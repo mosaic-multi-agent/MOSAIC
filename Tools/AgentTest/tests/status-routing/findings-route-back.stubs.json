@@ -32,7 +32,7 @@
         "create_files": [
           {
             "path": "Orchestration-{run_id}/Plan.md",
-            "content": "---\nrun_id: {run_id}\ncreated_by: planner-tdd-soft#6\nhuman_approved: true\n---\n# Plan\n\n## Stage Table\n\n| Stage | Description | Approach | HITL | Depends On |\n|-------|-------------|----------|------|------------|\n| 1 | Add --verbose flag parsing and wire to diagnostics | TDD | No | - |\n| 2 | Per-item diagnostic output in list command | TDD | No | 1 |\n\n## Error Handling\n\nPflag parse failures return exit code 2 with usage hint.\n"
+            "content": "---\nrun_id: {run_id}\ncreated_by: planner-tdd-soft#6\nhuman_approved: true\n---\n# Plan\n\n## Stages\n\n| Stage | Name | Goal | Depends On | HITL | Approach |\n|-------|------|------|------------|:----:|----------|\n| 1 | Verbose flag | Add --verbose flag parsing and wire to diagnostics | - | FALSE | TDD |\n| 2 | Per-item diagnostics | Per-item diagnostic output in list command | 1 | FALSE | TDD |\n\n## Error Handling\n\nPflag parse failures return exit code 2 with usage hint.\n"
           }
         ]
       }

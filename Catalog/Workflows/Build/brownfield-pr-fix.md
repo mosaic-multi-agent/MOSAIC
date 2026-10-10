@@ -1,5 +1,5 @@
 ---
-version: "0.3"
+version: "1.0"
 name: "Brownfield PR Fix Workflow"
 description: "Resolve PR review comments on an existing codebase — fetch comments, refine scope and test strategy with user, research, plan and implement fixes with optional TDD, generate per-stage resolution replies, merge, and post."
 hint: "Fresh new untested workflow, created by combining brownfield-tdd with brownfield-pr-audit, with some modifications."
@@ -29,15 +29,16 @@ artifacts:
   - Stage-*/Plan.md
   - Stage-*/PlanProgress.md
   - plan-review.md
-  - Stage-{StageNumber}/Plan.md
-  - Stage-{StageNumber}/PlanProgress.md
-  - Stage-{StageNumber}/tests-review-tdd.md
-  - Stage-{StageNumber}/implementation-review.md
-  - Stage-{StageNumber}/PullRequestResponses.md
+  - Stage-{Stage}/Plan.md
+  - Stage-{Stage}/PlanProgress.md
+  - Stage-{Stage}/tests-review-tdd.md
+  - Stage-{Stage}/implementation-review.md
+  - Stage-{Stage}/PullRequestResponses.md
+  - Stage-*/PullRequestResponses.md
   - TestResults.md
 ---
 
-<Workflow type="core" name="brownfield-pr-fix" version="0.3">
+<Workflow type="core" name="brownfield-pr-fix" version="1.0">
 ## Brownfield PR Fix Workflow
 
 **Use when:** Resolving PR review comments on an **existing codebase** — fetch active comments, refine scope and test strategy with user, research context, plan and implement fixes, generate resolution replies per stage, merge, and post back to the PR.
@@ -49,33 +50,33 @@ artifacts:
 | RESEARCH | requirements-review | FALSE | codebase-research | requirements-refinement | Requirements.md | requirements-review.md |
 | RESEARCH | codebase-research | FALSE | planner-tdd-soft | - | Requirements.md, PullRequestComments.md | Research.md |
 | PLANNING | planner-tdd-soft | TRUE | plan-review | - | Research.md, Requirements.md, PullRequestComments.md | Plan.md, Stage-*/Plan.md, Stage-*/PlanProgress.md |
-| PLANNING | plan-review | FALSE | test-writer-tdd* | planner-tdd-soft | Requirements.md, PullRequestComments.md, Plan.md, Stage-*/Plan.md | plan-review.md |
-| EXECUTION.Test.[StageNumber] | test-writer-tdd | FALSE | tests-review-tdd | - | Stage-{StageNumber}/Plan.md, Stage-{StageNumber}/PlanProgress.md | Stage-{StageNumber}/PlanProgress.md |
-| EXECUTION.Test.[StageNumber] | tests-review-tdd | FALSE | implementation-tdd | test-writer-tdd | Stage-{StageNumber}/Plan.md, Stage-{StageNumber}/PlanProgress.md | Stage-{StageNumber}/tests-review-tdd.md |
-| EXECUTION.Impl.[StageNumber] | implementation-tdd | FALSE | implementation-review | - | Stage-{StageNumber}/Plan.md, Stage-{StageNumber}/PlanProgress.md | Stage-{StageNumber}/PlanProgress.md |
-| EXECUTION.Impl.[StageNumber] | implementation-review | FALSE | fix-to-pr-response | implementation-tdd | Stage-{StageNumber}/Plan.md, Stage-{StageNumber}/PlanProgress.md | Stage-{StageNumber}/implementation-review.md |
-| EXECUTION.Response.[StageNumber] | fix-to-pr-response | FALSE | test-runner | - | Stage-{StageNumber}/Plan.md, Stage-{StageNumber}/PlanProgress.md, PullRequestComments.md, PullRequestResponses.md | Stage-{StageNumber}/PullRequestResponses.md |
+| PLANNING | plan-review | FALSE | [Stage] | planner-tdd-soft | Requirements.md, PullRequestComments.md, Plan.md, Stage-*/Plan.md | plan-review.md |
+| EXECUTION.[Stage].Test | test-writer-tdd | FALSE | tests-review-tdd | - | Stage-{Stage}/Plan.md, Stage-{Stage}/PlanProgress.md | Stage-{Stage}/PlanProgress.md |
+| EXECUTION.[Stage].Test | tests-review-tdd | FALSE | COMPLETE | test-writer-tdd | Stage-{Stage}/Plan.md, Stage-{Stage}/PlanProgress.md | Stage-{Stage}/tests-review-tdd.md |
+| EXECUTION.[Stage].Impl | implementation-tdd | FALSE | implementation-review | - | Stage-{Stage}/Plan.md, Stage-{Stage}/PlanProgress.md | Stage-{Stage}/PlanProgress.md |
+| EXECUTION.[Stage].Impl | implementation-review | FALSE | COMPLETE | implementation-tdd | Stage-{Stage}/Plan.md, Stage-{Stage}/PlanProgress.md | Stage-{Stage}/implementation-review.md |
+| EXECUTION.[Stage].Response | fix-to-pr-response | FALSE | COMPLETE | - | Stage-{Stage}/Plan.md, Stage-{Stage}/PlanProgress.md, PullRequestComments.md, PullRequestResponses.md | Stage-{Stage}/PullRequestResponses.md |
 | REVIEW | test-runner | FALSE | response-merger | planner-tdd-soft | - | TestResults.md |
 | REVIEW | response-merger | TRUE | pull-request-comment-interface(post) | - | PullRequestComments.md, Stage-*/PullRequestResponses.md | PullRequestResponses.md |
 | COMPLETION | pull-request-comment-interface(post) | TRUE | COMPLETE | - | PullRequestResponses.md | PullRequestResponses.md |
 
-**Execution Groups:**
+**Blocks:**
 
-| Approach | Groups |
-|----------|--------|
-| TDD | Test, Impl, Response |
-| Implementation-First | Impl, Test, Response |
-| Implementation-Only | Impl, Response |
-| Tests-Only | Test |
+| Block | Source | Section |
+|-------|--------|---------|
+| Stage | Plan.md | Stages |
 
-**EXECUTION Stages:** Loop per stage (stages defined in Plan.md). Subagent sequence per stage determined by the `Approach` column in the stage table.
+**Groups:**
+
+| Block | Approach | Groups |
+|-------|----------|--------|
+| Stage | TDD | Test, Impl, Response |
+| Stage | Implementation-First | Impl, Test, Response |
+| Stage | Implementation-Only | Impl, Response |
+| Stage | Tests-Only | Test |
 
 **Notes:**
-- **Requirements.md is user-created** — PR ID, branches, optionally minimal scope hints. requirements-refinement enriches it with comment triage and test strategy
-- **fix-to-pr-response matches fixes to comments by file/line proximity and semantic similarity** — does not depend on planner referencing thread IDs
-- **implementation-review may route back to planner or research** based on finding type
-- **Two HITL gates at the end** — response-merger (content), pull-request-comment-interface(post) (timing)
-
+- Requirements.md is written by the user: the PR ID and branches, optionally minimal scope hints.
 </Workflow>
 
 ---
@@ -86,11 +87,13 @@ The inverse of `brownfield-pr-audit`: where that workflow reads code and produce
 
 Requirements-refinement was added because PR comments are not inherently actionable requirements — they vary from nitpicks to architectural rethinks to questions that aren't fix requests at all. The user needs a gate to triage which comments become work items and to set the test strategy (regression tests for everything, complex fixes only, or none). Without this, the planner would treat every unresolved comment as an equal-priority fix request and guess at the test approach. Requirements-review follows because the enriched Requirements.md is the document the entire downstream chain depends on — if refinement produced something ambiguous or contradictory, better to catch it before planning than after.
 
-The core design tension was where to generate resolution comments — once after all stages (simpler, one agent) or per-stage with a merger (more complex, two agents). Per-stage won because: (1) resolution comments should be grounded in actual code changes, not plan progress summaries; (2) a post-hoc agent reading all stages at once doesn't scale to large PRs; (3) per-stage generation keeps context fresh — the agent sees the diff while it's small and specific.
+The core design tension was where to generate resolution comments — once after all stages (simpler, one agent) or per-stage with a merger (more complex, two agents). Per-stage won because: (1) resolution comments should be grounded in actual code changes, not plan progress summaries; (2) a post-hoc agent reading all stages at once doesn't scale to large PRs; (3) per-stage generation keeps context fresh — the agent sees the diff while it's small and specific. The per-stage reply step is its own group, `Response`, listed last in every approach that changes code; a `Tests-Only` stage fixes nothing and so writes no replies.
 
 The planner does not need special instructions to reference PR comment thread IDs in stage plans. `fix-to-pr-response` handles the comment-to-fix mapping independently using file/line proximity from git diffs plus semantic matching against the original comment content. If the planner happens to include thread references (it reads PullRequestComments.md as input, so it might), that's a bonus signal, not a requirement.
 
-test-runner findings route to the planner, not to implementation-tdd. This was a lesson learned from brownfield-tdd v3.7: test failures after all stages complete may indicate plan-level issues (missed dependencies, incorrect sequencing, insufficient test coverage decisions) that only the planner can resolve by restructuring stages.
+test-runner findings route to the planner, not to implementation-tdd. This was a lesson learned from brownfield-tdd v3.7: test failures after all stages complete may indicate plan-level issues (missed dependencies, incorrect sequencing, insufficient test coverage decisions) that only the planner can resolve by restructuring stages. It is also the only fix target the format allows there: test-runner runs after the Stage block has exited, completed stages are frozen, and the planner adds a fix stage that runs when the block is entered again.
+
+Each reviewer's suggested fix target is its own creator. Deeper routing — implementation-review findings that trace back to the plan or to missing research — is the orchestrator's decision under its routing policy, not a declared route.
 
 Two HITL gates at the end serve different purposes: response-merger HITL lets the user review what will be said (content), pull-request-comment-interface(post) HITL lets the user control when it's said (timing synchronization with their own code push).
 
@@ -103,6 +106,7 @@ Two HITL gates at the end serve different purposes: response-merger HITL lets th
 | 0.1 | 2026-08-20 | MOSAIC | Initial version |
 | 0.2 | 2026-08-26 | MOSAIC | Replace Unicode emoji with ASCII tokens in HITL column (TRUE/FALSE). |
 | 0.3 | 2026-10-02 | MOSAIC | Provide the canonical PullRequestResponses.md schema artifact to each fix-to-pr-response stage and align frontmatter with the workflow region version. |
+| 1.0 | 2026-10-10 | MOSAIC | Migrated to WorkflowFormat 2.16: `[StageNumber]` → declared block `[Stage]` (`**Blocks:**` table), Phase cells in `PHASE.[Block].Group` order, `**Groups:**` table with `Block` column. Routing made scope-correct: `plan-review` enters `[Stage]` (was the legacy `test-writer-tdd*`); every group's last row says `COMPLETE`, and the block's exit continues to `test-runner`. `artifacts` gains `Stage-*/PullRequestResponses.md`. Notes cut to the Requirements.md seed content; the rest were redundant with the tables or are executor policy (moved to Design Rationale). |
 
 ---
 

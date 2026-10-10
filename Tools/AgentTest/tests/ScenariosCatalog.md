@@ -15,7 +15,7 @@ Each scenario is one verifiable routing condition. Scenarios are atomic — whet
 | ID | Scenario | Expected | Status |
 |----|----------|----------|--------|
 | H-1 | HITL-enabled agent returns SUCCESS but output artifact has `human_approved: false` | Re-dispatch same agent to complete HITL gate, not advance to next row | Tested |
-| H-2 | Plan stage table marks stage HITL=true, workflow table marks agent HITL=false | Dispatch agent with `human_in_the_loop: true` (additive merge) | Tested |
+| H-2 | Plan stage table marks stage HITL=TRUE, workflow table marks agent HITL=FALSE | Dispatch agent with `human_in_the_loop: true` (additive merge) | Tested |
 | H-3 | Plan stage HITL=true applies to ALL agents in that stage, not just first | Second agent in same HITL stage also dispatched with `human_in_the_loop: true` | Tested |
 
 ### Status Code Routing
@@ -64,6 +64,24 @@ Each scenario is one verifiable routing condition. Scenarios are atomic — whet
 | E-3 | Stage with Approach = "Implementation-First" | Dispatch implementation-tdd before test-writer-tdd (reversed from TDD) | Tested |
 | E-4 | Stage with Approach = "Tests-Only" | Dispatch test-writer-tdd/tests-review-tdd only, skip implementation agents | Tested |
 
+### Blocks & Iterations
+
+| ID | Scenario | Expected | Status |
+|----|----------|----------|--------|
+| B-1 | Implementation-First stage: Implementation group ends (`implementation-review` → `COMPLETE`) | Dispatch test-writer-tdd for the **same** stage — not the next stage, not test-runner | Deferred (format stabilizing) |
+| B-2 | Last group of the last stage ends (`COMPLETE`) | Block exits to the first row after it: dispatch test-runner; run is not marked COMPLETED | Deferred (format stabilizing) |
+| B-3 | Block re-entered after a route-back added stage 3 (stages 1–2 completed) | Run only the incomplete iteration: test-writer-tdd with Stage-3 inputs; stages 1–2 not re-run | Deferred (format stabilizing) |
+| B-4 | Block schedule is empty (header, no rows) | Block exits at once: contracts-review → test-runner | Deferred (low priority) |
+
+### Malformed Workflow & Block Schedule
+
+| ID | Scenario | Expected | Status |
+|----|----------|----------|--------|
+| M-1 | Plan.md `HITL` cell is not exactly `TRUE`/`FALSE` (e.g. `No`) | Do not enter the block; dispatch planner-tdd-soft (schedule producer) naming the problem | Deferred (format stabilizing) |
+| M-2 | Plan.md has no `## Stages` heading (e.g. legacy `## Stage Table`) | Same as M-1 | Deferred (format stabilizing) |
+| M-3 | Malformed block schedule whose source is a user seed (no row outputs it) | Escalate to user; no dispatch | Deferred (needs seed-schedule test workflow) |
+| M-4 | Workflow table is malformed (legacy `[StageNumber]`, `HITL` = `-`, prose in On Findings) | Refuse before the first dispatch | Deferred (feasibility unknown) |
+
 ### Parallel Dispatch
 
 | ID | Scenario | Expected | Status |
@@ -71,6 +89,7 @@ Each scenario is one verifiable routing condition. Scenarios are atomic — whet
 | P-1 | Multiple independent stages (no Depends On) after prior stage completes | Dispatch first-group agents for all eligible stages, not just one | Blocked (AgentTest capability TBD) |
 | P-2 | Stage completion unblocks a dependent stage (Depends On all met) | Dispatch first agent for newly-eligible stage | Blocked (AgentTest capability TBD) |
 | P-3 | Workflow fork — On Success names multiple agents | Dispatch all named agents | Blocked (AgentTest capability TBD) |
+| P-4 | Join (`Waits For`) — one branch returned SUCCESS, another has not | Do not dispatch the join until every branch it waits for has returned SUCCESS | Deferred (needs fork/join test workflow) |
 
 ### Infrastructure Agent Triggers
 
@@ -108,8 +127,8 @@ Filled in when tests are created. One test may cover multiple scenarios; one sce
 | creator-fix-rereview | Creator Fix Re-review | G-2 | brownfield-tdd | Seeded after planner fix (plan-review CNA → planner SUCCESS). Must re-review, not advance to contracts-designer |
 | hitl-redispatch-unapproved | HITL Re-dispatch Unapproved | H-1 | brownfield-tdd | Seeded after requirements-refinement SUCCESS with human_approved: false. Must re-dispatch for HITL gate, not advance |
 | impl-only-skip-tests | Impl-Only Skip Tests | E-2 | brownfield-tdd | Stage 1 Approach=Implementation-Only. Must skip test-writer-tdd/tests-review-tdd, dispatch implementation-tdd directly |
-| hitl-plan-stage-override | HITL Plan Stage Override | H-2, E-1 | brownfield-tdd | Plan stage 1 HITL=Yes overrides workflow HITL=false. test-writer-tdd dispatched with human_in_the_loop: true. Also proves E-1 (TDD first agent) |
-| hitl-plan-stage-all-agents | HITL Plan Stage All Agents | H-3 | brownfield-tdd | Stage 1 HITL=Yes, test-writer-tdd already done. tests-review-tdd must also get human_in_the_loop: true |
+| hitl-plan-stage-override | HITL Plan Stage Override | H-2, E-1 | brownfield-tdd | Plan stage 1 HITL=TRUE overrides workflow HITL=FALSE. test-writer-tdd dispatched with human_in_the_loop: true. Also proves E-1 (TDD first agent) |
+| hitl-plan-stage-all-agents | HITL Plan Stage All Agents | H-3 | brownfield-tdd | Stage 1 HITL=TRUE, test-writer-tdd already done. tests-review-tdd must also get human_in_the_loop: true |
 | blocked-e101-retry | BLOCKED E101 Retry | S-3 | brownfield-tdd | implementation-tdd BLOCKED E101 → Tier 1 auto-retry, same agent re-dispatched |
 | blocked-e501-retry | BLOCKED E501 Retry | S-4 | brownfield-tdd | implementation-tdd BLOCKED E501 → Tier 1 auto-retry, same agent re-dispatched |
 | needs-clarification-no-advance | NEEDS_CLARIFICATION No Advance | S-5 | brownfield-tdd | implementation-tdd NEEDS_CLARIFICATION → route back to planner-tdd-soft for clarification, not advance |
@@ -146,7 +165,7 @@ Detailed context for each scenario — failure modes observed, setup specifics, 
 
 ### H-2 / H-3: HITL Additive Merge From Plan Stage Table
 
-**Setup:** EXECUTION stage 3 in progress. Plan.md stage table marks stage 3 with HITL=true. Workflow table has `test-writer-tdd` as HITL FALSE.
+**Setup:** EXECUTION stage 3 in progress. Plan.md stage table marks stage 3 with HITL=TRUE. Workflow table has `test-writer-tdd` as HITL FALSE.
 
 **Failure mode anticipated:** Orchestrator only checks the workflow table's HITL column, ignores Plan's per-stage HITL. Subtle — requires reading Plan for HITL resolution, not just stage ordering.
 
@@ -247,6 +266,8 @@ Detailed context for each scenario — failure modes observed, setup specifics, 
 **R-3:** Same pattern but route-back to `contracts-designer` → must hit `contracts-review`.
 **R-4:** Route-back from `test-runner` (REVIEW phase) to `planner-tdd-soft` → must hit `plan-review`.
 
+**R-3 meaning changed with brownfield-tdd 4.0:** the old `implementation-review` On Findings cell read `implementation-tdd (or other based on issue)`, which licensed re-targeting to `contracts-designer` from the table itself. Under WorkflowFormat 2.16 the cell is exactly `implementation-tdd` and On Findings is only a suggested fix target; re-targeting is the orchestrator's own routing decision (WorkflowFormat §1). `contracts-routeback-quality-gate` therefore now asserts re-targeting *against* the table's suggestion — a harder condition. A failure there means something different than it did under 3.7.
+
 ### R-2: Missing Input Artifacts on Distant Route-Back
 
 **Setup:** Stage 5's `implementation-review` routes back to `planner-tdd-soft`. Workflow table says planner inputs: `Research.md, Requirements.md`.
@@ -266,9 +287,27 @@ Detailed context for each scenario — failure modes observed, setup specifics, 
 
 ### E-1 through E-4: Execution Group Selection
 
-**Context:** Plan stage table has Approach column. Orchestrator must read it and dispatch the correct group sequence. The brownfield-tdd Execution Groups table defines the mapping.
+**Context:** Plan stage table has Approach column. Orchestrator must read it and dispatch the correct group sequence. The brownfield-tdd `**Groups:**` table defines the mapping.
 
 **E-2 failure mode anticipated:** Orchestrator ignores Approach column, defaults to full TDD sequence for every stage.
+
+### B-1 through B-4: Block Routing (WorkflowFormat 2.16)
+
+**Context:** In brownfield-tdd 4.0, `tests-review-tdd` and `implementation-review` both say `COMPLETE`. In 3.7 they named their successors explicitly (`implementation-tdd`, `test-runner`). `COMPLETE` now ends the current *scope* — a group, then the iteration — and what follows is derived from the iteration's `Approach` (next group), the block schedule (next iteration), or the block exit (first row after the block). E-1 to E-4 only cover the *first* dispatch of an iteration; B-* cover the transitions out of a group and out of the block.
+
+**B-1/B-2 failure mode anticipated:** Orchestrator reads `COMPLETE` literally and ends the run, or jumps to test-runner mid-stage.
+
+**B-3:** Re-entry runs only iterations that have not completed (WorkflowFormat §6.5). Natural follow-up to R-1/R-4: `planner-routeback-quality-gate` stops at plan-review, before re-entry. Seed: route-back re-plan added stage 3, plan-review → contracts-designer → contracts-review all SUCCESS. Closed-set input assertion catches a Stage-1 dispatch for free. Likely the most realistic new-format bug — route-backs are routine.
+
+**B-4:** Valid per format, but a planner practically never writes an empty schedule. Cheap; low realism.
+
+### M-1 through M-4: Malformed Input Refusal
+
+**Context:** The orchestrator refuses what the format declares malformed rather than guessing (WorkflowFormat §10). Two distinct behaviours:
+
+- **Block schedule malformed (M-1, M-2):** checked each time the block is entered. Do not run the block; dispatch the row that outputs the schedule's `Source` (planner-tdd-soft for brownfield-tdd) with the problem named in `task_description` (`task_description_contains` assertion). Seed: design-complete state with a malformed Plan.md.
+- **Schedule source is a seed (M-3):** no row can fix it, so escalate. Needs a workflow whose schedule is a seed (e.g. an `implementation-only` test workflow).
+- **Workflow table malformed (M-4):** refuse before the first dispatch. **Feasibility check first:** if mosaic-deploy validates workflows at deploy time, a malformed workflow never reaches the orchestrator and this is not testable at the orchestrator layer.
 
 ### P-1 / P-2 / P-3: Parallel Dispatch
 
@@ -277,6 +316,10 @@ Detailed context for each scenario — failure modes observed, setup specifics, 
 **P-1 failure mode observed:** Stages treated as strictly sequential even when plan allows parallelism.
 
 **P-3 note:** brownfield-tdd has no explicit On Success forks — may need custom test workflow.
+
+**P-4:** Join gating via `Waits For` (WorkflowFormat §7.2). Six production workflows use joins (audit and KB families); no test workflow has one yet. Needs a fork/join test workflow plus stubs where one branch returns before the other.
+
+**Open question (P-1/P-2):** WorkflowFormat 2.16 says iterations whose `Depends On` are met *may* run concurrently. Whether the orchestrator is expected to actually dispatch independent stages concurrently, or sequential is intended, decides whether P-1 is a valid scenario at all. AgentTest now has a `min_concurrency` assertion, which may lift the "capability TBD" block.
 
 **Blocked:** AgentTest parallel dispatch assertion support TBD.
 
@@ -312,7 +355,8 @@ Detailed context for each scenario — failure modes observed, setup specifics, 
 
 - All tests use the oneshot pattern with seeded `Orchestration.md`
 - Primary workflow: `brownfield-tdd` (most scenarios observed there)
-- Some scenarios (P-3, I-5) may need custom test workflows
+- Some scenarios (P-3, P-4, M-3, I-5) may need custom test workflows
+- B-* and M-* (and P-4) are deferred until WorkflowFormat 2.16 / OrchestrationArtifactFormat 3.0 have been proven on real runs of regular workflows — no point testing routing against a format that may still move
 - Infrastructure agent scenarios (I-*) need test workflows with `<InfrastructureAgents>` declarations and corresponding stub agent definitions
 - Each test needs: seed Orchestration.md, seed artifacts with correct provenance frontmatter, stub registry for expected dispatch(es), assertions on agent identity + input artifacts + HITL flag
 - `stop_after_invocations: 1` for most (one dispatch decision per test)

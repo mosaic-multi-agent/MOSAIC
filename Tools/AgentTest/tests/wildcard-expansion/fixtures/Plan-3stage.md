@@ -5,13 +5,13 @@ human_approved: true
 ---
 # Plan
 
-## Stage Table
+## Stages
 
-| Stage | Description | Approach | HITL | Depends On |
-|-------|-------------|----------|------|------------|
-| 1 | Add --verbose flag parsing and wire to diagnostics | TDD | No | - |
-| 2 | Per-item diagnostic output in list command | TDD | No | 1 |
-| 3 | Batch mode verbose flag support | TDD | No | 2 |
+| Stage | Name | Goal | Depends On | HITL | Approach |
+|-------|------|------|------------|:----:|----------|
+| 1 | Verbose flag | Add --verbose flag parsing and wire to diagnostics | - | FALSE | TDD |
+| 2 | Per-item diagnostics | Per-item diagnostic output in list command | 1 | FALSE | TDD |
+| 3 | Batch mode | Batch mode verbose flag support | 2 | FALSE | TDD |
 
 ## Summary
 

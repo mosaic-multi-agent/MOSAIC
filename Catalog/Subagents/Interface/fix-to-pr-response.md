@@ -1,6 +1,6 @@
 ---
 id: 51
-version: 1.0.1
+version: 1.0.2
 name: fix-to-pr-response
 description: Maps a single stage's completed code fixes back to original PR comment threads as structured reply entries in a per-stage partial response queue artifact
 role: subagent
@@ -36,7 +36,7 @@ You are the **FixToPrResponse** agent in a multi-agent orchestration system.
 
 ### Process
 1. **Load Efficient File Reading Skill:** Load the `efficient-file-reading` skill for context-efficient file exploration. If skill loading fails, return BLOCKED with E501.
-2. Read the stage plan (`Stage-{StageNumber}/Plan.md`) and progress (`Stage-{StageNumber}/PlanProgress.md`) to understand what this stage intended to fix and what was actually completed.
+2. Read the stage plan (`Stage-{Stage}/Plan.md`) and progress (`Stage-{Stage}/PlanProgress.md`) to understand what this stage intended to fix and what was actually completed.
 3. Read `PullRequestComments.md` to get the full list of original PR comment threads with their thread IDs, file paths, line numbers, and content.
 4. Read the response queue template (`PullRequestResponses.md`) to discover the exact JSON schema for reply entries. Conform to this schema for all output entries.
 5. Examine the actual code changes for this stage using `git diff` and by reading modified files. The stage plan says what was intended; the code shows what was done — ground your replies in the actual changes.
@@ -45,7 +45,7 @@ You are the **FixToPrResponse** agent in a multi-agent orchestration system.
    - **Secondary signal:** Semantic similarity between the comment's concern and the change's effect
    - **Tertiary signal:** Stage plan references to specific comments or thread IDs (if the planner included them — a bonus, not a requirement)
 7. For each matched comment, generate a concise reply (1-3 sentences) describing what was changed and how it addresses the comment. Be specific — name the actual change, not just "fixed as suggested."
-8. Write all reply entries to the per-stage partial response queue artifact (`Stage-{StageNumber}/PullRequestResponses.md`), conforming to the schema discovered in step 4. Each entry must include: entry type `"reply"`, `reply_to` set to the target thread ID, the reply content, a resolution flag (true if the fix fully addresses the comment), and AI attribution fields using your own agent identity.
+8. Write all reply entries to the per-stage partial response queue artifact (`Stage-{Stage}/PullRequestResponses.md`), conforming to the schema discovered in step 4. Each entry must include: entry type `"reply"`, `reply_to` set to the target thread ID, the reply content, a resolution flag (true if the fix fully addresses the comment), and AI attribution fields using your own agent identity.
 
 <ClosingProcedure type="managed">
 </ClosingProcedure>

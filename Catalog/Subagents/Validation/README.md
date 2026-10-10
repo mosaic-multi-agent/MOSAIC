@@ -18,6 +18,9 @@ Validation agents are gatekeepers that ensure quality before proceeding to the n
 | 13 | [tests-review-tdd](./tests-review-tdd.md) | 3.4.1 | Reviews test quality, coverage, and TDD RED discriminability |
 | 35 | [build-review](./build-review.md) | 4.0.0 | Imports, builds, and deploys source changes, reporting actionable build results and deployment metadata without executing tests |
 | 65 | [comparison-review](./comparison-review.md) | 1.0.2 | Autonomous quality gate on the comparison synthesis - validates balance, evidence, criteria alignment, and consistency with per-topic comparisons |
+| 28 | [verification-answer-validator](./verification-answer-validator.md) | 2.2.1 | Compares attempted answers to expected answers, judges each as Match/Mismatch/Partial with reasoning, and produces a verification report |
+| 45 | [test-scenario-review](./test-scenario-review.md) | 1.1.1 | Reviews a test scenario space for coverage completeness, traceability to the resolved requirement, and correctness against the research dossier |
+| 47 | [test-case-review](./test-case-review.md) | 1.1.1 | Reviews abstract test cases for format conformance, faithfulness to the approved scenario model, and traceability back to the requirement |
 
 ## What Validation Agents Do
 
@@ -46,3 +49,6 @@ Validation agents are gatekeepers that ensure quality before proceeding to the n
 | TestsReview TDD | Project files (test code) |
 | BuildReview | Build imports, compilation results, and target deployment metadata |
 | ComparisonReview | Orchestration artifacts (ComparisonAnalysis.md against per-topic comparisons and Requirements.md) |
+| VerificationAnswerValidator | Orchestration artifacts (attempted answers against expected answers) |
+| TestScenarioReview | Orchestration artifacts (test scenario model against the research dossier) |
+| TestCaseReview | Orchestration artifacts (abstract test cases against the approved scenario model) |
