@@ -1,0 +1,57 @@
+---
+type: orchestration-artifact
+run_id: "{run_id}"
+workflow: brownfield-tdd
+workflow_version: "4.0"
+task: "Add --verbose and --quiet flags to the widgets CLI."
+started: 2026-01-15T10:00:00Z
+last_updated: 2026-01-15T10:50:00Z
+global_sequence: 7
+checkpoints: disabled
+commits: disabled
+current_state:
+  phase: DESIGN
+  iteration: null
+  last_status: SUCCESS
+  last_agent: "contracts-review#7"
+  error_code: null
+---
+
+<ExecutionLog type="core">
+
+| Seq | Agent | Phase | Iteration | WorkflowRow | Status | Timestamp | Summary | Inputs | Checkpoint |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | codebase-research#1 | RESEARCH | - | 1 | SUCCESS | 2026-01-15T10:05:00Z | Identified CLI entry point, flag parsing with pflag, existing diagnostic pattern. | - | - |
+| 2 | requirements-refinement#2 | RESEARCH | - | 2 | SUCCESS | 2026-01-15T10:10:00Z | Requirements refined with verbose and quiet flag specifics. | Research.md | - |
+| 3 | requirements-review#3 | RESEARCH | - | 3 | SUCCESS | 2026-01-15T10:15:00Z | Requirements complete, no findings. | Requirements.md | - |
+| 4 | planner-tdd-soft#4 | PLANNING | - | 4 | SUCCESS | 2026-01-15T10:20:00Z | Created 2-stage TDD plan with two independent stages. | Research.md, Requirements.md | - |
+| 5 | plan-review#5 | PLANNING | - | 5 | SUCCESS | 2026-01-15T10:30:00Z | Plan review passed, no findings. | Requirements.md, Plan.md, Stage-1/Plan.md, Stage-2/Plan.md, Stage-1/PlanProgress.md, Stage-2/PlanProgress.md | - |
+| 6 | contracts-designer#6 | DESIGN | - | 6 | SUCCESS | 2026-01-15T10:40:00Z | Designed verbose and quiet flag contracts. | Research.md, Requirements.md, Plan.md, Stage-1/Plan.md, Stage-2/Plan.md | - |
+| 7 | contracts-review#7 | DESIGN | - | 7 | SUCCESS | 2026-01-15T10:50:00Z | Contracts review passed, no findings. | Plan.md, Stage-1/Plan.md, Stage-2/Plan.md, ContractsDesign.md | - |
+
+</ExecutionLog>
+
+<Artifacts type="core">
+
+| Artifact | Created In | Created By |
+| --- | --- | --- |
+| Research.md | RESEARCH | codebase-research#1 |
+| Requirements.md | RESEARCH | requirements-refinement#2 |
+| requirements-review.md | RESEARCH | requirements-review#3 |
+| Plan.md | PLANNING | planner-tdd-soft#4 |
+| Stage-1/Plan.md | PLANNING | planner-tdd-soft#4 |
+| Stage-1/PlanProgress.md | PLANNING | planner-tdd-soft#4 |
+| Stage-2/Plan.md | PLANNING | planner-tdd-soft#4 |
+| Stage-2/PlanProgress.md | PLANNING | planner-tdd-soft#4 |
+| plan-review.md | PLANNING | plan-review#5 |
+| ContractsDesign.md | DESIGN | contracts-designer#6 |
+| contracts-review.md | DESIGN | contracts-review#7 |
+
+</Artifacts>
+
+<WorkflowNotes type="core">
+
+| Seq | Note |
+| --- | --- |
+
+</WorkflowNotes>

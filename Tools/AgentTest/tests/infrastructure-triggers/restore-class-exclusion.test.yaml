@@ -1,15 +1,18 @@
 schema_version: 1
 name: restore-class-exclusion
 id: 63
-version: 1
+version: 2
 changelog:
+  - version: 2
+    date: "2026-10-12"
+    changes: "Trigger STAGE_END renamed ITERATION_END; stub restore-stage-end renamed restore-iteration-end. Seed Orchestration.md now records dispatch: sequential (orchestrator 8.1.0)."
   - version: 1
     date: "2026-01-01"
     changes: "Initial."
 description: >
-  I-6: Restore-class agents never fire automatically. restore-stage-end
-  declares STAGE_END trigger and is restore class. After implementation-review
-  completes stage 1 (STAGE_END condition met), the restore agent must NOT
+  I-6: Restore-class agents never fire automatically. restore-iteration-end
+  declares ITERATION_END trigger and is restore class. After implementation-review
+  completes stage 1 (ITERATION_END condition met), the restore agent must NOT
   be dispatched — the next dispatch must be the stage 2 workflow agent.
 layer: orchestrator
 negative: false
@@ -18,7 +21,7 @@ subject:
   identity: orchestrator
   agent: orchestrator
   workflows: [brownfield-tdd]
-  infrastructure_agents: [restore-stage-end]
+  infrastructure_agents: [restore-iteration-end]
   opening_message: |
     Continue the existing workflow run. Read the Orchestration.md in the
     run-scoped folder and resume from where it left off. Do not ask me any

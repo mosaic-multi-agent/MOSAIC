@@ -9,6 +9,11 @@
 
 ## Catalog
 - **orchestrator-script** (v3.1.0): dispatch replies name the block iteration in `iteration` (the Execution Log's `Iteration` value) instead of `stage`, and give the bare agent id without the mode qualifier; required by the new Runner
+- **orchestrator-script** (v3.2.0): runs fork branches and block iterations one at a time, each to its end, in a fixed order
+- **orchestrator** (v8.1.0): **breaking** — trigger `STAGE_END` renamed `ITERATION_END`; redeploy orchestrators. Asks whether a run is sequential or parallel (enabling commits makes it sequential), refuses unknown triggers, and gives the commit agent the finished iteration's files
+- **commit-manager-git** (v2.3.0): commit messages come from the finished iteration's files whatever the workflow names them; `Mosaic-Stage` trailer replaced by `Mosaic-Iteration`
+- **checkpoint-manager-git** (v2.2.1), **checkpoint-restore-git** (v2.2.2): trigger renamed `ITERATION_END`; revert commits name the checkpoint's sequence number
+- **orchestration-review** (v1.2.2): uses iteration terminology of the current run format
 
 # 0.6.2 (2026-10-10)
 

@@ -1,8 +1,8 @@
 ---
-id: 24
+id: 25
 version: 1.0.0
-name: checkpoint-stage-end-only
-description: Test variant — checkpoint agent with only STAGE_END trigger (no INVOCATION_INTERVAL)
+name: checkpoint-stage-end
+description: Test variant - checkpoint agent with only a stage-end trigger
 role: subagent
 model: "{model-identifier}"
 recommended_tier: TEST-STUB
@@ -16,7 +16,7 @@ on_failure: halt
 ---
 
 <Identity type="core">
-# CheckpointStageEndOnly — Test Echo Agent
+# CheckpointStageEnd — Test Echo Agent
 
 You are a test echo agent in an automated test scenario. Your only job is exact reproduction.
 

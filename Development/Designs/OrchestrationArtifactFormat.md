@@ -3,7 +3,7 @@
 > **Status:** Approved
 > **Version:** 3.0
 > **Created:** 2026-07-28
-> **Last Updated:** 2026-10-10
+> **Last Updated:** 2026-10-12
 > **Scope:** The schema of `Orchestration.md` — the blackboard artifact an orchestrator (an LLM orchestrator or a deterministic executor) reads and writes to track execution state for one workflow run. Defines its sections, their mutability rules, and the format each section uses.
 
 ---
@@ -118,6 +118,7 @@ task: "Add JWT-based authentication to the user service API"
 started: 2026-01-29T09:00:00Z
 last_updated: 2026-01-29T11:30:00Z
 global_sequence: 8
+dispatch: sequential
 checkpoints: enabled
 commits: enabled
 commit_branch: mosaic/run/20260129T090000Z-a3f9
@@ -143,8 +144,9 @@ current_state:
 | `started` | Set once | ISO-8601 timestamp at file creation. |
 | `last_updated` | Updated in place | ISO-8601 timestamp, bumped on every write to this file. |
 | `global_sequence` | Updated in place | Monotonically increasing invocation counter. Incremented before each subagent invocation; the incremented value becomes that invocation's `{AgentName}#{Number}` suffix. Never decremented or reused — a rollback-performing invocation is still just an invocation (§5) and gets the next sequence number like any other. |
+| `dispatch` | Set once | `sequential` or `parallel`, chosen by the user at run start and fixed for the life of the run. It decides how the run uses the parallel work its workflow permits (WorkflowFormat §7): fork targets, and block iterations whose `Depends On` iterations have completed. Under `sequential`, at most one workflow invocation is outstanding at any time; work that becomes eligible together is dispatched one invocation after another, fork targets in the order the `On Success` cell lists them and block iterations in block-schedule order, and each fork branch runs to its close and each iteration to its completion before the next one starts — interleaving them would leave half-done work in the tree at another iteration's end. Under `parallel`, eligible work is dispatched concurrently where the executor and harness support it. `commits: enabled` requires `sequential` (`CommitAgent.md` §6). The user is asked only when the choice matters: when commits are enabled, or the workflow declares no fork and no block, or the run is ad hoc, `sequential` is recorded without asking. Any value other than the two is invalid and the run must not start or resume. An executor that supports only one value refuses to start or resume a run recording the other. An artifact with the field absent is read as `sequential`, the value every executor supports. |
 | `checkpoints` | Set once | `enabled` or `disabled`. Fixed for the life of the run. When `disabled`, the Execution Log's `Checkpoint` column is always empty. |
-| `commits` | Set once | `enabled` or `disabled`. Fixed for the life of the run. Controls whether `commit`-class infrastructure agents fire on trigger. Default `disabled`. |
+| `commits` | Set once | `enabled` or `disabled`. Fixed for the life of the run. Controls whether `commit`-class infrastructure agents fire on trigger. Default `disabled`. `enabled` requires `dispatch: sequential`. |
 | `commit_branch` | Set once | The branch name the `commit`-class agent commits to, recorded once at run start. Present when `commits: enabled`; absent or `null` when `disabled`. Enables branch-mismatch detection if `HEAD` moves mid-run. The value is whatever the run-start setup dispatch returned (`CommitAgent.md` §4.9) — the orchestrator records it rather than deriving it, and inspects the repository at no point. The run's variant is decidable from this field alone: MOSAIC-owned exactly when the value is `mosaic/run/{run_id}`, which is why no separate variant field exists to disagree with it. |
 | `review_loop_limit` | Set once | Optional positive integer chosen by the user at run start. Both orchestrators' shared Routing Policy escalates instead of routing a reviewer's `COMPLETED_NEEDS_ACTION` back once that reviewer has returned it this many times at the current phase and iteration, unless Workflow Notes records a user decision to continue. Absent means no limit, which is also how artifacts created before the field existed are read. |
 | `infrastructure_overrides` | Set once | Optional block; absent in the common case. When present, each key is an infrastructure agent name whose `triggers` list is replaced by the specified list for the duration of the run. Set once at run start and never modified during the run. An agent name not present in the infrastructure agent declaration region is a start-up error. Shape: `{agent-name}: { triggers: [ { trigger: <trigger>, trigger_param: <param-or-null> } ] }`. |
@@ -324,6 +326,7 @@ task: "Implement user profile CRUD operations with avatar upload support"
 started: 2026-01-29T08:00:00Z
 last_updated: 2026-01-29T12:45:00Z
 global_sequence: 16
+dispatch: sequential
 checkpoints: enabled
 commits: enabled
 commit_branch: mosaic/run/20260129T080000Z-b2c4

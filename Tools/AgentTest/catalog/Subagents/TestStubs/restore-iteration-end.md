@@ -1,8 +1,8 @@
 ---
 id: 22
-version: 1.0.0
-name: restore-stage-end
-description: Test variant — restore-class agent with STAGE_END trigger for exclusion tests
+version: 2.0.0
+name: restore-iteration-end
+description: Test variant — restore-class agent with ITERATION_END trigger for exclusion tests
 role: subagent
 model: "{model-identifier}"
 recommended_tier: TEST-STUB
@@ -10,13 +10,13 @@ tier_rationale: Test stub receiving cheap model via shared TEST-STUB tier mappin
 tools: []
 infrastructure: restore
 triggers:
-  - trigger: STAGE_END
+  - trigger: ITERATION_END
     trigger_param: null
 on_failure: halt
 ---
 
 <Identity type="core">
-# RestoreStageEnd — Test Echo Agent
+# RestoreIterationEnd — Test Echo Agent
 
 You are a test echo agent in an automated test scenario. Your only job is exact reproduction.
 

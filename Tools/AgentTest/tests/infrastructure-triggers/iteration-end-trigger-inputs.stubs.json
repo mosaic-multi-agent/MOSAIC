@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "test_id": "iteration-end-trigger-inputs",
+  "on_unmatched": "halt",
+  "stubs": [
+    {
+      "match": { "tool": "dispatch", "agent": "implementation-review", "invocation": 1 },
+      "response": {
+        "agent_instance_id": "implementation-review#11",
+        "run_id": "{run_id}",
+        "status_code": "SUCCESS",
+        "status_message": "Implementation review passed for stage 1. No findings."
+      },
+      "side_effects": {
+        "create_files": [
+          {
+            "path": "Orchestration-{run_id}/Stage-1/implementation-review.md",
+            "content": "---\nrun_id: {run_id}\ncreated_by: implementation-review#11\nhuman_approved: false\n---\n# Implementation Review - Stage 1\n\nNo findings.\n"
+          }
+        ]
+      }
+    },
+    {
+      "match": { "tool": "dispatch", "agent": "checkpoint-iteration-end-only", "invocation": 1 },
+      "response": {
+        "agent_instance_id": "checkpoint-iteration-end-only#12",
+        "run_id": "{run_id}",
+        "status_code": "SUCCESS",
+        "status_message": "Checkpoint captured. [checkpoint:3f2a9c1e7b4d5a6f8e9d0c1b2a3f4e5d6c7b8a9f]"
+      }
+    },
+    {
+      "match": { "tool": "dispatch", "agent": "commit-manager-git", "invocation": 1 },
+      "response": {
+        "agent_instance_id": "commit-manager-git#13",
+        "run_id": "{run_id}",
+        "status_code": "SUCCESS",
+        "status_message": "Committed Stage 1 to mosaic/run/{run_id}. [commit:9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d]"
+      }
+    }
+  ]
+}

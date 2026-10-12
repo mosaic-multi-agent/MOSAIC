@@ -35,7 +35,8 @@ When you invoke the orchestrator, it asks for three required pieces of configura
 | **Task** | Yes | What needs to be accomplished |
 | **Workflow** | Yes | Which workflow to follow (orchestrator shows available options) |
 | **Checkpoints** | Yes | Enable recovery checkpoints? `enabled` or `disabled` |
-| **Commits** | Conditional | Commit each stage to git? Only asked if the deployment includes a commit agent |
+| **Commits** | Conditional | Commit each finished iteration (e.g. each plan stage) to git? Only asked if the deployment includes a commit agent. Enabling commits makes the run sequential |
+| **Dispatch** | Conditional | Run independent work `sequential` or `parallel`? Only asked if the workflow can run work in parallel and commits are disabled — see [Sequential or Parallel](#sequential-or-parallel) |
 
 The orchestrator will not proceed until Task, Workflow, and Checkpoints are explicitly specified. No silent defaults on these.
 
@@ -95,6 +96,18 @@ Multiple orchestration runs can execute simultaneously. Each lives in its own fo
 
 **The caveat:** Parallel runs work smoothly as long as they don't modify the same project files. Two runs editing the same source file will conflict just like two developers editing the same file — the second one to write wins, and the first one's changes are lost. Plan accordingly: runs targeting different parts of the codebase parallelize cleanly; runs touching the same files should be sequential.
 
+### Sequential or Parallel
+
+This is about work *inside* one run. Some workflows have steps that don't depend on each other — independent research or audits, or plan stages with no dependency between them. The run can execute them one after another or at the same time. The orchestrator asks at startup, records your answer as `dispatch` in `Orchestration.md`, and keeps it for the whole run, including after a resume.
+
+| | `sequential` | `parallel` |
+|---|---|---|
+| Speed | Slower — one subagent at a time | Faster, where your harness can run subagents concurrently |
+| Checkpoints | One per finished iteration; rolling back redoes exactly that iteration | A checkpoint can include sibling work still in progress, so rolling back also rewinds it |
+| Commits | Available | Not available |
+
+There is no recommended answer; it depends on whether you value speed or precise history and rollback more. If you enable commits, the run is sequential and this question is not asked. The Runner always runs sequentially.
+
 ---
 
 ## Checkpoints
@@ -103,7 +116,7 @@ Checkpoints are recovery snapshots taken automatically during a run. When enable
 
 ### What They Do
 
-- **Capture** a restorable snapshot at every stage boundary and periodically (e.g., every 10 invocations)
+- **Capture** a restorable snapshot at the end of every iteration (each plan stage, in `brownfield-tdd`) and periodically (e.g., every 10 invocations)
 - **Record** a content-reference (git commit hash) in the Execution Log's `Checkpoint` column
 - **Enable rollback** — if something goes wrong, you can tell the orchestrator to restore to a specific checkpoint
 
@@ -125,13 +138,13 @@ Rollback is always human-initiated — the orchestrator never rolls back on its 
 
 ### Cost
 
-Every checkpoint is an extra subagent dispatch — it consumes a sequence number and a full agent invocation. With the default triggers (every stage boundary + every 10 invocations), a 5-stage run with 26 workflow dispatches might add ~7 checkpoint dispatches on top. Factor this into your cost estimate for long runs.
+Every checkpoint is an extra subagent dispatch — it consumes a sequence number and a full agent invocation. With the default triggers (every iteration end + every 10 invocations), a 5-stage run with 26 workflow dispatches might add ~7 checkpoint dispatches on top. Factor this into your cost estimate for long runs.
 
 ---
 
 ## Commits
 
-Commits are an optional mode where completed stages are committed to git as they finish. Unlike checkpoints (which live in a private namespace), commits go into real git history.
+Commits are an optional mode where completed iterations (each plan stage, in `brownfield-tdd`) are committed to git as they finish. Unlike checkpoints (which live in a private namespace), commits go into real git history.
 
 ### When Commits Are Available
 
@@ -146,14 +159,15 @@ If commits are enabled, you choose where they go:
 | **MOSAIC-owned** | A new branch created for this run (e.g., `mosaic/run/20260817T...`) | Yes |
 | **User's own** | Your current branch | No |
 
-**Why MOSAIC-owned is recommended:** If a stage needs to be redone, the abandoned attempt can be cleanly discarded on a run-owned branch. On your own branch, both the failed attempt and its fix stay in history permanently.
+**Why MOSAIC-owned is recommended:** If an iteration needs to be redone, the abandoned attempt can be cleanly discarded on a run-owned branch. On your own branch, both the failed attempt and its fix stay in history permanently.
 
 ### What to Know
 
-- Each stage boundary produces a commit with a message describing the completed work
-- Any uncommitted changes of your own get swept into these commits (git can't tell whose changes are whose) — commit or stash your work before stages complete if you want it separate
+- Each iteration end produces a commit with a message describing the completed work, taken from that iteration's plan and progress files
+- Enabling commits makes the run sequential: work that could run in parallel runs one step at a time, so every commit holds exactly one finished iteration
+- Any uncommitted changes of your own get swept into these commits (git can't tell whose changes are whose) — commit or stash your work before iterations complete if you want it separate
 - On a MOSAIC-owned branch, you integrate the results afterward (a squash merge lands the entire run as one clean commit)
-- Like checkpoints, each commit is an extra subagent dispatch at every stage boundary — adds to the run's total cost
+- Like checkpoints, each commit is an extra subagent dispatch at every iteration end — adds to the run's total cost
 
 ---
 

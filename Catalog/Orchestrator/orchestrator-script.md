@@ -1,5 +1,5 @@
 ---
-version: 3.1.0
+version: 3.2.0
 name: orchestrator-script
 description: Makes one routing decision per Runner invocation by reading the orchestration artifact and returning a dispatch or stop instruction
 role: orchestrator
@@ -190,7 +190,7 @@ Each workflow in Available Workflows is one `<Workflow>` region: a `## {Name}` h
 
 Other schedule columns belong to whoever wrote the schedule; ignore them.
 
-- **Iterations.** An iteration starts at the block's first row (in a grouped block, at the first row of the first group its `Approach` lists). Iterations whose `Depends On` iterations have all completed may run concurrently. An iteration has completed when its scope — its last listed group, in a grouped block — has ended.
+- **Iterations.** An iteration starts at the block's first row (in a grouped block, at the first row of the first group its `Approach` lists). Iterations whose `Depends On` iterations have all completed may run concurrently; whether this run actually dispatches them concurrently is decided by its `dispatch` value (see Forks and Joins). An iteration has completed when its scope — its last listed group, in a grouped block — has ended.
 - **Exit.** Once every iteration has completed, continue at the first row after the block when that row is in the scope that entered the block; otherwise that scope ends. An empty schedule (header, no rows) is valid: the block exits at once.
 - **Re-entry.** Entering a block again runs only the iterations that have not completed. Read the schedule each time you enter the block: its producer may have added iterations since you last read it.
 - **Nesting.** An inner block runs inside one iteration of its enclosing block, over that iteration's schedule, and exits back into the same iteration.
@@ -210,7 +210,12 @@ A block schedule is checked each time its block is entered. It is malformed when
 
 ### Forks and Joins
 
-In Mode 1 you may drive a workflow the Runner's engine cannot route itself, such as a comma-separated `On Success` (fork) or a `Waits For` column (join). The Runner invokes one agent at a time, so a fork is a sequence of your decisions: dispatch one eligible branch per invocation, and keep dispatching until every branch has run. Dispatch a join row only once every row in its `Waits For` shows `SUCCESS` in the Execution Log for this pass of the fork, and dispatch it once per pass. Block iterations whose dependencies allow it are likewise dispatched one per invocation. Record in Workflow Notes which branches or iterations remain, so the next invocation does not have to re-derive them.
+In Mode 1 you may drive a workflow the Runner's engine cannot route itself, such as a comma-separated `On Success` (fork) or a `Waits For` column (join). The Runner runs every run with `dispatch: sequential` in the frontmatter (it refuses to start or resume one recording `parallel`), so at most one workflow invocation is outstanding at a time, and work that is eligible together becomes a sequence of your decisions, one dispatch per invocation, in a fixed order:
+
+- **Fork targets** in the order the `On Success` cell lists them.
+- **Block iterations** in block-schedule order, starting an iteration only once its `Depends On` iterations have completed.
+
+Run a fork branch to its close, and a block iteration to its completion, before dispatching the first row of the next one. Interleaving them would leave one iteration's half-done work in the working tree when another iteration ends, and the Runner evaluates infrastructure triggers at that iteration end — a checkpoint or commit taken there would capture work it does not describe. Every eligible target is eventually dispatched; none is skipped in favour of another. Dispatch a join row only once every row in its `Waits For` shows `SUCCESS` in the Execution Log for this pass of the fork, and dispatch it once per pass. Record in Workflow Notes which branches or iterations remain, so the next invocation does not have to re-derive them.
 
 ### Reading the Evidence
 
@@ -227,7 +232,7 @@ The orchestration artifact is your primary source and you read all of it.
 | The error classification, when the status is `BLOCKED` | Frontmatter `current_state.error_code` |
 | Which artifacts exist and which invocation most recently produced each | `<Artifacts type="core">` |
 | What an earlier invocation of you concluded and decided | `<WorkflowNotes type="core">` |
-| Run configuration -- workflow, version, run id, checkpoints, commits | Frontmatter |
+| Run configuration -- workflow, version, run id, dispatch, checkpoints, commits | Frontmatter |
 
 Beyond the artifact, read any registered artifact that bears on the routing decision -- a block schedule, a plan, a review output, an iteration's folder. This is wider than the conversational Orchestrator may read, deliberately: it holds a whole run in one session, where every read accumulates, while you start fresh on every decision. The routing table is in Available Workflows, in this prompt.
 

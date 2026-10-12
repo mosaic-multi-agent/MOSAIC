@@ -7,6 +7,7 @@ task: "Add a --verbose flag to the widgets CLI so it prints per-item diagnostics
 started: 2026-01-15T10:00:00Z
 last_updated: 2026-01-15T11:10:00Z
 global_sequence: 9
+dispatch: sequential
 checkpoints: disabled
 commits: disabled
 current_state:

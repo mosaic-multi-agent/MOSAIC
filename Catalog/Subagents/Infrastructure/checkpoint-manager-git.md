@@ -1,6 +1,6 @@
 ---
 id: 36
-version: 2.2.0
+version: 2.2.1
 name: checkpoint-manager-git
 description: Commits a restorable checkpoint of the working tree to a private git ref namespace and returns its content-reference
 role: subagent
@@ -11,7 +11,7 @@ tier_rationale: fixed command sequence with no branching judgment
 required_skills: []
 infrastructure: checkpoint
 triggers:
-  - trigger: STAGE_END
+  - trigger: ITERATION_END
     trigger_param: null
   - trigger: INVOCATION_INTERVAL
     trigger_param: 10
@@ -116,7 +116,7 @@ Mosaic-Seq: {seq}
 
 Both values come from what you already hold — `run_id` from the invocation, `Seq` from your own `agent_instance_id`. Nothing else is included.
 
-Phase, stage, trigger, and timestamp are deliberately absent, not because they lack value but because you cannot know them: they live in the orchestration artifact you never read. `run_id` + `Seq` are a foreign key into the Execution Log, and that row already carries phase, stage, and timestamp.
+Phase, iteration, trigger, and timestamp are deliberately absent, not because they lack value but because you cannot know them: they live in the orchestration artifact you never read. `run_id` + `Seq` are a foreign key into the Execution Log, and that row already carries phase, iteration, and timestamp.
 
 The trailers follow git's standard trailer convention, so `git log --format` and `git interpret-trailers` parse them without a custom tool.
 

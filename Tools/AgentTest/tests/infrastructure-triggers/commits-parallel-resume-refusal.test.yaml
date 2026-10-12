@@ -1,16 +1,21 @@
 schema_version: 1
-name: stage-end-checkpoint
-id: 64
+name: commits-parallel-resume-refusal
+id: 84
 version: 1
 changelog:
   - version: 1
-    date: "2026-01-01"
+    date: "2026-10-12"
     changes: "Initial."
 description: >
-  I-1: STAGE_END trigger fires checkpoint agent at stage boundary. After
-  implementation-review completes stage 1, checkpoint-stage-end-only must be
-  dispatched before stage 2's first workflow agent. Uses a checkpoint variant
-  with only STAGE_END trigger (no INVOCATION_INTERVAL) to isolate the test.
+  D-1: Resuming an artifact that records commits: enabled together with
+  dispatch: parallel is a configuration error (Configuration Preconditions 3:
+  commits: enabled requires dispatch: sequential). commit-manager-git is
+  declared, so the commit-class precondition is otherwise satisfied, and
+  checkpoints are disabled so no checkpoint precondition is involved. The
+  orchestrator must refuse to resume and dispatch nothing - it must not
+  silently downgrade to sequential, and must not drop commits to keep
+  parallel. Proceeding would dispatch implementation-review at once. The
+  refusal wording itself is not observable to AgentTest.
 layer: orchestrator
 negative: false
 
@@ -18,7 +23,7 @@ subject:
   identity: orchestrator
   agent: orchestrator
   workflows: [brownfield-tdd]
-  infrastructure_agents: [checkpoint-stage-end-only]
+  infrastructure_agents: [commit-manager-git]
   opening_message: |
     Continue the existing workflow run. Read the Orchestration.md in the
     run-scoped folder and resume from where it left off. Do not ask me any
@@ -26,15 +31,15 @@ subject:
   invocation_kind: orchestrator
   allowed_tools: [Task, Read, Write, Edit, Bash, Glob, Grep]
 
-stub_registry: stage-end-checkpoint.stubs.json
+stub_registry: commits-parallel-resume-refusal.stubs.json
 
-timeout: 10m
+timeout: 5m
 turn_limit: 10
-stop_after_invocations: 2
+stop_after_invocations: 1
 
 seed_files:
   - path: Orchestration-{run_id}/Orchestration.md
-    ref: stage1-impl-done.md
+    ref: stage1-impl-done-commits-parallel.md
   - path: Orchestration-{run_id}/Plan.md
     ref: Plan.md
   - path: Orchestration-{run_id}/Research.md
@@ -47,6 +52,8 @@ seed_files:
     ref: Stage-1-Plan.md
   - path: Orchestration-{run_id}/Stage-1/PlanProgress.md
     ref: Stage-1-PlanProgress.md
+  - path: Orchestration-{run_id}/Stage-1/tests-review-tdd.md
+    ref: Stage-1-tests-review-tdd.md
   - path: Orchestration-{run_id}/Stage-2/Plan.md
     ref: Stage-2-Plan.md
   - path: Orchestration-{run_id}/Stage-2/PlanProgress.md
@@ -55,6 +62,4 @@ seed_files:
 assertions:
   invocation_sequence:
     exact: true
-    steps:
-      - { tool: dispatch, agent: implementation-review }
-      - { tool: dispatch, agent: checkpoint-stage-end-only }
+    steps: []

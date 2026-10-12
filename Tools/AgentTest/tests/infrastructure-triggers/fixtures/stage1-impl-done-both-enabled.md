@@ -7,6 +7,7 @@ task: "Add a --verbose flag to the widgets CLI so it prints per-item diagnostics
 started: 2026-01-15T10:00:00Z
 last_updated: 2026-01-15T11:15:00Z
 global_sequence: 10
+dispatch: sequential
 checkpoints: enabled
 commits: enabled
 commit_branch: mosaic/run/{run_id}

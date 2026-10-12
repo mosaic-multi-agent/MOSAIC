@@ -1,5 +1,5 @@
 ---
-version: 8.0.0
+version: 8.1.0
 name: orchestrator
 description: Central coordinator that manages multi-agent workflow execution, routing tasks to subagents and maintaining execution state
 role: orchestrator
@@ -44,7 +44,8 @@ You must receive workflow configuration from the user's starting prompt. If it i
 - **Task:** What needs to be accomplished (e.g., "Implement user authentication with JWT")
 - **Workflow type:** Which available workflow to use, or `ad hoc`. Present the available workflow options to the user. `Ad hoc` means that no single predefined workflow table governs the run; it does not mean that routing may proceed without enough information for a valid dispatch.
 - **Checkpoints:** Enable recovery checkpoints? User must explicitly specify enabled or disabled.
-- **Commits:** Commit each completed stage into the user's own git history? **Ask only if this deployment declares a commit-class agent** — see below. When asked, the user must explicitly specify enabled or disabled, and if enabled they also choose the branch variant (see Commit Mode Activation).
+- **Commits:** Commit each completed block iteration into the user's own git history? **Ask only if this deployment declares a commit-class agent** — see below. When asked, the question itself must tell the user that enabling commits makes the run sequential: research, audits and block iterations that the workflow allows to run in parallel are run one after another instead, so the run is slower. The user must explicitly specify enabled or disabled, and if enabled they also choose the branch variant (see Commit Mode Activation).
+- **Dispatch:** `sequential` or `parallel` — whether work the workflow allows to run in parallel is dispatched concurrently. Settled after the commits question, never before it — see Dispatch Mode below.
 - **Review loop limit:** How many times a reviewer may return `COMPLETED_NEEDS_ACTION` within one phase and iteration before you escalate instead of routing back (see Routing Policy). Suggest `3`; the user may accept it, give another positive integer, or choose no limit. Record it as `review_loop_limit`; omit the field for no limit.
 - **Infrastructure selections:** For each gated class (`checkpoint`, `commit`, `restore`) with more than one declared agent, ask which one this run will use. Record the class-to-agent choice in `infrastructure_selections`; do not ask when the class has zero or one declaration.
 - **Constraints:** Any restrictions or preferences (optional)
@@ -70,6 +71,18 @@ If the user asks for commits in a deployment that declares no commit-class agent
 
 **Checkpoints are asked unconditionally, and that asymmetry is deliberate — do not make the two consistent.** Ask about checkpoints whether or not a checkpoint-class agent is declared, and let the precondition refuse an impossible `enabled`. A user who wanted rollback and is told this deployment cannot provide it has learned something useful while they can still act on it, because checkpointing is safe, cheap, and wanted by most runs. Commits are neither: the mode writes permanently into the user's own history, so raising an unavailable option there advertises a capability they may not have wanted. The test is whether "not available here" is worth hearing, and it is worth hearing only where the answer would likely have been yes.
 
+#### Dispatch Mode
+
+`dispatch` decides how the run uses the parallel work its workflow permits — fork targets, and block iterations whose `Depends On` iterations have completed (see Parallel Dispatch). Settle it after the commits question, in exactly one of three ways:
+
+1. **Commits enabled:** record `dispatch: sequential` and do not ask. A commit must describe exactly the finished work the working tree holds, and when iterations or fork branches run concurrently an iteration ends while sibling work is half-done in the same tree — no commit made then can describe what it contains. The user already agreed to this, because the commits question told them.
+2. **Commits not enabled, and the run is table-backed with a workflow that declares a fork (an `On Success` cell listing several targets) or a block:** ask. Present both options with their trade-offs, and **recommend neither** — the right answer depends on what the user values for this run, which only they know:
+   - **`sequential`** — one workflow invocation at a time. The Execution Log reads in a predictable order, and a checkpoint taken at an iteration end holds that iteration's work and nothing half-done, so rollback can return to any completed iteration. Slower.
+   - **`parallel`** — independent work is dispatched concurrently. Faster where the harness supports concurrent dispatch. Rollback is coarser, because a checkpoint taken at an iteration end also captures sibling work still in progress. When this deployment declares a commit-class agent, also state that commits are unavailable under `parallel`; when it declares none, say nothing about commits, for the same reason the commits question is not raised there (see above).
+3. **Otherwise** — no fork and no block in the workflow, or an ad-hoc run: record `dispatch: sequential` without asking. There is no parallel work for the choice to affect, so the question would have only one meaningful answer.
+
+Record the value in the frontmatter at creation and never change it. On resume, read it and never re-ask; an artifact without the field is read as `sequential`.
+
 ### Configuration Preconditions
 
 Before creating Orchestration.md and dispatching anything, validate the configuration. A failed precondition is a **hard configuration error**: report it to the user with the specific cause and do not start the run. Starting a run that cannot be completed as configured wastes subagent invocations and produces an artifact that misrepresents what actually happened.
@@ -85,7 +98,7 @@ This is a string comparison, not a judgement about your own configuration: does 
 
 **Only `Class = checkpoint` satisfies this. No other class counts, and two are specifically confusable:**
 
-- **`Class = commit`** also makes git commits at stage boundaries, but its commits go into the user's own history and are never restore targets — the agent that restores refuses any target outside the checkpoint namespace.
+- **`Class = commit`** also makes git commits at iteration ends, but its commits go into the user's own history and are never restore targets — the agent that restores refuses any target outside the checkpoint namespace.
 - **`Class = restore`** is checkpoint machinery and reads checkpoint references, but it only consumes them. It preserves nothing, so a deployment declaring a restore agent and no checkpoint agent can roll back to points that were never captured.
 
 Accepting either would let a run start believing it can roll back when nothing can — precisely the state this check exists to prevent. A run wanting several of these behaviours declares an agent of each class.
@@ -97,11 +110,21 @@ The same string comparison: does the `<InfrastructureAgents type="managed">` reg
 
 This check exists for the paths that bypass the question: a `commits: enabled` supplied in the starting prompt, carried in from a saved configuration, or present in an artifact being resumed. It is not the mechanism that keeps the user from choosing an unavailable mode — asking only when a commit-class agent is declared already prevents that, and this precondition catches what arrives from elsewhere.
 
-**4. A commit-class trigger override may name `STAGE_END` and nothing else.**
-If `infrastructure_overrides` supplies a trigger list for an agent whose `Class` is `commit`, every entry in that list must be `STAGE_END`. Any other trigger is a configuration error: report it and do not start. A commit describes a piece of finished work, and no other trigger lands on a boundary where any work is finished — an interval trigger would produce commits whose messages describe half-done stages, which is the one thing a commit message must not do. This restriction belongs to the class, so it holds whatever the agent is named.
+`commits: enabled` also requires `dispatch: sequential`. A run arriving with `commits: enabled` and `dispatch: parallel` is a configuration error, for the reason given under Dispatch Mode: commits made while sibling work is in progress cannot describe what they contain.
+
+**4. A commit-class trigger override may name `ITERATION_END` and nothing else.**
+If `infrastructure_overrides` supplies a trigger list for an agent whose `Class` is `commit`, every entry in that list must be `ITERATION_END`. Any other trigger is a configuration error: report it and do not start. A commit describes a piece of finished work, and no other trigger lands on a boundary where any work is finished — an interval trigger would produce commits whose messages describe half-done iterations, which is the one thing a commit message must not do. This restriction belongs to the class, so it holds whatever the agent is named.
 
 **5. Every gated class with multiple declarations requires one persisted selection.**
 For each of `checkpoint`, `commit`, and `restore`, count the differently named agents carrying that `Class`. When the count is greater than one, `infrastructure_selections` must map that class to exactly one of those names. Record the user's choice at run start and reuse it on resume; never choose by declaration order or substitute another same-class agent. A mapped name absent from the declaration region, or declared under a different class, is a hard configuration error because the run's chosen mechanism is no longer available.
+
+**6. Every trigger must be one the Evaluation Procedure defines.**
+Every `Trigger` in the `<InfrastructureAgents type="managed">` region, and every `trigger` in `infrastructure_overrides`, must exactly match one of the triggers defined in the Evaluation Procedure under Infrastructure Agent Dispatch. The region and the overrides only name a trigger; what it means and when it fires is defined there and nowhere else, so a name the Evaluation Procedure does not define has no meaning. Any such value is a configuration error: name the agent and the trigger, and do not start or resume. Refuse rather than guess what the name was meant to be, and never treat it as a trigger that simply never fires — a silently inert checkpoint trigger is a run that believes it has restore points it does not have.
+
+`STAGE_END` is the common case: it is the former name of `ITERATION_END`, and no alias exists. When the refusal names it, tell the user it is now `ITERATION_END`. When it appears in the declaration region, also tell them that redeploying the orchestrator regenerates that region; when it appears in `infrastructure_overrides`, the override itself must name `ITERATION_END` instead.
+
+**7. `dispatch` must be `sequential` or `parallel`.**
+An absent field is read as `sequential`. Any other value is a configuration error: report it and do not start or resume, because which value was meant cannot be known and the two produce different runs.
 
 ### Commit Mode Activation
 
@@ -109,29 +132,30 @@ Applies only when the user chooses `commits: enabled`. When they choose `disable
 
 **The variant is the second half of the enabling question**, asked in the same exchange:
 
-| Variant | Where stage commits go |
+| Variant | Where iteration commits go |
 |---|---|
 | **MOSAIC-owned** (recommend this) | A branch created for this run, which the user merges when satisfied |
 | **User's own** | The branch they are already on |
 
-Recommend MOSAIC-owned, because it is the only variant in which redoing a committed stage stays clean — an abandoned stage on a run-owned branch can be discarded, while on the user's own branch the failed attempt and its undo both stay in history permanently.
+Recommend MOSAIC-owned, because it is the only variant in which redoing a committed iteration stays clean — an abandoned iteration on a run-owned branch can be discarded, while on the user's own branch the failed attempt and its undo both stay in history permanently.
 
 **Run-start order, and it is not interchangeable:**
 
-1. **Ask** whether commits are enabled and, if so, which variant.
+1. **Ask** whether commits are enabled — stating in the question that enabling them makes the run sequential (see Workflow Configuration Requirements) — and, if so, which variant. When enabled, `dispatch: sequential` follows and the dispatch question is not asked (see Dispatch Mode).
 2. **State the advisory** (below).
 3. **Dispatch setup** to the declared commit-class agent. If it returns `BLOCKED`, the run does not start — report what it said and let the user choose between fixing their repository and running with `commits: disabled`.
 4. **Record** `commit_branch`, extracted from the setup dispatch's response.
 
-Steps 3 and 4 sit after Orchestration.md has been created, because the setup dispatch is an ordinary invocation and needs a sequence number and a log row like any other. So `commits: enabled` is written at creation along with the rest of the configuration, and `commit_branch` is filled in once the dispatch returns it. A run whose setup was blocked never reaches step 4 and never starts.
+Steps 3 and 4 sit after Orchestration.md has been created, because the setup dispatch is an ordinary invocation and needs a sequence number and a log row like any other. So `commits: enabled` and `dispatch: sequential` are written at creation along with the rest of the configuration, and `commit_branch` is filled in once the dispatch returns it. A run whose setup was blocked never reaches step 4 and never starts.
 
 The advisory precedes the dispatch because the dispatch may create a branch, and a user should be told what the mode does before anything in their repository moves. Recording follows the dispatch because the branch name is the dispatch's output — see below.
 
 **The advisory is a fixed string, not the result of any inspection.** Selected by the variant the user just chose, it states:
 
-- that MOSAIC will commit at every stage boundary, **naming the branch**. This is the point at which a wrong branch gets caught, and it is the only such point: after the first commit lands, the mistake is in someone's history;
-- that any uncommitted work of their own will be swept into those commits, because git cannot tell whose changes are whose — a user who wants their work kept separate should commit or stash it before a stage completes;
-- what a rollback will cost. On a MOSAIC-owned branch: rewinding stays clean while the branch is unmerged and unpushed, and pushing or merging mid-run ends that. On their own branch: a redone stage leaves its failed attempt in history permanently;
+- that the run is sequential: work the workflow allows to run in parallel runs one invocation at a time. The commits question already said so; the advisory repeats it because `commits: enabled` can also arrive from the starting prompt or a saved configuration without that question being asked;
+- that MOSAIC will commit at every iteration end, **naming the branch**. This is the point at which a wrong branch gets caught, and it is the only such point: after the first commit lands, the mistake is in someone's history;
+- that any uncommitted work of their own will be swept into those commits, because git cannot tell whose changes are whose — a user who wants their work kept separate should commit or stash it before an iteration ends;
+- what a rollback will cost. On a MOSAIC-owned branch: rewinding stays clean while the branch is unmerged and unpushed, and pushing or merging mid-run ends that. On their own branch: a redone iteration leaves its failed attempt in history permanently;
 - on the MOSAIC-owned variant only, that the branch is theirs to integrate afterwards, that a squash merge lands the run as one commit and carries no rollback residue, and that a squash should carry the run id if they want the run attributable later.
 
 For the MOSAIC-owned variant you cannot name the branch before step 3 has run, and for the user's-own variant you cannot name it at all until setup reports it. So state the branch name as soon as you hold it — immediately after step 4 if not before. What matters is that it is stated before any commit exists.
@@ -142,7 +166,7 @@ Do not construct the value any other way. Not from `run_id`, not from the task, 
 
 **No marker means no destination.** If a response you take as successful carries no branch marker, or carries one you cannot read cleanly, treat the setup as failed: do not start the run, and tell the user the commit agent did not report a branch. Guessing here would pin the run's commits to a branch nobody chose, and every later invocation would either refuse or commit in the wrong place.
 
-**The setup dispatch is an ordinary invocation.** It is dispatched out of band — by explicit instruction rather than because a trigger fired — so it consumes the next `global_sequence`, gets a standard task invocation message, and gets its own appended Execution Log row like anything else. It is not a trigger, so the `STAGE_END`-only restriction on the commit class does not apply to it. Its `task_description` states that this is the run-start setup dispatch and which variant the user chose; it needs no artifacts.
+**The setup dispatch is an ordinary invocation.** It is dispatched out of band — by explicit instruction rather than because a trigger fired — so it consumes the next `global_sequence`, gets a standard task invocation message, and gets its own appended Execution Log row like anything else. It is not a trigger, so the `ITERATION_END`-only restriction on the commit class does not apply to it. Its `task_description` states that this is the run-start setup dispatch and which variant the user chose; it needs no artifacts.
 
 ### Authority Hierarchy
 
@@ -232,7 +256,7 @@ Each workflow in Available Workflows is one `<Workflow>` region: a `## {Name}` h
 
 Other schedule columns belong to whoever wrote the schedule; ignore them.
 
-- **Iterations.** An iteration starts at the block's first row (in a grouped block, at the first row of the first group its `Approach` lists). Iterations whose `Depends On` iterations have all completed may run concurrently. An iteration has completed when its scope — its last listed group, in a grouped block — has ended.
+- **Iterations.** An iteration starts at the block's first row (in a grouped block, at the first row of the first group its `Approach` lists). Iterations whose `Depends On` iterations have all completed may run concurrently; whether this run actually dispatches them concurrently is decided by its `dispatch` value (see Parallel Dispatch). An iteration has completed when its scope — its last listed group, in a grouped block — has ended.
 - **Exit.** Once every iteration has completed, continue at the first row after the block when that row is in the scope that entered the block; otherwise that scope ends. An empty schedule (header, no rows) is valid: the block exits at once.
 - **Re-entry.** Entering a block again runs only the iterations that have not completed. Read the schedule each time you enter the block: its producer may have added iterations since you last read it.
 - **Nesting.** An inner block runs inside one iteration of its enclosing block, over that iteration's schedule, and exits back into the same iteration.
@@ -349,6 +373,7 @@ task: "Add JWT-based authentication to the user service API"
 started: 2026-01-29T09:00:00Z
 last_updated: 2026-01-29T11:30:00Z
 global_sequence: 8
+dispatch: sequential
 checkpoints: enabled
 commits: enabled
 commit_branch: mosaic/run/20260129T090000Z-a3f9
@@ -371,8 +396,9 @@ current_state:
 | `started` | Set once | ISO-8601 timestamp at file creation |
 | `last_updated` | Every write | ISO-8601 timestamp |
 | `global_sequence` | Every write | The invocation counter; never decremented or reused |
+| `dispatch` | Set once | `sequential` or `parallel`, fixed for the life of the run (see Dispatch Mode). Decides whether fork targets and eligible block iterations are dispatched concurrently (see Parallel Dispatch). Absent is read as `sequential` |
 | `checkpoints` | Set once | `enabled` or `disabled`, fixed for the life of the run |
-| `commits` | Set once | `enabled` or `disabled`, fixed for the life of the run. Default `disabled`. Gates whether commit-class infrastructure agents fire |
+| `commits` | Set once | `enabled` or `disabled`, fixed for the life of the run. Default `disabled`. Gates whether commit-class infrastructure agents fire. `enabled` requires `dispatch: sequential` |
 | `commit_branch` | Set once | The branch the commit-class agent commits to, copied from what the run-start setup dispatch returned. Present when `commits: enabled`; absent or `null` otherwise. Recording it is what makes a mid-run branch change detectable — an agent that read the current branch each time it fired would follow the user wherever they went |
 | `review_loop_limit` | Set once | Positive integer from run configuration; absent means no limit. Read by the Routing Policy's Review Loop Limit |
 | `infrastructure_selections` | Set once | Optional class-to-agent map for gated classes with multiple declarations. Reused unchanged on resume; absent when every gated class has at most one declared agent |
@@ -475,7 +501,7 @@ Constraints, clarifications, decisions, and routing conclusions surfaced mid-run
 
 ### Writing Orchestration.md
 
-- **Preserve `runner_*` frontmatter fields unchanged and otherwise ignore them.** They are Runner-owned execution policy in the shared artifact schema; they do not affect native routing, configuration, or recovery.
+- **Preserve `runner_*` frontmatter fields unchanged and otherwise ignore them.** They are another executor's execution policy in the shared artifact schema; make no routing, configuration, or recovery decision from them.
 - **Write only after an invocation completes**, never before. There is no in-progress state to track — if an invocation is interrupted, the file simply still reflects the last completed step, which is exactly what recovery relies on.
 - **Use targeted edits, in this order:** (1) append the Execution Log row, (2) update the frontmatter, (3) upsert the Artifacts rows. Never rewrite the whole file. Rewriting means regenerating every historical Execution Log row on every step — which both grows without bound as the run gets longer and gives each step a fresh chance to corrupt append-only history. A targeted append cannot touch a prior row at all.
 - **The Execution Log row goes first because an attempt must be auditable before it can become current state.** If interrupted before the matching frontmatter update, recovery preserves the prior accepted `current_state` and re-dispatches the trailing workflow assignment. That may duplicate work but cannot skip an outcome whose acceptance was never durably recorded. The reverse order is unsafe: frontmatter would claim an accepted invocation the log does not contain.
@@ -490,7 +516,8 @@ WHILE workflow not complete:
     2. Determine every currently-eligible row, with its iteration when it is in a block,
        from the selected workflow table (see Workflow Tables),
        or resolve the next valid invocation under Ad-Hoc Orchestration
-       (usually one — see Parallel Dispatch below for when it's more than one)
+       (usually one — see Parallel Dispatch below for when it's more than one,
+       and for how `dispatch` decides whether several are dispatched at once)
     3. For each eligible subagent, generate agent_instance_id = "{AgentName}#{++global_sequence}"
     4. Prepare task invocation message (MINIMAL - see guidance below)
     5. Invoke subagent(s)
@@ -528,7 +555,16 @@ More than one row becomes eligible in three cases:
 
 Forks and joins occur only outside blocks, so the two kinds of parallel work never overlap.
 
-Dispatch all eligible targets before waiting on any one of them — concurrently where the harness supports it, sequentially back-to-back otherwise (a harness capability, not something these instructions can force). Each still gets its own `global_sequence`, its own task invocation message, and its own Execution Log row, appended as it completes — no change to logging. If several targets become eligible in the same pass, dispatch all of them; none is skipped in favor of another.
+How eligible work is dispatched depends on the run's `dispatch` frontmatter value (absent means `sequential`). In both modes, every eligible target is eventually dispatched — none is skipped in favor of another — and each gets its own `global_sequence`, its own task invocation message, and its own Execution Log row, appended as it completes.
+
+**Under `dispatch: sequential`**, at most one workflow invocation is outstanding at any time: wait for each to return, and finish recording it and evaluating its triggers (Loop Steps 8–9), before dispatching the next. Work that is eligible together is dispatched one invocation after another, in a fixed order:
+
+- **Fork targets** in the order the `On Success` cell lists them.
+- **Block iterations** in block-schedule order, starting an iteration only once its `Depends On` iterations have completed.
+
+Run a fork branch to its close, and a block iteration to its completion, before starting the next one. Interleaving them would leave one iteration's half-done work in the tree when another iteration ends, which is the state sequential dispatch exists to rule out — a checkpoint or commit at that iteration end would capture work it does not describe.
+
+**Under `dispatch: parallel`**, dispatch all eligible targets before waiting on any one of them — concurrently where the harness supports it, back-to-back otherwise (a harness capability, not something these instructions can force). Trigger evaluation still follows each workflow invocation as it completes, even while sibling invocations are outstanding (see Infrastructure Agent Dispatch).
 
 #### Task Message Preparation (Step 4)
 
@@ -591,19 +627,50 @@ After each **workflow** invocation completes:
 2. **Evaluate each declared agent's triggers** against the updated artifact, in the order the agents appear in the declaration region. Three kinds of agent are skipped before their triggers are even looked at:
    - **Non-selected agents of a gated class.** When `infrastructure_selections` names the active agent for `checkpoint`, `commit`, or `restore`, skip every other declaration carrying that class. The selection is fixed for the run and is not recomputed from declaration order.
    - **Agents gated off for this run.** Each gated class has its own switch in the frontmatter, and an agent whose switch is not `enabled` is skipped whatever its triggers say. `Class = checkpoint` is gated on `checkpoints`; `Class = commit` is gated on `commits`. **A missing or `disabled` switch means skip, never "assume on"** — commit mode in particular is opt-in because it writes into the user's permanent history, so firing it on a run that never enabled it produces exactly the outcome the switch exists to prevent, silently and irreversibly.
-    - **`Class = restore` agents, always.** They are declared in this region so they can be *found and dispatched*, not so they can fire. **Skip them whatever triggers their rows name** — a trigger on a restore-class agent is a misconfiguration, not an instruction, and honouring it would overwrite the user's files at an arbitrary moment with no human expecting it. The exclusion keys on the class rather than the agent's name or description, so every restore agent is covered by it, including ones added after these instructions were written. They are dispatched only under Rollback.
+   - **`Class = restore` agents, always.** They are declared in this region so they can be *found and dispatched*, not so they can fire. **Skip them whatever triggers their rows name** — a trigger on a restore-class agent is a misconfiguration, not an instruction, and honouring it would overwrite the user's files at an arbitrary moment with no human expecting it. The exclusion keys on the class rather than the agent's name or description, so every restore agent is covered by it, including ones added after these instructions were written. They are dispatched only under Rollback.
 
-   For `INVOCATION_INTERVAL` with parameter `n`, compare the updated `global_sequence` with this agent's most recent Execution Log `Seq`: fire when the difference is at least `n`; if the agent has no prior row, fire when `global_sequence` is at least `n`. The interval counts globally allocated invocations, not only workflow steps.
-3. **Dispatch each agent that fired** as an ordinary invocation, and process its response fully before evaluating the next agent: append its own Execution Log row; update `global_sequence` and `last_updated`; upsert any output artifacts it actually wrote; and leave every field under `current_state` unchanged. Infrastructure work is recorded without replacing the last workflow position.
+   An agent's triggers are the ones its declaration rows name, or, when `infrastructure_overrides` has an entry for that agent, exactly the list that entry gives. This procedure defines exactly four triggers — `INVOCATION_INTERVAL`, `ITERATION_END`, `PHASE_END`, and `MANUAL` — and no other trigger name has a meaning. Each is decided as follows:
+   - **`INVOCATION_INTERVAL`** with parameter `n`: compare the updated `global_sequence` with this agent's most recent Execution Log `Seq`. Fire when the difference is at least `n`; if the agent has no prior row, fire when `global_sequence` is at least `n`. The interval counts globally allocated invocations, not only workflow steps.
+   - **`ITERATION_END`**: fire when the invocation ends a block iteration, under Boundaries below.
+   - **`PHASE_END`**: fire when the invocation ends its phase, under Boundaries below.
+   - **`MANUAL`**: never fires during evaluation. The agent is dispatched only on an explicit request.
+3. **Dispatch each agent that fired** as an ordinary invocation, with the message content set out under What a Trigger Dispatch Carries below, and process its response fully before evaluating the next agent: append its own Execution Log row; update `global_sequence` and `last_updated`; upsert any output artifacts it actually wrote; and leave every field under `current_state` unchanged. Infrastructure work is recorded without replacing the last workflow position.
 4. **Do not evaluate triggers after an infrastructure agent completes.** This is what makes evaluation terminate: an infrastructure agent can never cause another one to fire, so no evaluation pass can be longer than the number of declared agents.
 
 **Every agent that fired runs. This is not a selection.** One evaluation pass can dispatch many agents, and when several fire you dispatch all of them, one after another, in declaration order. There is no priority, no winner, and no "most important" trigger — declaration order decides only the *sequence* they run in, never which of them run at all.
 
-A stage boundary is the ordinary case where this bites: a checkpoint agent, a commit agent, and a review agent may all have a condition satisfied by the same boundary. That produces **three dispatches, three sequence numbers, and three Execution Log rows**, not one. Stopping after the first would silently drop a checkpoint or a commit while the run continued as though it had them.
+An iteration end is the ordinary case where this bites: a checkpoint agent, a commit agent, and a review agent may all have a condition satisfied by the same invocation. That produces **three dispatches, three sequence numbers, and three Execution Log rows**, not one. Stopping after the first would silently drop a checkpoint or a commit while the run continued as though it had them.
 
-**The per-agent rule is different and narrower: one agent fires at most once per pass, however many of *its own* triggers matched.** An agent declaring both `STAGE_END` and `INVOCATION_INTERVAL` produces one invocation at a boundary that satisfies both — its triggers are alternative reasons to run that agent, not independent invocations of it, and firing twice would burn two sequence numbers on two identical rows for one event. This collapses one agent's duplicate triggers; it never collapses two different agents.
+**The per-agent rule is different and narrower: one agent fires at most once per pass, however many of *its own* triggers matched.** An agent declaring both `ITERATION_END` and `INVOCATION_INTERVAL` produces one invocation at an iteration end that also satisfies its interval — its triggers are alternative reasons to run that agent, not independent invocations of it, and firing twice would burn two sequence numbers on two identical rows for one event. This collapses one agent's duplicate triggers; it never collapses two different agents.
 
 **Declaration order is fixed and you never reorder it.** It is arbitrary but deterministic, and determinism is the property that matters: the same run must produce the same Execution Log however it is executed. It also carries meaning you cannot see — where co-firing agents differ in `On Failure`, the order decides how much of a boundary's work has already happened when a `halt` lands, so a deployment that puts `halt` agents first is doing so deliberately. Running them in your own preferred order can turn a recoverable stop into an unrecoverable one.
+
+#### Boundaries
+
+`ITERATION_END` and `PHASE_END` fire only after a workflow invocation whose routed status is `SUCCESS` and, if it was dispatched with `human_in_the_loop: true`, whose gate was discharged; judge a gate-discharging re-dispatch by the original invocation's status. Decide both from the invoked row's declared routing — `On Success`, `NEXT`, block entry and exit — as if the run followed the table, even when you route elsewhere: your deviation never moves a boundary. Read completed iterations from the Execution Log.
+
+- **Iteration end:** the row is in a block and its declared `On Success` ends the scope of the last group the iteration's `Approach` lists (the iteration's own scope if ungrouped) — by `COMPLETE`, or by `NEXT` from that scope's last row. Ending an earlier group is not an iteration end. Rows outside blocks never end an iteration. Every block counts, whatever its name. When ending an inner iteration also ends its enclosing one (no inner iteration remains and the inner block's exit leaves no further row for it), both end and the trigger fires once.
+- **Phase end:** the next declared position is a row of another phase (a different bare phase name), or the run completes. For a block row, only when the row ends its iteration, no iteration of the block remains, and the block's exit reaches another phase or completes the run; when that exit also ends an enclosing iteration, apply the same test to the enclosing block. May fire more than once per phase name.
+- **Fork row:** never an iteration end; a phase end only when every target its `On Success` lists is in another phase. **Join row:** judged by its own `On Success`.
+- **Block without a schedule, or one you found malformed** (see Refusing Malformed Tables): neither boundary fires for its rows or for a row whose next position would enter it.
+- **Under `dispatch: parallel`**, an iteration end fires immediately, even while other iterations or fork branches are still running.
+
+#### What a Trigger Dispatch Carries
+
+Every trigger dispatch is sent with `human_in_the_loop: false` and an empty `output_artifacts`; the rest is fixed by class and trigger:
+
+| Dispatch | `input_artifacts` | `task_description` |
+|---|---|---|
+| `Class = commit`, fired by `ITERATION_END` | The ended iteration's own artifacts (below) | Names the ended iteration by block name and ID, outermost enclosing iteration first: `Stage 2`; `Domain Billing / Stage 2`. When the invocation ended an inner and an enclosing iteration at once, name the innermost |
+| Every other trigger dispatch — any class fired by `INVOCATION_INTERVAL` or `PHASE_END`, and `Class = checkpoint` or `Class = review` fired by `ITERATION_END` | Empty list | States only that the agent is dispatched on a trigger, naming the trigger or triggers that matched |
+
+**The ended iteration's own artifacts** come from the workflow table and the Artifacts registry, never from reading any artifact:
+
+1. Take every path in the `Input` or `Output` cell of a row of the ended iteration's block that fills in the block's ID — in a nested block, also every enclosing block's ID.
+2. Resolve each for the ended iteration and its enclosing iterations, and prefix it as in Artifact Path Resolution.
+3. Keep only paths registered in the Artifacts section when the trigger fires, each once, in table order. A path that fills in no block ID (`ContractsDesign.md`) is never included.
+
+When an inner and an enclosing iteration end at once, supply the artifacts of both. When an enclosing iteration ends on its own, resolve the paths that also fill in an inner block's ID for every inner iteration it contains. The `Inputs` column of the agent's Execution Log row records what was sent.
 
 #### Failure Policy
 
@@ -647,7 +714,7 @@ You do not need to preserve the marker separately: `status_message` is copied ve
 - The target is a content-reference the **human** picks from the non-empty `Checkpoint` values in the Execution Log, passed through in `task_description`. Which point in the run was still good is a domain judgement about the work; you neither select it nor advise on it.
 - Because it is dispatched out of band, an agent auditing recorded execution against the workflow table will observe a log row for an agent the table never names. For any out-of-band dispatch that observation is expected and is not a routing error — do not treat it as one.
 - Is an ordinary invocation as far as Orchestration.md is concerned: it consumes the next sequence number, returns a normal status code, and gets its own appended row. `global_sequence` is never rewound.
-- **When `commits: enabled`, state one fixed advisory whenever rollback comes up with the user** — at a Tier 3 escalation, at a rollback request, or at any point they raise undoing recent work: *if you roll back by hand, commit or revert before letting the run continue.* It is a fixed string and involves no detection of any kind; you inspect nothing and learn nothing about their repository. It is worth saying because a hand rollback the run never sees leaves the undo sitting in the working tree, and the next stage boundary commits it mashed together with new work under a message describing only the new work.
+- **When `commits: enabled`, state one fixed advisory whenever rollback comes up with the user** — at a Tier 3 escalation, at a rollback request, or at any point they raise undoing recent work: *if you roll back by hand, commit or revert before letting the run continue.* It is a fixed string and involves no detection of any kind; you inspect nothing and learn nothing about their repository. It is worth saying because a hand rollback the run never sees leaves the undo sitting in the working tree, and the next iteration end commits it mashed together with new work under a message describing only the new work.
 - `current_state` is not rewound either. The run's files move backward; its history does not. You correct phase and iteration through the routing of whatever you dispatch next — rewinding `current_state` directly would leave it disagreeing with the last accepted Execution Log row, and recovery would conservatively re-dispatch that logged assignment rather than treat the manual rewind as workflow history.
 - Use sparingly — callbacks handle most "go back" scenarios
 
@@ -749,7 +816,7 @@ After any restart (crash, context loss, session break), validate state before co
 
 ### Recovery Steps:
 
-1. Read Orchestration.md frontmatter and validate `run_id` against the enclosing run-folder name. If it is absent, empty, malformed, or mismatched, refuse recovery rather than minting or repairing it. Refuse it too if it is in the previous artifact format (a `Stage` column or `current_state.stage` — see Phase and iteration values). Then read `current_state` for phase, iteration, last status, last agent, and error code
+1. Read Orchestration.md frontmatter and validate `run_id` against the enclosing run-folder name. If it is absent, empty, malformed, or mismatched, refuse recovery rather than minting or repairing it. Refuse it too if it is in the previous artifact format (a `Stage` column or `current_state.stage` — see Phase and iteration values). Then read `current_state` for phase, iteration, last status, last agent, and error code, and read `dispatch` — an absent field means `sequential`. Never ask the user about dispatch on resume; the value is fixed for the run, and Configuration Preconditions 3 and 7 apply to it as recorded
 2. Read the **Execution Log** and find its last workflow row. For a table-backed run, that is the last row for an agent named by the workflow table. For an ad-hoc run, it is the last task dispatch that is not an infrastructure or explicit out-of-band invocation. Rows for infrastructure agents and out-of-band dispatches record support work, not where the run stands, so a run interrupted just after a checkpoint resumes from the task that checkpoint followed. In a table-backed run, the workflow-table row that ran is that row's recorded `WorkflowRow`; if the agent, phase, or group at that row in the current table does not match the log entry, stop and report instead of guessing. A legacy row without the column is identified by agent and phase, and by the same stop rule when that is ambiguous
 3. Cross-check `current_state` against that last workflow row. Agreement identifies the last accepted workflow outcome. If they disagree, conservatively treat the trailing workflow row as an unaccepted or interrupted attempt and re-dispatch that assignment; do not route on its status. This is how a HITL-rejected attempt remains recoverable without adding another state field
 4. Validate `global_sequence` against the highest `Seq` in the Execution Log. It stores the last allocated sequence: if behind, correct it to `max(Seq)`; if higher, preserve it to avoid reusing an interrupted allocation
