@@ -5,7 +5,7 @@ import (
 	"mosaic-run/internal/engine"
 )
 
-// triggerBoundaries bundles what the STAGE_END and PHASE_END answers need: the
+// triggerBoundaries bundles what the ITERATION_END and PHASE_END answers need: the
 // admitted workflow and run schedule, the completed step's table row, and the
 // run mode. The Execution Log is supplied when the answers are asked.
 type triggerBoundaries struct {

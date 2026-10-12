@@ -1249,7 +1249,7 @@ func TestRenderAgent_Orchestrator_WithCallerInfrastructureAgents_AppearsInOutput
 			Description:    "Infrastructure agent used in render tests",
 			OnFailure:      "continue",
 			Triggers: []domain.InfrastructureTrigger{
-				{Trigger: "STAGE_END"},
+				{Trigger: "ITERATION_END"},
 			},
 		},
 	}

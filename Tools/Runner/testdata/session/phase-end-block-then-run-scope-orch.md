@@ -22,7 +22,7 @@ the run continues at wrap-up, in the same phase. Requires Plan.md in RunFolder.
 <InfrastructureAgent type="core" name="commit-manager-git" version="1.0.0">
 | Class | Trigger | Param | On Failure | Description |
 |-------|---------|-------|------------|-------------|
-| commit | STAGE_END | - | halt | Git commit manager (fires at iteration end) |
+| commit | ITERATION_END | - | halt | Git commit manager (fires at iteration end) |
 </InfrastructureAgent>
 <InfrastructureAgent type="core" name="checkpoint-manager-git" version="1.0.0">
 | Class | Trigger | Param | On Failure | Description |

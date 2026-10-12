@@ -138,6 +138,15 @@ func (s *sessionImpl) setupInfraAndStages(ctx context.Context, rs *runStartCtx) 
 		return s.refusal(err.Error()), true, nil
 	}
 
+	// Step 6e: on resume, validate the recorded infrastructure_overrides against
+	// the filtered declared set. This precedes every artifact write and every
+	// dispatch, so a refused override leaves the run untouched.
+	if !rs.config.IsNewRun {
+		if err := validateOverrides(rs.existingState.InfrastructureOverrides, declaredInfraAgents); err != nil {
+			return s.refusal(err.Error()), true, nil
+		}
+	}
+
 	// Step 7: settle checkpoints.
 	if rs.config.Checkpoints && !hasCheckpointClassAgent(declaredInfraAgents) {
 		return s.refusal("checkpoints requested but no checkpoint provider is available"), true, nil
@@ -316,15 +325,11 @@ func (s *sessionImpl) resumeRunArtifact(ctx context.Context, rs *runStartCtx) (d
 }
 
 // applyOverridesAndPreConsult handles steps 8b and 8c of the run-start
-// sequence: validate and apply infrastructure overrides, build the stage
+// sequence: apply infrastructure overrides, build the stage
 // source descriptor, and perform the optional pre-consultation.
 func (s *sessionImpl) applyOverridesAndPreConsult(ctx context.Context, rs *runStartCtx) (domain.RunOutcome, bool, error) {
-	// Step 8b: validate and apply infrastructure overrides.
-	updated, err := validateAndApplyOverrides(rs.state.InfrastructureOverrides, rs.declaredInfraAgents)
-	if err != nil {
-		return s.refusal(err.Error()), true, nil
-	}
-	rs.declaredInfraAgents = updated
+	// Step 8b: apply infrastructure overrides (validated at run start).
+	rs.declaredInfraAgents = applyOverrides(rs.state.InfrastructureOverrides, rs.declaredInfraAgents)
 
 	// Build the stage source descriptor.
 	rs.stageSources = stageSourcesFor(rs.admitted, rs.config.RunFolder)

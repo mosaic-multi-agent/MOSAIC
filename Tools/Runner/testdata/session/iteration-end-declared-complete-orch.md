@@ -22,6 +22,6 @@ scope. Requires Plan.md in RunFolder.
 <InfrastructureAgent type="core" name="commit-manager-git" version="1.0.0">
 | Class | Trigger | Param | On Failure | Description |
 |-------|---------|-------|------------|-------------|
-| commit | STAGE_END | - | halt | Git commit manager (fires at iteration end) |
+| commit | ITERATION_END | - | halt | Git commit manager (fires at iteration end) |
 </InfrastructureAgent>
 </InfrastructureAgents>

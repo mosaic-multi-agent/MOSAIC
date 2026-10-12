@@ -354,7 +354,7 @@ func TestToolManagedRegion_Infrastructure_AssembledInDeployedRegion(t *testing.T
 		Description: "Saves progress after each stage.",
 		OnFailure:   "halt",
 		Triggers: []domain.InfrastructureTrigger{
-			{Trigger: "STAGE_END", TriggerParam: ""},
+			{Trigger: "ITERATION_END", TriggerParam: ""},
 		},
 	}
 
@@ -480,7 +480,7 @@ You are the AllRegions agent.
 			{
 				Key: "sample-infra", Version: "1.0.0", Class: "checkpoint",
 				Description: "desc", OnFailure: "halt",
-				Triggers: []domain.InfrastructureTrigger{{Trigger: "STAGE_END"}},
+				Triggers: []domain.InfrastructureTrigger{{Trigger: "ITERATION_END"}},
 			},
 		},
 	}

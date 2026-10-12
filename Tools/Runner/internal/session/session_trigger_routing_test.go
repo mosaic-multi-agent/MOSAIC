@@ -1,6 +1,6 @@
 package session_test
 
-// STAGE_END and PHASE_END decided from routing. The step after which a
+// ITERATION_END and PHASE_END decided from routing. The step after which a
 // boundary trigger fires is the one whose On Success ends its iteration or
 // leaves its phase, not the one that happens to be last by table position. In
 // Modes 2 and 3 the engine's routing decides it; in Mode 1 the table's declared
@@ -128,11 +128,11 @@ func TestSession_Start_PhaseEndMode1_JoinLeavingPhase_FiresAfterJoinOnly(t *test
 
 // The worker declares COMPLETE and so ends its iteration, although the checker
 // is the last row of the scope by position.
-func TestSession_Start_StageEndMode1_DeclaredCompleteOnFirstRow_FiresAfterIt(t *testing.T) {
+func TestSession_Start_IterationEndMode1_DeclaredCompleteOnFirstRow_FiresAfterIt(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
 	consultant.queueStagedDispatch("worker", "task", 0, "1")
 	consultant.queueStop("done")
-	ses, f, orchPath := routeSession(t, "stage-end-declared-complete-orch.md", condOneStagePlan, consultant,
+	ses, f, orchPath := routeSession(t, "iteration-end-declared-complete-orch.md", condOneStagePlan, consultant,
 		"worker", "checker", "reporter", routeCommitAgent)
 	queueCond(f, "worker", domain.StatusSUCCESS)
 	queueCond(f, routeCommitAgent, domain.StatusSUCCESS)
@@ -144,14 +144,14 @@ func TestSession_Start_StageEndMode1_DeclaredCompleteOnFirstRow_FiresAfterIt(t *
 }
 
 // The consultant sends the run on to the checker although the worker declared
-// COMPLETE. STAGE_END fired after the worker by its declared routing, and the
+// COMPLETE. ITERATION_END fired after the worker by its declared routing, and the
 // checker, the last row of the scope with NEXT, ends the iteration once more.
-func TestSession_Start_StageEndMode1_ConsultedRouteDiffersFromDeclared_TriggersFollowDeclared(t *testing.T) {
+func TestSession_Start_IterationEndMode1_ConsultedRouteDiffersFromDeclared_TriggersFollowDeclared(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
 	consultant.queueStagedDispatch("worker", "task", 0, "1")
 	consultant.queueStagedDispatch("checker", "task", 1, "1")
 	consultant.queueStop("done")
-	ses, f, orchPath := routeSession(t, "stage-end-declared-complete-orch.md", condOneStagePlan, consultant,
+	ses, f, orchPath := routeSession(t, "iteration-end-declared-complete-orch.md", condOneStagePlan, consultant,
 		"worker", "checker", "reporter", routeCommitAgent)
 	queueCond(f, "worker", domain.StatusSUCCESS)
 	queueCond(f, routeCommitAgent, domain.StatusSUCCESS)

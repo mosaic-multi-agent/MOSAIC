@@ -82,7 +82,7 @@ func injSecurityBlock(version string) transform.InfrastructureBlock {
 	return transform.InfrastructureBlock{
 		Key: injSecurityKey, Name: injSecurityKey, Version: version, Class: "security",
 		Description: "Scans for vulnerabilities", OnFailure: "continue",
-		Triggers: []domain.InfrastructureTrigger{{Trigger: "STAGE_END"}},
+		Triggers: []domain.InfrastructureTrigger{{Trigger: "ITERATION_END"}},
 	}
 }
 
@@ -142,7 +142,7 @@ func injCatalog() *stubCatalog {
 	infra := []domain.Agent{
 		{Key: injSecurityKey, Version: "1.1", Name: injSecurityKey, Description: "Scans for vulnerabilities",
 			Role: domain.RoleSubagent, Infrastructure: "security", OnFailure: "continue",
-			Triggers: []domain.InfrastructureTrigger{{Trigger: "STAGE_END"}}, SourcePath: "src/" + injSecurityKey + ".md"},
+			Triggers: []domain.InfrastructureTrigger{{Trigger: "ITERATION_END"}}, SourcePath: "src/" + injSecurityKey + ".md"},
 		{Key: injCheckpointKey, Version: "1.0", Name: injCheckpointKey, Description: "Writes checkpoints",
 			Role: domain.RoleSubagent, Infrastructure: "checkpoint", OnFailure: "halt",
 			Triggers: []domain.InfrastructureTrigger{{Trigger: "INVOCATION_INTERVAL", TriggerParam: "10"}}, SourcePath: "src/" + injCheckpointKey + ".md"},

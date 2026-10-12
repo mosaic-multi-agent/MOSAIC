@@ -41,6 +41,9 @@ func Render(state domain.ArtifactState) ([]byte, error) {
 	buf.WriteString("started: " + state.Started.UTC().Format(time.RFC3339) + "\n")
 	buf.WriteString("last_updated: " + state.LastUpdated.UTC().Format(time.RFC3339) + "\n")
 	buf.WriteString("global_sequence: " + strconv.Itoa(state.GlobalSequence) + "\n")
+	if state.Dispatch.Present {
+		buf.WriteString("dispatch: " + renderDispatchValue(state.Dispatch.Value) + "\n")
+	}
 	if state.Checkpoints {
 		buf.WriteString("checkpoints: enabled\n")
 	} else {
@@ -143,6 +146,17 @@ func Render(state domain.ArtifactState) ([]byte, error) {
 	writeSection(&buf, workflowNotesOpen, renderWorkflowNotes(state.WorkflowNotes), workflowNotesClose)
 
 	return buf.Bytes(), nil
+}
+
+// renderDispatchValue writes a dispatch value so that the parser reads it back
+// verbatim: values the parser would otherwise trim, read as null or unwrap are
+// wrapped in double quotes.
+func renderDispatchValue(v string) string {
+	wrapped := len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"'
+	if v == "" || v == "null" || strings.TrimSpace(v) != v || wrapped {
+		return `"` + v + `"`
+	}
+	return v
 }
 
 // writeSection writes a region open tag, a blank line, the table, a blank line

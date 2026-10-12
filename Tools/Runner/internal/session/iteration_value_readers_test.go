@@ -1,6 +1,6 @@
 package session
 
-// The session's readers of a recorded Iteration value -- the STAGE_END and
+// The session's readers of a recorded Iteration value -- the ITERATION_END and
 // PHASE_END triggers, the defaults of a consultation-routed dispatch and the
 // re-dispatch of a schedule-defect producer -- read the value with the row it
 // was recorded for. A value in the 3.0 spelling "{ID}.{Group}" resolves the
@@ -126,9 +126,9 @@ func TestIterationEndTriggers_RecordedValueInTheThreeOhSpelling_ResolvesTheItera
 		steps   []ivStep
 		want    bool
 	}{
-		{"STAGE_END at the last row of the group", "STAGE_END",
+		{"ITERATION_END at the last row of the group", "ITERATION_END",
 			[]ivStep{{ivRowWriter, "A"}, {ivRowReview, "A"}}, true},
-		{"STAGE_END before the last row of the group", "STAGE_END",
+		{"ITERATION_END before the last row of the group", "ITERATION_END",
 			[]ivStep{{ivRowWriter, "A"}}, false},
 		{"PHASE_END at the last row of the last iteration", "PHASE_END",
 			[]ivStep{{ivRowWriter, "A"}, {ivRowReview, "A"}, {ivRowWriter, "B"}, {ivRowReview, "B"}}, true},
@@ -154,7 +154,7 @@ func TestIterationEndTriggers_RecordedValueInThePreThreeOhSpelling_DoesNotFire(t
 		trigger string
 		steps   []ivStep
 	}{
-		{"STAGE_END at the last row of the group", "STAGE_END",
+		{"ITERATION_END at the last row of the group", "ITERATION_END",
 			[]ivStep{{ivRowWriter, "A"}, {ivRowReview, "A"}}},
 		{"PHASE_END at the last row of the last iteration", "PHASE_END",
 			[]ivStep{{ivRowWriter, "A"}, {ivRowReview, "A"}, {ivRowWriter, "B"}, {ivRowReview, "B"}}},
@@ -174,7 +174,7 @@ func TestIterationEndTriggers_RecordedValueTheRowDoesNotAccept_DoesNotFire(t *te
 		Seq: 1, Agent: "tests-review#1", Phase: "EXECUTION", Stage: "A.Wrong",
 		WorkflowRow: domain.WorkflowRowFromIndex(ivRowReview), Status: domain.StatusSUCCESS,
 	}}
-	for _, trigger := range []string{"STAGE_END", "PHASE_END"} {
+	for _, trigger := range []string{"ITERATION_END", "PHASE_END"} {
 		t.Run(trigger, func(t *testing.T) {
 			if ivTriggerFiresAfter(t, aw, trigger, log) {
 				t.Errorf("%s must not fire for a value the row does not accept", trigger)

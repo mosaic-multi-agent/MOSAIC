@@ -11,7 +11,7 @@ tier_rationale: fixture for golden tests
 required_skills: []
 infrastructure: checkpoint
 triggers:
-  - trigger: STAGE_END
+  - trigger: ITERATION_END
 on_failure: halt
 ---
 

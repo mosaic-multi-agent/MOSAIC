@@ -7,6 +7,7 @@ task: "test task"
 started: 2026-01-01T00:00:00Z
 last_updated: 2026-01-01T00:00:00Z
 global_sequence: 2
+dispatch: sequential
 checkpoints: disabled
 commits: disabled
 runner_mode: auto

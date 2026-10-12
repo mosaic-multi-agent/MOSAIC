@@ -3,7 +3,7 @@ package domain
 // InfrastructureTrigger represents one trigger entry from an infrastructure agent's
 // frontmatter. A single agent may declare multiple triggers.
 type InfrastructureTrigger struct {
-	Trigger      string // e.g. "STAGE_END", "INVOCATION_INTERVAL", "PHASE_END", "MANUAL"
+	Trigger      string // e.g. "ITERATION_END", "INVOCATION_INTERVAL", "PHASE_END", "MANUAL"
 	TriggerParam string // e.g. "10"; empty string when the trigger takes no parameter
 }
 

@@ -164,6 +164,12 @@ func (s *sessionImpl) readArtifact(ctx context.Context, rs *runStartCtx) (domain
 		if idErr := checkResumeRunIdentity(existingState.RunID, rs.config); idErr != nil {
 			return s.runIdentityRefusal(idErr, rs.config), true, nil
 		}
+		if d := existingState.Dispatch; d.Present && d.Value != domain.DispatchSequential {
+			return s.refusal(fmt.Sprintf(
+				"run artifact records dispatch %q; this Runner runs sequentially and supports only \"dispatch: %s\"",
+				d.Value, domain.DispatchSequential,
+			)), true, nil
+		}
 		if valueErr := resumeValueRefusal(existingState, rs.table, rs.config.RunID); valueErr != nil {
 			return s.refusalCaused(valueErr.Error(), valueErr), true, nil
 		}

@@ -1,8 +1,8 @@
 ---
-version: "1.4"
+version: "1.5"
 name: "MosaicTest Infrastructure Checkpoint+Commit Workflow"
-description: "Runner mode fixture — Auto mode with checkpoint and commit infrastructure agents. Commit setup dispatch at run start, STAGE_END firing for both classes at each stage boundary. Proves the trigger-and-marker path works end to end through a real harness. Also guards the STAGE_END timing fix: each infra pair must fire between stages, including after the final stage."
-hint: "Harness test — infrastructure triggers (STAGE_END), commit setup dispatch, marker extraction"
+description: "Runner mode fixture — Auto mode with checkpoint and commit infrastructure agents. Commit setup dispatch at run start, ITERATION_END firing for both classes at each stage boundary. Proves the trigger-and-marker path works end to end through a real harness. Also guards the ITERATION_END timing fix: each infra pair must fire between stages, including after the final stage."
+hint: "Harness test — infrastructure triggers (ITERATION_END), commit setup dispatch, marker extraction"
 author: MOSAIC
 id: infra-checkpoint-commit
 referenced_agents:
@@ -20,10 +20,10 @@ checkpoints: enabled
 commits: enabled
 ---
 
-<Workflow type="core" name="infra-checkpoint-commit" version="1.4">
+<Workflow type="core" name="infra-checkpoint-commit" version="1.5">
 ## MosaicTest Infrastructure Checkpoint+Commit Workflow
 
-**Use when:** Verifying that infrastructure triggers fire through a real harness, that the commit setup dispatch runs at run start and extracts a branch marker, and that STAGE_END triggers fire on a stage transition for both checkpoint-class and commit-class agents.
+**Use when:** Verifying that infrastructure triggers fire through a real harness, that the commit setup dispatch runs at run start and extracts a branch marker, and that ITERATION_END triggers fire on a stage transition for both checkpoint-class and commit-class agents.
 
 | Phase | Subagent | HITL | On Success | On Findings | Input | Output |
 |-------|----------|:----:|------------|-------------|-------|--------|
@@ -40,7 +40,7 @@ commits: enabled
 - **Infrastructure agents are not in `referenced_agents`.** They are deployed from the catalog based on their `infrastructure:` frontmatter field and injected into the orchestrator's `<InfrastructureAgents>` region by the deploy tool. The workflow does not name them.
 - **`Plan.md` is a pre-placed fixture, not produced by the run.** It is the `Stage` block's schedule source, so it is a seed. Seed `Fixtures/infra-checkpoint-commit` as the single seed path.
 - The `Stage` block runs its single row once per row of the `## Stages` table, so one row per stage. `COMPLETE` ends each iteration.
-- The two infrastructure stubs (`mosaictest-checkpoint`, `mosaictest-commit`) both declare trigger `STAGE_END`. They fire on each observed stage transition, in catalog order (alphabetical by key: checkpoint before commit).
+- The two infrastructure stubs (`mosaictest-checkpoint`, `mosaictest-commit`) both declare trigger `ITERATION_END`. They fire on each observed stage transition, in catalog order (alphabetical by key: checkpoint before commit).
 - The commit setup dispatch fires once at run start, before the dispatch loop. It returns `[branch:mosaictest-run]`, which the runner records in the artifact's `commit_branch` frontmatter.
 - No deviations occur, so the orchestrator is consulted only for pre-consultation. The routing fixture declares `Pre-Consultation: none` and no rules.
 
@@ -83,34 +83,39 @@ Seven Orchestration.md log rows plus one pre-run consultation. Infrastructure ag
 catalog order (alphabetical by key): checkpoint before commit. Pre-consultation dispatches to the
 orchestrator but allocates no `Seq` and leaves no row — it surfaces only in the dispatch log.
 
-| Log `Seq` | `Agent` | Kind | `Phase` | `Iteration` | `Status` | `Summary` shows |
-|:---:|---|---|---|---|---|---|
-| 1 | `mosaictest-commit#1` | commit setup | -- | -- | SUCCESS | `[branch:mosaictest-run]` marker |
-| 2 | `mosaictest-scripted#2` | workflow step | EXECUTION | 1 | SUCCESS | stage 1 row, wrote Stage-1/MosaicTestStage.md |
-| 3 | `mosaictest-checkpoint#3` | infra trigger | -- | -- | SUCCESS | STAGE_END at end of stage 1, `[checkpoint:...]` marker |
-| 4 | `mosaictest-commit#4` | infra trigger | -- | -- | SUCCESS | STAGE_END at end of stage 1, `[branch:mosaictest-run]` marker |
-| 5 | `mosaictest-scripted#5` | workflow step | EXECUTION | 2 | SUCCESS | stage 2 row, wrote Stage-2/MosaicTestStage.md |
-| 6 | `mosaictest-checkpoint#6` | infra trigger | -- | -- | SUCCESS | STAGE_END at end of stage 2, `[checkpoint:...]` marker |
-| 7 | `mosaictest-commit#7` | infra trigger | -- | -- | SUCCESS | STAGE_END at end of stage 2, `[branch:mosaictest-run]` marker |
+| Log `Seq` | `Agent` | Kind | `Phase` | `Iteration` | `Inputs` | `Status` | `Summary` shows |
+|:---:|---|---|---|---|---|---|---|
+| 1 | `mosaictest-commit#1` | commit setup | -- | -- | - | SUCCESS | `[branch:mosaictest-run]` marker |
+| 2 | `mosaictest-scripted#2` | workflow step | EXECUTION | 1 | MosaicTestScript/infra-echo.md | SUCCESS | stage 1 row, wrote Stage-1/MosaicTestStage.md |
+| 3 | `mosaictest-checkpoint#3` | infra trigger | -- | -- | - | SUCCESS | ITERATION_END at end of stage 1, `[checkpoint:...]` marker |
+| 4 | `mosaictest-commit#4` | infra trigger | -- | -- | Stage-1/MosaicTestStage.md | SUCCESS | ITERATION_END at end of stage 1, `[branch:mosaictest-run]` marker |
+| 5 | `mosaictest-scripted#5` | workflow step | EXECUTION | 2 | MosaicTestScript/infra-echo.md | SUCCESS | stage 2 row, wrote Stage-2/MosaicTestStage.md |
+| 6 | `mosaictest-checkpoint#6` | infra trigger | -- | -- | - | SUCCESS | ITERATION_END at end of stage 2, `[checkpoint:...]` marker |
+| 7 | `mosaictest-commit#7` | infra trigger | -- | -- | Stage-2/MosaicTestStage.md | SUCCESS | ITERATION_END at end of stage 2, `[branch:mosaictest-run]` marker |
 
-**Run outcome:** COMPLETE. All workflow steps succeed, both STAGE_END boundaries fire.
+**Inputs:** a commit-class `ITERATION_END` dispatch is sent the ended iteration's existing fill-in
+artifacts, here `Stage-{Stage}/MosaicTestStage.md`. Artifacts without the block fill-in
+(`MosaicTestScript/infra-echo.md`, `Plan.md`) are never included. A checkpoint dispatch is sent no
+artifacts, so its `Inputs` show `-`. The commit setup dispatch carries none either.
+
+**Run outcome:** COMPLETE. All workflow steps succeed, both ITERATION_END boundaries fire, and each commit row records its iteration's artifact as `Inputs`.
 
 **Key observations:**
 - Seq 1 is the commit setup dispatch — before any workflow step *and* before pre-consultation.
   Per Design.md §4.2 the setup dispatch is run-start step 7a, while pre-consultation follows
   artifact creation (step 8) because its request carries the artifact path. This ordering is
-  is separate from `STAGE_END` timing. The artifact's `commit_branch` field
+  is separate from `ITERATION_END` timing. The artifact's `commit_branch` field
   should read `mosaictest-run`. Pre-consultation itself allocates no `Seq` and leaves no row, so
   the first workflow step is `mosaictest-scripted#2`, immediately following the commit setup row.
 - **Each infra pair straddles a stage boundary.** Seq 3/4 fire after stage 1's step and before
   stage 2's step; Seq 6/7 fire after stage 2's step. This is what makes per-stage commits
   meaningful: the commit at Seq 4 sees only stage 1's files, and the commit at Seq 7 sees only
   stage 2's.
-- **Regression guard for the `STAGE_END` timing fix.** `STAGE_END` used to be evaluated by
+- **Regression guard for the iteration-end timing fix.** The trigger (named `STAGE_END` before it became `ITERATION_END`) used to be evaluated by
   comparing the completed step's stage against the *previous* step's stage, so it could not fire
   until a step from the next stage had already completed. The Seq 3/4 pair landed after Seq 5's
   work instead of before it and swept both stages' files into one commit, and because the final
-  stage has no successor step, Seq 6/7 never fired. The fix evaluates `STAGE_END` when the last
+  stage has no successor step, Seq 6/7 never fired. The fix evaluates `ITERATION_END` when the last
   step of a stage returns HITL-accepted `SUCCESS` (Runner `Design.md` §5). If either symptom
   comes back, the fix has regressed.
 - Infrastructure rows are flagged `IsInfrastructure=true` in the log and do not update
@@ -129,7 +134,7 @@ orchestrator but allocates no `Seq` and leaves no row — it surfaces only in th
 | Seq 1 missing (no commit setup row) | The commit setup dispatch did not fire; check `session.go` doCommitSetupDispatch |
 | An `orchestrator-script` row appears in `Orchestration.md` | Consultations must leave no row in the artifact; pre-consultation wrongly called `Store.Apply` or allocated a `Seq` |
 | Commit setup fires but `commit_branch` is empty | The `[branch:mosaictest-run]` marker was not extracted from the stub's response |
-| Only one infra pair, firing after stage 2's step | The `STAGE_END` timing fix has regressed: the trigger again compares backwards against the previous step's stage, so it fires late and never for the final stage |
+| Only one infra pair, firing after stage 2's step | The `ITERATION_END` timing fix has regressed: the trigger again compares backwards against the previous step's stage, so it fires late and never for the final stage |
 | Two pairs, but both after stage 2's step | Partial regression: the final stage still fires, but the stage 1 trigger is late again, so the first commit sweeps up both stages' files |
 | No infra triggers at all | No stage boundary was observed at all — the trigger evaluator may not be running between stages, or `prevWorkflowStep` is not being carried across steps |
 | Infra triggers fire but in wrong order (commit before checkpoint) | The InfrastructureAgents region is not in alphabetical order, or the evaluator iterates differently from the declaration order |
@@ -148,13 +153,14 @@ orchestrator but allocates no `Seq` and leaves no row — it surfaces only in th
 | 1.2 | 2026-09-22 | MOSAIC | Expected Run restored to eight dispatches with each infra pair straddling a stage boundary. Deliberately RED pending the STAGE_END timing fix (`Issue-Runner-TerminalStageEndTrigger.md`); the v1.1 six-dispatch expectation documented the bug rather than the requirement. |
 | 1.3 | 2026-10-04 | MOSAIC | Added a rule-less `MosaicTestRouting.md` (`Pre-Consultation: none`). Without it the pre-consultation answer depended on how the stub happened to phrase "fixture not found", which made the run flaky. The `STAGE_END` timing fix has landed: the "RED on purpose" notes are replaced by regression notes, and the Expected Run is unchanged. |
 | 1.4 | 2026-10-12 | MOSAIC | WorkflowFormat 2.16 notation: `EXECUTION.[Stage]` with a `**Blocks:**` table over `Plan.md`, `Stage-{Stage}/MosaicTestStage.md`, `COMPLETE` instead of `-` in `On Success`, `Plan.md` listed in `artifacts`. Expected Run uses the OrchestrationArtifactFormat 3.0 log values (`Phase` `EXECUTION`, `Iteration` `1`). Dispatch sequence unchanged. |
+| 1.5 | 2026-10-12 | MOSAIC | Trigger renamed `STAGE_END` to `ITERATION_END` throughout (stubs, fixture `Plan.md`, prose). Expected Run gains an `Inputs` column: commit rows show the ended iteration's fill-in artifact, checkpoint rows `-`. Dispatch sequence unchanged. |
 
 ---
 
 ## Open Ideas / Dead Ends
 
 **Ideas under consideration:**
-- A variant with `INVOCATION_INTERVAL(2)` on the checkpoint agent instead of `STAGE_END`, so both trigger types fire in one run.
+- A variant with `INVOCATION_INTERVAL(2)` on the checkpoint agent instead of `ITERATION_END`, so both trigger types fire in one run.
 - Adding a review-class agent to exercise all three infrastructure classes simultaneously.
 - Testing the `on_failure: halt` path by making a stub return BLOCKED (requires changes to the infrastructure stubs).
 

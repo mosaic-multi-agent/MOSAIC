@@ -17,6 +17,6 @@
 <InfrastructureAgent type="core" name="commit-manager-git" version="1.0.0">
 | Class | Trigger | Param | On Failure | Description |
 |-------|---------|-------|------------|-------------|
-| commit | STAGE_END | - | halt | Git commit manager (fires on stage transition) |
+| commit | ITERATION_END | - | halt | Git commit manager (fires on stage transition) |
 </InfrastructureAgent>
 </InfrastructureAgents>

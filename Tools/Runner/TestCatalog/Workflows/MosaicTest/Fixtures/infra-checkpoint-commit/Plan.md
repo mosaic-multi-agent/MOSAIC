@@ -4,14 +4,14 @@
 > This file exists so the runner has a block schedule to read in a workflow with no planning row.
 
 ## Overview
-Two stages of fixture work. Two stages are needed so that STAGE_END fires mid-run (at the stage 1/2 boundary), not only at run completion.
+Two stages of fixture work. Two stages are needed so that ITERATION_END fires mid-run (at the stage 1/2 boundary), not only at run completion.
 
 ## Stages
 
 | Stage | Name | Goal | Depends On | HITL | Approach |
 |-------|------|------|------------|:----:|----------|
-| 1 | First infrastructure stage | Run the EXECUTION row once and trigger STAGE_END for checkpoint and commit | - | FALSE | direct |
-| 2 | Second infrastructure stage | Run the EXECUTION row again and trigger STAGE_END for checkpoint and commit | 1 | FALSE | direct |
+| 1 | First infrastructure stage | Run the EXECUTION row once and trigger ITERATION_END for checkpoint and commit | - | FALSE | direct |
+| 2 | Second infrastructure stage | Run the EXECUTION row again and trigger ITERATION_END for checkpoint and commit | 1 | FALSE | direct |
 
 ## Unresolved Questions
 <!-- Empty = plan is complete. -->

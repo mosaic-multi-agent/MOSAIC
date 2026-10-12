@@ -186,7 +186,7 @@ func minimalArtifactWithExecutionRow(inputs string) []byte {
 
 // minimalArtifactWithSingleOverrideBytes builds minimal valid artifact bytes
 // that contain one infrastructure_overrides entry for "checkpoint-manager-git"
-// with a single STAGE_END trigger and no trigger_param.
+// with a single ITERATION_END trigger and no trigger_param.
 func minimalArtifactWithSingleOverrideBytes() []byte {
 	return []byte("---\n" +
 		"type: orchestration-artifact\n" +
@@ -201,7 +201,7 @@ func minimalArtifactWithSingleOverrideBytes() []byte {
 		"infrastructure_overrides:\n" +
 		"  checkpoint-manager-git:\n" +
 		"    triggers:\n" +
-		"      - trigger: STAGE_END\n" +
+		"      - trigger: ITERATION_END\n" +
 		"current_state:\n" +
 		"  phase: null\n" +
 		"  iteration: null\n" +

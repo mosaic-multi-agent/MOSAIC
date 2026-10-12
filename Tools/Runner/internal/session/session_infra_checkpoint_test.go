@@ -90,7 +90,7 @@ func TestSession_Start_CheckpointsDisabled_WithCheckpointClassAgent_Proceeds(t *
 
 // newCommitAgentSession builds a session backed by the commit-agent-orch.md
 // fixture, which declares a commit-class infrastructure agent
-// (commit-manager-git) with a STAGE_END trigger. Agent files for agent-a
+// (commit-manager-git) with a ITERATION_END trigger. Agent files for agent-a
 // and agent-b are written into the temp dir.
 func newCommitAgentSession(t *testing.T) (ses session.Session, f *harness.MockAdapter, store *memStore, orchPath string) {
 	t.Helper()
@@ -243,7 +243,7 @@ func TestSession_Start_InfrastructureOverride_ReplacementSemantics_OverrideRepla
 // verifies that when an infrastructure_overrides entry specifies a trigger
 // outside the allowed set for the agent's class, the session refuses to start.
 //
-// The design specifies that commit-class agents are restricted to STAGE_END
+// The design specifies that commit-class agents are restricted to ITERATION_END
 // triggers only. Supplying INVOCATION_INTERVAL in an override for a
 // commit-class agent violates this restriction and must produce RunRefused.
 //
@@ -252,7 +252,7 @@ func TestSession_Start_InfrastructureOverride_ReplacementSemantics_OverrideRepla
 // is "RunCompleted instead of RunRefused" (missing class-restriction validation),
 // not a spurious deviation-resolver path from an empty harness queue.
 func TestSession_Start_InfrastructureOverride_ClassRestrictedTrigger_ReturnsRefusal(t *testing.T) {
-	// commit-agent-orch.md declares commit-manager-git (commit class, STAGE_END).
+	// commit-agent-orch.md declares commit-manager-git (commit class, ITERATION_END).
 	ses, f, store, orchPath := newCommitAgentSession(t)
 
 	// Override the commit-class agent with a trigger not in its allowed set.

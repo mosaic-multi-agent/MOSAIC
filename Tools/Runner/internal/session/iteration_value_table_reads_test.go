@@ -2,7 +2,7 @@ package session
 
 // A row of a named group records its iteration in the 3.0 spelling
 // "{ID}.{Group}". The session readers of a recorded Iteration value -- the
-// STAGE_END trigger, the defaults of a consultation-routed dispatch and the
+// ITERATION_END trigger, the defaults of a consultation-routed dispatch and the
 // re-dispatch of a schedule-defect producer -- resolve the other spellings to
 // no iteration: "Stage-{ID}" names no group and "{Group}.{ID}" is the pre-3.0
 // spelling. The 3.0 spelling is covered in iteration_value_readers_test.go.
@@ -23,7 +23,7 @@ func ivOldSpellings() map[string]string {
 	}
 }
 
-func TestStageEndTrigger_RowRecordedOldSpelling_DoesNotFire(t *testing.T) {
+func TestIterationEndTrigger_RowRecordedOldSpelling_DoesNotFire(t *testing.T) {
 	aw := ivAdmitted(t)
 	for spelling, value := range ivOldSpellings() {
 		t.Run(spelling, func(t *testing.T) {
@@ -36,8 +36,8 @@ func TestStageEndTrigger_RowRecordedOldSpelling_DoesNotFire(t *testing.T) {
 				})
 			}
 
-			if ivTriggerFiresAfter(t, aw, "STAGE_END", log) {
-				t.Errorf("STAGE_END must not fire after the last row recorded %q", value)
+			if ivTriggerFiresAfter(t, aw, "ITERATION_END", log) {
+				t.Errorf("ITERATION_END must not fire after the last row recorded %q", value)
 			}
 		})
 	}

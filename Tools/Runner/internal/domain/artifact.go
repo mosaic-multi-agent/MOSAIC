@@ -15,6 +15,21 @@ type InfrastructureOverride struct {
 	Triggers  []DeclaredInfraTrigger // replacement trigger list
 }
 
+// Values of the run artifact's dispatch frontmatter field
+// (OrchestrationArtifactFormat section 4).
+const (
+	DispatchSequential = "sequential"
+	DispatchParallel   = "parallel"
+)
+
+// DispatchField is the recorded dispatch frontmatter field. Presence is
+// modelled separately from the value so a present-but-blank key is never
+// confused with an absent one.
+type DispatchField struct {
+	Present bool   // the key exists in the frontmatter
+	Value   string // the value as parsed; meaningful only when Present
+}
+
 // ArtifactState is the parsed content of Orchestration.md.
 // It is the runner's only durable state.
 type ArtifactState struct {
@@ -27,6 +42,11 @@ type ArtifactState struct {
 	Started         time.Time
 	LastUpdated     time.Time
 	GlobalSequence  int // last allocated invocation number
+
+	// Dispatch is the dispatch frontmatter field. Zero value = absent (read as
+	// sequential). Set to sequential only by Store.Create; otherwise preserved
+	// exactly (Present and Value) by every rewrite.
+	Dispatch DispatchField
 
 	// RunSettings holds every run-configuration decision that is settled at run
 	// start, immutable for the run, and persisted in the artifact frontmatter so

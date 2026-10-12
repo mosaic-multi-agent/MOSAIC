@@ -337,9 +337,9 @@ func TestParse_InfrastructureOverrides_Trigger_Populated(t *testing.T) {
 		t.Fatal("InfrastructureOverrides[0].Triggers: want at least 1 trigger, got 0")
 	}
 
-	if state.InfrastructureOverrides[0].Triggers[0].Trigger != "STAGE_END" {
+	if state.InfrastructureOverrides[0].Triggers[0].Trigger != "ITERATION_END" {
 		t.Errorf("Triggers[0].Trigger: want %q, got %q",
-			"STAGE_END", state.InfrastructureOverrides[0].Triggers[0].Trigger)
+			"ITERATION_END", state.InfrastructureOverrides[0].Triggers[0].Trigger)
 	}
 }
 

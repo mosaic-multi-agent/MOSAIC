@@ -52,7 +52,7 @@ func TestReadInfrastructureDeclarations_AssembledSection_RoundTripsFields(t *tes
 		Class:       "review",
 		Description: "Advisory checks on run bookkeeping.",
 		OnFailure:   "halt",
-		Triggers:    []domain.InfrastructureTrigger{{Trigger: "STAGE_END", TriggerParam: ""}},
+		Triggers:    []domain.InfrastructureTrigger{{Trigger: "ITERATION_END", TriggerParam: ""}},
 	}
 	deployed := deployedOrchestrator(infraSection(block), "")
 
@@ -79,7 +79,7 @@ func TestReadInfrastructureDeclarations_MultiTrigger_ReadsEveryRowWithDashAsEmpt
 	block := newInfraBlock("progress-check", "2.0")
 	block.Triggers = []domain.InfrastructureTrigger{
 		{Trigger: "INVOCATION_INTERVAL", TriggerParam: "10"},
-		{Trigger: "STAGE_END", TriggerParam: ""},
+		{Trigger: "ITERATION_END", TriggerParam: ""},
 		{Trigger: "PHASE_END", TriggerParam: "implementation"},
 	}
 
@@ -159,7 +159,7 @@ func TestReadInfrastructureDeclarations_InconsistentClassAcrossRows_Unparsed(t *
 
 | Class | Trigger | Param | On Failure | Description |
 |-------|---------|-------|------------|-------------|
-| review | STAGE_END | - | halt | First row. |
+| review | ITERATION_END | - | halt | First row. |
 | audit | PHASE_END | - | halt | Second row. |
 
 </InfrastructureAgent>
@@ -213,7 +213,7 @@ func TestReadInfrastructureDeclarations_PipeInDescription_StillReadsWithoutFaili
 func TestReadInfrastructureDeclarations_CRLFDocument_RoundTripsFields(t *testing.T) {
 	block := newInfraBlock("crlf-agent", "3.1")
 	block.Triggers = []domain.InfrastructureTrigger{
-		{Trigger: "STAGE_END", TriggerParam: ""},
+		{Trigger: "ITERATION_END", TriggerParam: ""},
 		{Trigger: "INVOCATION_INTERVAL", TriggerParam: "5"},
 	}
 	deployed := []byte(toCRLF(string(deployedOrchestrator(infraSection(block), ""))))

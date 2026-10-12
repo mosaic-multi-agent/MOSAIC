@@ -184,9 +184,9 @@ func TestSession_Start_SingleGatedClassAgent_AutoSelected_RunProceeds(t *testing
 	// checkpoint-agent-orch.md declares one checkpoint-class agent.
 	ses, f, _, orchPath := newCheckpointAgentSession(t)
 
-	// Expected GREEN dispatch: agent-a -> agent-b. The STAGE_END trigger on
+	// Expected GREEN dispatch: agent-a -> agent-b. The ITERATION_END trigger on
 	// checkpoint-manager-git does not fire here because this is a linear (non-staged)
-	// PLANNING workflow -- STAGE_END only applies within EXECUTION phases that have
+	// PLANNING workflow -- ITERATION_END only applies within EXECUTION phases that have
 	// a stage structure. Without EXECUTION stages, the look-ahead finds no stage
 	// boundary and the checkpoint agent is never dispatched. That is correct
 	// behaviour: the trigger contract is unrelated to auto-selection.

@@ -187,6 +187,9 @@ func buildStateFromFrontmatter(fmContent string, entries []domain.FrontmatterEnt
 		}
 		state.GlobalSequence = n
 	}
+	if v, ok := topLevel["dispatch"]; ok {
+		state.Dispatch = domain.DispatchField{Present: true, Value: v}
+	}
 	if v, ok := topLevel["checkpoints"]; ok {
 		switch v {
 		case "enabled":

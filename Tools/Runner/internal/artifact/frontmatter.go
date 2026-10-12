@@ -62,6 +62,7 @@ func parseFrontmatter(content string) (topLevel map[string]string, currentState 
 var modelledFrontmatterKeys = map[string]bool{
 	"type": true, "run_id": true, "workflow": true, "workflow_version": true,
 	"task": true, "started": true, "last_updated": true, "global_sequence": true,
+	"dispatch": true,
 	"checkpoints": true, "commits": true, "commit_branch": true,
 	"review_loop_limit": true, "infrastructure_overrides": true,
 	"infrastructure_selections": true, "current_state": true,
@@ -233,7 +234,7 @@ func parseInfrastructureSelections(entries []domain.FrontmatterEntry) (map[strin
 //	infrastructure_overrides:
 //	  agent-name:
 //	    triggers:
-//	      - trigger: STAGE_END
+//	      - trigger: ITERATION_END
 //	      - trigger: INVOCATION_INTERVAL
 //	        trigger_param: 10
 //
@@ -286,7 +287,7 @@ func parseInfrastructureOverrides(content string) []domain.InfrastructureOverrid
 		if strings.HasPrefix(line, "    ") {
 			trimmed := strings.TrimSpace(line)
 
-			// Trigger list item start (e.g., "      - trigger: STAGE_END")
+			// Trigger list item start (e.g., "      - trigger: ITERATION_END")
 			if strings.HasPrefix(trimmed, "- trigger:") {
 				// Save previous trigger if any
 				if currentTrigger != nil && currentAgent != nil {

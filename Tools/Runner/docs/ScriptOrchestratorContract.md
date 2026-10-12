@@ -13,6 +13,8 @@ The Runner and the orchestrator agent collaborate to execute workflows. The Runn
 
 This document defines the contract for that invocation: the request the Runner sends, the response it expects, and the guarantees both sides provide.
 
+The Runner requires `orchestrator-script` v3.2.0, the orchestrator version that states this contract. It runs every run sequentially: new runs record `dispatch: sequential` in the artifact frontmatter, and a resumed artifact recording any other `dispatch` value is refused before any dispatch. The wire schema is unchanged by this requirement.
+
 ### 1.1 Why a Contract Document
 
 The orchestrator agent is an LLM — it produces natural language and JSON according to its system prompt. The Runner is a Go program — it parses JSON according to a struct definition. If either side's expectation drifts, the invocation fails silently or with an opaque parse error. This document is the single source of truth for what crosses the boundary.
@@ -157,7 +159,7 @@ Route to a specific agent in the workflow table.
 
 **Defaults and overrides:** The table row provides the default artifact set — what the workflow author designed for the first happy-path invocation of each agent. On re-invocations (after review loops, deviation recovery, backward jumps), the artifact set often differs: a creator routed back after review needs the review artifact as additional input; an agent re-invoked after upstream changes may need a different output scope. The orchestrator overrides only the fields that differ from table defaults — `null` means "use the table."
 
-**Runner behavior:** The Runner validates `row` and `iteration` against the routing table and the current block schedules, and never corrects them. For each protocol request field, it applies the orchestrator's value if provided, otherwise falls back to the table row's default. Sequence number is always assigned by the Runner. Once that invocation's outcome is accepted, `current_state` takes the dispatched row's position — including phase and stage changes, even if the dispatch jumps backward in the table.
+**Runner behavior:** The Runner validates `row` and `iteration` against the routing table and the current block schedules, and never corrects them. For each protocol request field, it applies the orchestrator's value if provided, otherwise falls back to the table row's default. Sequence number is always assigned by the Runner. Once that invocation's outcome is accepted, `current_state` takes the dispatched row's position — including phase and iteration changes, even if the dispatch jumps backward in the table.
 
 **Free table navigation:** The orchestrator can name any agent in the routing table, regardless of the current position. A reviewer finding upstream problems (bad contracts, incomplete requirements, wrong plan) is a normal reason to jump backward. The Runner imposes no ordering constraint — the orchestrator's routing decision is authoritative.
 
@@ -279,6 +281,7 @@ Unlike subagent failures (which become deviations that the orchestrator can reso
 | Re-read the artifact after the orchestrator returns | The orchestrator may have updated Workflow Notes. The Runner must pick up those changes before the next dispatch. |
 | Keep consultation diagnostics outside `Orchestration.md` | A consultation is a fresh turn of the run's coordinator, not a protocol subagent invocation. It does not consume `global_sequence`, create an Execution Log row, or update `current_state`. Runner diagnostic/MOSAIC logs record the individual call; continuity needed for routing belongs in Workflow Notes. |
 | Re-invoke the orchestrator on a malformed reply, within the attempt budget of §7.1 | A reply with invalid JSON or an invalid `row`/`iteration` is a recoverable orchestrator slip; the retry costs one consultation, not the run. |
+| Run sequentially and refuse another `dispatch` value on resume | The artifact's `dispatch` field records how the run is scheduled. The Runner writes `sequential` on new runs and refuses a present value other than exactly `sequential`; a missing field is read as `sequential`. The orchestrator's consultation never carries a parallel schedule. |
 | Never parse orchestrator responses beyond the defined schema | If the orchestrator returns extra fields, ignore them. Forward compatibility. |
 
 ---
@@ -334,6 +337,7 @@ Considered treating the orchestrator as another row in the routing table (a "met
 
 | Version | Date | Summary |
 |---------|------|---------|
+| 0.6 | 2026-10-12 | The Runner requires `orchestrator-script` v3.2.0 and runs every run with `dispatch: sequential`, refusing other recorded values on resume. Section 4.1 speaks of phase and iteration changes. The wire schema is unchanged. |
 | 0.5 | 2026-10-12 | **Breaking:** the `dispatch` reply names the iteration of a block row in `iteration`, a string holding exactly the Execution Log's `Iteration` value for that row (`"A"`, `"4"`, `"1.Test"`), split using the row's `Phase` cell; it replaces `stage`, which is no longer accepted. `agent` is the bare agent id, without the mode qualifier; the whole `Subagent` cell is an agent-row mismatch. Validation failures keep their handling classes (retried within the malformed-reply budget, or stopping at once). `orchestrator-script` v3.1.0 states the same contract and the new Runner requires it (§4.1, §7.1, §7.2). |
 | 0.4 | 2026-10-11 | `last_error_reason` also carries a Runner-constructed description when the consultation follows a block schedule that a producing row (or a row of the block that writes it) left defective after the Runner's two re-dispatches of that row: the rule ID (or that the Source is missing or unreadable), the block, the Source and Section, and the offending row, ID or token. `last_status_message` stays the producer's verbatim `status_message`. While a block's schedule is defective the request holds no schedule for it, so a reply that dispatches a row of that block is invalid (§3.2, §8; behaviour in `Design.md` §3.6). The request and response schemas are unchanged. |
 | 0.3 | 2026-10-08 | **Breaking:** every `dispatch` reply must carry `row` (1-based, numbered as the Execution Log's `WorkflowRow`) and, for a staged row, `stage`; a reply without them is invalid. Added the three row carriers (workflow table `Row` column - optional; Execution Log `WorkflowRow` - `-` allowed; routing reply `row` - mandatory) and which outcomes the Runner handles itself (`PARTIALLY_DONE`, `BLOCKED`/`E501`; auto and auto-review modes only; orchestrated mode consults on every decision). Malformed replies (invalid JSON, invalid `row`/`stage`, agent-row mismatch) are retried up to three attempts in total before the run stops; other orchestrator failures remain terminal. |

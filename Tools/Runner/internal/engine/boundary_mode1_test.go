@@ -1,7 +1,7 @@
 package engine_test
 
 // Iteration end and phase end in Mode 1 (orchestrated). The engine never
-// routes there, yet the session evaluates STAGE_END and PHASE_END in every
+// routes there, yet the session evaluates ITERATION_END and PHASE_END in every
 // mode, so both answers follow the table's declared On Success as if the run
 // were engine-routed: the row's declared entry, block exit and iteration
 // completion from the Execution Log. A join row is judged by its own On

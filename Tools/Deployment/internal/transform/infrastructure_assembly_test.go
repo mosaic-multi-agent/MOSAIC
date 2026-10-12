@@ -192,7 +192,7 @@ func TestAssembleInfrastructureBlocks_SingleTrigger_DataRow(t *testing.T) {
 // TestAssembleInfrastructureBlocks_EmptyTriggerParam_RenderedAsDash verifies that when
 // TriggerParam is empty (corresponding to a null frontmatter value), the Param column
 // renders as "-" rather than an empty cell. This is the canonical representation for
-// parameterless triggers (STAGE_END, PHASE_END, MANUAL).
+// parameterless triggers (ITERATION_END, PHASE_END, MANUAL).
 func TestAssembleInfrastructureBlocks_EmptyTriggerParam_RenderedAsDash(t *testing.T) {
 	blocks := []transform.InfrastructureBlock{
 		{
@@ -202,7 +202,7 @@ func TestAssembleInfrastructureBlocks_EmptyTriggerParam_RenderedAsDash(t *testin
 			Description: "Commits completed stage work.",
 			OnFailure:   "continue",
 			Triggers: []domain.InfrastructureTrigger{
-				{Trigger: "STAGE_END", TriggerParam: ""}, // null trigger_param → empty string → rendered as "-"
+				{Trigger: "ITERATION_END", TriggerParam: ""}, // null trigger_param → empty string → rendered as "-"
 			},
 		},
 	}
@@ -210,14 +210,14 @@ func TestAssembleInfrastructureBlocks_EmptyTriggerParam_RenderedAsDash(t *testin
 	assembled, _ := transform.AssembleInfrastructureBlocks(blocks)
 
 	// The Param column for a parameterless trigger must be "-", not an empty cell.
-	// We look for "| STAGE_END | - |" as a substring of the row.
-	if !bytes.Contains(assembled, []byte("| STAGE_END | - |")) {
+	// We look for "| ITERATION_END | - |" as a substring of the row.
+	if !bytes.Contains(assembled, []byte("| ITERATION_END | - |")) {
 		t.Errorf("empty TriggerParam not rendered as '-'; got:\n%s", assembled)
 	}
 }
 
 // TestAssembleInfrastructureBlocks_MultiTrigger_TwoRows verifies that a multi-trigger
-// agent (like checkpoint-manager-git with STAGE_END and INVOCATION_INTERVAL) produces
+// agent (like checkpoint-manager-git with ITERATION_END and INVOCATION_INTERVAL) produces
 // two data rows, with Class and On Failure repeated on each row.
 func TestAssembleInfrastructureBlocks_MultiTrigger_TwoRows(t *testing.T) {
 	blocks := []transform.InfrastructureBlock{
@@ -228,7 +228,7 @@ func TestAssembleInfrastructureBlocks_MultiTrigger_TwoRows(t *testing.T) {
 			Description: "Commits a restorable checkpoint of the working tree.",
 			OnFailure:   "halt",
 			Triggers: []domain.InfrastructureTrigger{
-				{Trigger: "STAGE_END", TriggerParam: ""},
+				{Trigger: "ITERATION_END", TriggerParam: ""},
 				{Trigger: "INVOCATION_INTERVAL", TriggerParam: "10"},
 			},
 		},
@@ -237,8 +237,8 @@ func TestAssembleInfrastructureBlocks_MultiTrigger_TwoRows(t *testing.T) {
 	assembled, _ := transform.AssembleInfrastructureBlocks(blocks)
 
 	// Both trigger names must appear in the output.
-	if !bytes.Contains(assembled, []byte("STAGE_END")) {
-		t.Errorf("output missing STAGE_END trigger row; got:\n%s", assembled)
+	if !bytes.Contains(assembled, []byte("ITERATION_END")) {
+		t.Errorf("output missing ITERATION_END trigger row; got:\n%s", assembled)
 	}
 	if !bytes.Contains(assembled, []byte("INVOCATION_INTERVAL")) {
 		t.Errorf("output missing INVOCATION_INTERVAL trigger row; got:\n%s", assembled)
@@ -265,7 +265,7 @@ func TestAssembleInfrastructureBlocks_MultiTrigger_ParamPopulated(t *testing.T) 
 			Description: "Commits a restorable checkpoint of the working tree.",
 			OnFailure:   "halt",
 			Triggers: []domain.InfrastructureTrigger{
-				{Trigger: "STAGE_END", TriggerParam: ""},
+				{Trigger: "ITERATION_END", TriggerParam: ""},
 				{Trigger: "INVOCATION_INTERVAL", TriggerParam: "10"},
 			},
 		},
@@ -290,7 +290,7 @@ func TestAssembleInfrastructureBlocks_MultipleAgents_BothBlocksPresent(t *testin
 			Description: "Commits a restorable checkpoint.",
 			OnFailure:   "halt",
 			Triggers: []domain.InfrastructureTrigger{
-				{Trigger: "STAGE_END", TriggerParam: ""},
+				{Trigger: "ITERATION_END", TriggerParam: ""},
 			},
 		},
 		{
@@ -339,7 +339,7 @@ func TestAssembleInfrastructureBlocks_MultipleAgents_InInputOrder(t *testing.T) 
 			Description: "Commits a restorable checkpoint.",
 			OnFailure:   "halt",
 			Triggers: []domain.InfrastructureTrigger{
-				{Trigger: "STAGE_END", TriggerParam: ""},
+				{Trigger: "ITERATION_END", TriggerParam: ""},
 			},
 		},
 	}
@@ -377,7 +377,7 @@ func TestAssembleInfrastructureBlocks_ReturnedKeys_MatchInputOrder(t *testing.T)
 			Class:       "checkpoint",
 			Description: "Commits a checkpoint.",
 			OnFailure:   "halt",
-			Triggers:    []domain.InfrastructureTrigger{{Trigger: "STAGE_END", TriggerParam: ""}},
+			Triggers:    []domain.InfrastructureTrigger{{Trigger: "ITERATION_END", TriggerParam: ""}},
 		},
 	}
 
@@ -873,7 +873,7 @@ func TestInfrastructureAgents_Update_WithAgentsProvided_AssemblesFromRequest(t *
 				Description: "Commits a restorable checkpoint of the working tree.",
 				OnFailure:   "halt",
 				Triggers: []domain.InfrastructureTrigger{
-					{Trigger: "STAGE_END", TriggerParam: ""},
+					{Trigger: "ITERATION_END", TriggerParam: ""},
 				},
 			},
 		},

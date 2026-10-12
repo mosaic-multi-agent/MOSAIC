@@ -96,7 +96,7 @@ Four rules already apply to the existing stubs and still hold. Two are new, need
 | `orchestrator-script` | A stub orchestrator. Returns whatever routing instruction its fixture tells it to. | Written (§5) |
 | `orchestrator` | A placeholder, never invoked (§4.2). | Written |
 | `mosaictest-checkpoint` | Checkpoint infrastructure stub. Returns success with a fake checkpoint marker, touches no git. | Implemented. Used by `infra-checkpoint-commit` |
-| `mosaictest-commit` | Commit infrastructure stub. Returns success with a fake `[branch:mosaictest-run]` marker, touches no git. Used for both the run-start setup dispatch and subsequent `STAGE_END` trigger dispatches. | Implemented. Used by `infra-checkpoint-commit` |
+| `mosaictest-commit` | Commit infrastructure stub. Returns success with a fake `[branch:mosaictest-run]` marker, touches no git. Used for both the run-start setup dispatch and subsequent `ITERATION_END` trigger dispatches. | Implemented. Used by `infra-checkpoint-commit` |
 | `mosaictest-review` | Review infrastructure stub. Returns success with a canned observation message, inspects nothing. | Implemented. Used by `infra-review-consult` |
 
 ### 4.1 Three Additions Needed to `mosaictest-scripted`
@@ -140,19 +140,19 @@ Two consequences:
 Structurally identical to `mosaictest-checkpoint`: zero tools, hardcoded behaviour, one predetermined response shape. Different class, different marker.
 
 **Class:** `commit` (frontmatter `infrastructure: commit`).
-**Trigger:** `STAGE_END`.
+**Trigger:** `ITERATION_END`.
 **Marker:** `[branch:mosaictest-run]` — a fixed fake branch name. Unlike the checkpoint stub's per-invocation sha, the branch name is constant because the real commit agent establishes a branch once and reuses it.
 
 **Two invocation contexts, same response:**
 
 1. **Run-start setup dispatch** (Design.md §4.2): The Runner dispatches the commit-class agent once after artifact creation and before the workflow loop. The stub returns SUCCESS with `[branch:mosaictest-run]` at the end of `status_message`. The Runner extracts `commit_branch` from the marker and records it in the artifact frontmatter. If the marker is missing, the run stops before the first workflow invocation and retains the failed setup row in the artifact.
 
-2. **Trigger dispatches** (during the run): Fired by `STAGE_END`. Same SUCCESS, same marker. The Runner records the commit row as a non-workflow Execution Log entry whose agent name matches the infrastructure declaration.
+2. **Trigger dispatches** (during the run): Fired by `ITERATION_END`. The dispatch names the ended iteration in its task description and carries that iteration's existing artifacts as inputs, which the stub ignores. Same SUCCESS, same marker. The Runner records the commit row as a non-workflow Execution Log entry whose agent name matches the infrastructure declaration.
 
 **Message template** (for `mosaictest-commit#3`):
 
 ```
-MosaicTest infrastructure stub / class=commit / declared trigger=STAGE_END / instance=mosaictest-commit#3 / no git performed / returning SUCCESS [branch:mosaictest-run]
+MosaicTest infrastructure stub / class=commit / declared trigger=ITERATION_END / instance=mosaictest-commit#3 / no git performed / returning SUCCESS [branch:mosaictest-run]
 ```
 
 **Error handling:** Same as `mosaictest-checkpoint` — `BLOCKED`/`E503` for `human_in_the_loop: true`, SUCCESS for everything else. `on_failure: halt` (matching the real commit agent: a commit failure that passes silently would lose work).
@@ -289,7 +289,7 @@ The remaining workflows test Runner modes, routing mechanisms, and edge cases. T
 | `deviation-ambiguous` | Auto-review | A routing hint the Runner cannot resolve becomes a deviation | **Implemented** |
 | `deviation-stop` | Auto | The orchestrator ends the run, and the artifact can still be resumed afterwards | **Implemented** |
 | `hitl-glob-staged` | Orchestrated | HITL approval check with a `Stage-*` wildcard output artifact; the wildcard is passed to the subagent literally and approval is read from the concrete files the subagent wrote that match it (§7.3) | **Implemented** |
-| `infra-checkpoint-commit` | Auto | Checkpoint trigger (`INVOCATION_INTERVAL`) and commit trigger (`STAGE_END`) both fire; checkpoint marker picked up; commit `[branch:{name}]` marker extracted; no cascading between infrastructure dispatches (§7.6) | **Implemented** |
+| `infra-checkpoint-commit` | Auto | Checkpoint trigger (`INVOCATION_INTERVAL`) and commit trigger (`ITERATION_END`) both fire; checkpoint marker picked up; commit `[branch:{name}]` marker extracted; no cascading between infrastructure dispatches (§7.6) | **Implemented** |
 | `infra-review-consult` | Auto | Review trigger (`INVOCATION_INTERVAL(3)`) fires; review agent returns observations; Runner follows up with an orchestrator routing consultation passing the review's `status_message` as `last_status_message` (§7.7) | **Implemented** |
 | `preconsult-advice` | Auto | Pre-consultation advice reaches auto-routed dispatches, and does **not** reach orchestrator-written ones | **Implemented** |
 | `staged-multigroup` | Auto | Multi-group block execution (TDD approach: Test group, then Implementation group); exercises `EXECUTION.[Stage].Test` and `EXECUTION.[Stage].Implementation` phase parsing and the `1.Test` log values through a real harness (§7.4) | **Implemented** |
@@ -344,17 +344,17 @@ A block Auto-mode workflow (at least 2 iterations) with both checkpoint-class an
 
 | Stub | Class | Trigger | What it proves |
 |------|-------|---------|----------------|
-| `mosaictest-checkpoint` | checkpoint | `STAGE_END` (from agent frontmatter) | Checkpoint trigger fires at iteration boundary; fake `[checkpoint:f00d{NNNN}]` marker extracted and recorded |
-| `mosaictest-commit` | commit | `STAGE_END` (from agent frontmatter) | Commit setup dispatch at run start extracts `[branch:mosaictest-run]`; subsequent `STAGE_END` triggers fire and record commit rows |
+| `mosaictest-checkpoint` | checkpoint | `ITERATION_END` (from agent frontmatter) | Checkpoint trigger fires at iteration boundary; fake `[checkpoint:f00d{NNNN}]` marker extracted and recorded |
+| `mosaictest-commit` | commit | `ITERATION_END` (from agent frontmatter) | Commit setup dispatch at run start extracts `[branch:mosaictest-run]`; subsequent `ITERATION_END` triggers fire and record commit rows |
 
 **What this proves:**
 - Commit setup dispatch runs at run start and extracts the branch marker into artifact frontmatter
-- `STAGE_END` fires exactly at iteration boundaries for both checkpoint and commit agents
+- `ITERATION_END` fires exactly at iteration boundaries for both checkpoint and commit agents
 - Trigger evaluation fires after workflow steps (not after infrastructure steps — no cascading)
 - Checkpoint marker is recorded in the execution log
 - Infrastructure steps are recorded as non-workflow rows identified from the declaration region; they do not update `current_state`
 
-**Shape:** 2 iterations × 1 row per iteration = 2 workflow steps. After iteration 1 completes, `STAGE_END` fires for both checkpoint and commit. After iteration 2 completes (end of run), `STAGE_END` fires again for both. Plus the commit setup dispatch at run start. Minimal workflow that exercises both classes.
+**Shape:** 2 iterations × 1 row per iteration = 2 workflow steps. After iteration 1 completes, `ITERATION_END` fires for both checkpoint and commit. After iteration 2 completes (end of run), `ITERATION_END` fires again for both. Plus the commit setup dispatch at run start. Minimal workflow that exercises both classes. The commit rows show the ended iteration's artifact in `Inputs`; the checkpoint rows show `-` because only commit-class dispatches carry iteration artifacts.
 
 **Run configuration:** `--checkpoints enabled --commits enabled --commit-branch mosaic-owned`. The commit setup dispatch is the first thing that fires after artifact creation (before any workflow step), which is itself a key assertion — if setup fails or the branch marker is missing, the run stops with that setup attempt preserved in the artifact.
 

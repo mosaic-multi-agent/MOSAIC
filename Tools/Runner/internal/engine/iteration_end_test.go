@@ -1,6 +1,6 @@
 package engine_test
 
-// Iteration end (the answer behind STAGE_END) on WorkflowFormat 2.16 tables.
+// Iteration end (the answer behind ITERATION_END) on WorkflowFormat 2.16 tables.
 // A step that returned SUCCESS ends its iteration when its On Success ends the
 // scope of the last group the iteration's approach lists (the iteration itself
 // for an ungrouped block): COMPLETE on any row of that scope, NEXT on its last

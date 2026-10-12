@@ -16,6 +16,7 @@ The package exposes:
 - **`Next(NextInput)`** — the per-invocation router: given the state after the most recent agent response (or no prior response at all), decide the next step. All inputs, including the execution mode, the last step's written output artifacts and the artifact registry, arrive in `NextInput`.
 - **`ResumePointFromSchedules`** — a purely artifact-derived function used once when a run is resumed after a process restart: it reconstructs where execution left off from the Execution Log and the block schedules, independent of `Next`.
 - **`ResolveRowDefaultsForIteration` / `ResolveArtifactsForIteration`** — the one routine that resolves a row's default input artifacts, output artifacts and HITL for an iteration of the row's block. The engine's own dispatch step and session's consultation-routed dispatches (and the manual routing dialogue's pre-checked lists) all use it, so a consulted dispatch defaults exactly like an engine-routed one.
+- **`IterationArtifactCandidates`** (`iteration_artifacts.go`) — pure selection of the ended iteration's own artifacts for a commit-class `ITERATION_END` dispatch: the `Input` and `Output` cell entries of the block's rows that fill in the block ID, resolved to the iteration (a `*` is kept unexpanded), de-duplicated in table order. Session expands wildcards and checks existence on disk.
 - **`E501BudgetRemaining`, `PartiallyDoneRedispatchLimit`, `E501AttemptLimit`, `ScheduleDefectAttempts`, `ScheduleDefectRedispatchLimit`, `IsLastRowOfIteration`, `IsLastRowOfPhaseForIteration`** — shared helpers and bounds that session also reads. The two boundary helpers take one `BoundaryInput` (workflow, schedules, completed row, iteration, log, mode).
 
 Both `Next` and `ResumePointFromSchedules` operate on the routing table shape produced by **compat** (`AdmittedWorkflow`, with its per-block model) and the per-block schedules produced by **planstages** (`BlockSchedules`, keyed by block name).
@@ -122,7 +123,7 @@ Called once at run start, before the dispatch loop:
 | Talks To | For |
 |----------|-----|
 | **domain** | Sole internal import — all types (`AdmittedWorkflow`, `BlockSchedules`, `ArtifactState`, `ProtocolResponse`, `EngineDecision` and its variants, `ResumeInfo`, `WorkflowRow`) come from here. `engine` imports nothing else internal and no I/O packages. |
-| **session** | The exclusive consumer. Session calls `ResumePointFromSchedules` once at run-start, then `Next` in a loop, translating each `EngineDecision` into I/O. It also calls `ResolveRowDefaultsForIteration`, `E501BudgetRemaining`, `ScheduleDefectAttempts` and the boundary helpers. |
+| **session** | The exclusive consumer. Session calls `ResumePointFromSchedules` once at run-start, then `Next` in a loop, translating each `EngineDecision` into I/O. It also calls `ResolveRowDefaultsForIteration`, `E501BudgetRemaining`, `ScheduleDefectAttempts`, `IterationArtifactCandidates` and the boundary helpers. |
 | **compat** (indirect, via inputs) | Supplies the `AdmittedWorkflow` shape (`Blocks` with row ranges, `Groups`, `Approaches`, seed classification). |
 | **planstages** (indirect, via inputs) | Supplies each block's `BlockSchedule` (iteration IDs, `Approach`, `HITL` and `Depends On` per iteration). |
 

@@ -258,6 +258,7 @@ func (m *memStore) Create(_ context.Context, info domain.WorkflowInfo, task stri
 		Started:         now,
 		LastUpdated:     now,
 		GlobalSequence:  0,
+		Dispatch:        domain.DispatchField{Present: true, Value: domain.DispatchSequential},
 		RunSettings:     settings,
 	}
 	m.exists = true
