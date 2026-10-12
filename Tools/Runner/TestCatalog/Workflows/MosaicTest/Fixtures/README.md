@@ -51,7 +51,7 @@ Three constraints force this layout, and each one is a way a hand-assembled seed
 
 **Exactly one `Requirement*` file is mandatory.** Seeding refuses any seed set with zero or more than one candidate, matched case-insensitively against file sources and the **top-level** files of directory sources. The refusal happens during planning, before the run folder exists, so a run that trips it produces no run folder and no orchestration log. Each seed root carries one `Requirements.md` for this reason alone; no subagent reads it.
 
-**`Plan.md` must land at the run folder root.** The two staged workflows have no pre-EXECUTION row that could write a stage table, so it is pre-placed. A top-level `Plan.md` inside the seed root lands at the root; one nested a directory deeper does not.
+**`Plan.md` must land at the run folder root.** The staged workflows have no planning row that could write the `Stage` block's schedule, so it is pre-placed: `Plan.md` is the block's declared Source and therefore a seed. A top-level `Plan.md` inside the seed root lands at the root; one nested a directory deeper does not.
 
 **The TUI accepts a single seed path.** There is no way to combine two sources there, so any layout needing more than one is command-line-only. A self-contained seed root is what keeps the suite runnable from the TUI.
 
@@ -60,7 +60,7 @@ Three constraints force this layout, and each one is a way a hand-assembled seed
 | Path | Contents |
 |------|----------|
 | `{workflow-id}/Requirements.md` | Seed-rule placeholder. Never read. |
-| `{workflow-id}/Plan.md` | Pre-placed stage table, for workflows that need one. |
+| `{workflow-id}/Plan.md` | Pre-placed block schedule (the `## Stages` table of the `Stage` block's Source), for workflows that need one. |
 | `{workflow-id}/MosaicTestRouting.md` | Routing fixture for the stub orchestrator. **Required for every workflow whose `pre_consult` is not `false`**, which is all of them by default: the run-start pre-consultation reads its `## Pre-Consultation` section. A workflow that never routes through the orchestrator still needs one, with `none` and no rules; a later consultation then matches no rule and stops loudly. Without the file the pre-consultation answer depends on how the model words "fixture not found", and the run passes or fails at random. Fixed filename — a consultation carries no artifact paths, so there is no per-invocation channel to bind a fixture through. |
 | `{workflow-id}/MosaicTestScript/` | Behaviour scripts for that workflow. Named for behaviour, never for row number. |
 
@@ -70,14 +70,14 @@ This README stays at the `Fixtures/` root, outside every seed root, so it is nev
 
 ## Why a copy step exists at all
 
-The stubs' only instruction channel is their artifact paths. A routed dispatch carries no `task_description`, so a workflow binds a script to a row through the row's Input column, and artifact paths resolve inside `Orchestration-{run_id}/`. A script fixture is therefore an ordinary run artifact that happens to be authored by hand instead of produced by an agent.
+The stubs' only instruction channel is their artifact paths. A routed dispatch's `task_description` is generic text (plus a focus paragraph for a row with a mode qualifier) and instructs nothing, so a workflow binds a script to a row through the row's Input column, and artifact paths resolve inside `Orchestration-{run_id}/`. A script fixture is therefore an ordinary run artifact that happens to be authored by hand instead of produced by an agent.
 
 ## The script format
 
 Specified in full in `MosaicTestCatalog/Subagents/MosaicTest/mosaictest-scripted.md`, under **The MosaicTest script format**. That file is the specification; these files are instances of it. Two properties are easy to break when authoring a new script:
 
 - **Fences are tildes (`~~~`), never backticks.** Payload fixtures carry backticks and whole fenced blocks, and tilde fences mean no escaping is needed anywhere. Escaping is precisely what must not happen to a payload under test.
-- **`status_message` is the primary readout.** Evaluation is a human watching the runner TUI, not a golden diff, so every message names its row, phase, stage where meaningful, and the status being returned. A message that is not self-describing makes the run unreadable.
+- **`status_message` is the primary readout.** Evaluation is a human watching the runner TUI, not a golden diff, so every message names its row, phase, iteration where meaningful, and the status being returned. A message that is not self-describing makes the run unreadable.
 
 ## Diagnosing a failed seed
 
@@ -85,6 +85,6 @@ Specified in full in `MosaicTestCatalog/Subagents/MosaicTest/mosaictest-scripted
 |---------|-------|
 | No run folder, no orchestration log, refusal naming `Requirement*` | Seed root missing its `Requirements.md`, or two seed sources each contributed one. |
 | `BLOCKED` / `E101` naming a `MosaicTestScript/...` path | A directory *inside* a seed root was seeded instead of the seed root, flattening the prefix. |
-| Stage table not found | `Plan.md` landed below the run folder root — the seeded directory was one level too high. |
+| Block schedule not found | `Plan.md` landed below the run folder root — the seeded directory was one level too high. |
 
 `mosaictest-scripted` refuses rather than guessing a status code, so a setup mistake is legible on the first attempt instead of producing a green run that measured nothing. Its `error_reason` names the path it looked for and lists what it found instead.

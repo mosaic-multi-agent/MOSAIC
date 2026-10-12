@@ -14,7 +14,7 @@ Measuring it requires real end-to-end runs, which requires agents. These are tho
 
 | ID | Agent | Version | Kind | Tier | Description |
 |----|-------|---------|------|:----:|-------------|
-| 40 | [mosaictest-scripted](./mosaictest-scripted.md) | 2.3.0 | Routed | LOW | Reads the script fixture bound to its row and returns exactly the response it specifies |
+| 40 | [mosaictest-scripted](./mosaictest-scripted.md) | 2.3.1 | Routed | LOW | Reads the script fixture bound to its row and returns exactly the response it specifies |
 | 41 | [mosaictest-checkpoint](./mosaictest-checkpoint.md) | 2.1.0 | Infrastructure, `checkpoint` | LOW | Returns SUCCESS with a fake `[checkpoint:{sha}]` marker; performs no git operations |
 | 42 | [mosaictest-review](./mosaictest-review.md) | 2.1.0 | Infrastructure, `review` | LOW | Returns SUCCESS with a self-describing message; inspects nothing |
 | 43 | [mosaictest-commit](./mosaictest-commit.md) | 2.1.0 | Infrastructure, `commit` | LOW | Returns SUCCESS with a fake `[branch:mosaictest-run]` marker; performs no git operations |
@@ -28,7 +28,7 @@ It is what `mosaic-run` is pointed at, and it is the reason this catalogue can b
 
 ## Behaviour Lives in Fixtures, Not in Agent Files
 
-A routed dispatch carries only `agent_instance_id`, `run_id`, `input_artifacts`, `output_artifacts`, and `human_in_the_loop`. `task_description` and `constraints` are never populated for a routed dispatch, and agent-with-mode notation (`agent(mode)`) is refused at workflow admission. **The artifact paths are therefore the only per-row discriminator available.**
+A routed dispatch carries `agent_instance_id`, `run_id`, `input_artifacts`, `output_artifacts`, and `human_in_the_loop`. Its `task_description` is the generic text the Runner writes, plus a focus paragraph naming the row's mode qualifier when the row's `Subagent` cell has one (`mosaictest-scripted(review)`); `constraints` is never populated. The qualifier tells rows of this one agent apart in the workflow and in the log, but the agent id, the instance ids and the agent file stay `mosaictest-scripted`, and the qualifier carries no instruction. **The artifact paths are therefore the only per-row discriminator that selects behaviour.**
 
 So `mosaictest-scripted` is bound to its behaviour through its Input column: exactly one of its input artifacts sits under a `MosaicTestScript/` prefix, and that file is its instruction set. One agent serves every routed row in every MosaicTest workflow; adding a test case adds a fixture, not an agent.
 
@@ -42,10 +42,10 @@ The script format is specified inside [mosaictest-scripted.md](./mosaictest-scri
 |---|---|
 | Agent slugs | `mosaictest-*` |
 | Script fixtures | `MosaicTestScript/{behaviour}.md` — named for behaviour, not row number, so one script serves identical rows across workflows |
-| Run artifacts | `MosaicTest*`-prefixed, e.g. `MosaicTestArtifact-1.md`; stage-scoped as `Stage-{StageNumber}/MosaicTestStage.md` |
+| Run artifacts | `MosaicTest*`-prefixed, e.g. `MosaicTestArtifact-1.md`; per-iteration as `Stage-{Stage}/MosaicTestStage.md` |
 | Workflows | `Workflows/MosaicTest/` — one workflow file per test case |
 
-`Plan.md` keeps its real name because workflow admission requires it. Nothing else reuses a reserved workflow-semantic name (Plan, Progress, Review, Audit, Research).
+`Plan.md` keeps its real name because it is the declared Source of the `Stage` block in the staged workflows. Nothing else reuses a reserved workflow-semantic name (Plan, Progress, Review, Audit, Research).
 
 ## Properties These Agents Must Keep
 
@@ -61,4 +61,4 @@ The script format is specified inside [mosaictest-scripted.md](./mosaictest-scri
 - [CommunicationProtocol.md](../../../../../Development/Designs/CommunicationProtocol.md) — the request and response envelopes these agents conform to
 - [InfrastructureAgentConcept.md](../../../../../Development/Designs/InfrastructureAgentConcept.md) — classes, triggers, evaluation, failure policy
 
-Execution group notation is not referenced here: the staged MosaicTest workflows use bare rows and declare no groups, which is itself one of their assertions.
+Block and group notation (`EXECUTION.[Stage]`, `EXECUTION.[Stage].Test`, the `**Blocks:**` and `**Groups:**` tables) is defined in `WorkflowFormat.md`; the staged MosaicTest workflows use it, and the agents in this folder reference none of it.

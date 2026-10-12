@@ -22,7 +22,7 @@ package session_test
 //   - HITL=true, Stage-* output, stages={1,2}, Stage-2/Plan.md unapproved ->
 //     session must redispatch once then escalate.
 //
-//   Zero files on disk / nil StageSet (orchestrated mode):
+//   Zero files on disk / nil schedule (orchestrated mode):
 //   - HITL=true, Stage-* output, no stage file written and no Plan.md -> the
 //     declared output was never written, so the step is accepted without a
 //     redispatch.

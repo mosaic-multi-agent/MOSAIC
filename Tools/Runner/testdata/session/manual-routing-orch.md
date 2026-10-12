@@ -9,14 +9,14 @@ Row numbers (1-based; the recorded WorkflowRow equals the row number):
    2 = PLANNING / plan-review
    3 = PLANNING / spec-writer
    4 = PLANNING / spec-review
-   5 = EXECUTION.Test.[StageNumber] / test-writer
-   6 = EXECUTION.Test.[StageNumber] / test-review
-   7 = EXECUTION.Implementation.[StageNumber] / implementer
-   8 = EXECUTION.Implementation.[StageNumber] / refactorer
-   9 = EXECUTION.Implementation.[StageNumber] / lint-check
-  10 = EXECUTION.Implementation.[StageNumber] / doc-writer
-  11 = EXECUTION.Implementation.[StageNumber] / impl-review
-  12 = EXECUTION.Implementation.[StageNumber] / build-review
+   5 = EXECUTION.[Stage].Test / test-writer
+   6 = EXECUTION.[Stage].Test / test-review
+   7 = EXECUTION.[Stage].Implementation / implementer
+   8 = EXECUTION.[Stage].Implementation / refactorer
+   9 = EXECUTION.[Stage].Implementation / lint-check
+  10 = EXECUTION.[Stage].Implementation / doc-writer
+  11 = EXECUTION.[Stage].Implementation / impl-review
+  12 = EXECUTION.[Stage].Implementation / build-review
   13 = REVIEW / final-review
 
 | Phase | Subagent | HITL | On Success | On Findings | Input | Output |
@@ -24,21 +24,27 @@ Row numbers (1-based; the recorded WorkflowRow equals the row number):
 | PLANNING | planner | FALSE | plan-review | - | - | Plan.md, Stage-*/Plan.md |
 | PLANNING | plan-review | FALSE | spec-writer | planner | - | - |
 | PLANNING | spec-writer | FALSE | spec-review | - | - | - |
-| PLANNING | spec-review | FALSE | test-writer | spec-writer | - | - |
-| EXECUTION.Test.[StageNumber] | test-writer | FALSE | test-review | - | - | - |
-| EXECUTION.Test.[StageNumber] | test-review | FALSE | implementer | test-writer | - | - |
-| EXECUTION.Implementation.[StageNumber] | implementer | FALSE | refactorer | - | - | - |
-| EXECUTION.Implementation.[StageNumber] | refactorer | FALSE | lint-check | - | - | - |
-| EXECUTION.Implementation.[StageNumber] | lint-check | FALSE | doc-writer | - | - | - |
-| EXECUTION.Implementation.[StageNumber] | doc-writer | FALSE | impl-review | - | - | - |
-| EXECUTION.Implementation.[StageNumber] | impl-review | FALSE | build-review | implementer | - | - |
-| EXECUTION.Implementation.[StageNumber] | build-review | FALSE | final-review | implementer | Stage-{StageNumber}/Plan.md | Stage-{StageNumber}/Build.md |
+| PLANNING | spec-review | FALSE | [Stage] | spec-writer | - | - |
+| EXECUTION.[Stage].Test | test-writer | FALSE | NEXT | - | - | - |
+| EXECUTION.[Stage].Test | test-review | FALSE | COMPLETE | test-writer | - | - |
+| EXECUTION.[Stage].Implementation | implementer | FALSE | NEXT | - | - | - |
+| EXECUTION.[Stage].Implementation | refactorer | FALSE | NEXT | - | - | - |
+| EXECUTION.[Stage].Implementation | lint-check | FALSE | NEXT | - | - | - |
+| EXECUTION.[Stage].Implementation | doc-writer | FALSE | NEXT | - | - | - |
+| EXECUTION.[Stage].Implementation | impl-review | FALSE | NEXT | implementer | - | - |
+| EXECUTION.[Stage].Implementation | build-review | FALSE | COMPLETE | implementer | Stage-{Stage}/Plan.md | Stage-{Stage}/Build.md |
 | REVIEW | final-review | FALSE | COMPLETE | - | - | - |
 
-**Execution Groups:**
+**Blocks:**
 
-| Approach | Groups |
-|----------|--------|
-| TDD | Test, Implementation |
-| Implementation-Only | Implementation |
+| Block | Source | Section |
+|-------|--------|---------|
+| Stage | Plan.md | Stages |
+
+**Groups:**
+
+| Block | Approach | Groups |
+|-------|----------|--------|
+| Stage | TDD | Test, Implementation |
+| Stage | Implementation-Only | Implementation |
 </Workflow>

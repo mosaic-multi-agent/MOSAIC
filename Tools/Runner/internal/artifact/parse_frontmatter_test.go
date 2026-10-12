@@ -290,7 +290,7 @@ func TestParse_FrontmatterWithCommitsLine_DoesNotRefuse(t *testing.T) {
 		"commits: disabled\n" +
 		"current_state:\n" +
 		"  phase: null\n" +
-		"  stage: null\n" +
+		"  iteration: null\n" +
 		"  last_status: null\n" +
 		"  last_agent: null\n" +
 		"  error_code: null\n" +

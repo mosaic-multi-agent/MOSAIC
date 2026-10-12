@@ -53,6 +53,10 @@ type RefusalError struct {
 	Resource  string // what was being examined (file path, workflow id, row index)
 	Reason    string // specific condition (e.g. "no version comment", "forward dependency")
 	Cause     error  // optional underlying cause; exposed through Unwrap
+
+	Rule  string      // WorkflowFormat sec. 10 rule ID; "" when none is defined
+	Row   WorkflowRow // 1-based routing row; NoWorkflowRow when not about a row
+	Token string      // offending token, cell or heading; "" when none
 }
 
 // Unwrap returns the optional underlying cause.
@@ -81,11 +85,21 @@ func (e *RunIdentityError) Error() string {
 }
 
 func (e *RefusalError) Error() string {
-	return fmt.Sprintf("%s: refused %q: %s", e.Component, e.Resource, e.Reason)
+	msg := fmt.Sprintf("%s: refused %q: %s", e.Component, e.Resource, e.Reason)
+	if e.Rule != "" {
+		msg += " [rule " + e.Rule + "]"
+	}
+	if e.Row != NoWorkflowRow {
+		msg += fmt.Sprintf(" [row %d]", e.Row)
+	}
+	if e.Token != "" {
+		msg += fmt.Sprintf(" [token %q]", e.Token)
+	}
+	return msg
 }
 
 // UnresolvableApproachError is returned at the routing decision when a stage's
-// Approach value has no matching row in the workflow's Execution Groups table.
+// Approach value has no matching row in the block's **Groups:** table.
 // It is never recovered from: there is no default approach and no fallback order.
 //
 // This error is distinct from RefusalError. RefusalError describes a pre-invocation
@@ -95,7 +109,8 @@ func (e *RefusalError) Error() string {
 // alternatives.
 type UnresolvableApproachError struct {
 	WorkflowID WorkflowID
-	Stage      StageNumber
+	Block      BlockName   // block whose schedule holds the iteration
+	Iteration  IterationID // names the iteration
 	Approach   Approach
 	Declared   []Approach // every approach the workflow's table declares, in table order
 }
@@ -106,8 +121,8 @@ func (e *UnresolvableApproachError) Error() string {
 		declared[i] = string(a)
 	}
 	return fmt.Sprintf(
-		"stage %d: Approach %q is not declared in workflow %q Execution Groups table (declared: %s)",
-		e.Stage, e.Approach, e.WorkflowID, strings.Join(declared, ", "),
+		"stage %s: Approach %q is not declared in the **Groups:** table of workflow %q (declared: %s)",
+		e.Iteration, e.Approach, e.WorkflowID, strings.Join(declared, ", "),
 	)
 }
 
@@ -127,7 +142,8 @@ func (e *UnresolvableApproachError) Error() string {
 type RowNotInGroupError struct {
 	WorkflowID WorkflowID
 	RowIndex   int
-	Stage      StageNumber
+	Block      BlockName        // block whose schedule holds the iteration
+	Iteration  IterationID      // names the iteration
 	Groups     []ExecutionGroup // the resolved groups that were searched
 }
 
@@ -141,8 +157,8 @@ func (e *RowNotInGroupError) Error() string {
 		}
 	}
 	return fmt.Sprintf(
-		"stage %d: row %d is not in any execution group of workflow %q (groups: %s)",
-		e.Stage, e.RowIndex, e.WorkflowID, strings.Join(groupDescs, ", "),
+		"stage %s: row %d is not in any execution group of workflow %q (groups: %s)",
+		e.Iteration, e.RowIndex, e.WorkflowID, strings.Join(groupDescs, ", "),
 	)
 }
 

@@ -14,14 +14,14 @@ import (
 
 func requireResumeRefusesRecordedRow(t *testing.T, log *runLog, wantRow int) {
 	t.Helper()
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	for _, interrupted := range []bool{false, true} {
 		name := "clean"
 		if interrupted {
 			name = "interrupted"
 		}
 		t.Run(name, func(t *testing.T) {
-			_, err := resumeLog(aw, singleStageSet("TDD"), log, interrupted)
+			_, err := resumeLogIDs(aw, singleSchedules("TDD"), log, interrupted)
 
 			var perr *domain.PositionUnresolvedError
 			if !errors.As(err, &perr) {
@@ -58,14 +58,14 @@ func TestResumePoint_NonExecutionAgentRecordedRowOutsideTable_Refuses(t *testing
 
 func TestResumePoint_SingleRowExecutionAgentRecordedRowHoldsDifferentAgent_Refuses(t *testing.T) {
 	log := newBuildVerifiedLog()
-	log.workflowStep("test-writer-tdd", "Test.1", domain.StatusSUCCESS, bvRowTestsReview)
+	log.workflowStep("test-writer-tdd", "1.Test", domain.StatusSUCCESS, bvRowTestsReview)
 
 	requireResumeRefusesRecordedRow(t, log, bvRowTestsReview)
 }
 
 func TestResumePoint_SingleRowExecutionAgentRecordedRowOutsideTable_Refuses(t *testing.T) {
 	log := newBuildVerifiedLog()
-	log.workflowStep("test-writer-tdd", "Test.1", domain.StatusSUCCESS, 99)
+	log.workflowStep("test-writer-tdd", "1.Test", domain.StatusSUCCESS, 99)
 
 	requireResumeRefusesRecordedRow(t, log, 99)
 }

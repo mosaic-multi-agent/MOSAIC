@@ -25,7 +25,7 @@ import (
 
 // stage1DoneAutoState returns an ArtifactState that simulates an auto-mode run
 // through consult-staged-orch.md having completed both Stage-1 rows (agent-a#1,
-// agent-b#2). CurrentState.Stage = "1" (FormatStageValue("", 1)) is the
+// agent-b#2). CurrentState.Stage = "1" (domain.FormatIterationValue({ID: "1"})) is the
 // load-bearing value for cross-stage deviation tests: it represents the last
 // applied stage and should NOT appear in CompletedSteps for Stage-2 dispatches
 // after the D2 fix.
@@ -87,9 +87,9 @@ func (r *alternatingApprovalReader) ReadApproval(_ context.Context, _ string) do
 // is derived from the target row using the deviation context, producing Stage = "2".
 func TestSession_ConsultRoute_CrossStageDeviation_UsesTargetRowStage(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
-	// Row 0 is EXECUTION.[StageNumber]/agent-a (zero-based); stage 2 is named
+	// Row 0 is EXECUTION.[Stage]/agent-a (zero-based); stage 2 is named
 	// by the instruction.
-	consultant.queueStagedDispatch("agent-a", "recover Stage-2 after harness failure", 0, 2)
+	consultant.queueStagedDispatch("agent-a", "recover Stage-2 after harness failure", 0, "2")
 	consultant.queueStop("Stage-2 step completed after recovery")
 
 	dir := scopedTempDir(t)
@@ -203,7 +203,7 @@ func TestSession_MixedRoutingPaths_SeqStrictlyMonotonic(t *testing.T) {
 	// second returns True (HITLAccept). This exercises both the rlRejStep path
 	// and the final workflowStep path within a single consultRoute call.
 	consultant.queueDispatchWithHITLAndOutputs("agent-b", "re-route Stage-1/agent-b", 1, &hitlOverride, &outputs)
-	consultant.stageLastDispatch(1)
+	consultant.stageLastDispatch("1")
 	// After consultRoute returns, the outer auto loop dispatches Stage-2 rows.
 	// No further consultant instructions needed -- the run completes on its own
 	// via auto-routing.

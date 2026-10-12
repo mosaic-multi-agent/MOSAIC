@@ -19,15 +19,15 @@ func TestSession_ConsultRoute_InvalidInstruction_IsNeitherDispatchedNorRecorded(
 		name       string
 		agent      string
 		row        int
-		stage      domain.StageNumber
+		stage      domain.IterationID
 		wantReason domain.DispatchTargetReason
 	}{
-		{"stage not in the stage set", "implementer", rsImplementer, 9, domain.ReasonUnknownStage},
-		{"stage on a non-staged row", "plan-review", rsPlanReview, 1, domain.ReasonStageOnNonStagedRow},
-		{"staged row without a stage", "implementer", rsImplementer, 0, domain.ReasonMissingStage},
-		{"row outside the routing table", "implementer", 40, 1, domain.ReasonUnknownRow},
-		{"agent that does not hold the row", "build-review", rsImplementer, 1, domain.ReasonAgentMismatch},
-		{"stage whose approach lacks the row's group", "test-writer", rsTestWriter, 3, domain.ReasonStageGroupMismatch},
+		{"stage not in the stage set", "implementer", rsImplementer, "9", domain.ReasonUnknownStage},
+		{"stage on a non-staged row", "plan-review", rsPlanReview, "1", domain.ReasonStageOnNonStagedRow},
+		{"staged row without a stage", "implementer", rsImplementer, "", domain.ReasonMissingStage},
+		{"row outside the routing table", "implementer", 40, "1", domain.ReasonUnknownRow},
+		{"agent that does not hold the row", "build-review", rsImplementer, "1", domain.ReasonAgentMismatch},
+		{"stage whose approach lacks the row's group", "test-writer", rsTestWriter, "3", domain.ReasonStageGroupMismatch},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -66,8 +66,8 @@ func TestSession_ConsultRoute_InvalidInstruction_IsNeitherDispatchedNorRecorded(
 // on every consultation, not only the first.
 func TestSession_ConsultRoute_InvalidInstructionAfterValidStep_StopsWithoutSecondRecord(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
-	consultant.queueStagedDispatch("implementer", "implement stage 1", rsImplementer, 1)
-	consultant.queueStagedDispatch("implementer", "implement stage 7", rsImplementer, 7)
+	consultant.queueStagedDispatch("implementer", "implement stage 1", rsImplementer, "1")
+	consultant.queueStagedDispatch("implementer", "implement stage 7", rsImplementer, "7")
 	seed := rowStageSeed("plan-review", 2, "PLANNING", "")
 	rig := newRowStageRig(t, consultant, domain.ExecutionModeOrchestrated, seed)
 	queueSuccess(rig.f, "implementer", "implementer#3")
@@ -80,7 +80,7 @@ func TestSession_ConsultRoute_InvalidInstructionAfterValidStep_StopsWithoutSecon
 	if len(steps) != 1 {
 		t.Fatalf("want only the valid step recorded, got %d: %+v", len(steps), steps)
 	}
-	requireStepAt(t, steps[0], "EXECUTION", 4, "Implementation.1")
+	requireStepAt(t, steps[0], "EXECUTION", 4, "1.Implementation")
 	if n := len(rig.f.Invocations()); n != 1 {
 		t.Errorf("want exactly 1 harness invocation, got %d", n)
 	}

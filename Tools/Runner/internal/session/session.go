@@ -7,7 +7,7 @@
 //     c. Read existing artifact or detect new run (artifact store)
 //     d. Admit the workflow (compat)
 //     e. Resolve every agent identifier (agentresolve)
-//     f. Read stage set if a staged phase is present (planstages)
+//     f. Read the block schedule if a staged phase is present (planstages)
 //     g. Settle checkpoint value (FR-9 refusal if no provider)
 //     h. Create or resume the artifact
 //     i. Commit setup (commits enabled and no commit_branch recorded): an
@@ -34,9 +34,9 @@
 //       other Dispatch (harness -> artifact update). No consultation is needed.
 //       At the review loop limit (persisted in the artifact state the engine
 //       receives) the engine returns a Deviation instead.
-//     - Stage-* output re-derivation: after a completed row's output artifacts
-//       include a Stage-* pattern, session re-reads the plan artifact via
-//       planstages to obtain a refreshed stage set for the engine's next call.
+//     - Schedule re-derivation: after a completed row that produces or writes
+//       a block's schedule source, session re-reads that schedule via
+//       planstages for the engine's next call.
 //     - Deviation: engine returns Deviation; session routes through the
 //       RoutingConsultant (consultRoute). If no consultant is wired, the run
 //       terminates with RunDeviationUnresolved.
@@ -262,6 +262,12 @@ type sessionImpl struct {
 	// consultOutputs holds the outputs of the latest consultation-routed step
 	// until the dispatch loop hands them to the next engine decision.
 	consultOutputs consultOutputs
+	// scheduleDefect is the judged schedule defect of the latest accepted
+	// producing step, until the dispatch loop acts on it.
+	scheduleDefect *pendingScheduleDefect
+	// droppedSchedules holds, per block whose latest produced schedule was
+	// judged defective, the last schedule accepted for it.
+	droppedSchedules domain.BlockSchedules
 }
 
 // isRawTextHarnessError reports whether err is a raw-text protocol failure:

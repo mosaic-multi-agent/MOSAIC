@@ -15,9 +15,14 @@ func isMechanicalRetryMode(mode domain.ExecutionMode) bool {
 }
 
 // e501BudgetLeft reports whether the Execution Log still has E501 attempts
-// left at the given workflow row and stage.
-func e501BudgetLeft(state domain.ArtifactState, rowIndex int, stage string) bool {
-	return engine.E501BudgetRemaining(state.ExecutionLog, domain.WorkflowRowFromIndex(rowIndex), stage) > 0
+// left at the given workflow row and recorded stage value. The value is read
+// with the table row at rowIndex; a row the table lacks has no budget.
+func e501BudgetLeft(state domain.ArtifactState, table domain.RoutingTable, rowIndex int, stage string) bool {
+	row, ok := rowAtIndex(table, rowIndex)
+	if !ok {
+		return false
+	}
+	return engine.E501BudgetRemaining(state.ExecutionLog, row, stage) > 0
 }
 
 // bypassPermitted decides whether a raw-text bypass re-dispatch may run after
@@ -25,10 +30,12 @@ func e501BudgetLeft(state domain.ArtifactState, rowIndex int, stage string) bool
 // the mechanical-retry modes, so the budget owns the bound there; the
 // anti-loop guard only counts the dispatch. In orchestrated mode the guard
 // owns the bound.
-func bypassPermitted(state domain.ArtifactState, rowIndex int, stage, agentID string, antiLoop *antiLoopState) bool {
+func bypassPermitted(
+	state domain.ArtifactState, table domain.RoutingTable, rowIndex int, stage, agentID string, antiLoop *antiLoopState,
+) bool {
 	allowed := antiLoop.recordDispatch(rowIndex, agentID)
 	if isMechanicalRetryMode(state.Mode) {
-		return e501BudgetLeft(state, rowIndex, stage)
+		return e501BudgetLeft(state, table, rowIndex, stage)
 	}
 	return allowed
 }

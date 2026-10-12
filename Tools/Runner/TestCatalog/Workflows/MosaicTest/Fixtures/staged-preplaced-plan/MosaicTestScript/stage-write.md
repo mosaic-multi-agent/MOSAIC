@@ -24,5 +24,5 @@ row 1 / EXECUTION / staged-preplaced-plan / wrote MosaicTestStage.md / returning
 Written by the stage-write script. The content is fixture data and means nothing.
 
 The file path this landed in is the assertion: it must carry the stage number of
-the invocation that wrote it, substituted from the row's `{StageNumber}` token.
+the invocation that wrote it, filled in from the row's `{Stage}` token.
 ~~~

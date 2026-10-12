@@ -69,7 +69,7 @@ func TestFlow_ProgressScreen_UpdatesOnStepCompletion(t *testing.T) {
 		notice: interaction.Notice{
 			Level:   interaction.NoticeInfo,
 			Title:   "planning-agent#1",
-			Message: "phase=PLANNING stage=\"\" status=SUCCESS",
+			Message: "phase=PLANNING iteration=\"\" status=SUCCESS",
 		},
 	})
 
@@ -263,7 +263,7 @@ func TestFlow_RunningNotice_AppendRowViaStartNotice(t *testing.T) {
 		notice: interaction.Notice{
 			Level:   interaction.NoticeInfo,
 			Title:   "start-agent#1",
-			Message: `phase=PLANNING stage="" status=running`,
+			Message: `phase=PLANNING iteration="" status=running`,
 		},
 	})
 
@@ -289,7 +289,7 @@ func TestFlow_RunningNoticeThenCompletion_RowMarkedComplete(t *testing.T) {
 		notice: interaction.Notice{
 			Level:   interaction.NoticeInfo,
 			Title:   agentID,
-			Message: `phase=PLANNING stage="" status=running`,
+			Message: `phase=PLANNING iteration="" status=running`,
 		},
 	})
 
@@ -299,7 +299,7 @@ func TestFlow_RunningNoticeThenCompletion_RowMarkedComplete(t *testing.T) {
 		notice: interaction.Notice{
 			Level:   interaction.NoticeInfo,
 			Title:   agentID,
-			Message: `phase=PLANNING stage="" status=SUCCESS`,
+			Message: `phase=PLANNING iteration="" status=SUCCESS`,
 		},
 	})
 

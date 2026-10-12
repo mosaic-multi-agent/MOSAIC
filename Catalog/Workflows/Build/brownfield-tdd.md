@@ -73,6 +73,46 @@ artifacts:
 
 ---
 
+## Flow
+
+Solid arrows: the happy path (`On Success`). Dotted arrows: where findings usually go (`On Findings`). `[HITL]`: a human stop. Each stage runs the groups its `Approach` lists, in that order: `TDD` = Test then Implementation (drawn here), `Implementation-First` = the reverse, `Implementation-Only` / `Tests-Only` = one group.
+
+```mermaid
+flowchart TD
+    subgraph RESEARCH
+        CR["codebase-research"] --> RF["requirements-refinement [HITL]"]
+        RF --> RV["requirements-review"]
+        RV -. findings .-> RF
+    end
+    subgraph PLANNING
+        PL["planner-tdd-soft [HITL]<br/>Plan.md + per-stage Plan / PlanProgress"] --> PR["plan-review"]
+        PR -. findings .-> PL
+    end
+    subgraph DESIGN
+        CD["contracts-designer [HITL]"] --> CRV["contracts-review"]
+        CRV -. findings .-> CD
+    end
+    subgraph STAGE["Stage block: one iteration per plan stage, parallel where Depends On allows"]
+        subgraph TEST["Test group"]
+            TW["test-writer-tdd"] --> TRV["tests-review-tdd"]
+            TRV -. findings .-> TW
+        end
+        subgraph IMPL["Implementation group"]
+            IT["implementation-tdd"] --> IR["implementation-review"]
+            IR -. findings .-> IT
+        end
+        TRV -- "TDD order: Approach decides" --> IT
+    end
+    RV --> PL
+    PR --> CD
+    CRV --> TW
+    IR --> TRN["test-runner"]
+    TRN -. failures: planner adds a fix stage .-> PL
+    TRN --> DONE(["Feature implemented, tests green"])
+```
+
+---
+
 ## Design Rationale
 
 The king of workflows — the main workhorse. Works very well for software development where the environment is open to shell commands (`dotnet build`, `dotnet test`, etc. — build/test feedback loops the review and test-runner steps can act on). All of MOSAIC's own tooling was built using this workflow.

@@ -469,19 +469,19 @@ func stageEndRig(t *testing.T, kind dispatchPathKind, review ...harness.Scripted
 		GlobalSequence:  1,
 		RunSettings:     domain.RunSettings{Mode: modeFor(kind)},
 		CurrentState: domain.CurrentState{
-			Phase:      "EXECUTION.Stage-1",
-			Stage:      "Stage-1",
+			Phase:      "EXECUTION",
+			Stage:      "1",
 			LastStatus: domain.StatusSUCCESS,
 			LastAgent:  "implementation-tdd#1",
 		},
 		ExecutionLog: []domain.ExecutionLogEntry{
-			{Seq: 1, Agent: "implementation-tdd#1", Phase: "EXECUTION.Stage-1", Stage: "Stage-1", Status: domain.StatusSUCCESS},
+			{Seq: 1, Agent: "implementation-tdd#1", Phase: "EXECUTION", Stage: "1", Status: domain.StatusSUCCESS},
 		},
 	}
 	rig.adapter.Queue("implementation-review", review...)
 	rig.adapter.Queue("commit-manager-git", harness.ScriptedEntry{Response: resp(domain.StatusSUCCESS, "committed")})
 	if kind == pathConsult {
-		rig.consult.queueStagedDispatch("implementation-review", "review", 1, 1)
+		rig.consult.queueStagedDispatch("implementation-review", "review", 1, "1")
 	}
 	rig.consult.queueStop("done")
 	rig.consult.queueStop("done")

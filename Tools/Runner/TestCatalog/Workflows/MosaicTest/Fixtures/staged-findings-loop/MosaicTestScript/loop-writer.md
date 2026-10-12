@@ -17,7 +17,7 @@ SUCCESS
 
 ### Message
 ~~~
-row 1 / EXECUTION.Test / writer / staged-findings-loop / wrote MosaicTestLoopWritten.md / returning SUCCESS
+row 1 / EXECUTION / Test group / writer / staged-findings-loop / wrote MosaicTestLoopWritten.md / returning SUCCESS
 ~~~
 
 ### Write

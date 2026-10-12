@@ -85,10 +85,10 @@ func TestSession_Start_Dispatch_ResolvesInputArtifacts_ToRunScopedForm(t *testin
 	const resolveWorkflow = `<Workflow type="core" name="resolve-test" version="1.0">
 ## Resolve Test Workflow
 
-| Phase | Subagent | HITL | Input | Output |
-|-------|----------|:----:|-------|--------|
-| PLANNING | agent-a | FALSE | Plan.md | Progress.md |
-| PLANNING | agent-b | FALSE | Progress.md | Result.md |
+| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
+|-------|----------|:----:|------------|-------------|-------|--------|
+| PLANNING | agent-a | FALSE | agent-b | - | Plan.md | Progress.md |
+| PLANNING | agent-b | FALSE | COMPLETE | - | Progress.md | Result.md |
 </Workflow>
 `
 	orchPath := filepath.Join(dir, "resolve-orch.md")
@@ -102,10 +102,10 @@ func TestSession_Start_Dispatch_ResolvesInputArtifacts_ToRunScopedForm(t *testin
 	f := harness.NewMockAdapter()
 	store := &memStore{}
 	ses := session.New(session.Deps{
-		Harness:   f,
-		Store:     store,
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:  f,
+		Store:    store,
+		Clock:    fixedClock{t: epoch},
+		Interact: &noopInteraction{},
 	})
 
 	f.Queue("agent-a", harness.ScriptedEntry{Response: &domain.ProtocolResponse{
@@ -159,10 +159,10 @@ func TestSession_Start_Dispatch_ResolvesOutputArtifacts_ToRunScopedForm(t *testi
 	const resolveWorkflow = `<Workflow type="core" name="resolve-out" version="1.0">
 ## Resolve Output Workflow
 
-| Phase | Subagent | HITL | Input | Output |
-|-------|----------|:----:|-------|--------|
-| PLANNING | agent-a | FALSE | - | Progress.md |
-| PLANNING | agent-b | FALSE | Progress.md | Result.md |
+| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
+|-------|----------|:----:|------------|-------------|-------|--------|
+| PLANNING | agent-a | FALSE | agent-b | - | - | Progress.md |
+| PLANNING | agent-b | FALSE | COMPLETE | - | Progress.md | Result.md |
 </Workflow>
 `
 	orchPath := filepath.Join(dir, "resolve-out-orch.md")
@@ -176,10 +176,10 @@ func TestSession_Start_Dispatch_ResolvesOutputArtifacts_ToRunScopedForm(t *testi
 	f := harness.NewMockAdapter()
 	store := &memStore{}
 	ses := session.New(session.Deps{
-		Harness:   f,
-		Store:     store,
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:  f,
+		Store:    store,
+		Clock:    fixedClock{t: epoch},
+		Interact: &noopInteraction{},
 	})
 
 	f.Queue("agent-a", harness.ScriptedEntry{Response: &domain.ProtocolResponse{
@@ -243,9 +243,9 @@ func TestSession_Start_Dispatch_DoesNotDoublePrefixAlreadyScopedPaths(t *testing
 	resolveWorkflow := `<Workflow type="core" name="already-scoped" version="1.0">
 ## Already Scoped Workflow
 
-| Phase | Subagent | HITL | Input | Output |
-|-------|----------|:----:|-------|--------|
-| PLANNING | agent-a | FALSE | ` + scopedPrefix + `Plan.md | ` + scopedPrefix + `Progress.md |
+| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
+|-------|----------|:----:|------------|-------------|-------|--------|
+| PLANNING | agent-a | FALSE | COMPLETE | - | ` + scopedPrefix + `Plan.md | ` + scopedPrefix + `Progress.md |
 </Workflow>
 `
 	orchPath := filepath.Join(dir, "already-scoped-orch.md")
@@ -257,10 +257,10 @@ func TestSession_Start_Dispatch_DoesNotDoublePrefixAlreadyScopedPaths(t *testing
 	f := harness.NewMockAdapter()
 	store := &memStore{}
 	ses := session.New(session.Deps{
-		Harness:   f,
-		Store:     store,
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:  f,
+		Store:    store,
+		Clock:    fixedClock{t: epoch},
+		Interact: &noopInteraction{},
 	})
 
 	// agent-a returns SUCCESS → COMPLETE.

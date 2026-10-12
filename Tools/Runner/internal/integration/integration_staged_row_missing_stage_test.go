@@ -18,15 +18,21 @@ const stagedTwoGroupsContent = `## Staged Two Groups Workflow
 
 | Phase | Subagent | HITL | On Success | On Findings | Input | Output |
 |-------|----------|:----:|------------|-------------|-------|--------|
-| EXECUTION.Test.[StageNumber] | test-writer-tdd | FALSE | tests-review-tdd | - | Stage-{StageNumber}/Plan.md | Stage-{StageNumber}/PlanProgress.md |
-| EXECUTION.Test.[StageNumber] | tests-review-tdd | FALSE | implementation-tdd | test-writer-tdd | Stage-{StageNumber}/PlanProgress.md | Stage-{StageNumber}/tests-review-tdd.md |
-| EXECUTION.Implementation.[StageNumber] | implementation-tdd | FALSE | COMPLETE | - | Stage-{StageNumber}/Plan.md | Stage-{StageNumber}/PlanProgress.md |
+| EXECUTION.[Stage].Test | test-writer-tdd | FALSE | tests-review-tdd | - | Stage-{Stage}/Plan.md | Stage-{Stage}/PlanProgress.md |
+| EXECUTION.[Stage].Test | tests-review-tdd | FALSE | COMPLETE | test-writer-tdd | Stage-{Stage}/PlanProgress.md | Stage-{Stage}/tests-review-tdd.md |
+| EXECUTION.[Stage].Implementation | implementation-tdd | FALSE | COMPLETE | - | Stage-{Stage}/Plan.md | Stage-{Stage}/PlanProgress.md |
 
-**Execution Groups:**
+**Blocks:**
 
-| Approach | Groups |
-|----------|--------|
-| TDD | Test, Implementation |
+| Block | Source | Section |
+|-------|--------|---------|
+| Stage | Plan.md | Stages |
+
+**Groups:**
+
+| Block | Approach | Groups |
+|-------|----------|--------|
+| Stage | TDD | Test, Implementation |
 `
 
 // TestIntegration_ResumeArtifactWithStagedRowRecordedWithoutStage_RefusesNamingRowAndRepair
@@ -52,9 +58,12 @@ func TestIntegration_ResumeArtifactWithStagedRowRecordedWithoutStage_RefusesNami
 	if err != nil {
 		t.Fatalf("compat.Admit: %v", err)
 	}
-	stages := &domain.StageSet{Entries: []domain.StageEntry{{Number: 1, Approach: "TDD"}}}
+	schedules := domain.BlockSchedules{"Stage": domain.BlockSchedule{
+		Block: "Stage", Source: "Plan.md", Section: "Stages",
+		Iterations: []domain.ScheduleIteration{{ID: "1", Approach: "TDD"}},
+	}}
 
-	_, err = engine.ResumePoint(aw, stages, state, domain.NewInfraAgentSet(nil))
+	_, err = engine.ResumePointFromSchedules(aw, schedules, state, domain.NewInfraAgentSet(nil))
 
 	var perr *domain.PositionUnresolvedError
 	if !errors.As(err, &perr) {

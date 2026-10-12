@@ -27,8 +27,8 @@ func TestManualDialogue_StagedRow_AsksEveryStepAndDispatchCarriesTheChosenValues
 		domain.QuestionManualRow, domain.QuestionManualStage, domain.QuestionManualTask,
 		domain.QuestionManualInputs, domain.QuestionManualOutputs,
 		domain.QuestionManualConstraints, domain.QuestionManualHITL)
-	if disp.Agent != "dev" || disp.RowIndex != 2 || disp.Stage != 3 {
-		t.Errorf("want dev at RowIndex=2 Stage=3, got %q RowIndex=%d Stage=%d", disp.Agent, disp.RowIndex, disp.Stage)
+	if disp.Agent != "dev" || disp.RowIndex != 2 || disp.Iteration != "3" {
+		t.Errorf("want dev at RowIndex=2 Iteration=3, got %q RowIndex=%d Iteration=%q", disp.Agent, disp.RowIndex, disp.Iteration)
 	}
 	if disp.TaskDescription != "implement stage three" {
 		t.Errorf("want the trimmed task text, got %q", disp.TaskDescription)
@@ -57,8 +57,8 @@ func TestManualDialogue_NonStagedRow_SkipsTheStageStep(t *testing.T) {
 	requireSequence(t, d,
 		domain.QuestionManualRow, domain.QuestionManualTask, domain.QuestionManualInputs,
 		domain.QuestionManualOutputs, domain.QuestionManualConstraints, domain.QuestionManualHITL)
-	if disp.Agent != "reviewer" || disp.RowIndex != 3 || disp.Stage != 0 {
-		t.Errorf("want reviewer at RowIndex=3 Stage=0, got %q RowIndex=%d Stage=%d", disp.Agent, disp.RowIndex, disp.Stage)
+	if disp.Agent != "reviewer" || disp.RowIndex != 3 || disp.Iteration != "" {
+		t.Errorf("want reviewer at RowIndex=3 with no iteration, got %q RowIndex=%d Iteration=%q", disp.Agent, disp.RowIndex, disp.Iteration)
 	}
 }
 
@@ -67,7 +67,7 @@ func TestManualDialogue_RowAtTwelve_IsShownAsTwelveAndRoutedWithStageAndExtraInp
 	d.many[domain.QuestionManualInputs] = []manyFn{acceptDefaultsPlus("extra/context.md")}
 	table := twelveRowTable()
 
-	instr, err := consultManual(t, d, table, manualRequest(stagesUpTo(3)))
+	instr, err := consultManual(t, d, table, manualRequest(schedulesUpTo(3)))
 
 	disp := requireDispatch(t, instr, err)
 	rowQ := d.oneQ(domain.QuestionManualRow, 0)
@@ -82,19 +82,14 @@ func TestManualDialogue_RowAtTwelve_IsShownAsTwelveAndRoutedWithStageAndExtraInp
 	if rowOpts[12].ID != domain.ManualStopOptionID {
 		t.Errorf("want the stop option last, got %+v", rowOpts[12])
 	}
-	if disp.Agent != "build-review" || disp.RowIndex != 11 || disp.Stage != 3 {
-		t.Errorf("want build-review at RowIndex=11 Stage=3, got %q RowIndex=%d Stage=%d", disp.Agent, disp.RowIndex, disp.Stage)
+	if disp.Agent != "build-review" || disp.RowIndex != 11 || disp.Iteration != "3" {
+		t.Errorf("want build-review at RowIndex=11 Iteration=3, got %q RowIndex=%d Iteration=%q", disp.Agent, disp.RowIndex, disp.Iteration)
 	}
 	wantInputs := []string{"Plan.md", "Stage-3/Spec.md", "extra/context.md"}
 	if disp.InputArtifacts == nil || !slices.Equal(*disp.InputArtifacts, wantInputs) {
 		t.Errorf("want inputs %v, got %v", wantInputs, disp.InputArtifacts)
 	}
-	_, verr := domain.ValidateDispatchTarget(table, stagesUpTo(3), domain.DispatchTarget{
-		Agent: disp.Agent, Row: domain.WorkflowRowFromIndex(disp.RowIndex), Stage: disp.Stage,
-	})
-	if verr != nil {
-		t.Errorf("want the dispatch to satisfy the shared validator, got %v", verr)
-	}
+	requireValidReply(t, table, schedulesUpTo(3), disp)
 }
 
 func TestManualDialogue_RowAndStageAnswersMayBeTypedFreeForm(t *testing.T) {
@@ -105,8 +100,8 @@ func TestManualDialogue_RowAndStageAnswersMayBeTypedFreeForm(t *testing.T) {
 	instr, err := consultStaged(t, d, 3)
 
 	disp := requireDispatch(t, instr, err)
-	if disp.RowIndex != 2 || disp.Stage != 2 {
-		t.Errorf("want RowIndex=2 Stage=2 from typed answers, got RowIndex=%d Stage=%d", disp.RowIndex, disp.Stage)
+	if disp.RowIndex != 2 || disp.Iteration != "2" {
+		t.Errorf("want RowIndex=2 Stage=2 from typed answers, got RowIndex=%d Stage=%q", disp.RowIndex, disp.Iteration)
 	}
 }
 
@@ -175,11 +170,11 @@ func TestManualDialogue_ArtifactLists_ArePreCheckedWithTheDefaultsOfTheChosenRow
 
 func TestManualDialogue_Candidates_AreRowDefaultsThenOtherListThenRegistryEachPathOnce(t *testing.T) {
 	d := newDialogue(t).standard("3", "3")
-	req := manualRequest(stagesUpTo(3))
+	req := manualRequest(schedulesUpTo(3))
 	req.ArtifactRegistry = []domain.ArtifactRegistryEntry{
 		{Artifact: "Plan.md", CreatedIn: "PLANNING", CreatedBy: "planner#1"},
-		{Artifact: "Stage-1/Design.md", CreatedIn: "DESIGN.Stage-1", CreatedBy: "architect#4"},
-		{Artifact: "Stage-3/Out.md", CreatedIn: "EXECUTION.Implementation.3", CreatedBy: "dev#9"},
+		{Artifact: "Stage-1/Design.md", CreatedIn: "DESIGN.1", CreatedBy: "architect#4"},
+		{Artifact: "Stage-3/Out.md", CreatedIn: "EXECUTION.3.Implementation", CreatedBy: "dev#9"},
 	}
 
 	instr, err := consultManual(t, d, stagedRoutingTable(), req)
@@ -197,7 +192,7 @@ func TestManualDialogue_Candidates_AreRowDefaultsThenOtherListThenRegistryEachPa
 	}
 	requireOptions(t, in, 4)
 	design := in.Options[3]
-	if !strings.Contains(design.Description, "architect#4") || !strings.Contains(design.Description, "DESIGN.Stage-1") {
+	if !strings.Contains(design.Description, "architect#4") || !strings.Contains(design.Description, "DESIGN.1") {
 		t.Errorf("want a registry candidate described by creator and phase, got %q", design.Description)
 	}
 	if !strings.Contains(in.Options[0].Description, "row default") {

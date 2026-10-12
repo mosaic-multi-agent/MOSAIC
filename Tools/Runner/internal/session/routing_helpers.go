@@ -76,7 +76,7 @@ func rewindStateForRerun(table domain.RoutingTable, infra domain.InfraAgentSet, 
 // in any row.
 func isRoutingTableAgent(table domain.RoutingTable, agentID string) bool {
 	for _, row := range table.Rows {
-		if row.Agent == agentID {
+		if rowAgentID(row) == agentID {
 			return true
 		}
 	}
@@ -95,29 +95,29 @@ func bindRunContext(v any, rc domain.RunContext) {
 	}
 }
 
-// uniqueAgentIdentifiers returns the unique agent identifiers from the routing
-// table in first-occurrence order.
+// rowAgentID returns the bare agent id of a routing row (without any mode
+// qualifier). Rows built without an explicit AgentID fall back to the whole
+// Subagent cell, which equals the bare id for unqualified rows.
+func rowAgentID(row domain.RoutingRow) string {
+	if row.AgentID != "" {
+		return row.AgentID
+	}
+	return row.Agent
+}
+
+// uniqueAgentIdentifiers returns the unique bare agent identifiers from the
+// routing table in first-occurrence order.
 func uniqueAgentIdentifiers(table domain.RoutingTable) []string {
 	seen := make(map[string]bool, len(table.Rows))
 	result := make([]string, 0, len(table.Rows))
 	for _, row := range table.Rows {
-		if !seen[row.Agent] {
-			seen[row.Agent] = true
-			result = append(result, row.Agent)
+		id := rowAgentID(row)
+		if !seen[id] {
+			seen[id] = true
+			result = append(result, id)
 		}
 	}
 	return result
-}
-
-// hasStageStarArtifact reports whether any artifact path in the slice contains
-// the Stage-* wildcard pattern.
-func hasStageStarArtifact(artifacts []string) bool {
-	for _, a := range artifacts {
-		if strings.Contains(a, "Stage-*") {
-			return true
-		}
-	}
-	return false
 }
 
 // onInfrastructureAgentTrigger is the named no-op hook that marks the

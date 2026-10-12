@@ -117,8 +117,11 @@ func parseAt(data []byte, offset int, strict bool) (Table, int, int, error) {
 		return t, tableStart, tableEnd, nil
 	}
 
-	return Table{}, 0, 0, errors.New("mdtable: no table found")
+	return Table{}, 0, 0, ErrNoTable
 }
+
+// ErrNoTable is returned by Parse and ParseAt when the content holds no table.
+var ErrNoTable = errors.New("mdtable: no table found")
 
 // Column returns the zero-based index of the named column, or -1 if absent.
 func (t Table) Column(name string) int {

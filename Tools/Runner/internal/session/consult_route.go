@@ -28,8 +28,7 @@ func (s *sessionImpl) consultRoute(
 	seq *int,
 	lastResponse **domain.ProtocolResponse,
 	prevWorkflowStep **domain.CompletedStep,
-	refreshedStages **domain.StageSet,
-	stages **domain.StageSet,
+	stages *domain.BlockSchedules,
 	table domain.RoutingTable,
 	agents map[string]domain.AgentReference,
 	config domain.RunConfig,
@@ -43,12 +42,7 @@ func (s *sessionImpl) consultRoute(
 	}
 
 	// Build the consultation request.
-	req := newConsultRequest(config, deviation, *state, stages, refreshedStages)
-	if *lastResponse != nil {
-		msg := (*lastResponse).StatusMessage
-		req.LastStatusMessage = &msg
-		req.LastErrorReason = domain.LastErrorReasonFor(*lastResponse)
-	}
+	req := routingRequest(config, deviation, *state, stages, *lastResponse)
 
 	// Route to the appropriate resolver; handle errors and terminal instructions.
 	instr, selDone, selOut, selErr := s.consultSelectResolver(ctx, req, config)
@@ -58,7 +52,7 @@ func (s *sessionImpl) consultRoute(
 	dispInstr := instr.Dispatch
 
 	// The row and stage to record come from the validated instruction.
-	row, effectiveStage, tDone, tOut := s.resolveConsultTarget(table, dispInstr, agents, admitted, *stages, *refreshedStages)
+	row, effectiveStage, tDone, tOut := s.resolveConsultTarget(table, dispInstr, agents, admitted, *stages)
 	if tDone {
 		return true, tOut, nil
 	}
@@ -76,7 +70,7 @@ func (s *sessionImpl) consultRoute(
 
 	// Resolve the artifacts and HITL: row defaults as the engine resolves them,
 	// explicit overrides verbatim. A resolution failure ends the run unrecorded.
-	payload, payloadErr := resolveConsultPayload(dispInstr, row, effectiveStage, *stages, *refreshedStages)
+	payload, payloadErr := resolveConsultPayload(dispInstr, row, effectiveStage, *stages)
 	if payloadErr != nil {
 		s.deps.Debug.Log(domain.EventSessionConsultFailed, "consultation dispatch defaults unresolvable: "+payloadErr.Error(),
 			domain.F("agent", dispInstr.Agent),
@@ -88,6 +82,8 @@ func (s *sessionImpl) consultRoute(
 			Cause:   payloadErr,
 		}, nil
 	}
+
+	payload.Inputs = expandInputWildcards(config.RunFolder, state.RunID, payload.Inputs)
 
 	// Resolve the dispatched agent and build the ProtocolRequest.
 	agentRef, agentReq, phase, dispSeq, ok := buildConsultAgentRequest(
@@ -126,7 +122,7 @@ func (s *sessionImpl) consultRoute(
 			ArtifactState: *state,
 		}
 		return s.consultRoute(ctx, &guardDevInfo, state, seq, lastResponse, prevWorkflowStep,
-			refreshedStages, stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
+			stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
 	}
 
 	s.deps.Debug.Log(domain.EventSessionDispatchStart, "dispatching consultant-routed step",
@@ -137,14 +133,14 @@ func (s *sessionImpl) consultRoute(
 	s.deps.Interact.Notify(ctx, interaction.Notice{
 		Level:   interaction.NoticeInfo,
 		Title:   agentReq.AgentInstanceID,
-		Message: fmt.Sprintf("phase=%s stage=%q status=running", phase, effectiveStage),
+		Message: fmt.Sprintf("phase=%s iteration=%q status=running", phase, iterationNoticeValue(admitted.Table, dispInstr.RowIndex, effectiveStage)),
 	})
 	// Invoke the harness. A harness error is a deviation, not a crash.
 	s.beginOutputs(ctx, config.RunFolder, agentReq.OutputArtifacts)
 	response, invokeErr := s.invokeAndLog(ctx, agentRef, agentReq)
 	if invokeErr != nil {
 		return s.consultHandleHarnessErr(ctx, agentRef, agentReq, invokeErr, dispSeq, phase, effectiveStage,
-			dispInstr, state, seq, lastResponse, prevWorkflowStep, refreshedStages, stages,
+			dispInstr, state, seq, lastResponse, prevWorkflowStep, stages,
 			table, agents, config, declaredInfraAgents, admitted, antiLoop)
 	}
 
@@ -152,7 +148,7 @@ func (s *sessionImpl) consultRoute(
 	// already incorporates any HITLOverride from dispInstr) as effectiveHITL.
 	finalResp, finalSeq, routed, routedResp, cont, hitlDone, hitlOut, hitlErr := s.runConsultHITL(
 		ctx, agentRef, agentReq, response, dispSeq, agentReq.HumanInTheLoop, dispInstr, effectiveStage, phase,
-		state, seq, lastResponse, prevWorkflowStep, refreshedStages, stages,
+		state, seq, lastResponse, prevWorkflowStep, stages,
 		table, agents, config, declaredInfraAgents, admitted, antiLoop,
 	)
 	if cont || hitlDone || hitlErr != nil {
@@ -162,9 +158,34 @@ func (s *sessionImpl) consultRoute(
 	// Apply the accepted response and evaluate infrastructure triggers.
 	return s.applyConsultStep(
 		ctx, agentRef, agentReq, finalResp, finalSeq, routed, routedResp, phase, effectiveStage, dispInstr,
-		state, seq, lastResponse, prevWorkflowStep, refreshedStages, stages,
+		state, seq, lastResponse, prevWorkflowStep, stages,
 		table, agents, config, declaredInfraAgents, admitted, antiLoop,
 	)
+}
+
+// routingRequest builds the routing consultation request: the schedule in
+// force, the last response's status message and, as the last error reason,
+// the deviation's Runner-constructed reason when it has one, else the last
+// BLOCKED response's error reason.
+func routingRequest(
+	config domain.RunConfig,
+	deviation *domain.DeviationInfo,
+	state domain.ArtifactState,
+	stages *domain.BlockSchedules,
+	lastResponse *domain.ProtocolResponse,
+) domain.ConsultationRequest {
+	req := newConsultRequest(config, deviation, state, stages)
+	req.Schedules = *stages
+	if lastResponse != nil {
+		msg := lastResponse.StatusMessage
+		req.LastStatusMessage = &msg
+		req.LastErrorReason = domain.LastErrorReasonFor(lastResponse)
+	}
+	if deviation != nil && deviation.ErrorReason != "" {
+		reason := deviation.ErrorReason
+		req.LastErrorReason = &reason
+	}
+	return req
 }
 
 // consultSelectResolver routes a consultation request to the appropriate
@@ -277,8 +298,7 @@ func (s *sessionImpl) consultHandleHarnessErr(
 	seq *int,
 	lastResponse **domain.ProtocolResponse,
 	prevWorkflowStep **domain.CompletedStep,
-	refreshedStages **domain.StageSet,
-	stages **domain.StageSet,
+	stages *domain.BlockSchedules,
 	table domain.RoutingTable,
 	agents map[string]domain.AgentReference,
 	config domain.RunConfig,
@@ -319,7 +339,7 @@ func (s *sessionImpl) consultHandleHarnessErr(
 	}
 	// Raw-text bypass: attempt one direct redispatch before triggering a
 	// recursive consultRoute call.
-	if isRawTextHarnessError(invokeErr) && bypassPermitted(*state, dispInstr.RowIndex, effectiveStage, agentRef.Identifier, antiLoop) {
+	if isRawTextHarnessError(invokeErr) && bypassPermitted(*state, table, dispInstr.RowIndex, effectiveStage, agentRef.Identifier, antiLoop) {
 		bypassSeq := state.GlobalSequence + 1
 		bypassReq := agentReq
 		bypassReq.AgentInstanceID = fmt.Sprintf("%s#%d", agentRef.Identifier, bypassSeq)
@@ -327,14 +347,14 @@ func (s *sessionImpl) consultHandleHarnessErr(
 		if bypassErr == nil {
 			finalResp, finalSeq, routed, routedResp, cont, hitlDone, hitlOut, hitlErr := s.runConsultHITL(
 				ctx, agentRef, bypassReq, bypassResp, bypassSeq, agentReq.HumanInTheLoop, dispInstr,
-				effectiveStage, phase, state, seq, lastResponse, prevWorkflowStep, refreshedStages, stages,
+				effectiveStage, phase, state, seq, lastResponse, prevWorkflowStep, stages,
 				table, agents, config, declaredInfraAgents, admitted, antiLoop,
 			)
 			if cont || hitlDone || hitlErr != nil {
 				return hitlDone, hitlOut, hitlErr
 			}
 			return s.applyConsultStep(ctx, agentRef, bypassReq, finalResp, finalSeq, routed, routedResp, phase, effectiveStage, dispInstr,
-				state, seq, lastResponse, prevWorkflowStep, refreshedStages, stages,
+				state, seq, lastResponse, prevWorkflowStep, stages,
 				table, agents, config, declaredInfraAgents, admitted, antiLoop)
 		}
 		if recErr := s.recordFailedBypass(ctx, state, bypassReq, phase, effectiveStage, dispInstr.RowIndex, bypassErr); recErr != nil {
@@ -342,21 +362,11 @@ func (s *sessionImpl) consultHandleHarnessErr(
 		}
 	}
 	*lastResponse = &harnessResp
-	if isMechanicalRetryMode(state.Mode) && e501BudgetLeft(*state, dispInstr.RowIndex, effectiveStage) {
+	if isMechanicalRetryMode(state.Mode) && e501BudgetLeft(*state, table, dispInstr.RowIndex, effectiveStage) {
 		// Budget remains: the engine decision re-dispatches the same row and stage.
 		*seq = state.GlobalSequence
 		return false, domain.RunOutcome{}, nil
 	}
 	return s.consultRoute(ctx, &devInfo, state, seq, lastResponse, prevWorkflowStep,
-		refreshedStages, stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
-}
-
-// currentStageSet returns the stage set in force: the refreshed set when the
-// plan was re-read mid-run, otherwise the set read at the start of the run.
-// Nil when no plan has been read.
-func currentStageSet(stages, refreshed *domain.StageSet) *domain.StageSet {
-	if refreshed != nil {
-		return refreshed
-	}
-	return stages
+		stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
 }

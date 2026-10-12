@@ -22,42 +22,42 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestExtractField_SimpleValue(t *testing.T) {
-	msg := `phase=PLANNING stage="" status=running`
+	msg := `phase=PLANNING iteration="" status=running`
 	if got := extractField(msg, "phase"); got != "PLANNING" {
 		t.Errorf("extractField(phase) = %q, want %q", got, "PLANNING")
 	}
 }
 
 func TestExtractField_QuotedValue(t *testing.T) {
-	msg := `phase=EXECUTION stage="Stage-2" status=SUCCESS`
-	if got := extractField(msg, "stage"); got != "Stage-2" {
-		t.Errorf("extractField(stage) = %q, want %q", got, "Stage-2")
+	msg := `phase=EXECUTION iteration="2" status=SUCCESS`
+	if got := extractField(msg, "iteration"); got != "2" {
+		t.Errorf("extractField(iteration) = %q, want %q", got, "2")
 	}
 }
 
 func TestExtractField_QuotedEmptyValue(t *testing.T) {
-	msg := `phase=PLANNING stage="" status=running`
-	if got := extractField(msg, "stage"); got != "" {
-		t.Errorf("extractField(empty-stage) = %q, want empty string", got)
+	msg := `phase=PLANNING iteration="" status=running`
+	if got := extractField(msg, "iteration"); got != "" {
+		t.Errorf("extractField(empty-iteration) = %q, want empty string", got)
 	}
 }
 
 func TestExtractField_StatusRunning(t *testing.T) {
-	msg := `phase=PLANNING stage="" status=running`
+	msg := `phase=PLANNING iteration="" status=running`
 	if got := extractField(msg, "status"); got != "running" {
 		t.Errorf("extractField(status) = %q, want %q", got, "running")
 	}
 }
 
 func TestExtractField_StatusSuccess(t *testing.T) {
-	msg := `phase=PLANNING stage="" status=SUCCESS`
+	msg := `phase=PLANNING iteration="" status=SUCCESS`
 	if got := extractField(msg, "status"); got != "SUCCESS" {
 		t.Errorf("extractField(status) = %q, want %q", got, "SUCCESS")
 	}
 }
 
 func TestExtractField_KeyNotPresent(t *testing.T) {
-	msg := `phase=PLANNING stage="" status=running`
+	msg := `phase=PLANNING iteration="" status=running`
 	if got := extractField(msg, "missing"); got != "" {
 		t.Errorf("extractField(missing key) = %q, want empty string", got)
 	}
@@ -82,21 +82,21 @@ func TestExtractField_PrefixMatchOnly(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestExtractStatus_RunningMessage(t *testing.T) {
-	msg := `phase=PLANNING stage="" status=running`
+	msg := `phase=PLANNING iteration="" status=running`
 	if got := extractStatus(msg); got != "running" {
 		t.Errorf("extractStatus() = %q, want %q", got, "running")
 	}
 }
 
 func TestExtractStatus_SuccessMessage(t *testing.T) {
-	msg := `phase=DESIGN stage="" status=SUCCESS`
+	msg := `phase=DESIGN iteration="" status=SUCCESS`
 	if got := extractStatus(msg); got != "SUCCESS" {
 		t.Errorf("extractStatus() = %q, want %q", got, "SUCCESS")
 	}
 }
 
 func TestExtractStatus_BlockedMessage(t *testing.T) {
-	msg := `phase=REVIEW stage="" status=BLOCKED`
+	msg := `phase=REVIEW iteration="" status=BLOCKED`
 	if got := extractStatus(msg); got != "BLOCKED" {
 		t.Errorf("extractStatus() = %q, want %q", got, "BLOCKED")
 	}

@@ -105,23 +105,22 @@ func TestNext_ReviewLoopLimit_RepairSuccessKeepsEarlierIterationsCounted(t *test
 	requireRoutedTo(t, rllNext(t, domain.ExecutionModeAutoReview, 3, log), rllFixer)
 }
 
-// plan-review fills two PLANNING rows: a first review and a final review.
-const reviewerTwoRowsContent = `## Reviewer Two Rows Workflow
-
-| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
-|-------|----------|:----:|------------|-------------|-------|--------|
-| PLANNING | planner-tdd-soft | TRUE | plan-review | - | - | Plan.md, Stage-*/Plan.md |
-| PLANNING | plan-review | FALSE | planner-tdd-soft | planner-tdd-soft | Plan.md | plan-review.md |
-| PLANNING | planner-tdd-soft | TRUE | plan-review | - | Plan.md, plan-review.md | Plan.md |
-| PLANNING | plan-review | FALSE | implementation-tdd | planner-tdd-soft | Plan.md | plan-review-final.md |
-| EXECUTION.[StageNumber] | implementation-tdd | FALSE | test-runner | - | Stage-{StageNumber}/Plan.md | Stage-{StageNumber}/PlanProgress.md |
-| REVIEW | test-runner | FALSE | COMPLETE | implementation-tdd | - | TestResults.md |
-`
+// plan-review fills two PLANNING rows: a first review and a final review. The
+// planner's second row and the final review carry mode qualifiers, as every
+// Subagent cell is unique.
+const reviewerTwoRowsV216Content = v216Columns +
+	`| PLANNING | planner-tdd-soft | TRUE | plan-review | - | - | Plan.md, Stage-*/Plan.md |
+| PLANNING | plan-review | FALSE | planner-tdd-soft(revise) | planner-tdd-soft | Plan.md | plan-review.md |
+| PLANNING | planner-tdd-soft(revise) | TRUE | plan-review(final) | - | Plan.md, plan-review.md | Plan.md |
+| PLANNING | plan-review(final) | FALSE | [Stage] | planner-tdd-soft(revise) | Plan.md | plan-review-final.md |
+| EXECUTION.[Stage] | implementation-tdd | FALSE | COMPLETE | - | Stage-{Stage}/Plan.md | Stage-{Stage}/PlanProgress.md |
+| REVIEW | test-runner | FALSE | COMPLETE | - | - | TestResults.md |
+` + v216StageBlock
 
 // A reviewer that fills two rows of a phase shares one count for that phase
 // and stage: findings at both rows add up.
 func TestNext_ReviewLoopLimit_ReviewerInTwoRows_SharesOneCount(t *testing.T) {
-	aw := mustParseAndAdmit(t, reviewerTwoRowsContent, "reviewer-two-rows", "1.0")
+	aw := mustParseAndAdmitV216(t, reviewerTwoRowsV216Content, "reviewer-two-rows", "1.0")
 	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
 	log := (&runLog{}).
 		workflowStep("planner-tdd-soft", "", domain.StatusSUCCESS, 1).
@@ -132,7 +131,7 @@ func TestNext_ReviewLoopLimit_ReviewerInTwoRows_SharesOneCount(t *testing.T) {
 	run := func(limit int) domain.EngineDecision {
 		state := log.state()
 		state.ReviewLoopLimit = limit
-		return nextAfterState(aw, singleStageSet("TDD"), agents, state, cnaResponse(log.last().Agent))
+		return nextAfterState(aw, singleSchedules("TDD"), agents, state, cnaResponse(log.last().Agent))
 	}
 
 	requireLoopLimitDeviation(t, run(2))
@@ -141,7 +140,7 @@ func TestNext_ReviewLoopLimit_ReviewerInTwoRows_SharesOneCount(t *testing.T) {
 
 // A SUCCESS at one of the reviewer's rows resets the shared count for both.
 func TestNext_ReviewLoopLimit_ReviewerInTwoRows_SuccessResetsSharedCount(t *testing.T) {
-	aw := mustParseAndAdmit(t, reviewerTwoRowsContent, "reviewer-two-rows", "1.0")
+	aw := mustParseAndAdmitV216(t, reviewerTwoRowsV216Content, "reviewer-two-rows", "1.0")
 	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
 	log := (&runLog{}).
 		workflowStep("plan-review", "", domain.StatusCOMPLETED_NEEDS_ACTION, 2).
@@ -155,7 +154,7 @@ func TestNext_ReviewLoopLimit_ReviewerInTwoRows_SuccessResetsSharedCount(t *test
 	state := log.state()
 	state.ReviewLoopLimit = 2
 
-	dec := nextAfterState(aw, singleStageSet("TDD"), agents, state, cnaResponse(log.last().Agent))
+	dec := nextAfterState(aw, singleSchedules("TDD"), agents, state, cnaResponse(log.last().Agent))
 
 	requireRoutedTo(t, dec, "planner-tdd-soft")
 }

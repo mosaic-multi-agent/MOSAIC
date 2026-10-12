@@ -17,7 +17,7 @@ SUCCESS
 
 ### Message
 ~~~
-EXECUTION.Implementation / staged-multigroup / read MosaicTestStageTest.md from Test group / wrote MosaicTestStageImpl.md / received task_description: {task_description} / returning SUCCESS
+EXECUTION / Implementation group / staged-multigroup / read MosaicTestStageTest.md from Test group / wrote MosaicTestStageImpl.md / received task_description: {task_description} / returning SUCCESS
 ~~~
 
 ### Write

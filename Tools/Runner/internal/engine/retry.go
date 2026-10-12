@@ -15,20 +15,63 @@ const PartiallyDoneRedispatchLimit = 3
 // attempts per workflow row and stage since the last SUCCESS there.
 const E501AttemptLimit = 3
 
+// ScheduleDefectRedispatchLimit bounds schedule-defect re-dispatches of one
+// producing or writer row at one iteration value: 2 re-dispatches, 3 attempts
+// in total.
+const ScheduleDefectRedispatchLimit = 2
+
+// ScheduleDefectAttempts counts the SUCCESS entries of row at the recorded
+// value in the trailing run of log: the longest suffix holding no entry of
+// another routing-table row. Entries with NoWorkflowRow are skipped; entries of
+// row with another status, another value or an unreadable value neither end the
+// run nor count. Values are compared as parsed iterations read with row, so the
+// pre-3.0 and 3.0 spellings of one iteration count together. When recorded
+// cannot be read with row the result is the exhausted value
+// ScheduleDefectRedispatchLimit + 1. Re-dispatches used = attempts - 1.
+func ScheduleDefectAttempts(log []domain.ExecutionLogEntry, row domain.RoutingRow, recorded string) int {
+	want, err := domain.ReadIterationValue(recorded, row)
+	if err != nil {
+		return ScheduleDefectRedispatchLimit + 1
+	}
+	own := domain.WorkflowRowFromIndex(row.Index)
+	attempts := 0
+	for i := len(log) - 1; i >= 0; i-- {
+		e := log[i]
+		if e.WorkflowRow == domain.NoWorkflowRow {
+			continue
+		}
+		if e.WorkflowRow != own {
+			break
+		}
+		if e.Status == domain.StatusSUCCESS && entryHasValue(e, row, want) {
+			attempts++
+		}
+	}
+	return attempts
+}
+
 // PartiallyDoneContextPrefix introduces the previous status message that a
 // PARTIALLY_DONE re-dispatch carries in its task description.
 const PartiallyDoneContextPrefix = "Your previous invocation of this assignment returned PARTIALLY_DONE. Its status message was:"
 
 // E501BudgetRemaining returns E501AttemptLimit minus the number of BLOCKED log
-// rows with ErrorCode E501 at (row, stage) after the last SUCCESS row at the
-// same (row, stage); never negative. Rows at other rows or stages, rows with
-// NoWorkflowRow, and BLOCKED rows with another or no error code are ignored.
-// stage is the recorded group form ("" for non-staged rows).
-func E501BudgetRemaining(log []domain.ExecutionLogEntry, row domain.WorkflowRow, stage string) int {
+// rows with ErrorCode E501 at (row, recorded value) after the last SUCCESS row
+// at the same (row, value); never negative. Rows at other rows or values, rows
+// whose value cannot be read with row, rows with NoWorkflowRow, and BLOCKED
+// rows with another or no error code are ignored. Values are compared as parsed
+// iterations, so both spellings of one iteration share one budget. recorded is
+// the step's recorded value ("" outside every block); when it cannot be read
+// with row the budget is exhausted (0).
+func E501BudgetRemaining(log []domain.ExecutionLogEntry, row domain.RoutingRow, recorded string) int {
+	want, err := domain.ReadIterationValue(recorded, row)
+	if err != nil {
+		return 0
+	}
+	own := domain.WorkflowRowFromIndex(row.Index)
 	used := 0
 	for i := len(log) - 1; i >= 0; i-- {
 		e := log[i]
-		if e.WorkflowRow != row || e.Stage != stage {
+		if e.WorkflowRow != own || !entryHasValue(e, row, want) {
 			continue
 		}
 		if e.Status == domain.StatusSUCCESS {
@@ -42,16 +85,20 @@ func E501BudgetRemaining(log []domain.ExecutionLogEntry, row domain.WorkflowRow,
 }
 
 // partiallyDoneRunLength is k: the length of the trailing run of
-// PARTIALLY_DONE log rows at (row, stage). Rows without a recorded workflow
-// row (infrastructure and ad-hoc steps) are skipped; any other row ends the run.
-func partiallyDoneRunLength(log []domain.ExecutionLogEntry, row domain.WorkflowRow, stage string) int {
+// PARTIALLY_DONE log rows at (row, value). Rows without a recorded workflow
+// row (infrastructure and ad-hoc steps) are skipped; any other row, or a row of
+// another or unreadable value, ends the run.
+func partiallyDoneRunLength(
+	log []domain.ExecutionLogEntry, row domain.RoutingRow, want domain.IterationValue,
+) int {
+	own := domain.WorkflowRowFromIndex(row.Index)
 	k := 0
 	for i := len(log) - 1; i >= 0; i-- {
 		e := log[i]
 		if e.WorkflowRow == domain.NoWorkflowRow {
 			continue
 		}
-		if e.WorkflowRow != row || e.Stage != stage || e.Status != domain.StatusPARTIALLY_DONE {
+		if e.WorkflowRow != own || e.Status != domain.StatusPARTIALLY_DONE || !entryHasValue(e, row, want) {
 			break
 		}
 		k++
@@ -65,15 +112,19 @@ func partiallyDoneRunLength(log []domain.ExecutionLogEntry, row domain.WorkflowR
 // deviates. All counting comes from the Execution Log.
 func mechanicalRetry(
 	in NextInput,
+	sc ScheduleContext,
 	pos position,
 	status domain.StatusCode,
 ) (dec domain.EngineDecision, ok bool) {
-	row := domain.WorkflowRowFromIndex(pos.rowIdx)
+	row, inTable := tableRow(in.Workflow, pos.rowIdx)
+	if !inTable {
+		row = domain.RoutingRow{Index: pos.rowIdx}
+	}
 	log := in.State.ExecutionLog
 	var kind domain.RetryKind
 	switch status {
 	case domain.StatusPARTIALLY_DONE:
-		if partiallyDoneRunLength(log, row, pos.stage) > PartiallyDoneRedispatchLimit {
+		if partiallyDoneRunLength(log, row, pos.value) > PartiallyDoneRedispatchLimit {
 			return domain.EngineDecision{}, false
 		}
 		kind = domain.RetryPartiallyDone
@@ -86,8 +137,20 @@ func mechanicalRetry(
 	default:
 		return domain.EngineDecision{}, false
 	}
-	step, err := buildDispatchStep(in.Workflow, in.Stages, pos.rowIdx, pos.stageNum, pos.stage,
-		in.Agents, in.Seq, in.Now, in.RefreshedStages)
+	// A re-dispatched row resolves its defaults over the schedules of the
+	// original attempt, including a block schedule withheld from routing.
+	if len(in.RetrySchedules) > 0 {
+		merged := make(domain.BlockSchedules, len(sc.Schedules)+len(in.RetrySchedules))
+		for name, sched := range in.RetrySchedules {
+			merged[name] = sched
+		}
+		for name, sched := range sc.Schedules {
+			merged[name] = sched
+		}
+		sc.Schedules = merged
+	}
+	step, err := buildDispatchStep(in.Workflow, pos.rowIdx, pos.iteration,
+		in.Agents, in.Seq, in.Now, sc)
 	if err != nil {
 		return domain.EngineDecision{Stop: &domain.StopDecision{Reason: err.Error()}}, true
 	}
@@ -119,6 +182,5 @@ func addPartiallyDoneContext(step *domain.DispatchStep, in NextInput, pos positi
 		msg = in.LastResponse.StatusMessage
 	}
 	step.Request.InputArtifacts = injectReviewArtifacts(in.State.RunID, step.Request.InputArtifacts, in.LastOutputArtifacts)
-	step.Request.TaskDescription = domain.GenericTaskDescription + "\n\n" +
-		PartiallyDoneContextPrefix + "\n" + msg
+	step.Request.TaskDescription = partiallyDoneTaskDescription(in.Workflow.Table.Rows[step.RowIndex], msg)
 }

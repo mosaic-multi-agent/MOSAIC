@@ -31,8 +31,7 @@ type wireRoutingResponse struct {
 	OutputArtifacts *[]string          `json:"output_artifacts"` // optional; same semantics
 	HITLOverride    *bool              `json:"hitl_override"`    // optional; nil = fall back
 	Row             domain.WorkflowRow // dispatch only; required; 1-based, NoWorkflowRow = absent (see wire_row_stage.go)
-	Stage           domain.StageNumber // dispatch only; required exactly for a staged row; 0 = absent
-	StageGroup      domain.GroupName   // group of a "Group.N" stage value; empty for a bare number
+	Iteration       string             // dispatch only; the run artifact's Iteration value, required exactly for a block row; "" = absent
 	Reason          string             `json:"reason"` // stop only
 }
 
@@ -57,7 +56,8 @@ type wireRoutingRaw struct {
 	OutputArtifacts json.RawMessage `json:"output_artifacts"`
 	HITLOverride    json.RawMessage `json:"hitl_override"`
 	Row             json.RawMessage `json:"row"`
-	Stage           json.RawMessage `json:"stage"`
+	Iteration       json.RawMessage `json:"iteration"`
+	Stage           json.RawMessage `json:"stage"` // the pre-3.0 member; any value but null is refused
 	Reason          string          `json:"reason"`
 }
 
@@ -106,7 +106,10 @@ func unmarshalRoutingResponseLenient(data []byte) (wireRoutingResponse, error) {
 	if resp.Row, err = coerceRowField(raw.Row); err != nil {
 		return wireRoutingResponse{}, err
 	}
-	if resp.Stage, resp.StageGroup, err = coerceStageField(raw.Stage); err != nil {
+	if err = refuseStageField(raw.Stage); err != nil {
+		return wireRoutingResponse{}, err
+	}
+	if resp.Iteration, err = coerceIterationField(raw.Iteration); err != nil {
 		return wireRoutingResponse{}, err
 	}
 

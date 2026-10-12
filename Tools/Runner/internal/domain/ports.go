@@ -33,7 +33,7 @@ type CompletedStep struct {
 	Seq           int
 	AgentInstance string // "{AgentName}#{Seq}"
 	Phase         string
-	Stage         string // recorded stage value (domain.FormatStageValue, e.g. "Test.1") during EXECUTION, "" otherwise
+	Stage         string // recorded OAF 3.0 iteration value (domain.FormatIterationValue, e.g. "1.Test") during EXECUTION, "" otherwise
 	// WorkflowRow is the dispatched routing-table row, 1-based.
 	// NoWorkflowRow for infrastructure and out-of-band steps.
 	WorkflowRow WorkflowRow

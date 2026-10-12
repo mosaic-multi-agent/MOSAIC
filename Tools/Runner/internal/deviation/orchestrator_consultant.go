@@ -45,7 +45,7 @@ type OrchestratorConsultant struct {
 //   - ConsultFailUnknownAgent: dispatch agent not in the routing table
 //
 // A dispatch reply must name the row (1-based) and, for a staged row, the
-// stage; it is validated against the table and req.Stages. An invalid reply is
+// stage; it is validated against the table and req.Schedules. An invalid reply is
 // retried like a malformed one and, once the attempts are spent, fails with
 // ConsultFailMalformedJSON.
 func (c *OrchestratorConsultant) ConsultRouting(ctx context.Context, req domain.ConsultationRequest) (domain.RoutingInstruction, error) {
@@ -153,8 +153,8 @@ func (c *OrchestratorConsultant) ConsultRouting(ctx context.Context, req domain.
 }
 
 // dispatchFromReply turns a parsed dispatch reply into a DispatchInstruction.
-// A reply whose row or stage fails domain.ValidateDispatchTarget against the
-// routing table and the request's current stage set is reported as
+// A reply whose row or stage fails domain.ValidateDispatchIteration against the
+// routing table and the request's current block schedules is reported as
 // ConsultFailMalformedJSON, so the caller retries it like any malformed reply.
 // An unknown agent keeps its own failure class and is not retried.
 func (c *OrchestratorConsultant) dispatchFromReply(req domain.ConsultationRequest, resp wireRoutingResponse) (*domain.DispatchInstruction, error) {
@@ -173,8 +173,10 @@ func (c *OrchestratorConsultant) dispatchFromReply(req domain.ConsultationReques
 	agents := make([]string, 0, len(c.Table.Rows))
 	known := false
 	for _, row := range c.Table.Rows {
-		agents = append(agents, row.Agent)
-		if row.Agent == resp.Agent {
+		agents = append(agents, row.BareAgentID())
+		// A whole qualified cell is a known agent named wrongly: the row
+		// cross-check rejects it as an agent-row mismatch, which is retried.
+		if row.BareAgentID() == resp.Agent || row.Agent == resp.Agent {
 			known = true
 		}
 	}
@@ -185,11 +187,10 @@ func (c *OrchestratorConsultant) dispatchFromReply(req domain.ConsultationReques
 			Agents:  agents,
 		}
 	}
-	resolved, err := domain.ValidateDispatchTarget(c.Table, req.Stages, domain.DispatchTarget{
-		Agent:      resp.Agent,
-		Row:        resp.Row,
-		Stage:      resp.Stage,
-		StageGroup: resp.StageGroup,
+	resolved, err := domain.ValidateDispatchIteration(c.Table, req.Schedules, domain.DispatchTarget{
+		Agent:     resp.Agent,
+		Row:       resp.Row,
+		Iteration: resp.Iteration,
 	})
 	if err != nil {
 		return nil, &domain.ConsultationError{
@@ -201,7 +202,7 @@ func (c *OrchestratorConsultant) dispatchFromReply(req domain.ConsultationReques
 	return &domain.DispatchInstruction{
 		Agent:           resp.Agent,
 		RowIndex:        resolved.Row.Index,
-		Stage:           resolved.StageNumber,
+		Iteration:       resolved.Iteration,
 		TaskDescription: resp.TaskDescription,
 		Constraints:     resp.Constraints,
 		InputArtifacts:  resp.InputArtifacts,

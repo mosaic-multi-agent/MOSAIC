@@ -1,14 +1,13 @@
 package engine_test
 
-// On Findings route-back and non-EXECUTION On Success targets are resolved by
-// position when an agent fills several routing-table rows:
+// On Findings route-back and run-scope On Success targets are resolved by the
+// whole Subagent cell a target names, so an agent that fills several routing
+// rows is addressed through its mode qualifiers:
 //
-//   - On Findings goes to the nearest row strictly above the row that ran whose
-//     agent is the target. Group and stage boundaries are ignored; a row below
-//     is never chosen. No such row is the no-target deviation.
-//   - A non-EXECUTION On Success naming a duplicated agent goes to the nearest
-//     matching non-EXECUTION row below the current row, or the nearest above
-//     when none is below.
+//   - On Findings goes to the row its cell names, a row of the same scope, in
+//     whichever group, stage or direction it lies.
+//   - A run-scope On Success naming a qualified agent goes to the one row whose
+//     cell it names.
 
 import (
 	"testing"
@@ -17,25 +16,22 @@ import (
 	"mosaic-run/internal/engine"
 )
 
-// ===== On Findings: nearest preceding row =====
+// ===== On Findings: the named row =====
 
 // twoGroupFindingsContent has the same fixer in the Test group (row 1) and in
-// the Implementation group (row 3). Each group ends with its own gate, whose
-// On Findings names the fixer.
-const twoGroupFindingsContent = `## Two Group Findings Workflow
+// the Implementation group (row 3), told apart by mode qualifiers. Each group
+// ends with its own gate, whose On Findings names the fixer of its group.
+const twoGroupFindingsContent = v216Columns +
+	`| EXECUTION.[Stage].Test | fixer(tests) | FALSE | NEXT | - | - | Stage-{Stage}/FixTests.md |
+| EXECUTION.[Stage].Test | gate-tests | FALSE | COMPLETE | fixer(tests) | - | Stage-{Stage}/GateTests.md |
+| EXECUTION.[Stage].Implementation | fixer(impl) | FALSE | NEXT | - | - | Stage-{Stage}/FixImpl.md |
+| EXECUTION.[Stage].Implementation | gate-impl | FALSE | COMPLETE | fixer(impl) | - | Stage-{Stage}/GateImpl.md |
+` + v216StageBlock + `
+**Groups:**
 
-| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
-|-------|----------|:----:|------------|-------------|-------|--------|
-| EXECUTION.Test.[StageNumber] | fixer | FALSE | - | - | Script/fix-tests.md | Stage-{StageNumber}/FixTests.md |
-| EXECUTION.Test.[StageNumber] | gate-tests | FALSE | - | fixer | Script/gate-tests.md | Stage-{StageNumber}/GateTests.md |
-| EXECUTION.Implementation.[StageNumber] | fixer | FALSE | - | - | Script/fix-impl.md | Stage-{StageNumber}/FixImpl.md |
-| EXECUTION.Implementation.[StageNumber] | gate-impl | FALSE | - | fixer | Script/gate-impl.md | Stage-{StageNumber}/GateImpl.md |
-
-**Execution Groups:**
-
-| Approach | Groups |
-|----------|--------|
-| TDD | Test, Implementation |
+| Block | Approach | Groups |
+|-------|----------|--------|
+| Stage | TDD | Test, Implementation |
 `
 
 const (
@@ -54,42 +50,42 @@ func twoGroupAgents() map[string]domain.AgentReference {
 func twoGroupLogAtImplGate() *runLog {
 	log := &runLog{}
 	return log.
-		workflowStep("fixer", "Test.1", domain.StatusSUCCESS, tgRowFixTests).
-		workflowStep("gate-tests", "Test.1", domain.StatusSUCCESS, tgRowGateTest).
-		workflowStep("fixer", "Implementation.1", domain.StatusSUCCESS, tgRowFixImpl).
-		workflowStep("gate-impl", "Implementation.1", domain.StatusCOMPLETED_NEEDS_ACTION, tgRowGateImpl)
+		workflowStep("fixer", "1.Test", domain.StatusSUCCESS, tgRowFixTests).
+		workflowStep("gate-tests", "1.Test", domain.StatusSUCCESS, tgRowGateTest).
+		workflowStep("fixer", "1.Implementation", domain.StatusSUCCESS, tgRowFixImpl).
+		workflowStep("gate-impl", "1.Implementation", domain.StatusCOMPLETED_NEEDS_ACTION, tgRowGateImpl)
 }
 
-func TestNext_OnFindings_TargetInTwoGroups_RoutesToNearestPrecedingRow(t *testing.T) {
-	aw := mustParseAndAdmit(t, twoGroupFindingsContent, "two-group-findings", "1.0")
+func TestNext_OnFindings_SameAgentInTwoGroups_RoutesToFixerNamedByTheGate(t *testing.T) {
+	aw := mustParseAndAdmitV216(t, twoGroupFindingsContent, "two-group-findings", "1.0")
 
-	step := requireNextStep(t, aw, singleStageSet("TDD"), twoGroupAgents(), twoGroupLogAtImplGate())
+	step := requireNextStepIDs(t, aw, singleSchedules("TDD"), twoGroupAgents(), twoGroupLogAtImplGate())
 
 	if got := agentName(step.Request.AgentInstanceID); got != "fixer" {
 		t.Errorf("findings must route to fixer, got %s", got)
 	}
-	requireStepAt(t, step, tgRowFixImpl-1, "Implementation.1")
+	requireStepAt(t, step, tgRowFixImpl-1, "1.Implementation")
 }
 
-func TestNext_OnFindings_TargetInTwoGroups_TestGateStillRoutesToTestGroupRow(t *testing.T) {
-	aw := mustParseAndAdmit(t, twoGroupFindingsContent, "two-group-findings", "1.0")
+func TestNext_OnFindings_SameAgentInTwoGroups_TestGateStillRoutesToTestGroupRow(t *testing.T) {
+	aw := mustParseAndAdmitV216(t, twoGroupFindingsContent, "two-group-findings", "1.0")
 	log := &runLog{}
-	log.workflowStep("fixer", "Test.1", domain.StatusSUCCESS, tgRowFixTests).
-		workflowStep("gate-tests", "Test.1", domain.StatusCOMPLETED_NEEDS_ACTION, tgRowGateTest)
+	log.workflowStep("fixer", "1.Test", domain.StatusSUCCESS, tgRowFixTests).
+		workflowStep("gate-tests", "1.Test", domain.StatusCOMPLETED_NEEDS_ACTION, tgRowGateTest)
 
-	step := requireNextStep(t, aw, singleStageSet("TDD"), twoGroupAgents(), log)
+	step := requireNextStepIDs(t, aw, singleSchedules("TDD"), twoGroupAgents(), log)
 
-	requireStepAt(t, step, tgRowFixTests-1, "Test.1")
+	requireStepAt(t, step, tgRowFixTests-1, "1.Test")
 }
 
-func TestNext_OnFindings_NearestPrecedingRoute_InjectsReviewOutputs(t *testing.T) {
-	aw := mustParseAndAdmit(t, twoGroupFindingsContent, "two-group-findings", "1.0")
+func TestNext_OnFindings_NamedRowRoute_InjectsReviewOutputs(t *testing.T) {
+	aw := mustParseAndAdmitV216(t, twoGroupFindingsContent, "two-group-findings", "1.0")
 	log := twoGroupLogAtImplGate()
 	reviewOutput := "Stage-1/GateImpl.md"
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:            aw,
-		Stages:              singleStageSet("TDD"),
+		Schedules:           singleSchedules("TDD"),
 		State:               log.state(),
 		LastResponse:        cnaResponse(log.last().Agent),
 		LastOutputArtifacts: []string{reviewOutput},
@@ -100,7 +96,7 @@ func TestNext_OnFindings_NearestPrecedingRoute_InjectsReviewOutputs(t *testing.T
 	})
 
 	step := requireDispatch(t, dec)
-	requireStepAt(t, step, tgRowFixImpl-1, "Implementation.1")
+	requireStepAt(t, step, tgRowFixImpl-1, "1.Implementation")
 	found := false
 	for _, a := range step.Request.InputArtifacts {
 		if a == reviewOutput {
@@ -112,13 +108,13 @@ func TestNext_OnFindings_NearestPrecedingRoute_InjectsReviewOutputs(t *testing.T
 	}
 }
 
-func TestNext_OnFindings_NearestPrecedingRoute_ReviewLoopLimitStillApplies(t *testing.T) {
-	aw := mustParseAndAdmit(t, twoGroupFindingsContent, "two-group-findings", "1.0")
+func TestNext_OnFindings_NamedRowRoute_ReviewLoopLimitStillApplies(t *testing.T) {
+	aw := mustParseAndAdmitV216(t, twoGroupFindingsContent, "two-group-findings", "1.0")
 	log := twoGroupLogAtImplGate()
 	state := log.state()
 	state.ReviewLoopLimit = 1
 
-	dec := engineNextAuto(aw, singleStageSet("TDD"), state, cnaResponse(log.last().Agent))
+	dec := engineNextAutoIDs(aw, singleSchedules("TDD"), state, cnaResponse(log.last().Agent))
 
 	dev := requireDeviation(t, dec)
 	if dev.Info.Kind != domain.DeviationReviewLoopLimit {
@@ -126,78 +122,79 @@ func TestNext_OnFindings_NearestPrecedingRoute_ReviewLoopLimitStillApplies(t *te
 	}
 }
 
-func TestNext_OnFindings_SameAgentWriterGateReview_RoutesToWriterDirectlyAbove(t *testing.T) {
-	aw := mustParseAndAdmit(t, stagedFindingsLoopContent, "staged-findings-loop", "1.0")
+// findingsLoopContent has one agent filling three Test-group rows and one
+// Implementation-group row; the gate row names the writer row of that same
+// agent as its On Findings target.
+const findingsLoopContent = v216Columns +
+	`| EXECUTION.[Stage].Test | loop-agent(writer) | FALSE | NEXT | - | - | Stage-{Stage}/Written.md |
+| EXECUTION.[Stage].Test | loop-agent(gate) | FALSE | NEXT | loop-agent(writer) | - | Stage-{Stage}/Gate.md |
+| EXECUTION.[Stage].Test | loop-agent(review) | FALSE | COMPLETE | - | - | Stage-{Stage}/Review.md |
+| EXECUTION.[Stage].Implementation | loop-agent(impl) | FALSE | COMPLETE | - | - | Stage-{Stage}/Impl.md |
+` + v216StageBlock + `
+**Groups:**
+
+| Block | Approach | Groups |
+|-------|----------|--------|
+| Stage | TDD | Test, Implementation |
+`
+
+const (
+	findingsLoopRowWriter = 1
+	findingsLoopRowGate   = 2
+	findingsLoopRowReview = 3
+	findingsLoopRowImpl   = 4
+)
+
+func TestNext_OnFindings_SameAgentWriterGateReview_RoutesToWriterRowNamedByGate(t *testing.T) {
+	aw := mustParseAndAdmitV216(t, findingsLoopContent, "findings-loop", "1.0")
 	log := &runLog{}
-	log.workflowStep("loop-agent", "Test.1", domain.StatusSUCCESS, loopRowWriter).
-		workflowStep("loop-agent", "Test.1", domain.StatusCOMPLETED_NEEDS_ACTION, loopRowGate)
+	log.workflowStep("loop-agent", "1.Test", domain.StatusSUCCESS, findingsLoopRowWriter).
+		workflowStep("loop-agent", "1.Test", domain.StatusCOMPLETED_NEEDS_ACTION, findingsLoopRowGate)
 
-	step := requireNextStep(t, aw, singleStageSet("TDD"), newTestAgents("loop-agent"), log)
+	step := requireNextStepIDs(t, aw, singleSchedules("TDD"), newTestAgents("loop-agent"), log)
 
-	requireStepAt(t, step, loopRowWriter-1, "Test.1")
+	requireStepAt(t, step, findingsLoopRowWriter-1, "1.Test")
 }
 
 // targetBelowContent has the On Findings target only below the reviewer.
-const targetBelowContent = `## Target Below Workflow
-
-| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
-|-------|----------|:----:|------------|-------------|-------|--------|
-| PLANNING | checker | FALSE | - | fixer | Plan.md | check.md |
-| DESIGN | fixer | FALSE | COMPLETE | - | Plan.md | Plan.md |
+const targetBelowContent = v216Columns +
+	`| PLANNING | checker | FALSE | NEXT | fixer | - | check.md |
+| DESIGN | fixer | FALSE | COMPLETE | - | - | Plan.md |
 `
 
-// targetAbsentContent names an On Findings target that has no row at all.
-const targetAbsentContent = `## Target Absent Workflow
+func TestNext_OnFindings_TargetBelow_RoutesToNamedRow(t *testing.T) {
+	aw := mustParseAndAdmitV216(t, targetBelowContent, "target-below", "1.0")
+	state := stateAfterRow("PLANNING", "", "checker#1", domain.StatusCOMPLETED_NEEDS_ACTION, 1, 1)
 
-| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
-|-------|----------|:----:|------------|-------------|-------|--------|
-| PLANNING | checker | FALSE | COMPLETE | fixer | Plan.md | check.md |
-| DESIGN | other | FALSE | COMPLETE | - | Plan.md | Plan.md |
-`
-
-func nextAfterCheckerFindings(t *testing.T, content string) domain.EngineDecision {
-	t.Helper()
-	aw := mustParseAndAdmit(t, content, "no-preceding-target", "1.0")
-	state := stateAfter("PLANNING", "", "checker#1", domain.StatusCOMPLETED_NEEDS_ACTION, 1)
-	return engine.Next(engine.NextInput{
+	dec := engine.Next(engine.NextInput{
 		Workflow:     aw,
-		Stages:       singleStageSet("TDD"),
+		Schedules:    singleSchedules("TDD"),
 		State:        state,
 		LastResponse: cnaResponse("checker#1"),
-		Agents:       newTestAgents("checker", "fixer", "other"),
+		Agents:       newTestAgents("checker", "fixer"),
 		Seq:          1,
 		Now:          fixedNow,
 		Mode:         domain.ExecutionModeAutoReview,
 	})
+
+	step := requireDispatch(t, dec)
+	if step.RowIndex != 1 {
+		t.Errorf("want the fixer row below the checker (index 1), got index %d", step.RowIndex)
+	}
 }
 
-func TestNext_OnFindings_TargetOnlyBelow_ReturnsDeviation(t *testing.T) {
-	dec := nextAfterCheckerFindings(t, targetBelowContent)
-
-	requireDeviation(t, dec)
-}
-
-func TestNext_OnFindings_TargetAbsent_ReturnsDeviation(t *testing.T) {
-	dec := nextAfterCheckerFindings(t, targetAbsentContent)
-
-	requireDeviation(t, dec)
-}
-
-func TestNext_OnFindings_TargetAboveAndBelow_NeverChoosesRowBelow(t *testing.T) {
-	const content = `## Target Above And Below Workflow
-
-| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
-|-------|----------|:----:|------------|-------------|-------|--------|
-| RESEARCH | fixer | FALSE | checker | - | Plan.md | Plan.md |
-| PLANNING | checker | FALSE | - | fixer | Plan.md | check.md |
-| DESIGN | fixer | FALSE | COMPLETE | - | Plan.md | Plan.md |
+func TestNext_OnFindings_SameAgentAboveAndBelow_RoutesToTheRowNamed(t *testing.T) {
+	const content = v216Columns +
+		`| RESEARCH | fixer(draft) | FALSE | checker | - | - | Plan.md |
+| PLANNING | checker | FALSE | NEXT | fixer(draft) | - | check.md |
+| DESIGN | fixer(final) | FALSE | COMPLETE | - | - | Final.md |
 `
-	aw := mustParseAndAdmit(t, content, "above-and-below", "1.0")
-	state := stateAfter("PLANNING", "", "checker#2", domain.StatusCOMPLETED_NEEDS_ACTION, 2)
+	aw := mustParseAndAdmitV216(t, content, "above-and-below", "1.0")
+	state := stateAfterRow("PLANNING", "", "checker#2", domain.StatusCOMPLETED_NEEDS_ACTION, 2, 2)
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:     aw,
-		Stages:       singleStageSet("TDD"),
+		Schedules:    singleSchedules("TDD"),
 		State:        state,
 		LastResponse: cnaResponse("checker#2"),
 		Agents:       newTestAgents("checker", "fixer"),
@@ -208,23 +205,24 @@ func TestNext_OnFindings_TargetAboveAndBelow_NeverChoosesRowBelow(t *testing.T) 
 
 	step := requireDispatch(t, dec)
 	if step.RowIndex != 0 {
-		t.Errorf("want the fixer row above (index 0), got index %d", step.RowIndex)
+		t.Errorf("want the fixer(draft) row named by the checker (index 0), got index %d", step.RowIndex)
 	}
 }
 
-// ===== Non-EXECUTION On Success with a duplicated agent =====
+// ===== Run-scope On Success naming a qualified agent =====
 
-// nextAfterSuccess calls engine.Next for a SUCCESS of agentID in phase.
-func nextAfterSuccess(t *testing.T, content, phase, agentID string, seq int, agents ...string) domain.DispatchStep {
+// nextAfterSuccess calls engine.Next for a SUCCESS of agentID, recorded as
+// running the given 1-based row of the admitted content.
+func nextAfterSuccess(t *testing.T, content, phase, agentID string, seq, row int) domain.DispatchStep {
 	t.Helper()
-	aw := mustParseAndAdmit(t, content, "on-success-lookup", "1.0")
-	state := stateAfter(phase, "", agentID, domain.StatusSUCCESS, seq)
+	aw := mustParseAndAdmitV216(t, content, "on-success-lookup", "1.0")
+	state := stateAfterRow(phase, "", agentID, domain.StatusSUCCESS, seq, row)
 	dec := engine.Next(engine.NextInput{
 		Workflow:     aw,
-		Stages:       singleStageSet("TDD"),
+		Schedules:    singleSchedules("TDD"),
 		State:        state,
 		LastResponse: successResponse(agentID),
-		Agents:       newTestAgents(agents...),
+		Agents:       scopeAgents(aw),
 		Seq:          seq,
 		Now:          fixedNow,
 		Mode:         domain.ExecutionModeAutoReview,
@@ -232,43 +230,22 @@ func nextAfterSuccess(t *testing.T, content, phase, agentID string, seq int, age
 	return requireDispatch(t, dec)
 }
 
-func TestNext_NonExecutionOnSuccess_DuplicatedAgent_DispatchesNearestRowBelow(t *testing.T) {
-	const content = `## Duplicate Below Workflow
-
-| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
-|-------|----------|:----:|------------|-------------|-------|--------|
-| RESEARCH | checker | FALSE | - | - | Plan.md | a.md |
-| PLANNING | drafter | FALSE | checker | - | Plan.md | b.md |
-| REVIEW | checker | FALSE | COMPLETE | - | Plan.md | c.md |
+func TestNext_RunScopeOnSuccess_QualifiedAgent_DispatchesTheRowNamed(t *testing.T) {
+	const content = v216Columns +
+		`| RESEARCH | checker(draft) | FALSE | NEXT | - | - | a.md |
+| PLANNING | drafter | FALSE | checker(final) | - | - | b.md |
+| REVIEW | checker(final) | FALSE | COMPLETE | - | - | c.md |
 `
 
-	step := nextAfterSuccess(t, content, "PLANNING", "drafter#1", 1, "checker", "drafter")
+	step := nextAfterSuccess(t, content, "PLANNING", "drafter#1", 1, 2)
 
-	if step.RowIndex != 2 {
-		t.Errorf("want the checker row below the drafter (index 2), got index %d", step.RowIndex)
+	if got := agentName(step.Request.AgentInstanceID); got != "checker" || step.RowIndex != 2 {
+		t.Errorf("want checker (final) at index 2, got %s at index %d", got, step.RowIndex)
 	}
 }
 
-func TestNext_NonExecutionOnSuccess_DuplicatedAgentOnlyAbove_DispatchesNearestRowAbove(t *testing.T) {
-	const content = `## Duplicate Above Workflow
-
-| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
-|-------|----------|:----:|------------|-------------|-------|--------|
-| RESEARCH | checker | FALSE | - | - | Plan.md | a.md |
-| PLANNING | checker | FALSE | - | - | Plan.md | b.md |
-| REVIEW | drafter | FALSE | checker | - | Plan.md | c.md |
-`
-
-	step := nextAfterSuccess(t, content, "REVIEW", "drafter#1", 1, "checker", "drafter")
-
-	if step.RowIndex != 1 {
-		t.Errorf("want the nearest checker row above (index 1), got index %d", step.RowIndex)
-	}
-}
-
-func TestNext_NonExecutionOnSuccess_UniqueAgents_DispatchesNamedRow(t *testing.T) {
-	step := nextAfterSuccess(t, quickFixContent, "PLANNING", "planner-tdd-soft#1", 1,
-		"planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
+func TestNext_RunScopeOnSuccess_UniqueAgents_DispatchesNamedRow(t *testing.T) {
+	step := nextAfterSuccess(t, quickFixV216Content, "PLANNING", "planner-tdd-soft#1", 1, 1)
 
 	if got := agentName(step.Request.AgentInstanceID); got != "plan-review" || step.RowIndex != 1 {
 		t.Errorf("want plan-review at index 1, got %s at index %d", got, step.RowIndex)
@@ -290,9 +267,9 @@ type stagedLoopStep struct {
 // runStagedLoop replays the steps against the staged findings loop workflow,
 // checking the next dispatch after each. The last step has no further dispatch
 // when wantComplete is set.
-func runStagedLoop(t *testing.T, stages *domain.StageSet, steps []stagedLoopStep, wantComplete bool) {
+func runStagedLoop(t *testing.T, schedules domain.BlockSchedules, steps []stagedLoopStep, wantComplete bool) {
 	t.Helper()
-	aw := mustParseAndAdmit(t, stagedFindingsLoopContent, "staged-findings-loop", "1.0")
+	aw := mustParseAndAdmitV216(t, findingsLoopContent, "findings-loop", "1.0")
 	agents := newTestAgents("loop-agent")
 	log := &runLog{}
 	for i, s := range steps {
@@ -301,7 +278,7 @@ func runStagedLoop(t *testing.T, stages *domain.StageSet, steps []stagedLoopStep
 		last := i == len(steps)-1
 
 		t.Run(s.name, func(t *testing.T) {
-			dec := nextAfterLog(aw, stages, agents, snapshot)
+			dec := nextAfterLogIDs(aw, schedules, agents, snapshot)
 			if last && wantComplete {
 				requireComplete(t, dec)
 				return
@@ -312,31 +289,43 @@ func runStagedLoop(t *testing.T, stages *domain.StageSet, steps []stagedLoopStep
 }
 
 func TestNext_StagedFindingsLoop_SingleStage_RunsAllSixStepsInOrder(t *testing.T) {
+	const (
+		writer = findingsLoopRowWriter
+		gate   = findingsLoopRowGate
+		review = findingsLoopRowReview
+		impl   = findingsLoopRowImpl
+	)
 	steps := []stagedLoopStep{
-		{"writer", "Test.1", domain.StatusSUCCESS, loopRowWriter, loopRowGate - 1, "Test.1"},
-		{"gate needs action", "Test.1", domain.StatusCOMPLETED_NEEDS_ACTION, loopRowGate, loopRowWriter - 1, "Test.1"},
-		{"writer again", "Test.1", domain.StatusSUCCESS, loopRowWriter, loopRowGate - 1, "Test.1"},
-		{"gate succeeds", "Test.1", domain.StatusSUCCESS, loopRowGate, loopRowReview - 1, "Test.1"},
-		{"review", "Test.1", domain.StatusSUCCESS, loopRowReview, loopRowImpl - 1, "Implementation.1"},
-		{"impl", "Implementation.1", domain.StatusSUCCESS, loopRowImpl, 0, ""},
+		{"writer", "1.Test", domain.StatusSUCCESS, writer, gate - 1, "1.Test"},
+		{"gate needs action", "1.Test", domain.StatusCOMPLETED_NEEDS_ACTION, gate, writer - 1, "1.Test"},
+		{"writer again", "1.Test", domain.StatusSUCCESS, writer, gate - 1, "1.Test"},
+		{"gate succeeds", "1.Test", domain.StatusSUCCESS, gate, review - 1, "1.Test"},
+		{"review", "1.Test", domain.StatusSUCCESS, review, impl - 1, "1.Implementation"},
+		{"impl", "1.Implementation", domain.StatusSUCCESS, impl, 0, ""},
 	}
 
-	runStagedLoop(t, singleStageSet("TDD"), steps, true)
+	runStagedLoop(t, singleSchedules("TDD"), steps, true)
 }
 
 func TestNext_StagedFindingsLoop_RouteBackInStageOne_StageTwoRunsEveryRow(t *testing.T) {
+	const (
+		writer = findingsLoopRowWriter
+		gate   = findingsLoopRowGate
+		review = findingsLoopRowReview
+		impl   = findingsLoopRowImpl
+	)
 	steps := []stagedLoopStep{
-		{"stage 1 writer", "Test.1", domain.StatusSUCCESS, loopRowWriter, loopRowGate - 1, "Test.1"},
-		{"stage 1 gate needs action", "Test.1", domain.StatusCOMPLETED_NEEDS_ACTION, loopRowGate, loopRowWriter - 1, "Test.1"},
-		{"stage 1 writer again", "Test.1", domain.StatusSUCCESS, loopRowWriter, loopRowGate - 1, "Test.1"},
-		{"stage 1 gate succeeds", "Test.1", domain.StatusSUCCESS, loopRowGate, loopRowReview - 1, "Test.1"},
-		{"stage 1 review", "Test.1", domain.StatusSUCCESS, loopRowReview, loopRowImpl - 1, "Implementation.1"},
-		{"stage 1 impl", "Implementation.1", domain.StatusSUCCESS, loopRowImpl, loopRowWriter - 1, "Test.2"},
-		{"stage 2 writer", "Test.2", domain.StatusSUCCESS, loopRowWriter, loopRowGate - 1, "Test.2"},
-		{"stage 2 gate", "Test.2", domain.StatusSUCCESS, loopRowGate, loopRowReview - 1, "Test.2"},
-		{"stage 2 review", "Test.2", domain.StatusSUCCESS, loopRowReview, loopRowImpl - 1, "Implementation.2"},
-		{"stage 2 impl", "Implementation.2", domain.StatusSUCCESS, loopRowImpl, 0, ""},
+		{"stage 1 writer", "1.Test", domain.StatusSUCCESS, writer, gate - 1, "1.Test"},
+		{"stage 1 gate needs action", "1.Test", domain.StatusCOMPLETED_NEEDS_ACTION, gate, writer - 1, "1.Test"},
+		{"stage 1 writer again", "1.Test", domain.StatusSUCCESS, writer, gate - 1, "1.Test"},
+		{"stage 1 gate succeeds", "1.Test", domain.StatusSUCCESS, gate, review - 1, "1.Test"},
+		{"stage 1 review", "1.Test", domain.StatusSUCCESS, review, impl - 1, "1.Implementation"},
+		{"stage 1 impl", "1.Implementation", domain.StatusSUCCESS, impl, writer - 1, "2.Test"},
+		{"stage 2 writer", "2.Test", domain.StatusSUCCESS, writer, gate - 1, "2.Test"},
+		{"stage 2 gate", "2.Test", domain.StatusSUCCESS, gate, review - 1, "2.Test"},
+		{"stage 2 review", "2.Test", domain.StatusSUCCESS, review, impl - 1, "2.Implementation"},
+		{"stage 2 impl", "2.Implementation", domain.StatusSUCCESS, impl, 0, ""},
 	}
 
-	runStagedLoop(t, twoStageSet("TDD"), steps, true)
+	runStagedLoop(t, twoSchedules("TDD"), steps, true)
 }

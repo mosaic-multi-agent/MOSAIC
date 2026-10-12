@@ -48,8 +48,8 @@ func TestManualDialogue_EscAtAStep_ReturnsToThePreviousStepAndRoutingStillComple
 				t.Errorf("after Esc at %s want %s asked next, got %s (sequence %v)", tc.cancelAt, tc.wantNext, got, d.calls)
 			}
 			disp := requireDispatch(t, instr, err)
-			if tc.stage == "2" && (disp.RowIndex != 2 || disp.Stage != 2) {
-				t.Errorf("want the dialogue to complete at RowIndex=2 Stage=2, got RowIndex=%d Stage=%d", disp.RowIndex, disp.Stage)
+			if tc.stage == "2" && (disp.RowIndex != 2 || disp.Iteration != "2") {
+				t.Errorf("want the dialogue to complete at RowIndex=2 Stage=2, got RowIndex=%d Stage=%q", disp.RowIndex, disp.Iteration)
 			}
 		})
 	}
@@ -209,9 +209,9 @@ func TestManualDialogue_ChangingTheStageOnTheWayBack_DiscardsSelectionsButKeepsT
 	if got := d.textQ(domain.QuestionManualTask, 2).Default; got != "T" {
 		t.Errorf("want the task text kept, got %q", got)
 	}
-	if disp.Stage != 2 || disp.TaskDescription != "T" || disp.InputArtifacts != nil {
-		t.Errorf("want Stage=2 task T and untouched input defaults, got Stage=%d task=%q inputs=%v",
-			disp.Stage, disp.TaskDescription, disp.InputArtifacts)
+	if disp.Iteration != "2" || disp.TaskDescription != "T" || disp.InputArtifacts != nil {
+		t.Errorf("want Stage=2 task T and untouched input defaults, got Stage=%q task=%q inputs=%v",
+			disp.Iteration, disp.TaskDescription, disp.InputArtifacts)
 	}
 }
 
@@ -235,7 +235,7 @@ func TestManualDialogue_ChangingTheRowOnTheWayBack_AsksTheNewRowsDefaults(t *tes
 	if want := []string{"Plan.md"}; !slices.Equal(inputs[1].DefaultOptionIDs, want) {
 		t.Errorf("want the defaults of the new row %v pre-checked, got %v", want, inputs[1].DefaultOptionIDs)
 	}
-	if disp.RowIndex != 3 || disp.Stage != 0 || disp.TaskDescription != "T" {
-		t.Errorf("want reviewer row 4 with the kept task, got RowIndex=%d Stage=%d task=%q", disp.RowIndex, disp.Stage, disp.TaskDescription)
+	if disp.RowIndex != 3 || disp.Iteration != "" || disp.TaskDescription != "T" {
+		t.Errorf("want reviewer row 4 with the kept task, got RowIndex=%d Stage=%q task=%q", disp.RowIndex, disp.Iteration, disp.TaskDescription)
 	}
 }

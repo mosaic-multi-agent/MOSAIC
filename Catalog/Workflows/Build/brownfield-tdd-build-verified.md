@@ -75,6 +75,48 @@ artifacts:
 
 ---
 
+## Flow
+
+Solid arrows: the happy path (`On Success`). Dotted arrows: where findings usually go (`On Findings`). `[HITL]`: a human stop. Each stage runs the groups its `Approach` lists, in that order: `TDD` = Test then Implementation (drawn here), `Implementation-First` = the reverse, `Implementation-Only` / `Tests-Only` = one group. `build-review` imports, builds and deploys; the reviewers after it run the tests on the target.
+
+```mermaid
+flowchart TD
+    subgraph RESEARCH
+        CR["codebase-research"] --> RF["requirements-refinement [HITL]"]
+        RF --> RV["requirements-review"]
+        RV -. findings .-> RF
+    end
+    subgraph PLANNING
+        PL["planner-tdd-soft [HITL]<br/>Plan.md + per-stage Plan / PlanProgress"] --> PR["plan-review"]
+        PR -. findings .-> PL
+    end
+    subgraph DESIGN
+        CD["contracts-designer [HITL]"] --> CRV["contracts-review"]
+        CRV -. findings .-> CD
+    end
+    subgraph STAGE["Stage block: one iteration per plan stage, parallel where Depends On allows"]
+        subgraph TEST["Test group"]
+            TW["test-writer-tdd"] --> BT["build-review(tests)<br/>import, build, deploy"]
+            BT -. build failed .-> TW
+            BT --> TRV["tests-review-tdd<br/>runs tests: verifies RED"]
+            TRV -. findings .-> TW
+        end
+        subgraph IMPL["Implementation group"]
+            IT["implementation-tdd"] --> BI["build-review(impl)<br/>import, build, deploy"]
+            BI -. build failed .-> IT
+            BI --> IR["implementation-review<br/>runs tests: verifies GREEN"]
+            IR -. findings .-> IT
+        end
+        TRV -- "TDD order: Approach decides" --> IT
+    end
+    RV --> PL
+    PR --> CD
+    CRV --> TW
+    IR --> DONE(["Feature implemented, verified on target"])
+```
+
+---
+
 ## Design Rationale
 
 Identical to `brownfield-tdd` except for how build/test execution is handled. In standard `brownfield-tdd`, the execution agents (test-writer-tdd, implementation-tdd, and their reviewers) are expected to build and run tests themselves via simple terminal commands. This workflow exists for cases where that path doesn't work — the build/test toolchain is complex enough (proprietary IDEs, COM automation, MCP servers, cross-compilation, target deployment) that making every execution agent competent at it would overload their context with mechanics unrelated to their actual job.

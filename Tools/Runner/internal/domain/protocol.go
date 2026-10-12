@@ -84,6 +84,6 @@ type DispatchStep struct {
 	Request       ProtocolRequest
 	EffectiveHITL bool      // the computed HITL value, or an override
 	Phase         string    // the phase to record in the artifact
-	Stage         string    // recorded stage value (domain.FormatStageValue, e.g. "Test.1") or "" -- what to write to the artifact
+	Stage         string    // recorded OAF 3.0 iteration value (domain.FormatIterationValue, e.g. "1.Test") or "" -- what to write to the artifact
 	Retry         RetryKind // RetryNone for every non-retry dispatch
 }

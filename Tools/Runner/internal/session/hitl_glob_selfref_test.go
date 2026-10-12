@@ -48,8 +48,8 @@ func hitlGlobSelfRefOrchestratedConfig(orchPath, runFolder string) domain.RunCon
 // with no preceding row that establishes a stage set.
 //
 // The session must derive the stage set from Plan.md before the HITL check so
-// that expandStageGlobs receives a non-nil stage set and produces expanded
-// paths (Stage-1/Plan.md, Stage-2/Plan.md). When all expanded files carry
+// that the Stage-* output is reported as the files it matches
+// (Stage-1/Plan.md, Stage-2/Plan.md). When all matched files carry
 // human_approved: true the step must be accepted without redispatch.
 //
 // The real write detector is wired; stage files are written during planner's
@@ -262,8 +262,8 @@ dispatched row is both the Stage-* producer and the HITL subject.
 // with no preceding row that establishes a stage set.
 //
 // The session must derive the stage set from Plan.md before the hitlCheckLoop so
-// that expandStageGlobs receives a non-nil stage set and produces expanded paths.
-// When all expanded files carry human_approved: true the step must be accepted
+// that the Stage-* output is reported as the files it matches.
+// When all matched files carry human_approved: true the step must be accepted
 // without redispatch.
 //
 // The real write detector is wired; stage files are written during planner's

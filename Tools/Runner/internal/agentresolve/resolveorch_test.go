@@ -42,9 +42,9 @@ import (
 const minimalWorkflowContent = `<Workflow type="core" name="demo" version="1.0">
 ## Demo Workflow
 
-| Phase | Subagent | HITL | Input | Output |
-|-------|----------|:----:|-------|--------|
-| PLANNING | agent-a | FALSE | - | plan.md |
+| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
+|-------|----------|:----:|------------|-------------|-------|--------|
+| PLANNING | agent-a | FALSE | COMPLETE | - | - | plan.md |
 </Workflow>
 `
 

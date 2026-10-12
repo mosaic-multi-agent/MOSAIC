@@ -26,7 +26,7 @@ func TestManualDialogue_RowQuestion_PreselectsTheRowThatDeviated(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			d := newDialogue(t).standard("4", "")
 			d.one[domain.QuestionManualRow] = []oneFn{pick(domain.ManualStopOptionID)}
-			req := manualRequest(stagesUpTo(3))
+			req := manualRequest(schedulesUpTo(3))
 			req.Deviation = tc.deviation
 
 			consultManual(t, d, tc.table, req) //nolint:errcheck
@@ -45,16 +45,16 @@ func TestManualDialogue_StageQuestion_PreselectsTheDeviatingStageOfTheSameGroup(
 		currentStage string
 		want         string
 	}{
-		{"same group, stage in the set", "Implementation.3", "3"},
-		{"other group", "Test.2", ""},
-		{"stage not in the set", "Implementation.9", ""},
+		{"same group, stage in the set", "3.Implementation", "3"},
+		{"other group", "2.Test", ""},
+		{"stage not in the set", "9.Implementation", ""},
 		{"unparsable value", "garbage", ""},
 		{"empty value", "", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			d := newDialogue(t).standard("3", "1")
-			req := manualRequest(stagesUpTo(4))
+			req := manualRequest(schedulesUpTo(4))
 			req.Deviation = &domain.DeviationInfo{CurrentRow: 2, CurrentStage: tc.currentStage}
 
 			consultManual(t, d, stagedRoutingTable(), req) //nolint:errcheck

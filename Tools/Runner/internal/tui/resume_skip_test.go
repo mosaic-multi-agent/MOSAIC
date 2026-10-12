@@ -53,17 +53,17 @@ func writeOrchestratorFixture(t *testing.T) string {
 	content := `<Workflow type="core" name="` + decoyWorkflowID + `" version="1.0">
 ## First Listed Workflow
 
-| Phase | Subagent | HITL | Input | Output |
-|-------|----------|:----:|-------|--------|
-| PLANNING | planner | TRUE | - | Plan.md |
+| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
+|-------|----------|:----:|------------|-------------|-------|--------|
+| PLANNING | planner | TRUE | COMPLETE | - | - | Plan.md |
 </Workflow>
 
 <Workflow type="core" name="` + recordedWorkflowID + `" version="1.0">
 ## Test Workflow
 
-| Phase | Subagent | HITL | Input | Output |
-|-------|----------|:----:|-------|--------|
-| PLANNING | planner | TRUE | - | Plan.md |
+| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
+|-------|----------|:----:|------------|-------------|-------|--------|
+| PLANNING | planner | TRUE | COMPLETE | - | - | Plan.md |
 </Workflow>
 `
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {

@@ -8,23 +8,40 @@ import (
 	"mosaic-run/internal/engine"
 )
 
+// creatorInjectionV216Content is a minimal EXECUTION-only workflow used to
+// exercise the creator-artifact injection path. test-writer-tdd's output
+// artifact (Stage-{Stage}/PlanProgress.md) is intentionally absent from its
+// input artifact list so that creator-artifact injection produces a genuinely
+// new entry that would not be present without it.
+const creatorInjectionV216Content = v216Columns +
+	`| EXECUTION.[Stage].Test | test-writer-tdd | FALSE | NEXT | - | Stage-{Stage}/Plan.md, ContractsDesign.md | Stage-{Stage}/PlanProgress.md |
+| EXECUTION.[Stage].Test | tests-review-tdd | FALSE | COMPLETE | test-writer-tdd | Stage-{Stage}/PlanProgress.md | Stage-{Stage}/tests-review-tdd.md |
+| EXECUTION.[Stage].Implementation | implementation-tdd | FALSE | COMPLETE | - | Stage-{Stage}/Plan.md | Stage-{Stage}/impl.md |
+` + v216StageBlock + `
+**Groups:**
+
+| Block | Approach | Groups |
+|-------|----------|--------|
+| Stage | TDD | Test, Implementation |
+`
+
 func TestNext_CreatorArtifactInjection_RegistryPresent_InjectsOutputArtifact(t *testing.T) {
-	aw := mustParseAndAdmit(t, creatorInjectionContent, "creator-injection", "1.0")
-	stages := singleStageSet("TDD")
+	aw := mustParseAndAdmitV216(t, creatorInjectionV216Content, "creator-injection", "1.0")
+	schedules := singleSchedules("TDD")
 	agents := newTestAgents("test-writer-tdd", "tests-review-tdd", "implementation-tdd")
 	// tests-review-tdd (row 1) completed with CNA; OnFindings=test-writer-tdd.
-	state := stateAfter("EXECUTION.[StageNumber]", "Stage-1", "tests-review-tdd#5", domain.StatusCOMPLETED_NEEDS_ACTION, 5)
+	state := stateAfterRow("EXECUTION", "1.Test", "tests-review-tdd#5", domain.StatusCOMPLETED_NEEDS_ACTION, 5, 2)
 
 	// Registry entry: test-writer-tdd's prior output, bare path after StripRunPrefix.
 	registry := []domain.ArtifactRegistryEntry{
-		{Artifact: "Stage-1/PlanProgress.md", CreatedIn: "Test.1", CreatedBy: "test-writer-tdd#1"},
+		{Artifact: "Stage-1/PlanProgress.md", CreatedIn: "EXECUTION.1.Test", CreatedBy: "test-writer-tdd#1"},
 	}
 	// Review agent's last output artifacts (injected by existing review logic).
 	reviewOutputs := []string{"Stage-1/tests-review-tdd.md"}
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:            aw,
-		Stages:              stages,
+		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("tests-review-tdd#5"),
 		LastOutputArtifacts: reviewOutputs,
@@ -57,15 +74,15 @@ func TestNext_CreatorArtifactInjection_RegistryPresent_InjectsOutputArtifact(t *
 // creator-artifact injection occurs -- the dispatched step's InputArtifacts
 // contain only the table row entries and the review agent's LastOutputArtifacts.
 func TestNext_CreatorArtifactInjection_RegistryAbsent_NoInjection(t *testing.T) {
-	aw := mustParseAndAdmit(t, creatorInjectionContent, "creator-injection", "1.0")
-	stages := singleStageSet("TDD")
+	aw := mustParseAndAdmitV216(t, creatorInjectionV216Content, "creator-injection", "1.0")
+	schedules := singleSchedules("TDD")
 	agents := newTestAgents("test-writer-tdd", "tests-review-tdd", "implementation-tdd")
-	state := stateAfter("EXECUTION.[StageNumber]", "Stage-1", "tests-review-tdd#5", domain.StatusCOMPLETED_NEEDS_ACTION, 5)
+	state := stateAfterRow("EXECUTION", "1.Test", "tests-review-tdd#5", domain.StatusCOMPLETED_NEEDS_ACTION, 5, 2)
 	reviewOutputs := []string{"Stage-1/tests-review-tdd.md"}
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:            aw,
-		Stages:              stages,
+		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("tests-review-tdd#5"),
 		LastOutputArtifacts: reviewOutputs,
@@ -89,30 +106,30 @@ func TestNext_CreatorArtifactInjection_RegistryAbsent_NoInjection(t *testing.T) 
 
 // TestNext_CreatorArtifactInjection_TemplatedOutput_MatchesResolvedPath verifies
 // that creator-artifact injection fires correctly when the target row's declared
-// output artifact contains a {StageNumber} template token. The comparison must
-// use the resolved path (Stage-1/PlanProgress.md) rather than the raw template
-// (Stage-{StageNumber}/PlanProgress.md), so a registry entry with the bare
-// resolved path triggers injection.
+// output artifact contains a {Stage} fill-in. The comparison must use the
+// resolved path (Stage-2/PlanProgress.md) rather than the raw template
+// (Stage-{Stage}/PlanProgress.md), so a registry entry with the bare resolved
+// path triggers injection.
 func TestNext_CreatorArtifactInjection_TemplatedOutput_MatchesResolvedPath(t *testing.T) {
-	aw := mustParseAndAdmit(t, creatorInjectionContent, "creator-injection", "1.0")
+	aw := mustParseAndAdmitV216(t, creatorInjectionV216Content, "creator-injection", "1.0")
 	// Stage 2: resolved output would be Stage-2/PlanProgress.md.
-	stages := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: false, Approach: "TDD"},
-		{Number: 2, HITL: false, Approach: "TDD"},
-	})
+	schedules := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "TDD"},
+		domain.ScheduleIteration{ID: "2", HITL: false, Approach: "TDD"},
+	)
 	agents := newTestAgents("test-writer-tdd", "tests-review-tdd", "implementation-tdd")
 	// State: tests-review-tdd completed for stage 2 (CNA).
-	state := stateAfter("EXECUTION.[StageNumber]", "Stage-2", "tests-review-tdd#7", domain.StatusCOMPLETED_NEEDS_ACTION, 7)
+	state := stateAfterRow("EXECUTION", "2.Test", "tests-review-tdd#7", domain.StatusCOMPLETED_NEEDS_ACTION, 7, 2)
 	// Registry carries the bare resolved path for stage 2 (as session provides
 	// after StripRunPrefix -- the resolved path, not the raw template).
 	registry := []domain.ArtifactRegistryEntry{
-		{Artifact: "Stage-2/PlanProgress.md", CreatedIn: "Test.2", CreatedBy: "test-writer-tdd#5"},
+		{Artifact: "Stage-2/PlanProgress.md", CreatedIn: "EXECUTION.2.Test", CreatedBy: "test-writer-tdd#5"},
 	}
 	reviewOutputs := []string{"Stage-2/tests-review-tdd.md"}
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:            aw,
-		Stages:              stages,
+		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("tests-review-tdd#7"),
 		LastOutputArtifacts: reviewOutputs,
@@ -140,68 +157,36 @@ func TestNext_CreatorArtifactInjection_TemplatedOutput_MatchesResolvedPath(t *te
 
 // ===== "next" keyword routing (handleNonExecutionSuccess) =====
 
-// nextKeywordNonExecContent is a two-row non-EXECUTION workflow where both rows
-// carry On Success = "next". The same agent appears in both rows to reflect the
-// motivating scenario (same-agent consecutive rows would loop with name-based
-// routing). Tests derive three behaviors from this fixture:
-//   - row 0 success with "next" → advance to row 1 (DispatchDecision, agent-a).
-//   - row 1 success with "next" → past the last row → CompleteDecision.
-//   - case-insensitive variants (see nextKeywordMixedCaseContent and
-//     nextKeywordUpperCaseContent) advance to row 1 the same way.
-const nextKeywordNonExecContent = `## Next Keyword Non-Exec Workflow
-
-| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
-|-------|----------|:----:|------------|-------------|-------|--------|
-| PLANNING | agent-a | FALSE | next | - | - | out.md |
-| PLANNING | agent-b | FALSE | next | - | - | final.md |
-`
-
-// nextKeywordMixedCaseContent is a two-row non-EXECUTION workflow where row 0
-// carries On Success = "Next" (mixed case) to verify case-insensitive matching.
-const nextKeywordMixedCaseContent = `## Next Keyword Mixed Case Workflow
-
-| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
-|-------|----------|:----:|------------|-------------|-------|--------|
-| PLANNING | agent-a | FALSE | Next | - | - | out.md |
-| PLANNING | agent-b | FALSE | COMPLETE | - | out.md | final.md |
-`
-
-// nextKeywordUpperCaseContent is a two-row non-EXECUTION workflow where row 0
-// carries On Success = "NEXT" (upper case) to verify case-insensitive matching.
-const nextKeywordUpperCaseContent = `## Next Keyword Upper Case Workflow
-
-| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
-|-------|----------|:----:|------------|-------------|-------|--------|
-| PLANNING | agent-a | FALSE | NEXT | - | - | out.md |
-| PLANNING | agent-b | FALSE | COMPLETE | - | out.md | final.md |
+// nextKeywordNonExecContent is a two-row run-scope workflow where both rows
+// carry On Success = NEXT. Tests derive two behaviors from this fixture:
+//   - row 0 success with NEXT -> advance to row 1 (DispatchDecision, agent-b).
+//   - row 1 success with NEXT -> past the last row -> CompleteDecision.
+const nextKeywordNonExecContent = v216Columns +
+	`| PLANNING | agent-a | FALSE | NEXT | - | - | out.md |
+| PLANNING | agent-b | FALSE | NEXT | - | - | final.md |
 `
 
 // nextIntoExecutionContent is a workflow with a single PLANNING row using
-// On Success = "next" followed by EXECUTION rows. Used to verify that "next"
-// correctly enters the EXECUTION code path when the next row is staged, and that
-// it returns StopDecision when no stage set is available (same behavior as naming
-// an EXECUTION agent with nil stages).
-const nextIntoExecutionContent = `## Next Into Execution Workflow
-
-| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
-|-------|----------|:----:|------------|-------------|-------|--------|
-| PLANNING | planner | FALSE | next | - | - | Plan.md, Stage-*/Plan.md, Stage-*/PlanProgress.md |
-| EXECUTION.[StageNumber] | implementation-tdd | FALSE | implementation-review | - | Stage-{StageNumber}/Plan.md, Stage-{StageNumber}/PlanProgress.md | Stage-{StageNumber}/PlanProgress.md |
-| EXECUTION.[StageNumber] | implementation-review | FALSE | COMPLETE | implementation-tdd | Stage-{StageNumber}/Plan.md, Stage-{StageNumber}/PlanProgress.md | Stage-{StageNumber}/implementation-review.md |
-`
+// On Success = NEXT followed by a block. Used to verify that NEXT enters the
+// block when the next row begins it, and that it returns StopDecision when no
+// schedule is available (same behavior as naming the block with no schedule).
+const nextIntoExecutionContent = v216Columns +
+	`| PLANNING | planner | FALSE | NEXT | - | - | Plan.md, Stage-*/Plan.md, Stage-*/PlanProgress.md |
+| EXECUTION.[Stage] | implementation-tdd | FALSE | NEXT | - | Stage-{Stage}/Plan.md, Stage-{Stage}/PlanProgress.md | Stage-{Stage}/PlanProgress.md |
+| EXECUTION.[Stage] | implementation-review | FALSE | COMPLETE | implementation-tdd | Stage-{Stage}/Plan.md, Stage-{Stage}/PlanProgress.md | Stage-{Stage}/implementation-review.md |
+` + v216StageBlock
 
 // TestNext_NextKeyword_AdvancesToNextRow verifies that a SUCCESS response from a
-// non-EXECUTION row with On Success = "next" (lowercase) dispatches the
-// immediately following row by index rather than by agent-name lookup.
+// run-scope row with On Success = NEXT dispatches the immediately following row
+// by index rather than by agent-name lookup.
 func TestNext_NextKeyword_AdvancesToNextRow(t *testing.T) {
-	aw := mustParseAndAdmit(t, nextKeywordNonExecContent, "next-keyword-non-exec", "1.0")
+	aw := mustParseAndAdmitV216(t, nextKeywordNonExecContent, "next-keyword-non-exec", "1.0")
 	agents := newTestAgents("agent-a", "agent-b")
 	// State: agent-a (row 0) just completed successfully.
 	state := stateAfter("PLANNING", "", "agent-a#1", domain.StatusSUCCESS, 1)
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:     aw,
-		Stages:       nil, // no EXECUTION rows in this workflow
 		State:        state,
 		LastResponse: successResponse("agent-a#1"),
 		Agents:       agents,
@@ -220,17 +205,16 @@ func TestNext_NextKeyword_AdvancesToNextRow(t *testing.T) {
 }
 
 // TestNext_NextKeyword_PastLastRow_ReturnsComplete verifies that a SUCCESS
-// response from the last row in the workflow when On Success = "next" returns
-// CompleteDecision (same as On Success = "COMPLETE").
+// response from the last row in the workflow when On Success = NEXT returns
+// CompleteDecision (same as On Success = COMPLETE).
 func TestNext_NextKeyword_PastLastRow_ReturnsComplete(t *testing.T) {
-	aw := mustParseAndAdmit(t, nextKeywordNonExecContent, "next-keyword-non-exec", "1.0")
+	aw := mustParseAndAdmitV216(t, nextKeywordNonExecContent, "next-keyword-non-exec", "1.0")
 	agents := newTestAgents("agent-a", "agent-b")
 	// State: agent-b (row 1, the last row) just completed successfully.
 	state := stateAfter("PLANNING", "", "agent-b#2", domain.StatusSUCCESS, 2)
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:     aw,
-		Stages:       nil,
 		State:        state,
 		LastResponse: successResponse("agent-b#2"),
 		Agents:       agents,
@@ -242,71 +226,20 @@ func TestNext_NextKeyword_PastLastRow_ReturnsComplete(t *testing.T) {
 	requireComplete(t, dec)
 }
 
-// TestNext_NextKeyword_MixedCase_AdvancesToNextRow verifies that On Success =
-// "Next" (mixed case) is treated identically to "next" (case-insensitive match).
-func TestNext_NextKeyword_MixedCase_AdvancesToNextRow(t *testing.T) {
-	aw := mustParseAndAdmit(t, nextKeywordMixedCaseContent, "next-keyword-mixed-case", "1.0")
-	agents := newTestAgents("agent-a", "agent-b")
-	state := stateAfter("PLANNING", "", "agent-a#1", domain.StatusSUCCESS, 1)
-
-	dec := engine.Next(engine.NextInput{
-		Workflow:     aw,
-		Stages:       nil,
-		State:        state,
-		LastResponse: successResponse("agent-a#1"),
-		Agents:       agents,
-		Seq:          1,
-		Now:          fixedNow,
-		Mode:         domain.ExecutionModeAutoReview,
-	})
-
-	step := requireDispatch(t, dec)
-	if agentName(step.Request.AgentInstanceID) != "agent-b" {
-		t.Errorf("Next (mixed case): want agent-b (next row by index), got %s",
-			step.Request.AgentInstanceID)
-	}
-}
-
-// TestNext_NextKeyword_UpperCase_AdvancesToNextRow verifies that On Success =
-// "NEXT" (upper case) is treated identically to "next" (case-insensitive match).
-func TestNext_NextKeyword_UpperCase_AdvancesToNextRow(t *testing.T) {
-	aw := mustParseAndAdmit(t, nextKeywordUpperCaseContent, "next-keyword-upper-case", "1.0")
-	agents := newTestAgents("agent-a", "agent-b")
-	state := stateAfter("PLANNING", "", "agent-a#1", domain.StatusSUCCESS, 1)
-
-	dec := engine.Next(engine.NextInput{
-		Workflow:     aw,
-		Stages:       nil,
-		State:        state,
-		LastResponse: successResponse("agent-a#1"),
-		Agents:       agents,
-		Seq:          1,
-		Now:          fixedNow,
-		Mode:         domain.ExecutionModeAutoReview,
-	})
-
-	step := requireDispatch(t, dec)
-	if agentName(step.Request.AgentInstanceID) != "agent-b" {
-		t.Errorf("NEXT (upper case): want agent-b (next row by index), got %s",
-			step.Request.AgentInstanceID)
-	}
-}
-
 // TestNext_NextKeyword_IntoExecutionRow_TriggersStageResolution verifies that
-// On Success = "next" from a pre-EXECUTION row whose successor is a staged
-// EXECUTION row triggers full stage/group resolution (same dispatch path as
-// naming an EXECUTION agent directly). The dispatched agent must be the first
-// agent of the ordered group for the given stage and approach.
+// On Success = NEXT from a run-scope row whose successor begins a block enters
+// the block (same dispatch path as naming the block with [Stage]). The
+// dispatched agent must be the first row of the block's first iteration.
 func TestNext_NextKeyword_IntoExecutionRow_TriggersStageResolution(t *testing.T) {
-	aw := mustParseAndAdmit(t, nextIntoExecutionContent, "next-into-execution", "1.0")
-	stages := singleStageSet("Implementation-Only")
+	aw := mustParseAndAdmitV216(t, nextIntoExecutionContent, "next-into-execution", "1.0")
+	schedules := singleSchedules("Implementation-Only")
 	agents := newTestAgents("planner", "implementation-tdd", "implementation-review")
 	// State: planner (row 0, PLANNING) just completed successfully.
 	state := stateAfter("PLANNING", "", "planner#1", domain.StatusSUCCESS, 1)
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:     aw,
-		Stages:       stages,
+		Schedules:    schedules,
 		State:        state,
 		LastResponse: successResponse("planner#1"),
 		Agents:       agents,
@@ -325,18 +258,17 @@ func TestNext_NextKeyword_IntoExecutionRow_TriggersStageResolution(t *testing.T)
 	}
 }
 
-// TestNext_NextKeyword_IntoExecutionRow_NilStages_ReturnsStop verifies that
-// On Success = "next" into a staged EXECUTION row with no available stage set
-// returns StopDecision with a non-empty reason. This is consistent with naming
-// an EXECUTION agent directly when stages is nil: both yield StopDecision.
-func TestNext_NextKeyword_IntoExecutionRow_NilStages_ReturnsStop(t *testing.T) {
-	aw := mustParseAndAdmit(t, nextIntoExecutionContent, "next-into-execution", "1.0")
+// TestNext_NextKeyword_IntoExecutionRow_NoSchedules_ReturnsStop verifies that
+// On Success = NEXT into a block with no available schedule returns
+// StopDecision with a non-empty reason. This is consistent with naming the
+// block with [Stage] when no schedule is read: both yield StopDecision.
+func TestNext_NextKeyword_IntoExecutionRow_NoSchedules_ReturnsStop(t *testing.T) {
+	aw := mustParseAndAdmitV216(t, nextIntoExecutionContent, "next-into-execution", "1.0")
 	agents := newTestAgents("planner", "implementation-tdd", "implementation-review")
 	state := stateAfter("PLANNING", "", "planner#1", domain.StatusSUCCESS, 1)
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:     aw,
-		Stages:       nil, // no stage set available
 		State:        state,
 		LastResponse: successResponse("planner#1"),
 		Agents:       agents,
@@ -347,25 +279,21 @@ func TestNext_NextKeyword_IntoExecutionRow_NilStages_ReturnsStop(t *testing.T) {
 
 	stop := requireStop(t, dec)
 	if stop.Reason == "" {
-		t.Error("next into EXECUTION with nil stages: want non-empty StopDecision.Reason, got empty")
+		t.Error("next into EXECUTION with nil schedules: want non-empty StopDecision.Reason, got empty")
 	}
 }
 
-// ===== ResolveArtifacts export: codify existing behavior (T1.4) =====
+// ===== ResolveArtifactsForIteration: template expansion =====
 //
-// These tests call engine.ResolveArtifacts (the newly exported name) to
-// codify the existing template-expansion behavior so that the rename
-// (I1.6) does not regress it. Tests are placed in the engine_test package
-// (black-box) to verify the exported name is accessible from outside the
-// engine package.
+// These tests live in the engine_test package (black-box) and cover the
+// template-expansion behaviour of the exported artifact-path resolver.
 
-// TestResolveArtifacts_StageNumber_Substitution_InputArtifact verifies that
-// {StageNumber} in an input artifact path is replaced with the current stage
-// number when a stage context is present.
-func TestResolveArtifacts_StageNumber_Substitution_InputArtifact(t *testing.T) {
-	arts := []string{"Stage-{StageNumber}/Plan.md", "ContractsDesign.md"}
-	stages := singleStageSet("TDD")
-	got, err := engine.ResolveArtifacts(arts, 2, "Stage-2", stages, nil, true)
+// TestResolveArtifacts_FillIn_Substitution_InputArtifact verifies that
+// {Stage} in an input artifact path is replaced with the current iteration ID.
+func TestResolveArtifacts_FillIn_Substitution_InputArtifact(t *testing.T) {
+	arts := []string{"Stage-{Stage}/Plan.md", "ContractsDesign.md"}
+	schedules := singleSchedules("TDD")
+	got, err := engine.ResolveArtifactsForIteration(arts, "Stage", "2", engine.ScheduleContext{Schedules: schedules}, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -375,13 +303,13 @@ func TestResolveArtifacts_StageNumber_Substitution_InputArtifact(t *testing.T) {
 	}
 }
 
-// TestResolveArtifacts_StageNumber_Substitution_OutputArtifact verifies that
-// {StageNumber} in an output artifact path is also replaced with the current
-// stage number (same substitution rule for both directions).
-func TestResolveArtifacts_StageNumber_Substitution_OutputArtifact(t *testing.T) {
-	arts := []string{"Stage-{StageNumber}/PlanProgress.md"}
-	stages := singleStageSet("TDD")
-	got, err := engine.ResolveArtifacts(arts, 3, "Stage-3", stages, nil, false)
+// TestResolveArtifacts_FillIn_Substitution_OutputArtifact verifies that
+// {Stage} in an output artifact path is also replaced with the current
+// iteration ID (same substitution rule for both directions).
+func TestResolveArtifacts_FillIn_Substitution_OutputArtifact(t *testing.T) {
+	arts := []string{"Stage-{Stage}/PlanProgress.md"}
+	schedules := singleSchedules("TDD")
+	got, err := engine.ResolveArtifactsForIteration(arts, "Stage", "3", engine.ScheduleContext{Schedules: schedules}, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -391,22 +319,21 @@ func TestResolveArtifacts_StageNumber_Substitution_OutputArtifact(t *testing.T) 
 	}
 }
 
-// TestResolveArtifacts_StageWildcard_Input_ExpandedPerStage verifies that
-// Stage-* in an input artifact path is expanded to one path per stage in
-// the effective stage set.
-func TestResolveArtifacts_StageWildcard_Input_ExpandedPerStage(t *testing.T) {
+// TestResolveArtifacts_StageWildcard_Input_PassedThroughForTheSession verifies
+// that Stage-* in an input artifact path is passed through unexpanded whatever
+// the schedules hold: the session expands wildcards, never the engine.
+func TestResolveArtifacts_StageWildcard_Input_PassedThroughForTheSession(t *testing.T) {
 	arts := []string{"Stage-*/Plan.md"}
-	stages := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: false, Approach: "TDD"},
-		{Number: 2, HITL: false, Approach: "TDD"},
-		{Number: 3, HITL: false, Approach: "TDD"},
-	})
-	// Non-EXECUTION context (stageNum=0, stageStr="") uses refreshedStages for expansion.
-	got, err := engine.ResolveArtifacts(arts, 0, "", stages, nil, true)
+	schedules := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "TDD"},
+		domain.ScheduleIteration{ID: "2", HITL: false, Approach: "TDD"},
+		domain.ScheduleIteration{ID: "3", HITL: false, Approach: "TDD"},
+	)
+	got, err := engine.ResolveArtifactsForIteration(arts, "", "", engine.ScheduleContext{Schedules: schedules}, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := []string{"Stage-1/Plan.md", "Stage-2/Plan.md", "Stage-3/Plan.md"}
+	want := []string{"Stage-*/Plan.md"}
 	if !stringSlicesEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -417,11 +344,11 @@ func TestResolveArtifacts_StageWildcard_Input_ExpandedPerStage(t *testing.T) {
 // use the wildcard as a literal declaration, not a glob expansion).
 func TestResolveArtifacts_StageWildcard_Output_PassThrough(t *testing.T) {
 	arts := []string{"Stage-*/PlanProgress.md"}
-	stages := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: false, Approach: "TDD"},
-		{Number: 2, HITL: false, Approach: "TDD"},
-	})
-	got, err := engine.ResolveArtifacts(arts, 1, "Stage-1", stages, nil, false)
+	schedules := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "TDD"},
+		domain.ScheduleIteration{ID: "2", HITL: false, Approach: "TDD"},
+	)
+	got, err := engine.ResolveArtifactsForIteration(arts, "Stage", "1", engine.ScheduleContext{Schedules: schedules}, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -432,18 +359,18 @@ func TestResolveArtifacts_StageWildcard_Output_PassThrough(t *testing.T) {
 }
 
 // TestResolveArtifacts_UnresolvablePlaceholder_ReturnsError verifies that
-// {StageNumber} in an artifact path without a stage context (stageNum=0,
-// stageStr="") returns an error rather than leaving the placeholder literal.
+// {Stage} in an artifact path of a block row without an iteration returns an
+// error rather than leaving the placeholder literal.
 func TestResolveArtifacts_UnresolvablePlaceholder_ReturnsError(t *testing.T) {
-	arts := []string{"Stage-{StageNumber}/Plan.md"}
-	stages := singleStageSet("TDD")
-	// No stage context: stageNum=0, stageStr="" (non-EXECUTION row).
-	_, err := engine.ResolveArtifacts(arts, 0, "", stages, nil, true)
+	arts := []string{"Stage-{Stage}/Plan.md"}
+	schedules := singleSchedules("TDD")
+	// A block row with no iteration.
+	_, err := engine.ResolveArtifactsForIteration(arts, "Stage", "", engine.ScheduleContext{Schedules: schedules}, true)
 	if err == nil {
-		t.Fatal("want error for {StageNumber} without stage context, got nil")
+		t.Fatal("want error for {Stage} without an iteration, got nil")
 	}
-	if !strings.Contains(err.Error(), "{StageNumber}") {
-		t.Errorf("error %q: want mention of the unresolvable placeholder {StageNumber}", err.Error())
+	if !strings.Contains(err.Error(), "{Stage}") {
+		t.Errorf("error %q: want mention of the unresolvable placeholder {Stage}", err.Error())
 	}
 }
 

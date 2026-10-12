@@ -11,7 +11,7 @@ checkpoints: enbaled
 commits: disabled
 current_state:
   phase: null
-  stage: null
+  iteration: null
   last_status: null
   last_agent: null
   error_code: null

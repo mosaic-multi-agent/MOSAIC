@@ -10,8 +10,14 @@ review agent, so tests can observe when each boundary trigger fires.
 
 | Phase | Subagent | HITL | On Success | On Findings | Input | Output |
 |-------|----------|:----:|------------|-------------|-------|--------|
-| EXECUTION.[StageNumber] | implementation-tdd | FALSE | implementation-review | - | - | - |
-| EXECUTION.[StageNumber] | implementation-review | TRUE | COMPLETE | implementation-tdd | - | Stage-{StageNumber}/implementation-review.md |
+| EXECUTION.[Stage] | implementation-tdd | FALSE | NEXT | - | - | - |
+| EXECUTION.[Stage] | implementation-review | TRUE | COMPLETE | implementation-tdd | - | Stage-{Stage}/implementation-review.md |
+
+**Blocks:**
+
+| Block | Source | Section |
+|-------|--------|---------|
+| Stage | Plan.md | Stages |
 </Workflow>
 
 <InfrastructureAgents type="managed">

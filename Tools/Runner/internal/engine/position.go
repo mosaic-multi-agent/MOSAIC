@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 
 	"mosaic-run/internal/domain"
@@ -10,10 +11,11 @@ import (
 // the step that just ran. Live routing (Next) and resume (ResumePoint) both
 // derive row and stage through resolvePosition, so they cannot disagree.
 type position struct {
-	entry    domain.ExecutionLogEntry
-	rowIdx   int // zero-based routing table row; -1 when the entry cannot be identified
-	stage    string
-	stageNum domain.StageNumber
+	entry     domain.ExecutionLogEntry
+	rowIdx    int // zero-based routing table row; -1 when the entry cannot be identified
+	stage     string
+	iteration domain.IterationID    // the ID read from stage; "" when stage is empty or unreadable
+	value     domain.IterationValue // stage read with the row's block and group; zero outside every block
 }
 
 // currentPosition derives the position of the step that last ran from the
@@ -70,69 +72,99 @@ func resolvePosition(workflow domain.AdmittedWorkflow, entry domain.ExecutionLog
 }
 
 // recordedPosition validates the row recorded on entry against the table: the
-// row exists and holds the entry's agent. For a staged row the entry must also
-// carry a stage whose group is the row's group.
+// row exists and holds the entry's bare agent id. For a row of a block the
+// entry must also carry a stage whose group is the row's group.
 func recordedPosition(workflow domain.AdmittedWorkflow, entry domain.ExecutionLogEntry) (position, error) {
 	idx := entry.WorkflowRow.Index()
 	if idx < 0 || idx >= len(workflow.Table.Rows) {
 		return position{rowIdx: -1}, recordedRowError(entry, domain.CauseRecordedRowInvalid)
 	}
 	row := workflow.Table.Rows[idx]
-	if row.Agent != extractAgentName(entry.Agent) {
+	if row.BareAgentID() != extractAgentName(entry.Agent) {
 		return position{rowIdx: -1}, recordedRowError(entry, domain.CauseRecordedRowInvalid)
 	}
-	pos := position{entry: entry, rowIdx: idx, stage: entry.Stage, stageNum: parseStageNumber(entry.Stage)}
-	if !row.PhaseParsed.IsStaged {
-		return pos, nil
-	}
-	if entry.Stage == "" {
-		return position{rowIdx: -1}, &domain.PositionUnresolvedError{
-			AgentInstance: entry.Agent,
-			Phase:         entry.Phase,
-			Stage:         entry.Stage,
-			Cause:         domain.CauseStagedRowWithoutStage,
-			RecordedRow:   entry.WorkflowRow,
-			Group:         row.PhaseParsed.Group,
+	pos := position{entry: entry, rowIdx: idx, stage: entry.Stage}
+	value, err := domain.ReadIterationValue(entry.Stage, row)
+	if err != nil {
+		var verr *domain.IterationValueError
+		if errors.As(err, &verr) && verr.Kind == domain.IterationValueMissing {
+			return position{rowIdx: -1}, &domain.PositionUnresolvedError{
+				AgentInstance: entry.Agent,
+				Phase:         entry.Phase,
+				Stage:         entry.Stage,
+				Cause:         domain.CauseStagedRowWithoutStage,
+				RecordedRow:   entry.WorkflowRow,
+				Group:         row.PhaseParsed.Group,
+			}
 		}
-	}
-	stageGroup, _, ok := domain.ParseStageValue(entry.Stage)
-	if !ok {
 		return position{rowIdx: -1}, recordedRowError(entry, domain.CauseRecordedRowInvalid)
 	}
-	groupIdx := findGroupIndexInWorkflow(workflow, idx)
-	if groupIdx < 0 || workflow.Groups[groupIdx].Name != stageGroup {
-		return position{rowIdx: -1}, recordedRowError(entry, domain.CauseRecordedRowInvalid)
-	}
+	pos.value = value
+	pos.iteration = value.ID
 	return pos, nil
 }
 
-// fallbackPosition resolves an entry that records no workflow row by agent and
-// phase: a non-EXECUTION entry by the first row with that agent and phase, an
-// EXECUTION entry by the agent's single staged row. An agent that fills several
-// EXECUTION rows cannot be resolved without a recorded row.
+// fallbackPosition resolves an entry that records no workflow row by its bare
+// agent id and phase. Whether a candidate row belongs to a block decides how
+// the entry's stage is read: an entry with no stage names a row outside every
+// block (the first such row), and an entry with a stage value names the row of
+// a block whose group is the stage value's group. An agent that fills several
+// block rows of one group cannot be resolved without a recorded row.
 func fallbackPosition(workflow domain.AdmittedWorkflow, entry domain.ExecutionLogEntry) (position, error) {
 	agentName := extractAgentName(entry.Agent)
-	pos := position{entry: entry, rowIdx: -1, stage: entry.Stage, stageNum: parseStageNumber(entry.Stage)}
-	if !isExecutionPhase(entry.Phase) {
-		for _, row := range workflow.Table.Rows {
-			if row.Agent == agentName && row.Phase == entry.Phase {
-				pos.rowIdx = row.Index
-				return pos, nil
+	phase := domain.RecordedPhaseName(entry.Phase)
+	pos := position{entry: entry, rowIdx: -1, stage: entry.Stage}
+
+	var plain, inBlock []int
+	for _, row := range workflow.Table.Rows {
+		if row.BareAgentID() != agentName || (row.PhaseParsed.Name != phase && row.Phase != entry.Phase) {
+			continue
+		}
+		if blockOfRow(workflow, row.Index) != "" {
+			inBlock = append(inBlock, row.Index)
+		} else {
+			plain = append(plain, row.Index)
+		}
+	}
+
+	candidates := inBlock
+	// "No iteration" check while choosing the row: no value is split here, so
+	// the recorded text is compared as is.
+	if entry.Stage == "" || entry.Stage == "-" {
+		if len(plain) > 0 {
+			pos.rowIdx = plain[0]
+			return pos, nil
+		}
+	} else {
+		// The rows of the agent that read the recorded value narrow the
+		// candidates (one agent may fill rows of several groups through mode
+		// qualifiers); when none reads it, all stay.
+		var readable []int
+		for _, idx := range inBlock {
+			if _, err := domain.ReadIterationValue(entry.Stage, workflow.Table.Rows[idx]); err == nil {
+				readable = append(readable, idx)
 			}
 		}
-		return pos, nil
-	}
-	var matches []int
-	for _, row := range workflow.Table.Rows {
-		if row.Agent == agentName && row.PhaseParsed.IsStaged {
-			matches = append(matches, row.Index)
+		if len(readable) > 0 {
+			candidates = readable
 		}
 	}
-	switch len(matches) {
+	switch len(candidates) {
 	case 0:
+		if len(plain) > 0 {
+			pos.rowIdx = plain[0]
+		}
 		return pos, nil
 	case 1:
-		pos.rowIdx = matches[0]
+		// The value is read with the one matched row; a value that row does not
+		// accept leaves no row matching the recorded phase and value.
+		value, err := domain.ReadIterationValue(entry.Stage, workflow.Table.Rows[candidates[0]])
+		if err != nil {
+			return position{rowIdx: -1}, recordedRowError(entry, domain.CauseNoMatchingRow)
+		}
+		pos.rowIdx = candidates[0]
+		pos.value = value
+		pos.iteration = value.ID
 		return pos, nil
 	}
 	return position{rowIdx: -1}, recordedRowError(entry, domain.CauseNoRecordedRow)
@@ -162,40 +194,13 @@ func resumePosition(workflow domain.AdmittedWorkflow, entry domain.ExecutionLogE
 	return pos, nil
 }
 
-// enteringExecution reports the resume point for a run whose last step was a
-// non-EXECUTION row and whose next row is a staged EXECUTION row: execution is
-// entered at the first row of the first group of the first stage, exactly as
-// live routing enters it. ok is false when the next row is not staged or the
-// entry point cannot be computed, in which case the positional next row stands.
-func enteringExecution(
-	workflow domain.AdmittedWorkflow,
-	stages *domain.StageSet,
-	nextRow domain.RoutingRow,
-) (info domain.ResumeInfo, ok bool) {
-	if !nextRow.PhaseParsed.IsStaged || !workflow.HasStagedPhase || stages == nil || len(stages.Entries) == 0 {
-		return domain.ResumeInfo{}, false
-	}
-	first := stages.Entries[0]
-	groups, err := orderedGroupsForStage(workflow, stages, first.Number)
-	if err != nil || len(groups) == 0 {
-		return domain.ResumeInfo{}, false
-	}
-	rowIdx := groups[0].StartRow
-	return domain.ResumeInfo{
-		RowIndex:    rowIdx,
-		Phase:       workflow.Table.Rows[rowIdx].Phase,
-		Stage:       fmt.Sprintf("Stage-%d", first.Number),
-		StageNumber: first.Number,
-		GroupIndex:  findGroupIndexInWorkflow(workflow, rowIdx),
-	}, true
-}
-
-// resumeAfterNonExecution is the resume point after a cleanly completed
-// non-EXECUTION row: the row immediately after it, or the entry point of
-// EXECUTION when that row is staged.
+// resumeAfterNonExecution is the resume point after a cleanly completed row of
+// the run scope: the row immediately after it, or the entry point of the block
+// that row begins. A block with no usable schedule leaves the positional next
+// row.
 func resumeAfterNonExecution(
 	workflow domain.AdmittedWorkflow,
-	stages *domain.StageSet,
+	schedules domain.BlockSchedules,
 	currentRowIdx int,
 	seq int,
 ) domain.ResumeInfo {
@@ -203,10 +208,37 @@ func resumeAfterNonExecution(
 	if nextRowIdx >= len(workflow.Table.Rows) {
 		return domain.ResumeInfo{RowIndex: nextRowIdx, GroupIndex: -1, Seq: seq}
 	}
-	nextRow := workflow.Table.Rows[nextRowIdx]
-	if info, ok := enteringExecution(workflow, stages, nextRow); ok {
-		info.Seq = seq
-		return info
+	adv, err := newRouter(workflow, schedules, false).enterRow(nextRowIdx)
+	if err != nil || adv.NoSchedule != "" || adv.Complete {
+		nextRow := workflow.Table.Rows[nextRowIdx]
+		return domain.ResumeInfo{
+			RowIndex:   nextRowIdx,
+			Phase:      nextRow.Phase,
+			Block:      blockOfRow(workflow, nextRowIdx),
+			GroupIndex: -1,
+			Seq:        seq,
+		}
 	}
-	return domain.ResumeInfo{RowIndex: nextRowIdx, Phase: nextRow.Phase, GroupIndex: -1, Seq: seq}
+	return resumeInfoAt(workflow, adv, seq)
+}
+
+// resumeInfoAt is the resume point of a computed position.
+func resumeInfoAt(workflow domain.AdmittedWorkflow, adv advance, seq int) domain.ResumeInfo {
+	if adv.Complete || adv.RowIndex < 0 || adv.RowIndex >= len(workflow.Table.Rows) {
+		return domain.ResumeInfo{RowIndex: len(workflow.Table.Rows), GroupIndex: -1, Seq: seq}
+	}
+	row := workflow.Table.Rows[adv.RowIndex]
+	groupIdx := -1
+	if row.PhaseParsed.IsStaged {
+		groupIdx = groupIndexOfRow(workflow, adv.RowIndex)
+	}
+	return domain.ResumeInfo{
+		RowIndex:   adv.RowIndex,
+		Phase:      row.Phase,
+		Stage:      recordedIterationValue(row.PhaseParsed.Group, adv.Iteration),
+		Block:      blockOfRow(workflow, adv.RowIndex),
+		Iteration:  adv.Iteration,
+		GroupIndex: groupIdx,
+		Seq:        seq,
+	}
 }

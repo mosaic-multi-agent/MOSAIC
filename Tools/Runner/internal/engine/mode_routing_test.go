@@ -7,20 +7,20 @@ import (
 	"mosaic-run/internal/engine"
 )
 
-// ===== Mode-gated routing (Stage 2) =====
+// ===== Mode-gated routing =====
 
 // TestNext_Mode_Auto_Success_RoutesNormally verifies that in auto mode a SUCCESS
 // response routes to the On Success target exactly as before.
 func TestNext_Mode_Auto_Success_RoutesNormally(t *testing.T) {
 	// quick-fix row 0: planner-tdd-soft, OnSuccess="plan-review"
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
-	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
+	agents := scopeAgents(aw)
 	state := stateAfter("PLANNING", "", "planner-tdd-soft#1", domain.StatusSUCCESS, 1)
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:     aw,
-		Stages:       stages,
+		Schedules:    schedules,
 		State:        state,
 		LastResponse: successResponse("planner-tdd-soft#1"),
 		Agents:       agents,
@@ -40,14 +40,14 @@ func TestNext_Mode_Auto_Success_RoutesNormally(t *testing.T) {
 // mode SUCCESS routing is identical to auto — the auto-review extension applies
 // only to CNA with an unambiguous On Findings hint.
 func TestNext_Mode_AutoReview_Success_RoutesNormally(t *testing.T) {
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
-	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
+	agents := scopeAgents(aw)
 	state := stateAfter("PLANNING", "", "planner-tdd-soft#1", domain.StatusSUCCESS, 1)
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:     aw,
-		Stages:       stages,
+		Schedules:    schedules,
 		State:        state,
 		LastResponse: successResponse("planner-tdd-soft#1"),
 		Agents:       agents,
@@ -67,13 +67,13 @@ func TestNext_Mode_AutoReview_Success_RoutesNormally(t *testing.T) {
 // orchestrated mode the engine returns a ConsultDecision on the very first call
 // (before any agent has run), with trigger ConsultTriggerOrchestratedMode.
 func TestNext_Mode_Orchestrated_FirstCall_ReturnsConsultDecision(t *testing.T) {
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
-	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
+	agents := scopeAgents(aw)
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:     aw,
-		Stages:       stages,
+		Schedules:    schedules,
 		State:        emptyState(),
 		LastResponse: nil,
 		Agents:       agents,
@@ -98,14 +98,14 @@ func TestNext_Mode_Orchestrated_FirstCall_ReturnsConsultDecision(t *testing.T) {
 // in orchestrated mode every call returns a ConsultDecision, not just the first.
 // Even a SUCCESS response does not produce a routing decision from the engine.
 func TestNext_Mode_Orchestrated_AfterSuccess_ReturnsConsultDecision(t *testing.T) {
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
-	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
+	agents := scopeAgents(aw)
 	state := stateAfter("PLANNING", "", "planner-tdd-soft#1", domain.StatusSUCCESS, 1)
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:     aw,
-		Stages:       stages,
+		Schedules:    schedules,
 		State:        state,
 		LastResponse: successResponse("planner-tdd-soft#1"),
 		Agents:       agents,
@@ -134,21 +134,16 @@ func TestNext_Mode_Orchestrated_AfterSuccess_ReturnsConsultDecision(t *testing.T
 // in orchestrated mode even a CNA response does not produce a DeviationDecision
 // or a DispatchDecision — it always produces ConsultDecision.
 func TestNext_Mode_Orchestrated_AfterCNA_ReturnsConsultDecision(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	stages := singleStageSet("TDD")
-	agents := newTestAgents(
-		"codebase-research", "requirements-refinement", "requirements-review",
-		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
-		"test-writer-tdd", "build-review", "tests-review-tdd",
-		"implementation-tdd", "implementation-review",
-	)
-	// build-review has an unambiguous OnFindings hint. In auto-review this dispatches;
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
+	schedules := singleSchedules("TDD")
+	agents := scopeAgents(aw)
+	// build-review names an On Findings target. In auto-review this dispatches;
 	// in orchestrated it must still consult.
-	state := stateAfter("EXECUTION.[StageNumber]", "Stage-1", "build-review#9", domain.StatusCOMPLETED_NEEDS_ACTION, 9)
+	state := stateAfterRow("EXECUTION", "1.Test", "build-review#9", domain.StatusCOMPLETED_NEEDS_ACTION, 9, 9)
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:     aw,
-		Stages:       stages,
+		Schedules:    schedules,
 		State:        state,
 		LastResponse: cnaResponse("build-review#9"),
 		Agents:       agents,
@@ -163,93 +158,30 @@ func TestNext_Mode_Orchestrated_AfterCNA_ReturnsConsultDecision(t *testing.T) {
 			consult.Trigger)
 	}
 	// After a CNA in EXECUTION the current phase and stage come from the state.
-	if consult.CurrentPhase != "EXECUTION.[StageNumber]" {
+	if consult.CurrentPhase != "EXECUTION" {
 		t.Errorf("orchestrated mode after CNA: want CurrentPhase=%q, got %q",
-			"EXECUTION.[StageNumber]", consult.CurrentPhase)
+			"EXECUTION", consult.CurrentPhase)
 	}
-	if consult.CurrentStage != "Stage-1" {
+	if consult.CurrentStage != "1.Test" {
 		t.Errorf("orchestrated mode after CNA: want CurrentStage=%q, got %q",
-			"Stage-1", consult.CurrentStage)
+			"1.Test", consult.CurrentStage)
 	}
-}
-
-// TestNext_Mode_Auto_CNA_AmbiguousOnFindings_ReturnsDeviation verifies that in
-// auto mode CNA with an ambiguous On Findings hint still yields Deviation (not
-// Dispatch). Ambiguous OnFindings must deviate in every mode.
-func TestNext_Mode_Auto_CNA_AmbiguousOnFindings_ReturnsDeviation(t *testing.T) {
-	// brownfield-tdd row 10: implementation-review has
-	// OnFindings="implementation-tdd (or other based on issue)" — ambiguous.
-	aw := mustParseAndAdmit(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
-	stages := singleStageSet("TDD")
-	agents := newTestAgents(
-		"codebase-research", "requirements-refinement", "requirements-review",
-		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
-		"test-writer-tdd", "tests-review-tdd", "implementation-tdd", "implementation-review",
-		"test-runner",
-	)
-	state := stateAfter("EXECUTION.[StageNumber]", "Stage-1", "implementation-review#11", domain.StatusCOMPLETED_NEEDS_ACTION, 11)
-
-	dec := engine.Next(engine.NextInput{
-		Workflow:     aw,
-		Stages:       stages,
-		State:        state,
-		LastResponse: cnaResponse("implementation-review#11"),
-		Agents:       agents,
-		Seq:          11,
-		Now:          fixedNow,
-		Mode:         domain.ExecutionModeAuto,
-	})
-
-	requireDeviation(t, dec)
-}
-
-// TestNext_Mode_AutoReview_CNA_AmbiguousOnFindings_ReturnsDeviation verifies
-// that in auto-review mode CNA with an ambiguous On Findings hint also yields
-// Deviation. The auto-review extension only fires on unambiguous hints.
-func TestNext_Mode_AutoReview_CNA_AmbiguousOnFindings_ReturnsDeviation(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
-	stages := singleStageSet("TDD")
-	agents := newTestAgents(
-		"codebase-research", "requirements-refinement", "requirements-review",
-		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
-		"test-writer-tdd", "tests-review-tdd", "implementation-tdd", "implementation-review",
-		"test-runner",
-	)
-	state := stateAfter("EXECUTION.[StageNumber]", "Stage-1", "implementation-review#11", domain.StatusCOMPLETED_NEEDS_ACTION, 11)
-
-	dec := engine.Next(engine.NextInput{
-		Workflow:     aw,
-		Stages:       stages,
-		State:        state,
-		LastResponse: cnaResponse("implementation-review#11"),
-		Agents:       agents,
-		Seq:          11,
-		Now:          fixedNow,
-		Mode:         domain.ExecutionModeAutoReview,
-	})
-
-	requireDeviation(t, dec)
 }
 
 // TestNext_Mode_Auto_NonCNA_NonSuccess_ReturnsDeviation verifies that in auto
 // mode non-CNA non-SUCCESS statuses always yield Deviation regardless of On Findings.
 func TestNext_Mode_Auto_NonCNA_NonSuccess_ReturnsDeviation(t *testing.T) {
-	// tests-review-tdd has OnFindings="test-writer-tdd" — unambiguous — but the
+	// tests-review-tdd has On Findings = test-writer-tdd, but the
 	// status is NEEDS_CLARIFICATION (not CNA, not retried mechanically), so it
 	// must deviate.
-	aw := mustParseAndAdmit(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
-	stages := singleStageSet("TDD")
-	agents := newTestAgents(
-		"codebase-research", "requirements-refinement", "requirements-review",
-		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
-		"test-writer-tdd", "tests-review-tdd", "implementation-tdd", "implementation-review",
-		"test-runner",
-	)
-	state := stateAfter("EXECUTION.[StageNumber]", "Stage-1", "tests-review-tdd#9", domain.StatusNEEDS_CLARIFICATION, 9)
+	aw := mustParseAndAdmitV216(t, brownfieldTDDV216Content, "brownfield-tdd", "3.4")
+	schedules := singleSchedules("TDD")
+	agents := scopeAgents(aw)
+	state := stateAfterRow("EXECUTION", "1.Test", "tests-review-tdd#9", domain.StatusNEEDS_CLARIFICATION, 9, 9)
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:     aw,
-		Stages:       stages,
+		Schedules:    schedules,
 		State:        state,
 		LastResponse: nonSuccessResponse("tests-review-tdd#9", domain.StatusNEEDS_CLARIFICATION),
 		Agents:       agents,
@@ -264,19 +196,14 @@ func TestNext_Mode_Auto_NonCNA_NonSuccess_ReturnsDeviation(t *testing.T) {
 // TestNext_Mode_AutoReview_NonCNA_NonSuccess_ReturnsDeviation verifies that in
 // auto-review mode non-CNA non-SUCCESS statuses also yield Deviation, not Dispatch.
 func TestNext_Mode_AutoReview_NonCNA_NonSuccess_ReturnsDeviation(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
-	stages := singleStageSet("TDD")
-	agents := newTestAgents(
-		"codebase-research", "requirements-refinement", "requirements-review",
-		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
-		"test-writer-tdd", "tests-review-tdd", "implementation-tdd", "implementation-review",
-		"test-runner",
-	)
-	state := stateAfter("EXECUTION.[StageNumber]", "Stage-1", "tests-review-tdd#9", domain.StatusBLOCKED, 9)
+	aw := mustParseAndAdmitV216(t, brownfieldTDDV216Content, "brownfield-tdd", "3.4")
+	schedules := singleSchedules("TDD")
+	agents := scopeAgents(aw)
+	state := stateAfterRow("EXECUTION", "1.Test", "tests-review-tdd#9", domain.StatusBLOCKED, 9, 9)
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:     aw,
-		Stages:       stages,
+		Schedules:    schedules,
 		State:        state,
 		LastResponse: nonSuccessResponse("tests-review-tdd#9", domain.StatusBLOCKED),
 		Agents:       agents,
@@ -288,27 +215,19 @@ func TestNext_Mode_AutoReview_NonCNA_NonSuccess_ReturnsDeviation(t *testing.T) {
 	requireDeviation(t, dec)
 }
 
-// ===== Review artifact injection (Stage 2) =====
-//
-// On the auto-review auto-route-back (CNA + unambiguous On Findings), the
-// reviewing agent's output artifacts (in.LastOutputArtifacts) are appended to
-// the dispatched step's Request.InputArtifacts, after the table row's entries,
-// without duplicating any path already present.
-//
-// No injection occurs on SUCCESS-routed dispatches or Deviation decisions.
+// ===== Unset mode =====
 
-// TestNext_ArtifactInjection_AutoReview_CNA_InjectsLastOutputArtifacts verifies
-// that on the auto-review auto-route-back the reviewing agent's output artifacts
-// are present in the dispatched step's InputArtifacts, after the table row's
-// own entries.
+// TestNext_Mode_Unset_ReturnsDeviationAmbiguousRoute verifies that an engine
+// call with no execution mode set routes nothing and deviates as an ambiguous
+// route.
 func TestNext_Mode_Unset_ReturnsDeviationAmbiguousRoute(t *testing.T) {
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
-	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
+	agents := scopeAgents(aw)
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:     aw,
-		Stages:       stages,
+		Schedules:    schedules,
 		State:        emptyState(),
 		LastResponse: nil,
 		Agents:       agents,
@@ -323,4 +242,3 @@ func TestNext_Mode_Unset_ReturnsDeviationAmbiguousRoute(t *testing.T) {
 			domain.DeviationAmbiguousRoute, dev.Info.Kind)
 	}
 }
-

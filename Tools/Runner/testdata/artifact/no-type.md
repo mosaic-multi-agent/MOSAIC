@@ -9,14 +9,14 @@ global_sequence: 1
 checkpoints: disabled
 current_state:
   phase: PLANNING
-  stage: null
+  iteration: null
   last_status: SUCCESS
   last_agent: "planner-tdd-soft#1"
   error_code: null
 ---
 
 <ExecutionLog type="core">
-| Seq | Agent              | Phase    | Stage | Status  | Timestamp            | Summary      | Checkpoint |
+| Seq | Agent              | Phase    | Iteration | Status  | Timestamp            | Summary      | Checkpoint |
 |-----|--------------------|---------:|-------|---------|----------------------|--------------|------------|
 | 1   | planner-tdd-soft#1 | PLANNING | -     | SUCCESS | 2026-01-29T09:05:00Z | Plan created | -          |
 </ExecutionLog>

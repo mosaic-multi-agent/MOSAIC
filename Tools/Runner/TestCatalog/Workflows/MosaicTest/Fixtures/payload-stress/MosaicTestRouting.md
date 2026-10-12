@@ -25,7 +25,7 @@ mosaictest-scripted
 ### Row
 1
 
-### Stage
+### Iteration
 1
 
 ### TaskDescription
@@ -47,7 +47,7 @@ mosaictest-scripted
 ### Row
 2
 
-### Stage
+### Iteration
 1
 
 ### TaskDescription
@@ -73,7 +73,7 @@ mosaictest-scripted
 ### Row
 3
 
-### Stage
+### Iteration
 1
 
 ### TaskDescription

@@ -1,319 +1,148 @@
 // Package workflow parses a routing table from a workflow region's raw content
 // into a flat, ordered, index-identified model. It uses mdtable to parse the
-// pipe-delimited markdown table and produces a RoutingTable value whose rows
+// pipe-delimited markdown tables and produces a RoutingTable value whose rows
 // preserve declaration order.
 //
-// Parse does not interpret the table: no compat checks, no grouping, no path
-// resolution. Artifact paths are preserved verbatim (templates are not resolved
-// here). Optional columns (On Success, On Findings) use OptionalHint to
-// distinguish "column absent" from "column present with no hint".
+// Parse is the strict WorkflowFormat 2.16 parser of a region's structure: the
+// Phase cells (blocks, groups, nesting), the routing table, and the
+// **Blocks:** and **Groups:** tables. It does not interpret the tables: no
+// compat checks, no path resolution. Artifact paths are preserved verbatim.
+// The parser accepts no 1.x notation: every such token is refused.
 //
-// Refusals: no parseable routing table, missing required columns, empty table
-// (header with no data rows), malformed EXECUTION phase strings, malformed
-// Execution Groups table. Every refusal produces a *domain.RefusalError
-// naming the workflow and the specific condition.
+// Every refusal is a *domain.RefusalError naming the workflow and the
+// condition; strict refusals also carry the sec. 10 rule ID where one exists,
+// the 1-based routing row and the offending token.
 package workflow
 
 import (
-	"bytes"
-	"fmt"
 	"strings"
 
 	"mosaic-common/mdtable"
 	"mosaic-run/internal/domain"
 )
 
-// Required column names that must be present in every routing table.
-var requiredColumns = []string{"Phase", "Subagent", "HITL", "Input", "Output"}
-
 // Parse turns a workflow region's raw content into a flat, ordered,
-// row-identified routing table model. It parses but does not interpret:
-// no refusal decisions, no grouping, no path resolution.
+// row-identified routing table model, strictly by WorkflowFormat 2.16. It
+// never accepts 1.x notation.
 //
 // The content is the raw bytes inside the <Workflow type="core" name="{id}">
 // region. The info carries the identifier and version extracted by orchfile.
 //
-// Required columns: Phase, Subagent, HITL, Input, Output.
-// Optional columns: On Success, On Findings, Row. Row is validated, not stored:
-// when present, each data row must hold its 1-based position in the table.
+// Required columns: Phase, Subagent, HITL, On Success, On Findings, Input,
+// Output. Allowed besides them: Waits For and the deployed Row column. Row is
+// validated, not stored: when present, each data row must hold its 1-based
+// position in the table.
 //
-// Returns a *domain.RefusalError with a specific message naming the workflow
-// and condition if:
-//   - The content contains no parseable routing table
-//   - Required columns (Phase, Subagent, HITL, Input, Output) are missing
-//   - The table has a header and separator but zero data rows
-//   - A Row column is present and a row's value is not its 1-based position
-//     (non-numeric, missing, duplicated, out of order or wrong start)
-//   - An EXECUTION phase string is malformed
-//   - The **Execution Groups:** heading is present but the approach table is invalid
+// Returns a *domain.RefusalError if:
+//   - the first table of the region is not a routing table, or the region
+//     holds a table besides the routing, Blocks and Groups tables (T1)
+//   - a required column is missing (T2), another column is present (T11), or
+//     the routing table has no data rows (T3)
+//   - a Row column is present and a row's value is not its 1-based position (T4)
+//   - a Phase cell is malformed (P1, P2, P10, P12) or uses 1.x notation
+//   - a cell is empty (T12), a Subagent cell is malformed (T6) or repeated
+//     (T8), a HITL cell is not TRUE or FALSE (T7)
+//   - an On Success, On Findings or Waits For cell is malformed (T5, T6), a
+//     target repeats in one cell (T14) or matches no Subagent cell (T9), or the
+//     Waits For column is present without any join (T13)
+//   - a fill-in stands in a target cell (P11) or names a block the row is not
+//     in (P9)
+//   - a reserved heading repeats or is not followed by a table (P3)
+//   - the Blocks or Groups table is invalid (P4-P8)
+//   - the region holds the 1.x **Execution Groups:** heading
 func Parse(content []byte, info domain.WorkflowInfo) (domain.RoutingTable, error) {
 	workflowID := string(info.ID)
 
-	t, err := mdtable.Parse(content)
+	routing, _, routingEnd, err := mdtable.ParseAt(content, 0)
 	if err != nil {
-		return domain.RoutingTable{}, &domain.RefusalError{
-			Component: "workflow",
-			Resource:  workflowID,
-			Reason:    "no parseable routing table found",
-		}
+		return domain.RoutingTable{}, tableRefusal(workflowID, "T1", 0, "",
+			"no parseable routing table found")
 	}
-
-	// Validate that all required columns are present.
-	for _, col := range requiredColumns {
-		if t.Column(col) < 0 {
-			return domain.RoutingTable{}, &domain.RefusalError{
-				Component: "workflow",
-				Resource:  workflowID,
-				Reason:    "required column missing: " + col,
-			}
-		}
+	if !firstTableIsRouting(routing) {
+		return domain.RoutingTable{}, tableRefusal(workflowID, "T1", 0, strings.Join(routing.Header, " | "),
+			"the first table of the region is not a routing table")
 	}
-
-	// Refuse tables with a valid header/separator but no data rows.
-	if len(t.Rows) == 0 {
-		return domain.RoutingTable{}, &domain.RefusalError{
-			Component: "workflow",
-			Resource:  workflowID,
-			Reason:    "routing table has no data rows",
-		}
+	if hasExecutionGroupsHeading(content) {
+		return domain.RoutingTable{}, tableRefusal(workflowID, "", 0, retiredExecutionGroupsHeading,
+			"the 1.x heading is not WorkflowFormat 2.16 notation; use **Groups:**")
 	}
-
-	if err := validateRowColumn(t, workflowID); err != nil {
+	reserved, err := locateReservedTables(content, routingEnd, workflowID)
+	if err != nil {
 		return domain.RoutingTable{}, err
 	}
 
-	// Resolve column indices.
-	phaseCol := t.Column("Phase")
-	subagentCol := t.Column("Subagent")
-	hitlCol := t.Column("HITL")
-	inputCol := t.Column("Input")
-	outputCol := t.Column("Output")
-	onSuccessCol := t.Column("On Success")
-	onFindingsCol := t.Column("On Findings")
-
-	rows := make([]domain.RoutingRow, 0, len(t.Rows))
-	for i, rawRow := range t.Rows {
-		phase := rawRow[phaseCol]
-		agent := rawRow[subagentCol]
-		hitlCell := rawRow[hitlCol]
-		inputCell := rawRow[inputCol]
-		outputCell := rawRow[outputCol]
-
-		// Decode HITL: TRUE means true, anything else means false.
-		hitl := strings.EqualFold(strings.TrimSpace(hitlCell), "TRUE")
-
-		// Split comma-separated artifact paths; "-" or empty means no artifacts.
-		inputArtifacts := splitArtifacts(inputCell)
-		outputArtifacts := splitArtifacts(outputCell)
-
-		// Parse the phase string into its structured form. Returns an error
-		// for malformed EXECUTION phase strings.
-		phaseParsed, parseErr := parsePhase(phase, i)
-		if parseErr != nil {
-			return domain.RoutingTable{}, &domain.RefusalError{
-				Component: "workflow",
-				Resource:  workflowID,
-				Reason:    parseErr.Error(),
-			}
-		}
-
-		// Resolve optional columns.
-		onSuccess := resolveOptionalHint(rawRow, onSuccessCol)
-		onFindings := resolveOptionalHint(rawRow, onFindingsCol)
-
-		rows = append(rows, domain.RoutingRow{
-			Index:           i,
-			Phase:           phase,
-			PhaseParsed:     phaseParsed,
-			Agent:           agent,
-			HITL:            hitl,
-			InputArtifacts:  inputArtifacts,
-			OutputArtifacts: outputArtifacts,
-			OnSuccess:       onSuccess,
-			OnFindings:      onFindings,
-		})
+	rows, err := parseRoutingRows(routing, workflowID)
+	if err != nil {
+		return domain.RoutingTable{}, err
+	}
+	if err := checkNoOtherTables(content, routingEnd, reserved, workflowID); err != nil {
+		return domain.RoutingTable{}, err
 	}
 
-	// Locate and decode the Execution Groups approach table, if declared.
-	var approachTable domain.ApproachTable
-	if headingOffset, found := findExecutionGroupsHeading(content); found {
-		approachTable, err = parseApproachTable(content, headingOffset, workflowID)
-		if err != nil {
+	table := domain.RoutingTable{Info: info, Rows: rows}
+	if reserved.blocks != nil {
+		if table.Blocks, err = parseBlocksTable(*reserved.blocks, rows, workflowID); err != nil {
 			return domain.RoutingTable{}, err
 		}
 	}
-
-	return domain.RoutingTable{
-		Info:          info,
-		Rows:          rows,
-		ApproachTable: approachTable,
-	}, nil
-}
-
-// parsePhase converts a phase string into a PhaseParsed value.
-// It is fallible: a malformed EXECUTION phase string returns an error rather
-// than being silently normalised to a bare staged row.
-//
-// row is the zero-based row index within the routing table; it is included in
-// refusal messages so callers do not need to re-wrap the error.
-//
-// Algorithm:
-//   - A phase not starting with "EXECUTION." yields a non-staged result, no error.
-//   - rest = everything after "EXECUTION.":
-//   - rest starts with "[" → bare staged row, Group "".
-//   - rest has no "." → error (missing [StageNumber] segment).
-//   - segment before first "." is empty or contains whitespace → error (P2).
-//   - remainder after that "." does not start with "[" → error (P1).
-//   - otherwise → grouped staged row with the segment as Group.
-func parsePhase(phase string, row int) (domain.PhaseParsed, error) {
-	const prefix = "EXECUTION."
-	if !strings.HasPrefix(phase, prefix) {
-		return domain.PhaseParsed{Name: phase, IsStaged: false}, nil
-	}
-	rest := phase[len(prefix):]
-
-	// Bare staged row: EXECUTION.[StageNumber]
-	if strings.HasPrefix(rest, "[") {
-		return domain.PhaseParsed{Name: "EXECUTION", IsStaged: true, Group: ""}, nil
-	}
-
-	// Grouped staged row: EXECUTION.{Group}.[StageNumber]
-	dotIdx := strings.Index(rest, ".")
-	if dotIdx < 0 {
-		// No second dot — [StageNumber] segment is missing entirely.
-		return domain.PhaseParsed{}, fmt.Errorf(
-			"malformed EXECUTION phase %q in row %d: expected EXECUTION.{Group}.[StageNumber]", phase, row)
-	}
-
-	segment := rest[:dotIdx]
-	// Group token must be non-empty after trimming and must not contain whitespace.
-	if strings.TrimSpace(segment) == "" || strings.ContainsAny(segment, " \t\n\r") {
-		return domain.PhaseParsed{}, fmt.Errorf(
-			"malformed EXECUTION phase %q in row %d: group segment must be a single non-empty token", phase, row)
-	}
-
-	remainder := rest[dotIdx+1:]
-	if !strings.HasPrefix(remainder, "[") {
-		// The segment after the group token is not a bracketed stage number.
-		return domain.PhaseParsed{}, fmt.Errorf(
-			"malformed EXECUTION phase %q in row %d: expected EXECUTION.{Group}.[StageNumber]", phase, row)
-	}
-
-	return domain.PhaseParsed{
-		Name:     "EXECUTION",
-		IsStaged: true,
-		Group:    domain.GroupName(segment),
-	}, nil
-}
-
-// findExecutionGroupsHeading scans content line by line for an exact trimmed
-// full-line match of domain.ExecutionGroupsHeading. Returns the byte offset
-// immediately after that line (where the approach table might follow) and true
-// when found. Returns (0, false) when the heading is absent.
-func findExecutionGroupsHeading(content []byte) (int, bool) {
-	lines := bytes.Split(content, []byte("\n"))
-	offset := 0
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(string(line))
-		if trimmed == domain.ExecutionGroupsHeading {
-			// Return the offset after this line (start of the next line).
-			return offset + len(line) + 1, true
+	if reserved.groups != nil {
+		approach, err := parseGroupsTable(*reserved.groups, workflowID)
+		if err != nil {
+			return domain.RoutingTable{}, err
 		}
-		offset += len(line) + 1
+		table.ApproachTable = domain.ApproachTable{Rows: approach}
 	}
-	return 0, false
+	return table, nil
 }
 
-// parseApproachTable reads and validates the Execution Groups approach table
-// from content starting at headingOffset. headingOffset is the byte position
-// immediately after the reserved heading line.
-//
-// Returns a populated ApproachTable on success, or a *domain.RefusalError for
-// any structural problem (P3–P8 in the refusal catalogue).
-func parseApproachTable(content []byte, headingOffset int, workflowID string) (domain.ApproachTable, error) {
-	refusal := func(reason string) (domain.ApproachTable, error) {
-		return domain.ApproachTable{}, &domain.RefusalError{
-			Component: "workflow",
-			Resource:  workflowID,
-			Reason:    reason,
-		}
+// parseRoutingRows validates the routing table's columns and Row column and
+// decodes its data rows, resolving every routing cell to typed entries.
+func parseRoutingRows(t mdtable.Table, workflowID string) ([]domain.RoutingRow, error) {
+	if err := checkColumns(t, workflowID); err != nil {
+		return nil, err
 	}
-
-	// P3: heading present but no table follows.
-	tbl, _, _, err := mdtable.ParseAt(content, headingOffset)
+	if len(t.Rows) == 0 {
+		return nil, tableRefusal(workflowID, "T3", 0, strings.Join(t.Header, " | "), "routing table has no data rows")
+	}
+	if err := validateRowColumn(t, workflowID); err != nil {
+		return nil, err
+	}
+	cols := locateColumns(t)
+	rows, err := parseRowIdentities(t, cols, workflowID)
 	if err != nil {
-		return refusal(`no Execution Groups table found after the "**Execution Groups:**" heading`)
+		return nil, err
 	}
-
-	// P4: Approach column missing.
-	approachCol := tbl.Column("Approach")
-	if approachCol < 0 {
-		return refusal(`Execution Groups table is missing the required "Approach" column`)
+	if err := resolveRoutingCells(t, cols, rows, workflowID); err != nil {
+		return nil, err
 	}
+	return rows, nil
+}
 
-	// P5: Groups column missing.
-	groupsCol := tbl.Column("Groups")
-	if groupsCol < 0 {
-		return refusal(`Execution Groups table is missing the required "Groups" column`)
-	}
-
-	// P6: table header present but zero data rows.
-	if len(tbl.Rows) == 0 {
-		return refusal("Execution Groups table has no data rows")
-	}
-
-	seenApproach := make(map[domain.Approach]bool)
-	rows := make([]domain.ApproachSequence, 0, len(tbl.Rows))
-
-	for rowIdx, rawRow := range tbl.Rows {
-		approachCell := rawRow[approachCol]
-		groupsCell := rawRow[groupsCol]
-
-		// P7: empty Approach cell.
-		if approachCell == "" {
-			return refusal(fmt.Sprintf("Execution Groups table row %d has an empty Approach value", rowIdx))
+// checkColumns refuses a routing table that lacks a required column (T2) or
+// holds a column that is neither required, Waits For nor the deployed Row
+// column (T11).
+func checkColumns(t mdtable.Table, workflowID string) error {
+	for _, col := range strictRequiredColumns {
+		if t.Column(col) < 0 {
+			return tableRefusal(workflowID, "T2", 0, col, "required column missing: "+col)
 		}
-
-		// P7: empty Groups cell.
-		if groupsCell == "" {
-			return refusal(fmt.Sprintf("Execution Groups table row %d has an empty Groups value", rowIdx))
-		}
-
-		approach := domain.Approach(approachCell)
-
-		// P8: duplicate Approach token across rows.
-		if seenApproach[approach] {
-			return refusal(fmt.Sprintf("Execution Groups table declares approach %q twice", approach))
-		}
-		seenApproach[approach] = true
-
-		// Parse the comma-separated group token sequence.
-		parts := strings.Split(groupsCell, ",")
-		seenGroup := make(map[domain.GroupName]bool)
-		groups := make([]domain.GroupName, 0, len(parts))
-
-		for _, p := range parts {
-			token := strings.TrimSpace(p)
-			// P7: empty token inside a Groups cell.
-			if token == "" {
-				return refusal(fmt.Sprintf("Execution Groups table row %d has an empty Groups value", rowIdx))
-			}
-			g := domain.GroupName(token)
-			// P8: duplicate group token within one Groups cell.
-			if seenGroup[g] {
-				return refusal(fmt.Sprintf("Execution Groups table declares group %q twice", g))
-			}
-			seenGroup[g] = true
-			groups = append(groups, g)
-		}
-
-		rows = append(rows, domain.ApproachSequence{
-			Approach: approach,
-			Groups:   groups,
-		})
 	}
+	for _, col := range t.Header {
+		if col == waitsForColumn || col == rowColumnName || containsName(strictRequiredColumns, col) {
+			continue
+		}
+		return tableRefusal(workflowID, "T11", 0, col, "unknown column: "+col)
+	}
+	return nil
+}
 
-	return domain.ApproachTable{Rows: rows}, nil
+func containsName(names []string, name string) bool {
+	for _, n := range names {
+		if n == name {
+			return true
+		}
+	}
+	return false
 }
 
 // splitArtifacts splits a comma-separated artifact path cell into individual
@@ -331,18 +160,4 @@ func splitArtifacts(cell string) []string {
 		}
 	}
 	return result
-}
-
-// resolveOptionalHint returns an OptionalHint for an optional column.
-// When colIdx < 0, the column is absent (ColumnPresent == false).
-// When the column is present but the cell is "-" or empty, Value is "".
-func resolveOptionalHint(row []string, colIdx int) domain.OptionalHint {
-	if colIdx < 0 {
-		return domain.OptionalHint{ColumnPresent: false}
-	}
-	val := row[colIdx]
-	if val == "-" || val == "" {
-		return domain.OptionalHint{ColumnPresent: true, Value: ""}
-	}
-	return domain.OptionalHint{ColumnPresent: true, Value: val}
 }

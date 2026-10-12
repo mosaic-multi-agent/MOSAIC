@@ -42,9 +42,9 @@ func (c *countingInteraction) AskText(ctx context.Context, q interaction.TextQue
 // manualRoutingTable is a two-row table: a non-staged row and a staged row.
 func manualRoutingTable() domain.RoutingTable {
 	return domain.RoutingTable{Rows: []domain.RoutingRow{
-		{Index: 0, Phase: "RESEARCH", Agent: "researcher", PhaseParsed: domain.PhaseParsed{Name: "RESEARCH"}},
-		{Index: 1, Phase: "EXECUTION.Implementation.[StageNumber]", Agent: "dev",
-			PhaseParsed: domain.PhaseParsed{Name: "EXECUTION", IsStaged: true, Group: "Implementation"}},
+		{Index: 0, Phase: "RESEARCH", Agent: "researcher", AgentID: "researcher", PhaseParsed: domain.PhaseParsed{Name: "RESEARCH"}},
+		{Index: 1, Phase: "EXECUTION.[Stage].Implementation", Agent: "dev", AgentID: "dev",
+			PhaseParsed: domain.PhaseParsed{Name: "EXECUTION", IsStaged: true, Group: "Implementation", Blocks: []domain.BlockName{"Stage"}}},
 	}}
 }
 
@@ -55,7 +55,7 @@ func TestManualRouting_WithTheRealCLIInteraction_EndsWithoutDispatchAndWithoutBl
 	req := domain.ConsultationRequest{
 		OrchestrationArtifact: "Orchestration-abc/Orchestration.md",
 		Context:               domain.ConsultContextRouting,
-		Stages:                &domain.StageSet{Entries: []domain.StageEntry{{Number: 1}, {Number: 2}}},
+		Schedules:             domain.BlockSchedules{"Stage": {Block: "Stage", Iterations: []domain.ScheduleIteration{{ID: "1"}, {ID: "2"}}}},
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

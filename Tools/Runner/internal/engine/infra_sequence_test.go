@@ -8,7 +8,6 @@ import (
 	"mosaic-run/internal/engine"
 )
 
-
 // ===== Position immune to infrastructure activity =====
 //
 // Coverage:
@@ -45,8 +44,8 @@ func declaredCheckpointInfraAgent() []domain.DeclaredInfraAgent {
 // at the row after that workflow step rather than treating the trailing
 // infrastructure entry as an interruption.
 func TestResumePoint_TrailingInfrastructureEntry_NotMisdiagnosedAsInterrupted(t *testing.T) {
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
 	infra := domain.NewInfraAgentSet(declaredCheckpointInfraAgent())
 
 	state := domain.ArtifactState{
@@ -63,7 +62,7 @@ func TestResumePoint_TrailingInfrastructureEntry_NotMisdiagnosedAsInterrupted(t 
 		},
 	}
 
-	info, err := engine.ResumePoint(aw, stages, state, infra)
+	info, err := engine.ResumePointFromSchedules(aw, schedules, state, infra)
 	if err != nil {
 		t.Fatalf("ResumePoint: unexpected error: %v", err)
 	}
@@ -81,8 +80,8 @@ func TestResumePoint_TrailingInfrastructureEntry_NotMisdiagnosedAsInterrupted(t 
 // current_state is re-run, and the interleaved infrastructure entry does not
 // obscure the interruption.
 func TestResumePoint_InterruptionAfterInfrastructureActivity_RerunsWorkflowRow(t *testing.T) {
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
 	infra := domain.NewInfraAgentSet(declaredCheckpointInfraAgent())
 
 	// planner-tdd-soft (row 0) completed and is recorded in current_state.
@@ -104,7 +103,7 @@ func TestResumePoint_InterruptionAfterInfrastructureActivity_RerunsWorkflowRow(t
 		},
 	}
 
-	info, err := engine.ResumePoint(aw, stages, state, infra)
+	info, err := engine.ResumePointFromSchedules(aw, schedules, state, infra)
 	if err != nil {
 		t.Fatalf("ResumePoint: unexpected error: %v", err)
 	}
@@ -121,8 +120,8 @@ func TestResumePoint_InterruptionAfterInfrastructureActivity_RerunsWorkflowRow(t
 // EXECUTION row: an infrastructure step's sequence bump, interleaved between
 // two workflow rows, must not throw off sequence-based row disambiguation.
 func TestNext_Interleaved_Infrastructure_SequenceDisambiguation_RepeatedAgent(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.1")
-	stages := singleStageSet("TDD")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.1")
+	schedules := singleSchedules("TDD")
 	agents := newTestAgents("test-writer-tdd", "build-review", "tests-review-tdd",
 		"implementation-tdd", "implementation-review")
 
@@ -134,20 +133,20 @@ func TestNext_Interleaved_Infrastructure_SequenceDisambiguation_RepeatedAgent(t 
 	// The log records rows 8 (test-writer-tdd) and 9 (build-review) of the table;
 	// the infrastructure entry carries no row.
 	state := stateWithLog(10,
-		execLogEntry(8, "test-writer-tdd#8", "EXECUTION", "Test.1", domain.StatusSUCCESS, 8),
-		execLogEntry(9, "checkpoint-manager-git#9", "EXECUTION", "Test.1", domain.StatusSUCCESS, 0),
-		execLogEntry(10, "build-review#10", "EXECUTION", "Test.1", domain.StatusSUCCESS, 9),
+		execLogEntry(8, "test-writer-tdd#8", "EXECUTION", "1.Test", domain.StatusSUCCESS, 8),
+		execLogEntry(9, "checkpoint-manager-git#9", "EXECUTION", "1.Test", domain.StatusSUCCESS, 0),
+		execLogEntry(10, "build-review#10", "EXECUTION", "1.Test", domain.StatusSUCCESS, 9),
 	)
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           state,
-		LastResponse:    successResponse("build-review#10"),
-		Agents:          agents,
-		Seq:             10,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        state,
+		LastResponse: successResponse("build-review#10"),
+		Agents:       agents,
+		Seq:          10,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
@@ -163,8 +162,8 @@ func TestNext_Interleaved_Infrastructure_SequenceDisambiguation_RepeatedAgent(t 
 // by agent+phase, not sequence arithmetic, so an inflated global_sequence from an
 // interleaved infrastructure step must not affect resolution.
 func TestNext_Interleaved_Infrastructure_SequenceDisambiguation_SingleAgentPerRow(t *testing.T) {
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
 	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
 
 	// planner-tdd-soft completes at seq 1. checkpoint-manager-git then fires as an
@@ -182,14 +181,14 @@ func TestNext_Interleaved_Infrastructure_SequenceDisambiguation_SingleAgentPerRo
 	}
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           state,
-		LastResponse:    successResponse("plan-review#3"),
-		Agents:          agents,
-		Seq:             3,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        state,
+		LastResponse: successResponse("plan-review#3"),
+		Agents:       agents,
+		Seq:          3,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
@@ -204,8 +203,8 @@ func TestNext_Interleaved_Infrastructure_SequenceDisambiguation_SingleAgentPerRo
 // an infrastructure entry either), the stop names the agent and states that it is
 // not a workflow participant, rather than a generic "could not determine" message.
 func TestNext_UnresolvedPosition_AgentNotInWorkflow_StopNamesCause(t *testing.T) {
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
 	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
 
 	state := domain.ArtifactState{
@@ -219,14 +218,14 @@ func TestNext_UnresolvedPosition_AgentNotInWorkflow_StopNamesCause(t *testing.T)
 	}
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           state,
-		LastResponse:    successResponse("mystery-agent#1"),
-		Agents:          agents,
-		Seq:             1,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        state,
+		LastResponse: successResponse("mystery-agent#1"),
+		Agents:       agents,
+		Seq:          1,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	stop := requireStop(t, dec)

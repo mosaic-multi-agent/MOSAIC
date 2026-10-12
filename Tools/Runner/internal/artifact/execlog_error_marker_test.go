@@ -330,7 +330,7 @@ func TestRender_BlockedRows_KeepExecutionLogColumnSet(t *testing.T) {
 
 	got := executionLogHeader(t, readFile(t, path))
 
-	want := []string{"Seq", "Agent", "Phase", "Stage", "WorkflowRow", "Status", "Timestamp", "Summary", "Inputs", "Checkpoint"}
+	want := []string{"Seq", "Agent", "Phase", "Iteration", "WorkflowRow", "Status", "Timestamp", "Summary", "Inputs", "Checkpoint"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("Execution Log columns: want %v, got %v", want, got)
 	}

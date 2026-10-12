@@ -117,7 +117,7 @@ func runGuarded(t *testing.T, in interaction.Interaction) (domain.RoutingInstruc
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	m := &deviation.ManualResolver{Interact: in, Table: stagedRoutingTable()}
-	instr, err := m.ConsultRouting(ctx, manualRequest(stagesUpTo(3)))
+	instr, err := m.ConsultRouting(ctx, manualRequest(schedulesUpTo(3)))
 	if ctx.Err() != nil {
 		t.Fatalf("manual routing did not end before the deadline: %v", ctx.Err())
 	}
@@ -226,8 +226,8 @@ func TestManualTermination_EmptyAnswerOnAnOptionalStep_IsAValidAnswer(t *testing
 			instr, err := runGuarded(t, in)
 
 			disp := requireDispatch(t, instr, err)
-			if disp.RowIndex != 2 || disp.Stage != 2 {
-				t.Errorf("want the dispatch of row 3 stage 2, got RowIndex=%d Stage=%d", disp.RowIndex, disp.Stage)
+			if disp.RowIndex != 2 || disp.Iteration != "2" {
+				t.Errorf("want the dispatch of row 3 stage 2, got RowIndex=%d Stage=%q", disp.RowIndex, disp.Iteration)
 			}
 		})
 	}

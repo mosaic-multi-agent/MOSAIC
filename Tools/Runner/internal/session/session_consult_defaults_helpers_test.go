@@ -18,7 +18,6 @@ const (
 	cdTestWriter  = 1 // EXECUTION.Test, staged
 	cdBuildReview = 3 // EXECUTION.Implementation, staged
 	cdFinalReview = 4 // REVIEW, non-staged, Stage-* input
-	cdImplReview  = 5 // REVIEW, non-staged, input pattern needs a stage
 )
 
 // writeDefaultsPlan replaces the rig's Plan.md with a two-stage plan whose

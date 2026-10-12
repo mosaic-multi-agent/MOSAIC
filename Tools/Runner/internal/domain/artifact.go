@@ -63,7 +63,7 @@ type FrontmatterEntry struct {
 // CurrentState is the mutable nested block in the frontmatter.
 type CurrentState struct {
 	Phase      string     // standard workflow phase
-	Stage      string     // recorded stage value (domain.FormatStageValue, e.g. "Test.1") during EXECUTION with stages, "" otherwise
+	Stage      string     // recorded OAF 3.0 iteration value (domain.FormatIterationValue, e.g. "1.Test") during EXECUTION with blocks, "" otherwise
 	LastStatus StatusCode // zero value before any invocation
 	LastAgent  string     // "{AgentName}#{Seq}", "" before any invocation
 	ErrorCode  ErrorCode  // populated only when LastStatus is BLOCKED
@@ -74,7 +74,7 @@ type ExecutionLogEntry struct {
 	Seq   int
 	Agent string // "{AgentName}#{Seq}"
 	Phase string
-	Stage string // recorded stage value (domain.FormatStageValue, e.g. "Test.1") during EXECUTION, "" otherwise
+	Stage string // recorded OAF 3.0 iteration value (domain.FormatIterationValue, e.g. "1.Test") during EXECUTION, "" otherwise
 	// WorkflowRow is the 1-based routing-table row the step ran; NoWorkflowRow
 	// when absent, "-" or non-canonical in the table.
 	WorkflowRow WorkflowRow

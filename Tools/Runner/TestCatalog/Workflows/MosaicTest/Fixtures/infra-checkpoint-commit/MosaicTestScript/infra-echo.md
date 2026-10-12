@@ -6,7 +6,7 @@ mosaictest_script: 1
 
 Unconditional SUCCESS with a self-describing message and a written output artifact.
 Used in every stage of infra-checkpoint-commit. The written artifact proves the
-`{StageNumber}` substitution resolved correctly for the output path.
+`{Stage}` fill-in resolved correctly for the output path.
 
 ## Selector
 none
@@ -28,5 +28,5 @@ row 1 / EXECUTION / infra-checkpoint-commit / wrote MosaicTestStage.md / returni
 Written by the infra-echo script. The content is fixture data and means nothing.
 
 The file path this landed in is the assertion: it must carry the stage number of
-the invocation that wrote it, substituted from the row's `{StageNumber}` token.
+the invocation that wrote it, filled in from the row's `{Stage}` token.
 ~~~

@@ -65,7 +65,7 @@ func TestRender_EveryWrittenCellIsSanitised(t *testing.T) {
 	state := domain.ArtifactState{
 		RunID: testRunID,
 		ExecutionLog: []domain.ExecutionLogEntry{{
-			Seq: 1, Agent: "a|gent#1", Phase: "PH|ASE", Stage: "G|r.1", WorkflowRow: 2,
+			Seq: 1, Agent: "a|gent#1", Phase: "PH|ASE", Stage: "1.G|r", WorkflowRow: 2,
 			Status: domain.StatusSUCCESS, Timestamp: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 			Summary: "sum | mary\r\nnext", Inputs: "in|put.md\nmore", Checkpoint: "ch|eck",
 		}},
@@ -80,7 +80,7 @@ func TestRender_EveryWrittenCellIsSanitised(t *testing.T) {
 	checks := map[string][2]string{
 		"Agent":      {e.Agent, "a|gent#1"},
 		"Phase":      {e.Phase, "PH|ASE"},
-		"Stage":      {e.Stage, "G|r.1"},
+		"Iteration":  {e.Stage, "1.G|r"},
 		"Summary":    {e.Summary, "sum | mary next"},
 		"Inputs":     {e.Inputs, "in|put.md more"},
 		"Checkpoint": {e.Checkpoint, "ch|eck"},
@@ -145,7 +145,7 @@ func artifactWithSections(execLog, registry, notes string) []byte {
 }
 
 const (
-	validExecLog   = "| Seq | Agent | Phase | Stage | Status | Timestamp | Summary | Inputs | Checkpoint |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+	validExecLog   = "| Seq | Agent | Phase | Iteration | Status | Timestamp | Summary | Inputs | Checkpoint |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
 	validRegistry  = "| Artifact | Created In | Created By |\n| --- | --- | --- |\n"
 	validNotesHead = "| Seq | Note |\n| --- | --- |\n"
 )

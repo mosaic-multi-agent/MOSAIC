@@ -68,7 +68,7 @@ Today MOSAIC targets four harnesses — Claude Code, OpenCode, VS Code GitHub Co
 
 ## Orchestration Model
 
-**Hub-and-spoke.** One orchestrator agent coordinates specialized subagents. No direct agent-to-agent communication — all routing flows through the orchestrator. The orchestrator reads a workflow table (a compact markdown state machine) and dispatches subagents in the order and conditions it specifies. It contains zero workflow-specific logic — workflows are pure configuration.
+**Hub-and-spoke.** One orchestrator agent coordinates specialized subagents. No direct subagent-to-subagent communication — all routing flows through the orchestrator. The orchestrator reads a workflow table (a compact markdown state machine) and dispatches subagents in the order and conditions it specifies. It contains zero workflow-specific logic — workflows are pure configuration.
 
 **Blackboard state.** Each orchestration run gets an `Orchestration-{run_id}/` folder. Inside, `Orchestration.md` tracks every dispatch, every status response, and every artifact produced. This file is the shared state — agents read it to understand what has happened so far and write their outputs as artifacts in the same folder.
 

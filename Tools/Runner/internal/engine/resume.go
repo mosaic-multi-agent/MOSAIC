@@ -6,7 +6,7 @@ import (
 	"mosaic-run/internal/domain"
 )
 
-// ResumePoint determines where to continue from a parsed artifact.
+// ResumePointFromSchedules determines where to continue from a parsed artifact.
 // Pure function -- no I/O, no side effects.
 //
 // Position is resolved from the last *workflow* entry in the execution log:
@@ -25,22 +25,21 @@ import (
 //
 // Returns *domain.PositionUnresolvedError when the position cannot be
 // determined.
-func ResumePoint(
+func ResumePointFromSchedules(
 	workflow domain.AdmittedWorkflow,
-	stages *domain.StageSet,
+	schedules domain.BlockSchedules,
 	state domain.ArtifactState,
 	infra domain.InfraAgentSet,
 ) (domain.ResumeInfo, error) {
 	if len(state.ExecutionLog) == 0 {
 		// Fresh start: resume from the first row.
 		return domain.ResumeInfo{
-			RowIndex:    0,
-			Phase:       firstRowPhase(workflow),
-			Stage:       "",
-			StageNumber: 0,
-			GroupIndex:  -1,
-			Seq:         0,
-			RerunLast:   false,
+			RowIndex:   0,
+			Phase:      firstRowPhase(workflow),
+			Stage:      "",
+			GroupIndex: -1,
+			Seq:        0,
+			RerunLast:  false,
 		}, nil
 	}
 
@@ -52,13 +51,12 @@ func ResumePoint(
 		// The log holds no workflow entry at all (only infrastructure activity
 		// on record so far): resume from the first row, as if fresh.
 		return domain.ResumeInfo{
-			RowIndex:    0,
-			Phase:       firstRowPhase(workflow),
-			Stage:       "",
-			StageNumber: 0,
-			GroupIndex:  -1,
-			Seq:         0,
-			RerunLast:   false,
+			RowIndex:   0,
+			Phase:      firstRowPhase(workflow),
+			Stage:      "",
+			GroupIndex: -1,
+			Seq:        0,
+			RerunLast:  false,
 		}, nil
 	}
 
@@ -76,19 +74,24 @@ func ResumePoint(
 		}
 		rowIdx := pos.rowIdx
 		row := workflow.Table.Rows[rowIdx]
-		stageNum := pos.stageNum
 		groupIdx := -1
 		if row.PhaseParsed.IsStaged {
-			groupIdx = findGroupIndexInWorkflow(workflow, rowIdx)
+			groupIdx = groupIndexOfRow(workflow, rowIdx)
+		}
+		block := blockOfRow(workflow, rowIdx)
+		iteration := domain.IterationID("")
+		if block != "" {
+			iteration = pos.iteration
 		}
 		return domain.ResumeInfo{
-			RowIndex:    rowIdx,
-			Phase:       row.Phase,
-			Stage:       lastWorkflowEntry.Stage,
-			StageNumber: stageNum,
-			GroupIndex:  groupIdx,
-			Seq:         state.GlobalSequence,
-			RerunLast:   true,
+			RowIndex:   rowIdx,
+			Phase:      row.Phase,
+			Stage:      lastWorkflowEntry.Stage,
+			Block:      block,
+			Iteration:  iteration,
+			GroupIndex: groupIdx,
+			Seq:        state.GlobalSequence,
+			RerunLast:  true,
 		}, nil
 	}
 
@@ -97,61 +100,20 @@ func ResumePoint(
 	if err != nil {
 		return domain.ResumeInfo{}, err
 	}
-	currentRowIdx := pos.rowIdx
+	return resumeAfterScopedRow(workflow, schedules, state.ExecutionLog, pos, state.GlobalSequence)
+}
 
-	currentRow := workflow.Table.Rows[currentRowIdx]
-
-	if !currentRow.PhaseParsed.IsStaged {
-		return resumeAfterNonExecution(workflow, stages, currentRowIdx, state.GlobalSequence), nil
+// scheduleSpelling returns the ID as the block's schedule spells it when the
+// recorded ID matches an entry ignoring case, and the recorded ID otherwise.
+func scheduleSpelling(schedules domain.BlockSchedules, block domain.BlockName, id domain.IterationID) domain.IterationID {
+	sched, ok := schedules[block]
+	if !ok {
+		return id
 	}
-
-	// EXECUTION row: apply group/stage logic.
-	currentStageNum := pos.stageNum
-	adv, advErr := computeNextFromExecution(workflow, stages, currentRowIdx, currentStageNum)
-	if advErr != nil {
-		return domain.ResumeInfo{}, fmt.Errorf("resume: %w", advErr)
+	if idx := iterationIndex(sched, id); idx >= 0 {
+		return sched.Iterations[idx].ID
 	}
-
-	if adv.Complete {
-		return domain.ResumeInfo{
-			RowIndex:    len(workflow.Table.Rows),
-			Phase:       "",
-			Stage:       "",
-			StageNumber: 0,
-			GroupIndex:  -1,
-			Seq:         state.GlobalSequence,
-			RerunLast:   false,
-		}, nil
-	}
-	// Defense-in-depth: unreachable after RowNotInGroupError replaced the -1
-	// sentinel in computeNextFromExecution. Retained as a defensive guard only.
-	if adv.RowIndex < 0 {
-		return domain.ResumeInfo{
-			RowIndex:    len(workflow.Table.Rows),
-			Phase:       "",
-			Stage:       "",
-			StageNumber: 0,
-			GroupIndex:  -1,
-			Seq:         state.GlobalSequence,
-			RerunLast:   false,
-		}, nil
-	}
-
-	nextRow := workflow.Table.Rows[adv.RowIndex]
-	nextGroupIdx := -1
-	if nextRow.PhaseParsed.IsStaged {
-		nextGroupIdx = findGroupIndexInWorkflow(workflow, adv.RowIndex)
-	}
-
-	return domain.ResumeInfo{
-		RowIndex:    adv.RowIndex,
-		Phase:       nextRow.Phase,
-		Stage:       adv.StageString,
-		StageNumber: adv.StageNumber,
-		GroupIndex:  nextGroupIdx,
-		Seq:         state.GlobalSequence,
-		RerunLast:   false,
-	}, nil
+	return id
 }
 
 // lastWorkflowLogEntry returns the most recent execution log entry produced
@@ -193,26 +155,9 @@ func lastWorkflowLogEntry(
 // participant for this workflow, in any row.
 func isWorkflowParticipant(workflow domain.AdmittedWorkflow, agentName string) bool {
 	for _, row := range workflow.Table.Rows {
-		if row.Agent == agentName {
+		if row.BareAgentID() == agentName {
 			return true
 		}
 	}
 	return false
-}
-
-// noStageSetReason builds the stop reason for a staged row reached with no
-// stage set available. base is the generic message for the call site
-// (distinct wording for initial dispatch vs. entering EXECUTION from a
-// prior row). When stageSource is the zero value ("not stated"), base is
-// returned unchanged. Otherwise the message names the path the stage table
-// was looked for, and distinguishes "was supposed to be seeded here and is
-// missing" from "this run never had one" via Seeded.
-func noStageSetReason(base string, stageSource domain.StageSource) string {
-	if stageSource == (domain.StageSource{}) {
-		return base
-	}
-	if stageSource.Seeded {
-		return fmt.Sprintf("%s: a stage table was seeded at %s but is missing", base, stageSource.Path)
-	}
-	return fmt.Sprintf("%s: no stage table was found at %s", base, stageSource.Path)
 }

@@ -191,7 +191,7 @@ func (s *ProgressScreen) View() string {
 			indicator = "▶ "
 			label := fmt.Sprintf("%s  phase=%s", row.AgentInstance, row.Phase)
 			if row.Stage != "" {
-				label += fmt.Sprintf(" stage=%s", row.Stage)
+				label += fmt.Sprintf(" iteration=%s", row.Stage)
 			}
 			line = indicator + s.styles.Selected.Render(label)
 		} else if row.Status == "SUCCESS" {

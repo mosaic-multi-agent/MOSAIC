@@ -7,7 +7,6 @@ import (
 
 	"mosaic-run/internal/agentresolve"
 	"mosaic-run/internal/domain"
-	"mosaic-run/internal/engine"
 )
 
 // reviewConsultSignal carries the status message from the last successful
@@ -52,9 +51,9 @@ func lastInfraSeqInLog(agentName string, log []domain.ExecutionLogEntry) int {
 // evaluation pass). log is the current execution log, used for
 // INVOCATION_INTERVAL interval arithmetic.
 //
-// rowIdx is the routing table row index of the completed step. admitted and
-// stages are the admitted workflow and stage set, used for prospective look-ahead
-// in STAGE_END and PHASE_END evaluation.
+// boundaries carries the completed step's table row, the admitted workflow,
+// the schedule and the run mode; STAGE_END and PHASE_END are answered from them
+// and from log, which holds the completed step.
 //
 // STAGE_END and PHASE_END additionally require that the completed step returned
 // SUCCESS and that hitlAccepted is true (the step passed HITL verification
@@ -65,9 +64,7 @@ func infraTriggerFires(
 	log []domain.ExecutionLogEntry,
 	agentName string,
 	completedStep domain.CompletedStep,
-	rowIdx int,
-	admitted domain.AdmittedWorkflow,
-	stages *domain.StageSet,
+	boundaries triggerBoundaries,
 	hitlAccepted bool,
 ) bool {
 	switch trigger.Trigger {
@@ -89,15 +86,16 @@ func infraTriggerFires(
 		}
 		// Prospective semantics: fires when the completed step is the last
 		// step of its stage (look-ahead), not by comparing against a prior step.
-		// STAGE_END only applies to EXECUTION-phase steps (Stage != "").
+		// STAGE_END only applies to EXECUTION-phase steps (Stage != ""); the
+		// comparison is a presence check, not a split of the value.
 		if completedStep.Stage == "" {
 			return false
 		}
-		_, stageNum, ok := domain.ParseStageValue(completedStep.Stage)
-		if !ok || stageNum == 0 {
+		value, readErr := boundaries.readValue(completedStep.Stage)
+		if readErr != nil {
 			return false
 		}
-		return engine.IsLastRowOfStage(admitted, stages, rowIdx, stageNum)
+		return boundaries.endsIteration(value.ID, log)
 
 	case "PHASE_END":
 		if !boundaryConditionsMet(completedStep, hitlAccepted) {
@@ -105,8 +103,11 @@ func infraTriggerFires(
 		}
 		// Prospective semantics: fires when the completed step is the last
 		// step of its phase (look-ahead), not by comparing against a prior step.
-		_, stageNum, _ := domain.ParseStageValue(completedStep.Stage)
-		return engine.IsLastRowOfPhase(admitted, stages, rowIdx, stageNum)
+		// An unreadable value leaves the zero value: a step outside every
+		// block records none, and the phase boundary is then judged without
+		// an iteration. (STAGE_END above returns false instead: it needs one.)
+		value, _ := boundaries.readValue(completedStep.Stage)
+		return boundaries.endsPhase(value.ID, log)
 
 	case "MANUAL":
 		// MANUAL triggers never fire automatically.
@@ -158,7 +159,7 @@ func (s *sessionImpl) evaluateTriggers(
 	orchDir string,
 	rowIdx int,
 	admitted domain.AdmittedWorkflow,
-	stages *domain.StageSet,
+	stages domain.BlockSchedules,
 	hitlAccepted bool,
 ) (haltRun bool, stopRequested bool, reviewConsult *reviewConsultSignal, err error) {
 	var reviewSignal *reviewConsultSignal
@@ -185,9 +186,10 @@ func (s *sessionImpl) evaluateTriggers(
 
 		// Check whether any declared trigger fires. An agent fires at most once
 		// per evaluation pass even if multiple triggers match.
+		boundaries := triggerBoundaries{Workflow: admitted, Stages: stages, RowIndex: rowIdx, Mode: config.Mode}
 		fired := false
 		for _, trigger := range agent.Triggers {
-			if infraTriggerFires(trigger, *seq, state.ExecutionLog, agent.Name, completedStep, rowIdx, admitted, stages, hitlAccepted) {
+			if infraTriggerFires(trigger, *seq, state.ExecutionLog, agent.Name, completedStep, boundaries, hitlAccepted) {
 				fired = true
 				break
 			}

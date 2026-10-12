@@ -17,7 +17,7 @@ import (
 // stage left at Test.1 while the log says otherwise.
 func laggingFrontmatterState(log *runLog, limit int) domain.ArtifactState {
 	state := log.state()
-	state.CurrentState.Stage = "Test.1"
+	state.CurrentState.Stage = "1.Test"
 	state.ReviewLoopLimit = limit
 	return state
 }
@@ -27,44 +27,44 @@ func laggingFrontmatterState(log *runLog, limit int) domain.ArtifactState {
 func stageTwoTestsReviewLog() *runLog {
 	log := &runLog{}
 	return log.
-		workflowStep("test-writer-tdd", "Test.2", domain.StatusSUCCESS, bvRowTestWriter).
-		workflowStep("build-review", "Test.2", domain.StatusSUCCESS, bvRowTestBuild).
-		workflowStep("tests-review-tdd", "Test.2", domain.StatusCOMPLETED_NEEDS_ACTION, bvRowTestsReview)
+		workflowStep("test-writer-tdd", "2.Test", domain.StatusSUCCESS, bvRowTestWriter).
+		workflowStep("build-review", "2.Test", domain.StatusSUCCESS, bvRowTestBuild).
+		workflowStep("tests-review-tdd", "2.Test", domain.StatusCOMPLETED_NEEDS_ACTION, bvRowTestsReview)
 }
 
 func TestNext_FindingsRouteBack_StageComesFromLogEntryNotFrontmatter(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	log := stageTwoTestsReviewLog()
 
-	dec := engineNextAuto(aw, twoStageSet("TDD"), laggingFrontmatterState(log, 0), cnaResponse(log.last().Agent))
+	dec := engineNextAutoIDs(aw, twoSchedules("TDD"), laggingFrontmatterState(log, 0), cnaResponse(log.last().Agent))
 
-	requireStepAt(t, requireDispatch(t, dec), bvRowTestWriter-1, "Test.2")
+	requireStepAt(t, requireDispatch(t, dec), bvRowTestWriter-1, "2.Test")
 }
 
 func TestNext_ReviewLoopLimit_CountsFindingsAtTheLogEntryStage(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	log := stageTwoTestsReviewLog()
 
 	// One findings round at Test.2 reaches the limit of 1. Counted at the
 	// frontmatter stage Test.1 there are none, and the run would route back.
-	dec := engineNextAuto(aw, twoStageSet("TDD"), laggingFrontmatterState(log, 1), cnaResponse(log.last().Agent))
+	dec := engineNextAutoIDs(aw, twoSchedules("TDD"), laggingFrontmatterState(log, 1), cnaResponse(log.last().Agent))
 
 	dev := requireLoopLimitDeviation(t, dec)
-	if dev.Info.CurrentStage != "Test.2" {
-		t.Errorf("deviation stage: want the log entry's Test.2, got %q", dev.Info.CurrentStage)
+	if dev.Info.CurrentStage != "2.Test" {
+		t.Errorf("deviation stage: want the log entry's 2.Test, got %q", dev.Info.CurrentStage)
 	}
 }
 
 func TestNext_NonSuccessDeviation_ReportsTheLogEntryStage(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	log := &runLog{}
-	log.workflowStep("test-writer-tdd", "Test.2", domain.StatusBLOCKED, bvRowTestWriter)
+	log.workflowStep("test-writer-tdd", "2.Test", domain.StatusBLOCKED, bvRowTestWriter)
 
-	dec := engineNextAuto(aw, twoStageSet("TDD"), laggingFrontmatterState(log, 0), responseFor(log.last()))
+	dec := engineNextAutoIDs(aw, twoSchedules("TDD"), laggingFrontmatterState(log, 0), responseFor(log.last()))
 
 	dev := requireDeviation(t, dec)
-	if dev.Info.CurrentStage != "Test.2" {
-		t.Errorf("deviation stage: want the log entry's Test.2, got %q", dev.Info.CurrentStage)
+	if dev.Info.CurrentStage != "2.Test" {
+		t.Errorf("deviation stage: want the log entry's 2.Test, got %q", dev.Info.CurrentStage)
 	}
 	if dev.Info.CurrentRow != bvRowTestWriter-1 {
 		t.Errorf("deviation row: want %d, got %d", bvRowTestWriter-1, dev.Info.CurrentRow)
@@ -72,38 +72,38 @@ func TestNext_NonSuccessDeviation_ReportsTheLogEntryStage(t *testing.T) {
 }
 
 func TestNext_LastAgentEntryIsNotTheFinalLogEntry_UsesTheLastAgentsEntry(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	log := &runLog{}
-	log.workflowStep("test-writer-tdd", "Test.2", domain.StatusSUCCESS, bvRowTestWriter).
-		infraStep(checkpointAgent, "Test.2")
+	log.workflowStep("test-writer-tdd", "2.Test", domain.StatusSUCCESS, bvRowTestWriter).
+		infraStep(checkpointAgent, "2.Test")
 	state := log.state()
 	state.CurrentState = domain.CurrentState{
-		Phase: "EXECUTION", Stage: "Test.1", LastStatus: domain.StatusSUCCESS,
+		Phase: "EXECUTION", Stage: "1.Test", LastStatus: domain.StatusSUCCESS,
 		LastAgent: log.entries[0].Agent,
 	}
 
-	dec := engineNextAuto(aw, twoStageSet("TDD"), state, successResponse(log.entries[0].Agent))
+	dec := engineNextAutoIDs(aw, twoSchedules("TDD"), state, successResponse(log.entries[0].Agent))
 
-	requireStepAt(t, requireDispatch(t, dec), bvRowTestBuild-1, "Test.2")
+	requireStepAt(t, requireDispatch(t, dec), bvRowTestBuild-1, "2.Test")
 }
 
 func TestNext_NoLogEntryForLastAgent_SingleRowExecutionAgent_FallsBackToCurrentState(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	state := domain.ArtifactState{
 		GlobalSequence: 1,
 		CurrentState: domain.CurrentState{
-			Phase: "EXECUTION", Stage: "Test.1", LastStatus: domain.StatusSUCCESS,
+			Phase: "EXECUTION", Stage: "1.Test", LastStatus: domain.StatusSUCCESS,
 			LastAgent: "test-writer-tdd#1",
 		},
 	}
 
-	dec := engineNextAuto(aw, singleStageSet("TDD"), state, successResponse("test-writer-tdd#1"))
+	dec := engineNextAutoIDs(aw, singleSchedules("TDD"), state, successResponse("test-writer-tdd#1"))
 
-	requireStepAt(t, requireDispatch(t, dec), bvRowTestBuild-1, "Test.1")
+	requireStepAt(t, requireDispatch(t, dec), bvRowTestBuild-1, "1.Test")
 }
 
 func TestNext_NoLogEntryForLastAgent_NonExecutionAgent_FallsBackToCurrentState(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	state := domain.ArtifactState{
 		GlobalSequence: 1,
 		CurrentState: domain.CurrentState{
@@ -111,7 +111,7 @@ func TestNext_NoLogEntryForLastAgent_NonExecutionAgent_FallsBackToCurrentState(t
 		},
 	}
 
-	dec := engineNextAuto(aw, singleStageSet("TDD"), state, successResponse("codebase-research#1"))
+	dec := engineNextAutoIDs(aw, singleSchedules("TDD"), state, successResponse("codebase-research#1"))
 
 	step := requireDispatch(t, dec)
 	if got := agentName(step.Request.AgentInstanceID); got != "requirements-refinement" {
@@ -122,13 +122,13 @@ func TestNext_NoLogEntryForLastAgent_NonExecutionAgent_FallsBackToCurrentState(t
 // A log row that records "-" for the row and no stage keeps resolving as it
 // did before the row was recorded: it is not the new missing-stage refusal.
 func TestNext_StagedRowWithNoRecordedRowAndNoStage_IsNotTheMissingStageRefusal(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	log := &runLog{}
 	log.workflowStep("test-writer-tdd", "", domain.StatusSUCCESS, int(domain.NoWorkflowRow))
 	state := log.state()
-	state.CurrentState.Stage = "Test.1"
+	state.CurrentState.Stage = "1.Test"
 
-	dec := engineNextAuto(aw, singleStageSet("TDD"), state, successResponse(log.last().Agent))
+	dec := engineNextAutoIDs(aw, singleSchedules("TDD"), state, successResponse(log.last().Agent))
 
 	var perr *domain.PositionUnresolvedError
 	if dec.Stop != nil && errors.As(dec.Stop.Err, &perr) && perr.Cause == domain.CauseStagedRowWithoutStage {
@@ -137,11 +137,11 @@ func TestNext_StagedRowWithNoRecordedRowAndNoStage_IsNotTheMissingStageRefusal(t
 }
 
 func TestResumePoint_StagedRowWithNoRecordedRowAndNoStage_IsNotTheMissingStageRefusal(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	log := newBuildVerifiedLog()
 	log.workflowStep("test-writer-tdd", "", domain.StatusSUCCESS, int(domain.NoWorkflowRow))
 
-	_, err := resumeLog(aw, singleStageSet("TDD"), log, false)
+	_, err := resumeLogIDs(aw, singleSchedules("TDD"), log, false)
 
 	var perr *domain.PositionUnresolvedError
 	if errors.As(err, &perr) && perr.Cause == domain.CauseStagedRowWithoutStage {

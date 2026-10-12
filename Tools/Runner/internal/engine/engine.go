@@ -25,8 +25,9 @@ import (
 //	  ConsultTriggerOrchestratedMode, ...}} for every call, including the
 //	  first call of a new run.
 //
-//	ExecutionModeAuto — On StatusSUCCESS, routes to the On Success target or
-//	  the next EXECUTION row exactly as before. After PARTIALLY_DONE (within
+//	ExecutionModeAuto — On StatusSUCCESS, routes by the row's typed On Success
+//	  entry in the run scope and by the block's own progression inside a
+//	  block (a block row's On Success is not read). After PARTIALLY_DONE (within
 //	  PartiallyDoneRedispatchLimit) and BLOCKED with error code E501 (within
 //	  E501AttemptLimit) it re-dispatches the same assignment mechanically. On
 //	  any other non-SUCCESS status, including StatusCOMPLETED_NEEDS_ACTION, and
@@ -34,16 +35,17 @@ import (
 //	  On-Findings auto-route never fires.
 //
 //	ExecutionModeAutoReview — As ExecutionModeAuto, plus: on
-//	  StatusCOMPLETED_NEEDS_ACTION where the row's OnFindings hint is
-//	  unambiguous, returns a DispatchDecision targeting that agent's row,
+//	  StatusCOMPLETED_NEEDS_ACTION where the row's typed On Findings entry
+//	  names a row, returns a DispatchDecision targeting that row,
 //	  with in.LastOutputArtifacts injected into the dispatched step's
 //	  Request.InputArtifacts (see review artifact injection below). When the
 //	  reviewer's COMPLETED_NEEDS_ACTION count at the current phase and stage
 //	  reaches state.ReviewLoopLimit (0 = no limit), the engine returns a
 //	  DeviationReviewLoopLimit deviation instead of auto-routing.
 //
-// An unambiguous OnFindings hint is one where ColumnPresent is true, Value is
-// non-empty, and Value contains no space and no parenthesis.
+// The On Findings target is the row the typed entry names; a "-" entry has no
+// target and deviates. A route-back to a row of the same block keeps the current
+// iteration.
 //
 // Review artifact injection applies to the auto-review COMPLETED_NEEDS_ACTION
 // auto-route-back and to nothing else. A SUCCESS-routed dispatch never carries
@@ -56,7 +58,7 @@ import (
 func Next(in NextInput) domain.EngineDecision {
 	// Unpack for readability.
 	workflow := in.Workflow
-	stages := in.Stages
+	sc := ScheduleContext{Schedules: in.Schedules}
 	state := in.State
 	lastResponse := in.LastResponse
 
@@ -78,7 +80,7 @@ func Next(in NextInput) domain.EngineDecision {
 
 	// No prior invocations: initial dispatch.
 	if state.CurrentState.LastAgent == "" {
-		return initialDispatch(workflow, stages, in.Agents, in.Seq, in.Now, in.StageSource)
+		return initialDispatch(in, sc)
 	}
 
 	// Determine the response status and the response for deviation assembly.
@@ -108,13 +110,9 @@ func Next(in NextInput) domain.EngineDecision {
 	currentRow := workflow.Table.Rows[currentRowIdx]
 
 	if status != domain.StatusSUCCESS {
-		return nonSuccessDecision(in, pos, currentRow, status, resp)
+		return nonSuccessDecision(in, sc, pos, currentRow, status, resp)
 	}
 
-	// SUCCESS: route based on row type.
-	if !currentRow.PhaseParsed.IsStaged {
-		return handleNonExecutionSuccess(workflow, stages, pos, currentRow, state,
-			in.Agents, in.Seq, in.Now, in.RefreshedStages, in.StageSource)
-	}
-	return handleExecutionSuccess(workflow, stages, pos, state, in.Agents, in.Seq, in.Now)
+	// SUCCESS: route by the row's scope.
+	return routeSuccess(in, sc, pos, currentRow)
 }

@@ -37,9 +37,9 @@ func requireNamesRowAndRepair(t *testing.T, msg string, row int) {
 }
 
 func TestNext_StagedRowRecordedWithoutStage_RefusesWithTypedCauseNamingRowAndRepair(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 
-	dec := nextAfterLog(aw, singleStageSet("TDD"), buildVerifiedAgents(), stagedRowWithoutStageLog())
+	dec := nextAfterLogIDs(aw, singleSchedules("TDD"), buildVerifiedAgents(), stagedRowWithoutStageLog())
 
 	perr := requirePositionCause(t, dec, domain.CauseStagedRowWithoutStage)
 	requireNamesRowAndRepair(t, requireStop(t, dec).Reason, bvRowImplBuild)
@@ -49,20 +49,20 @@ func TestNext_StagedRowRecordedWithoutStage_RefusesWithTypedCauseNamingRowAndRep
 }
 
 func TestNext_StagedRowRecordedWithoutStage_FrontmatterStageDoesNotHideIt(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	log := stagedRowWithoutStageLog()
 	state := log.state()
-	state.CurrentState.Stage = "Implementation.1"
+	state.CurrentState.Stage = "1.Implementation"
 
-	dec := engineNextAuto(aw, singleStageSet("TDD"), state, successResponse(log.last().Agent))
+	dec := engineNextAutoIDs(aw, singleSchedules("TDD"), state, successResponse(log.last().Agent))
 
 	requirePositionCause(t, dec, domain.CauseStagedRowWithoutStage)
 }
 
 func TestNext_StagedRowRecordedWithoutStage_StopReasonIsTheTypedError(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 
-	dec := nextAfterLog(aw, singleStageSet("TDD"), buildVerifiedAgents(), stagedRowWithoutStageLog())
+	dec := nextAfterLogIDs(aw, singleSchedules("TDD"), buildVerifiedAgents(), stagedRowWithoutStageLog())
 
 	stop := requireStop(t, dec)
 	if stop.Err == nil || stop.Reason != stop.Err.Error() {
@@ -71,7 +71,7 @@ func TestNext_StagedRowRecordedWithoutStage_StopReasonIsTheTypedError(t *testing
 }
 
 func TestResumePoint_StagedRowRecordedWithoutStage_RefusesWithTypedCauseNamingRowAndRepair(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	for _, interrupted := range []bool{false, true} {
 		name := "clean"
 		if interrupted {
@@ -79,10 +79,10 @@ func TestResumePoint_StagedRowRecordedWithoutStage_RefusesWithTypedCauseNamingRo
 		}
 		t.Run(name, func(t *testing.T) {
 			log := newBuildVerifiedLog()
-			log.workflowStep("implementation-tdd", "Implementation.1", domain.StatusSUCCESS, bvRowImplementation)
+			log.workflowStep("implementation-tdd", "1.Implementation", domain.StatusSUCCESS, bvRowImplementation)
 			log.workflowStep("build-review", "", domain.StatusSUCCESS, bvRowImplBuild)
 
-			_, err := resumeLog(aw, singleStageSet("TDD"), log, interrupted)
+			_, err := resumeLogIDs(aw, singleSchedules("TDD"), log, interrupted)
 
 			var perr *domain.PositionUnresolvedError
 			if !errors.As(err, &perr) {
@@ -97,10 +97,10 @@ func TestResumePoint_StagedRowRecordedWithoutStage_RefusesWithTypedCauseNamingRo
 }
 
 func TestResumePoint_NonStagedRowRecordedWithoutStage_IsNotRefused(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	state := resumeState(newBuildVerifiedLog(), false)
 
-	info, err := engine.ResumePoint(aw, singleStageSet("TDD"), state,
+	info, err := engine.ResumePointFromSchedules(aw, singleSchedules("TDD"), state,
 		domain.NewInfraAgentSet(declaredCheckpointInfraAgent()))
 
 	if err != nil {

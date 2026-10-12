@@ -164,9 +164,15 @@ Five sources issue you instructions, and they do not always agree. When they con
 | Phase | Subagent | HITL | On Success | On Findings | Input | Output |
 |-------|----------|:----:|------------|-------------|-------|--------|
 | PLANNING | planner-tdd-soft | TRUE | plan-review | - | - | Plan.md, Stage-*/Plan.md, Stage-*/PlanProgress.md |
-| PLANNING | plan-review | FALSE | implementation-tdd | planner-tdd-soft | Plan.md, Stage-*/Plan.md, Stage-*/PlanProgress.md | plan-review.md |
-| EXECUTION.[StageNumber] | implementation-tdd | FALSE | test-runner | - | Stage-{StageNumber}/Plan.md, Stage-{StageNumber}/PlanProgress.md | Stage-{StageNumber}/PlanProgress.md |
-| REVIEW | test-runner | FALSE | COMPLETE | implementation-tdd | - | TestResults.md |
+| PLANNING | plan-review | FALSE | [Stage] | planner-tdd-soft | Plan.md, Stage-*/Plan.md, Stage-*/PlanProgress.md | plan-review.md |
+| EXECUTION.[Stage] | implementation-tdd | FALSE | COMPLETE | - | Stage-{Stage}/Plan.md, Stage-{Stage}/PlanProgress.md | Stage-{Stage}/PlanProgress.md |
+| REVIEW | test-runner | FALSE | COMPLETE | planner-tdd-soft | - | TestResults.md |
+
+**Blocks:**
+
+| Block | Source | Section |
+|-------|--------|---------|
+| Stage | Plan.md | Stages |
 
 **Notes:**
 - Single-stage plans use Stage-1/ folder for consistency (Decision 15)
@@ -186,21 +192,27 @@ Five sources issue you instructions, and they do not always agree. When they con
 | PLANNING | planner-tdd-soft | TRUE | plan-review | - | Requirements.md, SystemDesign.md | Plan.md, Stage-*/Plan.md, Stage-*/PlanProgress.md |
 | PLANNING | plan-review | FALSE | contracts-designer | planner-tdd-soft | Requirements.md, Plan.md, Stage-*/Plan.md, Stage-*/PlanProgress.md | plan-review.md |
 | DESIGN | contracts-designer | TRUE | contracts-review | - | Requirements.md, Plan.md, Stage-*/Plan.md, SystemDesign.md | ContractsDesign.md |
-| DESIGN | contracts-review | FALSE | test-writer-tdd | contracts-designer | Plan.md, Stage-*/Plan.md, ContractsDesign.md | contracts-review.md |
-| EXECUTION.Test.[StageNumber] | test-writer-tdd | FALSE | tests-review-tdd | - | Stage-{StageNumber}/Plan.md, ContractsDesign.md, Stage-{StageNumber}/PlanProgress.md | Stage-{StageNumber}/PlanProgress.md |
-| EXECUTION.Test.[StageNumber] | tests-review-tdd | FALSE | implementation-tdd | test-writer-tdd | Stage-{StageNumber}/Plan.md, ContractsDesign.md, Stage-{StageNumber}/PlanProgress.md | Stage-{StageNumber}/tests-review-tdd.md |
-| EXECUTION.Implementation.[StageNumber] | implementation-tdd | FALSE | implementation-review | - | Stage-{StageNumber}/Plan.md, ContractsDesign.md, Stage-{StageNumber}/PlanProgress.md | Stage-{StageNumber}/PlanProgress.md |
-| EXECUTION.Implementation.[StageNumber] | implementation-review | FALSE | test-runner | implementation-tdd (or other based on issue) | Stage-{StageNumber}/Plan.md, ContractsDesign.md, Stage-{StageNumber}/PlanProgress.md | Stage-{StageNumber}/implementation-review.md |
-| REVIEW | test-runner | FALSE | COMPLETE | implementation-tdd | - | TestResults.md |
+| DESIGN | contracts-review | FALSE | [Stage] | contracts-designer | Plan.md, Stage-*/Plan.md, ContractsDesign.md | contracts-review.md |
+| EXECUTION.[Stage].Test | test-writer-tdd | FALSE | tests-review-tdd | - | Stage-{Stage}/Plan.md, ContractsDesign.md, Stage-{Stage}/PlanProgress.md | Stage-{Stage}/PlanProgress.md |
+| EXECUTION.[Stage].Test | tests-review-tdd | FALSE | COMPLETE | test-writer-tdd | Stage-{Stage}/Plan.md, ContractsDesign.md, Stage-{Stage}/PlanProgress.md | Stage-{Stage}/tests-review-tdd.md |
+| EXECUTION.[Stage].Implementation | implementation-tdd | FALSE | implementation-review | - | Stage-{Stage}/Plan.md, ContractsDesign.md, Stage-{Stage}/PlanProgress.md | Stage-{Stage}/PlanProgress.md |
+| EXECUTION.[Stage].Implementation | implementation-review | FALSE | COMPLETE | implementation-tdd | Stage-{Stage}/Plan.md, ContractsDesign.md, Stage-{Stage}/PlanProgress.md | Stage-{Stage}/implementation-review.md |
+| REVIEW | test-runner | FALSE | COMPLETE | planner-tdd-soft | - | TestResults.md |
 
-**Execution Groups:**
+**Blocks:**
 
-| Approach | Groups |
-|----------|--------|
-| TDD | Test, Implementation |
-| Implementation-First | Implementation, Test |
-| Implementation-Only | Implementation |
-| Tests-Only | Test |
+| Block | Source | Section |
+|-------|--------|---------|
+| Stage | Plan.md | Stages |
+
+**Groups:**
+
+| Block | Approach | Groups |
+|-------|----------|--------|
+| Stage | TDD | Test, Implementation |
+| Stage | Implementation-First | Implementation, Test |
+| Stage | Implementation-Only | Implementation |
+| Stage | Tests-Only | Test |
 
 **EXECUTION Stages:** Loop per stage (stages defined in Plan.md). Subagent sequence per stage determined by the `Approach` column in the stage table.
 
@@ -477,7 +489,7 @@ commit_branch: mosaic/run/20260129T090000Z-a3f9
 review_loop_limit: 3
 current_state:
   phase: EXECUTION
-  stage: 2
+  iteration: "2"
   last_status: SUCCESS
   last_agent: "Implementation#14"
   error_code: null
@@ -498,47 +510,55 @@ current_state:
 | `commit_branch` | Set once | The branch the commit-class agent commits to, copied from what the run-start setup dispatch returned. Present when `commits: enabled`; absent or `null` otherwise. Recording it is what makes a mid-run branch change detectable — an agent that read the current branch each time it fired would follow the user wherever they went |
 | `review_loop_limit` | Set once | Positive integer from run configuration; absent means no limit. Read by the Routing Policy's Review Loop Limit |
 | `infrastructure_selections` | Set once | Optional class-to-agent map for gated classes with multiple declarations. Reused unchanged on resume; absent when every gated class has at most one declared agent |
-| `current_state.phase` | After each accepted workflow outcome | `INIT`\|`RESEARCH`\|`ARCHITECTURE`\|`PLANNING`\|`DESIGN`\|`EXECUTION`\|`REVIEW`\|`COMPLETION`, or `COMPLETED` once the run finishes successfully (terminal — a `COMPLETED` run is not resumable). Always the bare name — see Phase and Stage Values below |
-| `current_state.stage` | After each accepted workflow outcome | Stage value when `phase` is `EXECUTION` and the workflow has stages; `null` otherwise. See Phase and Stage Values below |
+| `current_state.phase` | After each accepted workflow outcome | The bare phase name of the accepted workflow row, or `COMPLETED` once the run finishes successfully (terminal — a `COMPLETED` run is not resumable). See Phase and iteration values below |
+| `current_state.iteration` | After each accepted workflow outcome | The iteration, as a quoted string, when the accepted row is in a block; `null` otherwise. See Phase and iteration values below |
 | `current_state.last_status` | After each accepted workflow outcome | Status code the run routes on for the most recently accepted workflow invocation — after a gate-discharging HITL re-dispatch, the original invocation's; `null` before any has been accepted |
 | `current_state.last_agent` | After each accepted workflow outcome | `{AgentName}#{Seq}` of the most recently accepted workflow invocation; `null` before any has been accepted |
 | `current_state.error_code` | After each accepted workflow outcome | Set only when the workflow invocation's `last_status` is `BLOCKED`; `null` otherwise |
 
-**Phase and stage values.** Phase and stage appear in four places — `current_state.phase`, `current_state.stage`, the Execution Log's `Phase` and `Stage` columns, and the Artifacts registry's `Created In`. Write them identically in all four.
+**Phase and iteration values.** Phase and iteration appear in four places — `current_state.phase`, `current_state.iteration`, the Execution Log's `Phase` and `Iteration` columns, and the Artifacts registry's `Created In`. Write them identically in all four.
 
-`Phase` is **always the bare phase name**: `EXECUTION`, never `EXECUTION.[StageNumber]` and never `EXECUTION.Test.[StageNumber]`. Those qualified forms are routing-table notation identifying a workflow row — they say which row you dispatched, not where the run is. A qualified value here breaks per-stage HITL and EXECUTION-phase recovery silently, because both compare against the literal string `EXECUTION` and neither reports a mismatch.
+`Phase` is **always the bare phase name** — the part of the dispatched row's `Phase` cell before the first `.`: `EXECUTION`, never `EXECUTION.[Stage]` and never `EXECUTION.[Stage].Test`. Block references and groups are routing-table notation identifying a row, which `WorkflowRow` already records; the run's position is its phase plus its iteration.
 
-`Stage` is where the execution group goes — it is the only field in this artifact that records one:
+`Iteration` records the iteration IDs and the group, and nothing else in this artifact does:
 
-| Situation | `Stage` / `stage` | `Created In` |
+| Dispatched row's `Phase` cell | `Iteration` (log) / `iteration` (frontmatter) | `Created In` |
 |---|---|---|
-| Phase is not `EXECUTION` | `-` in the log, `null` in frontmatter | phase alone, e.g. `PLANNING` |
-| `EXECUTION`, workflow declares no groups, stage 4 | `4` | `EXECUTION.4` |
-| `EXECUTION`, row `EXECUTION.Test.[StageNumber]`, stage 1 | `Test.1` | `EXECUTION.Test.1` |
-| `EXECUTION`, row `EXECUTION.Implementation.[StageNumber]`, stage 3 | `Implementation.3` | `EXECUTION.Implementation.3` |
+| `PLANNING` (no block) | `-` / `null` | `PLANNING` |
+| `EXECUTION.[Stage]`, ID `4` | `4` / `"4"` | `EXECUTION.4` |
+| `EXECUTION.[Stage].Test`, ID `1` | `1.Test` / `"1.Test"` | `EXECUTION.1.Test` |
+| `EXECUTION.[Domain].[Stage].Test`, IDs `Billing`, `2` | `Billing.2.Test` / `"Billing.2.Test"` | `EXECUTION.Billing.2.Test` |
+| `REVIEW.[Domain]`, ID `Billing` | `Billing` / `"Billing"` | `REVIEW.Billing` |
 
-Take `{Group}` verbatim from the group segment of the dispatched row's `Phase` cell — it is case-sensitive. Take `{StageNumber}` as the 1-based index of the stage in the Plan artifact's stage table. Join with a single `.`. A workflow whose EXECUTION rows are all bare (`EXECUTION.[StageNumber]`) produces a plain number, with no group and no filler in its place.
+Write one iteration ID per block reference in the row's `Phase` cell, outermost first, then the row's group when it has one, joined by single `.` characters. Copy each ID verbatim from the first column of its block schedule and the group verbatim from the `Phase` cell — both are case-sensitive as written. Block names are never written. A row outside every block has no iteration and no filler in its place.
 
-The stage value is **not** a folder name. Per-stage artifacts live under `Stage-{StageNumber}/` keyed on the number alone — the `Test` and `Implementation` groups of stage 1 both write into `Stage-1/`. Never put a group into a path, and never write `Stage-1` into the `Stage` column. An older orchestrator did write that form; when resuming such a run, read it as ungrouped stage 1 and write the current form from then on.
+The iteration is **not** a folder name. Artifact paths come only from the row's `Input` and `Output` cells with their fill-ins resolved (see Artifact Path Resolution) — the `Test` and `Implementation` groups of iteration `1` both write into `Stage-1/`. Never put a group into a path.
+
+An artifact whose Execution Log has a `Stage` column, or whose frontmatter has `current_state.stage`, was written in the previous artifact format. Do not resume it: tell the user it predates the current format and must be started as a new run.
 
 **2. EXECUTION LOG** (Append-only — NEVER modify a written row)
 ```markdown
 <ExecutionLog type="core">
-| Seq | Agent | Phase | Stage | Status | Timestamp | Summary | Inputs | Checkpoint |
-|-----|-------|-------|-------|--------|-----------|---------|--------|------------|
-| 1 | Research#1 | RESEARCH | - | SUCCESS | 2026-01-29T09:05:00Z | Analyzed auth requirements, JWT approach selected | - | - |
-| 3 | Designer#3 | DESIGN | - | SUCCESS | 2026-01-29T09:15:00Z | Designed ProfileService interface | Requirements.md, Research.md | 4f1a08d |
+
+| Seq | Agent | Phase | Iteration | WorkflowRow | Status | Timestamp | Summary | Inputs | Checkpoint |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Research#1 | RESEARCH | - | 1 | SUCCESS | 2026-01-29T09:05:00Z | Analyzed auth requirements, JWT approach selected | - | - |
+| 3 | Designer#3 | DESIGN | - | 3 | SUCCESS | 2026-01-29T09:15:00Z | Designed ProfileService interface | Requirements.md, Research.md | 4f1a08d |
+
 </ExecutionLog>
 ```
 
-One row per **completed** invocation, appended after it completes — never before. Every field is fixed at write time and never revisited.
+**Table layout (all three sections).** Put one blank line between the open tag and the table and one between the table and the close tag. Write each table row as `| cell | cell |` with a plain `| --- | --- |` separator row and no column-width padding. **Cell rule:** a cell holds one line. Replace each line break with a single space, trim the cell, and write each `|` inside a cell as `\|`.
+
+One row per **completed** invocation, appended after it completes — never before. Every field is fixed at write time and never revisited. Logs written before the `WorkflowRow` column existed have no such column and remain valid; do not rewrite their rows.
 
 | Column | Value |
 |---|---|
 | `Seq` | `global_sequence` at write time; also the suffix in `Agent` |
 | `Agent` | `{AgentName}#{Seq}` |
-| `Phase` | Phase during the invocation, bare name only (see Phase and stage values above) |
-| `Stage` | Stage value if `Phase` is `EXECUTION` and the workflow has stages; `-` otherwise. Carries the group when the row declares one |
+| `Phase` | Phase during the invocation, bare name only (see Phase and iteration values above) |
+| `Iteration` | The iteration the invocation ran in when its row is in a block; `-` otherwise. Carries the group when the row declares one |
+| `WorkflowRow` | The `Row` value of the workflow-table row you dispatched for this invocation. This is the workflow table's `Row` column, not this log's own row (`Seq` is that). A deployed table has a first-column `Row` numbered 1..N; if the table has no `Row` column, count the data rows from 1 and use that position. `-` for infrastructure, out-of-band and ad-hoc dispatches (an ad-hoc run has no routing table) |
 | `Status` | The subagent's returned status code |
 | `Timestamp` | ISO-8601 completion time |
 | `Summary` | The subagent's own `status_message`, **copied across** — never text you compose yourself |
@@ -560,7 +580,7 @@ A non-empty `Checkpoint` always means real, restorable content exists. Never wri
 |----------|------------|------------|
 | Requirements.md | INIT | user |
 | Research.md | RESEARCH | Research#1 |
-| Stage-1/PlanProgress.md | EXECUTION.Implementation.1 | Implementation#10 |
+| Stage-1/PlanProgress.md | EXECUTION.1.Implementation | Implementation#10 |
 </Artifacts>
 ```
 
@@ -675,7 +695,7 @@ Dispatch all eligible targets before waiting on any one of them — concurrently
 Workflow tables use template syntax for per-stage artifact paths. Resolve these when preparing the task invocation message:
 
 - **Run-scoped prefix:** every orchestration artifact path is prefixed with `Orchestration-{run_id}/`. If a path already carries the prefix, pass it through unchanged rather than prefixing it twice.
-- **`{StageNumber}` template:** Replace with the actual stage number at dispatch time. Example: For Stage 3, `Stage-{StageNumber}/Plan.md` → `Stage-3/Plan.md`
+- **`{Stage}` fill-in:** Replace with the current iteration's ID at dispatch time. Example: For iteration `3` of block `Stage`, `Stage-{Stage}/Plan.md` → `Stage-3/Plan.md`
 - **`Stage-*` wildcard in `input_artifacts`:** Expand to all existing stage folders. Used for subagents that need cross-stage visibility (e.g., plan-review reading all per-stage plans). Read the Plan artifact's stage table to determine available stages and their ordering.
 - **`Stage-*` wildcard in `output_artifacts`:** Pass through literally — do NOT expand. The subagent determines what stage folders to create. Expanding wildcards in output_artifacts would impose scope constraints that belong to the subagent's domain expertise, not to orchestration.
 - **Stage source:** Read the Plan artifact's stage table to determine available stages and their ordering. Only applicable when the Plan artifact already exists (i.e., after the planner has run).

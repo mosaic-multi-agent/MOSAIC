@@ -15,14 +15,14 @@ manual_resolution: enabled
 commit_branch_variant: user-own
 current_state:
   phase: EXECUTION
-  stage: 1
+  iteration: "1"
   last_status: SUCCESS
   last_agent: "implementation-tdd#2"
   error_code: null
 ---
 
 <ExecutionLog type="core">
-| Seq | Agent                | Phase     | Stage | Status  | Timestamp            | Summary      | Inputs | Checkpoint |
+| Seq | Agent                | Phase     | Iteration | Status  | Timestamp            | Summary      | Inputs | Checkpoint |
 | --- | -------------------- | --------- | ----- | ------- | -------------------- | ------------ | ------ | ---------- |
 | 1   | planner-tdd-soft#1   | PLANNING  | -     | SUCCESS | 2026-01-29T09:05:00Z | Plan created | -      | -          |
 | 2   | implementation-tdd#2 | EXECUTION | 1     | SUCCESS | 2026-01-29T10:00:00Z | Bug fixed    | -      | -          |

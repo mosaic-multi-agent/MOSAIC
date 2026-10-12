@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	execLogHeaderLine = "| Seq | Agent | Phase | Stage | WorkflowRow | Status | Timestamp | Summary | Inputs | Checkpoint |"
+	execLogHeaderLine = "| Seq | Agent | Phase | Iteration | WorkflowRow | Status | Timestamp | Summary | Inputs | Checkpoint |"
 	execLogSepLine    = "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
 )
 
@@ -31,7 +31,7 @@ func layoutState(summary string) domain.ArtifactState {
 		ExecutionLog: []domain.ExecutionLogEntry{
 			{Seq: 1, Agent: "researcher#1", Phase: "RESEARCH", WorkflowRow: 2, Status: domain.StatusSUCCESS,
 				Timestamp: layoutTimestamp(), Summary: "done", Inputs: "Requirements.md"},
-			{Seq: 2, Agent: "builder#2", Phase: "EXECUTION", Stage: "Implementation.1", WorkflowRow: 3,
+			{Seq: 2, Agent: "builder#2", Phase: "EXECUTION", Stage: "1.Implementation", WorkflowRow: 3,
 				Status: domain.StatusSUCCESS, Timestamp: layoutTimestamp(), Summary: summary},
 		},
 		ArtifactRegistry: []domain.ArtifactRegistryEntry{
@@ -120,7 +120,7 @@ func TestRender_TablesAreWrittenWithoutColumnPadding(t *testing.T) {
 		execLogHeaderLine,
 		execLogSepLine,
 		"| 1 | researcher#1 | RESEARCH | - | 2 | SUCCESS | 2026-10-07T17:40:11Z | done | Requirements.md | - |",
-		"| 2 | builder#2 | EXECUTION | Implementation.1 | 3 | SUCCESS | 2026-10-07T17:40:11Z | second summary | - | - |",
+		"| 2 | builder#2 | EXECUTION | 1.Implementation | 3 | SUCCESS | 2026-10-07T17:40:11Z | second summary | - | - |",
 		"| Artifact | Created In | Created By |",
 		"| --- | --- | --- |",
 		"| Research.md | RESEARCH | researcher#1 |",
@@ -140,8 +140,8 @@ func TestRender_LineLengthIsDrivenByTheRowsOwnContent(t *testing.T) {
 	linesLong := renderBodyLines(t, layoutState(long))
 	linesShort := renderBodyLines(t, layoutState(short))
 
-	rowLong := indexOfLine(t, linesLong, "| 2 | builder#2 | EXECUTION | Implementation.1 | 3 | SUCCESS | 2026-10-07T17:40:11Z | "+long+" | - | - |")
-	rowShort := indexOfLine(t, linesShort, "| 2 | builder#2 | EXECUTION | Implementation.1 | 3 | SUCCESS | 2026-10-07T17:40:11Z | "+short+" | - | - |")
+	rowLong := indexOfLine(t, linesLong, "| 2 | builder#2 | EXECUTION | 1.Implementation | 3 | SUCCESS | 2026-10-07T17:40:11Z | "+long+" | - | - |")
+	rowShort := indexOfLine(t, linesShort, "| 2 | builder#2 | EXECUTION | 1.Implementation | 3 | SUCCESS | 2026-10-07T17:40:11Z | "+short+" | - | - |")
 	// The first row must not grow because the second row has a long cell.
 	first := "| 1 | researcher#1 | RESEARCH | - | 2 | SUCCESS | 2026-10-07T17:40:11Z | done | Requirements.md | - |"
 	if len(linesLong[rowLong-1]) != len(first) || len(linesShort[rowShort-1]) != len(first) {

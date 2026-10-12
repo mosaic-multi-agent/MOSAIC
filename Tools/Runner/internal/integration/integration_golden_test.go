@@ -79,21 +79,27 @@ func TestIntegration_AllFourApproaches_StagedWorkflow_GoldenFileMatch(t *testing
 
 | Phase | Subagent | HITL | On Success | On Findings | Input | Output |
 |-------|----------|:----:|------------|-------------|-------|--------|
-| EXECUTION.Test.[StageNumber] | test-writer-tdd | FALSE | build-review | - | Stage-{StageNumber}/Plan.md | Stage-{StageNumber}/tests.md |
-| EXECUTION.Test.[StageNumber] | build-review | FALSE | tests-review-tdd | test-writer-tdd | Stage-{StageNumber}/tests.md | Stage-{StageNumber}/build-review-tests.md |
-| EXECUTION.Test.[StageNumber] | tests-review-tdd | FALSE | implementation-tdd | test-writer-tdd | Stage-{StageNumber}/tests.md | Stage-{StageNumber}/tests-review.md |
-| EXECUTION.Implementation.[StageNumber] | implementation-tdd | FALSE | build-review | - | Stage-{StageNumber}/Plan.md | Stage-{StageNumber}/impl.md |
-| EXECUTION.Implementation.[StageNumber] | build-review | FALSE | implementation-review | implementation-tdd | Stage-{StageNumber}/impl.md | Stage-{StageNumber}/build-review-impl.md |
-| EXECUTION.Implementation.[StageNumber] | implementation-review | FALSE | COMPLETE | implementation-tdd | Stage-{StageNumber}/impl.md | Stage-{StageNumber}/impl-review.md |
+| EXECUTION.[Stage].Test | test-writer-tdd | FALSE | build-review(tests) | - | Stage-{Stage}/Plan.md | Stage-{Stage}/tests.md |
+| EXECUTION.[Stage].Test | build-review(tests) | FALSE | tests-review-tdd | test-writer-tdd | Stage-{Stage}/tests.md | Stage-{Stage}/build-review-tests.md |
+| EXECUTION.[Stage].Test | tests-review-tdd | FALSE | COMPLETE | test-writer-tdd | Stage-{Stage}/tests.md | Stage-{Stage}/tests-review.md |
+| EXECUTION.[Stage].Implementation | implementation-tdd | FALSE | build-review(impl) | - | Stage-{Stage}/Plan.md | Stage-{Stage}/impl.md |
+| EXECUTION.[Stage].Implementation | build-review(impl) | FALSE | implementation-review | implementation-tdd | Stage-{Stage}/impl.md | Stage-{Stage}/build-review-impl.md |
+| EXECUTION.[Stage].Implementation | implementation-review | FALSE | COMPLETE | implementation-tdd | Stage-{Stage}/impl.md | Stage-{Stage}/impl-review.md |
 
-**Execution Groups:**
+**Blocks:**
 
-| Approach | Groups |
-|----------|--------|
-| TDD | Test, Implementation |
-| Implementation-First | Implementation, Test |
-| Implementation-Only | Implementation |
-| Tests-Only | Test |
+| Block | Source | Section |
+|-------|--------|---------|
+| Stage | Plan.md | Stages |
+
+**Groups:**
+
+| Block | Approach | Groups |
+|-------|----------|--------|
+| Stage | TDD | Test, Implementation |
+| Stage | Implementation-First | Implementation, Test |
+| Stage | Implementation-Only | Implementation |
+| Stage | Tests-Only | Test |
 </Workflow>
 `
 	orchPath := writeOrchFile(t, dir, "orchestrator.md", orchContent)

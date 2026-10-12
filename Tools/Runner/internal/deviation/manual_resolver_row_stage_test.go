@@ -74,10 +74,10 @@ func answeredText(text string) interaction.TextAnswer {
 	return interaction.TextAnswer{Status: interaction.Answered, Text: text}
 }
 
-func runManual(t *testing.T, si *scriptedInteraction, stages *domain.StageSet) (domain.RoutingInstruction, error) {
+func runManual(t *testing.T, si *scriptedInteraction, schedules domain.BlockSchedules) (domain.RoutingInstruction, error) {
 	t.Helper()
 	m := &deviation.ManualResolver{Interact: si, Table: stagedRoutingTable()}
-	return m.ConsultRouting(context.Background(), rowStageRequest(stages))
+	return m.ConsultRouting(context.Background(), rowStageRequest(schedules))
 }
 
 func assertNoDispatch(t *testing.T, instr domain.RoutingInstruction) {
@@ -90,7 +90,7 @@ func assertNoDispatch(t *testing.T, instr domain.RoutingInstruction) {
 func TestManualResolver_RowOptionsAreKeyedByRowWithOneBasedLabels(t *testing.T) {
 	si := manualScript{rowAnswer: answeredOption("stop")}.interaction()
 
-	runManual(t, si, stagesUpTo(2)) //nolint:errcheck
+	runManual(t, si, schedulesUpTo(2)) //nolint:errcheck
 
 	if len(si.SelectOneCalls) == 0 {
 		t.Fatal("want a row question, got no SelectOne call")
@@ -127,7 +127,7 @@ func TestManualResolver_LaterRowOfMultiRowAgent_YieldsThatRowAndStage(t *testing
 		textAnswer:  answeredText("implement it"),
 	}.interaction()
 
-	instr, err := runManual(t, si, stagesUpTo(3))
+	instr, err := runManual(t, si, schedulesUpTo(3))
 
 	if err != nil {
 		t.Fatalf("want no error, got %v", err)
@@ -136,20 +136,15 @@ func TestManualResolver_LaterRowOfMultiRowAgent_YieldsThatRowAndStage(t *testing
 		t.Fatal("want Dispatch instruction, got nil")
 	}
 	d := instr.Dispatch
-	if d.Agent != "dev" || d.RowIndex != 2 || d.Stage != 2 {
-		t.Errorf("want dev at RowIndex=2 Stage=2 (the chosen later row), got agent %q RowIndex=%d Stage=%d",
-			d.Agent, d.RowIndex, d.Stage)
+	if d.Agent != "dev" || d.RowIndex != 2 || d.Iteration != "2" {
+		t.Errorf("want dev at RowIndex=2 Stage=2 (the chosen later row), got agent %q RowIndex=%d Stage=%q",
+			d.Agent, d.RowIndex, d.Iteration)
 	}
 	if d.TaskDescription != "implement it" {
 		t.Errorf("want the entered task text, got %q", d.TaskDescription)
 	}
 	// The result is a valid target per the shared validator.
-	_, verr := domain.ValidateDispatchTarget(stagedRoutingTable(), stagesUpTo(3), domain.DispatchTarget{
-		Agent: d.Agent, Row: domain.WorkflowRowFromIndex(d.RowIndex), Stage: d.Stage,
-	})
-	if verr != nil {
-		t.Errorf("want the returned dispatch to pass ValidateDispatchTarget, got %v", verr)
-	}
+	requireValidReply(t, stagedRoutingTable(), schedulesUpTo(3), d)
 }
 
 func TestManualResolver_StagedRow_AsksForAStageFromTheCurrentStageSet(t *testing.T) {
@@ -159,7 +154,7 @@ func TestManualResolver_StagedRow_AsksForAStageFromTheCurrentStageSet(t *testing
 		textAnswer:  answeredText("write tests"),
 	}.interaction()
 
-	runManual(t, si, stagesUpTo(3)) //nolint:errcheck
+	runManual(t, si, schedulesUpTo(3)) //nolint:errcheck
 
 	stageQ, asked := stageQuestion(si)
 	if !asked {
@@ -186,7 +181,7 @@ func TestManualResolver_NonStagedRow_AsksNoStageAndYieldsStageZero(t *testing.T)
 		textAnswer: answeredText("review it"),
 	}.interaction()
 
-	instr, err := runManual(t, si, stagesUpTo(3))
+	instr, err := runManual(t, si, schedulesUpTo(3))
 
 	if err != nil {
 		t.Fatalf("want no error, got %v", err)
@@ -194,7 +189,7 @@ func TestManualResolver_NonStagedRow_AsksNoStageAndYieldsStageZero(t *testing.T)
 	if _, asked := stageQuestion(si); asked {
 		t.Errorf("want no stage question for a non-staged row, got SelectOne questions %v", selectOneIDs(si))
 	}
-	if instr.Dispatch == nil || instr.Dispatch.RowIndex != 3 || instr.Dispatch.Stage != 0 {
+	if instr.Dispatch == nil || instr.Dispatch.RowIndex != 3 || instr.Dispatch.Iteration != "" {
 		t.Fatalf("want reviewer at RowIndex=3 Stage=0, got %+v", instr.Dispatch)
 	}
 }
@@ -206,12 +201,12 @@ func TestManualResolver_StageAddedMidRun_IsOfferedAndAccepted(t *testing.T) {
 		textAnswer:  answeredText("late stage"),
 	}.interaction()
 
-	instr, err := runManual(t, si, stagesUpTo(4))
+	instr, err := runManual(t, si, schedulesUpTo(4))
 
 	if err != nil {
 		t.Fatalf("want no error for a stage present in the current set, got %v", err)
 	}
-	if instr.Dispatch == nil || instr.Dispatch.Stage != 4 {
+	if instr.Dispatch == nil || instr.Dispatch.Iteration != "4" {
 		t.Fatalf("want dispatch at Stage=4, got %+v", instr.Dispatch)
 	}
 }
@@ -219,7 +214,7 @@ func TestManualResolver_StageAddedMidRun_IsOfferedAndAccepted(t *testing.T) {
 func TestManualResolver_CancelledRowPick_IsUserAbandonedAndNeverDispatches(t *testing.T) {
 	si := manualScript{rowAnswer: interaction.ChoiceAnswer{Status: interaction.Cancelled}}.interaction()
 
-	instr, err := runManual(t, si, stagesUpTo(2))
+	instr, err := runManual(t, si, schedulesUpTo(2))
 
 	assertConsultationError(t, err, domain.ConsultFailUserAbandoned)
 	assertNoDispatch(t, instr)
@@ -231,7 +226,7 @@ func TestManualResolver_CancelledRowPick_IsUserAbandonedAndNeverDispatches(t *te
 func TestManualResolver_BlankTaskText_IsAnUnavailableInteractionAndNeverDispatches(t *testing.T) {
 	si := manualScript{rowAnswer: answeredOption("4"), textAnswer: answeredText("   ")}.interaction()
 
-	instr, err := runManual(t, si, stagesUpTo(2))
+	instr, err := runManual(t, si, schedulesUpTo(2))
 
 	assertConsultationError(t, err, domain.ConsultFailInteractionUnavailable)
 	assertNoDispatch(t, instr)
@@ -243,27 +238,27 @@ func TestManualResolver_RepeatedInvalidResult_EndsAsBoundExceededAndNeverDispatc
 	cases := []struct {
 		name   string
 		script manualScript
-		stages *domain.StageSet
+		schedules domain.BlockSchedules
 	}{
 		{"row id that is not a table row", manualScript{
 			rowAnswer: answeredOption("99"), textAnswer: answeredText("x"),
-		}, stagesUpTo(2)},
+		}, schedulesUpTo(2)},
 		{"row id that is not a number", manualScript{
 			rowAnswer: answeredOption("dev"), textAnswer: answeredText("x"),
-		}, stagesUpTo(2)},
+		}, schedulesUpTo(2)},
 		{"stage outside the current set", manualScript{
 			rowAnswer: answeredOption("3"), stageAnswer: answeredOption("7"), textAnswer: answeredText("x"),
-		}, stagesUpTo(2)},
+		}, schedulesUpTo(2)},
 		{"staged row with no stage set", manualScript{
 			rowAnswer: answeredOption("3"), stageAnswer: answeredOption("1"), textAnswer: answeredText("x"),
 		}, nil},
 		{"staged row with an empty stage set", manualScript{
 			rowAnswer: answeredOption("3"), stageAnswer: answeredOption("1"), textAnswer: answeredText("x"),
-		}, &domain.StageSet{}},
+		}, schedulesUpTo(0)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			instr, err := runManual(t, tc.script.interaction(), tc.stages)
+			instr, err := runManual(t, tc.script.interaction(), tc.schedules)
 
 			assertConsultationError(t, err, domain.ConsultFailManualBoundExceeded)
 			assertNoDispatch(t, instr)

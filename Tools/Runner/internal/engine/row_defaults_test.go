@@ -6,7 +6,6 @@ package engine_test
 import (
 	"errors"
 	"reflect"
-	"strings"
 	"testing"
 
 	"mosaic-run/internal/domain"
@@ -17,27 +16,34 @@ func stagedDefaultsRow() domain.RoutingRow {
 	return domain.RoutingRow{
 		Index:           2,
 		Agent:           "test-writer",
-		Phase:           "EXECUTION.Test.[StageNumber]",
-		PhaseParsed:     domain.PhaseParsed{Name: "EXECUTION", IsStaged: true, Group: "Test"},
-		InputArtifacts:  []string{"Stage-*/Plan.md", "Stage-{StageNumber}/notes.md"},
-		OutputArtifacts: []string{"Stage-{StageNumber}/tests.md", "Stage-*/Plan.md"},
+		AgentID:         "test-writer",
+		Phase:           "EXECUTION.[Stage].Test",
+		PhaseParsed:     domain.PhaseParsed{Name: "EXECUTION", Blocks: []domain.BlockName{"Stage"}, IsStaged: true, Group: "Test"},
+		InputArtifacts:  []string{"Stage-*/Plan.md", "Stage-{Stage}/notes.md"},
+		OutputArtifacts: []string{"Stage-{Stage}/tests.md", "Stage-*/Plan.md"},
 	}
 }
 
-func defaultsStages(stage2HITL bool) *domain.StageSet {
-	return &domain.StageSet{Entries: []domain.StageEntry{
-		{Number: 1, Approach: "TDD"},
-		{Number: 2, HITL: stage2HITL, Approach: "TDD"},
-	}}
+func defaultsSchedules(stage2HITL bool) domain.BlockSchedules {
+	return newTestSchedules(
+		domain.ScheduleIteration{ID: "1", Approach: "TDD"},
+		domain.ScheduleIteration{ID: "2", HITL: stage2HITL, Approach: "TDD"},
+	)
 }
 
-func TestResolveRowDefaults_StagedRow_ExpandsInputsKeepsOutputWildcardsAndOrsStageHITL(t *testing.T) {
-	got, err := engine.ResolveRowDefaults(stagedDefaultsRow(), 2, defaultsStages(true), nil)
+// defaultsContext is the schedule context of a resolution that reads only the
+// current schedules.
+func defaultsContext(schedules domain.BlockSchedules) engine.ScheduleContext {
+	return engine.ScheduleContext{Schedules: schedules}
+}
+
+func TestResolveRowDefaults_StagedRow_FillsInInputsKeepsWildcardsAndOrsStageHITL(t *testing.T) {
+	got, err := engine.ResolveRowDefaultsForIteration(stagedDefaultsRow(), "2", defaultsContext(defaultsSchedules(true)))
 
 	if err != nil {
 		t.Fatalf("ResolveRowDefaults: unexpected error %v", err)
 	}
-	wantIn := []string{"Stage-1/Plan.md", "Stage-2/Plan.md", "Stage-2/notes.md"}
+	wantIn := []string{"Stage-*/Plan.md", "Stage-2/notes.md"}
 	if !reflect.DeepEqual(got.InputArtifacts, wantIn) {
 		t.Errorf("inputs = %v, want %v", got.InputArtifacts, wantIn)
 	}
@@ -54,7 +60,7 @@ func TestResolveRowDefaults_RowHITLWithoutStageHITL_IsTrue(t *testing.T) {
 	row := stagedDefaultsRow()
 	row.HITL = true
 
-	got, err := engine.ResolveRowDefaults(row, 1, defaultsStages(false), nil)
+	got, err := engine.ResolveRowDefaultsForIteration(row, "1", defaultsContext(defaultsSchedules(false)))
 
 	if err != nil {
 		t.Fatalf("ResolveRowDefaults: unexpected error %v", err)
@@ -65,7 +71,7 @@ func TestResolveRowDefaults_RowHITLWithoutStageHITL_IsTrue(t *testing.T) {
 }
 
 func TestResolveRowDefaults_NoHITLAnywhere_IsFalse(t *testing.T) {
-	got, err := engine.ResolveRowDefaults(stagedDefaultsRow(), 1, defaultsStages(true), nil)
+	got, err := engine.ResolveRowDefaultsForIteration(stagedDefaultsRow(), "1", defaultsContext(defaultsSchedules(true)))
 
 	if err != nil {
 		t.Fatalf("ResolveRowDefaults: unexpected error %v", err)
@@ -78,21 +84,23 @@ func TestResolveRowDefaults_NoHITLAnywhere_IsFalse(t *testing.T) {
 	}
 }
 
-func TestResolveRowDefaults_NonStagedRow_UsesRefreshedStagesForExpansion(t *testing.T) {
+func TestResolveRowDefaults_NonStagedRow_PassesStageWildcardThroughForTheSession(t *testing.T) {
 	row := domain.RoutingRow{
 		Agent:          "final-review",
+		AgentID:        "final-review",
 		Phase:          "REVIEW",
 		PhaseParsed:    domain.PhaseParsed{Name: "REVIEW"},
 		InputArtifacts: []string{"Stage-*/Plan.md"},
 	}
-	refreshed := &domain.StageSet{Entries: []domain.StageEntry{{Number: 1}, {Number: 2}, {Number: 3}}}
 
-	got, err := engine.ResolveRowDefaults(row, 0, defaultsStages(false), refreshed)
+	got, err := engine.ResolveRowDefaultsForIteration(row, "", engine.ScheduleContext{
+		Schedules: defaultsSchedules(false),
+	})
 
 	if err != nil {
 		t.Fatalf("ResolveRowDefaults: unexpected error %v", err)
 	}
-	want := []string{"Stage-1/Plan.md", "Stage-2/Plan.md", "Stage-3/Plan.md"}
+	want := []string{"Stage-*/Plan.md"}
 	if !reflect.DeepEqual(got.InputArtifacts, want) {
 		t.Errorf("inputs = %v, want %v", got.InputArtifacts, want)
 	}
@@ -101,12 +109,13 @@ func TestResolveRowDefaults_NonStagedRow_UsesRefreshedStagesForExpansion(t *test
 func TestResolveRowDefaults_NonStagedRowWithRowHITL_IsTrue(t *testing.T) {
 	row := domain.RoutingRow{
 		Agent:       "final-review",
+		AgentID:     "final-review",
 		Phase:       "REVIEW",
 		PhaseParsed: domain.PhaseParsed{Name: "REVIEW"},
 		HITL:        true,
 	}
 
-	got, err := engine.ResolveRowDefaults(row, 0, defaultsStages(false), nil)
+	got, err := engine.ResolveRowDefaultsForIteration(row, "", defaultsContext(defaultsSchedules(false)))
 
 	if err != nil {
 		t.Fatalf("ResolveRowDefaults: unexpected error %v", err)
@@ -117,22 +126,22 @@ func TestResolveRowDefaults_NonStagedRowWithRowHITL_IsTrue(t *testing.T) {
 }
 
 func TestResolveRowDefaults_StageArgumentErrors(t *testing.T) {
-	nonStaged := domain.RoutingRow{Agent: "final-review", PhaseParsed: domain.PhaseParsed{Name: "REVIEW"}}
+	nonStaged := domain.RoutingRow{Agent: "final-review", AgentID: "final-review", PhaseParsed: domain.PhaseParsed{Name: "REVIEW"}}
 	cases := []struct {
-		name   string
-		row    domain.RoutingRow
-		stage  domain.StageNumber
-		stages *domain.StageSet
-		want   error
+		name      string
+		row       domain.RoutingRow
+		iteration domain.IterationID
+		schedules domain.BlockSchedules
+		want      error
 	}{
-		{"staged row without stage", stagedDefaultsRow(), 0, defaultsStages(false), engine.ErrRowDefaultsStageRequired},
-		{"staged row with stage missing from set", stagedDefaultsRow(), 7, defaultsStages(false), engine.ErrRowDefaultsStageNotInSet},
-		{"staged row with nil stage set", stagedDefaultsRow(), 1, nil, engine.ErrRowDefaultsStageNotInSet},
-		{"non-staged row with a stage", nonStaged, 1, defaultsStages(false), engine.ErrRowDefaultsStageOnNonStagedRow},
+		{"staged row without stage", stagedDefaultsRow(), "", defaultsSchedules(false), engine.ErrRowDefaultsStageRequired},
+		{"staged row with stage missing from set", stagedDefaultsRow(), "7", defaultsSchedules(false), engine.ErrRowDefaultsStageNotInSet},
+		{"staged row with no schedules", stagedDefaultsRow(), "1", nil, engine.ErrRowDefaultsStageNotInSet},
+		{"non-staged row with a stage", nonStaged, "1", defaultsSchedules(false), engine.ErrRowDefaultsStageOnNonStagedRow},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := engine.ResolveRowDefaults(tc.row, tc.stage, tc.stages, nil)
+			got, err := engine.ResolveRowDefaultsForIteration(tc.row, tc.iteration, defaultsContext(tc.schedules))
 
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("error = %v, want one wrapping %v", err, tc.want)
@@ -141,24 +150,5 @@ func TestResolveRowDefaults_StageArgumentErrors(t *testing.T) {
 				t.Errorf("want zero defaults on error, got %+v", got)
 			}
 		})
-	}
-}
-
-func TestResolveRowDefaults_UnresolvablePattern_ReturnsErrorNamingAgentAndPattern(t *testing.T) {
-	row := domain.RoutingRow{
-		Agent:          "final-review",
-		PhaseParsed:    domain.PhaseParsed{Name: "REVIEW"},
-		InputArtifacts: []string{"Stage-{StageNumber}/Plan.md"},
-	}
-
-	_, err := engine.ResolveRowDefaults(row, 0, defaultsStages(false), nil)
-
-	if err == nil {
-		t.Fatalf("want an error for a {StageNumber} pattern on a non-staged row, got nil")
-	}
-	for _, want := range []string{"final-review", "{StageNumber}"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error %q should mention %q", err.Error(), want)
-		}
 	}
 }

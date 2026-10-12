@@ -128,10 +128,10 @@ func newTestDeviationWorkflowSession(
 	const deviationWorkflow = `<Workflow type="core" name="deviate-log" version="1.0">
 ## Deviation Log Workflow
 
-| Phase | Subagent | HITL | On Success | Input | Output |
-|-------|----------|:----:|------------|-------|--------|
-| PLANNING | agent-a | FALSE | agent-b | - | plan.md |
-| PLANNING | agent-b | FALSE | COMPLETE | plan.md | result.md |
+| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
+|-------|----------|:----:|------------|-------------|-------|--------|
+| PLANNING | agent-a | FALSE | agent-b | - | - | plan.md |
+| PLANNING | agent-b | FALSE | COMPLETE | - | plan.md | result.md |
 </Workflow>
 `
 	orchPath = filepath.Join(dir, "deviate-log-orch.md")

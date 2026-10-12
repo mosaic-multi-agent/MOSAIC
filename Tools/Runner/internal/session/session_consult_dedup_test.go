@@ -23,7 +23,7 @@ func countPath(paths []string, want string) int {
 }
 
 func TestSession_ConsultRoute_ExplicitInputsInBothPathForms_ListedOnce(t *testing.T) {
-	seed := rowStageSeed("build-review", 4, "EXECUTION", "Implementation.1")
+	seed := rowStageSeed("build-review", 4, "EXECUTION", "1.Implementation")
 	seed.RunID = testRunID
 	explicit := []string{
 		"Stage-1/Plan.md",
@@ -32,7 +32,7 @@ func TestSession_ConsultRoute_ExplicitInputsInBothPathForms_ListedOnce(t *testin
 	}
 	consultant := &scriptedRoutingConsultant{}
 	consultant.queueDispatchWithInputs("test-writer", "write the tests for stage 2", cdTestWriter, &explicit)
-	consultant.stageLastDispatch(2)
+	consultant.stageLastDispatch("2")
 	consultant.queueStop("done")
 	rig := newDefaultsRig(t, consultant, domain.ExecutionModeOrchestrated, seed)
 	queueSuccess(rig.f, "test-writer", "test-writer#3")
@@ -60,7 +60,7 @@ func TestSession_AutoReview_RouteBackWhoseInjectedOutputIsATableInput_ListsItOnc
 	reviewOutputs := []string{"Stage-1/tests.md"}
 	consultant := &scriptedRoutingConsultant{}
 	consultant.queueDispatchWithOutputs("build-review", "review the tests", cdBuildReview, &reviewOutputs)
-	consultant.stageLastDispatch(1)
+	consultant.stageLastDispatch("1")
 	for i := 0; i < 3; i++ {
 		consultant.queueStop("done")
 	}

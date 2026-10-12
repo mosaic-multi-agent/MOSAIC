@@ -1,5 +1,5 @@
 ---
-version: 1.1.0
+version: 1.2.0
 name: orchestrator-script
 description: Harness conformance test fixture — a stub script-mode orchestrator that returns exactly the routing instruction its fixture specifies for the run's current state
 role: orchestrator
@@ -162,7 +162,7 @@ A rule carrying `#{n}` is preferred over an otherwise identical rule without one
 
 **`### Row`** — present only when the action is `dispatch`, and then required. A single line holding the 1-based routing table row the dispatch targets (the same number the Execution Log's `WorkflowRow` column uses). Return it as the instruction's integer `row`.
 
-**`### Stage`** — present only when the action is `dispatch` and the targeted row is a staged row (its phase carries a `[StageNumber]` placeholder), and then required. A single line holding the plan stage number. Return it as the instruction's integer `stage`. Omit the heading for a non-staged row, and return `stage` as `null`.
+**`### Iteration`** — present only when the action is `dispatch` and the targeted row is in a block (its `Phase` cell carries a `[Block]` reference), and then required. A single line holding the iteration exactly as the Execution Log's `Iteration` column writes it for that row: `{ID}` for an ungrouped row, `{ID}.{Group}` for a grouped row (`1`, `1.Test`). Return it as the instruction's string `iteration`. Omit the heading for a row outside every block, and return `iteration` as `null`.
 
 **`### TaskDescription`** — present only when the action is `dispatch`, and then required. A tilde-fenced block. Reproduce it **exactly** as the instruction's `task_description`: no trimming, no rewording, no normalising. Whether these bytes reach the subagent intact is one of the things under test.
 
@@ -239,7 +239,7 @@ Dispatch:
   "action": "dispatch",
   "agent": "mosaictest-scripted",
   "row": 1,
-  "stage": null,
+  "iteration": null,
   "task_description": "the fixture's TaskDescription block, verbatim",
   "constraints": null,
   "input_artifacts": null,
@@ -248,7 +248,7 @@ Dispatch:
 }
 ```
 
-`row` is always the fixture's `### Row` value, as an integer. `stage` is the fixture's `### Stage` value as an integer for a staged row, and `null` when the rule has no `### Stage`. The Runner rejects and retries a dispatch whose row or stage is missing or invalid, so a fixture that names a wrong row is a fixture defect, never something to correct. Every field the fixture's `Overrides` section does not name is `null`. `null` tells the Runner to use the routing table's own value, which is a behaviour under test.
+`row` is always the fixture's `### Row` value, as an integer. `iteration` is the fixture's `### Iteration` value as a string for a row in a block, and `null` when the rule has no `### Iteration`. `agent` is the bare agent id the fixture names, never a whole `Subagent` cell with its mode qualifier. The reply has no `stage` member: the Runner refuses one. The Runner rejects and retries a dispatch whose row or iteration is missing or invalid, so a fixture that names a wrong row or iteration is a fixture defect, never something to correct. Every field the fixture's `Overrides` section does not name is `null`. `null` tells the Runner to use the routing table's own value, which is a behaviour under test.
 
 Stop:
 

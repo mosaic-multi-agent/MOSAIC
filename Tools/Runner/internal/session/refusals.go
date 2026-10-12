@@ -1,8 +1,10 @@
 package session
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"mosaic-run/internal/domain"
@@ -31,6 +33,23 @@ func (s *sessionImpl) refusalCaused(message string, cause error) domain.RunOutco
 		Message: message,
 		Cause:   cause,
 	}
+}
+
+// workflowRefusal is the outcome of a workflow that parse or admission
+// refused. The refusal travels as the outcome's cause so its rule, row and
+// token stay reachable. A new run is refused before it exists, so its run
+// folder is removed and no trace remains; a folder that already holds an
+// artifact belongs to an existing run and is kept.
+func (s *sessionImpl) workflowRefusal(ctx context.Context, config domain.RunConfig, err error) domain.RunOutcome {
+	if config.IsNewRun && config.RunFolder != "" {
+		if _, readErr := s.deps.Store.Read(ctx); errors.Is(readErr, os.ErrNotExist) {
+			if rmErr := os.RemoveAll(config.RunFolder); rmErr != nil {
+				s.deps.Debug.Log(domain.EventSessionRefusal,
+					fmt.Sprintf("removing the refused run's folder %s failed: %v", config.RunFolder, rmErr))
+			}
+		}
+	}
+	return s.refusalCaused(err.Error(), err)
 }
 
 // isWorkflowNotFound reports whether err is orchfile's "this identifier is not

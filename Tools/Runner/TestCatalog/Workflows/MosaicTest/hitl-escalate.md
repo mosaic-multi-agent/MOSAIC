@@ -1,5 +1,5 @@
 ---
-version: "1.0"
+version: "1.1"
 name: "MosaicTest HITL Escalate Workflow"
 description: "Runner mode fixture — HITL approval check reads human_approved: false from the output artifact, the Runner re-dispatches once, the second attempt also fails approval, and the Runner escalates to a deviation. The orchestrator stops the run. Proves the full approval-read-to-escalation path works end to end."
 hint: "Mode 2 test — HITL approval failure, re-dispatch, escalation to deviation, orchestrator stop"
@@ -14,7 +14,7 @@ modes:
   - auto
 ---
 
-<Workflow type="core" name="hitl-escalate" version="1.0">
+<Workflow type="core" name="hitl-escalate" version="1.1">
 ## MosaicTest HITL Escalate Workflow
 
 **Use when:** Verifying that the Runner reads `human_approved` from output artifacts when an agent returns `SUCCESS` with HITL=true, re-dispatches once on failure, and escalates to a deviation when the second attempt also fails approval.
@@ -40,7 +40,7 @@ modes:
 
 ### Why this workflow exists
 
-`hitl-glob-staged` exercises the `Status != SUCCESS` shortcut in `DecideHITLCompliance`, where the HITL check accepts immediately because the non-SUCCESS path already deviates. That shortcut means the approval-reading path — where the Runner reads `human_approved` from the output artifact — is never exercised by any E2E test.
+`hitl-glob-staged` exercises the accepting side of the approval read: a HITL dispatch whose written files are approved. No scenario exercises the rejecting side — where the Runner reads `human_approved: false` from the output artifact after a `SUCCESS`, re-dispatches once and then escalates.
 
 This workflow covers the full decision table:
 - `EffectiveHITL: true` + `Status: SUCCESS` + `!IsApproved()` + `!RedispatchUsed` → `HITLRedispatch`
@@ -48,7 +48,7 @@ This workflow covers the full decision table:
 
 ### Why E1 and E3 are required
 
-Without E3, `mosaictest-scripted` auto-refuses on `human_in_the_loop: true` with `BLOCKED`/`E503`. A `BLOCKED` response takes the `Status != SUCCESS` shortcut in `DecideHITLCompliance`, so the approval-reading path is never entered. E3 overrides this behaviour so the stub returns `SUCCESS` even with HITL=true.
+Without E3, `mosaictest-scripted` auto-refuses on `human_in_the_loop: true` with `BLOCKED`/`E503`. `BLOCKED` with `E503` is routed directly by the Runner, which treats it as the report that the gate could not run, so no approval is read and the re-dispatch path is never entered. E3 overrides this behaviour so the stub returns `SUCCESS` even with HITL=true.
 
 Without E1, the stub cannot write `human_approved: false` in the output artifact. The Runner would find either no file (treated as non-compliant — same outcome) or no `human_approved` field. E1 makes the fixture explicit: the stub writes a file that clearly says `human_approved: false`.
 
@@ -100,6 +100,7 @@ Two Orchestration.md log rows. Pre-run consultation and the escalation-routing c
 | Version | Date | Author | Summary |
 |---------|------|--------|---------|
 | 1.0 | 2026-09-20 | MOSAIC | Initial version. HITL approval failure, re-dispatch, escalation. Requires stub enhancements E1+E3. |
+| 1.1 | 2026-10-12 | MOSAIC | Wording only: the rationale no longer describes the removed `Status != SUCCESS` shortcut and describes `hitl-glob-staged` as the accepting side of the approval read. Routing table and dispatch sequence unchanged. |
 
 ---
 
@@ -107,7 +108,7 @@ Two Orchestration.md log rows. Pre-run consultation and the escalation-routing c
 
 **Ideas under consideration:**
 - A variant where the first invocation writes `human_approved: false` and the second writes `human_approved: true`, proving the re-dispatch path succeeds when the agent fixes the output on retry.
-- A staged variant with `Stage-*` output artifacts to combine glob expansion with approval reading.
+- A variant with a wildcard Output (`Stage-*/...`) next to concrete paths, one of which carries `human_approved: false`, to combine wildcard matching with the rejecting side of the approval read (see `hitl-glob-staged` for the accepting side).
 
 **Dead ends (tried and rejected):**
 - Using a marker gate to change behaviour between invocations. The marker gate distinguishes invocations, but both invocations need the same behaviour (SUCCESS with `human_approved: false`). A marker gate that changes the second invocation's approval to true would test re-dispatch recovery, not escalation — a different test case.

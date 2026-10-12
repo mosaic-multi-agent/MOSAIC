@@ -1,8 +1,8 @@
 ---
-version: "1.0"
+version: "1.1"
 name: "MosaicTest Staged Multi-Group Workflow"
-description: "Runner mode fixture — multi-group staged execution with TDD approach. Test group dispatches first per stage, then Implementation group. Proves group-ordering, phase-column notation, and {StageNumber} substitution survive a real harness round trip."
-hint: "Harness test — EXECUTION.Test and EXECUTION.Implementation group ordering across two stages"
+description: "Runner mode fixture — multi-group staged execution with TDD approach. Test group dispatches first per stage, then Implementation group. Proves group ordering, block-reference phase notation, and {Stage} fill-in survive a real harness round trip."
+hint: "Harness test — Test and Implementation group ordering inside the Stage block across two stages"
 author: MOSAIC
 id: staged-multigroup
 referenced_agents:
@@ -10,35 +10,41 @@ referenced_agents:
 artifacts:
   - MosaicTestScript/multigroup-test.md
   - MosaicTestScript/multigroup-impl.md
-  - Stage-{StageNumber}/MosaicTestStageTest.md
-  - Stage-{StageNumber}/MosaicTestStageImpl.md
+  - Stage-{Stage}/MosaicTestStageTest.md
+  - Stage-{Stage}/MosaicTestStageImpl.md
+  - Plan.md
 modes:
   - auto
 ---
 
-<Workflow type="core" name="staged-multigroup" version="1.0">
+<Workflow type="core" name="staged-multigroup" version="1.1">
 ## MosaicTest Staged Multi-Group Workflow
 
-**Use when:** Verifying that the runner dispatches execution groups in the correct order (Test before Implementation) across stages, and that the `EXECUTION.{Group}.[StageNumber]` phase-column notation parses correctly through a real harness CLI.
+**Use when:** Verifying that the runner dispatches groups in the correct order (Test before Implementation) across the iterations of a block, and that the `EXECUTION.[Stage].{Group}` phase-column notation parses correctly through a real harness CLI.
 
 | Phase | Subagent | HITL | On Success | On Findings | Input | Output |
 |-------|----------|:----:|------------|-------------|-------|--------|
-| EXECUTION.Test.[StageNumber] | mosaictest-scripted | FALSE | - | - | MosaicTestScript/multigroup-test.md | Stage-{StageNumber}/MosaicTestStageTest.md |
-| EXECUTION.Implementation.[StageNumber] | mosaictest-scripted | FALSE | - | - | MosaicTestScript/multigroup-impl.md, Stage-{StageNumber}/MosaicTestStageTest.md | Stage-{StageNumber}/MosaicTestStageImpl.md |
+| EXECUTION.[Stage].Test | mosaictest-scripted(test) | FALSE | COMPLETE | - | MosaicTestScript/multigroup-test.md | Stage-{Stage}/MosaicTestStageTest.md |
+| EXECUTION.[Stage].Implementation | mosaictest-scripted(impl) | FALSE | COMPLETE | - | MosaicTestScript/multigroup-impl.md, Stage-{Stage}/MosaicTestStageTest.md | Stage-{Stage}/MosaicTestStageImpl.md |
 
-**Execution Groups:**
+**Blocks:**
 
-| Approach | Groups |
-|----------|--------|
-| TDD | Test, Implementation |
+| Block | Source | Section |
+|-------|--------|---------|
+| Stage | Plan.md | Stages |
 
-**EXECUTION Stages:** Loop per stage (stages defined in Plan.md). For each stage, the Test group's rows run first, then the Implementation group's rows, per the TDD approach ordering.
+**Groups:**
+
+| Block | Approach | Groups |
+|-------|----------|--------|
+| Stage | TDD | Test, Implementation |
 
 **Notes:**
 - **`Plan.md` is a pre-placed fixture, not produced by the run.** It and the scripts must be seeded into the run folder at run creation. Seed `Fixtures/staged-multigroup` — the whole directory, not anything inside it — as the single seed path. See `Fixtures/README.md`.
-- There are **no pre-EXECUTION rows**, so admission condition 1 (a pre-EXECUTION row must output `Stage-*/Plan.md`) does not apply. This is deliberate: it is what lets the plan be pre-placed.
-- The Implementation row takes the Test row's output (`Stage-{StageNumber}/MosaicTestStageTest.md`) as an input. This chains the two groups within a stage and proves `{StageNumber}` resolved to the same value for both rows.
-- `On Success` is `-` because it is ignored inside EXECUTION; row order, group order, and stage progression govern routing there.
+- **No row produces `Plan.md`.** The `Stage` block's schedule source is therefore a seed, which is deliberate: it is what lets the plan be pre-placed.
+- The Implementation row takes the Test row's output (`Stage-{Stage}/MosaicTestStageTest.md`) as an input. This chains the two groups within an iteration and proves `{Stage}` filled in the same value for both rows.
+- Each group holds one row, so `COMPLETE` ends the group's scope; the `TDD` approach in the `**Groups:**` table orders the groups.
+- The two rows run the same agent, so their `Subagent` cells are told apart by the mode qualifiers `test` and `impl`. Dispatch, instance ids and logs use the bare id `mosaictest-scripted`; the qualifier is added to each row's task description, which the scripts echo.
 
 </Workflow>
 
@@ -48,7 +54,7 @@ modes:
 
 ### Why two groups, not one
 
-`staged-preplaced-plan` proves stage progression and `{StageNumber}` substitution with bare rows (no groups). This workflow adds groups: the engine must parse `EXECUTION.Test.[StageNumber]` and `EXECUTION.Implementation.[StageNumber]`, sort them by group order, and dispatch Test before Implementation within each stage. A bare workflow exercises none of that parsing.
+`staged-preplaced-plan` proves iteration progression and `{Stage}` fill-in with rows that have no groups. This workflow adds groups: the engine must parse `EXECUTION.[Stage].Test` and `EXECUTION.[Stage].Implementation`, order the groups by the iteration's approach, and dispatch Test before Implementation within each iteration. A block without groups exercises none of that.
 
 ### Why two stages
 
@@ -72,12 +78,12 @@ A past engine crash occurred at glob/wildcard dispatch after the design phase fi
 
 Five dispatches total: one pre-consultation, then four workflow steps (2 stages × 2 groups). The pre-consultation allocates no `Seq` and leaves no `Orchestration.md` row — it surfaces only in the dispatch log.
 
-| Log `Seq` | `Agent` | `Phase` | `Status` | `Summary` shows |
-|:---:|---|---|---|---|
-| 1 | `mosaictest-scripted#1` | EXECUTION.Test.1 | SUCCESS | Test group / stage 1 / wrote test artifact |
-| 2 | `mosaictest-scripted#2` | EXECUTION.Implementation.1 | SUCCESS | Implementation group / stage 1 / wrote impl artifact |
-| 3 | `mosaictest-scripted#3` | EXECUTION.Test.2 | SUCCESS | Test group / stage 2 / wrote test artifact |
-| 4 | `mosaictest-scripted#4` | EXECUTION.Implementation.2 | SUCCESS | Implementation group / stage 2 / wrote impl artifact |
+| Log `Seq` | `Agent` | `Phase` | `Iteration` | `Status` | `Summary` shows |
+|:---:|---|---|---|---|---|
+| 1 | `mosaictest-scripted#1` | EXECUTION | 1.Test | SUCCESS | Test group / stage 1 / wrote test artifact |
+| 2 | `mosaictest-scripted#2` | EXECUTION | 1.Implementation | SUCCESS | Implementation group / stage 1 / wrote impl artifact |
+| 3 | `mosaictest-scripted#3` | EXECUTION | 2.Test | SUCCESS | Test group / stage 2 / wrote test artifact |
+| 4 | `mosaictest-scripted#4` | EXECUTION | 2.Implementation | SUCCESS | Implementation group / stage 2 / wrote impl artifact |
 
 **Run outcome:** COMPLETE. All stages exhausted, no deviations.
 
@@ -85,7 +91,7 @@ Five dispatches total: one pre-consultation, then four workflow steps (2 stages 
 - Rows 1 and 2 are stage 1: Test before Implementation.
 - Rows 3 and 4 are stage 2: Test before Implementation again.
 - If group ordering were wrong (Implementation before Test), the chained input artifact would be missing and the run would fail with BLOCKED.
-- The `Phase` column in the execution log carries the fully resolved notation (`EXECUTION.Test.1`, not `EXECUTION.Test.[StageNumber]`).
+- The execution log carries the bare phase name in `Phase` (`EXECUTION`, never `EXECUTION.[Stage].Test`) and the iteration ID and group in `Iteration` (`1.Test`).
 
 ---
 
@@ -96,8 +102,8 @@ Five dispatches total: one pre-consultation, then four workflow steps (2 stages 
 | Run refuses to start, naming `Plan.md` | Plan fixture was not seeded, or the seed root was wrong. Check the seed path. |
 | BLOCKED on the Implementation row, naming the Test artifact | Group ordering is wrong: Implementation dispatched before Test within a stage. The chained input did not exist yet. |
 | All Test rows run before any Implementation row | The engine is not resetting group ordering per stage — it is running all of one group across all stages, then the other. |
-| Phase column shows `EXECUTION.[StageNumber]` without a group name | The `EXECUTION.{Group}.[StageNumber]` notation was not parsed. The engine may be treating rows as bare. |
-| Phase column shows `EXECUTION.Test.[StageNumber]` (literal brackets) | `{StageNumber}` substitution failed in the phase column. |
+| `Iteration` column shows `1` or `2` without a group name | The `EXECUTION.[Stage].{Group}` notation was not parsed. The engine may be treating rows as ungrouped. |
+| `Phase` column shows `EXECUTION.[Stage].Test` (literal brackets) | The log wrote routing-table notation instead of the bare phase name and the iteration. |
 | Only 2 workflow steps instead of 4 | Stage progression is broken — only one stage ran. Check Plan.md for two stages. |
 | Orchestrator consulted mid-run (extra `orchestrator-script` entries in the dispatch log) | A deviation occurred. All rows should return SUCCESS in this workflow; a deviation means the stub script was not found or returned an unexpected status. |
 
@@ -108,6 +114,7 @@ Five dispatches total: one pre-consultation, then four workflow steps (2 stages 
 | Version | Date | Author | Summary |
 |---------|------|--------|---------|
 | 1.0 | 2026-09-20 | MOSAIC | Initial version. Multi-group staged execution with Test/Implementation ordering. |
+| 1.1 | 2026-10-12 | MOSAIC | WorkflowFormat 2.16 notation: `EXECUTION.[Stage].Test` / `.Implementation` rows with `**Blocks:**` and `**Groups:**` tables, `{Stage}` fill-in, `COMPLETE` instead of `-` in `On Success`, unique `Subagent` cells through the mode qualifiers `test` and `impl`, `Plan.md` listed in `artifacts`. Expected Run uses the OrchestrationArtifactFormat 3.0 log values (`Phase` `EXECUTION`, `Iteration` `1.Test`). Dispatch sequence unchanged. |
 
 ---
 

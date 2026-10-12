@@ -9,7 +9,6 @@ import (
 	"mosaic-common/interaction"
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/engine"
-	"mosaic-run/internal/planstages"
 )
 
 // runDispatchLoop arms the ManualDispatch flag and executes the dispatch loop
@@ -18,26 +17,36 @@ import (
 // sequence before this function is called.
 func (s *sessionImpl) runDispatchLoop(ctx context.Context, rs *runStartCtx) (domain.RunOutcome, error) {
 	s.manualDispatchPending = rs.config.ManualDispatch
+	s.scheduleDefect = rs.resumedDefect
+	s.droppedSchedules = nil
 
 	for {
 		if s.consultOutputs.set {
 			rs.lastOutputArtifacts = s.consultOutputs.paths
 			s.consultOutputs = consultOutputs{}
 		}
+		// A defective produced schedule is acted on before the engine routes
+		// onwards: the engine never sees a block row to dispatch against it.
+		if s.scheduleDefect != nil {
+			out, done, err := s.handleScheduleDefect(ctx, rs)
+			if done {
+				return out, err
+			}
+			continue
+		}
 		decision := engine.Next(engine.NextInput{
 			Workflow:            rs.admitted,
-			Stages:              rs.stages,
+			Schedules:           rs.stages,
+			RetrySchedules:      s.droppedSchedules,
 			State:               rs.state,
 			LastResponse:        rs.lastResponse,
 			Agents:              rs.agents,
 			Seq:                 rs.seq,
 			Now:                 s.deps.Clock.Now(),
-			RefreshedStages:     rs.refreshedStages,
-			StageSource:         rs.stageSource,
+			StageSources:        rs.stageSources,
 			Mode:                rs.state.Mode,
 			LastOutputArtifacts: rs.lastOutputArtifacts,
 		})
-		rs.refreshedStages = nil
 
 		if decision.Dispatch != nil {
 			out, done, _, err := s.handleEngineDispatch(ctx, rs, decision)
@@ -91,7 +100,7 @@ func (s *sessionImpl) handleEngineConsult(ctx context.Context, rs *runStartCtx) 
 		}, true, nil
 	}
 	done, out, err := s.consultRoute(ctx, nil, &rs.state, &rs.seq,
-		&rs.lastResponse, &rs.prevWorkflowStep, &rs.refreshedStages, &rs.stages,
+		&rs.lastResponse, &rs.prevWorkflowStep, &rs.stages,
 		rs.table, rs.agents, rs.config, rs.declaredInfraAgents, rs.admitted, &rs.antiLoop)
 	return out, done, err
 }
@@ -108,7 +117,7 @@ func (s *sessionImpl) handleEngineDeviation(ctx context.Context, rs *runStartCtx
 		return domain.RunOutcome{Status: domain.RunDeviationUnresolved, Message: msg}, true, nil
 	}
 	done, out, err := s.consultRoute(ctx, &decision.Deviation.Info, &rs.state, &rs.seq,
-		&rs.lastResponse, &rs.prevWorkflowStep, &rs.refreshedStages, &rs.stages,
+		&rs.lastResponse, &rs.prevWorkflowStep, &rs.stages,
 		rs.table, rs.agents, rs.config, rs.declaredInfraAgents, rs.admitted, &rs.antiLoop)
 	return out, done, err
 }
@@ -188,7 +197,8 @@ func (s *sessionImpl) prepareAutoDispatchRequest(ctx context.Context, rs *runSta
 	}
 	step.Request.RunID = rs.state.RunID
 	folder := domain.RunScopedFolder(rs.state.RunID) + "/"
-	step.Request.InputArtifacts = resolveToRunScoped(step.Request.InputArtifacts, folder)
+	step.Request.InputArtifacts = expandInputWildcards(rs.config.RunFolder, rs.state.RunID,
+		resolveToRunScoped(step.Request.InputArtifacts, folder))
 	step.Request.OutputArtifacts = resolveToRunScoped(step.Request.OutputArtifacts, folder)
 	s.deps.Debug.Log(domain.EventSessionDispatchStart, "dispatching step",
 		domain.F("agent", step.Request.AgentInstanceID),
@@ -199,7 +209,7 @@ func (s *sessionImpl) prepareAutoDispatchRequest(ctx context.Context, rs *runSta
 	s.deps.Interact.Notify(ctx, interaction.Notice{
 		Level:   interaction.NoticeInfo,
 		Title:   step.Request.AgentInstanceID,
-		Message: fmt.Sprintf("phase=%s stage=%q status=running", step.Phase, step.Stage),
+		Message: fmt.Sprintf("phase=%s iteration=%q status=running", step.Phase, iterationNoticeValue(rs.admitted.Table, step.RowIndex, step.Stage)),
 	})
 	return step
 }
@@ -254,7 +264,7 @@ func (s *sessionImpl) handleAutoHarnessErrorAndBypass(ctx context.Context, rs *r
 	}
 	// Raw-text bypass: one direct retry (one attempt of the E501 budget in the
 	// mechanical-retry modes) before the next step is decided.
-	if isRawTextHarnessError(invokeErr) && bypassPermitted(rs.state, step.RowIndex, step.Stage, step.Agent.Identifier, &rs.antiLoop) {
+	if isRawTextHarnessError(invokeErr) && bypassPermitted(rs.state, rs.table, step.RowIndex, step.Stage, step.Agent.Identifier, &rs.antiLoop) {
 		bypassSeq := rs.state.GlobalSequence + 1
 		bypassReq := step.Request
 		bypassReq.AgentInstanceID = fmt.Sprintf("%s#%d", step.Agent.Identifier, bypassSeq)
@@ -269,12 +279,12 @@ func (s *sessionImpl) handleAutoHarnessErrorAndBypass(ctx context.Context, rs *r
 		rs.seq = rs.state.GlobalSequence
 	}
 	rs.lastResponse = &harnessResp
-	if isMechanicalRetryMode(rs.state.Mode) && e501BudgetLeft(rs.state, step.RowIndex, step.Stage) {
+	if isMechanicalRetryMode(rs.state.Mode) && e501BudgetLeft(rs.state, rs.table, step.RowIndex, step.Stage) {
 		// Budget remains: the engine decision re-dispatches the same row and stage.
 		return domain.ProtocolResponse{}, step, false, true, domain.RunOutcome{}, nil
 	}
 	done, out, outErr := s.consultRoute(ctx, &deviationInfo, &rs.state, &rs.seq,
-		&rs.lastResponse, &rs.prevWorkflowStep, &rs.refreshedStages, &rs.stages,
+		&rs.lastResponse, &rs.prevWorkflowStep, &rs.stages,
 		rs.table, rs.agents, rs.config, rs.declaredInfraAgents, rs.admitted, &rs.antiLoop)
 	return domain.ProtocolResponse{}, step, done, true, out, outErr
 }
@@ -318,7 +328,7 @@ func (s *sessionImpl) postAutoDispatchApply(ctx context.Context, rs *runStartCtx
 	s.deps.Interact.Notify(ctx, interaction.Notice{
 		Level:   interaction.NoticeInfo,
 		Title:   completedStep.AgentInstance,
-		Message: fmt.Sprintf("phase=%s stage=%q status=%s", completedStep.Phase, completedStep.Stage, string(completedStep.Status)),
+		Message: fmt.Sprintf("phase=%s iteration=%q status=%s", completedStep.Phase, iterationNoticeValue(rs.admitted.Table, hitlStep.RowIndex, completedStep.Stage), string(completedStep.Status)),
 	})
 	orchDir := filepath.Dir(rs.config.OrchestratorFilePath)
 	if !completedStep.IsInfrastructure {
@@ -327,19 +337,9 @@ func (s *sessionImpl) postAutoDispatchApply(ctx context.Context, rs *runStartCtx
 			return out, true, trigErr
 		}
 	}
-	// Stage-* output re-derivation.
-	if hasStageStarArtifact(hitlStep.Request.OutputArtifacts) {
-		ss, ssErr := planstages.ReadStages(filepath.Join(rs.config.RunFolder, "Plan.md"), rs.admitted.GroupsDeclared)
-		if ssErr != nil {
-			s.deps.Interact.Notify(ctx, interaction.Notice{
-				Level:   interaction.NoticeWarning,
-				Message: fmt.Sprintf("failed to re-read stage set after Stage-* output: %v", ssErr),
-			})
-		} else {
-			rs.refreshedStages = &ss
-			rs.stages = &ss
-		}
-	}
+	// Schedule re-derivation for the blocks this row produces or writes.
+	s.rereadAccepted(ctx, rs.admitted, rs.config.RunFolder, hitlStep.RowIndex, hitlStep.Stage,
+		hitlResp, &rs.stages)
 	return domain.RunOutcome{}, false, nil
 }
 
@@ -376,7 +376,7 @@ func (s *sessionImpl) postDispatchTriggers(ctx context.Context, rs *runStartCtx,
 		syntheticResp := domain.ProtocolResponse{StatusMessage: reviewConsult.StatusMessage}
 		rs.lastResponse = &syntheticResp
 		done, out, consultErr := s.consultRoute(ctx, nil, &rs.state, &rs.seq,
-			&rs.lastResponse, &rs.prevWorkflowStep, &rs.refreshedStages, &rs.stages,
+			&rs.lastResponse, &rs.prevWorkflowStep, &rs.stages,
 			rs.table, rs.agents, rs.config, rs.declaredInfraAgents, rs.admitted, &rs.antiLoop)
 		if consultErr != nil {
 			return domain.RunOutcome{Status: domain.RunFailed, Message: consultErr.Error()}, true, consultErr

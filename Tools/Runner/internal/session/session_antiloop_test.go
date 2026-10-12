@@ -298,15 +298,16 @@ func TestSession_AntiLoopGuard_CounterResets_OnDifferentAgentDispatch(t *testing
 func TestSession_AntiLoopGuard_CounterResets_OnNewStep(t *testing.T) {
 	dir := t.TempDir()
 
-	// Two-row workflow with agent-a in both rows (HITL=false so PARTIALLY_DONE
-	// drives consultant re-routing without triggering HITL redispatch).
+	// Two-row workflow with agent-a in both rows, told apart by mode qualifiers
+	// (HITL=false so PARTIALLY_DONE drives consultant re-routing without
+	// triggering HITL redispatch).
 	const twoAgentAWorkflow = `<Workflow type="core" name="two-agent-a" version="1.0">
 ## Two-Step Agent-A Workflow
 
 | Phase | Subagent | HITL | On Success | On Findings | Input | Output |
 |-------|----------|:----:|------------|-------------|-------|--------|
-| PLANNING | agent-a | FALSE | agent-a | - | - | plan.md |
-| PLANNING | agent-a | FALSE | COMPLETE | - | plan.md | result.md |
+| PLANNING | agent-a(tests) | FALSE | agent-a(impl) | - | - | plan.md |
+| PLANNING | agent-a(impl) | FALSE | COMPLETE | - | plan.md | result.md |
 </Workflow>
 `
 	orchPath := filepath.Join(dir, "two-agent-a-orch.md")

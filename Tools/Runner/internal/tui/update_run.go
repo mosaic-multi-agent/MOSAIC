@@ -69,13 +69,13 @@ func (m *rootModel) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // extractStatus parses the status from a session notice message.
-// Format: "phase=X stage=\"Y\" status=Z"
+// Format: "phase=X iteration=\"Y\" status=Z"
 func extractStatus(msg string) string {
 	return extractField(msg, "status")
 }
 
 // extractField parses a specific key=value pair from a session notice message.
-// Values may be optionally double-quoted (e.g. stage="Test.1"); quotes are stripped.
+// Values may be optionally double-quoted (e.g. iteration="1.Test"); quotes are stripped.
 func extractField(msg, key string) string {
 	prefix := key + "="
 	for _, part := range strings.Fields(msg) {

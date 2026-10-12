@@ -200,13 +200,13 @@ func cancelText(interaction.TextQuestion) interaction.TextAnswer {
 
 // ---- request and run helpers ----
 
-// testRowDefaults reproduces engine.ResolveRowDefaults' observable stage
-// argument behaviour over a fixed payload: a staged row needs a stage in the
-// set (read at call time), a non-staged row takes none.
-func testRowDefaults(stages *domain.StageSet) domain.RowDefaultsFunc {
-	return func(row domain.RoutingRow, stage domain.StageNumber) (domain.DispatchDefaults, error) {
+// testRowDefaults reproduces engine.ResolveRowDefaults' observable iteration
+// argument behaviour over a fixed payload: a staged row needs an iteration in
+// its block's schedule (read at call time), a non-staged row takes none.
+func testRowDefaults(schedules domain.BlockSchedules) domain.RowDefaultsFunc {
+	return func(row domain.RoutingRow, stage domain.IterationID) (domain.DispatchDefaults, error) {
 		if !row.PhaseParsed.IsStaged {
-			if stage != 0 {
+			if stage != "" {
 				return domain.DispatchDefaults{}, fmt.Errorf("row %d: non-staged row cannot take a stage", row.Index+1)
 			}
 			return domain.DispatchDefaults{
@@ -214,28 +214,26 @@ func testRowDefaults(stages *domain.StageSet) domain.RowDefaultsFunc {
 				OutputArtifacts: []string{fmt.Sprintf("Row%d/Out.md", row.Index+1)},
 			}, nil
 		}
-		if stage == 0 {
+		if stage == "" {
 			return domain.DispatchDefaults{}, fmt.Errorf("row %d: staged row requires a stage", row.Index+1)
 		}
-		if stages == nil {
-			return domain.DispatchDefaults{}, fmt.Errorf("row %d: stage %d is not in the stage set", row.Index+1, stage)
-		}
-		if _, ok := stages.Entry(stage); !ok {
-			return domain.DispatchDefaults{}, fmt.Errorf("row %d: stage %d is not in the stage set", row.Index+1, stage)
+		block, _ := row.Block()
+		if _, ok := schedules[block].Find(stage); !ok {
+			return domain.DispatchDefaults{}, fmt.Errorf("row %d: stage %s is not in the schedule", row.Index+1, stage)
 		}
 		return domain.DispatchDefaults{
-			InputArtifacts:  []string{"Plan.md", fmt.Sprintf("Stage-%d/Spec.md", stage)},
-			OutputArtifacts: []string{fmt.Sprintf("Stage-%d/Out.md", stage)},
+			InputArtifacts:  []string{"Plan.md", fmt.Sprintf("Stage-%s/Spec.md", stage)},
+			OutputArtifacts: []string{fmt.Sprintf("Stage-%s/Out.md", stage)},
 			HITL:            row.Index == 2,
 		}, nil
 	}
 }
 
-// manualRequest is a routing request with the stage set, row defaults and an
-// (empty) registry the dialogue consumes.
-func manualRequest(stages *domain.StageSet) domain.ConsultationRequest {
-	req := rowStageRequest(stages)
-	req.RowDefaults = testRowDefaults(stages)
+// manualRequest is a routing request with the block schedules, row defaults and
+// an (empty) registry the dialogue consumes.
+func manualRequest(schedules domain.BlockSchedules) domain.ConsultationRequest {
+	req := rowStageRequest(schedules)
+	req.RowDefaults = testRowDefaults(schedules)
 	return req
 }
 
@@ -255,7 +253,7 @@ func consultManual(t *testing.T, d interaction.Interaction, table domain.Routing
 // consultStaged runs the dialogue over the four-row table with stages 1..n.
 func consultStaged(t *testing.T, d *dialogue, stageCount int) (domain.RoutingInstruction, error) {
 	t.Helper()
-	return consultManual(t, d, stagedRoutingTable(), manualRequest(stagesUpTo(stageCount)))
+	return consultManual(t, d, stagedRoutingTable(), manualRequest(schedulesUpTo(stageCount)))
 }
 
 // requireDispatch fails unless the call returned a dispatch and no error.
@@ -302,13 +300,13 @@ func twelveRowTable() domain.RoutingTable {
 	var rows []domain.RoutingRow
 	for i := 0; i < 11; i++ {
 		rows = append(rows, domain.RoutingRow{
-			Index: i, Phase: "PLANNING", Agent: fmt.Sprintf("filler-%d", i+1),
+			Index: i, Phase: "PLANNING", Agent: fmt.Sprintf("filler-%d", i+1), AgentID: fmt.Sprintf("filler-%d", i+1),
 			PhaseParsed: domain.PhaseParsed{Name: "PLANNING"},
 		})
 	}
 	rows = append(rows, domain.RoutingRow{
-		Index: 11, Phase: "EXECUTION.Implementation.[StageNumber]", Agent: "build-review",
-		PhaseParsed: domain.PhaseParsed{Name: "EXECUTION", IsStaged: true, Group: "Implementation"},
+		Index: 11, Phase: "EXECUTION.[Stage].Implementation", Agent: "build-review", AgentID: "build-review",
+		PhaseParsed: domain.PhaseParsed{Name: "EXECUTION", IsStaged: true, Group: "Implementation", Blocks: []domain.BlockName{"Stage"}},
 	})
 	return domain.RoutingTable{Rows: rows}
 }

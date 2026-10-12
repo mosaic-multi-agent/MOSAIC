@@ -125,7 +125,7 @@ func minimalArtifactBytes(runID string) []byte {
 		"checkpoints: disabled\n" +
 		"current_state:\n" +
 		"  phase: null\n" +
-		"  stage: null\n" +
+		"  iteration: null\n" +
 		"  last_status: null\n" +
 		"  last_agent: null\n" +
 		"  error_code: null\n" +
@@ -161,14 +161,14 @@ func minimalArtifactWithExecutionRow(inputs string) []byte {
 		"checkpoints: disabled\n" +
 		"current_state:\n" +
 		"  phase: PLANNING\n" +
-		"  stage: null\n" +
+		"  iteration: null\n" +
 		"  last_status: SUCCESS\n" +
 		"  last_agent: \"planner#1\"\n" +
 		"  error_code: null\n" +
 		"---\n" +
 		"\n" +
 		"<ExecutionLog type=\"core\">\n" +
-		"| Seq | Agent     | Phase    | Stage | Status  | Timestamp            | Summary      | Inputs | Checkpoint |\n" +
+		"| Seq | Agent     | Phase    | Iteration | Status  | Timestamp            | Summary      | Inputs | Checkpoint |\n" +
 		"| --- | --------- | -------- | ----- | ------- | -------------------- | ------------ | ------ | ---------- |\n" +
 		"| 1   | planner#1 | PLANNING | -     | SUCCESS | 2026-01-01T01:00:00Z | Plan created | " + cell + " | - |\n" +
 		"</ExecutionLog>\n" +
@@ -204,7 +204,7 @@ func minimalArtifactWithSingleOverrideBytes() []byte {
 		"      - trigger: STAGE_END\n" +
 		"current_state:\n" +
 		"  phase: null\n" +
-		"  stage: null\n" +
+		"  iteration: null\n" +
 		"  last_status: null\n" +
 		"  last_agent: null\n" +
 		"  error_code: null\n" +
@@ -242,7 +242,7 @@ func minimalArtifactWithMultiTriggerOverrideBytes() []byte {
 		"      - trigger: PHASE_END\n" +
 		"current_state:\n" +
 		"  phase: null\n" +
-		"  stage: null\n" +
+		"  iteration: null\n" +
 		"  last_status: null\n" +
 		"  last_agent: null\n" +
 		"  error_code: null\n" +
@@ -275,7 +275,7 @@ func minimalArtifactWithConfigBytes(configLines string) []byte {
 		configLines +
 		"current_state:\n" +
 		"  phase: null\n" +
-		"  stage: null\n" +
+		"  iteration: null\n" +
 		"  last_status: null\n" +
 		"  last_agent: null\n" +
 		"  error_code: null\n" +

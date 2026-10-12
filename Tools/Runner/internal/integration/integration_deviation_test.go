@@ -211,10 +211,10 @@ func TestIntegration_Deviation_NoConsultant_ReturnsUnresolved(t *testing.T) {
 	const orchContent = `<Workflow type="core" name="deviation-resume" version="1.0">
 ## Deviation Resume Workflow
 
-| Phase | Subagent | HITL | On Success | Input | Output |
-|-------|----------|:----:|------------|-------|--------|
-| PLANNING | agent-a | FALSE | agent-b | - | plan.md |
-| PLANNING | agent-b | FALSE | COMPLETE | plan.md | result.md |
+| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
+|-------|----------|:----:|------------|-------------|-------|--------|
+| PLANNING | agent-a | FALSE | agent-b | - | - | plan.md |
+| PLANNING | agent-b | FALSE | COMPLETE | - | plan.md | result.md |
 </Workflow>
 `
 	orchPath := writeOrchFile(t, dir, "orchestrator.md", orchContent)

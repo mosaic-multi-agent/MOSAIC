@@ -11,7 +11,6 @@ import (
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/engine"
 	"mosaic-run/internal/orchfile"
-	"mosaic-run/internal/planstages"
 	"mosaic-run/internal/seed"
 	"mosaic-run/internal/snapshot"
 	"mosaic-run/internal/snapshot/lockprotocol"
@@ -99,16 +98,14 @@ func (s *sessionImpl) setupNameBackup(ctx context.Context, rs *runStartCtx) (dom
 // agents, validate class selections, read run settings from the artifact on
 // resume, and validate checkpoints, mode, and commits.
 func (s *sessionImpl) setupInfraAndStages(ctx context.Context, rs *runStartCtx) (domain.RunOutcome, bool, error) {
-	// Step 6: read stage set (resumed runs; new runs read after Store.Create).
-	rs.planPath = filepath.Join(rs.config.RunFolder, "Plan.md")
+	// Step 6: read every block's schedule (resumed runs; new runs read after
+	// Store.Create).
 	if !rs.config.IsNewRun {
-		if _, statErr := os.Stat(rs.planPath); statErr == nil {
-			ss, stageErr := planstages.ReadStages(rs.planPath, rs.admitted.GroupsDeclared)
-			if stageErr != nil {
-				return s.refusal(stageErr.Error()), true, nil
-			}
-			rs.stages = &ss
+		schedules, readErr := s.readStartSchedules(ctx, rs)
+		if readErr != nil {
+			return s.scheduleRefusal(readErr), true, nil
 		}
+		rs.stages = schedules
 	}
 
 	// Step 6b: enumerate declared infrastructure agents.
@@ -281,18 +278,17 @@ func (s *sessionImpl) createNewRunArtifact(ctx context.Context, rs *runStartCtx)
 		return s.refusal(applyErr.Error()), true, nil
 	}
 
-	// Step 8a2: read stage set now that the run folder and seed inputs are in place.
-	if _, statErr := os.Stat(rs.planPath); statErr == nil {
-		ss, stageErr := planstages.ReadStages(rs.planPath, rs.admitted.GroupsDeclared)
-		if stageErr != nil {
-			if rmErr := os.RemoveAll(rs.config.RunFolder); rmErr != nil {
-				return s.refusal(fmt.Sprintf("%s; additionally, removing the run folder %s failed: %v",
-					stageErr.Error(), rs.config.RunFolder, rmErr)), true, nil
-			}
-			return s.refusal(stageErr.Error()), true, nil
+	// Step 8a2: read every block's schedule now that the run folder and seed
+	// inputs are in place.
+	schedules, readErr := s.readStartSchedules(ctx, rs)
+	if readErr != nil {
+		if rmErr := os.RemoveAll(rs.config.RunFolder); rmErr != nil {
+			return s.refusal(fmt.Sprintf("%s; additionally, removing the run folder %s failed: %v",
+				readErr.Error(), rs.config.RunFolder, rmErr)), true, nil
 		}
-		rs.stages = &ss
+		return s.scheduleRefusal(readErr), true, nil
 	}
+	rs.stages = schedules
 
 	rs.state = state
 	return domain.RunOutcome{}, false, nil
@@ -303,7 +299,7 @@ func (s *sessionImpl) createNewRunArtifact(ctx context.Context, rs *runStartCtx)
 // Called by createOrResumeArtifact on the resume path.
 func (s *sessionImpl) resumeRunArtifact(ctx context.Context, rs *runStartCtx) (domain.RunOutcome, bool, error) {
 	state := rs.existingState
-	resume, resumeErr := engine.ResumePoint(rs.admitted, rs.stages, state, domain.NewInfraAgentSet(rs.declaredInfraAgents, s.orchRef.Identifier))
+	resume, resumeErr := engine.ResumePointFromSchedules(rs.admitted, rs.stages, state, domain.NewInfraAgentSet(rs.declaredInfraAgents, s.orchRef.Identifier))
 	if resumeErr != nil {
 		return domain.RunOutcome{Status: domain.RunFailed, Message: resumeErr.Error()}, true, resumeErr
 	}
@@ -331,10 +327,7 @@ func (s *sessionImpl) applyOverridesAndPreConsult(ctx context.Context, rs *runSt
 	rs.declaredInfraAgents = updated
 
 	// Build the stage source descriptor.
-	rs.stageSource = domain.StageSource{
-		Path:   rs.planPath,
-		Seeded: rs.seedPlan.HasDest("Plan.md"),
-	}
+	rs.stageSources = stageSourcesFor(rs.admitted, rs.config.RunFolder)
 
 	// Step 8c: pre-consultation (auto and auto-review modes only, when enabled).
 	if !rs.config.PreConsultation {

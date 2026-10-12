@@ -1,3 +1,15 @@
+# Unreleased
+
+## Tools
+
+### Runner
+#### Changes
+- Requires `orchestrator-script` v3.1.0 (dispatch replies name the iteration and the bare agent id)
+- Accepts only WorkflowFormat 2.16 workflows (1.x workflows are refused at start and on resume) and refuses to resume runs written before OrchestrationArtifactFormat 3.0
+
+## Catalog
+- **orchestrator-script** (v3.1.0): dispatch replies name the block iteration in `iteration` (the Execution Log's `Iteration` value) instead of `stage`, and give the bare agent id without the mode qualifier; required by the new Runner
+
 # 0.6.2 (2026-10-10)
 
 ## Tools

@@ -17,39 +17,59 @@ type WorkflowInfo struct {
 	Version WorkflowVersion // from the region's version attribute
 }
 
-// ExecutionGroupsHeading is the reserved line that locates a workflow's
-// approach-to-group-sequence table inside its SECTION content.
-// An exact trimmed full-line match is required.
-const ExecutionGroupsHeading = "**Execution Groups:**"
+// BlockName is a block name from the **Blocks:** table (letters only).
+type BlockName string
+
+// BlockDecl is one row of the **Blocks:** table.
+type BlockDecl struct {
+	Name    BlockName
+	Source  string // declared path, verbatim (may fill in enclosing blocks)
+	Section string // heading text of the schedule section
+}
 
 // PhaseParsed is the structured decomposition of a phase string.
 type PhaseParsed struct {
-	Name     string    // e.g. "RESEARCH", "PLANNING", "DESIGN", "EXECUTION", "REVIEW"
-	IsStaged bool      // true when the phase is "EXECUTION.[StageNumber]"
-	Group    GroupName // group segment of a staged phase; "" when none declared
-}
-
-// OptionalHint represents an optional routing column value.
-// ColumnPresent is false when the column does not exist in the table at all.
-// When ColumnPresent is true but the value is "-" or empty, Value is "".
-// Raw carries the original text when it contains free-form qualification.
-type OptionalHint struct {
-	ColumnPresent bool
-	Value         string // "" means "no hint"; non-empty means the raw column text
+	Name     string      // bare phase name, e.g. "RESEARCH", "PLANNING", "EXECUTION", "REVIEW"
+	IsStaged bool        // true when the row is in a block (len(Blocks) > 0)
+	Group    GroupName   // the row's group; "" when none declared
+	Blocks   []BlockName // block references, outermost first; nil outside every block
 }
 
 // RoutingRow is one row of a workflow routing table. The row, not the agent,
 // is the unit of execution.
 type RoutingRow struct {
-	Index           int          // zero-based position in the table; the row's identity
-	Phase           string       // literal phase string from the Phase column
-	PhaseParsed     PhaseParsed  // structured parse of the phase
-	Agent           string       // agent identifier from Subagent column, verbatim
-	HITL            bool         // decoded from checkbox emoji
-	InputArtifacts  []string     // comma-separated paths, trimmed, verbatim (templates preserved)
-	OutputArtifacts []string     // same
-	OnSuccess       OptionalHint // from On Success column, if present
-	OnFindings      OptionalHint // from On Findings column, if present
+	Index           int           // zero-based position in the table; the row's identity
+	Phase           string        // literal phase string from the Phase column
+	PhaseParsed     PhaseParsed   // structured parse of the phase
+	Agent           string        // whole Subagent cell, verbatim (e.g. "build-review(tests)")
+	AgentID         string        // bare agent id ("build-review")
+	Qualifier       string        // mode qualifier ("tests"); "" when absent
+	HITL            bool          // decoded from checkbox emoji
+	InputArtifacts  []string      // comma-separated paths, trimmed, verbatim (templates preserved)
+	OutputArtifacts []string      // same
+	Success         SuccessEntry  // typed On Success cell
+	Findings        FindingsEntry // typed On Findings cell
+	WaitsFor        []RowRef      // Waits For targets; nil when the column is absent or the cell is "-"
+}
+
+// Block returns the block the row is in.
+//
+//   - When PhaseParsed.Blocks is non-empty it returns (Blocks[0], true): the
+//     outermost reference.
+//   - Otherwise it returns ("", false): the row is outside every block.
+func (r RoutingRow) Block() (BlockName, bool) {
+	if len(r.PhaseParsed.Blocks) > 0 {
+		return r.PhaseParsed.Blocks[0], true
+	}
+	return "", false
+}
+
+// BareAgentID returns the bare agent id of the row: the id that is dispatched,
+// resolved to an agent file and recorded in instance ids.
+//
+// It returns AgentID, the Subagent cell without its mode qualifier.
+func (r RoutingRow) BareAgentID() string {
+	return r.AgentID
 }
 
 // RoutingTable is the complete routing model for one workflow.
@@ -57,6 +77,7 @@ type RoutingTable struct {
 	Info          WorkflowInfo
 	Rows          []RoutingRow  // declaration order, zero-based indexed
 	ApproachTable ApproachTable // zero value when the workflow declares none
+	Blocks        []BlockDecl   // **Blocks:** rows in declaration order
 }
 
 // WorkflowRegion is one workflow definition found in an orchestrator agent file.

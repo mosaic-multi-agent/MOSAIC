@@ -15,8 +15,8 @@ import (
 
 // Render serialises an ArtifactState to the canonical markdown bytes.
 //
-// Stage and Checkpoint fields that are "" in the ArtifactState are rendered as
-// "-" in the execution log table. No other component ever sees or produces "-".
+// Iteration (the Stage field) and Checkpoint fields that are "" in the
+// ArtifactState are rendered as "-" in the execution log table. No other component ever sees or produces "-".
 //
 // Tables are written compact (no column padding) with every cell sanitised, so
 // line length follows row content and a cell can never break its table.
@@ -96,7 +96,7 @@ func Render(state domain.ArtifactState) ([]byte, error) {
 	buf.WriteString("current_state:\n")
 	cs := state.CurrentState
 	buf.WriteString("  phase: " + renderNullable(cs.Phase) + "\n")
-	buf.WriteString("  stage: " + renderNullable(cs.Stage) + "\n")
+	buf.WriteString("  iteration: " + renderNullableQuoted(cs.Stage) + "\n")
 	buf.WriteString("  last_status: " + renderNullable(string(cs.LastStatus)) + "\n")
 	buf.WriteString("  last_agent: " + renderNullableQuoted(cs.LastAgent) + "\n")
 	buf.WriteString("  error_code: " + renderNullable(string(cs.ErrorCode)) + "\n")
@@ -185,7 +185,7 @@ const ExecLogWorkflowRowHeader = "WorkflowRow"
 
 // renderExecutionLog renders the execution log entries as a markdown table.
 func renderExecutionLog(entries []domain.ExecutionLogEntry) []byte {
-	headers := []string{"Seq", "Agent", "Phase", "Stage", ExecLogWorkflowRowHeader, "Status", "Timestamp", "Summary", "Inputs", "Checkpoint"}
+	headers := []string{"Seq", "Agent", "Phase", "Iteration", ExecLogWorkflowRowHeader, "Status", "Timestamp", "Summary", "Inputs", "Checkpoint"}
 	t := mdtable.Table{Header: headers}
 
 	for _, e := range entries {

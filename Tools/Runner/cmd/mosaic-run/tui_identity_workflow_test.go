@@ -44,14 +44,14 @@ global_sequence: 1
 checkpoints: disabled
 current_state:
   phase: EXECUTION
-  stage: "1"
+  iteration: "1"
   last_status: SUCCESS
   last_agent: "agent#1"
   error_code: null
 ---
 
 <ExecutionLog type="core">
-| Seq | Agent   | Phase     | Stage | Status  | Timestamp            | Summary | Checkpoint |
+| Seq | Agent   | Phase     | Iteration | Status  | Timestamp            | Summary | Checkpoint |
 | --- | ------- | --------- | ----- | ------- | -------------------- | ------- | ---------- |
 | 1   | agent#1 | EXECUTION | 1     | SUCCESS | 2026-01-01T00:00:00Z | done    | -          |
 </ExecutionLog>

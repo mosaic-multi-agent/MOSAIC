@@ -26,7 +26,7 @@ func (m *rootModel) handleQuestionMsg(qMsg questionMsg) (tea.Model, tea.Cmd) {
 					m.progressScreen.AppendRow(runflow.ProgressRow{
 						AgentInstance: notice.Title,
 						Phase:         extractField(notice.Message, "phase"),
-						Stage:         extractField(notice.Message, "stage"),
+						Stage:         extractField(notice.Message, "iteration"),
 						Status:        "running",
 					})
 				} else if status != "" {

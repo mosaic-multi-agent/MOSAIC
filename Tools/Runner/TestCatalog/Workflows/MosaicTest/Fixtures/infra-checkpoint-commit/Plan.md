@@ -1,7 +1,7 @@
 # Plan: MosaicTest Infrastructure Checkpoint+Commit
 
 > [WARN] **FIXTURE ARTIFACT** — pre-placed by hand before the run, not produced by a planner agent.
-> This file exists so the runner has a stage table to read in a workflow with no pre-EXECUTION rows.
+> This file exists so the runner has a block schedule to read in a workflow with no planning row.
 
 ## Overview
 Two stages of fixture work. Two stages are needed so that STAGE_END fires mid-run (at the stage 1/2 boundary), not only at run completion.
@@ -18,4 +18,4 @@ Two stages of fixture work. Two stages are needed so that STAGE_END fires mid-ru
 
 ## Fixture Notes
 
-The `Approach` column is `direct` because this is a bare workflow with no execution groups. A bare workflow must ignore the Approach column entirely; a value is present to guard against a regression where bare workflows start honouring approaches.
+The `Approach` column is `direct` because the `Stage` block of this workflow has no groups. A block without groups must ignore the Approach column entirely; a value is present to guard against a regression where such blocks start honouring approaches.

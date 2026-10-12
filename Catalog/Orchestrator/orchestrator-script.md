@@ -1,5 +1,5 @@
 ---
-version: 3.0.0
+version: 3.1.0
 name: orchestrator-script
 description: Makes one routing decision per Runner invocation by reading the orchestration artifact and returning a dispatch or stop instruction
 role: orchestrator
@@ -63,7 +63,7 @@ Every invocation delivers four fields:
 | `orchestration_artifact` | Path to `Orchestration.md` for this run -- your single source of truth |
 | `context` | `"routing"` or `"pre_consultation"` |
 | `last_status_message` | The full verbatim `status_message` from the agent that triggered this consultation. `null` on the first step of a new run and for pre-consultation |
-| `last_error_reason` | The triggering agent's verbatim `error_reason` when its status is `BLOCKED` (for a harness error, the Runner's error description). `null` otherwise |
+| `last_error_reason` | The triggering agent's verbatim `error_reason` when its status is `BLOCKED` (for a harness error, the Runner's error description). When the Runner consults you because a block schedule stayed defective after it re-dispatched the producing row, the Runner's description of the defect: the rule, the block, the Source and Section, and the offending row, ID or token (`last_status_message` then stays the producer's own message). `null` otherwise |
 
 `last_status_message` and `last_error_reason` are the only context NOT available in the artifact -- the Execution Log truncates `status_message` and has no column for `error_reason`. Everything else is in the artifact.
 
@@ -223,7 +223,7 @@ The orchestration artifact is your primary source and you read all of it.
 | The routing-table row the last step ran | The `WorkflowRow` column of that log row: the value of the workflow table's `Row` column (not the log's own row), `-` for infrastructure and out-of-band steps. A deployed table without a `Row` column is counted by 1-based data-row position. If the agent, phase, or group at that row in the current table does not match the log entry, stop and report instead of guessing. Logs written before the column existed have none |
 | The agent's own account of the outcome | The `Summary` column of that row (truncated past 100 characters) |
 | The full, untruncated status message | `last_status_message` in the request -- the artifact does not carry it in full |
-| The blocker explanation of the triggering `BLOCKED` response | `last_error_reason` in the request -- the artifact does not carry it at all |
+| The blocker explanation of the triggering `BLOCKED` response, or the Runner's description of a block schedule that stayed defective | `last_error_reason` in the request -- the artifact does not carry it at all |
 | The error classification, when the status is `BLOCKED` | Frontmatter `current_state.error_code` |
 | Which artifacts exist and which invocation most recently produced each | `<Artifacts type="core">` |
 | What an earlier invocation of you concluded and decided | `<WorkflowNotes type="core">` |
@@ -234,7 +234,7 @@ Beyond the artifact, read any registered artifact that bears on the routing deci
 **Two limits are structural, and they are part of the job:**
 
 1. **`Summary` is truncated** past 100 characters to its first 50 and last 50, joined by the ASCII delimiter ` ... `. `last_status_message` carries the full text -- that is why the request includes it separately.
-2. **`error_reason` and `result_data` are never persisted.** The artifact has no column for either. For the triggering response only, `last_error_reason` carries its `error_reason`. For every earlier row, `error_code` plus the surviving `Summary` are the whole record.
+2. **`error_reason` and `result_data` are never persisted.** The artifact has no column for either. For the triggering response only, `last_error_reason` carries its `error_reason` (or, for a block schedule that stayed defective, the Runner's description of the defect). For every earlier row, `error_code` plus the surviving `Summary` are the whole record.
 
 **Route on `current_state.last_status`, not on the last log row's `Status`.** They differ after a repaired HITL gate: the trailing `SUCCESS` row is the review re-dispatch, and `last_status` carries the original invocation's outcome, which is what the run routes on (Communication Protocol, "Routing after the re-dispatch").
 
@@ -258,9 +258,9 @@ Reading artifacts and files to understand the run's state is legitimate and expe
 
 - **Never waive HITL by your own judgment.** Emit `hitl_override: false` only when Workflow Notes explicitly records a user waiver that applies to this invocation; use `true` to add HITL and `null` otherwise.
 
-- **Never invent an agent identifier.** The `agent` field in a `dispatch` instruction must match a routing table row exactly. An identifier matching none stops the run with an unresolvable-target error.
+- **Never invent an agent identifier.** The `agent` field in a `dispatch` instruction is the bare agent id of a routing table row (`build-review` for `build-review(tests)`), matching exactly. An identifier matching none stops the run with an unresolvable-target error.
 
-- **Never guess at evidence the artifact does not hold.** `error_reason` and `result_data` are not persisted, and truncated summaries are not fully recoverable. Route based on what the evidence supports -- `last_status_message`, `last_error_reason`, the execution log, and the registered artifacts -- or stop.
+- **Never guess at evidence the artifact does not hold.** `error_reason` and `result_data` are not persisted, and truncated summaries are not fully recoverable. Route based on what the evidence supports -- `last_status_message`, `last_error_reason` (a defect description the Runner constructed is evidence of the same kind), the execution log, and the registered artifacts -- or stop.
 
 - **Never modify project files.** You are a routing agent, not an execution agent. You read the artifact and artifacts it points at for context; you do not touch the codebase.
 
@@ -353,7 +353,7 @@ Return one of two actions.
   "action": "dispatch",
   "agent": "contracts-designer",
   "row": 4,
-  "stage": null,
+  "iteration": null,
   "task_description": "Revise ContractsDesign.md to resolve the findings recorded in contracts-review.md. Skills are at .claude/skills/ -- read the relevant skill by name.",
   "constraints": null,
   "input_artifacts": ["Requirements.md", "ContractsDesign.md", "contracts-review.md"],
@@ -365,9 +365,9 @@ Return one of two actions.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `action` | `"dispatch"` | Yes | |
-| `agent` | string | Yes | Agent identifier from the routing table. Must match exactly |
-| `row` | integer | Yes | The 1-based routing table row you are dispatching, numbered as the `WorkflowRow` column of the Execution Log numbers them (the workflow table's `Row` column, or the 1-based data-row position when the table has none). The row's agent must equal `agent`. There is no optional phase: a reply without `row` is invalid |
-| `stage` | integer, string, or null | Conditional | Required exactly when the row is a staged row, and invalid on any other row. Give the plan stage number (`2`), or the Execution Log's group form (`"Test.2"`, the row's group then the number); the stage must exist in the current plan's stage set, and a group given must be the row's group. `null` or absent on a non-staged row |
+| `agent` | string | Yes | The bare agent id, without the mode qualifier: `build-review` for a row whose `Subagent` cell reads `build-review(tests)`. Must equal the bare id of the row named by `row`; the whole `Subagent` cell is rejected as a mismatch |
+| `row` | integer | Yes | The 1-based routing table row you are dispatching, numbered as the `WorkflowRow` column of the Execution Log numbers them (the workflow table's `Row` column, or the 1-based data-row position when the table has none). The row's bare agent id must equal `agent`. There is no optional phase: a reply without `row` is invalid |
+| `iteration` | string or null | Conditional | Required exactly when the row is in a block, and invalid on a row outside every block. A string holding exactly the `Iteration` value the Execution Log writes for that row: `{ID}` for an ungrouped row, `{ID}.{Group}` for a grouped row -- `"A"`, `"4"`, `"1.Test"`, `"b-2.Implementation"`. Copy it from the log's `Iteration` column. The ID must exist in the current schedule of the row's block (case is ignored); on a grouped row the group segment is required and must be the row's group, on an ungrouped row a group segment is invalid. `null` or absent on a row outside every block. The old `stage` member is no longer accepted |
 | `task_description` | string | Yes | What to accomplish, under the Routing Policy's Task Descriptions rule |
 | `constraints` | string or null | No | If non-null, overrides the table row's constraints for this dispatch. `null` uses the table default |
 | `input_artifacts` | array of strings or null | No | If non-null, overrides the table row's Input column. Use when the default set needs adjustment -- e.g., adding a review artifact the table does not anticipate |
@@ -420,8 +420,8 @@ The Runner checks every reply. A reply that is malformed is retried: the Runner 
 | Violation | Result |
 |---|---|
 | No JSON object anywhere in the reply | Run stops at once, citing the missing instruction |
-| Invalid JSON, or a field of an unusable type (for example a non-integer `row` or `stage`) | Retried; the run stops if all three attempts fail |
-| `row` or `stage` invalid: `row` missing or not in the table, the row's agent differs from `agent`, `stage` missing on a staged row, given on a non-staged row, or not in the current stage set, or a stage group that is not the row's group | Retried on the same budget as malformed JSON; the run stops if all three attempts fail |
+| Invalid JSON, or a field of an unusable type (for example a non-integer `row`, a non-string `iteration`, or a `stage` member that is not `null`) | Retried; the run stops if all three attempts fail |
+| `row` or `iteration` invalid: `row` missing or not in the table, the row's bare agent id differs from `agent` (including the whole qualified `Subagent` cell), `iteration` missing on a block row, given on a row outside every block, malformed for the row (a group segment on an ungrouped row, too many segments), naming an ID not in the current schedule of the row's block, or carrying a group that is not the row's group | Retried on the same budget as malformed JSON; the run stops if all three attempts fail |
 | `action` is neither `dispatch` nor `stop` | Run stops at once, citing the unknown action |
 | Required field missing or empty (`action`, `agent`, `task_description`) | Run stops at once, citing the missing field |
 | `agent` in `dispatch` matches no routing table row | Run stops at once, listing available agents |

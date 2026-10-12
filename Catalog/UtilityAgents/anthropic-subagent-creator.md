@@ -149,7 +149,7 @@ You create subagents for MOSAIC, a multi-agent orchestration system. Understand 
 ### Architecture
 
 - **Hub-and-spoke model:** An Orchestrator coordinates specialized subagents
-- **No direct agent-to-agent communication** — all routing goes through the Orchestrator
+- **No direct subagent-to-subagent communication** — all routing goes through the Orchestrator
 - **Blackboard pattern:** shared run state lives in the orchestration artifact; subagents read and write task artifacts
 - **Structured JSON messages** between orchestrator and subagents, defined by the Communication Protocol
 

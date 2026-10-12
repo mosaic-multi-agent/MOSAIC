@@ -1,5 +1,5 @@
 ---
-version: "1.0"
+version: "1.1"
 name: "MosaicTest Smoke Single Workflow"
 description: "Harness conformance fixture — one agent, one invocation, SUCCESS to COMPLETE. The simplest run mosaic-run can perform."
 hint: "Harness smoke test — single invocation, envelope parse and identifier echo"
@@ -16,7 +16,7 @@ smoke_set:
   - auto
 ---
 
-<Workflow type="core" name="smoke-single" version="1.0">
+<Workflow type="core" name="smoke-single" version="1.1">
 ## MosaicTest Smoke Single Workflow
 
 **Use when:** Verifying that `mosaic-run` can drive a harness at all. This is the first workflow to run against any new or changed harness — if it fails, nothing else in the suite is worth running.
@@ -26,8 +26,8 @@ smoke_set:
 | RESEARCH | mosaictest-scripted | FALSE | COMPLETE | - | MosaicTestScript/smoke-success.md | - |
 
 **Notes:**
-- Non-staged. With zero staged rows, workflow admission short-circuits, so none of the staged-shape conditions apply.
-- No `Plan.md` is read and no stage table is required.
+- No block rows. The workflow has no `**Blocks:**` table, so no block schedule is read.
+- No `Plan.md` is read and none is required.
 - The script fixture must be seeded into the run folder at run creation. Seed `Fixtures/smoke-single` — the whole directory, not anything inside it — as the single seed path. See `Fixtures/README.md`.
 
 </Workflow>
@@ -36,7 +36,7 @@ smoke_set:
 
 ## Design Rationale
 
-This workflow exists to isolate the harness invocation path from everything else. One row, one invocation, no stages, no artifacts written, no plan read. When it passes, the following are all known good for this harness: the agent was located and invoked from the command line; the model was selected; the prompt was delivered; a JSON response envelope came back and was parsed; the protocol response was extracted from it; and `run_id` and `agent_instance_id` survived the round trip intact.
+This workflow exists to isolate the harness invocation path from everything else. One row, one invocation, no blocks, no artifacts written, no plan read. When it passes, the following are all known good for this harness: the agent was located and invoked from the command line; the model was selected; the prompt was delivered; a JSON response envelope came back and was parsed; the protocol response was extracted from it; and `run_id` and `agent_instance_id` survived the round trip intact.
 
 That last property is why the row declares an input artifact but no output. The script fixture is the only thing that tells the stub what to do, so reading it also proves the harness resolved the working directory correctly and that file-read tooling functions. Writing an output artifact would add provenance stamping to the surface under test, which belongs in a later fixture where a failure can be attributed.
 
@@ -49,6 +49,7 @@ That last property is why the row declares an input artifact but no output. The 
 | Version | Date | Author | Summary |
 |---------|------|--------|---------|
 | 1.0 | 2026-08-03 | MOSAIC | Initial version |
+| 1.1 | 2026-10-12 | MOSAIC | WorkflowFormat 2.16 wording: block-schedule notes instead of staged-shape admission notes. Routing table and dispatch sequence unchanged. |
 
 ---
 

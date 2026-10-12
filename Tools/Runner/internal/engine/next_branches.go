@@ -35,6 +35,7 @@ func orchestratedDecision(in NextInput) domain.EngineDecision {
 // the generic non-SUCCESS deviation.
 func nonSuccessDecision(
 	in NextInput,
+	sc ScheduleContext,
 	pos position,
 	currentRow domain.RoutingRow,
 	status domain.StatusCode,
@@ -42,23 +43,27 @@ func nonSuccessDecision(
 ) domain.EngineDecision {
 	state := in.State
 	currentRowIdx := pos.rowIdx
-	if dec, ok := mechanicalRetry(in, pos, status); ok {
+	if dec, ok := mechanicalRetry(in, sc, pos, status); ok {
 		return dec
 	}
-	isFindingsLoop := in.Mode == domain.ExecutionModeAutoReview &&
-		status == domain.StatusCOMPLETED_NEEDS_ACTION &&
-		isUnambiguousHint(currentRow.OnFindings)
 
-	// COMPLETED_NEEDS_ACTION with an unambiguous On Findings hint -> loop-back dispatch.
+	// COMPLETED_NEEDS_ACTION with an On Findings target -> loop-back dispatch.
 	// This auto-route fires only in auto-review mode; in auto mode it deviates.
-	if isFindingsLoop && !reviewLoopLimitReached(state, pos) {
-		if dec, ok := findingsRouteBack(in, pos, currentRow); ok {
-			return dec
+	isFindingsLoop := false
+	if in.Mode == domain.ExecutionModeAutoReview && status == domain.StatusCOMPLETED_NEEDS_ACTION {
+		switch currentRow.Findings.Kind {
+		case domain.FindingsTarget:
+			isFindingsLoop = true
+		case "":
+			return unroutableStop(currentRowIdx, columnOnFindings, "")
 		}
+	}
+	if isFindingsLoop && !reviewLoopLimitReached(in.Workflow, state, pos) {
+		return findingsRouteBack(in, sc, pos, currentRow)
 	}
 
 	kind := domain.DeviationNonSuccess
-	if isFindingsLoop && reviewLoopLimitReached(state, pos) {
+	if isFindingsLoop {
 		// Review loop limit reached in auto-review mode: deviate instead of routing.
 		kind = domain.DeviationReviewLoopLimit
 	}
@@ -74,28 +79,27 @@ func nonSuccessDecision(
 	}}
 }
 
-// findingsRouteBack builds the auto-review loop-back dispatch to the agent named
-// by the row's On Findings hint. ok is false when no row above currentRow holds
-// that agent, in which case the caller deviates.
+// findingsRouteBack builds the auto-review loop-back dispatch to the row the
+// typed On Findings entry names. A target in the block of the current row keeps
+// the current iteration; any other target runs outside an iteration.
 func findingsRouteBack(
 	in NextInput,
+	sc ScheduleContext,
 	pos position,
 	currentRow domain.RoutingRow,
-) (dec domain.EngineDecision, ok bool) {
-	targetRowIdx := findNearestPrecedingRowForAgent(in.Workflow, pos.rowIdx, currentRow.OnFindings.Value)
-	if targetRowIdx < 0 {
-		return domain.EngineDecision{}, false
+) domain.EngineDecision {
+	targetRowIdx := currentRow.Findings.Target.Index
+	if targetRowIdx < 0 || targetRowIdx >= len(in.Workflow.Table.Rows) {
+		return unroutableStop(pos.rowIdx, columnOnFindings, string(domain.FindingsTarget))
 	}
-	var stageNum domain.StageNumber
-	var stageStr string
-	if currentRow.PhaseParsed.IsStaged {
-		stageNum = pos.stageNum
-		stageStr = pos.stage
+	var iteration domain.IterationID
+	if b, ok := in.Workflow.BlockOf(pos.rowIdx); ok && b.Contains(targetRowIdx) {
+		iteration = pos.iteration
 	}
-	step, err := buildDispatchStep(in.Workflow, in.Stages, targetRowIdx, stageNum, stageStr,
-		in.Agents, in.Seq, in.Now, in.RefreshedStages)
+	step, err := buildDispatchStep(in.Workflow, targetRowIdx, iteration,
+		in.Agents, in.Seq, in.Now, sc)
 	if err != nil {
-		return domain.EngineDecision{Stop: &domain.StopDecision{Reason: err.Error()}}, true
+		return domain.EngineDecision{Stop: &domain.StopDecision{Reason: err.Error()}}
 	}
 	// Inject the reviewing agent's output artifacts into the dispatched
 	// step's InputArtifacts. Entries already present in the table row's
@@ -106,7 +110,7 @@ func findingsRouteBack(
 		step.Request.InputArtifacts, step.Request.OutputArtifacts, in.ArtifactRegistry)
 	return domain.EngineDecision{Dispatch: &domain.DispatchDecision{
 		Steps: []domain.DispatchStep{step},
-	}}, true
+	}}
 }
 
 // injectCreatorArtifacts adds the creator agent's own previously-produced

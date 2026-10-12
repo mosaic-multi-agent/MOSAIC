@@ -23,7 +23,7 @@ func TestRoundTrip_CanonicalFile_IdenticalBytes(t *testing.T) {
 	// - Parse reads all fields correctly.
 	// - Render produces exactly the same bytes for an unmodified state.
 	// - No content is silently dropped or reformatted.
-	original, err := os.ReadFile(fixturePath("canonical.md"))
+	original, err := os.ReadFile(fixturePath("canonical_v3.md"))
 	if err != nil {
 		t.Fatalf("reading fixture: %v", err)
 	}

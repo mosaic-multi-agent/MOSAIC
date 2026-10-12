@@ -13,68 +13,86 @@ import (
 
 // ===== Incompatible workflows refused per FR-18a (file store) =====
 
-// TestIntegration_IncompatibleWorkflow_RefusedFR18a verifies that each of the
-// FR-18a incompatibility conditions causes the session to return RunRefused
-// before any harness invocation, with the full stack including the real
-// file-based artifact store.
+// TestIntegration_IncompatibleWorkflow_RefusedFR18a verifies that each
+// incompatible workflow shape causes the session to return RunRefused before
+// any harness invocation, with the full stack including the real file-based
+// artifact store.
 //
-// The compat unit tests cover all seven FR-18a conditions individually.
-// This integration test verifies that the refusal correctly propagates through
-// the full session → compat → RunRefused path for three representative
-// conditions: parallel dispatch, staged non-EXECUTION phase, and agent-with-mode
-// notation.
+// The compat and workflow unit tests cover the individual rules. This
+// integration test verifies that a refusal correctly propagates through the
+// full session -> workflow/compat -> RunRefused path, and that the message
+// names the WorkflowFormat validity rule that was broken, for three
+// representative shapes: a fork on a block row, a block schedule source no row
+// produces before the block is entered, and a repeated Subagent cell.
 func TestIntegration_IncompatibleWorkflow_RefusedFR18a(t *testing.T) {
 	cases := []struct {
-		name            string
-		workflowID      string
-		content         string
-		wantMsgContains string // substring expected in the refusal message
+		name       string
+		workflowID string
+		content    string
+		wantRule   string // WorkflowFormat validity rule ID the refusal must name
 	}{
 		{
 			name:       "parallel-dispatch",
 			workflowID: "parallel-dispatch",
-			// Condition 5: comma in OnSuccess signals parallel routing.
+			// A comma list in On Success is a fork; a block row may not fork (B1).
 			content: `<Workflow type="core" name="parallel-dispatch" version="1.0">
 ## Parallel Dispatch Workflow
 
-| Phase | Subagent | HITL | On Success       | Input | Output |
-|-------|----------|:----:|------------------|-------|--------|
-| EXECUTION.[StageNumber] | implementation-tdd | FALSE | agent-a, agent-b | Stage-{StageNumber}/Plan.md | out.md |
+| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
+|-------|----------|:----:|------------|-------------|-------|--------|
+| EXECUTION.[Stage] | implementation-tdd | FALSE | agent-a, agent-b | - | Stage-{Stage}/Plan.md | Stage-{Stage}/out.md |
+| EXECUTION.[Stage] | agent-a | FALSE | COMPLETE | - | Stage-{Stage}/out.md | Stage-{Stage}/a.md |
+| EXECUTION.[Stage] | agent-b | FALSE | COMPLETE | - | Stage-{Stage}/out.md | Stage-{Stage}/b.md |
+
+**Blocks:**
+
+| Block | Source | Section |
+|-------|--------|---------|
+| Stage | Plan.md | Stages |
 </Workflow>
 `,
-			wantMsgContains: "parallel",
+			wantRule: "B1",
 		},
 		{
 			name:       "dynamic-stage-set",
 			workflowID: "dynamic-stages",
-			// Condition 4: an EXECUTION row produces Stage-*/Plan.md (dynamic stage
-			// set — implies stages can be added during execution, which is not
-			// supported). The output uses the literal wildcard "Stage-*/Plan.md"
-			// rather than the template form "Stage-{StageNumber}/Plan.md" to
-			// exercise the exact pattern compat checks for.
+			// The block schedule source Plan.md is neither a seed (the first row
+			// does not list it and does not begin the block) nor output by a row
+			// outside the block that runs before it is entered: only a row of the
+			// block writes it, and a block row alone never produces its own
+			// schedule (A7).
 			content: `<Workflow type="core" name="dynamic-stages" version="1.0">
 ## Dynamic Stage Set Workflow
 
-| Phase | Subagent | HITL | On Success | Input | Output |
-|-------|----------|:----:|------------|-------|--------|
-| EXECUTION.[StageNumber] | implementation-tdd | FALSE | COMPLETE | Stage-{StageNumber}/Plan.md | Stage-*/Plan.md |
+| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
+|-------|----------|:----:|------------|-------------|-------|--------|
+| PLANNING | planner-tdd-soft | FALSE | NEXT | - | Requirements.md | Notes.md |
+| EXECUTION.[Stage] | implementation-tdd | FALSE | COMPLETE | - | Stage-{Stage}/Plan.md | Plan.md |
+
+**Blocks:**
+
+| Block | Source | Section |
+|-------|--------|---------|
+| Stage | Plan.md | Stages |
 </Workflow>
 `,
-			wantMsgContains: "dynamic",
+			wantRule: "A7",
 		},
 		{
-			name:       "agent-with-mode-notation",
+			name:       "repeated-subagent-cell",
 			workflowID: "mode-notation",
-			// Condition 6: parentheses in agent identifier.
+			// Mode qualifiers are valid, but a Subagent cell, qualifier included,
+			// names exactly one row (T8).
 			content: `<Workflow type="core" name="mode-notation" version="1.0">
 ## Mode Notation Workflow
 
-| Phase | Subagent       | HITL | On Success | Input | Output |
-|-------|----------------|:----:|------------|-------|--------|
-| PLANNING | agent-a(mode) | FALSE | COMPLETE | - | out.md |
+| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
+|-------|----------|:----:|------------|-------------|-------|--------|
+| PLANNING | agent-a(review) | FALSE | NEXT | - | - | out.md |
+| PLANNING | agent-a(review) | FALSE | COMPLETE | - | out.md | result.md |
 </Workflow>
 `,
-			wantMsgContains: "parentheses",
+			wantRule: "T8",
 		},
 	}
 
@@ -102,9 +120,9 @@ func TestIntegration_IncompatibleWorkflow_RefusedFR18a(t *testing.T) {
 			got, err := sess.Start(context.Background(), cfg)
 			msg := requireRefused(t, got, err)
 
-			if tc.wantMsgContains != "" && !strings.Contains(msg, tc.wantMsgContains) {
-				t.Errorf("want refusal message to contain %q, got %q",
-					tc.wantMsgContains, msg)
+			if !strings.Contains(msg, "rule "+tc.wantRule) {
+				t.Errorf("want refusal message to name rule %s, got %q",
+					tc.wantRule, msg)
 			}
 
 			// No harness invocations should have been made before the refusal.
@@ -220,14 +238,14 @@ runner_manual_resolution: disabled
 checkpoints: disabled
 current_state:
   phase: PLANNING
-  stage: null
+  iteration: null
   last_status: SUCCESS
   last_agent: "agent-a#1"
   error_code: null
 ---
 
 <ExecutionLog type="core">
-| Seq | Agent     | Phase    | Stage | Status  | Timestamp            | Summary       | Checkpoint |
+| Seq | Agent     | Phase    | Iteration | Status  | Timestamp            | Summary       | Checkpoint |
 | --- | --------- | -------- | ----- | ------- | -------------------- | ------------- | ---------- |
 | 1   | agent-a#1 | PLANNING | -     | SUCCESS | 2026-01-01T00:00:00Z | planning done | -          |
 </ExecutionLog>

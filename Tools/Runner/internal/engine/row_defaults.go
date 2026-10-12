@@ -7,52 +7,66 @@ import (
 	"mosaic-run/internal/domain"
 )
 
-// Sentinel causes of ResolveRowDefaults stage argument errors.
+// Sentinel causes of ResolveRowDefaultsForIteration iteration argument errors.
 var (
 	ErrRowDefaultsStageRequired       = errors.New("staged row requires a stage")
 	ErrRowDefaultsStageNotInSet       = errors.New("stage is not in the stage set")
 	ErrRowDefaultsStageOnNonStagedRow = errors.New("non-staged row cannot take a stage")
 )
 
-// ResolveRowDefaults resolves the default dispatch payload of row at stage,
-// exactly as an engine-routed dispatch does: inputs and outputs through
-// ResolveArtifacts, HITL = row.HITL || the plan stage's HITL for a staged row.
-// stage is 0 for a non-staged row. Paths are bare (no run prefix).
-func ResolveRowDefaults(row domain.RoutingRow, stage domain.StageNumber, stages, refreshedStages *domain.StageSet) (domain.DispatchDefaults, error) {
-	stageStr := ""
-	if row.PhaseParsed.IsStaged {
-		if stage <= 0 {
+// ResolveRowDefaultsForIteration resolves the default dispatch payload of row
+// at iteration, exactly as an engine-routed dispatch does: inputs and outputs
+// through ResolveArtifactsForIteration, HITL = row.HITL || the iteration's HITL
+// in the schedule of the row's block. iteration is "" for a row outside every
+// block. Paths are bare (no run prefix).
+//
+// The row's block is row.Block(). The iteration is looked up in that block's
+// schedule ignoring case and is used in paths exactly as passed.
+func ResolveRowDefaultsForIteration(
+	row domain.RoutingRow,
+	iteration domain.IterationID,
+	sc ScheduleContext,
+) (domain.DispatchDefaults, error) {
+	block, inBlock := row.Block()
+	if inBlock {
+		if iteration == "" {
 			return domain.DispatchDefaults{}, ErrRowDefaultsStageRequired
 		}
-		inSet := false
-		if stages != nil {
-			_, inSet = stages.Entry(stage)
-		}
-		if !inSet {
+		sched, ok := sc.Schedules[block]
+		if !ok {
 			return domain.DispatchDefaults{}, ErrRowDefaultsStageNotInSet
 		}
-		stageStr = domain.FormatStageValue(row.PhaseParsed.Group, stage)
-	} else if stage != 0 {
+		if _, found := sched.Find(iteration); !found {
+			return domain.DispatchDefaults{}, ErrRowDefaultsStageNotInSet
+		}
+	} else if iteration != "" {
 		return domain.DispatchDefaults{}, ErrRowDefaultsStageOnNonStagedRow
 	}
-	return resolveDefaults(row, stage, stageStr, stages, refreshedStages)
+	return resolveDefaults(row, block, iteration, sc)
 }
 
 // resolveDefaults is the one routine behind both the engine's dispatch step and
-// ResolveRowDefaults. It tolerates a missing stage set the way the engine
-// always has.
-func resolveDefaults(row domain.RoutingRow, stageNum domain.StageNumber, stageStr string, stages, refreshedStages *domain.StageSet) (domain.DispatchDefaults, error) {
+// ResolveRowDefaultsForIteration. It tolerates a missing schedule the way the
+// engine always has. block is "" for a row outside every block.
+func resolveDefaults(
+	row domain.RoutingRow,
+	block domain.BlockName,
+	iteration domain.IterationID,
+	sc ScheduleContext,
+) (domain.DispatchDefaults, error) {
 	hitl := row.HITL
-	if row.PhaseParsed.IsStaged && stages != nil && stageNum > 0 {
-		if entry, ok := stages.Entry(stageNum); ok {
-			hitl = hitl || entry.HITL
+	if block != "" && iteration != "" {
+		if sched, ok := sc.Schedules[block]; ok {
+			if it, found := sched.Find(iteration); found {
+				hitl = hitl || it.HITL
+			}
 		}
 	}
-	inputs, err := ResolveArtifacts(row.InputArtifacts, stageNum, stageStr, stages, refreshedStages, true)
+	inputs, err := ResolveArtifactsForIteration(row.InputArtifacts, block, iteration, sc, true)
 	if err != nil {
 		return domain.DispatchDefaults{}, fmt.Errorf("row for agent %q: input artifacts: %w", row.Agent, err)
 	}
-	outputs, err := ResolveArtifacts(row.OutputArtifacts, stageNum, stageStr, stages, refreshedStages, false)
+	outputs, err := ResolveArtifactsForIteration(row.OutputArtifacts, block, iteration, sc, false)
 	if err != nil {
 		return domain.DispatchDefaults{}, fmt.Errorf("row for agent %q: output artifacts: %w", row.Agent, err)
 	}

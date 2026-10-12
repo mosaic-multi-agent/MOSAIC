@@ -65,7 +65,7 @@ Deployed Agents (Ready to Use)
 
 ### Core Architecture Concepts
 
-**Hub-and-Spoke Orchestration:** One Orchestrator coordinates specialized Subagents. No direct agent-to-agent communication. All routing through orchestrator.
+**Hub-and-Spoke Orchestration:** One Orchestrator coordinates specialized Subagents. No direct subagent-to-subagent communication. All routing through orchestrator.
 
 **Communication Protocol (v1.6):** Standardized JSON messages. 6 status codes: SUCCESS, COMPLETED_NEEDS_ACTION, PARTIALLY_DONE, NEEDS_CLARIFICATION, CAPABILITY_EXCEEDED, BLOCKED. Only BLOCKED has error codes.
 

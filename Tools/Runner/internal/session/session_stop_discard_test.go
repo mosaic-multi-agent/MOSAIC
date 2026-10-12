@@ -173,7 +173,7 @@ func TestSession_StopDuringConsultation_StagedRowNamesTheStage(t *testing.T) {
 	})
 	d.store.state = consultStagedStage2State()
 	d.store.exists = true
-	d.inner.queueStagedDispatch("agent-b", "complete stage 2", 1, 2)
+	d.inner.queueStagedDispatch("agent-b", "complete stage 2", 1, "2")
 
 	got, err := d.ses.Start(context.Background(), baseConsultStagedConfig(orchPath, dir))
 

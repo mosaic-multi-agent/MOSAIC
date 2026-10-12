@@ -12,10 +12,10 @@ import (
 func TestNext_UnresolvableApproach_InitialDispatch_ReturnsStop(t *testing.T) {
 	// brownfield-tdd has an approach table with TDD, Implementation-First,
 	// Implementation-Only, Tests-Only. "UnknownApproach" is not in the table.
-	aw := mustParseAndAdmit(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
-	stages := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: false, Approach: "UnknownApproach"},
-	})
+	aw := mustParseAndAdmitV216(t, brownfieldTDDV216Content, "brownfield-tdd", "3.4")
+	schedules := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "UnknownApproach"},
+	)
 	agents := newTestAgents(
 		"codebase-research", "requirements-refinement", "requirements-review",
 		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
@@ -26,14 +26,14 @@ func TestNext_UnresolvableApproach_InitialDispatch_ReturnsStop(t *testing.T) {
 	state := stateAfter("DESIGN", "", "contracts-review#7", domain.StatusSUCCESS, 7)
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           state,
-		LastResponse:    successResponse("contracts-review#7"),
-		Agents:          agents,
-		Seq:             7,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        state,
+		LastResponse: successResponse("contracts-review#7"),
+		Agents:       agents,
+		Seq:          7,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	stop := requireStop(t, dec)
@@ -48,10 +48,10 @@ func TestNext_UnresolvableApproach_InitialDispatch_ReturnsStop(t *testing.T) {
 //
 // RED: current implementation produces no stop at all (falls back silently).
 func TestNext_UnresolvableApproach_StopReason_NamesApproachValue(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
-	stages := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: false, Approach: "UnknownApproach"},
-	})
+	aw := mustParseAndAdmitV216(t, brownfieldTDDV216Content, "brownfield-tdd", "3.4")
+	schedules := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "UnknownApproach"},
+	)
 	agents := newTestAgents(
 		"codebase-research", "requirements-refinement", "requirements-review",
 		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
@@ -61,14 +61,14 @@ func TestNext_UnresolvableApproach_StopReason_NamesApproachValue(t *testing.T) {
 	state := stateAfter("DESIGN", "", "contracts-review#7", domain.StatusSUCCESS, 7)
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           state,
-		LastResponse:    successResponse("contracts-review#7"),
-		Agents:          agents,
-		Seq:             7,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        state,
+		LastResponse: successResponse("contracts-review#7"),
+		Agents:       agents,
+		Seq:          7,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	stop := requireStop(t, dec)
@@ -84,12 +84,12 @@ func TestNext_UnresolvableApproach_StopReason_NamesApproachValue(t *testing.T) {
 //
 // RED: current implementation falls back to ApproachTDD for the missing approach.
 func TestNext_UnresolvableApproach_InterStageAdvance_ReturnsStop(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
+	aw := mustParseAndAdmitV216(t, brownfieldTDDV216Content, "brownfield-tdd", "3.4")
 	// Stage 1 uses TDD (valid), stage 2 uses "UnknownApproach" (not in table).
-	stages := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: false, Approach: "TDD"},
-		{Number: 2, HITL: false, Approach: "UnknownApproach"},
-	})
+	schedules := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "TDD"},
+		domain.ScheduleIteration{ID: "2", HITL: false, Approach: "UnknownApproach"},
+	)
 	agents := newTestAgents(
 		"codebase-research", "requirements-refinement", "requirements-review",
 		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
@@ -98,17 +98,17 @@ func TestNext_UnresolvableApproach_InterStageAdvance_ReturnsStop(t *testing.T) {
 	)
 	// implementation-review (row 10) is the last row of the Implementation group in TDD stage 1.
 	// After it completes, the engine should try to advance to stage 2 but find "UnknownApproach" → stop.
-	state := stateAfter("EXECUTION.Implementation.[StageNumber]", "Stage-1", "implementation-review#11", domain.StatusSUCCESS, 11)
+	state := stateAfterRow("EXECUTION", "1.Implementation", "implementation-review#11", domain.StatusSUCCESS, 11, 11)
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           state,
-		LastResponse:    successResponse("implementation-review#11"),
-		Agents:          agents,
-		Seq:             11,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        state,
+		LastResponse: successResponse("implementation-review#11"),
+		Agents:       agents,
+		Seq:          11,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	stop := requireStop(t, dec)
@@ -123,10 +123,10 @@ func TestNext_UnresolvableApproach_InterStageAdvance_ReturnsStop(t *testing.T) {
 //
 // RED: current implementation dispatches normally (silently falls back to TDD).
 func TestNext_UnresolvableApproach_NoFallbackDispatch(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
-	stages := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: false, Approach: "UnknownApproach"},
-	})
+	aw := mustParseAndAdmitV216(t, brownfieldTDDV216Content, "brownfield-tdd", "3.4")
+	schedules := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "UnknownApproach"},
+	)
 	agents := newTestAgents(
 		"codebase-research", "requirements-refinement", "requirements-review",
 		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
@@ -136,14 +136,14 @@ func TestNext_UnresolvableApproach_NoFallbackDispatch(t *testing.T) {
 	state := stateAfter("DESIGN", "", "contracts-review#7", domain.StatusSUCCESS, 7)
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           state,
-		LastResponse:    successResponse("contracts-review#7"),
-		Agents:          agents,
-		Seq:             7,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        state,
+		LastResponse: successResponse("contracts-review#7"),
+		Agents:       agents,
+		Seq:          7,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	// Must be Stop, not Dispatch.
@@ -161,8 +161,8 @@ func TestNext_UnresolvableApproach_NoFallbackDispatch(t *testing.T) {
 // the row recorded on every workflow entry.
 func unresolvableApproachResumeState() domain.ArtifactState {
 	return stateWithLog(9,
-		execLogEntry(8, "test-writer-tdd#8", "EXECUTION", "Test.1", domain.StatusSUCCESS, bvRowTestWriter),
-		execLogEntry(9, "build-review#9", "EXECUTION", "Test.1", domain.StatusSUCCESS, bvRowTestBuild),
+		execLogEntry(8, "test-writer-tdd#8", "EXECUTION", "1.Test", domain.StatusSUCCESS, bvRowTestWriter),
+		execLogEntry(9, "build-review#9", "EXECUTION", "1.Test", domain.StatusSUCCESS, bvRowTestBuild),
 	)
 }
 
@@ -174,13 +174,13 @@ func unresolvableApproachResumeState() domain.ArtifactState {
 // identified from the recorded row; the advance from that row then needs the
 // stage's ordered groups, which cannot be built for "UnknownApproach".
 func TestResumePoint_UnresolvableApproach_ReturnsError(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.1")
-	// "UnknownApproach" is not in brownfield-tdd-build-verified's Execution Groups table.
-	stages := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: false, Approach: "UnknownApproach"},
-	})
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.1")
+	// "UnknownApproach" is not in brownfield-tdd-build-verified's Groups table.
+	schedules := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "UnknownApproach"},
+	)
 
-	_, err := engine.ResumePoint(aw, stages, unresolvableApproachResumeState(), nil)
+	_, err := engine.ResumePointFromSchedules(aw, schedules, unresolvableApproachResumeState(), nil)
 
 	if err == nil {
 		t.Fatal("ResumePoint must return an error when the approach is unresolvable")
@@ -191,12 +191,12 @@ func TestResumePoint_UnresolvableApproach_ReturnsError(t *testing.T) {
 // error returned by ResumePoint wraps or chains an error containing the unresolvable
 // approach value for user diagnostics.
 func TestResumePoint_UnresolvableApproach_ErrorContainsApproachValue(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.1")
-	stages := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: false, Approach: "UnknownApproach"},
-	})
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.1")
+	schedules := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "UnknownApproach"},
+	)
 
-	_, err := engine.ResumePoint(aw, stages, unresolvableApproachResumeState(), nil)
+	_, err := engine.ResumePointFromSchedules(aw, schedules, unresolvableApproachResumeState(), nil)
 	if err == nil {
 		t.Fatal("ResumePoint must return an error")
 	}
@@ -218,24 +218,24 @@ func TestResumePoint_UnresolvableApproach_ErrorContainsApproachValue(t *testing.
 //
 // RED: current engine falls back to TDD approach silently.
 func TestNext_UnresolvableApproach_InitialDispatch_StagedOnly_ReturnsStop(t *testing.T) {
-	// threeGroupContent has no pre-execution rows and its stage must have a
+	// threeGroupV216Content has no pre-execution rows and its stage must have a
 	// matching approach. Use "NoSuchApproach" which is absent from the table.
-	aw := mustParseAndAdmit(t, threeGroupContent, "three-group", "1.0")
-	stages := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: false, Approach: "NoSuchApproach"},
-	})
+	aw := mustParseAndAdmitV216(t, threeGroupV216Content, "three-group", "1.0")
+	schedules := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "NoSuchApproach"},
+	)
 	agents := newTestAgents("agent-alpha", "agent-beta", "agent-gamma")
 
 	// Initial dispatch (no prior log) → engine enters EXECUTION immediately.
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           emptyState(),
-		LastResponse:    nil,
-		Agents:          agents,
-		Seq:             0,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        emptyState(),
+		LastResponse: nil,
+		Agents:       agents,
+		Seq:          0,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	stop := requireStop(t, dec)
@@ -256,16 +256,16 @@ func TestNext_UnresolvableApproach_InitialDispatch_StagedOnly_ReturnsStop(t *tes
 // arithmetic; the approach error comes from ordering the groups to find the
 // next row.
 func TestNext_UnresolvableApproach_WinsOverGenericRowStop(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.1")
-	stages := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: false, Approach: "UnknownApproach"},
-	})
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.1")
+	schedules := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "UnknownApproach"},
+	)
 	log := &runLog{}
 	log.
-		workflowStep("test-writer-tdd", "Test.1", domain.StatusSUCCESS, bvRowTestWriter).
-		workflowStep("build-review", "Test.1", domain.StatusSUCCESS, bvRowTestBuild)
+		workflowStep("test-writer-tdd", "1.Test", domain.StatusSUCCESS, bvRowTestWriter).
+		workflowStep("build-review", "1.Test", domain.StatusSUCCESS, bvRowTestBuild)
 
-	dec := nextAfterLog(aw, stages, buildVerifiedAgents(), log)
+	dec := nextAfterLogIDs(aw, schedules, buildVerifiedAgents(), log)
 
 	stop := requireStop(t, dec)
 	// The stop reason must name the unresolvable approach value. The generic
@@ -278,33 +278,33 @@ func TestNext_UnresolvableApproach_WinsOverGenericRowStop(t *testing.T) {
 
 // ===== T4.3: No-groups-declared path =====
 //
-// These tests verify that when a workflow declares no groups (bare EXECUTION rows,
-// no approach table), any Approach value in the StageSet is silently ignored and
+// These tests verify that when a workflow declares no groups (ungrouped block rows,
+// no approach table), any Approach value in the schedule is silently ignored and
 // all EXECUTION rows run in declaration order.
 
 // TestNext_NoGroups_UnknownApproachValue_DoesNotStop verifies that when the workflow
 // has no groups (GroupsDeclared=false), an approach value not present in any table
 // does NOT cause a StopDecision. The approach is simply ignored.
 func TestNext_NoGroups_UnknownApproachValue_DoesNotStop(t *testing.T) {
-	// implOnlyContent has no groups and no approach table.
-	aw := mustParseAndAdmit(t, implOnlyContent, "implementation-only", "3.1")
-	stages := newTestStageSet([]domain.StageEntry{
+	// implOnlyV216Content has no groups and no approach table.
+	aw := mustParseAndAdmitV216(t, implOnlyV216Content, "implementation-only", "3.1")
+	schedules := newTestSchedules(
 		// "CompletelyUnknownToken" is not a known approach, but with no groups
 		// declared the engine must ignore it rather than stopping.
-		{Number: 1, HITL: false, Approach: "CompletelyUnknownToken"},
-	})
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "CompletelyUnknownToken"},
+	)
 	agents := newTestAgents("implementation-tdd", "implementation-review", "test-runner")
 
 	// Fresh start: initial dispatch.
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           emptyState(),
-		LastResponse:    nil,
-		Agents:          agents,
-		Seq:             0,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        emptyState(),
+		LastResponse: nil,
+		Agents:       agents,
+		Seq:          0,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	// Must be a dispatch (rows run in order), not a Stop.
@@ -316,28 +316,28 @@ func TestNext_NoGroups_UnknownApproachValue_DoesNotStop(t *testing.T) {
 }
 
 // TestNext_NoGroups_AllExecutionRowsDispatchedInOrder verifies that all EXECUTION
-// rows in a bare (no-groups) workflow run in declaration order when the StageSet
+// rows in a bare (no-groups) workflow run in declaration order when the schedule
 // carries an approach value.
 func TestNext_NoGroups_AllExecutionRowsDispatchedInOrder(t *testing.T) {
-	// implOnlyContent: EXECUTION rows are implementation-tdd (row 0), implementation-review (row 1).
-	aw := mustParseAndAdmit(t, implOnlyContent, "implementation-only", "3.1")
-	stages := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: false, Approach: "SomeOpaqueValue"},
-	})
+	// implOnlyV216Content: EXECUTION rows are implementation-tdd (row 0), implementation-review (row 1).
+	aw := mustParseAndAdmitV216(t, implOnlyV216Content, "implementation-only", "3.1")
+	schedules := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "SomeOpaqueValue"},
+	)
 	agents := newTestAgents("implementation-tdd", "implementation-review", "test-runner")
 
 	// After implementation-tdd (row 0, seq 1) completes, next must be implementation-review (row 1).
-	state := stateAfter("EXECUTION.[StageNumber]", "Stage-1", "implementation-tdd#1", domain.StatusSUCCESS, 1)
+	state := stateAfterRow("EXECUTION", "1", "implementation-tdd#1", domain.StatusSUCCESS, 1, 1)
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           state,
-		LastResponse:    successResponse("implementation-tdd#1"),
-		Agents:          agents,
-		Seq:             1,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        state,
+		LastResponse: successResponse("implementation-tdd#1"),
+		Agents:       agents,
+		Seq:          1,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
