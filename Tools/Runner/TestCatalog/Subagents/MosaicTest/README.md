@@ -34,7 +34,7 @@ So `mosaictest-scripted` is bound to its behaviour through its Input column: exa
 
 The script format is specified inside [mosaictest-scripted.md](./mosaictest-scripted.md), so fixture authors and the agent read one spec rather than two.
 
-**The two infrastructure stubs cannot be scripted.** Their dispatch carries no artifacts at all, so there is no channel to hand them a fixture. Their behaviour is baked into their agent files, which is why they are fixed and tiny.
+**The two infrastructure stubs cannot be scripted.** The checkpoint stub's dispatch carries no artifacts at all, and the review stub's dispatch carries only the run's own `Orchestration.md`, which is the run's log and not a fixture channel, so there is no way to hand either of them a fixture. Their behaviour is baked into their agent files, which is why they are fixed and tiny.
 
 ## Conventions
 

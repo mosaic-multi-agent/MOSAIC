@@ -150,6 +150,21 @@ func TestUnsupportedCatalogIdentities_YieldErrUnknownHarness(t *testing.T) {
 	}
 }
 
+// TestSupportedModelCatalogs_ExcludeNonSupportedHarnesses verifies that the
+// model catalogs AgentTest offers cover only supported harnesses. The shared
+// catalog also holds non-CLI entries (vscode-ghcp) that must never be offered
+// as spawnable.
+func TestSupportedModelCatalogs_ExcludeNonSupportedHarnesses(t *testing.T) {
+	for _, cat := range supportedModelCatalogs() {
+		if cat.HarnessID == "vscode-ghcp" {
+			t.Errorf("supportedModelCatalogs() offers %q, which is not a spawnable harness", cat.HarnessID)
+		}
+		if !isSupportedHarness(cat.HarnessID) {
+			t.Errorf("supportedModelCatalogs() includes %q which is not a supported harness", cat.HarnessID)
+		}
+	}
+}
+
 // TestCLIOptionsHarnesses_MatchSupportedSet verifies that the harness set
 // offered to the CLI frontend comes from supportedHarnesses(), not the full
 // shared catalog, so an identity the catalog declares but this tool does not

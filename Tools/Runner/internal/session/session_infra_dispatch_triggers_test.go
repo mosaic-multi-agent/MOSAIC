@@ -1,9 +1,11 @@
 package session_test
 
-// What every other trigger dispatch carries: no input artifacts and a task
-// description naming each trigger that matched in the pass, with the agent
-// dispatched once however many of its triggers matched. The commit setup
-// dispatch is unchanged.
+// What the checkpoint-class and the non-ITERATION_END commit-class trigger
+// dispatches carry: no input artifacts and a task description naming each
+// trigger that matched in the pass, with the agent dispatched once however
+// many of its triggers matched. The commit setup dispatch is unchanged.
+// Review-class dispatches carry the run's Orchestration.md and are covered in
+// session_infra_dispatch_review_test.go.
 
 import (
 	"context"

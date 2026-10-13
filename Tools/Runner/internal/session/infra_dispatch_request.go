@@ -13,13 +13,17 @@ import (
 
 // buildInfraRequest builds the request of a trigger dispatch of agent.
 //
-// A commit-class agent whose matched triggers include ITERATION_END receives
-// the ended iteration's own artifacts that exist in the run folder, and a task
-// description naming the block and iteration ID. Every other dispatch carries
-// no input artifacts and a description naming the matched triggers. Output
-// artifacts stay empty and the human is never in the loop. Resolution never
-// fails the dispatch: when the iteration or its artifacts cannot be
-// determined, the request is built as for any other dispatch.
+// A review-class agent always receives exactly one input artifact, the
+// run-scoped Orchestration.md, whichever trigger matched. It is sent without a
+// file-existence check because the run's Orchestration.md is written before
+// triggers are evaluated. A commit-class agent whose matched triggers include
+// ITERATION_END receives the ended iteration's own artifacts that exist in the
+// run folder, and a task description naming the block and iteration ID. Every
+// other dispatch carries no input artifacts and a description naming the
+// matched triggers. Output artifacts stay empty and the human is never in the
+// loop. Resolution never fails the dispatch: when the iteration or its
+// artifacts cannot be determined, the request is built as for any other
+// dispatch.
 func buildInfraRequest(
 	agent domain.DeclaredInfraAgent,
 	matched []string,
@@ -34,6 +38,10 @@ func buildInfraRequest(
 		RunID:           runID,
 		TaskDescription: fmt.Sprintf("infrastructure agent dispatch: %s, triggered by %s",
 			agent.Name, strings.Join(matched, ", ")),
+	}
+	if agent.Class == "review" {
+		req.InputArtifacts = []string{domain.RunScopedFolder(runID) + "/Orchestration.md"}
+		return req
 	}
 	if agent.Class != "commit" || !containsTrigger(matched, domain.InfraTriggerIterationEnd) {
 		return req

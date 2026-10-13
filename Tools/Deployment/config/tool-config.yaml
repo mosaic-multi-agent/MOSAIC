@@ -34,24 +34,19 @@ schema_version: "1"
 #
 # NOTE ON DEFAULTS: omitting this key entirely is NOT the same as an empty list.
 # When the whole tool-config.yaml file is absent, the tool applies a built-in
-# default that enables all six shipped utility agents. Once this file exists,
-# the value written here is authoritative — so `[]` really does mean "none".
+# default that offers only injections-helper. Once this file exists, the value
+# written here is authoritative - so `[]` really does mean "none".
 #
-# The six shipped utility agent keys:
-#   anthropic-subagent-creator
-#   harness-bug-hunter
-#   orchestration-architect
-#   system-prompt-capturer
-#   transformation
-#   workflow-creator
+# The creator agents (subagent-creator, workflow-creator) are left out of the
+# default because they depend on files that exist only in the MOSAIC repository
+# and ship at MOSAIC root. The Deploy agents flow still offers every utility
+# agent on disk, creators included.
 #
 # Example:
 #   utility_agent_allow_list:
-#     - orchestration-architect
-#     - workflow-creator
+#     - injections-helper
+#     - system-prompt-capturer
 utility_agent_allow_list:
-  - workflow-creator
-  - anthropic-subagent-creator
   - injections-helper
 
 # ---------------------------------------------------------------------------

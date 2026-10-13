@@ -267,7 +267,7 @@ log_retention_runs: 50
 
 | Field | What it controls |
 |-------|-----------------|
-| `utility_agent_allow_list` | Which utility agents are selectable. `[]` = none. File absent = all six defaults. |
+| `utility_agent_allow_list` | Which utility agents are selectable. `[]` = none. File absent = `[injections-helper]` only; the Deploy agents flow still offers every utility agent on disk. |
 | `allow_external_modules` | Whether external harness modules in `MosaicDeploy/harnesses/` are allowed |
 | `log_retention_runs` | Max history log entries (`0` = keep all) |
 | `tool_destinations` | Permanent generic-tool to harness-tool mappings (silences repeated prompts) |
