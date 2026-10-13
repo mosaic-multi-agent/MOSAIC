@@ -1,34 +1,37 @@
-# Unreleased
+# 0.7.0 (2026-10-13)
+
+> **Breaking: the workflow format is finalized, and the new orchestrators accept nothing else.** The format is close to what 0.6.2 workflows already used. It is now fully specified, and "stages" are generalized into "blocks" and "iterations". Workflow logic is unchanged and all catalog workflows have been migrated. The new `orchestrator` (v8), `orchestrator-script` (v3) and Runner (v1.6) refuse workflows in the old format and cannot resume runs started with earlier versions.
+>
+> **To upgrade:** redeploy the orchestrator and workflows together, and finish any runs still in progress before upgrading. To migrate a custom workflow, use `workflow-creator`. The logic carries over as is, so every workflow is expected to migrate without problems.
 
 ## Tools
 
-### Runner
+### Runner v1.6.1
 #### Changes
-- Requires `orchestrator-script` v3.3.0 (dispatch replies name the iteration and the bare agent id; runs are sequential; the orchestrator judges whether finished work must run again)
-- **breaking** Infrastructure trigger `STAGE_END` is renamed `ITERATION_END` and fires when an iteration of any block ends; orchestrators must be redeployed
-- Refuses to start or resume a run when an infrastructure agent names a trigger the Runner does not know, in the orchestrator or in the run's overrides, before anything is dispatched; for `STAGE_END` the message says it is now `ITERATION_END`
-- New runs record `dispatch: sequential`, and resuming a run that records another value is refused
-- Commit dispatches carry the files of the iteration that just finished and other trigger dispatches name the trigger(s) that fired; infrastructure log rows show their inputs and error codes
-- Accepts only WorkflowFormat 2.16 workflows (1.x workflows are refused at start and on resume) and refuses to resume runs written before OrchestrationArtifactFormat 3.0
-- The orchestrator can end a run at pre-consultation with `stop` and a reason: the run ends before any dispatch (exit code 6, reason printed, run resumable; the TUI offers Retry only). Any other pre-consultation `action` and a stop without a reason fail the pre-consultation (exit code 7)
-- A routing reply without an `action` field is reported as a missing field, not as an unknown action
-- GHCP CLI: a `subagent.deselected` event (GHCP ran its default agent instead of the requested one) fails the invocation with an error naming the requested agent, and a `session.error` event (for example an exhausted quota) fails it with its type, code, status and message; the GHCP version is written to the debug log, and the parser's schema note records the versions these events were observed with
-- In Modes 2 and 3 a `SUCCESS` whose next step has already finished goes to the orchestrator instead of repeating that work; with manual resolution the finished step is pre-selected
-- The Execution Log `Summary` keeps the first 50 and last 100 characters above 150 characters, counted in characters rather than bytes
-- MosaicTest sidecars (`.expected.json`) can assert that the child run's stderr contains a given text (`stderr_contains`)
+- Accepts only the finalized workflow format. Requires `orchestrator-script` v3.3.0
+- Workflows with parallel branches (forks and joins) run only in Mode 1, one branch at a time
+- GHCP CLI: clear errors when GHCP runs its default agent instead of the requested one, or when the session fails (for example an exhausted quota)
+#### Bugfixes
+- Fix finished work being repeated after a route-back in Modes 2 and 3
+
+### Deploy v1.1.5
+#### Changes
+- `subagent-creator` and `workflow-creator` are no longer offered by default when deploying a workspace. They ship ready to use in the MOSAIC repository root, so run them there
+#### Bugfixes
+- VS Code GHCP model list is fixed and now offers the same models as GHCP CLI
 
 ## Catalog
-- **orchestrator-script** (v3.1.0): dispatch replies name the block iteration in `iteration` (the Execution Log's `Iteration` value) instead of `stage`, and give the bare agent id without the mode qualifier
-- **orchestrator-script** (v3.2.0): runs fork branches and block iterations one at a time, each to its end, in a fixed order
-- **orchestrator** (v8.1.0): **breaking** — trigger `STAGE_END` renamed `ITERATION_END`; redeploy orchestrators. Asks whether a run is sequential or parallel (enabling commits makes it sequential), refuses unknown triggers, and gives the commit agent the finished iteration's files
-- **commit-manager-git** (v2.3.0): commit messages come from the finished iteration's files whatever the workflow names them; `Mosaic-Stage` trailer replaced by `Mosaic-Iteration`
-- **checkpoint-manager-git** (v2.2.1), **checkpoint-restore-git** (v2.2.2): trigger renamed `ITERATION_END`; revert commits name the checkpoint's sequence number
-- **orchestration-review** (v1.2.2): uses iteration terminology of the current run format
-- **orchestrator-script** (v3.3.0): judges whether finished work must run again when `On Success` leads to a row that already finished, and treats it as a fourth deviation trigger; may end a run at pre-consultation with a `stop`; `Summary` keeps the first 50 and last 100 characters above 150; required by the new Runner
-- **orchestrator** (v8.2.0): same finished-work judgement in its Routing Policy; `Summary` handling keeps the first 50 and last 100 characters above 150
-- **commit-manager-git** (v2.3.1), **checkpoint-manager-git** (v2.2.2), **orchestration-review** (v1.2.3): wording about the Execution Log `Summary` truncation no longer states the old 50 + 50 cut
-- **mosaic-architect** (v1.4.1), **subagent-creator** (v3.1.1): catalog paths corrected (`Catalog/UtilityAgents/subagent-creator.md`, `Catalog/Workflows/Index.md`)
-- **MosaicTest catalogue**: stub orchestrator `orchestrator-script` (v1.3.0) can return a pre-consultation `stop` from its fixture; new workflows `preconsult-stop` and `finished-work-consult` cover the pre-consultation stop and the finished-work consultation
+- **orchestrator** (v8.2.1) / **orchestrator-script** (v3.3.0): finalized workflow format only. Stage-based wording becomes iterations, including the infrastructure trigger `STAGE_END`, renamed `ITERATION_END`
+- All catalog workflows migrated to the finalized format
+- **product-comparison** (v2.0): a new **comparison-planner** agent plans the products, research topics and comparison dimensions up front
+- **workflow-creator** (v2.1.0): authors workflows in the finalized format
+- **commit-manager-git** (v2.3.1): commits once per finished iteration. The `Mosaic-Stage` commit trailer is replaced by `Mosaic-Iteration`
+- Infrastructure, planning and research agents updated for the finalized format
+
+## Documentation
+- Workflow format fully specified in `Development/Designs/WorkflowFormat.md`
+- Getting Started and Deployment Guide: creator agents are run from the MOSAIC repository root
+- Orchestration and Runner guides use iteration terminology
 
 # 0.6.2 (2026-10-10)
 

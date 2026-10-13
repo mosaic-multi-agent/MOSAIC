@@ -6,7 +6,7 @@ Informal, hand-maintained list of what's next for this project. Order within eac
 
 ## Now (ASAP)
 
-- Update Runner tool to produce proper MOSAIC logs.
+- Enable Deploy tool to combine multiple Catalogs.
 
 ## Next (Near Future)
 
