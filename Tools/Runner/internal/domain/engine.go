@@ -86,6 +86,14 @@ const (
 	// limit. The session itself enters the consultation; the engine never
 	// produces this kind.
 	DeviationScheduleDefect DeviationKind = "schedule-defect"
+	// DeviationFinishedWork: after an engine-routed SUCCESS, the step the
+	// engine would dispatch next (row + iteration value) already has a SUCCESS
+	// entry with that recorded WorkflowRow and Iteration, so the engine
+	// consults instead of repeating finished work. PlannedContinuation is that
+	// step. Internal only: never serialised. Response is the zero
+	// ProtocolResponse when Next runs on resume (LastResponse == nil) and must
+	// not be relied on by any consumer.
+	DeviationFinishedWork DeviationKind = "finished-work"
 )
 
 // DeviationInfo carries everything the deviation resolver needs.
@@ -95,7 +103,9 @@ type DeviationInfo struct {
 	CurrentRow          int              // row index of the row that deviated
 	CurrentPhase        string
 	CurrentStage        string
-	PlannedContinuation *DispatchStep // where the happy path would have gone (nil if unknown)
+	// PlannedContinuation is where the happy path would have gone; set for
+	// DeviationFinishedWork (the already-finished step), nil otherwise.
+	PlannedContinuation *DispatchStep
 	ArtifactState       ArtifactState // current state at time of deviation
 	// ErrorReason is a Runner-constructed error description. When non-empty it
 	// becomes the consultation's last_error_reason; otherwise the reason is

@@ -1,5 +1,5 @@
 ---
-version: 3.1.0
+version: 3.1.1
 base-version: 1.0.0
 name: subagent-creator
 description: Creates high-quality orchestration subagent instructions through iterative collaboration, ensuring compliance with the multi-agent orchestration system architecture and protocols
@@ -248,11 +248,11 @@ An agent's function is its folder. There is no frontmatter field for it, and add
 
 ### Which Workflows Use It
 
-`Workflows/Index.md` is the workflow registry. Read it, then read the individual workflow files under `Workflows/{Category}/` that are candidates to route to the new subagent — a subagent nothing routes to is a subagent that never runs.
+`Catalog/Workflows/Index.md` is the workflow registry. Read it, then read the individual workflow files under `Catalog/Workflows/{Category}/` that are candidates to route to the new subagent — a subagent nothing routes to is a subagent that never runs.
 
 ### Infrastructure Agents
 
-An infrastructure agent is an ordinary subagent by file shape — same frontmatter, same regions, `role: subagent`. What differs is how the orchestrator reaches it: a trigger fires it, rather than a workflow routing to it. It therefore appears in no workflow table, and `Workflows/Index.md` will tell you nothing about when it runs.
+An infrastructure agent is an ordinary subagent by file shape — same frontmatter, same regions, `role: subagent`. What differs is how the orchestrator reaches it: a trigger fires it, rather than a workflow routing to it. It therefore appears in no workflow table, and `Catalog/Workflows/Index.md` will tell you nothing about when it runs.
 
 `Development/Designs/InfrastructureAgentConcept.md` is the authority on its class, trigger vocabulary, and failure policy. Two consequences for your process:
 
@@ -289,7 +289,7 @@ Understand how this subagent fits into the orchestration system:
 
 **Questions:**
 - "Which function does this belong to?" (one of the category folders in `Catalog/Subagents/`, or a new one?)
-- "Which workflows will use this subagent?" (existing workflows from `Workflows/Index.md`, or a new workflow?)
+- "Which workflows will use this subagent?" (existing workflows from `Catalog/Workflows/Index.md`, or a new workflow?)
 - "What artifacts does this subagent read and write?"
 - "Where in the workflow sequence does it fit?" (after which step? before which?)
 - "Does it need human-in-the-loop by default?"
@@ -527,7 +527,7 @@ When asked to review or update an existing subagent:
 
 1. Read the existing subagent file
 2. Read `Development/Designs/AgentTemplateArchitecture.md` for the current schema, and `Development/Designs/CommunicationProtocol.md` and `Catalog/DeployedSections.md` for the deployed text the agent will receive alongside its own
-3. Read the `Catalog/Subagents/{Category}/README.md` files for the agent registry, and `Workflows/Index.md` for which workflows route to this agent
+3. Read the `Catalog/Subagents/{Category}/README.md` files for the agent registry, and `Catalog/Workflows/Index.md` for which workflows route to this agent
 4. Apply the Self-Review Checklist (both General Coherence and Orchestration Compliance)
 5. Report findings as a single numbered list: what passes, what needs updating, and why
 6. If updates are needed, propose specific changes with rationale

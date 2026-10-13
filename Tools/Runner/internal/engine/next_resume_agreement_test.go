@@ -33,6 +33,37 @@ func requireNextAndResumeAgree(
 	wantStage string,
 ) {
 	t.Helper()
+	requireAgreement(t, aw, schedules, agents, state, wantRow, wantStage, false)
+}
+
+// requireNextAndResumeAgreeOrFinished is requireNextAndResumeAgree for a
+// position whose row already finished: ResumePoint has no deviation concept and
+// names the row, so Next agrees when it either dispatches that row or deviates
+// with the finished-work kind and the row as PlannedContinuation.
+func requireNextAndResumeAgreeOrFinished(
+	t *testing.T,
+	aw domain.AdmittedWorkflow,
+	schedules domain.BlockSchedules,
+	agents map[string]domain.AgentReference,
+	state domain.ArtifactState,
+	wantRow int,
+	wantStage string,
+) {
+	t.Helper()
+	requireAgreement(t, aw, schedules, agents, state, wantRow, wantStage, true)
+}
+
+func requireAgreement(
+	t *testing.T,
+	aw domain.AdmittedWorkflow,
+	schedules domain.BlockSchedules,
+	agents map[string]domain.AgentReference,
+	state domain.ArtifactState,
+	wantRow int,
+	wantStage string,
+	finishedAllowed bool,
+) {
+	t.Helper()
 	last := state.ExecutionLog[len(state.ExecutionLog)-1]
 	dec := engine.Next(engine.NextInput{
 		Workflow:     aw,
@@ -44,7 +75,12 @@ func requireNextAndResumeAgree(
 		Now:          fixedNow,
 		Mode:         domain.ExecutionModeAutoReview,
 	})
-	step := requireDispatch(t, dec)
+	var step domain.DispatchStep
+	if finishedAllowed && dec.Deviation != nil {
+		step = *requireFinishedWork(t, dec, wantRow, wantStage).PlannedContinuation
+	} else {
+		step = requireDispatch(t, dec)
+	}
 
 	info, err := engine.ResumePointFromSchedules(aw, schedules, state, domain.NewInfraAgentSet(declaredCheckpointInfraAgent()))
 	if err != nil {
@@ -124,7 +160,10 @@ func TestNextAndResumePoint_RouteBackRunWithRecordedRows_AgreeAfterEveryStep(t *
 		t.Run(step.agent+"@"+step.stage, func(t *testing.T) {
 			log := newBuildVerifiedLog().play(buildVerifiedRun, want.steps)
 
-			requireNextAndResumeAgree(t, aw, singleSchedules("TDD"), buildVerifiedAgents(),
+			// The row the resume point names may already have finished (the
+			// writer again after the review asked for changes): Next then
+			// names it in a finished-work deviation instead of dispatching.
+			requireNextAndResumeAgreeOrFinished(t, aw, singleSchedules("TDD"), buildVerifiedAgents(),
 				resumeState(log, false), want.row, want.stage)
 		})
 	}

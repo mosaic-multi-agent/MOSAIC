@@ -41,7 +41,8 @@ type OrchestratorConsultant struct {
 //   - ConsultFailTransport: harness error from InvokeRaw
 //   - ConsultFailMalformedJSON: reply is not valid JSON
 //   - ConsultFailUnknownAction: action is not "dispatch" or "stop"
-//   - ConsultFailMissingField: required field (agent, task_description) absent or empty
+//   - ConsultFailMissingField: required field (action, agent, task_description)
+//     absent or empty; an absent action is not retried
 //   - ConsultFailUnknownAgent: dispatch agent not in the routing table
 //
 // A dispatch reply must name the row (1-based) and, for a staged row, the
@@ -119,6 +120,13 @@ func (c *OrchestratorConsultant) ConsultRouting(ctx context.Context, req domain.
 				continue
 			}
 			return domain.RoutingInstruction{}, parseErr
+		}
+
+		if resp.ActionAbsent {
+			return domain.RoutingInstruction{}, &domain.ConsultationError{
+				Failure: domain.ConsultFailMissingField,
+				Detail:  "missing required field: action",
+			}
 		}
 
 		switch resp.Action {
@@ -222,11 +230,17 @@ func describeTargetError(err error) string {
 
 // PreConsult implements domain.PreConsultant. It invokes the orchestrator with
 // context=pre_consultation and last_status_message=null (always, per the contract),
-// then parses the optional-string-pair reply into a PreConsultationAdvice.
+// then parses the reply into a PreConsultationAdvice: the optional-string-pair
+// advice, or a stop ({"action":"stop","reason":...}) carried in advice.Stop.
+// It never retries.
 //
 // Failure classes returned:
 //   - ConsultFailTransport: harness error from InvokeRaw
-//   - ConsultFailMalformedJSON: reply is not valid JSON
+//   - ConsultFailNoInstruction: reply holds no JSON object
+//   - ConsultFailMalformedJSON: reply is not valid JSON, "action" is not a
+//     string, or a stop's "reason" is not a string
+//   - ConsultFailUnknownAction: "action" is a string other than "stop"
+//   - ConsultFailMissingField: a stop without a non-blank "reason"
 func (c *OrchestratorConsultant) PreConsult(ctx context.Context, req domain.ConsultationRequest) (domain.PreConsultationAdvice, error) {
 	wr := wireRequest{
 		OrchestrationArtifact: req.OrchestrationArtifact,
@@ -274,17 +288,5 @@ func (c *OrchestratorConsultant) PreConsult(ctx context.Context, req domain.Cons
 	if err != nil {
 		return domain.PreConsultationAdvice{}, err
 	}
-	var resp wirePreConsultResponse
-	if err := json.Unmarshal(extracted, &resp); err != nil {
-		return domain.PreConsultationAdvice{}, &domain.ConsultationError{
-			Failure: domain.ConsultFailMalformedJSON,
-			Detail:  fmt.Sprintf("malformed pre-consultation response JSON: %v", err),
-			Err:     err,
-		}
-	}
-
-	return domain.PreConsultationAdvice{
-		TaskDescription: resp.TaskDescription,
-		Constraints:     resp.Constraints,
-	}, nil
+	return parsePreConsultReply(extracted)
 }

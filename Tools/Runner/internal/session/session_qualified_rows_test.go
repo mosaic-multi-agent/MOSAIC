@@ -220,8 +220,10 @@ func TestSession_QualifiedRows_AutoReview_FindingsRouteBackLandsOnNamedRowAbove(
 
 // TestSession_QualifiedRows_AutoReview_FindingsRouteBackToOtherQualifiedRow
 // verifies that an On Findings entry naming the build-review(tests) cell lands
-// on that exact row, dispatched with the tests focus, and that routing then
-// continues from it through implementer to build-review(impl).
+// on that exact row, dispatched with the tests focus. The implementer row after
+// it had already finished, so the step into it is a finished-work consultation
+// and the orchestrator re-runs it; build-review(impl) never finished (its only
+// result was findings), so the engine continues to it without consulting.
 func TestSession_QualifiedRows_AutoReview_FindingsRouteBackToOtherQualifiedRow(t *testing.T) {
 	r := newQualifiedRun(t, qualifiedOptions{implFindings: "build-review(tests)"})
 	r.queue("planner", "planner#1", domain.StatusSUCCESS)
@@ -231,6 +233,7 @@ func TestSession_QualifiedRows_AutoReview_FindingsRouteBackToOtherQualifiedRow(t
 	r.queue("build-review", "build-review#5", domain.StatusSUCCESS)
 	r.queue("implementer", "implementer#6", domain.StatusSUCCESS)
 	r.queue("build-review", "build-review#7", domain.StatusSUCCESS)
+	r.consultant.queueDispatch("implementer", "rerun implementer", 2)
 
 	got, err := r.ses.Start(context.Background(), r.config(domain.ExecutionModeAutoReview))
 
@@ -243,6 +246,10 @@ func TestSession_QualifiedRows_AutoReview_FindingsRouteBackToOtherQualifiedRow(t
 	requireDispatchStep(t, invs, 5, "implementer", "implementer#6", "")
 	requireDispatchStep(t, invs, 6, "build-review", "build-review#7", "impl")
 	requireRecordedRows(t, r.store, 1, 2, 3, 4, 2, 3, 4)
+	if len(r.consultant.Requests) != 1 {
+		t.Fatalf("want one finished-work consultation (implementer finished, build-review(impl) did not), got %d", len(r.consultant.Requests))
+	}
+	requireFinishedWorkConsultation(t, r.consultant.Requests[0], 2)
 }
 
 // ===== Resume =====
@@ -284,7 +291,9 @@ func seedQualifiedResume(r qualifiedRun, lastAgent, lastPhase string, log ...dom
 // build-review(tests). The qualified row's log entry must be recognised as a
 // routing-table entry, so the rewind stops at it and the run re-dispatches
 // implementer. A rewind that treats it as foreign would fall back to planner
-// and dispatch build-review(tests) a second time.
+// and dispatch build-review(tests) a second time. The implementer row already
+// has a SUCCESS entry, so the resume consults the orchestrator, which re-runs
+// that exact row.
 func TestSession_QualifiedRows_Resume_InterruptedAfterInfraEntry_RerunsExactRow(t *testing.T) {
 	r := newQualifiedRun(t, qualifiedOptions{})
 	infra := qualifiedStep(3, "checkpoint-manager-git#3", "PLANNING", int(domain.NoWorkflowRow))
@@ -296,6 +305,7 @@ func TestSession_QualifiedRows_Resume_InterruptedAfterInfraEntry_RerunsExactRow(
 	)
 	r.queue("implementer", "implementer#5", domain.StatusSUCCESS)
 	r.queue("build-review", "build-review#6", domain.StatusSUCCESS)
+	r.consultant.queueDispatch("implementer", "rerun the interrupted implementer row", 2)
 	cfg := r.config(domain.ExecutionModeAuto)
 	markResume(&cfg)
 
@@ -308,12 +318,17 @@ func TestSession_QualifiedRows_Resume_InterruptedAfterInfraEntry_RerunsExactRow(
 	}
 	requireDispatchStep(t, invs, 0, "implementer", "implementer#5", "")
 	requireDispatchStep(t, invs, 1, "build-review", "build-review#6", "impl")
+	if len(r.consultant.Requests) != 1 {
+		t.Fatalf("want one finished-work consultation for the already finished implementer row, got %d", len(r.consultant.Requests))
+	}
+	requireFinishedWorkConsultation(t, r.consultant.Requests[0], 2)
 }
 
 // TestSession_QualifiedRows_Resume_InterruptedQualifiedRow_RerunsRowByRecordedRow
 // verifies that an interrupted build-review(impl) row is re-dispatched with its
 // own focus, picked by the recorded WorkflowRow, not the earlier row that holds
-// the same bare agent id.
+// the same bare agent id. The row already has a SUCCESS entry, so the resume
+// consults the orchestrator, which re-runs that exact row.
 func TestSession_QualifiedRows_Resume_InterruptedQualifiedRow_RerunsRowByRecordedRow(t *testing.T) {
 	r := newQualifiedRun(t, qualifiedOptions{})
 	seedQualifiedResume(r, "implementer#3", "EXECUTION",
@@ -323,6 +338,7 @@ func TestSession_QualifiedRows_Resume_InterruptedQualifiedRow_RerunsRowByRecorde
 		qualifiedStep(4, "build-review#4", "REVIEW", 4),
 	)
 	r.queue("build-review", "build-review#5", domain.StatusSUCCESS)
+	r.consultant.queueDispatch("build-review", qualifiedFocus("impl"), 3)
 	cfg := r.config(domain.ExecutionModeAuto)
 	markResume(&cfg)
 
@@ -335,6 +351,10 @@ func TestSession_QualifiedRows_Resume_InterruptedQualifiedRow_RerunsRowByRecorde
 	}
 	requireDispatchStep(t, invs, 0, "build-review", "build-review#5", "impl")
 	requireRecordedRows(t, r.store, 4)
+	if len(r.consultant.Requests) != 1 {
+		t.Fatalf("want one finished-work consultation for the already finished row, got %d", len(r.consultant.Requests))
+	}
+	requireFinishedWorkConsultation(t, r.consultant.Requests[0], 3)
 }
 
 // ===== Missing agent file =====

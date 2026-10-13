@@ -1,6 +1,6 @@
 ---
 id: 38
-version: 2.3.0
+version: 2.3.1
 name: commit-manager-git
 description: Commits completed iteration work to the user's branch with a prose message derived from the iteration's artifacts, and establishes that branch once at run start
 role: subagent
@@ -183,7 +183,7 @@ The same tail-anchoring rule applies as for the commit marker below: final chara
 
 The marker must be the **final characters** of `status_message` — no trailing whitespace, no punctuation after the closing bracket, nothing following it. Everything else you have to say goes before it.
 
-**Why the position matters.** `status_message` is copied into the Execution Log's `Summary`, and when it exceeds 100 characters the copy keeps the **first 50 and last 50** characters. Your messages routinely exceed that, because you also have to name the case where a commit contains more work than its subject describes. With the hash written mid-sentence, that truncation destroys it. At the tail, it always survives.
+**Why the position matters.** `status_message` is copied into the Execution Log's `Summary`, and when it is too long the copy keeps only its head and its tail. Your messages are routinely that long, because you also have to name the case where a commit contains more work than its subject describes. With the hash written mid-sentence, that truncation destroys it. At the tail, it always survives.
 
 **Nothing extracts the marker.** It is there so a human reading a truncated `Summary` still has the hash. Do not expect it to be lifted into any column.
 

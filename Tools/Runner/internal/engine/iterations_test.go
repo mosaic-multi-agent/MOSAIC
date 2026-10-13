@@ -280,19 +280,18 @@ func itLoggedSteps(steps []domain.DispatchStep) []itLogged {
 	return out
 }
 
-// itNextAfter hands engine.Next a hand-built Execution Log made of the given
-// entries, whose last one is the response just received, and returns the step
-// it dispatches. The run ending instead fails the test.
-func itNextAfter(t *testing.T, aw domain.AdmittedWorkflow, mode domain.ExecutionMode,
-	schedules domain.BlockSchedules, logged []itLogged) domain.DispatchStep {
-	t.Helper()
+// itDecisionAfter hands engine.Next a hand-built Execution Log made of the
+// given entries, whose last one is the response just received, and returns the
+// decision.
+func itDecisionAfter(aw domain.AdmittedWorkflow, mode domain.ExecutionMode,
+	schedules domain.BlockSchedules, logged []itLogged) domain.EngineDecision {
 	var log []domain.ExecutionLogEntry
 	for i, l := range logged {
 		agent := fmt.Sprintf("%s#%d", aw.Table.Rows[l.step.RowIndex].BareAgentID(), i+1)
 		log = append(log, execLogEntry(i+1, agent, l.step.Phase, l.step.Stage, l.status, l.step.RowIndex+1))
 	}
 	last := log[len(log)-1]
-	dec := engine.Next(engine.NextInput{
+	return engine.Next(engine.NextInput{
 		Workflow:     aw,
 		Schedules:    schedules,
 		State:        stateWithLog(len(log), log...),
@@ -302,11 +301,35 @@ func itNextAfter(t *testing.T, aw domain.AdmittedWorkflow, mode domain.Execution
 		Now:          fixedNow,
 		Mode:         mode,
 	})
+}
+
+// itNextAfter returns the step engine.Next dispatches after the given log. The
+// run ending or deviating instead fails the test.
+func itNextAfter(t *testing.T, aw domain.AdmittedWorkflow, mode domain.ExecutionMode,
+	schedules domain.BlockSchedules, logged []itLogged) domain.DispatchStep {
+	t.Helper()
+	dec := itDecisionAfter(aw, mode, schedules, logged)
 	if dec.Dispatch == nil {
 		t.Fatalf("an iteration that has not finished must be run again, but the engine decided %s",
 			scopeTrace{final: dec}.describe())
 	}
 	return requireDispatch(t, dec)
+}
+
+// itFinishedStepAfter returns the step the engine names in its finished-work
+// deviation after the given log: the iteration that has not completed runs
+// again, and its first step already has a SUCCESS, so the engine consults
+// instead of dispatching it. Anything else fails the test.
+func itFinishedStepAfter(t *testing.T, aw domain.AdmittedWorkflow, mode domain.ExecutionMode,
+	schedules domain.BlockSchedules, logged []itLogged) domain.DispatchStep {
+	t.Helper()
+	dec := itDecisionAfter(aw, mode, schedules, logged)
+	if dec.Deviation == nil || dec.Deviation.Info.Kind != domain.DeviationFinishedWork ||
+		dec.Deviation.Info.PlannedContinuation == nil {
+		t.Fatalf("an iteration that has not finished must be run again and its finished step named in a "+
+			"finished-work deviation, but the engine decided %s", scopeTrace{final: dec}.describe())
+	}
+	return *dec.Deviation.Info.PlannedContinuation
 }
 
 // An iteration whose Test group ended but whose Implementation group never ran
@@ -323,7 +346,7 @@ func TestIterations_ReEntry_GroupedIterationWithUnrunLastGroupRunsAgain(t *testi
 			domain.ScheduleIteration{ID: "1", Approach: "TDD"},
 			domain.ScheduleIteration{ID: "2", Approach: "TDD"})
 
-		step := itNextAfter(t, aw, mode, schedules, itLoggedSteps(steps))
+		step := itFinishedStepAfter(t, aw, mode, schedules, itLoggedSteps(steps))
 
 		// Iteration 1 resumes at its Implementation group (row 3) or starts
 		// over at its Test group (row 1); never another iteration or the
@@ -347,7 +370,7 @@ func TestIterations_ReEntry_UngroupedIterationEndingOnFindingsRunsAgain(t *testi
 		second := itLoggedSteps(itPlayed(t, aw, mode, itIteration("2")))
 		logged := append(first, second[1:]...)
 
-		step := itNextAfter(t, aw, mode, scheduleOf("Stage", itIteration("1"), itIteration("2")), logged)
+		step := itFinishedStepAfter(t, aw, mode, scheduleOf("Stage", itIteration("1"), itIteration("2")), logged)
 
 		if step.RowIndex != 1 || step.Stage != "1" {
 			t.Errorf("want iteration 1 run again at row 1, got row %d stage %q", step.RowIndex, step.Stage)

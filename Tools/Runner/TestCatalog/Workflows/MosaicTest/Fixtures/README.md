@@ -27,6 +27,8 @@ Each workflow has exactly one seed root. Seed that directory and nothing else.
 | `preconsult-advice` | **auto** | `C:\AI\MOSAIC\MOSAIC\Tools\Runner\TestCatalog\Workflows\MosaicTest\Fixtures\preconsult-advice` |
 | `rawtext-bypass` | **auto** | `C:\AI\MOSAIC\MOSAIC\Tools\Runner\TestCatalog\Workflows\MosaicTest\Fixtures\rawtext-bypass` |
 | `staged-findings-loop` | **auto-review** | `C:\AI\MOSAIC\MOSAIC\Tools\Runner\TestCatalog\Workflows\MosaicTest\Fixtures\staged-findings-loop` |
+| `preconsult-stop` | **auto** | `C:\AI\MOSAIC\MOSAIC\Tools\Runner\TestCatalog\Workflows\MosaicTest\Fixtures\preconsult-stop` |
+| `finished-work-consult` | **auto** and **auto-review** | `C:\AI\MOSAIC\MOSAIC\Tools\Runner\TestCatalog\Workflows\MosaicTest\Fixtures\finished-work-consult` |
 
 In the TUI, paste the path at the seed-input screen. On the command line it is `--input <path>`.
 

@@ -85,7 +85,11 @@ func (m *rootModel) handleRunDone(doneMsg runDoneMsg) (tea.Model, tea.Cmd) {
 	// Non-launch-failure terminal outcome: reset the consecutive-failure counter.
 	m.launchFailureAttempt = 0
 	if doneMsg.outcome.Status == domain.RunStoppedByConsultant {
-		m.stopScreen = decision.NewStopScreen(doneMsg.outcome.StopReason, m.width, m.height, style)
+		if doneMsg.outcome.PreConsultationStop {
+			m.stopScreen = decision.NewPreConsultationStopScreen(doneMsg.outcome.StopReason, m.width, m.height, style)
+		} else {
+			m.stopScreen = decision.NewStopScreen(doneMsg.outcome.StopReason, m.width, m.height, style)
+		}
 		m.screen = screenStop
 		return m, nil
 	}

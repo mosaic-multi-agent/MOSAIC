@@ -189,18 +189,25 @@ func TestQualifiedRows_FindingsRouteBack_LandsOnRowNamedNotOtherRowOfSameAgent(t
 		findings  string
 		wantRows  []int
 		wantFocus string
+		// wantFinished are the rows the engine names in a finished-work
+		// deviation: the row after the route-back target already ran.
+		wantFinished []int
 	}{
-		{"second qualified row", "build-review(impl)", []int{0, 1, 2, 1, 2, 3}, "impl"},
-		{"first qualified row", "build-review(tests)", []int{0, 1, 2, 0, 1, 2, 3}, "tests"},
+		{"second qualified row", "build-review(impl)", []int{0, 1, 2, 1, 2, 3}, "impl", nil},
+		{"first qualified row", "build-review(tests)", []int{0, 1, 2, 0, 1, 2, 3}, "tests", []int{1}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			aw := mustAdmitScope(t, repeatedAgentRows(tc.findings), "", domain.ExecutionModeAutoReview)
-			run := scopeRun{aw: aw, mode: domain.ExecutionModeAutoReview, statusOf: firstVisitFindings()}
+			run := scopeRun{
+				aw: aw, mode: domain.ExecutionModeAutoReview, statusOf: firstVisitFindings(),
+				consultantContinues: true,
+			}
 
 			trace := run.play(t)
 
 			requireRowsThenComplete(t, trace, tc.wantRows)
+			requireFinishedWorkAt(t, trace, tc.wantFinished, "")
 			if len(trace.steps) < 4 {
 				t.Fatalf("want a route-back dispatch after the findings, got rows %v", trace.rows())
 			}

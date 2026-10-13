@@ -17,7 +17,24 @@ import (
 //     completes the run past the last row;
 //   - a block entry enters the named block;
 //   - COMPLETE completes the run.
-func routeSuccess(in NextInput, sc ScheduleContext, pos position, currentRow domain.RoutingRow) domain.EngineDecision {
+//
+// A dispatch the routing produces is checked against the Execution Log: a step
+// that already finished is not dispatched again but returned as a deviation
+// (see finishedWorkDeviation). resp is the SUCCESS response, zero on resume.
+func routeSuccess(
+	in NextInput,
+	sc ScheduleContext,
+	pos position,
+	currentRow domain.RoutingRow,
+	resp domain.ProtocolResponse,
+) domain.EngineDecision {
+	decision := routeSuccessUnchecked(in, sc, pos, currentRow)
+	return finishedWorkDeviation(in, pos, currentRow, resp, decision)
+}
+
+// routeSuccessUnchecked computes the routing of a SUCCESS without the
+// finished-work check.
+func routeSuccessUnchecked(in NextInput, sc ScheduleContext, pos position, currentRow domain.RoutingRow) domain.EngineDecision {
 	workflow := in.Workflow
 	r := routerFor(in, sc)
 

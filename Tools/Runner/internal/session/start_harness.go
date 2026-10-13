@@ -356,6 +356,20 @@ func (s *sessionImpl) applyOverridesAndPreConsult(ctx context.Context, rs *runSt
 		// writes nothing to the artifact, and a resume retries it.
 		return s.startFailed("pre-consultation failed: "+pcErr.Error(), pcErr), true, nil
 	}
+	if advice.Stop != nil {
+		// Checked before the advice is applied; the artifact stays untouched and
+		// a resume re-runs pre-consultation.
+		s.deps.Debug.Log(domain.EventSessionConsultStop, "consultant stop instruction",
+			domain.F("reason", advice.Stop.Reason),
+			domain.F("context", "pre_consultation"),
+		)
+		return domain.RunOutcome{
+			Status:              domain.RunStoppedByConsultant,
+			Message:             "consultant stop: " + advice.Stop.Reason,
+			StopReason:          advice.Stop.Reason,
+			PreConsultationStop: true,
+		}, true, nil
+	}
 	rs.preConsultAdvice = advice
 	return domain.RunOutcome{}, false, nil
 }

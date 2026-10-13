@@ -33,6 +33,10 @@ type wireRoutingResponse struct {
 	Row             domain.WorkflowRow // dispatch only; required; 1-based, NoWorkflowRow = absent (see wire_row_stage.go)
 	Iteration       string             // dispatch only; the run artifact's Iteration value, required exactly for a block row; "" = absent
 	Reason          string             `json:"reason"` // stop only
+
+	// ActionAbsent is true when the reply has no "action" member at all, as
+	// opposed to an empty or null one.
+	ActionAbsent bool
 }
 
 // wirePreConsultResponse is the JSON payload the orchestrator returns for a
@@ -48,7 +52,7 @@ type wirePreConsultResponse struct {
 // captured as raw bytes so the coercion step can inspect and convert them.
 // All other fields unmarshal directly into their target types.
 type wireRoutingRaw struct {
-	Action          string          `json:"action"`
+	Action          json.RawMessage `json:"action"` // raw to tell an absent member from "" or null
 	Agent           string          `json:"agent"`
 	TaskDescription string          `json:"task_description"`
 	Constraints     *string         `json:"constraints"`
@@ -82,12 +86,24 @@ func unmarshalRoutingResponseLenient(data []byte) (wireRoutingResponse, error) {
 		}
 	}
 
+	var action string
+	if len(raw.Action) > 0 && string(raw.Action) != "null" {
+		if err := json.Unmarshal(raw.Action, &action); err != nil {
+			return wireRoutingResponse{}, &domain.ConsultationError{
+				Failure: domain.ConsultFailMalformedJSON,
+				Detail:  fmt.Sprintf("malformed routing response JSON: action: %v", err),
+				Err:     err,
+			}
+		}
+	}
+
 	resp := wireRoutingResponse{
-		Action:          raw.Action,
+		Action:          action,
 		Agent:           raw.Agent,
 		TaskDescription: raw.TaskDescription,
 		Constraints:     raw.Constraints,
 		Reason:          raw.Reason,
+		ActionAbsent:    len(raw.Action) == 0,
 	}
 
 	var err error

@@ -114,5 +114,5 @@ func Next(in NextInput) domain.EngineDecision {
 	}
 
 	// SUCCESS: route by the row's scope.
-	return routeSuccess(in, sc, pos, currentRow)
+	return routeSuccess(in, sc, pos, currentRow, resp)
 }

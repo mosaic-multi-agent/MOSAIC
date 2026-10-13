@@ -21,6 +21,8 @@
 //     A failed commit setup or pre-consultation ends the start with
 //     RunStartFailed. The run folder, the artifact and any setup row are
 //     kept, no workflow step is dispatched, and a resume retries the step.
+//     A stop in the pre-consultation reply ends the start with
+//     RunStoppedByConsultant and leaves the artifact as a failure does.
 //
 //  2. Dispatch loop: ask engine -> dispatch via harness -> apply to artifact -> repeat.
 //
@@ -102,8 +104,11 @@ type Session interface {
 	// Refusals (pre-invocation failures) are returned as RunOutcome{Status:
 	// RunRefused} with a nil error. A commit setup or pre-consultation failure
 	// after the artifact exists is RunOutcome{Status: RunStartFailed}, also
-	// with a nil error; the artifact is kept and a resume retries the step. Unexpected infrastructure failures return
-	// a non-nil error.
+	// with a nil error; the artifact is kept and a resume retries the step. A
+	// stop in the pre-consultation reply is RunOutcome{Status:
+	// RunStoppedByConsultant, PreConsultationStop: true} and leaves the
+	// artifact as a pre-consultation failure does. Unexpected infrastructure
+	// failures return a non-nil error.
 	Start(ctx context.Context, config domain.RunConfig) (domain.RunOutcome, error)
 }
 

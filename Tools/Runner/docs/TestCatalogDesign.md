@@ -213,7 +213,7 @@ For each rule, either:
 - **dispatch** — which agent to run next, the task description to send, and optionally replacements for input artifacts, output artifacts, constraints, or the human-review flag. Leaving those out means "use the workflow table's own values", which is itself the thing being tested.
 - **stop** — the reason.
 
-Plus, separately, the **pre-consultation** answer: the advice strings to return when the Runner asks at run start, or an explicit "none".
+Plus, separately, the **pre-consultation** answer, which is one of three things: the advice strings to return when the Runner asks at run start, an explicit "none", or a **stop** with a reason. A pre-consultation stop is returned in the same JSON `stop` shape as a routing stop (`ScriptOrchestratorContract.md` sec. 4.2), never as prose; the Runner ends the run with exit code 6 before any dispatch and prints the reason to stderr.
 
 Text is carried in tilde-fenced blocks, matching the existing fixture format, so fixtures can contain backticks without escaping.
 
@@ -296,6 +296,8 @@ The remaining workflows test Runner modes, routing mechanisms, and edge cases. T
 | `hitl-escalate` | Auto | The approval check uses up its re-dispatch and escalates to a deviation. Uses stub enhancements E1 + E3 (§7.8) | **Implemented** |
 | `deviation-chain` | Auto | Two consecutive deviations requiring two orchestrator consultations before the run completes; exercises the single-decision chain through a real harness (§7.5) | **Implemented** |
 | `staged-findings-loop` | Auto-review | After an On Findings route-back inside a grouped block whose rows share one agent, the engine continues from the row that actually ran, not from a row derived from the invocation count | **Implemented** |
+| `preconsult-stop` | Auto | A pre-consultation answer of `stop` ends the run before any dispatch: exit code 6, only the pre-consultation in the dispatch list, the reason asserted through `stderr_contains` | **Implemented** |
+| `finished-work-consult` | Auto **and** Auto-review | After an engine-routed SUCCESS whose next step already succeeded, the Runner consults the orchestrator instead of dispatching it; the consultation appears in both modes' dispatch lists | **Implemented** |
 
 ### 7.1 `findings-loop` — One Workflow, Run Under Two Modes
 
@@ -422,7 +424,13 @@ mosaic-run --dev test --catalog <path-to-MOSAIC-repo> --suite smoke --harness cl
 3. For each pair × each harness: deploys the test catalog, seeds fixtures, runs `mosaic-run run` with the correct flags, and checks the result
 4. Prints a structured pass/fail summary and exits 0 (all pass) or 1 (any failure)
 
-**What it checks:** The current checker validates run outcome (completed, stopped, refused) and execution log structure.
+**What it checks:** Each workflow has a `*.expected.json` sidecar. The checker compares, in this order, the child run's exit code, then the dispatch sequence (agent, status, optional task substring, optional error expectation), then the optional stderr assertion.
+
+**Asserting a stop reason:** a sidecar may carry an optional `"stderr_contains": "<substring>"` field. When non-empty, the child run's stderr must contain that substring; otherwise the check fails with a stderr mismatch that names the expected text and quotes the last 300 bytes of stderr. Absent or empty means stderr is not checked, so existing sidecars keep their meaning. A consultant stop writes its stop reason to stderr, so this field is how a workflow asserts the reason.
+
+```json
+{ "exit_code": 6, "dispatches": [], "stderr_contains": "PRECONSULT-STOP-MARKER" }
+```
 
 ### 8.2 What the Automated Checker Cannot Do
 

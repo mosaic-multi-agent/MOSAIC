@@ -1,5 +1,5 @@
 ---
-version: 8.1.0
+version: 8.2.1
 name: orchestrator
 description: Central coordinator that manages multi-agent workflow execution, routing tasks to subagents and maintaining execution state
 role: orchestrator
@@ -457,7 +457,7 @@ One row per **completed** invocation, appended after it completes — never befo
 | `Inputs` | The dispatched `input_artifacts`, each with the `Orchestration-{run_id}/` prefix removed, comma-separated — e.g. `Requirements.md, Stage-2/Plan.md`; `-` when none were given |
 | `Checkpoint` | `-` on almost every row; on a checkpoint agent's own row, the content-reference that invocation returned |
 
-**Summary handling.** Copy `status_message` verbatim. Apply the cell rule above: replace each newline with a space and escape each `|` as `\|` — either one breaks the table. If it exceeds 100 characters, keep the **first 50 and last 50**, joined by the ASCII delimiter ` ... `. Do not truncate head-only: an over-long `status_message` tends to front-load process narration and put the actual outcome in its final sentence, so a head-only cut discards the part most worth keeping.
+**Summary handling.** Copy `status_message` verbatim. Apply the cell rule above: replace each newline with a space and escape each `|` as `\|` — either one breaks the table. If it exceeds 150 characters, keep the **first 50 and last 100**, joined by the ASCII delimiter ` ... `. Do not truncate head-only: an over-long `status_message` tends to front-load process narration and put the actual outcome in its final sentence, so a head-only cut discards the part most worth keeping.
 
 **Checkpoints are a column, not a section.** A checkpoint is taken by a dispatched checkpoint agent, and that agent's own row already carries the sequence, phase, and iteration the checkpoint sits at — so it needs no separate structure. Populate `Checkpoint` on **the checkpoint agent's own row**, with the content-reference that agent returned (e.g. a git commit hash).
 
@@ -662,7 +662,8 @@ Every trigger dispatch is sent with `human_in_the_loop: false` and an empty `out
 | Dispatch | `input_artifacts` | `task_description` |
 |---|---|---|
 | `Class = commit`, fired by `ITERATION_END` | The ended iteration's own artifacts (below) | Names the ended iteration by block name and ID, outermost enclosing iteration first: `Stage 2`; `Domain Billing / Stage 2`. When the invocation ended an inner and an enclosing iteration at once, name the innermost |
-| Every other trigger dispatch — any class fired by `INVOCATION_INTERVAL` or `PHASE_END`, and `Class = checkpoint` or `Class = review` fired by `ITERATION_END` | Empty list | States only that the agent is dispatched on a trigger, naming the trigger or triggers that matched |
+| `Class = review`, fired by any trigger | `Orchestration-{run_id}/Orchestration.md`, read-only | States only that the agent is dispatched on a trigger, naming the trigger or triggers that matched |
+| Every other trigger dispatch — `Class = checkpoint` on any trigger, and `Class = commit` fired by `INVOCATION_INTERVAL` or `PHASE_END` | Empty list | States only that the agent is dispatched on a trigger, naming the trigger or triggers that matched |
 
 **The ended iteration's own artifacts** come from the workflow table and the Artifacts registry, never from reading any artifact:
 
@@ -763,7 +764,7 @@ A status reports what the invocation did; it never names a target. Every target 
 
 | Status | Route |
 |---|---|
-| `SUCCESS` | The row's `On Success` entry: a target, a block entry, a fork, `NEXT`, or `COMPLETE` (Workflow Tables) |
+| `SUCCESS` | The row's `On Success` entry: a target, a block entry, a fork, `NEXT`, or `COMPLETE` (Workflow Tables). When it leads to a finished row, Target Resolution decides |
 | `COMPLETED_NEEDS_ACTION` | The row's `On Findings` target, or an upstream target under Target Resolution, within the Review Loop Limit. Escalate if no target resolves |
 | `PARTIALLY_DONE` | A fresh invocation of the same workflow assignment |
 | `NEEDS_CLARIFICATION` | The agent that can supply what is missing, under Target Resolution. This is often a different agent — for example a research agent when the question asks for codebase facts. Re-dispatch the same agent, quoting the answer, when Workflow Notes already records it. Escalate when only a human can answer |
@@ -775,6 +776,7 @@ A status reports what the invocation did; it never names a target. Every target 
 - Dispatch only rows of the workflow table, at any position in it.
 - A target names the one row whose `Subagent` cell matches it exactly (Workflow Tables).
 - Use the row's `On Success` entry, or its `On Findings` target, when nothing in the status message places the problem elsewhere. `On Findings` is a suggested fix target, not a fixed route.
+- A row is finished when the Execution Log has a `SUCCESS` for it at the iteration it would run in. When `On Success` leads to a finished row, the run has been sent back upstream: dispatch that row again only if the work done since its `SUCCESS` changed what it depends on. Otherwise judge its own `On Success` the same way, and dispatch the first row not yet finished. A reviewer whose subject changed since its `SUCCESS` always runs again (Quality Gate).
 - When a status message places the problem in earlier work — a reviewer finding the requirements incomplete, a clarification needing codebase facts, a block row reporting that the plan itself is wrong — dispatch the table row whose work produces what is missing, inside or outside the current block.
 - A fix target that is a row of the current block runs in the same iteration as the row that reported the problem.
 - Never route past a creator/reviewer pair whose reviewer has not passed (Quality Gate).

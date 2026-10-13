@@ -1,5 +1,5 @@
 ---
-version: 1.4.0
+version: 1.4.1
 name: mosaic-architect
 description: System-level architect for the multi-agent orchestration system. Reasons about cross-layer impact, creates and maintains design documents, identifies subagent and workflow gaps, reviews system-level fit, and advises on deployment strategy. Delegates creation work to specialized utility agents.
 role: utility
@@ -119,7 +119,7 @@ Creation of subagents and workflows has dedicated utility agents with deep speci
 
 | Need | Delegate To | What You Provide |
 |------|-------------|------------------|
-| New subagent | **subagent-creator** (`Catalog/UtilityAgents/anthropic-subagent-creator.md`) | The gap spec: single responsibility, function category, artifacts in/out, which workflows route to it, HITL setting, and why the system needs it |
+| New subagent | **subagent-creator** (`Catalog/UtilityAgents/subagent-creator.md`) | The gap spec: single responsibility, function category, artifacts in/out, which workflows route to it, HITL setting, and why the system needs it |
 | New workflow | **workflow-creator** (`Catalog/UtilityAgents/workflow-creator.md`) | The shape: end-to-end goal, which phases, candidate subagents, where HITL matters, and how it differs from existing workflows |
 
 You cannot call other agents — they are separate conversations the user starts. When handing off, offer to draft a starting prompt that includes the context and decisions from your conversation.

@@ -166,12 +166,20 @@ type scopeRun struct {
 	schedulesAt func(dispatched []domain.DispatchStep) domain.BlockSchedules
 	// source is the stage-source descriptor handed to every Next call.
 	source domain.StageSource
+	// consultantContinues models the orchestrator answering a finished-work
+	// deviation by dispatching the finished step it names: the run goes on
+	// with that step as an authoritative dispatch, and the deviation is
+	// recorded in the trace.
+	consultantContinues bool
 }
 
 // scopeTrace is what a played run dispatched and how it ended.
 type scopeTrace struct {
 	steps []domain.DispatchStep
 	final domain.EngineDecision
+	// finishedWork holds the finished-work deviations the run met and
+	// continued past (scopeRun.consultantContinues).
+	finishedWork []domain.DeviationInfo
 }
 
 const scopeStepGuard = 60
@@ -204,6 +212,12 @@ func (r scopeRun) play(t *testing.T) scopeTrace {
 			StageSource:  r.source,
 			Mode:         r.mode,
 		})
+		if r.consultantContinues && dec.Deviation != nil && dec.Deviation.Info.Kind == domain.DeviationFinishedWork &&
+			dec.Deviation.Info.PlannedContinuation != nil {
+			trace.finishedWork = append(trace.finishedWork, dec.Deviation.Info)
+			dec = domain.EngineDecision{Dispatch: &domain.DispatchDecision{Steps: []domain.DispatchStep{
+				*dec.Deviation.Info.PlannedContinuation}}}
+		}
 		if dec.Dispatch == nil {
 			trace.final = dec
 			return trace
@@ -276,6 +290,23 @@ func requireStages(t *testing.T, tr scopeTrace, want []string) {
 	t.Helper()
 	if got := tr.stages(); !reflect.DeepEqual(got, want) {
 		t.Errorf("recorded stage values: want %q, got %q", want, got)
+	}
+}
+
+// requireFinishedWorkAt asserts the finished-work deviations a run met and
+// continued past (scopeRun.consultantContinues): one per wantRows entry, in
+// order, each naming that zero-based row at the recorded stage value wantStage.
+func requireFinishedWorkAt(t *testing.T, tr scopeTrace, wantRows []int, wantStage string) {
+	t.Helper()
+	var got []int
+	for _, info := range tr.finishedWork {
+		got = append(got, info.PlannedContinuation.RowIndex)
+		if info.PlannedContinuation.Stage != wantStage {
+			t.Errorf("finished-work step stage: want %q, got %q", wantStage, info.PlannedContinuation.Stage)
+		}
+	}
+	if !reflect.DeepEqual(got, wantRows) {
+		t.Errorf("finished-work deviations at rows: want %v, got %v", wantRows, got)
 	}
 }
 

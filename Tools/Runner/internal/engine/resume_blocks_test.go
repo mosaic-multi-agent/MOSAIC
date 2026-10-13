@@ -56,6 +56,20 @@ func bndDispatched(aw domain.AdmittedWorkflow, steps []bndStep) []domain.Dispatc
 // position that dispatches a row also asks Next in Modes 2 and 3.
 func runResumeCases(t *testing.T, aw domain.AdmittedWorkflow, schedules domain.BlockSchedules, cases []resumeCase) {
 	t.Helper()
+	runResumeCasesAs(t, aw, schedules, cases, false)
+}
+
+// runResumeCasesFinished is runResumeCases for cases whose resume position is
+// a step that already finished: Next names it in a finished-work deviation
+// instead of dispatching it.
+func runResumeCasesFinished(t *testing.T, aw domain.AdmittedWorkflow, schedules domain.BlockSchedules, cases []resumeCase) {
+	t.Helper()
+	runResumeCasesAs(t, aw, schedules, cases, true)
+}
+
+func runResumeCasesAs(t *testing.T, aw domain.AdmittedWorkflow, schedules domain.BlockSchedules,
+	cases []resumeCase, finished bool) {
+	t.Helper()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			steps := bndSteps(t, tc.steps...)
@@ -70,9 +84,15 @@ func runResumeCases(t *testing.T, aw domain.AdmittedWorkflow, schedules domain.B
 				return
 			}
 			forEachAutoMode(t, func(t *testing.T, mode domain.ExecutionMode) {
-				next := itNextAfter(t, aw, mode, schedules, itLoggedSteps(bndDispatched(aw, steps)))
+				logged := itLoggedSteps(bndDispatched(aw, steps))
+				var next domain.DispatchStep
+				if finished {
+					next = itFinishedStepAfter(t, aw, mode, schedules, logged)
+				} else {
+					next = itNextAfter(t, aw, mode, schedules, logged)
+				}
 				if next.RowIndex != tc.wantRow || bndIteration(next.Stage) != tc.wantIter {
-					t.Errorf("Next dispatches row %d iteration %q, the resume position is row %d iteration %q",
+					t.Errorf("Next names row %d iteration %q, the resume position is row %d iteration %q",
 						next.RowIndex, bndIteration(next.Stage), tc.wantRow, tc.wantIter)
 				}
 			})

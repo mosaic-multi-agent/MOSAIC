@@ -12,9 +12,10 @@ import (
 type StopChoice string
 
 const (
-	// StopChoiceRetry directs the runner to re-invoke the routing consultant
-	// with the same ConsultationRequest, for when the user has fixed something
-	// externally and wants the run to continue.
+	// StopChoiceRetry directs the runner to resume the run: after a routing
+	// stop it re-invokes the routing consultant with the same state, after a
+	// pre-consultation stop it repeats pre-consultation. For when the user has
+	// fixed something externally and wants the run to continue.
 	StopChoiceRetry StopChoice = "retry"
 
 	// StopChoiceManualDispatch directs the runner to invoke the ManualResolver
@@ -23,10 +24,19 @@ const (
 	StopChoiceManualDispatch StopChoice = "manual-dispatch"
 )
 
-// stopOptions lists the available recovery actions in cursor order.
+// stopOptions lists the available recovery actions in cursor order for a
+// routing stop.
 var stopOptions = []StopChoice{
 	StopChoiceRetry,
 	StopChoiceManualDispatch,
+}
+
+// preConsultationStopOptions lists the recovery actions after a
+// pre-consultation stop. Manual dispatch is absent: it only arms manual
+// resolution for routing consultations, so it cannot replace the
+// pre-consultation decision.
+var preConsultationStopOptions = []StopChoice{
+	StopChoiceRetry,
 }
 
 // StopScreen presents the stop reason and offers recovery actions when the
@@ -38,6 +48,9 @@ var stopOptions = []StopChoice{
 //   - Esc                        -> Back() == true.
 type StopScreen struct {
 	reason string
+	// preConsultation selects the pre-consultation variant: title, wording and
+	// option list differ from the routing-stop variant.
+	preConsultation bool
 	cursor int
 	done   bool
 	back   bool
@@ -57,6 +70,23 @@ func NewStopScreen(reason string, width, height int, styles screens.Styles) *Sto
 	}
 }
 
+// NewPreConsultationStopScreen creates the recovery screen for a run the
+// orchestrator stopped at pre-consultation. It offers exactly one choice,
+// StopChoiceRetry; the cursor cannot move off it.
+func NewPreConsultationStopScreen(reason string, width, height int, styles screens.Styles) *StopScreen {
+	s := NewStopScreen(reason, width, height, styles)
+	s.preConsultation = true
+	return s
+}
+
+// options returns the recovery actions for the screen's variant.
+func (s *StopScreen) options() []StopChoice {
+	if s.preConsultation {
+		return preConsultationStopOptions
+	}
+	return stopOptions
+}
+
 // Update processes key messages for the stop recovery screen.
 func (s *StopScreen) Update(msg tea.Msg) tea.Cmd {
 	keyMsg, ok := msg.(tea.KeyMsg)
@@ -69,7 +99,7 @@ func (s *StopScreen) Update(msg tea.Msg) tea.Cmd {
 			s.cursor--
 		}
 	case "down", "j":
-		if s.cursor < len(stopOptions)-1 {
+		if s.cursor < len(s.options())-1 {
 			s.cursor++
 		}
 	case "enter":
@@ -82,19 +112,29 @@ func (s *StopScreen) Update(msg tea.Msg) tea.Cmd {
 
 // View renders the stop recovery screen showing the reason and recovery options.
 func (s *StopScreen) View() string {
-	title := s.styles.Title.Width(s.width).Render("Run Stopped")
+	titleText := "Run Stopped"
+	retryLabel := "Retry — re-invoke the routing decision with the same state"
+	if s.preConsultation {
+		titleText = "Run Stopped at Pre-Consultation"
+		retryLabel = "Retry — resume the run, which asks the orchestrator for pre-consultation again"
+	}
+	title := s.styles.Title.Width(s.width).Render(titleText)
 	border := s.styles.Border.Width(s.width).Render(strings.Repeat("─", s.width))
 
-	reason := s.styles.Body.Width(s.width).Render("Reason: " + s.reason)
+	reasonText := "Reason: " + s.reason
+	if s.preConsultation {
+		reasonText = "The orchestrator stopped the run at pre-consultation.\n" + reasonText
+	}
+	reason := s.styles.Body.Width(s.width).Render(reasonText)
 
 	optionLabels := map[StopChoice]string{
-		StopChoiceRetry:          "Retry — re-invoke the routing decision with the same state",
+		StopChoiceRetry:          retryLabel,
 		StopChoiceManualDispatch: "Manual dispatch — take over as resolver for this one decision",
 	}
 
 	var optionsBuilder strings.Builder
 	optionsBuilder.WriteString(s.styles.Body.Width(s.width).Render("Recovery options:") + "\n")
-	for i, choice := range stopOptions {
+	for i, choice := range s.options() {
 		label := optionLabels[choice]
 		if i == s.cursor {
 			optionsBuilder.WriteString("▶ " + s.styles.Selected.Render(label) + "\n")
@@ -115,8 +155,9 @@ func (s *StopScreen) Back() bool { return s.back }
 
 // Choice returns the selected recovery action. Only valid when Done() is true.
 func (s *StopScreen) Choice() StopChoice {
-	if s.cursor >= 0 && s.cursor < len(stopOptions) {
-		return stopOptions[s.cursor]
+	opts := s.options()
+	if s.cursor >= 0 && s.cursor < len(opts) {
+		return opts[s.cursor]
 	}
 	return ""
 }

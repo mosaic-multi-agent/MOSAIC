@@ -2,7 +2,7 @@
 
 > **Status:** Draft for review
 > **Created:** 2026-07-31
-> **Last Updated:** 2026-10-12
+> **Last Updated:** 2026-10-13
 > **Scope:** Design for the two agents that make checkpointing real — one that preserves restorable state during a run, and one that restores it. Covers what a checkpoint captures, how it is stored in git, how its reference travels back into the orchestration artifact, how a rollback is requested and performed, how it reconciles with work already committed, and how both behave when several runs share a working tree. Committing completed work into the user's own history is a different purpose served by a different class; see `CommitAgent.md`.
 
 ---
@@ -188,7 +188,7 @@ The orchestrator or runner extracts the reference and writes it to the `Checkpoi
 **Why the tail of `status_message`, rather than a dedicated protocol field or `result_data`:**
 
 - It requires no protocol change and no per-agent invocation configuration. A dedicated field would mean a protocol version bump for one agent; `result_data` would require the orchestrator to remember to set `include_result_summary` on every checkpoint dispatch, and silently loses the reference if it forgets.
-- **It degrades instead of breaking.** `status_message` is copied verbatim into the Execution Log's `Summary` column, and when it exceeds the length limit the schema keeps the **first 50 and last 50 characters**. A marker at the very end therefore survives truncation. If extraction is never implemented, or is broken, or the run is being driven by a bare LLM with no tooling, **the hash is still sitting in `Summary` where a human can read it**. The structured column is an optimisation over a record that already exists.
+- **It degrades instead of breaking.** `status_message` is copied verbatim into the Execution Log's `Summary` column, and when it exceeds the length limit the schema keeps only its head and tail (`OrchestrationArtifactFormat.md` §5). A marker at the very end therefore survives truncation. If extraction is never implemented, or is broken, or the run is being driven by a bare LLM with no tooling, **the hash is still sitting in `Summary` where a human can read it**. The structured column is an optimisation over a record that already exists.
 
 The marker must be the final characters of `status_message`, with no trailing whitespace or punctuation after the closing bracket, so a consumer can anchor its match to the end of the string.
 

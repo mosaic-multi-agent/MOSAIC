@@ -169,27 +169,37 @@ func writeSection(buf *bytes.Buffer, open, table, closeTag []byte) {
 	buf.Write(closeTag)
 }
 
-// TruncateSummary applies the head-50 + tail-50 truncation rule from the artifact
-// format spec to the given summary string.
+// Summary truncation limits, counted in characters (runes).
+const (
+	// summaryMaxChars is the longest summary kept whole.
+	summaryMaxChars = 150
+	// summaryHeadChars and summaryTailChars are the parts kept of a longer summary.
+	summaryHeadChars = 50
+	summaryTailChars = 100
+)
+
+// TruncateSummary applies the head-50 + tail-100 truncation rule from the
+// artifact format spec to the given summary string.
 //
-// Messages of 100 characters or fewer are returned unchanged.
-// Messages longer than 100 characters are truncated: the first 50 and last 50
-// characters are kept, joined by " ... " (space, three periods, space), so the
-// rendered artifact stays ASCII.
+// Pipe characters ("|") and newlines are stripped first because they are
+// invalid inside a markdown table cell; the limits are counted on the
+// already-clean string. A result of 150 characters or fewer is returned
+// unchanged. A longer one becomes its first 50 characters, " ... " (space,
+// three periods, space) and its last 100 characters, so the rendered artifact
+// stays ASCII.
 //
-// Pipe characters ("|") and newlines are stripped from the result because they
-// are invalid inside a markdown table cell. Stripping is applied before truncation
-// so that the 50/50 split is counted on the already-clean string.
+// Characters are counted as runes, not bytes, so a cut never splits a UTF-8
+// sequence; for ASCII input runes equal bytes.
 func TruncateSummary(s string) string {
-	// Strip pipe characters and newlines.
 	clean := strings.NewReplacer("|", "", "\n", "", "\r", "").Replace(s)
 
-	if len(clean) <= 100 {
+	runes := []rune(clean)
+	if len(runes) <= summaryMaxChars {
 		return clean
 	}
 
-	head := clean[:50]
-	tail := clean[len(clean)-50:]
+	head := string(runes[:summaryHeadChars])
+	tail := string(runes[len(runes)-summaryTailChars:])
 	return head + " ... " + tail
 }
 

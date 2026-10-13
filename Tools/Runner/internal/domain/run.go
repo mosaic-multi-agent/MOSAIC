@@ -143,6 +143,13 @@ type RunOutcome struct {
 	// Message remains the human-readable text; Cause is for identity checks
 	// (errors.Is / errors.As) only. Neither is derived from the other.
 	Cause error
+
+	// PreConsultationStop is true when Status is RunStoppedByConsultant
+	// because the orchestrator returned a stop in its pre-consultation reply.
+	// False for every other outcome, including routing stops. Frontends use
+	// it to offer pre-consultation recovery; exit code and CLI text do not
+	// depend on it.
+	PreConsultationStop bool
 }
 
 // RunStatus classifies the run's outcome for exit code mapping.
@@ -155,14 +162,16 @@ const (
 	RunRefused             RunStatus = "refused"              // workflow or artifact refused before any invocation
 	RunFailed              RunStatus = "failed"               // unexpected error
 
-	// RunStoppedByConsultant: the routing consultant returned a stop instruction,
-	// or an orchestrator failure ended the run. The artifact is left resumable.
+	// RunStoppedByConsultant: the orchestrator returned a stop instruction at
+	// routing or at pre-consultation (see RunOutcome.PreConsultationStop), or an
+	// orchestrator failure ended the run. The artifact is left resumable.
 	// The CLI prints StopReason and exits non-zero; the TUI presents StopReason
 	// with retry and manual-dispatch recovery.
 	RunStoppedByConsultant RunStatus = "stopped-by-consultant"
 
 	// RunStartFailed: commit setup or pre-consultation failed after the
 	// artifact was created. The artifact and any commit setup row are kept and
-	// a resume retries the failed step.
+	// a resume retries the failed step. A pre-consultation stop is not a start
+	// failure; it is RunStoppedByConsultant.
 	RunStartFailed RunStatus = "start-failed"
 )

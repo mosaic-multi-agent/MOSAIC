@@ -46,9 +46,12 @@ func TestQualifiedRows_FindingsRouteBack_SamePhaseRows_LandsOnRowNamed(t *testin
 		findings  string
 		wantRows  []int
 		wantFocus string
+		// wantFinished are the rows the engine names in a finished-work
+		// deviation: the row after the route-back target already ran.
+		wantFinished []int
 	}{
-		{"first qualified row", "build-review(tests)", []int{0, 1, 2, 3, 1, 2, 3, 4}, "tests"},
-		{"second qualified row", "build-review(impl)", []int{0, 1, 2, 3, 2, 3, 4}, "impl"},
+		{"first qualified row", "build-review(tests)", []int{0, 1, 2, 3, 1, 2, 3, 4}, "tests", []int{2}},
+		{"second qualified row", "build-review(impl)", []int{0, 1, 2, 3, 2, 3, 4}, "impl", nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -56,6 +59,7 @@ func TestQualifiedRows_FindingsRouteBack_SamePhaseRows_LandsOnRowNamed(t *testin
 			given := false
 			run := scopeRun{
 				aw: aw, schedules: scheduleOf("Stage", idsOf("", "1")...), mode: domain.ExecutionModeAutoReview,
+				consultantContinues: true,
 				statusOf: func(_ int, step domain.DispatchStep) domain.StatusCode {
 					if step.RowIndex == 3 && !given {
 						given = true
@@ -68,6 +72,7 @@ func TestQualifiedRows_FindingsRouteBack_SamePhaseRows_LandsOnRowNamed(t *testin
 			trace := run.play(t)
 
 			requireRowsThenComplete(t, trace, tc.wantRows)
+			requireFinishedWorkAt(t, trace, tc.wantFinished, "1")
 			if len(trace.steps) < 5 {
 				t.Fatalf("want a route-back dispatch after the findings, got rows %v", trace.rows())
 			}

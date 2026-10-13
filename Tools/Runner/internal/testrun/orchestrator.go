@@ -126,6 +126,7 @@ func (o *Orchestrator) Run(ctx context.Context, cfg TestConfig) (*TestSummary, e
 					checkInput := testcheck.CheckInput{
 						ExitCode:    invokeResult.ExitCode,
 						DispatchLog: invokeResult.DispatchLogPath,
+						Stderr:      string(invokeResult.ChildStderr),
 					}
 					checkResult := o.deps.Checker.Check(checkInput, expected)
 					result.Pass = checkResult.Pass

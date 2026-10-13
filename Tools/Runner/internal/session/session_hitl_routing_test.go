@@ -326,7 +326,8 @@ func TestSession_HITLGate_RepairedSuccess_RoutesAsSuccess(t *testing.T) {
 // TestSession_HITLGate_RepairedCompletedNeedsAction_AutoReviewRoutesToOnFindings
 // verifies that a reviewer's COMPLETED_NEEDS_ACTION followed by a repaired
 // SUCCESS is routed to the On Findings target, exactly as if the original had
-// been accepted.
+// been accepted. The re-run of agent-a then succeeds into agent-b, which had
+// already finished, so the orchestrator is consulted and re-dispatches it.
 func TestSession_HITLGate_RepairedCompletedNeedsAction_AutoReviewRoutesToOnFindings(t *testing.T) {
 	rig := reviewRig(t)
 	rig.adapter.Queue("agent-a",
@@ -339,10 +340,15 @@ func TestSession_HITLGate_RepairedCompletedNeedsAction_AutoReviewRoutesToOnFindi
 		reviewAttempt(domain.StatusSUCCESS, domain.ErrorNone, "clean", "true", "v3"),
 	)
 	rig.adapter.Queue("agent-c", harness.ScriptedEntry{Response: resp(domain.StatusSUCCESS, "c done")})
+	rig.consult.queueDispatch("agent-b", "review the fixed work", 1)
 
 	got, err := rig.ses.Start(context.Background(), reviewConfig(rig, pathAuto, domain.ExecutionModeAutoReview, 0))
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
+	if len(rig.consult.Requests) != 1 {
+		t.Fatalf("want one finished-work consultation (agent-b already finished), got %d", len(rig.consult.Requests))
+	}
+	requireFinishedWorkConsultation(t, rig.consult.Requests[0], 1)
 	var order []string
 	for _, inv := range rig.adapter.Invocations() {
 		order = append(order, inv.Agent.Identifier)
@@ -361,7 +367,8 @@ func TestSession_HITLGate_RepairedCompletedNeedsAction_AutoReviewRoutesToOnFindi
 // TestSession_HITLGate_ReviewLoopLimit_CountsRepairedOriginalOnce verifies that
 // the review loop limit sees a rejected COMPLETED_NEEDS_ACTION and its repaired
 // SUCCESS re-dispatch as one findings iteration: limit 1 is reached by it,
-// limit 2 is not.
+// limit 2 is not. Under limit 2 the only consultation is the finished-work one
+// after the re-run of agent-a reaches the already finished agent-b.
 func TestSession_HITLGate_ReviewLoopLimit_CountsRepairedOriginalOnce(t *testing.T) {
 	setup := func(t *testing.T, limit int) *detectingRig {
 		rig := reviewRig(t)
@@ -375,7 +382,11 @@ func TestSession_HITLGate_ReviewLoopLimit_CountsRepairedOriginalOnce(t *testing.
 			reviewAttempt(domain.StatusSUCCESS, domain.ErrorNone, "clean", "true", "v3"),
 		)
 		rig.adapter.Queue("agent-c", harness.ScriptedEntry{Response: resp(domain.StatusSUCCESS, "c done")})
-		rig.consult.queueStop("done")
+		if limit == 1 {
+			rig.consult.queueStop("done")
+		} else {
+			rig.consult.queueDispatch("agent-b", "review the fixed work", 1)
+		}
 		rig.ses.Start(context.Background(), reviewConfig(rig, pathAuto, domain.ExecutionModeAutoReview, limit)) //nolint:errcheck
 		return rig
 	}
@@ -392,9 +403,15 @@ func TestSession_HITLGate_ReviewLoopLimit_CountsRepairedOriginalOnce(t *testing.
 	})
 	t.Run("limit 2 is not reached", func(t *testing.T) {
 		rig := setup(t, 2)
-		if len(rig.consult.Requests) != 0 {
-			t.Errorf("one repaired findings iteration must count once (no deviation under limit 2), got %d consultation(s)", len(rig.consult.Requests))
+		for _, req := range rig.consult.Requests {
+			if req.Deviation != nil && req.Deviation.Kind == domain.DeviationReviewLoopLimit {
+				t.Errorf("one repaired findings iteration must count once (no review loop limit deviation under limit 2)")
+			}
 		}
+		if len(rig.consult.Requests) != 1 {
+			t.Fatalf("want only the finished-work consultation under limit 2, got %d consultation(s)", len(rig.consult.Requests))
+		}
+		requireFinishedWorkConsultation(t, rig.consult.Requests[0], 1)
 		if n := rig.invocationsOf("agent-a"); n != 2 {
 			t.Errorf("agent-a must be re-dispatched via On Findings, got %d invocation(s)", n)
 		}

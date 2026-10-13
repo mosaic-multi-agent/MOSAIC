@@ -109,6 +109,10 @@ var helperScenarios = map[string]func(){
 	"ghcpcli-incomplete":             helperScenarioGhcpcliIncomplete,
 	"ghcpcli-decode-fail":            helperScenarioGhcpcliDecodeFail,
 	"hang":                           helperScenarioHang,
+	"ghcpcli-deselected":             helperScenarioGhcpcliDeselected,
+	"ghcpcli-quota":                  helperScenarioGhcpcliQuota,
+	"ghcpcli-session-error-exit0":    helperScenarioGhcpcliSessionErrorExitZero,
+	"ghcpcli-versioned":              helperScenarioGhcpcliVersioned,
 }
 
 // helperScenarioSuccess implements the GO_HELPER_CMD=success scenario.

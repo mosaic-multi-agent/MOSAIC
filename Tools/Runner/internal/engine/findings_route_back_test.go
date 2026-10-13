@@ -138,7 +138,10 @@ func TestFindingsRouteBack_WithinBlock_KeepsCurrentIteration(t *testing.T) {
 
 // The route-back target is the first of two rows of one bare agent, on a block
 // that is not named EXECUTION: the nearest row of that agent above the
-// reviewer is the other one.
+// reviewer is the other one. The route-back lands on worker(first); the row
+// after it (worker(second)) has already finished in that iteration, so the
+// engine names it in a finished-work deviation and the orchestrator, modelled
+// by consultantContinues, dispatches it.
 func TestFindingsRouteBack_WithinNonExecutionBlock_ToQualifiedRowKeepsIteration(t *testing.T) {
 	rows := []scopeRow{
 		{phase: "PLANNING", agent: "planner", output: "Plan.md"},
@@ -151,6 +154,7 @@ func TestFindingsRouteBack_WithinNonExecutionBlock_ToQualifiedRowKeepsIteration(
 	given := false
 	run := scopeRun{
 		aw: aw, schedules: scheduleOf("Stage", idsOf("", "1", "2")...), mode: domain.ExecutionModeAutoReview,
+		consultantContinues: true,
 		statusOf: func(_ int, step domain.DispatchStep) domain.StatusCode {
 			if step.RowIndex == 3 && step.Stage == "2" && !given {
 				given = true
@@ -164,4 +168,5 @@ func TestFindingsRouteBack_WithinNonExecutionBlock_ToQualifiedRowKeepsIteration(
 
 	requireRowsThenComplete(t, trace, []int{0, 1, 2, 3, 1, 2, 3, 1, 2, 3, 4})
 	requireStages(t, trace, []string{"", "1", "1", "1", "2", "2", "2", "2", "2", "2", ""})
+	requireFinishedWorkAt(t, trace, []int{2}, "2")
 }

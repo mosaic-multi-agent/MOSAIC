@@ -48,6 +48,16 @@ func icReentered(t *testing.T, aw domain.AdmittedWorkflow, mode domain.Execution
 	return itNextAfter(t, aw, mode, schedules, itLoggedSteps(logged))
 }
 
+// icReenteredAgain is icReentered for an iteration that has not completed: it
+// runs again, and its first step already finished, so the engine names that
+// step in a finished-work deviation instead of dispatching it.
+func icReenteredAgain(t *testing.T, aw domain.AdmittedWorkflow, mode domain.ExecutionMode,
+	schedules domain.BlockSchedules, prefix []domain.DispatchStep) domain.DispatchStep {
+	t.Helper()
+	logged := append(append([]domain.DispatchStep{}, prefix...), prefix[0])
+	return itFinishedStepAfter(t, aw, mode, schedules, itLoggedSteps(logged))
+}
+
 // icWithStage returns a copy of steps in which every step from index from on
 // records the given stage value.
 func icWithStage(steps []domain.DispatchStep, from int, value string) []domain.DispatchStep {
@@ -134,7 +144,7 @@ func TestIterationCompletion_NextOnRowThatIsNotLastOfScope_IterationRunsAgain(t 
 		aw := mustAdmitScope(t, rows, stageBlockTables(), mode)
 		prefix := itPlayed(t, aw, mode, itIteration("1"))[:2]
 
-		step := icReentered(t, aw, mode, scheduleOf("Stage", itIteration("1"), itIteration("2")), prefix)
+		step := icReenteredAgain(t, aw, mode, scheduleOf("Stage", itIteration("1"), itIteration("2")), prefix)
 
 		requireStepOfIteration(t, step, []int{1, 2}, "1")
 	})
@@ -146,7 +156,7 @@ func TestIterationCompletion_TargetOnRow_IterationRunsAgain(t *testing.T) {
 		aw := mustAdmitScope(t, rows, stageBlockTables(), mode)
 		prefix := itPlayed(t, aw, mode, itIteration("1"))[:2]
 
-		step := icReentered(t, aw, mode, scheduleOf("Stage", itIteration("1"), itIteration("2")), prefix)
+		step := icReenteredAgain(t, aw, mode, scheduleOf("Stage", itIteration("1"), itIteration("2")), prefix)
 
 		requireStepOfIteration(t, step, []int{1, 3}, "1")
 	})
@@ -175,7 +185,7 @@ func TestIterationCompletion_GroupedEntryWithMalformedValue_IterationRunsAgain(t
 		played := itPlayed(t, aw, mode, domain.ScheduleIteration{ID: "1", Approach: "TDD"})[:4]
 		prefix := icWithStage(played, 3, "Implementation")
 
-		step := icReentered(t, aw, mode, scheduleOf("Stage",
+		step := icReenteredAgain(t, aw, mode, scheduleOf("Stage",
 			domain.ScheduleIteration{ID: "1", Approach: "TDD"},
 			domain.ScheduleIteration{ID: "2", Approach: "TDD"}), prefix)
 

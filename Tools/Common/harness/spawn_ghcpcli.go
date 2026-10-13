@@ -12,6 +12,7 @@ package harness
 import (
 	"context"
 	"errors"
+	"fmt"
 )
 
 // ErrGHCPCLIUnsupportedOutputFormat reports a SpawnRequest asking for an
@@ -248,6 +249,10 @@ func (s *ghcpCLISpawner) Spawn(ctx context.Context, req SpawnRequest) (Response,
 
 	text, parseErr := ParseGHCPCLIEnvelope(resp.Stdout, []byte(resp.Stderr), resp.ExitCode)
 	if parseErr != nil {
+		if errors.Is(parseErr, ErrGHCPCLIAgentDeselected) {
+			// The parser has no agent identifier; name the requested agent here.
+			parseErr = fmt.Errorf("%w: requested agent %q", parseErr, req.Agent.Identifier)
+		}
 		return resp, parseErr
 	}
 

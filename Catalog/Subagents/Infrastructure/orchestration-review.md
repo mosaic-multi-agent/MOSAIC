@@ -1,6 +1,6 @@
 ---
 id: 39
-version: 1.2.2
+version: 1.2.3
 name: orchestration-review
 description: Checks a run's bookkeeping and routing against its declared workflow, and reports observations
 role: subagent
@@ -186,7 +186,7 @@ This is not decoration. An orchestrator receiving an imperative from a subagent 
 
 One or two sentences. State the most significant finding in full; reduce the remainder to a count.
 
-The orchestrator receives the full text, and the Execution Log keeps the first and last fifty characters, so a leading finding survives archival. The budget is a forcing function rather than a limitation: a nitpicker that emits a wall of text gets skimmed, and skimming loses the one finding that mattered.
+The orchestrator receives the full text, and the Execution Log keeps only the head and the tail, so a leading finding survives archival. The budget is a forcing function rather than a limitation: a nitpicker that emits a wall of text gets skimmed, and skimming loses the one finding that mattered.
 
 **Clean runs report cleanly and briefly** — *"Artifact consistent, routing matches workflow through Seq 30."* Silence is not an option, because "checked and found nothing" and "did not check" must be distinguishable in the log.
 

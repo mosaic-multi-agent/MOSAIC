@@ -108,11 +108,25 @@ func (d *manualDialogue) rowPreselection() string {
 	if d.rowChoice != "" {
 		return d.rowChoice
 	}
-	dev := d.req.Deviation
-	if dev == nil || dev.CurrentRow < 0 || dev.CurrentRow >= len(d.table.Rows) {
+	row, _, ok := d.deviationTarget()
+	if !ok || row < 0 || row >= len(d.table.Rows) {
 		return ""
 	}
-	return strconv.Itoa(dev.CurrentRow + 1)
+	return strconv.Itoa(row + 1)
+}
+
+// deviationTarget is the step the manual dispatch offers by default: the
+// already-finished next step for a finished-work deviation, else the step that
+// deviated. ok is false without a deviation.
+func (d *manualDialogue) deviationTarget() (row int, stage string, ok bool) {
+	dev := d.req.Deviation
+	if dev == nil {
+		return 0, "", false
+	}
+	if dev.Kind == domain.DeviationFinishedWork && dev.PlannedContinuation != nil {
+		return dev.PlannedContinuation.RowIndex, dev.PlannedContinuation.Stage, true
+	}
+	return dev.CurrentRow, dev.CurrentStage, true
 }
 
 // ---- stage ----
@@ -192,14 +206,11 @@ func (d *manualDialogue) stagePreselection(sched domain.BlockSchedule) string {
 	if d.stageChoice != "" {
 		return d.stageChoice
 	}
-	dev := d.req.Deviation
-	if dev == nil {
+	row, stage, ok := d.deviationTarget()
+	if !ok || row < 0 || row >= len(d.table.Rows) {
 		return ""
 	}
-	if dev.CurrentRow < 0 || dev.CurrentRow >= len(d.table.Rows) {
-		return ""
-	}
-	value, err := domain.ReadIterationValue(dev.CurrentStage, d.table.Rows[dev.CurrentRow])
+	value, err := domain.ReadIterationValue(stage, d.table.Rows[row])
 	if err != nil || value.Group != d.currentRow().PhaseParsed.Group {
 		return ""
 	}

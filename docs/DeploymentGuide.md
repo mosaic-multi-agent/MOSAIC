@@ -146,6 +146,8 @@ Use this to add or update individual agents across any catalog category without 
 
 The TUI presents a browsable list grouped by catalog category (Subagents, Utility Agents, Standalone Agents, etc.), mirroring the folder structure in the catalog.
 
+> **Not every utility agent belongs in a workspace.** `subagent-creator` and `workflow-creator` write catalog source files and depend on the design documents in the MOSAIC repository, so they are meant to run in the MOSAIC repository root, where they ship ready to use. This list still offers them, but deployed into a project workspace they cannot reach their references. See `Catalog/UtilityAgents/README.md`.
+
 **CLI:**
 
 ```sh

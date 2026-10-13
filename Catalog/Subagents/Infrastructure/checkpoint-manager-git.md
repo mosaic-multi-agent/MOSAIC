@@ -1,6 +1,6 @@
 ---
 id: 36
-version: 2.2.1
+version: 2.2.2
 name: checkpoint-manager-git
 description: Commits a restorable checkpoint of the working tree to a private git ref namespace and returns its content-reference
 role: subagent
@@ -130,7 +130,7 @@ Your `status_message` **must end with** a checkpoint marker:
 
 The marker must be the final characters of `status_message`, with no trailing whitespace or punctuation after the closing bracket, so a consumer can anchor its match to the end of the string.
 
-**Why the tail of `status_message` rather than `result_data`:** it requires no protocol change and no per-dispatch configuration, and it degrades instead of breaking. `status_message` is copied into the Execution Log's `Summary`, and truncation keeps the first and last fifty characters — so a marker at the very end survives. Even where no extraction tooling exists, the hash is still sitting in the log where a human can read it.
+**Why the tail of `status_message` rather than `result_data`:** it requires no protocol change and no per-dispatch configuration, and it degrades instead of breaking. `status_message` is copied into the Execution Log's `Summary`, and truncation keeps only the head and the tail — so a marker at the very end survives. Even where no extraction tooling exists, the hash is still sitting in the log where a human can read it.
 
 <OutputArtifactTemplate type="project">
 </OutputArtifactTemplate>

@@ -90,7 +90,7 @@ func TestIterationValueForms_GroupedBlock_PreThreeOhEntryOfTheLastRow_CompletesN
 	aw := mustAdmitScope(t, bsTddShapeRows(), bsApproachTables(), domain.ExecutionModeAutoReview)
 	tdd := scheduleOf("Stage", idsOf("TDD", "A", "B")...)
 
-	runResumeCases(t, aw, tdd, []resumeCase{
+	runResumeCasesFinished(t, aw, tdd, []resumeCase{
 		{"the iteration with the pre-3.0 entry runs again", []string{
 			"0:", "1:A.Test", "2:A.Test", "3:A.Implementation", "4:Implementation.A",
 			"1:B.Test", "2:B.Test", "3:B.Implementation", "4:B.Implementation"}, false, 1, "Stage", "A", 0},
@@ -121,11 +121,11 @@ func TestIterationValueForms_GroupedBlock_UnreadableEntryOfTheLastRow_CompletesN
 	aw := mustAdmitScope(t, bsTddShapeRows(), bsApproachTables(), domain.ExecutionModeAutoReview)
 	tdd := scheduleOf("Stage", idsOf("TDD", "A", "B")...)
 
-	ivRunGroupedForms(t, aw, tdd, []resumeCase{
+	runResumeCasesFinished(t, aw, tdd, ivConvertCases([]resumeCase{
 		{"the iteration with the unreadable entry runs again", []string{
 			"0:", "1:Test.A", "2:Test.A", "3:Implementation.A", "4:Wrong.A",
 			"1:Test.B", "2:Test.B", "3:Implementation.B", "4:Implementation.B"}, false, 1, "Stage", "A", 0},
-	})
+	}, ivKeyToThreeOh))
 }
 
 func TestIterationValueForms_UngroupedBlock_PlainIDsResumeAndRoute(t *testing.T) {

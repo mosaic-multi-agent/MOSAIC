@@ -194,7 +194,9 @@ func (a *GHCPCLIAdapter) Invoke(ctx context.Context, agent domain.AgentReference
 		case errors.Is(err, commonharness.ErrMalformedJSON),
 			errors.Is(err, commonharness.ErrProtocolNotExtractable),
 			errors.Is(err, ErrGHCPCLIStreamError),
-			errors.Is(err, ErrGHCPCLIStreamIncomplete):
+			errors.Is(err, ErrGHCPCLIStreamIncomplete),
+			errors.Is(err, commonharness.ErrGHCPCLIAgentDeselected),
+			errors.Is(err, commonharness.ErrGHCPCLISessionError):
 			a.logger.Log(domain.EventHarnessParseFailed, string(resp.Stdout),
 				domain.F("agent", request.AgentInstanceID),
 			)
@@ -208,23 +210,17 @@ func (a *GHCPCLIAdapter) Invoke(ctx context.Context, agent domain.AgentReference
 				Executable: a.executablePath,
 				Err:        err,
 			}
-			a.logger.Log(domain.EventHarnessInvokeError, launchErr.Error(),
-				domain.F("agent", request.AgentInstanceID),
-			)
+			a.logOutcome(domain.EventHarnessInvokeError, launchErr.Error(), request.AgentInstanceID, resp.Stdout)
 			return domain.ProtocolResponse{}, launchErr
 		}
 		// The shared package distinguishes parent-context cancellation from
 		// adapter timeout via ErrCancelled. Runner's existing call sites and
 		// tests expect ctx.Err() on cancellation, so translate it back here.
 		if ctx.Err() != nil {
-			a.logger.Log(domain.EventHarnessInvokeError, err.Error(),
-				domain.F("agent", request.AgentInstanceID),
-			)
+			a.logOutcome(domain.EventHarnessInvokeError, err.Error(), request.AgentInstanceID, resp.Stdout)
 			return domain.ProtocolResponse{}, ctx.Err()
 		}
-		a.logger.Log(domain.EventHarnessInvokeError, err.Error(),
-			domain.F("agent", request.AgentInstanceID),
-		)
+		a.logOutcome(domain.EventHarnessInvokeError, err.Error(), request.AgentInstanceID, resp.Stdout)
 		return domain.ProtocolResponse{}, err
 	}
 
@@ -234,14 +230,11 @@ func (a *GHCPCLIAdapter) Invoke(ctx context.Context, agent domain.AgentReference
 		a.logger.Log(domain.EventHarnessParseFailed, string(resp.Protocol),
 			domain.F("agent", request.AgentInstanceID),
 		)
-		a.logger.Log(domain.EventHarnessInvokeError, wrapped.Error(),
-			domain.F("agent", request.AgentInstanceID),
-		)
+		a.logOutcome(domain.EventHarnessInvokeError, wrapped.Error(), request.AgentInstanceID, resp.Stdout)
 		return domain.ProtocolResponse{}, wrapped
 	}
 
-	a.logger.Log(domain.EventHarnessInvokeOK, "invocation succeeded",
-		domain.F("agent", request.AgentInstanceID),
+	a.logOutcome(domain.EventHarnessInvokeOK, "invocation succeeded", request.AgentInstanceID, resp.Stdout,
 		domain.F("status", string(protoResp.StatusCode)),
 	)
 	return protoResp, nil
@@ -348,17 +341,17 @@ func (a *GHCPCLIAdapter) InvokeRaw(ctx context.Context, agent domain.AgentRefere
 
 	text, parseErr := commonharness.ParseGHCPCLIEnvelope(resp.Stdout, []byte(resp.Stderr), resp.ExitCode)
 	if parseErr != nil {
-		a.logger.Log(domain.EventHarnessInvokeError, parseErr.Error(),
-			domain.F("agent", agent.Identifier),
-		)
+		if errors.Is(parseErr, commonharness.ErrGHCPCLIAgentDeselected) {
+			// The parser has no agent identifier; name the requested agent here.
+			parseErr = fmt.Errorf("%w: requested agent %q", parseErr, agent.Identifier)
+		}
+		a.logOutcome(domain.EventHarnessInvokeError, parseErr.Error(), agent.Identifier, resp.Stdout)
 		return nil, parseErr
 	}
 
 	a.logger.Log(domain.EventHarnessStdout, text,
 		domain.F("agent", agent.Identifier),
 	)
-	a.logger.Log(domain.EventHarnessInvokeOK, "raw invocation succeeded",
-		domain.F("agent", agent.Identifier),
-	)
+	a.logOutcome(domain.EventHarnessInvokeOK, "raw invocation succeeded", agent.Identifier, resp.Stdout)
 	return []byte(text), nil
 }
