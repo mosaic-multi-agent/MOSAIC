@@ -14,7 +14,7 @@ Planning agents define WHAT work to do, WHEN to do it, and HOW it should be stru
 | 7 | [planner-audit](./planner-audit.md) | 5.3.1 | Creates audit plans splitting changed files into typed stages (Implementation, Tests, Architecture, Contracts), always including whole-PR Architecture and Contracts stages, for parallel auditing |
 | 8 | [contracts-designer](./contracts-designer.md) | 4.3.1 | Defines interfaces, contracts, data structures, and component specifications |
 | 5 | [system-designer](./system-designer.md) | 3.2.2 | Designs system architecture, component interactions, and high-level structure |
-| 4 | [requirements-refinement](./requirements-refinement.md) | 3.4.1 | Refines requirements into typed specifications at a user-declared depth through user dialogue |
+| 4 | [requirements-refinement](./requirements-refinement.md) | 3.4.2 | Refines requirements into typed specifications at a user-declared depth through user dialogue |
 | 24 | [knowledge-base-flag-sorter](./knowledge-base-flag-sorter.md) | 3.3.1 | Collects correction flags from KBFlags.md, organizes bottom-up by tier, writes the Corrections schedule in KBProgress.md |
 | 31 | [hw-schema-planner](./hw-schema-planner.md) | 3.3.1 | Discovers all sheets of a hardware schematic project and writes HWResearchProgress.md with one research stage per sheet |
 | 26 | [verification-questions-preparer](./verification-questions-preparer.md) | 2.3.1 | Creates, populates, and validates Q/A verification artifacts and prepares batched attempted-answer prompts |
