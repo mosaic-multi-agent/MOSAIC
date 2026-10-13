@@ -1,10 +1,10 @@
 # Plan: MosaicTest Staged Findings Loop
 
 > [WARN] **FIXTURE ARTIFACT** — pre-placed by hand before the run, not produced by a planner agent.
-> This file exists so the runner has a stage table to read in a workflow with no pre-EXECUTION rows.
+> This file exists so the runner has a block schedule to read in a workflow with no planning row.
 
 ## Overview
-One stage with two execution groups (Test, Implementation). The Test group holds a findings loop: the gate row returns COMPLETED_NEEDS_ACTION once and is routed back to the writer row.
+One stage with two groups (Test, Implementation). The Test group holds a findings loop: the gate row returns COMPLETED_NEEDS_ACTION once and is routed back to the writer row.
 
 ## Stages
 
@@ -17,4 +17,4 @@ One stage with two execution groups (Test, Implementation). The Test group holds
 
 ## Fixture Notes
 
-One stage is enough: the defect under test concerns row position within a stage.
+One stage is enough: the defect under test concerns row position within an iteration.

@@ -1,7 +1,7 @@
 package artifact_test
 
-// Tests for the ASCII summary truncation rule: a summary over 100 characters
-// keeps its first 50 and last 50 characters joined by " ... " (ASCII), and a
+// Tests for the ASCII summary truncation rule: a summary over 150 characters
+// keeps its first 50 and last 100 characters joined by " ... " (ASCII), and a
 // fully rendered Orchestration.md contains only ASCII bytes.
 
 import (
@@ -17,13 +17,13 @@ import (
 )
 
 func TestTruncateSummary_OneOverBoundary_TruncatedWithAsciiDelimiter(t *testing.T) {
-	input := strings.Repeat("a", 50) + "X" + strings.Repeat("b", 50) // 101 chars
+	input := strings.Repeat("a", 50) + "X" + strings.Repeat("b", 100) // 151 chars
 
 	got := artifact.TruncateSummary(input)
 
-	want := strings.Repeat("a", 50) + " ... " + strings.Repeat("b", 50)
+	want := strings.Repeat("a", 50) + " ... " + strings.Repeat("b", 100)
 	if got != want {
-		t.Errorf("TruncateSummary(101 chars):\n  want: %q\n   got: %q", want, got)
+		t.Errorf("TruncateSummary(151 chars):\n  want: %q\n   got: %q", want, got)
 	}
 }
 
@@ -57,7 +57,7 @@ func TestApply_LongSummary_FullyRenderedArtifactIsAsciiOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	long := strings.Repeat("h", 50) + strings.Repeat("m", 60) + strings.Repeat("t", 50)
+	long := strings.Repeat("h", 50) + strings.Repeat("m", 60) + strings.Repeat("t", 100)
 	step := newTestStep(1, "planner#1", "PLANNING", "", domain.StatusSUCCESS, time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC), nil)
 	step.Summary = long
 
@@ -74,7 +74,7 @@ func TestApply_LongSummary_FullyRenderedArtifactIsAsciiOnly(t *testing.T) {
 			t.Fatalf("Orchestration.md contains non-ASCII byte 0x%02x at offset %d", b, i)
 		}
 	}
-	if !strings.Contains(string(raw), strings.Repeat("h", 50)+" ... "+strings.Repeat("t", 50)) {
-		t.Errorf("summary must be head-50 + \" ... \" + tail-50 in the log row, got:\n%s", raw)
+	if !strings.Contains(string(raw), strings.Repeat("h", 50)+" ... "+strings.Repeat("t", 100)) {
+		t.Errorf("summary must be head-50 + \" ... \" + tail-100 in the log row, got:\n%s", raw)
 	}
 }

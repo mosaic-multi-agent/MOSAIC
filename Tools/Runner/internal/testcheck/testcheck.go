@@ -34,6 +34,7 @@ const (
 	MismatchErrorExpected                      // expected an error entry, got a normal response
 	MismatchErrorUnexpected                    // expected a normal response, got an error entry
 	MismatchInfraError                         // infrastructure error inside Check (e.g. dispatch log unreadable)
+	MismatchStderrContains                     // stderr lacks the expected substring
 )
 
 // Mismatch describes the first point of divergence between expected and actual
@@ -72,6 +73,9 @@ type CheckInput struct {
 
 	// DispatchLog is the path to the JSONL dispatch log file for this run.
 	DispatchLog string
+
+	// Stderr is the child mosaic-run process's captured stderr.
+	Stderr string
 }
 
 // ExpectedOutcome is the Go representation of a .expected.json sidecar file.
@@ -81,6 +85,10 @@ type ExpectedOutcome struct {
 
 	// Dispatches is the expected dispatch sequence.
 	Dispatches []ExpectedDispatch `json:"dispatches"`
+
+	// StderrContains, when non-empty, requires the child run's stderr to
+	// contain this substring. Empty or absent: stderr is not checked.
+	StderrContains string `json:"stderr_contains,omitempty"`
 }
 
 // ExpectedDispatch is one expected entry in the dispatch sequence.
@@ -450,5 +458,5 @@ func Check(actual CheckInput, expected *ExpectedOutcome) CheckResult {
 		}
 	}
 
-	return CheckResult{Pass: true}
+	return checkStderr(actual, expected)
 }

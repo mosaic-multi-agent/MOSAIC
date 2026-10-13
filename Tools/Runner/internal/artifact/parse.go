@@ -15,7 +15,7 @@ import (
 // Returns *domain.RefusalError if the content is not in the canonical format
 // (missing type field, missing required sections, or a truncated file).
 //
-// Empty-value convention: cells that contain "-" in the execution log Stage or
+// Empty-value convention: cells that contain "-" in the execution log Iteration or
 // Checkpoint columns are returned as "" in the ArtifactState. No other component
 // ever sees or produces "-" for these fields.
 func Parse(data []byte) (domain.ArtifactState, error) {
@@ -187,6 +187,9 @@ func buildStateFromFrontmatter(fmContent string, entries []domain.FrontmatterEnt
 		}
 		state.GlobalSequence = n
 	}
+	if v, ok := topLevel["dispatch"]; ok {
+		state.Dispatch = domain.DispatchField{Present: true, Value: v}
+	}
 	if v, ok := topLevel["checkpoints"]; ok {
 		switch v {
 		case "enabled":
@@ -245,7 +248,11 @@ func buildStateFromFrontmatter(fmContent string, entries []domain.FrontmatterEnt
 	if v, ok := currentState["phase"]; ok {
 		cs.Phase = v
 	}
-	if v, ok := currentState["stage"]; ok {
+	// The pre-3.0 key "stage" marks the pre-3.0 layout and is not read.
+	if _, ok := currentState["stage"]; ok {
+		return domain.ArtifactState{}, refuseSection("current_state has the pre-3.0 key \"stage\": ", ErrPre30Layout)
+	}
+	if v, ok := currentState["iteration"]; ok {
 		cs.Stage = v
 	}
 	if v, ok := currentState["last_status"]; ok {

@@ -13,6 +13,7 @@ Creation agents write actual project files - source code and test code. They tra
 | 16 | [implementation-tdd](./implementation-tdd.md) | 4.2.1 | Writes implementation code that makes tests pass (TDD GREEN phase) |
 | 15 | [test-writer-tdd](./test-writer-tdd.md) | 5.3.0 | Writes, updates, and fixes test code (TDD RED phase and beyond) |
 | 25 | [knowledge-base-index-assembler](./knowledge-base-index-assembler.md) | 2.2.1 | Creates top-level Index.md in the KB output path from completed KB documents |
+| 46 | [test-case-writer](./test-case-writer.md) | 1.1.0 | Renders an approved test scenario model into abstract test cases in the project's domain vocabulary and test-case format |
 
 ## TDD Phases
 

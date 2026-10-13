@@ -1,67 +1,26 @@
 package domain
 
-// StageNumber is a positive integer stage number starting at 1.
-type StageNumber int
-
-// StageEntry is one row from the plan artifact's stage table.
-type StageEntry struct {
-	Number    StageNumber
-	HITL      bool
-	DependsOn []StageNumber // empty means no dependencies
-	Approach  Approach      // zero value when not read (single-group workflow)
-}
-
-// StageSet is the validated, ordered collection of stages for a workflow run.
-// Validation guarantees: consecutive numbering starting at 1, no forward
-// dependencies, and (when required) valid approach values.
-type StageSet struct {
-	Entries []StageEntry // ascending stage-number order, consecutive from 1
-}
-
-// Count returns the number of stages.
-func (s StageSet) Count() int {
-	return len(s.Entries)
-}
-
-// Entry returns the stage entry for the given number, or false if not found.
-func (s StageSet) Entry(n StageNumber) (StageEntry, bool) {
-	for _, e := range s.Entries {
-		if e.Number == n {
-			return e, true
-		}
-	}
-	return StageEntry{}, false
-}
-
-// Numbers returns all stage numbers in order.
-func (s StageSet) Numbers() []StageNumber {
-	out := make([]StageNumber, len(s.Entries))
-	for i, e := range s.Entries {
-		out[i] = e.Number
-	}
-	return out
-}
-
 // GroupName is a workflow-defined execution group token, taken verbatim from
-// the Phase column's group segment and from the Execution Groups table.
+// the Phase column's group segment and from the **Groups:** table.
 // The empty value means "no group declared".
 type GroupName string
 
 // Approach is a workflow-defined, opaque token read verbatim from the plan
-// artifact's Approach column and matched against the workflow's Execution
-// Groups table. The runner defines no Approach constants.
+// artifact's Approach column and matched against the workflow's **Groups:**
+// table. The runner defines no Approach constants.
 // The zero value "" means "no approach read" and is only legal when the
 // workflow declares no groups.
 type Approach string
 
-// ApproachSequence is one row of the Execution Groups table: an approach token
+// ApproachSequence is one row of the **Groups:** table: an approach token
 // and the ordered group sequence it selects.
 type ApproachSequence struct {
+	Block    BlockName // the **Groups:** Block cell
 	Approach Approach
 	Groups   []GroupName // ordered; non-empty for a valid table row
 }
 
-// ApproachTable is a workflow's Execution Groups table in declaration order.
+// ApproachTable is a workflow's **Groups:** table in declaration order.
 // The zero value means the workflow declares no approach table.
 type ApproachTable struct {
 	Rows []ApproachSequence
@@ -81,6 +40,17 @@ func (t ApproachTable) Sequence(a Approach) ([]GroupName, bool) {
 		}
 	}
 	return nil, false
+}
+
+// ForBlock returns the rows keyed to block b, in table order.
+func (t ApproachTable) ForBlock(b BlockName) ApproachTable {
+	var rows []ApproachSequence
+	for _, row := range t.Rows {
+		if row.Block == b {
+			rows = append(rows, row)
+		}
+	}
+	return ApproachTable{Rows: rows}
 }
 
 // Approaches returns every declared approach token in table order.
@@ -109,7 +79,7 @@ func (t ApproachTable) GroupNames() []GroupName {
 }
 
 // ExecutionGroup is a contiguous range of routing table rows that form
-// one execution group within the EXECUTION phase.
+// one group of a block.
 type ExecutionGroup struct {
 	Name     GroupName // workflow-defined; "" for the implicit no-groups range
 	StartRow int       // inclusive, zero-based row index into RoutingTable.Rows
@@ -117,35 +87,11 @@ type ExecutionGroup struct {
 }
 
 // AdmittedWorkflow is the output of compat admission: a routing table that has
-// been validated as inside the supported subset, with resolved execution groups.
+// been validated as inside the supported subset, with its blocks resolved.
 type AdmittedWorkflow struct {
 	Table RoutingTable
 
-	// Groups holds the EXECUTION row partition. When GroupsDeclared is true it
-	// holds one entry per declared group, in first-appearance order. When
-	// GroupsDeclared is false it holds exactly one entry with an empty Name
-	// covering every staged row. Empty for non-staged workflows.
-	Groups         []ExecutionGroup
-	GroupsDeclared bool          // true iff at least one EXECUTION row carries a group segment
-	ApproachTable  ApproachTable // carried through from the routing table
-
-	// PreExecutionRows and PostExecutionRows identify the row ranges
-	// before and after the staged EXECUTION phase (empty for non-staged or
-	// when the phase is at the boundary of the table).
-	PreExecutionStartRow  int // inclusive
-	PreExecutionEndRow    int // exclusive (equals first EXECUTION row index)
-	PostExecutionStartRow int // inclusive (equals first post-EXECUTION row index)
-	PostExecutionEndRow   int // exclusive
-
-	HasStagedPhase bool
-}
-
-// GroupByName returns the group with the given name and false when absent.
-func (w AdmittedWorkflow) GroupByName(n GroupName) (ExecutionGroup, bool) {
-	for _, g := range w.Groups {
-		if g.Name == n {
-			return g, true
-		}
-	}
-	return ExecutionGroup{}, false
+	// Blocks is the per-block admitted model, in table order. Rows outside
+	// every block belong to the run scope.
+	Blocks []AdmittedBlock
 }

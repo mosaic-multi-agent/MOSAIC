@@ -16,6 +16,7 @@
 package orchfile
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -145,6 +146,10 @@ func EnumerateWorkflows(path string) ([]domain.WorkflowRegion, error) {
 //   - The file does not exist or cannot be read
 //   - A section has an empty name
 //   - Duplicate section names exist
+//   - Any row of any agent's table names a trigger outside the trigger
+//     vocabulary (domain.IsValidInfraTrigger), has a blank Trigger cell, or the
+//     table has rows but no Trigger column. Every row is checked, whatever the
+//     agent's class.
 func EnumerateInfrastructureAgents(path string) ([]domain.DeclaredInfraAgent, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -206,6 +211,10 @@ func EnumerateInfrastructureAgents(path string) ([]domain.DeclaredInfraAgent, er
 
 		// Parse the markdown table inside the section.
 		agent, parseErr := parseInfraAgentTable(name, version, content)
+		var triggerErr *domain.RefusalError
+		if errors.As(parseErr, &triggerErr) {
+			return nil, triggerErr
+		}
 		if parseErr != nil {
 			return nil, &domain.RefusalError{
 				Component: "orchfile",
@@ -242,6 +251,15 @@ func parseInfraAgentTable(name, version string, content []byte) (domain.Declared
 	paramCol := t.Column("Param")
 	onFailureCol := t.Column("On Failure")
 
+	if triggerCol < 0 {
+		return agent, &domain.RefusalError{
+			Component: "orchfile",
+			Resource:  name,
+			Token:     "",
+			Reason:    domain.InfraTriggerRefusalReason(name, "", domain.InfraTriggerInDeclaration),
+		}
+	}
+
 	for _, row := range t.Rows {
 		if classCol >= 0 && agent.Class == "" {
 			agent.Class = strings.TrimSpace(row[classCol])
@@ -250,9 +268,14 @@ func parseInfraAgentTable(name, version string, content []byte) (domain.Declared
 			agent.OnFailure = strings.TrimSpace(row[onFailureCol])
 		}
 
-		tr := domain.DeclaredInfraTrigger{}
-		if triggerCol >= 0 {
-			tr.Trigger = strings.TrimSpace(row[triggerCol])
+		tr := domain.DeclaredInfraTrigger{Trigger: strings.TrimSpace(row[triggerCol])}
+		if !domain.IsValidInfraTrigger(tr.Trigger) {
+			return agent, &domain.RefusalError{
+				Component: "orchfile",
+				Resource:  name,
+				Token:     tr.Trigger,
+				Reason:    domain.InfraTriggerRefusalReason(name, tr.Trigger, domain.InfraTriggerInDeclaration),
+			}
 		}
 		if paramCol >= 0 {
 			p := strings.TrimSpace(row[paramCol])
@@ -260,9 +283,7 @@ func parseInfraAgentTable(name, version string, content []byte) (domain.Declared
 				tr.Param = p
 			}
 		}
-		if tr.Trigger != "" {
-			agent.Triggers = append(agent.Triggers, tr)
-		}
+		agent.Triggers = append(agent.Triggers, tr)
 	}
 
 	return agent, nil

@@ -11,7 +11,7 @@ import (
 	"mosaic-run/internal/engine"
 )
 
-// 1-based rows and agents of brownfieldTDDContent used by the retry tests.
+// 1-based rows and agents of brownfieldTDDV216Content used by the retry tests.
 const (
 	rtRowPlanner     = 4 // PLANNING, non-staged
 	rtRowPlanReview  = 5 // PLANNING, non-staged
@@ -26,18 +26,18 @@ const (
 	rtLastMessage = "wrote half of the plan, stopped at the stage list"
 )
 
-// retryFixture is the workflow, stage set and agents a retry test runs on.
+// retryFixture is the workflow, schedules and agents a retry test runs on.
 type retryFixture struct {
-	aw     domain.AdmittedWorkflow
-	stages *domain.StageSet
-	agents map[string]domain.AgentReference
+	aw        domain.AdmittedWorkflow
+	schedules domain.BlockSchedules
+	agents    map[string]domain.AgentReference
 }
 
 func newRetryFixture(t *testing.T) retryFixture {
 	t.Helper()
 	return retryFixture{
-		aw:     mustParseAndAdmit(t, brownfieldTDDContent, "brownfield-tdd", "3.4"),
-		stages: twoStageSet("TDD"),
+		aw:        mustParseAndAdmitV216(t, brownfieldTDDV216Content, "brownfield-tdd", "3.4"),
+		schedules: twoSchedules("TDD"),
 		agents: newTestAgents(
 			"codebase-research", "requirements-refinement", "requirements-review",
 			rtPlanner, rtPlanReview, "contracts-designer", "contracts-review",
@@ -100,7 +100,7 @@ func (f retryFixture) next(mode domain.ExecutionMode, log *runLog, resume bool,
 	state.CurrentState.ErrorCode = last.ErrorCode
 	in := engine.NextInput{
 		Workflow:            f.aw,
-		Stages:              f.stages,
+		Schedules:           f.schedules,
 		State:               state,
 		Agents:              f.agents,
 		Seq:                 last.Seq,
@@ -155,12 +155,12 @@ func hasText(s, sub string) bool { return strings.Contains(s, sub) }
 
 // nextAfterState runs engine.Next in auto-review mode for an explicit state and
 // response, with the state's last sequence number.
-func nextAfterState(aw domain.AdmittedWorkflow, stages *domain.StageSet,
+func nextAfterState(aw domain.AdmittedWorkflow, schedules domain.BlockSchedules,
 	agents map[string]domain.AgentReference, state domain.ArtifactState,
 	resp *domain.ProtocolResponse) domain.EngineDecision {
 	return engine.Next(engine.NextInput{
 		Workflow:     aw,
-		Stages:       stages,
+		Schedules:    schedules,
 		State:        state,
 		LastResponse: resp,
 		Agents:       agents,

@@ -1,6 +1,6 @@
 package session_test
 
-// Tests for the conditions under which STAGE_END and PHASE_END infrastructure
+// Tests for the conditions under which ITERATION_END and PHASE_END infrastructure
 // triggers fire: only after the last step of the stage (or phase) returned
 // SUCCESS and, where HITL applies, passed HITL verification. The same rules must
 // hold for auto-routed dispatches and for consultant-routed dispatches.
@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	condStageEndAgent = "commit-manager-git"
+	condIterationEndAgent = "commit-manager-git"
 	condPhaseEndAgent = "review-agent-a"
 )
 
@@ -48,7 +48,7 @@ func newTriggerConditionSession(t *testing.T, plan string, approvals domain.Appr
 	t.Helper()
 	dir := t.TempDir()
 	orchPath = copyOrchestratorFile(t, dir, "trigger-conditions-orch.md")
-	for _, a := range []string{"implementation-tdd", "implementation-review", condStageEndAgent, condPhaseEndAgent} {
+	for _, a := range []string{"implementation-tdd", "implementation-review", condIterationEndAgent, condPhaseEndAgent} {
 		writeAgentFile(t, dir, a)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "Plan.md"), []byte(plan), 0600); err != nil {
@@ -118,8 +118,8 @@ func requireAgentSequence(t *testing.T, got []string, want []string) {
 
 func requireNoBoundaryTriggers(t *testing.T, agents []string) {
 	t.Helper()
-	if n := countAgent(agents, condStageEndAgent); n != 0 {
-		t.Errorf("STAGE_END must not fire, but %s was dispatched %d time(s): %v", condStageEndAgent, n, agents)
+	if n := countAgent(agents, condIterationEndAgent); n != 0 {
+		t.Errorf("ITERATION_END must not fire, but %s was dispatched %d time(s): %v", condIterationEndAgent, n, agents)
 	}
 	if n := countAgent(agents, condPhaseEndAgent); n != 0 {
 		t.Errorf("PHASE_END must not fire, but %s was dispatched %d time(s): %v", condPhaseEndAgent, n, agents)
@@ -167,14 +167,14 @@ func TestSession_Start_BoundaryTriggers_FireOnceAfterRejectedThenAcceptedSuccess
 	queueCond(f, "implementation-tdd", domain.StatusSUCCESS)
 	queueCond(f, "implementation-review", domain.StatusSUCCESS) // rejected
 	queueCond(f, "implementation-review", domain.StatusSUCCESS) // accepted
-	queueCond(f, condStageEndAgent, domain.StatusSUCCESS)
+	queueCond(f, condIterationEndAgent, domain.StatusSUCCESS)
 	queueCond(f, condPhaseEndAgent, domain.StatusSUCCESS)
 
 	got, err := ses.Start(context.Background(), condConfig(orchPath, domain.ExecutionModeAuto))
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
 	requireAgentSequence(t, invokedAgents(f), []string{
-		"implementation-tdd", "implementation-review", "implementation-review", condStageEndAgent, condPhaseEndAgent,
+		"implementation-tdd", "implementation-review", "implementation-review", condIterationEndAgent, condPhaseEndAgent,
 	})
 }
 
@@ -183,7 +183,7 @@ func TestSession_Start_BoundaryTriggers_PhaseEndOnlyAtLastStage(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		queueCond(f, "implementation-tdd", domain.StatusSUCCESS)
 		queueCond(f, "implementation-review", domain.StatusSUCCESS)
-		queueCond(f, condStageEndAgent, domain.StatusSUCCESS)
+		queueCond(f, condIterationEndAgent, domain.StatusSUCCESS)
 	}
 	queueCond(f, condPhaseEndAgent, domain.StatusSUCCESS)
 
@@ -191,8 +191,8 @@ func TestSession_Start_BoundaryTriggers_PhaseEndOnlyAtLastStage(t *testing.T) {
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
 	requireAgentSequence(t, invokedAgents(f), []string{
-		"implementation-tdd", "implementation-review", condStageEndAgent,
-		"implementation-tdd", "implementation-review", condStageEndAgent, condPhaseEndAgent,
+		"implementation-tdd", "implementation-review", condIterationEndAgent,
+		"implementation-tdd", "implementation-review", condIterationEndAgent, condPhaseEndAgent,
 	})
 }
 
@@ -200,7 +200,7 @@ func TestSession_Start_BoundaryTriggers_PhaseEndOnlyAtLastStage(t *testing.T) {
 // consultant sends the run back to the implementer and then to the reviewer.
 func TestSession_Start_BoundaryTriggers_ReviewerFindingsThenSuccessFiresOnlyOnSuccess(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
-	consultant.queueStagedDispatch("implementation-tdd", "fix findings", 0, 1)
+	consultant.queueStagedDispatch("implementation-tdd", "fix findings", 0, "1")
 	// After the fix the auto route resumes on its own and re-runs the reviewer;
 	// the next consultation happens only after the boundary triggers and stops.
 	consultant.queueStop("done")
@@ -209,7 +209,7 @@ func TestSession_Start_BoundaryTriggers_ReviewerFindingsThenSuccessFiresOnlyOnSu
 	queueCond(f, "implementation-review", domain.StatusCOMPLETED_NEEDS_ACTION)
 	queueCond(f, "implementation-tdd", domain.StatusSUCCESS)
 	queueCond(f, "implementation-review", domain.StatusSUCCESS)
-	queueCond(f, condStageEndAgent, domain.StatusSUCCESS)
+	queueCond(f, condIterationEndAgent, domain.StatusSUCCESS)
 	queueCond(f, condPhaseEndAgent, domain.StatusSUCCESS)
 
 	_, _ = ses.Start(context.Background(), condConfig(orchPath, domain.ExecutionModeAuto))
@@ -217,7 +217,7 @@ func TestSession_Start_BoundaryTriggers_ReviewerFindingsThenSuccessFiresOnlyOnSu
 	requireAgentSequence(t, invokedAgents(f), []string{
 		"implementation-tdd", "implementation-review", // findings: nothing fires
 		"implementation-tdd", "implementation-review", // success: both fire
-		condStageEndAgent, condPhaseEndAgent,
+		condIterationEndAgent, condPhaseEndAgent,
 	})
 }
 
@@ -233,7 +233,7 @@ func newConsultTriggerSession(t *testing.T, plan string, approvals domain.Approv
 	t.Helper()
 	dir := scopedTempDir(t)
 	orchPath := copyOrchestratorFile(t, dir, "trigger-conditions-orch.md")
-	for _, a := range []string{"implementation-tdd", "implementation-review", condStageEndAgent, condPhaseEndAgent} {
+	for _, a := range []string{"implementation-tdd", "implementation-review", condIterationEndAgent, condPhaseEndAgent} {
 		writeAgentFile(t, dir, a)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "Plan.md"), []byte(plan), 0600); err != nil {
@@ -247,13 +247,13 @@ func newConsultTriggerSession(t *testing.T, plan string, approvals domain.Approv
 		GlobalSequence:  1,
 		RunSettings:     domain.RunSettings{Mode: domain.ExecutionModeOrchestrated},
 		CurrentState: domain.CurrentState{
-			Phase:      "EXECUTION.Stage-1",
-			Stage:      "Stage-1",
+			Phase:      "EXECUTION",
+			Stage:      "1",
 			LastStatus: domain.StatusSUCCESS,
 			LastAgent:  "implementation-tdd#1",
 		},
 		ExecutionLog: []domain.ExecutionLogEntry{
-			{Seq: 1, Agent: "implementation-tdd#1", Phase: "EXECUTION.Stage-1", Stage: "Stage-1", Status: domain.StatusSUCCESS},
+			{Seq: 1, Agent: "implementation-tdd#1", Phase: "EXECUTION", Stage: "1", Status: domain.StatusSUCCESS},
 		},
 	}
 	store.exists = true
@@ -282,7 +282,7 @@ func TestSession_Consult_BoundaryTriggers_NonSuccessLastStepFiresNothing(t *test
 	for _, status := range condNonSuccessStatuses {
 		t.Run(string(status), func(t *testing.T) {
 			consultant := &scriptedRoutingConsultant{}
-			consultant.queueStagedDispatch("implementation-review", "review", 1, 1)
+			consultant.queueStagedDispatch("implementation-review", "review", 1, "1")
 			consultant.queueStop("done")
 			ses, f, cfg := newConsultTriggerSession(t, condOneStagePlan, &fixedApprovalReader{approval: domain.ApprovalTrue}, consultant)
 			queueCond(f, "implementation-review", status)
@@ -296,7 +296,7 @@ func TestSession_Consult_BoundaryTriggers_NonSuccessLastStepFiresNothing(t *test
 
 func TestSession_Consult_BoundaryTriggers_HITLRejectedSuccessFiresNothing(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
-	consultant.queueStagedDispatch("implementation-review", "review", 1, 1)
+	consultant.queueStagedDispatch("implementation-review", "review", 1, "1")
 	consultant.queueStop("done")
 	ses, f, cfg := newConsultTriggerSession(t, condOneStagePlan, &fixedApprovalReader{approval: domain.ApprovalFalse}, consultant)
 	queueCond(f, "implementation-review", domain.StatusSUCCESS)
@@ -309,44 +309,44 @@ func TestSession_Consult_BoundaryTriggers_HITLRejectedSuccessFiresNothing(t *tes
 
 func TestSession_Consult_BoundaryTriggers_FireOnceAfterAcceptedSuccess(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
-	consultant.queueStagedDispatch("implementation-review", "review", 1, 1)
+	consultant.queueStagedDispatch("implementation-review", "review", 1, "1")
 	consultant.queueStop("done")
 	ses, f, cfg := newConsultTriggerSession(t, condOneStagePlan, &fixedApprovalReader{approval: domain.ApprovalTrue}, consultant)
 	queueCond(f, "implementation-review", domain.StatusSUCCESS)
-	queueCond(f, condStageEndAgent, domain.StatusSUCCESS)
+	queueCond(f, condIterationEndAgent, domain.StatusSUCCESS)
 	queueCond(f, condPhaseEndAgent, domain.StatusSUCCESS)
 
 	_, _ = ses.Start(context.Background(), cfg)
 
 	requireAgentSequence(t, invokedAgents(f), []string{
-		"implementation-review", condStageEndAgent, condPhaseEndAgent,
+		"implementation-review", condIterationEndAgent, condPhaseEndAgent,
 	})
 }
 
 func TestSession_Consult_BoundaryTriggers_PhaseEndNotFiredBeforeLastStage(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
-	consultant.queueStagedDispatch("implementation-review", "review", 1, 1)
+	consultant.queueStagedDispatch("implementation-review", "review", 1, "1")
 	consultant.queueStop("done")
 	ses, f, cfg := newConsultTriggerSession(t, condTwoStagePlan, &fixedApprovalReader{approval: domain.ApprovalTrue}, consultant)
 	queueCond(f, "implementation-review", domain.StatusSUCCESS)
-	queueCond(f, condStageEndAgent, domain.StatusSUCCESS)
+	queueCond(f, condIterationEndAgent, domain.StatusSUCCESS)
 
 	_, _ = ses.Start(context.Background(), cfg)
 
-	requireAgentSequence(t, invokedAgents(f), []string{"implementation-review", condStageEndAgent})
+	requireAgentSequence(t, invokedAgents(f), []string{"implementation-review", condIterationEndAgent})
 }
 
 func TestSession_Consult_BoundaryTriggers_ReviewerFindingsThenSuccessFiresOnlyOnSuccess(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
-	consultant.queueStagedDispatch("implementation-review", "review", 1, 1)
-	consultant.queueStagedDispatch("implementation-tdd", "fix findings", 0, 1)
-	consultant.queueStagedDispatch("implementation-review", "re-review", 1, 1)
+	consultant.queueStagedDispatch("implementation-review", "review", 1, "1")
+	consultant.queueStagedDispatch("implementation-tdd", "fix findings", 0, "1")
+	consultant.queueStagedDispatch("implementation-review", "re-review", 1, "1")
 	consultant.queueStop("done")
 	ses, f, cfg := newConsultTriggerSession(t, condOneStagePlan, &fixedApprovalReader{approval: domain.ApprovalTrue}, consultant)
 	queueCond(f, "implementation-review", domain.StatusCOMPLETED_NEEDS_ACTION)
 	queueCond(f, "implementation-tdd", domain.StatusSUCCESS)
 	queueCond(f, "implementation-review", domain.StatusSUCCESS)
-	queueCond(f, condStageEndAgent, domain.StatusSUCCESS)
+	queueCond(f, condIterationEndAgent, domain.StatusSUCCESS)
 	queueCond(f, condPhaseEndAgent, domain.StatusSUCCESS)
 
 	_, _ = ses.Start(context.Background(), cfg)
@@ -354,6 +354,6 @@ func TestSession_Consult_BoundaryTriggers_ReviewerFindingsThenSuccessFiresOnlyOn
 	requireAgentSequence(t, invokedAgents(f), []string{
 		"implementation-review",
 		"implementation-tdd", "implementation-review",
-		condStageEndAgent, condPhaseEndAgent,
+		condIterationEndAgent, condPhaseEndAgent,
 	})
 }

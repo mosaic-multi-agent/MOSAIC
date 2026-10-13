@@ -7,9 +7,9 @@ package registry_test
 // and returns the effective catalog for that module.
 //
 // Returning a catalog with an empty IDs list means "no shared entry for this harness; keep
-// the descriptor's own declared catalog unchanged". This preserves a non-CLI-backed harness
-// (like vscodeghcp), a descriptor-tier harness, and an external harness on their own model
-// data rather than emptying them.
+// the descriptor's own declared catalog unchanged". This preserves a harness the shared
+// catalog does not know (a descriptor-tier or external harness) on its own model data
+// rather than emptying it.
 //
 // All tests in this file reference registry.Options.ModelCatalog, which does not exist until
 // I9.1 is implemented. Every test therefore fails to compile until then — that is the intended
@@ -261,7 +261,7 @@ func TestDiscover_ModelCatalogHook_NonEmptyIDsInstalledOnDescriptor(t *testing.T
 // TestDiscover_ModelCatalogHook_EmptyIDsPreservesDescriptorModels verifies that when the
 // hook returns a catalog with an empty IDs list, the descriptor's own declared model catalog
 // is preserved. An empty IDs list signals "no shared entry for this harness; use descriptor's
-// own declared catalog unchanged" — the mechanism that keeps vscodeghcp and descriptor-tier
+// own declared catalog unchanged" — the mechanism that keeps descriptor-tier and external
 // harnesses on their own model data rather than emptying them.
 func TestDiscover_ModelCatalogHook_EmptyIDsPreservesDescriptorModels(t *testing.T) {
 	root := makeRoot(t)

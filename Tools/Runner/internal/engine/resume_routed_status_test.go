@@ -17,8 +17,8 @@ import (
 func recordedStatusNext(t *testing.T, mode domain.ExecutionMode, limit int,
 	recorded domain.StatusCode, code domain.ErrorCode, log []domain.ExecutionLogEntry) domain.EngineDecision {
 	t.Helper()
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
 	agents := newTestAgents(
 		"codebase-research", "requirements-refinement", "requirements-review",
 		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
@@ -39,13 +39,13 @@ func recordedStatusNext(t *testing.T, mode domain.ExecutionMode, limit int,
 	}
 	state.ReviewLoopLimit = limit
 	return engine.Next(engine.NextInput{
-		Workflow: aw,
-		Stages:   stages,
-		State:    state,
-		Agents:   agents,
-		Seq:      last.Seq,
-		Now:      fixedNow,
-		Mode:     mode,
+		Workflow:  aw,
+		Schedules: schedules,
+		State:     state,
+		Agents:    agents,
+		Seq:       last.Seq,
+		Now:       fixedNow,
+		Mode:      mode,
 	})
 }
 

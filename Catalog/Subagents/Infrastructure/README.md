@@ -12,10 +12,10 @@ They are a new *reason to invoke*, not a new *kind of invocation*. In every prot
 
 | ID | Agent | Version | Class | Triggers | On Failure | Description |
 |----|-------|---------|-------|----------|------------|-------------|
-| 36 | [checkpoint-manager-git](./checkpoint-manager-git.md) | 2.2.0 | `checkpoint` | STAGE_END, INVOCATION_INTERVAL(10) | halt | Commits a restorable checkpoint of the working tree to a private ref namespace; never modifies files |
-| 38 | [commit-manager-git](./commit-manager-git.md) | 2.2.0 | `commit` | STAGE_END | continue | Commits completed stage work to the user's branch with a prose message; not a restore point |
-| 39 | [orchestration-review](./orchestration-review.md) | 1.2.1 | `review` | INVOCATION_INTERVAL(30) | continue | Advisory — reports observations about the run's own bookkeeping and routing; never returns an instruction |
-| 37 | [checkpoint-restore-git](./checkpoint-restore-git.md) | 2.2.1 | `restore` | MANUAL | halt | Restores the working tree to a checkpoint; dispatched only on explicit human decision |
+| 36 | [checkpoint-manager-git](./checkpoint-manager-git.md) | 2.2.2 | `checkpoint` | ITERATION_END, INVOCATION_INTERVAL(10) | halt | Commits a restorable checkpoint of the working tree to a private ref namespace; never modifies files |
+| 38 | [commit-manager-git](./commit-manager-git.md) | 2.3.1 | `commit` | ITERATION_END | continue | Commits completed iteration work to the user's branch with a prose message; not a restore point |
+| 39 | [orchestration-review](./orchestration-review.md) | 1.2.3 | `review` | INVOCATION_INTERVAL(30) | continue | Advisory — reports observations about the run's own bookkeeping and routing; never returns an instruction |
+| 37 | [checkpoint-restore-git](./checkpoint-restore-git.md) | 2.2.2 | `restore` | MANUAL | halt | Restores the working tree to a checkpoint; dispatched only on explicit human decision |
 
 ### Why `checkpoint-restore-git` never fires automatically
 
@@ -30,7 +30,7 @@ Capture is safe and restore is dangerous. The checkpoint agent may run unattende
 | Class | Meaning | Activation |
 |-------|---------|------------|
 | `checkpoint` | Preserves restorable content and returns a content-reference. Never writes to a branch the user works on. | Run's `checkpoints` field |
-| `commit` | Writes completed work into the user's own history. Produces no restore point and is never a restore target. | Run's `commits` field; restricted to the `STAGE_END` trigger |
+| `commit` | Writes completed work into the user's own history. Produces no restore point and is never a restore target. | Run's `commits` field; restricted to the `ITERATION_END` trigger |
 | `review` | Inspects the run and reports observations. Produces no artifact and never routes. | None — deactivating it is a deployment decision |
 | `restore` | Restores a human-selected checkpoint and never fires automatically. | Explicit dispatch only; `MANUAL` trigger and class-based exclusion from trigger evaluation |
 
@@ -40,7 +40,7 @@ Capture is safe and restore is dangerous. The checkpoint agent may run unattende
 
 ## Declaration Order Matters
 
-Where co-triggered agents differ in `on_failure`, declaration order decides how much of a boundary's work is already done when a `halt` lands. **Declare `halt` agents first.** Checkpoint-before-commit means a halt lands before anything has entered the user's history; the reverse produces a committed stage with no restore point marking its boundary — the single state the pairing exists to prevent.
+Where co-triggered agents differ in `on_failure`, declaration order decides how much of a boundary's work is already done when a `halt` lands. **Declare `halt` agents first.** Checkpoint-before-commit means a halt lands before anything has entered the user's history; the reverse produces a committed iteration with no restore point marking its boundary — the single state the pairing exists to prevent.
 
 ## What Infrastructure Agents Do
 

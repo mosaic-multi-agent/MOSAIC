@@ -6,14 +6,14 @@ import "strings"
 // declaration (parsed from the deployed orchestrator file) or in an
 // infrastructure_overrides entry (parsed from Orchestration.md frontmatter).
 //
-// Trigger is drawn from the closed vocabulary: "STAGE_END",
-// "INVOCATION_INTERVAL", "PHASE_END", "MANUAL".
+// Trigger is drawn from the closed vocabulary: "INVOCATION_INTERVAL",
+// "ITERATION_END", "PHASE_END", "MANUAL" (see InfraTriggerVocabulary).
 //
 // Param holds the trigger's parameter value (e.g. an interval count for
 // INVOCATION_INTERVAL). Empty string when the trigger takes no parameter.
 // The YAML field name for Param is "trigger_param".
 type DeclaredInfraTrigger struct {
-	Trigger string // e.g. "STAGE_END", "INVOCATION_INTERVAL", "PHASE_END", "MANUAL"
+	Trigger string // e.g. "INVOCATION_INTERVAL", "ITERATION_END", "PHASE_END", "MANUAL"
 	Param   string // trigger parameter; empty when the trigger takes no parameter
 }
 

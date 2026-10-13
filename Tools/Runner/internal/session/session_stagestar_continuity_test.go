@@ -112,13 +112,13 @@ func TestSession_Start_StageStarOutputPrecedesStagedExecution_EntersExecution(t 
 	}
 }
 
-// TestSession_Start_FailedStageStarRederivation_RetainsExistingStageSet
+// TestSession_Start_FailedStageStarRederivation_RetainsExistingSchedule
 // verifies that when a stage set has already been successfully derived
 // earlier in a run, a later failed re-read of the plan file (triggered by a
 // further Stage-* output) does not discard it: the run still reaches
 // EXECUTION and dispatches the stage 1 rows instead of stopping for an
 // unavailable stage set.
-func TestSession_Start_FailedStageStarRederivation_RetainsExistingStageSet(t *testing.T) {
+func TestSession_Start_FailedStageStarRederivation_RetainsExistingSchedule(t *testing.T) {
 	orchDir := t.TempDir()
 	runFolder := t.TempDir()
 

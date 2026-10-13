@@ -41,7 +41,7 @@ template at `Tools/Deployment/config/tool-config.yaml` instead.
 Both files are optional:
 
 - If `tool-config.yaml` is **absent**, built-in defaults apply — including an
-  allow-list enabling all six shipped utility agents.
+  allow-list offering only `injections-helper`.
 - If `tool-config.yaml` is **present**, its values are authoritative. An omitted
   key takes its zero value, which for `utility_agent_allow_list` means *no*
   utility agents, not *all* of them. This is the one place where "absent file"
@@ -64,7 +64,7 @@ startup error.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `schema_version` | string | `"1"` | Config schema version. Do not change. |
-| `utility_agent_allow_list` | list of strings | see below | Utility agent keys selectable during deployment. |
+| `utility_agent_allow_list` | list of strings | `[injections-helper]` | Utility agent keys selectable during deployment. |
 | `allow_external_modules` | bool | `false` | Whether external harness module binaries may run. |
 | `log_retention_runs` | int | `0` | Max history log entries; `0` = unbounded. |
 | `tool_destinations` | map | `{}` | Generic-tool → harness-tool mappings. See [tool_destinations](#tool_destinations). |
@@ -81,26 +81,18 @@ Only agents whose key — the file base name without extension — appears in th
 list are offered in the utility-agent selection UI. Everything else is omitted
 regardless of what the catalog contains.
 
-The six shipped utility agent keys:
-
-```
-anthropic-subagent-creator
-harness-bug-hunter
-orchestration-architect
-system-prompt-capturer
-transformation
-workflow-creator
-```
-
-When the whole config file is absent, all six are enabled by default: opting out
-of one agent is simpler UX than opting in to six, and none of these agents
-performs arbitrary user-defined actions. Once the file exists, `[]` genuinely
-means "none".
+When the whole config file is absent, the built-in default offers only
+`injections-helper`, the one utility agent that applies outside the MOSAIC
+repository. The creator agents (`subagent-creator`, `workflow-creator`) are left
+out because they depend on files that exist only in the MOSAIC repository and
+ship at MOSAIC root. The Deploy agents flow is not filtered by this list: it
+still offers every utility agent on disk, creators included. Once the file
+exists, `[]` genuinely means "none".
 
 ```yaml
 utility_agent_allow_list:
-  - orchestration-architect
-  - workflow-creator
+  - injections-helper
+  - system-prompt-capturer
 ```
 
 ### allow_external_modules

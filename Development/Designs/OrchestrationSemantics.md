@@ -1,32 +1,29 @@
 # Orchestration Semantics
 
 > **Status:** Draft
-> **Version:** 0.2
+> **Version:** 0.6
 > **Created:** 2026-08-15
-> **Last Updated:** 2026-09-27
-> **Scope:** The controlled vocabulary of the orchestration system — reserved keywords in artifact names, naming patterns for agents, and the semantic rules that govern how the orchestrator interprets them. Defines what names carry behavioral weight and how to introduce new names without colliding with existing semantics.
+> **Last Updated:** 2026-10-10
+> **Scope:** The controlled vocabulary of the orchestration system — reserved keywords in artifact names, naming patterns for agents, and the conventions they carry for workflow authors and agents. Defines what names carry behavioral weight and how to introduce new names without colliding with existing semantics.
 
 ---
 
 ## 1. Purpose
 
-The orchestration system relies on naming conventions to convey meaning. The orchestrator interprets artifact names to determine routing behavior. Agent naming patterns signal structural relationships (creator/reviewer pairs). Workflow authors must understand which names carry semantic weight and cannot be used casually.
+The orchestration system relies on naming conventions to convey meaning. Artifact keywords tell workflow authors and agents what an artifact is for; agent naming patterns signal structural relationships (creator/reviewer pairs). **No name routes.** An executor routes on the workflow's routing table, on status codes, and on the block schedules the workflow declares (`WorkflowFormat.md` §9) — never on an artifact's name (§2.1). Names still matter: authors choose Inputs and Outputs by what names say, and agents decide what an artifact is for by its name, so a misleading name produces a misbuilt workflow or a confused agent.
 
 This document is the single source of truth for:
-- Reserved artifact keywords and their semantic meaning
-- Agent naming patterns that carry behavioral implications
-- Rules for introducing new names without colliding with existing semantics
-- The relationship between naming conventions and orchestrator behavior
+- Reserved artifact keywords and their meaning
+- Agent naming patterns that carry structural implications
+- Rules for introducing new names without colliding with existing ones
+- What an executor reads, and why names are not part of it (§5)
 
 ### 1.1 Why This Matters
 
 Without a controlled vocabulary, the following failures occur:
-- A new subagent accidentally uses `-review` in its name, implying a creator/reviewer pairing that doesn't exist
-- A new workflow creates a `Progress.md` artifact that the orchestrator misinterprets as task-state tracking
-- An artifact named `Plan.md` in a non-standard location breaks the orchestrator's stage-routing logic
-- A workflow author names something `AuditPlan.md` without realizing "Plan" carries routing semantics
-
-The orchestrator treats certain keywords as semantic signals. This document defines what those signals are, so every agent, workflow, and artifact respects them.
+- A new subagent uses `-review` in its name, implying a creator/reviewer pairing that doesn't exist, and a workflow author names an On Findings target with no creator behind it
+- A new workflow names a scratch file `Progress.md`, and agents treat it as a task tracker they must keep current
+- A workflow author names a deliverable `AuditPlan.md` that is not a plan, and downstream agents read it as defining their scope
 
 ### 1.2 Scope
 
@@ -36,6 +33,7 @@ This document covers:
 - **Compliance rules** — What workflow authors and agent creators must follow
 
 This document does NOT cover:
+- Workflow file format, including how block schedules are declared (see `WorkflowFormat.md`)
 - Artifact file format/schema (see `OrchestrationArtifactFormat.md`)
 - Communication protocol (see `CommunicationProtocol.md`)
 
@@ -43,76 +41,70 @@ This document does NOT cover:
 
 ## 2. Reserved Artifact Keywords
 
-Artifact names are not arbitrary. Certain keywords signal specific roles in the orchestration system. Keywords fall into two tiers based on the consequences of misuse.
+Certain keywords in artifact names signal an artifact's role. They are conventions for workflow authors and agents. No executor derives routing from them.
 
-### 2.1 Routing Keywords
+### 2.1 Names Do Not Route
 
-These keywords directly affect orchestrator behavior. The orchestrator reads artifacts containing these keywords and makes routing decisions based on them. Misusing a routing keyword breaks orchestration.
+What an executor routes on is declared, never inferred from a file name (`WorkflowFormat.md` §2, *Declared, not inferred*):
 
-| Keyword | Semantic Role | Orchestrator Behavior | Examples |
-|---------|--------------|----------------------|----------|
-| **Plan** | Routing artifact — defines execution structure (stages, ordering, dependencies, HITL, approach) | Reads the master Plan to determine stage count, ordering, subagent sequence per stage, HITL resolution, and recovery state. Subagents read both master and per-stage Plans for task context. | `Plan.md`, `Stage-{N}/Plan.md`, `AuditPlan.md` |
-| **Progress** | Task-state tracking — mutable artifact tracking completion of work items within a plan's scope | Reads only during EXECUTION-phase recovery, to establish which items are done or pending after a restart. Ordinary routing and stage advancement use status codes | `PlanProgress.md`, `AuditProgress.md`, `HWResearchProgress.md`, `KBProgress.md` |
-| **Review** | Quality-gate feedback — output of a review agent evaluating another agent's work | Used in routing: the reviewer's configured action condition triggers `COMPLETED_NEEDS_ACTION` -> callback to creator. Below-threshold findings may remain recorded while the reviewer returns `SUCCESS`. Always kebab-case. | `requirements-review.md`, `plan-review.md`, `contracts-review.md` |
+- **The routing table** — rows, targets, Inputs and Outputs.
+- **Status codes** — `CommunicationProtocol.md`.
+- **Block schedules** — each block's `Source` artifact and `Section`, declared in the workflow's `**Blocks:**` table (`WorkflowFormat.md` §9.1). The executor reads that section of that artifact and nothing else in it. A master `Plan.md` is a schedule source only because a workflow declares it; `KBProgress.md` is one for the same reason; an artifact named `*Plan.md` that no workflow declares is never read for routing.
 
-### 2.2 Convention Keywords
+A misused keyword therefore does not break routing. It misleads the people and agents who read the name — which is still a defect, because they act on it.
 
-These keywords carry semantic meaning for workflow design and agent behavior, but the orchestrator does not read these artifacts or route based on them. Misusing a convention keyword creates confusion, not routing failures.
+### 2.2 Artifact Keywords
 
 | Keyword | Semantic Role | Convention | Examples |
 |---------|--------------|------------|----------|
-| **Requirements** | User-authored scope definition — the starting input that defines what the orchestration should accomplish | Passes to first subagent(s); never generated by subagents (only refined). Signals "human-defined scope" to all downstream agents. | `Requirements.md` |
-| **Research** | Information-gathering output — context collected by research agents for downstream consumption | Passes as input to downstream agents. Orchestrator does not read (information asymmetry by design). Multiple research artifacts may exist (focused variants). | `Research.md`, `ResearchArchitecture.md`, `ResearchContracts.md` |
+| **Plan** | Execution structure — what to execute, in what order | Written by planning agents. A master plan holds the block schedule a workflow declares as a block's source (iteration IDs, `Depends On`, `HITL`, `Approach`); per-iteration plans hold task details for subagents (R1). | `Plan.md`, `Stage-{Stage}/Plan.md`, `AuditPlan.md` |
+| **Progress** | Task state — mutable tracking of work items within a plan's scope | Written by subagents as work completes; paired with a Plan (R2, R3). | `PlanProgress.md`, `AuditProgress.md`, `HWResearchProgress.md`, `KBProgress.md` |
+| **Review** | Quality-gate feedback — output of a review agent evaluating another agent's work | Named after the producing reviewer, in kebab-case. Routing uses the reviewer's status code: its configured action condition triggers `COMPLETED_NEEDS_ACTION`, for which the reviewer's On Findings cell suggests the creator as fix target; below-threshold findings may remain recorded while the reviewer returns `SUCCESS` (R6). | `requirements-review.md`, `plan-review.md`, `contracts-review.md` |
+| **Requirements** | User-authored scope definition — the starting input that defines what the run should accomplish | Supplied by the user, typically as a seed (`WorkflowFormat.md` §6.7); never generated by subagents, only refined (R4). | `Requirements.md` |
+| **Research** | Information-gathering output — context collected by research agents for downstream consumption | Passed as input to downstream agents; executors do not read it (R5). Multiple research artifacts may exist (focused variants). | `Research.md`, `ResearchArchitecture.md`, `ResearchContracts.md` |
 
 ### 2.3 Keyword Rules
 
 **R1: Plan keyword signals execution structure.**
 Any artifact containing "Plan" in its name defines execution structure — WHAT to execute and in what ORDER. Plan artifacts serve two audiences:
 
-**Orchestrator reads the master Plan** (e.g., `Plan.md`, `AuditPlan.md`) for:
-- Stage count and ordering
-- Per-stage HITL settings
-- Subagent sequence (Approach column)
-- Dependencies between stages
-- Recovery state (which stages completed)
+- **An executor reads a plan only where a workflow declares it** as a schedule source, and then only the declared section (`WorkflowFormat.md` §9.1). The name plays no part: an undeclared plan is not read, and a declared source is read whatever it is called.
+- **Subagents read master and per-iteration plans** for task context — understanding their scope, goals, and constraints.
 
-**Subagents read both master and per-stage Plans** for task context — understanding their scope, goals, and constraints.
-
-**All Plans are semantically equal.** `Plan.md`, `AuditPlan.md`, `KBProgress.md` (when acting as a plan — see §2.4) all serve the same role: defining execution structure for the orchestrator to route through. Domain-specific names (e.g., `AuditPlan.md`) exist for clarity in workflows with multiple plan types, not because they have different semantics.
+**All Plans are semantically equal.** `Plan.md`, `AuditPlan.md`, `KBProgress.md` (when acting as a plan — see §2.4) all serve the same role: defining execution structure. Domain-specific names (e.g., `AuditPlan.md`) exist for clarity in workflows with multiple plan types, not because they have different semantics.
 
 **Plan scopes:**
-- `Plan.md` (root) — Master routing artifact. Brief: stage list, ordering, dependencies, HITL, Approach. No task details. Read by the orchestrator.
-- `Stage-{N}/Plan.md` — Per-stage detailed plan. Contains goal, tasks, file hints, success criteria. Immutable after creation. Read by subagents, NOT by the orchestrator (context window protection).
-- Domain-specific plans (e.g., `AuditPlan.md`) — Equivalent to `Plan.md` in a different workflow context. The orchestrator treats them identically.
+- Master plan (`Plan.md`, or a domain-specific name such as `AuditPlan.md`) — Brief: the block schedule in the section the workflow declares (iterations, ordering, dependencies, HITL, Approach). No task details.
+- `Stage-{Stage}/Plan.md` — Per-iteration detailed plan: goal, tasks, file hints, success criteria. Revised only when its iteration is reworked (`WorkflowFormat.md` §9.3). Read by subagents, never by an executor (context window protection).
 
-**R2: Progress keyword signals mutable task-state.**
+**R2: Progress keyword signals mutable task state.**
 Any artifact containing "Progress" in its name tracks completion state of work items. Progress artifacts are:
 - **Mutable** — checkboxes/status fields change as work completes
 - **Paired with a Plan** — every Progress artifact corresponds to a Plan artifact that defines the work being tracked
-- **Read by the orchestrator** only during EXECUTION-phase recovery, to determine which stages/items are complete
 - **Written by subagents** during task execution
+- **Not read by an executor by name.** A Progress artifact that is also a schedule source (`KBProgress.md`) is read as one because a workflow declares it. Whether an executor consults progress artifacts when resuming a run is that executor's recovery design (`OrchestrationArtifactFormat.md` §9), not a property of the name.
 
 **R3: Progress requires a Plan.**
-A Progress artifact MUST NOT exist without a corresponding Plan that defines the work being tracked. Progress tracks completion of work; a Plan defines what that work is. Without a Plan, a Progress artifact has no defined scope — it becomes an unstructured status file that the orchestrator cannot interpret for routing.
+A Progress artifact MUST NOT exist without a corresponding Plan that defines the work being tracked. Progress tracks completion of work; a Plan defines what that work is. Without a Plan, a Progress artifact has no defined scope — it becomes an unstructured status file no agent can interpret consistently.
 
 **R4: Requirements is user-authored.**
 `Requirements.md` is always created or provided by the user, never generated by a subagent. Subagents may *refine* Requirements.md (e.g., `requirements-refinement`), but the initial content comes from the user. This keyword signals "human-defined scope" to all downstream agents.
 
 **R5: Research is information-gathering output.**
-Artifacts containing "Research" are outputs of research-phase agents. They provide context for downstream agents but do not define execution structure. The orchestrator passes them as input but does not read them for routing decisions (that would violate information asymmetry). Focused variants use a suffix: `ResearchArchitecture.md`, `ResearchContracts.md`.
+Artifacts containing "Research" are outputs of research agents. They provide context for downstream agents but do not define execution structure. The executor passes them as input but never reads them (information asymmetry). Focused variants use a suffix: `ResearchArchitecture.md`, `ResearchContracts.md`.
 
 **R6: Review (in artifact names) is quality-gate output.**
-Artifacts named with the pattern `{subagent-name}.md` in kebab-case (e.g., `requirements-review.md`, `plan-review.md`) are review outputs. The orchestrator uses the producing subagent's status code (not the artifact content) for routing.
+Artifacts named with the pattern `{subagent-name}.md` in kebab-case (e.g., `requirements-review.md`, `plan-review.md`) are review outputs. The executor routes on the producing subagent's status code, not on the artifact content.
 
 ### 2.4 Known Exceptions
 
 **KBProgress.md — Combined Plan/Progress artifact:**
-In Knowledge Base workflows, `KBProgress.md` serves as both plan and progress tracker. The first KB generator run creates it (bootstrap), subsequent runs update it. It defines stages (plan function) AND tracks their completion (progress function). This is an accepted design compromise because KB workflows have dynamic stage creation — stages are discovered during execution rather than planned upfront. The combined artifact avoids a complex synchronization problem between separate plan and progress files when stages are being created mid-execution.
+In Knowledge Base workflows, `KBProgress.md` serves as both plan and progress tracker. The first KB generator run creates it (bootstrap), subsequent runs update it. It defines iterations (plan function) AND tracks their completion (progress function). This is an accepted design compromise because KB workflows discover values during execution rather than planning them upfront; the combined artifact avoids synchronizing separate plan and progress files while values are being added. The workflow declares it as a block's schedule source, so the "Progress" in its name has no effect on how it is read.
 
 **HWResearchProgress.md — Combined Plan/Progress artifact:**
-Similar to KBProgress.md, `HWResearchProgress.md` serves dual plan/progress roles for hardware schematic research. The planner creates the initial stage list, and research agents update completion status within the same file.
+Similar to KBProgress.md, `HWResearchProgress.md` serves dual plan/progress roles for hardware schematic research. The planner creates the initial iteration list, and research agents update completion status within the same file.
 
-Future new workflows should prefer separate Plan and Progress artifacts unless they have the same dynamic-stage-creation constraint that KB workflows have. The combined form exists for a specific technical reason, not as a general pattern.
+Future new workflows should prefer separate Plan and Progress artifacts unless they have the same discovered-during-execution constraint that KB workflows have. The combined form exists for a specific technical reason, not as a general pattern.
 
 ---
 
@@ -134,7 +126,7 @@ The `-review` suffix is the most semantically loaded pattern in the system. It s
 
 1. **A paired creator exists.** Every `*-review` agent has a corresponding creator agent whose output it validates.
 2. **They must be used together in workflows.** If a workflow includes a `-review` agent, the paired creator should appear in the same workflow (either directly before it, or reachable via the routing chain).
-3. **The On Findings column routes back to the creator.** The `-review` agent's On Findings target is its paired creator — this is the correction loop.
+3. **The On Findings cell names the creator.** The `-review` row's On Findings target is its paired creator — the suggested fix target of the correction loop. It is a default, not a route: where findings actually go is the executor's decision (`WorkflowFormat.md` §1, §6.5).
 4. **The pair shares an artifact.** The creator writes a primary artifact (CamelCase); the reviewer reads it and writes a review artifact (kebab-case named after itself).
 
 **Current Creator/Reviewer Pairs (examples):**
@@ -142,11 +134,11 @@ The `-review` suffix is the most semantically loaded pattern in the system. It s
 | Creator Agent | Reviewer Agent | Shared Artifact |
 |---------------|---------------|-----------------|
 | `contracts-designer` | `contracts-review` | `ContractsDesign.md` |
-| `test-writer-tdd` | `tests-review-tdd` | `Stage-{N}/PlanProgress.md` |
+| `test-writer-tdd` | `tests-review-tdd` | `Stage-{Stage}/PlanProgress.md` |
 
-For table-backed runs, the full set of pairs is visible in workflow tables — the On Findings column is the definitive record of which reviewer routes back to which creator. This document does not maintain a complete registry to avoid maintenance burden; workflow tables are the source of truth for those runs, while the ad-hoc exception is defined below.
+For table-backed runs, the full set of pairs is visible in workflow tables — the On Findings column is the definitive record of which reviewer is paired with which creator. This document does not maintain a complete registry to avoid maintenance burden; workflow tables are the source of truth for those runs, while the ad-hoc exception is defined below.
 
-**Naming flexibility:** Creator and reviewer names do not need to match exactly (e.g., `test-writer-tdd` / `tests-review-tdd`). In a table-backed run, the pairing is established by the workflow table's On Findings routing, not by name matching.
+**Naming flexibility:** Creator and reviewer names do not need to match exactly (e.g., `test-writer-tdd` / `tests-review-tdd`). In a table-backed run, the pairing is established by the reviewer row's On Findings target, not by name matching.
 
 **Ad-hoc orchestration (no governing workflow table):** The orchestrator may infer a `-review` agent's creator pairing from relevant rows in the available workflows and from the agent's stated review responsibility. It records the inferred pairing in Workflow Notes before relying on it. If more than one pairing remains plausible, it asks the user rather than choosing one silently.
 
@@ -178,17 +170,17 @@ When creating new agents, artifacts, or workflows, follow these rules to avoid s
 
 ### 4.1 Artifact Naming Rules
 
-**N1: Do not use routing keywords casually.**
-If your artifact name contains Plan, Progress, or Review, it MUST comply with the semantic rules defined in §2.1. These keywords change orchestrator behavior — misuse causes routing failures, not just confusion.
+**N1: Do not use reserved keywords casually.**
+If your artifact name contains Plan, Progress, Review, Requirements or Research, it MUST comply with §2.2 and §2.3. Misuse does not change routing (§2.1), but it misleads authors wiring Inputs and Outputs and agents deciding what an artifact is for.
 
-**N2: Respect convention keywords.**
-If your artifact name contains Requirements or Research, it should comply with the conventions in §2.2. These don't break routing, but misuse confuses workflow authors and downstream agents about what the artifact represents.
+**N2: Declare what routes.**
+An artifact the executor must read for iterations is declared in the workflow's `**Blocks:**` table (`WorkflowFormat.md` §9.1). Naming it `*Plan.md` is the convention for such an artifact, not a substitute for the declaration.
 
 **N3: CamelCase for deliverables, kebab-case for review output.**
 - `CamelCase.md` = Primary deliverable — a work product created by a planning, design, or creation agent (e.g., `Plan.md`, `ContractsDesign.md`, `SystemDesign.md`)
 - `kebab-case.md` = Review/validation output — quality-gate feedback named after the producing subagent (e.g., `plan-review.md`, `contracts-review.md`)
 
-The distinction matters: CamelCase artifacts are what downstream agents consume to do their work. Kebab-case artifacts are feedback loops — they exist to trigger correction routing. The orchestrator never reads the content of kebab-case artifacts (routes based on status code instead); the HITL gate reads only their frontmatter. This naming split makes artifact purpose immediately recognizable.
+The distinction matters: CamelCase artifacts are what downstream agents consume to do their work. Kebab-case artifacts are feedback loops — they accompany correction routing, which runs on the reviewer's status code. The orchestrator never reads the content of kebab-case artifacts (routes based on status code instead); the HITL gate reads only their frontmatter. This naming split makes artifact purpose immediately recognizable.
 
 **N4: New Plan artifacts need Progress counterparts.**
 If you introduce a new Plan artifact (e.g., `MigrationPlan.md`), you should also define its corresponding Progress artifact (e.g., `MigrationProgress.md`), unless the plan is read-only and doesn't track execution state.
@@ -202,7 +194,7 @@ When a workflow needs specialized variants of a standard artifact type, use a do
 Do not use `-review` in an agent name unless the agent is the reviewer half of a creator/reviewer pair. If you need a quality assessment agent that doesn't have a paired creator, use `-audit`, `-validator`, `-checker`, or another suffix.
 
 **A2: `-review` pairs must be explicit.**
-When creating a new `-review` agent, ensure it appears in a workflow table with its On Findings column routing back to its paired creator. That table is the source of truth for table-backed runs. An ad-hoc run may infer a pairing under §3.2, but must record the decision and ask the user when it is ambiguous.
+When creating a new `-review` agent, ensure it appears in a workflow table with its On Findings cell naming its paired creator. That table is the source of truth for table-backed runs. An ad-hoc run may infer a pairing under §3.2, but must record the decision and ask the user when it is ambiguous.
 
 **A3: `-audit` signals assessment without a correction loop.**
 Use `-audit` when the agent assesses existing work (code, architecture, tests) that was not produced by a preceding subagent in the current workflow. The key behavioral difference from `-review`: audit findings may trigger downstream correction actions at the workflow level, but do not imply the tight creator/reviewer correction loop that `-review` does.
@@ -212,46 +204,44 @@ Avoid naming patterns that could be confused with reserved ones. For example, do
 
 ---
 
-## 5. Orchestrator Behavior by Keyword
+## 5. What the Executor Reads
 
-This section summarizes how the orchestrator's behavior changes based on artifact keywords. This is a behavioral reference — the orchestrator's own instructions implement these behaviors, and this document explains the naming conventions that trigger them.
+Names carry no routing behavior (§2.1). This section summarizes what an executor reads, so authors know which artifacts reach it and which stay with subagents. The orchestrators' own instructions implement this.
 
-### 5.1 What the Orchestrator Reads
+### 5.1 Reads by Artifact Kind
 
-| Artifact Keyword | Does Orchestrator Read? | Why |
-|-----------------|:-----------------------:|-----|
-| **Plan** (master) | Yes | Stage ordering, HITL resolution, approach, recovery |
-| **Plan** (per-stage) | No | Domain content for subagents — orchestrator protects context window |
-| **Progress** | Only during EXECUTION-phase recovery | Establish which stages/items are complete after a restart; ordinary routing uses status codes |
+| Artifact | Does the Executor Read It? | Why |
+|----------|:--------------------------:|-----|
+| **Schedule source** declared in `**Blocks:**` (usually a master Plan) | The declared section only | Iterations, ordering (`Depends On`), HITL, Approach (`WorkflowFormat.md` §9) |
+| **Plan** (per-iteration) | No | Domain content for subagents — the executor protects its context window |
+| **Progress** | Not by name | Task state for subagents; a declared schedule source is read as one, and resume is the executor's recovery design |
 | **Requirements** | No | Domain content — passes to subagents, doesn't interpret |
 | **Research** | No | Domain content — information asymmetry by design |
-| **Review** (kebab-case) | No | Routes based on status code, not artifact content |
+| **Review** (kebab-case) | No | Routes on status code, not artifact content |
 
 ### 5.2 Plan/Progress Lifecycle
 
 ```
-                    +----------------------------+
-                    |  Planner creates Plan.md   |
-                    |  + Stage-{N}/Plan.md       |
-                    |  + Stage-{N}/PlanProgress  |
-                    +--------------+-------------+
-                                   |
-              +--------------------v------------------+
-              |  Orchestrator reads Plan.md            |
-              |  -> Stage count, ordering, HITL        |
-              |  -> Approach per stage                 |
-              +--------------------+------------------+
-                                   |
-         +-------------------------v-------------------------+
-         |  EXECUTION: Per-stage loop                        |
-         |  1. Orchestrator dispatches subagent for stage    |
-         |  2. Subagent updates PlanProgress                 |
-         |     -> Checks off completed items                 |
-         |  3. Orchestrator routes on the status code        |
-         |     -> Stage's last agent SUCCESS -> Next stage   |
-         |  Recovery only: orchestrator reads PlanProgress   |
-         |     -> Validates position after a restart         |
-         +---------------------------------------------------+
+            +------------------------------------------------+
+            |  Planner creates Plan.md (block schedule in    |
+            |  the section the workflow declares)            |
+            |  + Stage-{Stage}/Plan.md                       |
+            |  + Stage-{Stage}/PlanProgress.md               |
+            +-----------------------+------------------------+
+                                    |
+            +-----------------------v------------------------+
+            |  Executor reads the declared section           |
+            |  -> iterations, Depends On, HITL, Approach     |
+            +-----------------------+------------------------+
+                                    |
+            +-----------------------v------------------------+
+            |  Block: runs each iteration                    |
+            |  1. Executor dispatches the iteration's rows   |
+            |  2. Subagents update PlanProgress              |
+            |     -> Check off completed items               |
+            |  3. Executor routes on the status codes        |
+            |     -> Iteration completes; dependents start   |
+            +------------------------------------------------+
 ```
 
 ### 5.3 Creator/Reviewer Lifecycle
@@ -278,9 +268,11 @@ This section summarizes how the orchestrator's behavior changes based on artifac
             |                     |
       +-----v------+    +--------v-----------+
       | On Success |    | On Findings        |
-      | -> Next    |    | -> Back to Creator |
+      | -> Next    |    | -> Creator (fix)   |
       +------------+    +--------------------+
 ```
+
+On Findings is the suggested fix target. Where the findings actually go, and how the run continues once they are fixed, is the executor's decision (`WorkflowFormat.md` §1).
 
 ---
 
@@ -289,8 +281,7 @@ This section summarizes how the orchestrator's behavior changes based on artifac
 Use this checklist when creating new workflows, agents, or artifacts.
 
 ### For New Artifacts
-- [ ] Does the name contain a routing keyword (Plan, Progress, Review)? If yes: does the artifact comply with §2.1?
-- [ ] Does the name contain a convention keyword (Requirements, Research)? If yes: does it respect §2.2?
+- [ ] Does the name contain a reserved keyword (Plan, Progress, Review, Requirements, Research)? If yes: does the artifact comply with §2.2 and §2.3?
 - [ ] Does it follow CamelCase (deliverable) or kebab-case (review output) convention?
 - [ ] If it's a Plan artifact: is there a corresponding Progress artifact?
 - [ ] If it's a Progress artifact: is there a corresponding Plan artifact?
@@ -299,20 +290,20 @@ Use this checklist when creating new workflows, agents, or artifacts.
 - [ ] Does the name contain `-review`? If so: is there a paired creator agent?
 - [ ] Does the name contain `-audit`? If so: does it assess existing work (not a predecessor subagent's output)?
 - [ ] Does the name shadow a reserved pattern? (e.g., `-reviewer`, `-reviewing`, `-reviewed`)
-- [ ] If it's a review agent: is the pairing visible in a workflow table (On Findings routing)?
+- [ ] If it's a review agent: is the pairing visible in a workflow table (its On Findings target)?
 
 ### For New Workflows
 - [ ] Do all `-review` agents have their paired creators present (or reachable) in the workflow?
-- [ ] Do all `-review` agents have On Findings routing back to their paired creator?
+- [ ] Does every `-review` row name its paired creator in On Findings?
 - [ ] Do all Progress artifacts in Input/Output have corresponding Plan artifacts?
-- [ ] Are master Plan artifacts listed where the orchestrator can read them for routing?
+- [ ] Is every block schedule the workflow routes on declared in `**Blocks:**`, with its `Source` and `Section` (`WorkflowFormat.md` §9.1)?
 
 ---
 
 ## 7. Non-Goals
 
 - Artifact file format/schema — defined by `OrchestrationArtifactFormat.md`.
-- Workflow table format — defined by the workflow files themselves.
+- Workflow file format — defined by `WorkflowFormat.md`.
 - Communication protocol message shapes — defined by `CommunicationProtocol.md`.
 - Agent template structure — defined by `AgentTemplateArchitecture.md`; this document adds naming constraints on top of it.
 
@@ -328,5 +319,9 @@ Use this checklist when creating new workflows, agents, or artifacts.
 
 | Version | Date | Summary |
 |---------|------|---------|
+| 0.6 | 2026-10-10 | Terminology aligned with `WorkflowFormat.md` 2.16: "value table" is now **block schedule**, and "value-table source" is now **schedule source**. "Value" is now **iteration** (one per block-schedule row) with an **ID**; "per-value plan" is now **per-iteration plan**. No semantic change. |
+| 0.5 | 2026-10-10 | Aligned with `WorkflowFormat.md` 2.12+: On Findings is a suggested fix target, not a route. "Routes back to the creator" wording replaced in §1.1, §2.2 (Review), §3.2, §4.2, the §5.3 lifecycle and the §6 checklist; the pairing is established by the reviewer row's On Findings target. No change to naming rules. |
+| 0.4 | 2026-10-10 | Terminology aligned with `WorkflowFormat.md` 2.13: value tables are declared per **block** in the `**Blocks:**` table (was "placeholder", `**Placeholders:**`). No semantic change. |
+| 0.3 | 2026-10-10 | **Names do not route** (§2.1). Aligned with `WorkflowFormat.md` 2.x (*Declared, not inferred*): an executor reads only value tables a workflow declares in `**Placeholders:**`, and only the declared section; no artifact keyword changes routing. The routing/convention keyword tiers are merged into one table (§2.2). R1: the master plan is read because it is declared, not because of its name; per-value plans are revised when their value is reworked rather than immutable. R2: Progress is not read by name; resume is the executor's recovery design. §2.4 exceptions keep their names but are read because declared. N1/N2 rewritten; §5 renamed *What the Executor Reads*, with a new lifecycle. `Stage-{N}` paths become `Stage-{Stage}`. |
 | 0.2 | 2026-09-27 | Aligned review routing semantics with the current status model. Review artifacts may record below-threshold findings while the reviewer returns `SUCCESS`; `COMPLETED_NEEDS_ACTION` and the correction route apply only when the reviewer's configured agent-specific action condition is met. The orchestrator never reads kebab-case artifact content; the HITL gate reads only their frontmatter. The native orchestrator reads Progress artifacts only during EXECUTION-phase recovery. Ordinary routing and stage advancement use status codes, matching `orchestrator.md`'s Context Window Protection, so §2.1, R2, §5.1 and the §5.2 lifecycle no longer describe a Progress read around every dispatch (round-seven R7-06). Ad-hoc creator/reviewer pairing may be inferred from available workflow precedent and the review responsibility, but the native orchestrator records the decision and asks the user when more than one pairing remains plausible (round-eight R8-07). |
 | 0.1 | 2026-08-15 | Initial draft. Routing keywords (Plan, Progress, Review) and convention keywords (Requirements, Research) with tiered severity. Agent naming patterns (`*-review`, `*-audit`, `*-research`). All Plans semantically equal (no subtypes). Orchestrator reads master Plan only. Workflow tables are source of truth for creator/reviewer pairs. `-audit` reserved as agent suffix to distinguish from `-review` correction loops, but carries no artifact-level semantics. |

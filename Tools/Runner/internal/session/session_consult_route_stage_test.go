@@ -47,7 +47,7 @@ func (c *noticeCapturingInteraction) allNotices() []interaction.Notice {
 }
 
 // writeConsultStagedPlan writes a Plan.md with Stage-1 and Stage-2 into dir.
-// consult-staged-orch.md uses the EXECUTION.[StageNumber] template, so the
+// consult-staged-orch.md uses the EXECUTION.[Stage] template, so the
 // session must read Plan.md from RunFolder to expand the routing table to four
 // rows (indices 0-3). This helper satisfies that requirement.
 func writeConsultStagedPlan(t *testing.T, dir string) {
@@ -67,13 +67,13 @@ func writeConsultStagedPlan(t *testing.T, dir string) {
 }
 
 // newConsultStagedSession builds a session backed by consult-staged-orch.md
-// in orchestrated mode. The fixture uses EXECUTION.[StageNumber] rows for
+// in orchestrated mode. The fixture uses EXECUTION.[Stage] rows for
 // agent-a and agent-b and requires Plan.md for the stage set; this helper
 // writes Plan.md (stages 1 and 2) and sets RunFolder = dir so the session finds
 // it. The routing table has two rows (indices 0-1), each run once per stage:
 //
-//	0 = EXECUTION.[StageNumber] / agent-a
-//	1 = EXECUTION.[StageNumber] / agent-b
+//	0 = EXECUTION.[Stage] / agent-a
+//	1 = EXECUTION.[Stage] / agent-b
 //
 // A consultant dispatch names the row index and the plan stage number.
 //
@@ -106,7 +106,7 @@ func newConsultStagedSession(t *testing.T, consultant domain.RoutingConsultant) 
 // baseConsultStagedConfig returns a RunConfig for the consult-staged workflow
 // in orchestrated resume mode (IsNewRun=false, store pre-seeded by caller).
 // runFolder must point to the directory containing Plan.md so the session can
-// expand the EXECUTION.[StageNumber] template rows.
+// expand the EXECUTION.[Stage] template rows.
 func baseConsultStagedConfig(orchPath, runFolder string) domain.RunConfig {
 	return domain.RunConfig{
 		OrchestratorFilePath: orchPath,
@@ -167,9 +167,9 @@ func consultStagedStage2State() domain.ArtifactState {
 // notification message emitted during the dispatch contains the stage value.
 func TestSession_ConsultRoute_PreservesCurrentStateStage(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
-	// Row 1 is EXECUTION.[StageNumber]/agent-b (zero-based); the instruction
+	// Row 1 is EXECUTION.[Stage]/agent-b (zero-based); the instruction
 	// names stage 2 from the Plan.md stage set.
-	consultant.queueStagedDispatch("agent-b", "complete Stage-2", 1, 2)
+	consultant.queueStagedDispatch("agent-b", "complete Stage-2", 1, "2")
 	consultant.queueStop("Stage-2 complete")
 
 	notices := &noticeCapturingInteraction{}
@@ -218,7 +218,7 @@ func TestSession_ConsultRoute_PreservesCurrentStateStage(t *testing.T) {
 	}
 
 	// Secondary assertion: the non-infrastructure CompletedStep applied by
-	// consultRoute must carry Stage="Stage-2". Find the last workflow step
+	// consultRoute must carry Stage="2". Find the last workflow step
 	// (non-infrastructure, non-HITLRejected) in store.Applied.
 	var workflowStep *domain.CompletedStep
 	for i := range store.Applied {
@@ -239,7 +239,7 @@ func TestSession_ConsultRoute_PreservesCurrentStateStage(t *testing.T) {
 
 	// Tertiary assertion: at least one notification emitted by consultRoute
 	// must carry the stage the step runs at.
-	const wantNotice = `stage="2"`
+	const wantNotice = `iteration="2"`
 	found := false
 	for _, n := range notices.allNotices() {
 		if strings.Contains(n.Message, wantNotice) {
@@ -268,17 +268,17 @@ func TestSession_ConsultRoute_PreservesCurrentStateStage(t *testing.T) {
 func TestSession_ConsultRoute_RecursiveCall_RecordsOwnInstructionStage(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
 	// First dispatch: agent-a (row 0, stage 2). Harness returns an error.
-	consultant.queueStagedDispatch("agent-a", "attempt Stage-2 step", 0, 2)
+	consultant.queueStagedDispatch("agent-a", "attempt Stage-2 step", 0, "2")
 	// The harness error triggers recursive consultRoute with a deviation.
 	// Recursive dispatch: agent-b (row 1, stage 1). Harness returns SUCCESS.
-	consultant.queueStagedDispatch("agent-b", "recover from deviation in stage 1", 1, 1)
+	consultant.queueStagedDispatch("agent-b", "recover from deviation in stage 1", 1, "1")
 	// After the recursive consultRoute returns, the outer loop resumes and
 	// calls the consultant once more; stop to end the run cleanly.
 	consultant.queueStop("Stage-2 deviation resolved")
 
 	ses, f, store, orchPath, runFolder := newConsultStagedSession(t, consultant)
 
-	// Pre-seed the store: Stage-1 done, Stage-2/agent-a done, Stage="Stage-2".
+	// Pre-seed the store: Stage-1 done, Stage-2/agent-a done, Stage="2".
 	store.state = consultStagedStage2State()
 	store.exists = true
 
@@ -354,10 +354,10 @@ func TestSession_ConsultRoute_HITLRejection_InfrastructureStepsCarryStage(t *tes
 	// Both the initial dispatch and the HITL redispatch return SUCCESS with
 	// ApprovalFalse, causing redispatch then escalation.
 	consultant.queueDispatchWithHITLAndOutputs("agent-b", "complete Stage-2 step with HITL", 1, &hitlTrue, &outputs)
-	consultant.stageLastDispatch(2)
+	consultant.stageLastDispatch("2")
 	// Call 2: dispatched by the recursive consultRoute after HITL escalation.
 	// No HITL override -> row.HITL=false -> HITLAccept on first attempt.
-	consultant.queueStagedDispatch("agent-b", "recover after HITL escalation", 1, 2)
+	consultant.queueStagedDispatch("agent-b", "recover after HITL escalation", 1, "2")
 	// Call 3: outer dispatch loop resumes after the recursive call returns.
 	consultant.queueStop("Stage-2 HITL recovery complete")
 

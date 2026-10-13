@@ -173,6 +173,10 @@ func TestApply_BlockedWithVeryLongMessage_MarkerSurvivesTruncation(t *testing.T)
 	if len(cell) > len(artifact.TruncateSummary(long))+1+len(errorMarkerE501) {
 		t.Errorf("Summary cell must stay bounded by truncation limit plus marker, got %d bytes", len(cell))
 	}
+	wantCell := long[:50] + " ... " + long[len(long)-100:] + " " + errorMarkerE501
+	if cell != wantCell {
+		t.Errorf("Summary cell must be head-50 + \" ... \" + tail-100 + marker:\n  want: %q\n   got: %q", wantCell, cell)
+	}
 	entry := read.ExecutionLog[0]
 	if entry.ErrorCode != domain.ErrorTOOL_UNAVAILABLE {
 		t.Errorf("parsed ErrorCode: want E501, got %q", entry.ErrorCode)
@@ -330,7 +334,7 @@ func TestRender_BlockedRows_KeepExecutionLogColumnSet(t *testing.T) {
 
 	got := executionLogHeader(t, readFile(t, path))
 
-	want := []string{"Seq", "Agent", "Phase", "Stage", "WorkflowRow", "Status", "Timestamp", "Summary", "Inputs", "Checkpoint"}
+	want := []string{"Seq", "Agent", "Phase", "Iteration", "WorkflowRow", "Status", "Timestamp", "Summary", "Inputs", "Checkpoint"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("Execution Log columns: want %v, got %v", want, got)
 	}

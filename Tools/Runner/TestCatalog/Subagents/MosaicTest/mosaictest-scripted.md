@@ -1,6 +1,6 @@
 ---
 id: 40
-version: 2.3.0
+version: 2.3.1
 name: mosaictest-scripted
 description: Harness conformance test fixture — reads the script fixture handed to it as an input artifact and returns exactly the protocol response the script specifies
 role: subagent
@@ -79,7 +79,7 @@ The single highest-value property you have is that **your response is predictabl
 
 ### Finding your script
 
-From the dispatch you receive, only the artifact paths vary between rows. `task_description` and `constraints` are never populated for a routed dispatch, so there is no free-text channel through which anyone can tell you what to do. **The script binding is the whole instruction channel.**
+From the dispatch you receive, only the artifact paths vary between rows in a way that selects behaviour. The `task_description` of a routed dispatch is generic text, plus a focus paragraph naming the row's mode qualifier when its `Subagent` cell has one (`mosaictest-scripted(review)`), and `constraints` is never populated, so there is no free-text channel through which anyone can tell you what to do. The qualifier is not an instruction: ignore it, and take the script from your input artifacts. **The script binding is the whole instruction channel.**
 
 Exactly one path in `input_artifacts` contains the segment `MosaicTestScript/`. That path is your script. Every other input artifact exists only for the marker check (§ Selector) — do not read them for any other reason.
 
@@ -135,7 +135,7 @@ marker-artifact: MosaicTestMarker.md
 marker-content: MOSAICTEST-MARKER-SET
 ```
 
-- `marker-artifact` is matched as a **path suffix** against the union of `input_artifacts` and `output_artifacts`. Suffix matching is used because the runner resolves `Orchestration-{run_id}/` and `{StageNumber}` before you see the path, so the fixture cannot name the full path.
+- `marker-artifact` is matched as a **path suffix** against the union of `input_artifacts` and `output_artifacts`. Suffix matching is used because the runner resolves `Orchestration-{run_id}/` and block fill-ins such as `{Stage}` before you see the path, so the fixture cannot name the full path.
 - The marker counts as **present** only if that file exists **and** its content contains the literal `marker-content` string. Anything else — file absent, file empty, file present with different content — counts as **absent**.
 - The check is **content-based, never deletion-based**. You hold no delete tool and need none: a marker is reset by overwriting it, and a run-scoped marker starts absent for every new run because `Orchestration-{run_id}/` is fresh.
 - If `marker-artifact` matches no declared path, return `FIXTURE_ERROR`, `E101`. Do not fall back to either branch — a guessed branch would silently pass a loopback test that never actually looped.
@@ -198,7 +198,7 @@ The suite is evaluated by a human reading the runner's TUI, not by a golden diff
 Write messages that identify themselves without reference to anything else on screen:
 
 ```
-row 3 / EXECUTION.Test / stage 2 / returning SUCCESS
+row 3 / EXECUTION / Test group / stage 2 / returning SUCCESS
 row 1 / PLANNING / wrote Plan.md / returning SUCCESS
 row 4 / EXECUTION / stage 1 / marker absent, created it / returning COMPLETED_NEEDS_ACTION
 row 2 / VALIDATION / fixture-declared blocker / returning BLOCKED E401

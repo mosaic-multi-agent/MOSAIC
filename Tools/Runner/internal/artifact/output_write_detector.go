@@ -6,9 +6,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"mosaic-run/internal/domain"
@@ -90,7 +88,7 @@ func (d *outputWriteDetector) Written(_ context.Context, baseline domain.OutputB
 func inspect(root, p string) (present bool, sum [sha256.Size]byte, readable bool) {
 	full := filepath.Join(root, filepath.FromSlash(p))
 	if _, err := os.Stat(full); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
+		if errors.Is(err, fs.ErrNotExist) || absentFromParent(full) {
 			return false, sum, false
 		}
 		return true, sum, false
@@ -102,49 +100,31 @@ func inspect(root, p string) (present bool, sum [sha256.Size]byte, readable bool
 	return true, sha256.Sum256(data), true
 }
 
-// expandDeclared returns the concrete paths a declared entry denotes now. An
-// entry without wildcard characters is returned as-is whether or not it
-// exists. Wildcard entries yield the existing matches, sorted lexically.
-func expandDeclared(root, entry string) []string {
-	if !strings.ContainsAny(entry, "*?[") {
-		return []string{entry}
+// absentFromParent reports whether full is provably absent: its directory is
+// listable and holds no entry of that name. It covers names the operating
+// system rejects outright (reported as an error other than "not exist"), which
+// can never denote an existing file.
+func absentFromParent(full string) bool {
+	entries, err := os.ReadDir(filepath.Dir(full))
+	if err != nil {
+		return false
 	}
-	segments := strings.Split(entry, "/")
-	candidates := []string{""}
-	for i, seg := range segments {
-		last := i == len(segments)-1
-		var next []string
-		for _, base := range candidates {
-			if !strings.ContainsAny(seg, "*?[") {
-				next = append(next, joinSlash(base, seg))
-				continue
-			}
-			entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(base)))
-			if err != nil {
-				continue
-			}
-			var names []string
-			for _, e := range entries {
-				if ok, mErr := path.Match(seg, e.Name()); mErr == nil && ok {
-					if !last && !e.IsDir() {
-						continue
-					}
-					names = append(names, e.Name())
-				}
-			}
-			sort.Strings(names)
-			for _, n := range names {
-				next = append(next, joinSlash(base, n))
-			}
+	name := filepath.Base(full)
+	for _, e := range entries {
+		if e.Name() == name {
+			return false
 		}
-		candidates = next
 	}
-	return candidates
+	return true
 }
 
-func joinSlash(base, name string) string {
-	if base == "" {
-		return name
+// expandDeclared returns the concrete paths a declared entry denotes now. An
+// entry without '*' is returned as-is whether or not it exists. Wildcard
+// entries yield the existing matches, sorted lexically; only '*' is a
+// wildcard.
+func expandDeclared(root, entry string) []string {
+	if !strings.Contains(entry, "*") {
+		return []string{entry}
 	}
-	return base + "/" + name
+	return ExpandWildcard(os.DirFS(root), entry)
 }

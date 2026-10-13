@@ -42,7 +42,7 @@ func recordedWorkflowCandidate(workflow string) runscan.RunCandidate {
 			Workflow:    workflow,
 			Task:        "test task",
 			Phase:       "EXECUTION",
-			Stage:       "Stage-1",
+			Stage:       "1.Implementation",
 			LastAgent:   "impl#1",
 		},
 	}

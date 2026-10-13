@@ -15,7 +15,7 @@ import (
 func historySample() []ProgressRow {
 	return []ProgressRow{
 		{AgentInstance: "planner#1", Phase: "PLANNING", Stage: "", Status: "SUCCESS"},
-		{AgentInstance: "builder#2", Phase: "EXECUTION", Stage: "Implementation.1", Status: "BLOCKED"},
+		{AgentInstance: "builder#2", Phase: "EXECUTION", Stage: "1.Implementation", Status: "BLOCKED"},
 	}
 }
 

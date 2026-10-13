@@ -1,5 +1,5 @@
 ---
-version: "1.0"
+version: "1.1"
 name: "MosaicTest Orchestrated Backjump Workflow"
 description: "Runner mode fixture — Orchestrated mode instruction overrides. The orchestrator dispatches the same row three times: once with no overrides, once with an input_artifacts override, and once with hitl=true. Proves that override fields reach the Runner and affect dispatch."
 hint: "Mode 1 test — consultation override fields (input_artifacts, hitl_override)"
@@ -13,7 +13,7 @@ modes:
   - orchestrated
 ---
 
-<Workflow type="core" name="orchestrated-backjump" version="1.0">
+<Workflow type="core" name="orchestrated-backjump" version="1.1">
 ## MosaicTest Orchestrated Backjump Workflow
 
 **Use when:** Verifying that the orchestrator's dispatch instruction override fields (`input_artifacts`, `hitl_override`) propagate through the Runner to the dispatched agent. Also confirms the Runner handles a BLOCKED result in Orchestrated mode (another consultation).
@@ -25,7 +25,7 @@ modes:
 **Notes:**
 - **Run this workflow in Orchestrated mode only.**
 - Three dispatches of the single row, each with different overrides. The third dispatch sets `hitl_override: true`, which causes the stub to return `BLOCKED`/`E503` (it has no user-interaction tool). The orchestrator then stops.
-- Non-staged. No `Plan.md` required.
+- No block rows. The workflow has no `**Blocks:**` table, so no `Plan.md` is required.
 - Seed `Fixtures/orchestrated-backjump` — the whole directory, not anything inside it.
 
 </Workflow>
@@ -36,7 +36,7 @@ modes:
 
 ### What "backjump" means here
 
-The design document names this workflow for the orchestrator sending the run back to an earlier row. True multi-row backjump is blocked by first-match resolution: when the orchestrator names an agent, the Runner resolves to the first matching row, so two rows with the same agent are indistinguishable. That gap is documented as a candidate RUN-9.
+The design document names this workflow for the orchestrator sending the run back to an earlier row. True multi-row backjump needs two rows of one stub agent, told apart by mode qualifiers, and a reply that names the row to return to. That is authorable under WorkflowFormat 2.16 but is not what this workflow covers.
 
 This workflow tests the other half of what the design describes: **instruction overrides**. The orchestrator overrides `input_artifacts` and `hitl_override` on successive dispatches of the same row, proving those fields propagate through the Runner to the dispatched agent.
 
@@ -92,6 +92,7 @@ Three Orchestration.md log rows. Every consultation — including the one before
 | Version | Date | Author | Summary |
 |---------|------|--------|---------|
 | 1.0 | 2026-08-17 | MOSAIC | Initial version. Override mechanism test; true multi-row backjump deferred pending row addressing. |
+| 1.1 | 2026-10-12 | MOSAIC | WorkflowFormat 2.16 wording: first-match agent resolution no longer described as a blocker; the deferred backjump is an open idea built on mode qualifiers and replies that name `row`. Routing table and dispatch sequence unchanged. |
 
 ---
 
@@ -100,7 +101,7 @@ Three Orchestration.md log rows. Every consultation — including the one before
 **Ideas under consideration:**
 - `output_artifacts` override, once the Execution Log gains an Outputs column or another observation channel exists for it.
 - `constraints` override, once an observation channel exists (the Execution Log does not surface constraints).
-- True multi-row backjump (row 1 → row 2 → back to row 1) after row addressing for repeated agents is resolved.
+- True multi-row backjump (row 1 → row 2 → back to row 1) with two qualified rows (`mosaictest-scripted(first)`, `mosaictest-scripted(second)`) and replies that name `row`.
 
 **Dead ends (tried and rejected):**
-- Two rows with different scripts for the backjump. Same first-match resolution problem as orchestrated-linear: both rows are `mosaictest-scripted`, so the orchestrator cannot address row 2.
+- Two rows with different scripts for the backjump. Under 1.x notation the orchestrator could not address row 2, because both rows named `mosaictest-scripted` and an agent name resolved to the first row. Mode qualifiers make it authorable; it is left as an open idea so this workflow stays on the override fields.

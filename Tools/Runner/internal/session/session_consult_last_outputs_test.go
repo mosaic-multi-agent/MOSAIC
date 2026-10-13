@@ -20,12 +20,12 @@ func TestSession_AutoReview_RouteBackAfterConsultRoutedReview_InjectsThatReviews
 	// (outputs: Stage-1/build-review.md). The review reports findings and the
 	// engine routes back to the implementer.
 	consultant := &scriptedRoutingConsultant{}
-	consultant.queueStagedDispatch("build-review", "review the implementation", cdBuildReview, 1)
+	consultant.queueStagedDispatch("build-review", "review the implementation", cdBuildReview, "1")
 	for i := 0; i < 3; i++ {
 		consultant.queueStop("done")
 	}
 	rig := newDefaultsRig(t, consultant, domain.ExecutionModeAutoReview,
-		rowStageSeed("test-writer", 2, "EXECUTION", "Test.1"))
+		rowStageSeed("test-writer", 2, "EXECUTION", "1.Test"))
 	rig.f.Queue("implementer", harness.ScriptedEntry{Response: &domain.ProtocolResponse{
 		AgentInstanceID: "implementer#3", StatusCode: domain.StatusNEEDS_CLARIFICATION, StatusMessage: "need guidance",
 	}})
@@ -59,12 +59,12 @@ func TestSession_AutoReview_RouteBackAfterConsultRoutedStepWithNoOutputs_Injects
 	noOutputs := []string{}
 	consultant := &scriptedRoutingConsultant{}
 	consultant.queueDispatchWithOutputs("build-review", "review the implementation", cdBuildReview, &noOutputs)
-	consultant.stageLastDispatch(1)
+	consultant.stageLastDispatch("1")
 	for i := 0; i < 3; i++ {
 		consultant.queueStop("done")
 	}
 	rig := newDefaultsRig(t, consultant, domain.ExecutionModeAutoReview,
-		rowStageSeed("test-writer", 2, "EXECUTION", "Test.1"))
+		rowStageSeed("test-writer", 2, "EXECUTION", "1.Test"))
 	rig.f.Queue("implementer", harness.ScriptedEntry{Response: &domain.ProtocolResponse{
 		AgentInstanceID: "implementer#3", StatusCode: domain.StatusNEEDS_CLARIFICATION, StatusMessage: "need guidance",
 	}})

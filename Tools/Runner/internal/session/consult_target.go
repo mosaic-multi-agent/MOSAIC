@@ -7,7 +7,7 @@ import (
 )
 
 // resolveConsultTarget validates a consultation dispatch instruction against
-// the routing table and the stage set in force, and returns the routing row
+// the routing table and the schedule in force, and returns the routing row
 // and the stage to record for the step: the instruction's own stage for a
 // staged row, empty for a non-staged row. Nothing is inherited from the
 // state the consultation was entered with.
@@ -19,26 +19,26 @@ func (s *sessionImpl) resolveConsultTarget(
 	dispInstr *domain.DispatchInstruction,
 	agents map[string]domain.AgentReference,
 	admitted domain.AdmittedWorkflow,
-	stages, refreshedStages *domain.StageSet,
+	stages domain.BlockSchedules,
 ) (row domain.RoutingRow, stage string, done bool, outcome domain.RunOutcome) {
 	if _, known := agents[dispInstr.Agent]; !known {
 		return row, "", true, domain.RunOutcome{Status: domain.RunFailed, Message: "consultant dispatched unknown agent: " + dispInstr.Agent}
 	}
-	stageSet := currentStageSet(stages, refreshedStages)
+	schedule := stages
 	target := domain.DispatchTarget{
-		Agent: dispInstr.Agent,
-		Row:   domain.WorkflowRowFromIndex(dispInstr.RowIndex),
-		Stage: dispInstr.Stage,
+		Agent:     dispInstr.Agent,
+		Row:       domain.WorkflowRowFromIndex(dispInstr.RowIndex),
+		Iteration: domain.IterationTargetValue(table, dispInstr.RowIndex, dispInstr.Iteration),
 	}
-	resolved, err := domain.ValidateDispatchTarget(table, stageSet, target)
+	resolved, err := domain.ValidateDispatchIteration(table, schedule, target)
 	if err == nil {
-		err = checkStageApproachHasGroup(admitted, stageSet, resolved, target)
+		err = checkStageApproachHasGroup(admitted, schedule, resolved, target)
 	}
 	if err != nil {
 		s.deps.Debug.Log(domain.EventSessionConsultFailed, "consultation dispatch target invalid: "+err.Error(),
 			domain.F("agent", dispInstr.Agent),
 			domain.F("row", strconv.Itoa(dispInstr.RowIndex)),
-			domain.F("stage", strconv.Itoa(int(dispInstr.Stage))),
+			domain.F("stage", string(dispInstr.Iteration)),
 		)
 		return row, "", true, domain.RunOutcome{
 			Status:  domain.RunStoppedByConsultant,
@@ -58,18 +58,26 @@ func (s *sessionImpl) resolveConsultTarget(
 // declared groups, and approaches the table does not know, are not checked.
 func checkStageApproachHasGroup(
 	admitted domain.AdmittedWorkflow,
-	stages *domain.StageSet,
+	stages domain.BlockSchedules,
 	resolved domain.ResolvedDispatchTarget,
 	target domain.DispatchTarget,
 ) error {
-	if !resolved.Row.PhaseParsed.IsStaged || !admitted.GroupsDeclared || stages == nil {
+	if !resolved.Row.PhaseParsed.IsStaged {
 		return nil
 	}
-	entry, ok := stages.Entry(resolved.StageNumber)
+	block, inBlock := admitted.BlockOf(resolved.Row.Index)
+	if !inBlock || !block.Grouped {
+		return nil
+	}
+	schedule, have := stages[block.Name]
+	if !have {
+		return nil
+	}
+	entry, ok := schedule.Find(resolved.Iteration)
 	if !ok {
 		return nil
 	}
-	sequence, found := admitted.ApproachTable.Sequence(entry.Approach)
+	sequence, found := block.Approaches.Sequence(entry.Approach)
 	if !found {
 		return nil
 	}
@@ -82,7 +90,7 @@ func checkStageApproachHasGroup(
 	return &domain.DispatchTargetError{
 		Reason: domain.ReasonStageGroupMismatch,
 		Target: target,
-		Detail: "stage " + strconv.Itoa(int(resolved.StageNumber)) + " approach " + string(entry.Approach) +
+		Detail: "stage " + string(resolved.Iteration) + " approach " + string(entry.Approach) +
 			" does not include group " + string(group),
 	}
 }

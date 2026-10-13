@@ -17,14 +17,14 @@ const creatorPathRunID = "20261007T174011Z-4f54"
 // test-writer-tdd with the given registry and returns the dispatched inputs.
 func creatorInjectionInputs(t *testing.T, registry []domain.ArtifactRegistryEntry) []string {
 	t.Helper()
-	aw := mustParseAndAdmit(t, creatorInjectionContent, "creator-injection", "1.0")
+	aw := mustParseAndAdmitV216(t, creatorInjectionV216Content, "creator-injection", "1.0")
 	agents := newTestAgents("test-writer-tdd", "tests-review-tdd", "implementation-tdd")
-	state := stateAfter("EXECUTION.[StageNumber]", "Stage-1", "tests-review-tdd#5", domain.StatusCOMPLETED_NEEDS_ACTION, 5)
+	state := stateAfterRow("EXECUTION", "1.Test", "tests-review-tdd#5", domain.StatusCOMPLETED_NEEDS_ACTION, 5, 2)
 	state.RunID = creatorPathRunID
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:            aw,
-		Stages:              singleStageSet("TDD"),
+		Schedules:           singleSchedules("TDD"),
 		State:               state,
 		LastResponse:        cnaResponse("tests-review-tdd#5"),
 		LastOutputArtifacts: []string{"Stage-1/tests-review-tdd.md"},
@@ -54,7 +54,7 @@ func countForm(paths []string, want string) int {
 // Regression coverage: the unprefixed registry form is already accepted.
 func TestNext_CreatorInjection_UnprefixedRegistryEntry_InjectedOnce(t *testing.T) {
 	registry := []domain.ArtifactRegistryEntry{
-		{Artifact: "Stage-1/PlanProgress.md", CreatedIn: "Test.1", CreatedBy: "test-writer-tdd#1"},
+		{Artifact: "Stage-1/PlanProgress.md", CreatedIn: "EXECUTION.1.Test", CreatedBy: "test-writer-tdd#1"},
 	}
 
 	inputs := creatorInjectionInputs(t, registry)
@@ -66,7 +66,7 @@ func TestNext_CreatorInjection_UnprefixedRegistryEntry_InjectedOnce(t *testing.T
 
 func TestNext_CreatorInjection_PrefixedRegistryEntry_InjectedOnce(t *testing.T) {
 	registry := []domain.ArtifactRegistryEntry{
-		{Artifact: domain.RunScopedFolder(creatorPathRunID) + "/Stage-1/PlanProgress.md", CreatedIn: "Test.1", CreatedBy: "test-writer-tdd#1"},
+		{Artifact: domain.RunScopedFolder(creatorPathRunID) + "/Stage-1/PlanProgress.md", CreatedIn: "EXECUTION.1.Test", CreatedBy: "test-writer-tdd#1"},
 	}
 
 	inputs := creatorInjectionInputs(t, registry)
@@ -78,7 +78,7 @@ func TestNext_CreatorInjection_PrefixedRegistryEntry_InjectedOnce(t *testing.T) 
 
 func TestNext_CreatorInjection_RegistryEntryOfAnotherAgent_NotInjected(t *testing.T) {
 	registry := []domain.ArtifactRegistryEntry{
-		{Artifact: "Stage-1/Other.md", CreatedIn: "Test.1", CreatedBy: "implementation-tdd#2"},
+		{Artifact: "Stage-1/Other.md", CreatedIn: "EXECUTION.1.Test", CreatedBy: "implementation-tdd#2"},
 	}
 
 	inputs := creatorInjectionInputs(t, registry)

@@ -79,7 +79,7 @@ Four rules already apply to the existing stubs and still hold. Two are new, need
 1. **A run must be predictable before it starts.** Reading the fixture files tells you exactly what the run will do. A stub that makes its own decisions ruins this, and ruins it silently — the run still looks fine.
 2. **Failing loudly beats passing quietly.** If a fixture does not say what to do, the stub reports an error and says what is missing. A stub that guesses produces a green run that tested nothing.
 3. **Behaviour goes in fixture files, not in agent files.** One stub agent serves many workflow rows. Adding a test case means adding a fixture, not adding an agent.
-4. **`status_message` is what the tester reads.** A person reads the run output, so every message says which row, phase, stage and status it belongs to.
+4. **`status_message` is what the tester reads.** A person reads the run output, so every message says which row, phase, iteration and status it belongs to.
 
 **New rules:**
 
@@ -96,7 +96,7 @@ Four rules already apply to the existing stubs and still hold. Two are new, need
 | `orchestrator-script` | A stub orchestrator. Returns whatever routing instruction its fixture tells it to. | Written (§5) |
 | `orchestrator` | A placeholder, never invoked (§4.2). | Written |
 | `mosaictest-checkpoint` | Checkpoint infrastructure stub. Returns success with a fake checkpoint marker, touches no git. | Implemented. Used by `infra-checkpoint-commit` |
-| `mosaictest-commit` | Commit infrastructure stub. Returns success with a fake `[branch:mosaictest-run]` marker, touches no git. Used for both the run-start setup dispatch and subsequent `STAGE_END` trigger dispatches. | Implemented. Used by `infra-checkpoint-commit` |
+| `mosaictest-commit` | Commit infrastructure stub. Returns success with a fake `[branch:mosaictest-run]` marker, touches no git. Used for both the run-start setup dispatch and subsequent `ITERATION_END` trigger dispatches. | Implemented. Used by `infra-checkpoint-commit` |
 | `mosaictest-review` | Review infrastructure stub. Returns success with a canned observation message, inspects nothing. | Implemented. Used by `infra-review-consult` |
 
 ### 4.1 Three Additions Needed to `mosaictest-scripted`
@@ -140,19 +140,19 @@ Two consequences:
 Structurally identical to `mosaictest-checkpoint`: zero tools, hardcoded behaviour, one predetermined response shape. Different class, different marker.
 
 **Class:** `commit` (frontmatter `infrastructure: commit`).
-**Trigger:** `STAGE_END`.
+**Trigger:** `ITERATION_END`.
 **Marker:** `[branch:mosaictest-run]` — a fixed fake branch name. Unlike the checkpoint stub's per-invocation sha, the branch name is constant because the real commit agent establishes a branch once and reuses it.
 
 **Two invocation contexts, same response:**
 
 1. **Run-start setup dispatch** (Design.md §4.2): The Runner dispatches the commit-class agent once after artifact creation and before the workflow loop. The stub returns SUCCESS with `[branch:mosaictest-run]` at the end of `status_message`. The Runner extracts `commit_branch` from the marker and records it in the artifact frontmatter. If the marker is missing, the run stops before the first workflow invocation and retains the failed setup row in the artifact.
 
-2. **Trigger dispatches** (during the run): Fired by `STAGE_END`. Same SUCCESS, same marker. The Runner records the commit row as a non-workflow Execution Log entry whose agent name matches the infrastructure declaration.
+2. **Trigger dispatches** (during the run): Fired by `ITERATION_END`. The dispatch names the ended iteration in its task description and carries that iteration's existing artifacts as inputs, which the stub ignores. Same SUCCESS, same marker. The Runner records the commit row as a non-workflow Execution Log entry whose agent name matches the infrastructure declaration.
 
 **Message template** (for `mosaictest-commit#3`):
 
 ```
-MosaicTest infrastructure stub / class=commit / declared trigger=STAGE_END / instance=mosaictest-commit#3 / no git performed / returning SUCCESS [branch:mosaictest-run]
+MosaicTest infrastructure stub / class=commit / declared trigger=ITERATION_END / instance=mosaictest-commit#3 / no git performed / returning SUCCESS [branch:mosaictest-run]
 ```
 
 **Error handling:** Same as `mosaictest-checkpoint` — `BLOCKED`/`E503` for `human_in_the_loop: true`, SUCCESS for everything else. `on_failure: halt` (matching the real commit agent: a commit failure that passes silently would lose work).
@@ -213,7 +213,7 @@ For each rule, either:
 - **dispatch** — which agent to run next, the task description to send, and optionally replacements for input artifacts, output artifacts, constraints, or the human-review flag. Leaving those out means "use the workflow table's own values", which is itself the thing being tested.
 - **stop** — the reason.
 
-Plus, separately, the **pre-consultation** answer: the advice strings to return when the Runner asks at run start, or an explicit "none".
+Plus, separately, the **pre-consultation** answer, which is one of three things: the advice strings to return when the Runner asks at run start, an explicit "none", or a **stop** with a reason. A pre-consultation stop is returned in the same JSON `stop` shape as a routing stop (`ScriptOrchestratorContract.md` sec. 4.2), never as prose; the Runner ends the run with exit code 6 before any dispatch and prints the reason to stderr.
 
 Text is carried in tilde-fenced blocks, matching the existing fixture format, so fixtures can contain backticks without escaping.
 
@@ -235,7 +235,7 @@ Each seed folder holds:
 | File | Why |
 |------|-----|
 | `Requirements.md` | Seeding requires exactly one requirements-like file. Nothing reads it. |
-| `Plan.md` | A ready-made stage table, for workflows where no row produces one. |
+| `Plan.md` | A ready-made block schedule (its `## Stages` table), for workflows where no row produces one. |
 | `MosaicTestRouting.md` | The routing fixture, for workflows run in a mode that consults the orchestrator. |
 | `MosaicTestScript/{behaviour}.md` | One file per subagent behaviour the workflow needs. |
 
@@ -281,21 +281,23 @@ The remaining workflows test Runner modes, routing mechanisms, and edge cases. T
 | `smoke-single` | Auto, Auto-review | Harness works at all; single invocation, envelope parse, identifier echo | **Implemented** |
 | `payload-stress` | Auto, Auto-review, Orchestrated | Fenced blocks, JSON in messages, Unicode survive the round trip | **Implemented** |
 | `request-fidelity` | Auto | The request reaches the agent byte for byte: an input path containing a literal `%OS%` and `cmd.exe`-special advice text survive delivery, including through Windows npm `.cmd` shims. Failure is machine-detected (`FIXTURE_ERROR`), not left to a human reading the TUI | **Implemented** |
-| `staged-preplaced-plan` | Auto, Auto-review, Orchestrated | Staged execution with a pre-placed Plan.md | **Implemented** |
+| `staged-preplaced-plan` | Auto, Auto-review, Orchestrated | A block run over a pre-placed `Plan.md` schedule (a seeded `Source`), with the `{Stage}` fill-in | **Implemented** |
 | `orchestrated-linear` | Orchestrated | Orchestrator is asked before every step including the first; the stop instruction works; the task description it writes actually reaches the subagent | **Implemented** |
 | `orchestrated-backjump` | Orchestrated | Instruction overrides for artifacts, constraints and human review on successive dispatches of the same row | **Implemented** |
 | `findings-loop` | Auto **and** Auto-review | The one difference between these two modes (§7.1) | **Implemented** |
 | `deviation-blocked` | Auto | A `BLOCKED` result becomes a deviation, the orchestrator is asked, and the run carries on | **Implemented** |
 | `deviation-ambiguous` | Auto-review | A routing hint the Runner cannot resolve becomes a deviation | **Implemented** |
 | `deviation-stop` | Auto | The orchestrator ends the run, and the artifact can still be resumed afterwards | **Implemented** |
-| `hitl-glob-staged` | Orchestrated | HITL approval check with `Stage-*` glob output artifacts; glob expansion resolves to concrete Stage-N paths before approval is read (§7.3) | **Implemented** |
-| `infra-checkpoint-commit` | Auto | Checkpoint trigger (`INVOCATION_INTERVAL`) and commit trigger (`STAGE_END`) both fire; checkpoint marker picked up; commit `[branch:{name}]` marker extracted; no cascading between infrastructure dispatches (§7.6) | **Implemented** |
+| `hitl-glob-staged` | Orchestrated | HITL approval check with a `Stage-*` wildcard output artifact; the wildcard is passed to the subagent literally and approval is read from the concrete files the subagent wrote that match it (§7.3) | **Implemented** |
+| `infra-checkpoint-commit` | Auto | Checkpoint trigger (`INVOCATION_INTERVAL`) and commit trigger (`ITERATION_END`) both fire; checkpoint marker picked up; commit `[branch:{name}]` marker extracted; no cascading between infrastructure dispatches (§7.6) | **Implemented** |
 | `infra-review-consult` | Auto | Review trigger (`INVOCATION_INTERVAL(3)`) fires; review agent returns observations; Runner follows up with an orchestrator routing consultation passing the review's `status_message` as `last_status_message` (§7.7) | **Implemented** |
 | `preconsult-advice` | Auto | Pre-consultation advice reaches auto-routed dispatches, and does **not** reach orchestrator-written ones | **Implemented** |
-| `staged-multigroup` | Auto | Multi-group staged execution (TDD approach: Test group → Implementation group); exercises `EXECUTION.Test.[StageNumber]` and `EXECUTION.Implementation.[StageNumber]` phase parsing through a real harness (§7.4) | **Implemented** |
+| `staged-multigroup` | Auto | Multi-group block execution (TDD approach: Test group, then Implementation group); exercises `EXECUTION.[Stage].Test` and `EXECUTION.[Stage].Implementation` phase parsing and the `1.Test` log values through a real harness (§7.4) | **Implemented** |
 | `hitl-escalate` | Auto | The approval check uses up its re-dispatch and escalates to a deviation. Uses stub enhancements E1 + E3 (§7.8) | **Implemented** |
 | `deviation-chain` | Auto | Two consecutive deviations requiring two orchestrator consultations before the run completes; exercises the single-decision chain through a real harness (§7.5) | **Implemented** |
-| `staged-findings-loop` | Auto-review | After an On Findings route-back inside a staged EXECUTION group whose rows share one agent, the engine continues from the row that actually ran, not from a row derived from the invocation count | **Implemented** |
+| `staged-findings-loop` | Auto-review | After an On Findings route-back inside a grouped block whose rows share one agent, the engine continues from the row that actually ran, not from a row derived from the invocation count | **Implemented** |
+| `preconsult-stop` | Auto | A pre-consultation answer of `stop` ends the run before any dispatch: exit code 6, only the pre-consultation in the dispatch list, the reason asserted through `stderr_contains` | **Implemented** |
+| `finished-work-consult` | Auto **and** Auto-review | After an engine-routed SUCCESS whose next step already succeeded, the Runner consults the orchestrator instead of dispatching it; the consultation appears in both modes' dispatch lists | **Implemented** |
 
 ### 7.1 `findings-loop` — One Workflow, Run Under Two Modes
 
@@ -308,27 +310,27 @@ The clearest way to prove this is **the same workflow and the same fixtures, run
 
 In Auto-review, the routing fixture's findings rule simply never fires. That the run finishes without ever firing it is the proof.
 
-The workflow has two rows: a creator, then a reviewer whose `On Findings` names the creator. A one-row workflow whose reviewer names itself does not work: the findings target resolves to the nearest row *above* the row that ran, and that row is never its own candidate (Design.md §2.4, nearest-preceding rule). A self-target therefore counts as no target, and Auto-review deviates just as Auto does.
+The workflow has two rows: a creator, then a reviewer whose `On Findings` names the creator. The findings target is the row the `On Findings` entry names (Design.md §2.4), so the route-back from the reviewer lands on the creator's row, and a separate creator row is what lets the run show the creator reading the review artifact.
 
 ### 7.2 `preconsult-advice` Needs Both Kinds of Dispatch
 
 Pre-consultation advice is added only to dispatches the Runner builds itself, never to ones the orchestrator writes. To show the "never" half, the run needs both kinds — so this workflow also causes one deviation. The echoing stub (E2) then shows the advice present on the auto-built dispatch and absent on the orchestrator-written one.
 
-### 7.3 `hitl-glob-staged` — Glob Expansion in HITL Approval Checks
+### 7.3 `hitl-glob-staged` — Wildcard Output in HITL Approval Checks
 
-Added during implementation to cover a real bug: the HITL approval check was reading from the literal `Stage-*/HITLGlobStage.md` path instead of expanding the glob. This workflow exercises the `expandStageGlobs` path with `Stage-*` output artifacts and orchestrator-controlled `hitl_override`.
+Added during implementation to cover a real bug: the HITL approval check was reading from the literal `Stage-*/HITLGlobStage.md` path instead of the files it matches. An Output wildcard is passed to the subagent literally and never expanded by the Runner, so this workflow has the subagent write the concrete per-iteration files itself and checks that the approval is read from those files, using a `Stage-*` output pattern and an orchestrator-controlled `hitl_override`.
 
 This replaces the originally planned `hitl-approve` workflow. The original design assumed E1 and E3 stub enhancements would be available; `hitl-glob-staged` works with the existing stub by using the `Status != SUCCESS` shortcut in `DecideHITLCompliance`.
 
 **Coverage note:** The approval-reading-from-artifacts path (where an agent returns `SUCCESS` with HITL=true and the Runner reads `human_approved` from the artifact) is exercised by `hitl-escalate` (§7.8), which uses E1 and E3.
 
-### 7.4 `staged-multigroup` — Multi-Group Staged Execution
+### 7.4 `staged-multigroup` — Multi-Group Block Execution
 
-This workflow exercises the full group-ordering path through a real harness: `EXECUTION.Test.[StageNumber]` rows dispatched first, then `EXECUTION.Implementation.[StageNumber]` rows, across at least two stages.
+This workflow exercises the full group-ordering path through a real harness: `EXECUTION.[Stage].Test` rows dispatched first, then `EXECUTION.[Stage].Implementation` rows, for each iteration of the `Stage` block, across at least two iterations.
 
-**Why this matters:** The engine's group-ordering logic is covered by unit tests, but the phase-column notation (`EXECUTION.Test.[StageNumber]`) passes through the harness CLI and model response parsing. A historical crash occurred when the engine tried to resolve a glob/wildcard dispatch after the design phase finished — exactly the kind of bug that only manifests through a real harness. A multi-group staged workflow is the most complex routing path the engine handles, and proving it works end-to-end through every harness is essential for a confident compatibility declaration.
+**Why this matters:** The engine's group-ordering logic is covered by unit tests, but the phase-column notation (`EXECUTION.[Stage].Test`) passes through the harness CLI and model response parsing, and the Execution Log has to record `1.Test`-style `Iteration` values. A historical crash occurred when the engine tried to resolve a glob/wildcard dispatch after the design phase finished - exactly the kind of bug that only manifests through a real harness. A multi-group block workflow is the most complex routing path the engine handles, and proving it works end-to-end through every harness is essential for a confident compatibility declaration.
 
-**Shape:** Two execution groups (Test, Implementation), two stages, with the TDD approach. At least 8 EXECUTION dispatches total (2 groups × 2 rows × 2 stages, or similar). Uses the `mosaictest-scripted` stub with appropriate per-group fixtures.
+**Shape:** Two groups (Test, Implementation), two iterations, with the TDD approach. At least 4 EXECUTION dispatches total (2 groups x 1 row x 2 iterations, or more). Uses the `mosaictest-scripted` stub with mode-qualified `Subagent` cells and appropriate per-group fixtures.
 
 ### 7.5 `deviation-chain` — Consecutive Deviations
 
@@ -338,23 +340,23 @@ This workflow exercises the single-decision principle (Design.md §2.6) through 
 
 ### 7.6 `infra-checkpoint-commit` — Checkpoint and Commit Triggers
 
-A staged Auto-mode workflow (at least 2 stages) with both checkpoint-class and commit-class infrastructure agents declared. The workflow frontmatter declares `infrastructure_agents: [mosaictest-checkpoint, mosaictest-commit]`, `checkpoints: enabled`, and `commits: enabled`. The test runner reads these fields and passes `--infrastructure=mosaictest-checkpoint,mosaictest-commit --checkpoints enabled --commits enabled` to the `mosaic-run run` subprocess, so the agents are active and the session's startup checks pass.
+A block Auto-mode workflow (at least 2 iterations) with both checkpoint-class and commit-class infrastructure agents declared. The workflow frontmatter declares `infrastructure_agents: [mosaictest-checkpoint, mosaictest-commit]`, `checkpoints: enabled`, and `commits: enabled`. The test runner reads these fields and passes `--infrastructure=mosaictest-checkpoint,mosaictest-commit --checkpoints enabled --commits enabled` to the `mosaic-run run` subprocess, so the agents are active and the session's startup checks pass.
 
 **Stubs used:**
 
 | Stub | Class | Trigger | What it proves |
 |------|-------|---------|----------------|
-| `mosaictest-checkpoint` | checkpoint | `STAGE_END` (from agent frontmatter) | Checkpoint trigger fires at stage boundary; fake `[checkpoint:f00d{NNNN}]` marker extracted and recorded |
-| `mosaictest-commit` | commit | `STAGE_END` (from agent frontmatter) | Commit setup dispatch at run start extracts `[branch:mosaictest-run]`; subsequent `STAGE_END` triggers fire and record commit rows |
+| `mosaictest-checkpoint` | checkpoint | `ITERATION_END` (from agent frontmatter) | Checkpoint trigger fires at iteration boundary; fake `[checkpoint:f00d{NNNN}]` marker extracted and recorded |
+| `mosaictest-commit` | commit | `ITERATION_END` (from agent frontmatter) | Commit setup dispatch at run start extracts `[branch:mosaictest-run]`; subsequent `ITERATION_END` triggers fire and record commit rows |
 
 **What this proves:**
 - Commit setup dispatch runs at run start and extracts the branch marker into artifact frontmatter
-- `STAGE_END` fires exactly at stage boundaries for both checkpoint and commit agents
+- `ITERATION_END` fires exactly at iteration boundaries for both checkpoint and commit agents
 - Trigger evaluation fires after workflow steps (not after infrastructure steps — no cascading)
 - Checkpoint marker is recorded in the execution log
 - Infrastructure steps are recorded as non-workflow rows identified from the declaration region; they do not update `current_state`
 
-**Shape:** 2 stages × 1 row per stage = 2 workflow steps. After stage 1 completes, `STAGE_END` fires for both checkpoint and commit. After stage 2 completes (end of run), `STAGE_END` fires again for both. Plus the commit setup dispatch at run start. Minimal workflow that exercises both classes.
+**Shape:** 2 iterations × 1 row per iteration = 2 workflow steps. After iteration 1 completes, `ITERATION_END` fires for both checkpoint and commit. After iteration 2 completes (end of run), `ITERATION_END` fires again for both. Plus the commit setup dispatch at run start. Minimal workflow that exercises both classes. The commit rows show the ended iteration's artifact in `Inputs`; the checkpoint rows show `-` because only commit-class dispatches carry iteration artifacts.
 
 **Run configuration:** `--checkpoints enabled --commits enabled --commit-branch mosaic-owned`. The commit setup dispatch is the first thing that fires after artifact creation (before any workflow step), which is itself a key assertion — if setup fails or the branch marker is missing, the run stops with that setup attempt preserved in the artifact.
 
@@ -422,7 +424,13 @@ mosaic-run --dev test --catalog <path-to-MOSAIC-repo> --suite smoke --harness cl
 3. For each pair × each harness: deploys the test catalog, seeds fixtures, runs `mosaic-run run` with the correct flags, and checks the result
 4. Prints a structured pass/fail summary and exits 0 (all pass) or 1 (any failure)
 
-**What it checks:** The current checker validates run outcome (completed, stopped, refused) and execution log structure.
+**What it checks:** Each workflow has a `*.expected.json` sidecar. The checker compares, in this order, the child run's exit code, then the dispatch sequence (agent, status, optional task substring, optional error expectation), then the optional stderr assertion.
+
+**Asserting a stop reason:** a sidecar may carry an optional `"stderr_contains": "<substring>"` field. When non-empty, the child run's stderr must contain that substring; otherwise the check fails with a stderr mismatch that names the expected text and quotes the last 300 bytes of stderr. Absent or empty means stderr is not checked, so existing sidecars keep their meaning. A consultant stop writes its stop reason to stderr, so this field is how a workflow asserts the reason.
+
+```json
+{ "exit_code": 6, "dispatches": [], "stderr_contains": "PRECONSULT-STOP-MARKER" }
+```
 
 ### 8.2 What the Automated Checker Cannot Do
 
@@ -464,7 +472,7 @@ Here is the idea, for a three-row Mode 1 workflow:
 | 6 | `mosaictest-scripted` | workflow step, row 3 | SUCCESS |
 | 7 | `orchestrator-script` | consultation | stop |
 
-Each workflow document fills this in with the real column values, including sequence numbers, phases and stages.
+Each workflow document fills this in with the real column values, including sequence numbers, phases and iterations.
 
 Why bother: it turns checking into a comparison instead of an opinion, and a mismatch tells you where to look.
 
@@ -477,7 +485,7 @@ Each workflow document also says what a failure of *its own* mechanism looks lik
 
 **Nothing needs to be built to capture it.** The Runner already writes the run as a table: the Execution Log inside `Orchestration.md`. It has one row per step, with these columns:
 
-`Seq` · `Agent` · `Phase` · `Stage` · `Status` · `Timestamp` · `Summary` · `Inputs` · `Checkpoint`
+`Seq` · `Agent` · `Phase` · `Iteration` · `WorkflowRow` · `Status` · `Timestamp` · `Summary` · `Inputs` · `Checkpoint`
 
 That table *is* the actual run. Checking a run means comparing it against the expected table in the workflow document. By hand today; by machine later if we choose (§9.2).
 
@@ -493,7 +501,7 @@ Automating this is worth doing and is smaller than it sounds — but it should c
 
 | Column | Comparable? |
 |--------|------------|
-| `Agent`, `Phase`, `Stage`, `Status`, `Seq` | Yes — the Runner decides these, and the same fixtures always produce the same values |
+| `Agent`, `Phase`, `Iteration`, `WorkflowRow`, `Status`, `Seq` | Yes — the Runner decides these, and the same fixtures always produce the same values |
 | `Checkpoint` | Presence yes, exact value no — the stub makes up a fake marker |
 | `Timestamp` | No — differs every run |
 | `Inputs` | Only after removing the run id, which is in every path |
@@ -531,9 +539,9 @@ Run the smoke set on any change to the Runner or an adapter. Run the full suite 
 | Stub agent names | `mosaictest-*` |
 | Behaviour fixtures | `MosaicTestScript/{behaviour}.md`, named after the behaviour |
 | Routing fixtures | `MosaicTestRouting.md`, at the seed folder root, one per workflow |
-| Artifacts a run writes | Start with `MosaicTest`; per-stage ones as `Stage-{StageNumber}/MosaicTest*` |
+| Artifacts a run writes | Start with `MosaicTest`; per-iteration ones as `Stage-{Stage}/MosaicTest*` |
 | Workflow files | One per test case, named after the mechanism tested |
-| `Plan.md` | Keeps its real name — workflow admission requires it. No other reserved name is reused. |
+| `Plan.md` | The pre-placed block schedule keeps this name in the fixtures. The Runner reads a schedule from the `Source` its workflow declares, whatever the file is named. |
 
 ---
 

@@ -16,7 +16,7 @@ import (
 
 func TestSession_ConsultRoute_StagedRowAfterNonStagedStep_RecordsInstructionStage(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
-	consultant.queueStagedDispatch("implementer", "implement stage 2", rsImplementer, 2)
+	consultant.queueStagedDispatch("implementer", "implement stage 2", rsImplementer, "2")
 	consultant.queueStop("done")
 	seed := rowStageSeed("plan-review", 2, "PLANNING", "")
 	rig := newRowStageRig(t, consultant, domain.ExecutionModeOrchestrated, seed)
@@ -29,14 +29,14 @@ func TestSession_ConsultRoute_StagedRowAfterNonStagedStep_RecordsInstructionStag
 	if len(steps) != 1 {
 		t.Fatalf("want 1 workflow step, got %d: %+v", len(steps), steps)
 	}
-	requireStepAt(t, steps[0], "EXECUTION", 4, "Implementation.2")
+	requireStepAt(t, steps[0], "EXECUTION", 4, "2.Implementation")
 }
 
 func TestSession_ConsultRoute_ReviewRoutedAcrossGroupAndStage_RecordsInstructionRowAndStage(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
-	consultant.queueStagedDispatch("build-review", "review the build", rsBuildReview, 3)
+	consultant.queueStagedDispatch("build-review", "review the build", rsBuildReview, "3")
 	consultant.queueStop("done")
-	seed := rowStageSeed("test-writer", 3, "EXECUTION", "Test.1")
+	seed := rowStageSeed("test-writer", 3, "EXECUTION", "1.Test")
 	rig := newRowStageRig(t, consultant, domain.ExecutionModeOrchestrated, seed)
 	queueSuccess(rig.f, "build-review", "build-review#3")
 
@@ -47,12 +47,12 @@ func TestSession_ConsultRoute_ReviewRoutedAcrossGroupAndStage_RecordsInstruction
 	if len(steps) != 1 {
 		t.Fatalf("want 1 workflow step, got %d: %+v", len(steps), steps)
 	}
-	requireStepAt(t, steps[0], "EXECUTION", 5, "Implementation.3")
+	requireStepAt(t, steps[0], "EXECUTION", 5, "3.Implementation")
 }
 
 func TestSession_ConsultRoute_NonStagedRowAfterStagedStep_RecordsNoStage(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
-	consultant.queueStagedDispatch("test-writer", "write the tests for stage 2", rsTestWriter, 2)
+	consultant.queueStagedDispatch("test-writer", "write the tests for stage 2", rsTestWriter, "2")
 	consultant.queueDispatch("plan-review", "re-review the plan", rsPlanReview)
 	consultant.queueStop("done")
 	seed := rowStageSeed("planner", 1, "PLANNING", "")
@@ -67,7 +67,7 @@ func TestSession_ConsultRoute_NonStagedRowAfterStagedStep_RecordsNoStage(t *test
 	if len(steps) != 2 {
 		t.Fatalf("want 2 workflow steps, got %d: %+v", len(steps), steps)
 	}
-	requireStepAt(t, steps[0], "EXECUTION", 3, "Test.2")
+	requireStepAt(t, steps[0], "EXECUTION", 3, "2.Test")
 	requireStepAt(t, steps[1], "PLANNING", 2, "")
 }
 
@@ -75,7 +75,7 @@ func TestSession_ConsultRoute_NonStagedRowAfterStagedEntry_RecordsNoStage(t *tes
 	consultant := &scriptedRoutingConsultant{}
 	consultant.queueDispatch("final-review", "close out the run", rsFinalReview)
 	consultant.queueStop("done")
-	seed := rowStageSeed("impl-review", 6, "EXECUTION", "Implementation.3")
+	seed := rowStageSeed("impl-review", 6, "EXECUTION", "3.Implementation")
 	rig := newRowStageRig(t, consultant, domain.ExecutionModeOrchestrated, seed)
 	queueSuccess(rig.f, "final-review", "final-review#3")
 
@@ -94,8 +94,8 @@ func TestSession_ConsultRoute_NonStagedRowAfterStagedEntry_RecordsNoStage(t *tes
 // stage; the second does not inherit the first.
 func TestSession_ConsultRoute_HarnessErrorRecursion_RecordsEachInstructionRowAndStage(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
-	consultant.queueStagedDispatch("implementer", "implement stage 2", rsImplementer, 2)
-	consultant.queueStagedDispatch("test-writer", "write the tests for stage 1", rsTestWriter, 1)
+	consultant.queueStagedDispatch("implementer", "implement stage 2", rsImplementer, "2")
+	consultant.queueStagedDispatch("test-writer", "write the tests for stage 1", rsTestWriter, "1")
 	consultant.queueStop("done")
 	seed := rowStageSeed("plan-review", 2, "PLANNING", "")
 	rig := newRowStageRig(t, consultant, domain.ExecutionModeOrchestrated, seed)
@@ -109,11 +109,11 @@ func TestSession_ConsultRoute_HarnessErrorRecursion_RecordsEachInstructionRowAnd
 	if len(steps) != 2 {
 		t.Fatalf("want 2 workflow steps (failed attempt, routed step), got %d: %+v", len(steps), steps)
 	}
-	requireStepAt(t, steps[0], "EXECUTION", 4, "Implementation.2")
+	requireStepAt(t, steps[0], "EXECUTION", 4, "2.Implementation")
 	if steps[0].Status != domain.StatusBLOCKED {
 		t.Errorf("want the failed attempt recorded BLOCKED, got %q", steps[0].Status)
 	}
-	requireStepAt(t, steps[1], "EXECUTION", 3, "Test.1")
+	requireStepAt(t, steps[1], "EXECUTION", 3, "1.Test")
 }
 
 // In auto mode a deviation is resolved by a consultation that routes a review
@@ -121,7 +121,7 @@ func TestSession_ConsultRoute_HarnessErrorRecursion_RecordsEachInstructionRowAnd
 // the engine then advances from that row to the next one at the same stage.
 func TestSession_ConsultRoute_AutoDeviationToStagedReview_RecordsRowAndAdvancesFromIt(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
-	consultant.queueStagedDispatch("build-review", "review the build", rsBuildReview, 3)
+	consultant.queueStagedDispatch("build-review", "review the build", rsBuildReview, "3")
 	consultant.queueStop("done")
 	seed := rowStageSeed("planner", 1, "PLANNING", "")
 	rig := newRowStageRig(t, consultant, domain.ExecutionModeAuto, seed)
@@ -152,9 +152,9 @@ func TestSession_ConsultRoute_AutoDeviationToStagedReview_RecordsRowAndAdvancesF
 	if review == nil {
 		t.Fatalf("want a recorded step for the routed build-review, got %+v", steps)
 	}
-	requireStepAt(t, *review, "EXECUTION", 5, "Implementation.3")
+	requireStepAt(t, *review, "EXECUTION", 5, "3.Implementation")
 	if next == nil {
 		t.Fatalf("want the engine to dispatch impl-review after the routed build-review, invoked %v", invokedAgents(rig.f))
 	}
-	requireStepAt(t, *next, "EXECUTION", 6, "Implementation.3")
+	requireStepAt(t, *next, "EXECUTION", 6, "3.Implementation")
 }

@@ -37,25 +37,26 @@ type runStartCtx struct {
 	identifiers []string
 	// Infrastructure agents (set at step 6b; filtered at step 6b2).
 	declaredInfraAgents []domain.DeclaredInfraAgent
-	// Stage set (nil if no Plan.md present; updated on resume at step 6
+	// Schedules, one per block whose Source was read (nil when none was; set on resume at step 6
 	// and on new-run at step 8a2).
-	stages   *domain.StageSet
-	planPath string
+	stages domain.BlockSchedules
 	// Run artifact state (created/resumed at step 8; updated by dispatch loop).
 	state domain.ArtifactState
 	seq   int
 	// Dispatch loop shared mutable state.
 	lastResponse        *domain.ProtocolResponse
 	prevWorkflowStep    *domain.CompletedStep
-	refreshedStages     *domain.StageSet
 	lastOutputArtifacts []string
 	antiLoop            antiLoopState
 	// Pre-consultation result (step 8c).
 	preConsultAdvice domain.PreConsultationAdvice
 	// Seed inputs applied at step 8 (new-run only).
 	seedPlan seed.Plan
-	// Stage source descriptor for engine error messages.
-	stageSource domain.StageSource
+	// Per-block schedule source descriptors for engine error messages.
+	stageSources []domain.StageSource
+	// resumedDefect is the defective produced schedule a resume found, for the
+	// dispatch loop to act on first.
+	resumedDefect *pendingScheduleDefect
 }
 
 // prepareRouting handles steps 1 through 2c of the run-start sequence:
@@ -79,10 +80,12 @@ func (s *sessionImpl) prepareRouting(ctx context.Context, config domain.RunConfi
 		return nil, s.refusal(err.Error()), true, nil
 	}
 
-	// Step 2: parse the routing table.
+	// Step 2: parse the routing table. A workflow in a retired notation is
+	// refused here, on a new run and on resume alike; the refusal travels as the
+	// outcome's cause so its rule, row and token stay reachable.
 	table, err := workflow.Parse(region.Content, region.Info)
 	if err != nil {
-		return nil, s.refusal(err.Error()), true, nil
+		return nil, s.workflowRefusal(ctx, config, err), true, nil
 	}
 
 	// Step 2a: resolve the orchestrator agent reference.
@@ -126,6 +129,9 @@ func (s *sessionImpl) prepareRouting(ctx context.Context, config domain.RunConfi
 func (s *sessionImpl) readArtifact(ctx context.Context, rs *runStartCtx) (domain.RunOutcome, bool, error) {
 	existingState, readErr := s.deps.Store.Read(ctx)
 	if readErr != nil {
+		if layoutErr := resumeLayoutRefusal(readErr, rs.config.RunID); layoutErr != nil && !rs.config.IsNewRun {
+			return s.refusalCaused(layoutErr.Error(), layoutErr), true, nil
+		}
 		var refErr *domain.RefusalError
 		if errors.As(readErr, &refErr) {
 			return s.refusal(refErr.Error()), true, nil
@@ -158,6 +164,15 @@ func (s *sessionImpl) readArtifact(ctx context.Context, rs *runStartCtx) (domain
 		if idErr := checkResumeRunIdentity(existingState.RunID, rs.config); idErr != nil {
 			return s.runIdentityRefusal(idErr, rs.config), true, nil
 		}
+		if d := existingState.Dispatch; d.Present && d.Value != domain.DispatchSequential {
+			return s.refusal(fmt.Sprintf(
+				"run artifact records dispatch %q; this Runner runs sequentially and supports only \"dispatch: %s\"",
+				d.Value, domain.DispatchSequential,
+			)), true, nil
+		}
+		if valueErr := resumeValueRefusal(existingState, rs.table, rs.config.RunID); valueErr != nil {
+			return s.refusalCaused(valueErr.Error(), valueErr), true, nil
+		}
 	}
 
 	// FR-7b: version check for resume mode.
@@ -175,13 +190,13 @@ func (s *sessionImpl) readArtifact(ctx context.Context, rs *runStartCtx) (domain
 }
 
 // admitAndResolveAgents handles steps 4 through 5 of the run-start sequence:
-// admit the workflow (FR-18a compat checks), run the recovery check for CLI
+// admit the workflow (compat checks), run the recovery check for CLI
 // harnesses, and resolve all agent identifiers to definition files.
 func (s *sessionImpl) admitAndResolveAgents(ctx context.Context, rs *runStartCtx) (domain.RunOutcome, bool, error) {
 	// Step 4: admit the workflow.
 	admitted, err := compat.Admit(rs.table, rs.config.RunSettings.Mode)
 	if err != nil {
-		return s.refusal(err.Error()), true, nil
+		return s.workflowRefusal(ctx, rs.config, err), true, nil
 	}
 	rs.orchDir = filepath.Dir(rs.config.OrchestratorFilePath)
 	rs.admitted = admitted

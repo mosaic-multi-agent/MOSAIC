@@ -8,10 +8,10 @@ import (
 )
 
 func TestResumePoint_NoLogEntries_ReturnsFirstRow(t *testing.T) {
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
 
-	info, err := engine.ResumePoint(aw, stages, emptyState(), nil)
+	info, err := engine.ResumePointFromSchedules(aw, schedules, emptyState(), nil)
 	if err != nil {
 		t.Fatalf("ResumePoint: unexpected error: %v", err)
 	}
@@ -31,11 +31,11 @@ func TestResumePoint_NoLogEntries_ReturnsFirstRow(t *testing.T) {
 // the row after the last completed one.
 func TestResumePoint_LastEntrySuccess_AdvancesToNextRow(t *testing.T) {
 	// After planner-tdd-soft (row 0) completed with SUCCESS.
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
 	state := stateAfter("PLANNING", "", "planner-tdd-soft#1", domain.StatusSUCCESS, 1)
 
-	info, err := engine.ResumePoint(aw, stages, state, nil)
+	info, err := engine.ResumePointFromSchedules(aw, schedules, state, nil)
 	if err != nil {
 		t.Fatalf("ResumePoint: unexpected error: %v", err)
 	}
@@ -57,8 +57,8 @@ func TestResumePoint_Interruption_RerunsLastRow(t *testing.T) {
 	// Simulate an interruption: the log says plan-review#2 ran, but the runner
 	// was interrupted before CurrentState was updated to reflect it. CurrentState
 	// still shows planner-tdd-soft from the prior step.
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
 
 	// CurrentState reflects planner-tdd-soft (row 0), but the log has a second
 	// entry for plan-review (row 1) — meaning plan-review started but the artifact
@@ -77,7 +77,7 @@ func TestResumePoint_Interruption_RerunsLastRow(t *testing.T) {
 		},
 	}
 
-	info, err := engine.ResumePoint(aw, stages, state, nil)
+	info, err := engine.ResumePointFromSchedules(aw, schedules, state, nil)
 	if err != nil {
 		t.Fatalf("ResumePoint: unexpected error: %v", err)
 	}
@@ -91,15 +91,15 @@ func TestResumePoint_Interruption_RerunsLastRow(t *testing.T) {
 }
 
 // TestResumePoint_StagedWorkflow_DerivesGroupAndStage verifies that ResumePoint
-// correctly derives GroupIndex and StageNumber for a staged workflow position.
+// correctly derives GroupIndex and Iteration for a staged workflow position.
 func TestResumePoint_StagedWorkflow_DerivesGroupAndStage(t *testing.T) {
-	// After test-writer-tdd (row 7) in Stage-1 of brownfield-tdd.
-	// GroupIndex should be 0 (test group), StageNumber=1.
-	aw := mustParseAndAdmit(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
-	stages := singleStageSet("TDD")
-	state := stateAfter("EXECUTION.[StageNumber]", "Stage-1", "test-writer-tdd#8", domain.StatusSUCCESS, 8)
+	// After test-writer-tdd (row 7) in iteration 1 of brownfield-tdd.
+	// GroupIndex should be 0 (test group), Iteration "1".
+	aw := mustParseAndAdmitV216(t, brownfieldTDDV216Content, "brownfield-tdd", "3.4")
+	schedules := singleSchedules("TDD")
+	state := stateAfterRow("EXECUTION", "1.Test", "test-writer-tdd#8", domain.StatusSUCCESS, 8, 8)
 
-	info, err := engine.ResumePoint(aw, stages, state, nil)
+	info, err := engine.ResumePointFromSchedules(aw, schedules, state, nil)
 	if err != nil {
 		t.Fatalf("ResumePoint: unexpected error: %v", err)
 	}
@@ -111,11 +111,11 @@ func TestResumePoint_StagedWorkflow_DerivesGroupAndStage(t *testing.T) {
 	if info.GroupIndex != 0 {
 		t.Errorf("want GroupIndex=0 (test group), got %d", info.GroupIndex)
 	}
-	if info.StageNumber != 1 {
-		t.Errorf("want StageNumber=1, got %d", info.StageNumber)
+	if info.Iteration != "1" {
+		t.Errorf("want Iteration=%q, got %q", "1", info.Iteration)
 	}
-	if info.Stage != "Stage-1" {
-		t.Errorf("want Stage=Stage-1, got %q", info.Stage)
+	if info.Stage != "1.Test" {
+		t.Errorf("want Stage=1.Test, got %q", info.Stage)
 	}
 }
 
@@ -123,19 +123,19 @@ func TestResumePoint_StagedWorkflow_DerivesGroupAndStage(t *testing.T) {
 // that a resume point outside the staged phase has GroupIndex=-1.
 func TestResumePoint_StagedWorkflow_NonExecutionRow_GroupIndexNegativeOne(t *testing.T) {
 	// After codebase-research (row 0) in brownfield-tdd (RESEARCH phase, pre-execution).
-	aw := mustParseAndAdmit(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
-	stages := singleStageSet("TDD")
+	aw := mustParseAndAdmitV216(t, brownfieldTDDV216Content, "brownfield-tdd", "3.4")
+	schedules := singleSchedules("TDD")
 	state := stateAfter("RESEARCH", "", "codebase-research#1", domain.StatusSUCCESS, 1)
 
-	info, err := engine.ResumePoint(aw, stages, state, nil)
+	info, err := engine.ResumePointFromSchedules(aw, schedules, state, nil)
 	if err != nil {
 		t.Fatalf("ResumePoint: unexpected error: %v", err)
 	}
 	if info.GroupIndex != -1 {
 		t.Errorf("want GroupIndex=-1 (not in staged phase), got %d", info.GroupIndex)
 	}
-	if info.StageNumber != 0 {
-		t.Errorf("want StageNumber=0 (not in staged phase), got %d", info.StageNumber)
+	if info.Iteration != "" {
+		t.Errorf("want empty Iteration (not in staged phase), got %q", info.Iteration)
 	}
 }
 
@@ -143,27 +143,27 @@ func TestResumePoint_StagedWorkflow_NonExecutionRow_GroupIndexNegativeOne(t *tes
 // when the runner was interrupted while executing an EXECUTION row, ResumePoint
 // returns RerunLast=true so the session re-dispatches the interrupted row.
 func TestResumePoint_MidStageInterruption_DerivesCorrectRow(t *testing.T) {
-	// In brownfield-tdd (TDD approach), Stage-1:
+	// In brownfield-tdd (TDD approach), iteration 1:
 	// Log says tests-review-tdd ran (row 8), but CurrentState only shows test-writer-tdd.
 	// This means tests-review-tdd was dispatched but the artifact update was lost.
-	aw := mustParseAndAdmit(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
-	stages := singleStageSet("TDD")
+	aw := mustParseAndAdmitV216(t, brownfieldTDDV216Content, "brownfield-tdd", "3.4")
+	schedules := singleSchedules("TDD")
 
 	state := domain.ArtifactState{
 		GlobalSequence: 8,
 		CurrentState: domain.CurrentState{
-			Phase:      "EXECUTION.[StageNumber]",
-			Stage:      "Stage-1",
+			Phase:      "EXECUTION",
+			Stage:      "1.Test",
 			LastStatus: domain.StatusSUCCESS,
 			LastAgent:  "test-writer-tdd#8",
 		},
 		ExecutionLog: []domain.ExecutionLogEntry{
-			{Seq: 8, Agent: "test-writer-tdd#8", Phase: "EXECUTION.[StageNumber]", Stage: "Stage-1", Status: domain.StatusSUCCESS},
-			{Seq: 9, Agent: "tests-review-tdd#9", Phase: "EXECUTION.[StageNumber]", Stage: "Stage-1", Status: domain.StatusSUCCESS},
+			execLogEntry(8, "test-writer-tdd#8", "EXECUTION", "1.Test", domain.StatusSUCCESS, 8),
+			execLogEntry(9, "tests-review-tdd#9", "EXECUTION", "1.Test", domain.StatusSUCCESS, 9),
 		},
 	}
 
-	info, err := engine.ResumePoint(aw, stages, state, nil)
+	info, err := engine.ResumePointFromSchedules(aw, schedules, state, nil)
 	if err != nil {
 		t.Fatalf("ResumePoint: unexpected error: %v", err)
 	}
@@ -175,4 +175,3 @@ func TestResumePoint_MidStageInterruption_DerivesCorrectRow(t *testing.T) {
 		t.Errorf("want RowIndex=8 (tests-review-tdd, the interrupted row), got %d", info.RowIndex)
 	}
 }
-

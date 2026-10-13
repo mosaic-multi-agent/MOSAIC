@@ -38,8 +38,8 @@ package vscodeghcp_test
 //   - The tool field is flow-style with single-quoted items: ['read/readFile', 'edit/createFile']
 //
 //   Human-readable model format:
-//   - The VS Code GHCP descriptor's ModelCatalog.FormatHint is "display-name" (human-readable
-//     names with spaces, e.g. "Claude Sonnet 4.6").
+//   - The "display-name" format hint (human-readable names with spaces, e.g.
+//     "Claude Sonnet 4.6") comes from the shared model catalog, not the descriptor.
 //   - A ModelSelection with ModelID "Claude Sonnet 4.6" is emitted verbatim as that string.
 //   - A custom ModelID is also emitted verbatim with no reformatting (AC13.3, FR-11).
 //
@@ -903,21 +903,6 @@ func TestModel_CustomModelIDEmittedVerbatim(t *testing.T) {
 	// The custom model ID must appear verbatim in the output bytes.
 	if !bytes.Contains(result.Output, []byte(customModel.ModelID)) {
 		t.Errorf("transform output does not contain custom model ID %q; it must be emitted verbatim", customModel.ModelID)
-	}
-}
-
-// TestModel_DescriptorFormatHintIsDisplayName verifies that the descriptor declares a format
-// hint indicating human-readable display names are expected for this harness.
-func TestModel_DescriptorFormatHintIsDisplayName(t *testing.T) {
-	mod := newModule(t)
-	d := mod.Descriptor()
-	if d == nil {
-		t.Fatal("Descriptor() returned nil")
-	}
-	// The format hint is display-only but must signal to the TUI that this harness expects
-	// human-readable names like "Claude Opus 4.6", not provider IDs like "claude-opus-4-6".
-	if d.Models.FormatHint == "" {
-		t.Error("Descriptor().Models.FormatHint is empty; VS Code GHCP should declare a format hint to guide model selection UI")
 	}
 }
 

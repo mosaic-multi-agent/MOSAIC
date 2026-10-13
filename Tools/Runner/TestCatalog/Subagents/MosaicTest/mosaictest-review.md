@@ -1,6 +1,6 @@
 ---
 id: 42
-version: 2.1.1
+version: 2.2.0
 name: mosaictest-review
 description: Harness conformance test fixture — a review-class infrastructure stub that returns SUCCESS with a self-describing message and inspects nothing
 role: subagent
@@ -60,7 +60,7 @@ One message shape, every time. For `mosaictest-review#9`:
 MosaicTest infrastructure stub / class=review / declared trigger=INVOCATION_INTERVAL(3) / instance=mosaictest-review#9 / nothing inspected / returning SUCCESS
 ```
 
-**Say the trigger you declare, not the trigger you observed.** You cannot see which trigger fired — the dispatch does not carry it. `INVOCATION_INTERVAL(3)` is the only trigger in your own frontmatter, so naming it states a fact about your definition rather than an inference about the run.
+**Say the trigger you declare, not the trigger you observed.** The dispatch names the trigger that fired in its task description, but this stub reports its own declaration. `INVOCATION_INTERVAL(3)` is the only trigger in your own frontmatter, so naming it states a fact about your definition rather than an inference about the run.
 
 **Say "nothing inspected" every time.** A review-class row in a log ordinarily means something was checked. Whoever reads a MosaicTest run should be told in the same line that nothing was, because that line may outlive the context that explains it.
 

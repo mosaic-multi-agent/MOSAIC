@@ -16,25 +16,25 @@ func TestNext_Approach_ImplementationFirst_AfterImplGroup_DispatchesTestGroup(t 
 	// brownfield-tdd, Implementation-First: impl group = rows 9-10, test group = rows 7-8.
 	// After implementation-review (row 10) in Stage-1, the next dispatch must be
 	// test-writer-tdd (row 7, first test group row).
-	aw := mustParseAndAdmit(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
-	stages := singleStageSet("Implementation-First")
+	aw := mustParseAndAdmitV216(t, brownfieldTDDV216Content, "brownfield-tdd", "3.4")
+	schedules := singleSchedules("Implementation-First")
 	agents := newTestAgents(
 		"codebase-research", "requirements-refinement", "requirements-review",
 		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
 		"test-writer-tdd", "tests-review-tdd", "implementation-tdd", "implementation-review",
 		"test-runner",
 	)
-	state := stateAfter("EXECUTION.[StageNumber]", "Stage-1", "implementation-review#11", domain.StatusSUCCESS, 11)
+	state := stateAfterRow("EXECUTION", "1.Implementation", "implementation-review#11", domain.StatusSUCCESS, 11, 11)
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           state,
-		LastResponse:    successResponse("implementation-review#11"),
-		Agents:          agents,
-		Seq:             11,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        state,
+		LastResponse: successResponse("implementation-review#11"),
+		Agents:       agents,
+		Seq:          11,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
@@ -51,25 +51,25 @@ func TestNext_Approach_TestsOnly_AfterTestGroup_AdvancesToNextStage(t *testing.T
 	// brownfield-tdd, Tests-Only, 2 stages:
 	// After tests-review-tdd (row 8, last test-group row) in Stage-1,
 	// advance to Stage-2 test-writer-tdd (no implementation group).
-	aw := mustParseAndAdmit(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
-	stages := twoStageSet("Tests-Only")
+	aw := mustParseAndAdmitV216(t, brownfieldTDDV216Content, "brownfield-tdd", "3.4")
+	schedules := twoSchedules("Tests-Only")
 	agents := newTestAgents(
 		"codebase-research", "requirements-refinement", "requirements-review",
 		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
 		"test-writer-tdd", "tests-review-tdd", "implementation-tdd", "implementation-review",
 		"test-runner",
 	)
-	state := stateAfter("EXECUTION.[StageNumber]", "Stage-1", "tests-review-tdd#9", domain.StatusSUCCESS, 9)
+	state := stateAfterRow("EXECUTION", "1.Test", "tests-review-tdd#9", domain.StatusSUCCESS, 9, 9)
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           state,
-		LastResponse:    successResponse("tests-review-tdd#9"),
-		Agents:          agents,
-		Seq:             9,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        state,
+		LastResponse: successResponse("tests-review-tdd#9"),
+		Agents:       agents,
+		Seq:          9,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
@@ -77,8 +77,8 @@ func TestNext_Approach_TestsOnly_AfterTestGroup_AdvancesToNextStage(t *testing.T
 		t.Errorf("Tests-Only after last test-group row: want test-writer-tdd in Stage-2, got %s",
 			step.Request.AgentInstanceID)
 	}
-	if step.Stage != "Test.2" {
-		t.Errorf("Tests-Only: want Test.2, got %q", step.Stage)
+	if step.Stage != "2.Test" {
+		t.Errorf("Tests-Only: want 2.Test, got %q", step.Stage)
 	}
 }
 
@@ -88,8 +88,8 @@ func TestNext_Approach_TestsOnly_AfterTestGroup_AdvancesToNextStage(t *testing.T
 // sequence in brownfield-tdd-build-verified with TDD approach:
 // test-writer-tdd → build-review → tests-review-tdd.
 func TestNext_BuildVerified_TDD_TestGroupSequence(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	stages := singleStageSet("TDD")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
+	schedules := singleSchedules("TDD")
 	agents := newTestAgents(
 		"codebase-research", "requirements-refinement", "requirements-review",
 		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
@@ -98,11 +98,11 @@ func TestNext_BuildVerified_TDD_TestGroupSequence(t *testing.T) {
 	)
 
 	tests := []struct {
-		name       string
-		state      domain.ArtifactState
-		response   *domain.ProtocolResponse
-		seq        int
-		wantAgent  string
+		name      string
+		state     domain.ArtifactState
+		response  *domain.ProtocolResponse
+		seq       int
+		wantAgent string
 	}{
 		{
 			name:      "after contracts-review, dispatches test-writer-tdd",
@@ -113,14 +113,14 @@ func TestNext_BuildVerified_TDD_TestGroupSequence(t *testing.T) {
 		},
 		{
 			name:      "after test-writer-tdd, dispatches build-review (test build)",
-			state:     stateAfterRow("EXECUTION", "Test.1", "test-writer-tdd#8", domain.StatusSUCCESS, 8, 8),
+			state:     stateAfterRow("EXECUTION", "1.Test", "test-writer-tdd#8", domain.StatusSUCCESS, 8, 8),
 			response:  successResponse("test-writer-tdd#8"),
 			seq:       8,
 			wantAgent: "build-review",
 		},
 		{
 			name:      "after build-review (test build), dispatches tests-review-tdd",
-			state:     stateAfterRow("EXECUTION", "Test.1", "build-review#9", domain.StatusSUCCESS, 9, 9),
+			state:     stateAfterRow("EXECUTION", "1.Test", "build-review#9", domain.StatusSUCCESS, 9, 9),
 			response:  successResponse("build-review#9"),
 			seq:       9,
 			wantAgent: "tests-review-tdd",
@@ -130,14 +130,14 @@ func TestNext_BuildVerified_TDD_TestGroupSequence(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			dec := engine.Next(engine.NextInput{
-				Workflow:        aw,
-				Stages:          stages,
-				State:           tc.state,
-				LastResponse:    tc.response,
-				Agents:          agents,
-				Seq:             tc.seq,
-				Now:             fixedNow,
-				Mode:            domain.ExecutionModeAutoReview,
+				Workflow:     aw,
+				Schedules:    schedules,
+				State:        tc.state,
+				LastResponse: tc.response,
+				Agents:       agents,
+				Seq:          tc.seq,
+				Now:          fixedNow,
+				Mode:         domain.ExecutionModeAutoReview,
 			})
 			step := requireDispatch(t, dec)
 			if agentName(step.Request.AgentInstanceID) != tc.wantAgent {
@@ -151,8 +151,8 @@ func TestNext_BuildVerified_TDD_TestGroupSequence(t *testing.T) {
 // sequence in brownfield-tdd-build-verified with TDD approach:
 // implementation-tdd → build-review → implementation-review.
 func TestNext_BuildVerified_TDD_ImplGroupSequence(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	stages := singleStageSet("TDD")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
+	schedules := singleSchedules("TDD")
 	agents := newTestAgents(
 		"codebase-research", "requirements-refinement", "requirements-review",
 		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
@@ -169,21 +169,21 @@ func TestNext_BuildVerified_TDD_ImplGroupSequence(t *testing.T) {
 	}{
 		{
 			name:      "after tests-review-tdd (last test-group row), dispatches implementation-tdd",
-			state:     stateAfterRow("EXECUTION", "Test.1", "tests-review-tdd#10", domain.StatusSUCCESS, 10, 10),
+			state:     stateAfterRow("EXECUTION", "1.Test", "tests-review-tdd#10", domain.StatusSUCCESS, 10, 10),
 			response:  successResponse("tests-review-tdd#10"),
 			seq:       10,
 			wantAgent: "implementation-tdd",
 		},
 		{
 			name:      "after implementation-tdd, dispatches build-review (impl build)",
-			state:     stateAfterRow("EXECUTION", "Implementation.1", "implementation-tdd#11", domain.StatusSUCCESS, 11, 11),
+			state:     stateAfterRow("EXECUTION", "1.Implementation", "implementation-tdd#11", domain.StatusSUCCESS, 11, 11),
 			response:  successResponse("implementation-tdd#11"),
 			seq:       11,
 			wantAgent: "build-review",
 		},
 		{
 			name:      "after build-review (impl build), dispatches implementation-review",
-			state:     stateAfterRow("EXECUTION", "Implementation.1", "build-review#12", domain.StatusSUCCESS, 12, 12),
+			state:     stateAfterRow("EXECUTION", "1.Implementation", "build-review#12", domain.StatusSUCCESS, 12, 12),
 			response:  successResponse("build-review#12"),
 			seq:       12,
 			wantAgent: "implementation-review",
@@ -193,14 +193,14 @@ func TestNext_BuildVerified_TDD_ImplGroupSequence(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			dec := engine.Next(engine.NextInput{
-				Workflow:        aw,
-				Stages:          stages,
-				State:           tc.state,
-				LastResponse:    tc.response,
-				Agents:          agents,
-				Seq:             tc.seq,
-				Now:             fixedNow,
-				Mode:            domain.ExecutionModeAutoReview,
+				Workflow:     aw,
+				Schedules:    schedules,
+				State:        tc.state,
+				LastResponse: tc.response,
+				Agents:       agents,
+				Seq:          tc.seq,
+				Now:          fixedNow,
+				Mode:         domain.ExecutionModeAutoReview,
 			})
 			step := requireDispatch(t, dec)
 			if agentName(step.Request.AgentInstanceID) != tc.wantAgent {
@@ -212,24 +212,24 @@ func TestNext_BuildVerified_TDD_ImplGroupSequence(t *testing.T) {
 
 // ===== DispatchStep fields =====
 
-// TestNext_DispatchStep_PhaseAndStageSet verifies that the dispatched step
+// TestNext_DispatchStep_PhaseAndSchedule verifies that the dispatched step
 // carries the correct Phase and Stage values for recording in the artifact.
-func TestNext_DispatchStep_PhaseAndStageSet(t *testing.T) {
-	// quick-fix: dispatching implementation-tdd (row 2, EXECUTION.[StageNumber]) in Stage-1.
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
+func TestNext_DispatchStep_PhaseAndSchedule(t *testing.T) {
+	// quick-fix: dispatching implementation-tdd (row 3, EXECUTION.[Stage]) in iteration 1.
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
 	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
 	state := stateAfter("PLANNING", "", "plan-review#2", domain.StatusSUCCESS, 2)
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           state,
-		LastResponse:    successResponse("plan-review#2"),
-		Agents:          agents,
-		Seq:             2,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        state,
+		LastResponse: successResponse("plan-review#2"),
+		Agents:       agents,
+		Seq:          2,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
@@ -246,19 +246,19 @@ func TestNext_DispatchStep_PhaseAndStageSet(t *testing.T) {
 // TestNext_DispatchStep_RowIndex verifies that RowIndex matches the routing table.
 func TestNext_DispatchStep_RowIndex(t *testing.T) {
 	// quick-fix: row 0 = planner-tdd-soft.
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
 	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           emptyState(),
-		LastResponse:    nil,
-		Agents:          agents,
-		Seq:             0,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        emptyState(),
+		LastResponse: nil,
+		Agents:       agents,
+		Seq:          0,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
@@ -270,19 +270,19 @@ func TestNext_DispatchStep_RowIndex(t *testing.T) {
 // TestNext_DispatchStep_AgentIdentifier verifies that DispatchStep.Agent.Identifier
 // matches the routing table's agent field.
 func TestNext_DispatchStep_AgentIdentifier(t *testing.T) {
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
 	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           emptyState(),
-		LastResponse:    nil,
-		Agents:          agents,
-		Seq:             0,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        emptyState(),
+		LastResponse: nil,
+		Agents:       agents,
+		Seq:          0,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
@@ -290,8 +290,3 @@ func TestNext_DispatchStep_AgentIdentifier(t *testing.T) {
 		t.Errorf("want Agent.Identifier=planner-tdd-soft, got %q", step.Agent.Identifier)
 	}
 }
-
-// ===== ResumePoint =====
-
-// TestResumePoint_NoLogEntries_ReturnsFirstRow verifies that with no execution
-// log entries, ResumePoint returns RowIndex=0 and RerunLast=false.

@@ -14,16 +14,16 @@ runner_pre_consultation: disabled
 runner_manual_resolution: disabled
 current_state:
   phase: EXECUTION
-  stage: null
+  iteration: null
   last_status: SUCCESS
   last_agent: "tests-review-tdd#2"
   error_code: null
 ---
 
 <ExecutionLog type="core">
-| Seq | Agent              | Phase     | Stage  | WorkflowRow | Status  | Timestamp            | Summary       | Inputs | Checkpoint |
+| Seq | Agent              | Phase     | Iteration  | WorkflowRow | Status  | Timestamp            | Summary       | Inputs | Checkpoint |
 | --- | ------------------ | --------- | ------ | ----------- | ------- | -------------------- | ------------- | ------ | ---------- |
-| 1   | test-writer-tdd#1  | EXECUTION | Test.1 | 1           | SUCCESS | 2026-01-29T09:05:00Z | Tests written | -      | -          |
+| 1   | test-writer-tdd#1  | EXECUTION | 1.Test | 1           | SUCCESS | 2026-01-29T09:05:00Z | Tests written | -      | -          |
 | 2   | tests-review-tdd#2 | EXECUTION | -      | 2           | SUCCESS | 2026-01-29T10:00:00Z | Tests passed  | -      | -          |
 </ExecutionLog>
 

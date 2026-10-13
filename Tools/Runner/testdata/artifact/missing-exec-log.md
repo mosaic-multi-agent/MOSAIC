@@ -10,7 +10,7 @@ global_sequence: 1
 checkpoints: disabled
 current_state:
   phase: PLANNING
-  stage: null
+  iteration: null
   last_status: SUCCESS
   last_agent: "planner-tdd-soft#1"
   error_code: null

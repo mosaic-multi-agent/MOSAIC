@@ -435,8 +435,9 @@ func TestDeployAgents_OptionBuilder_UtilityAgentOutsideAllowListIsOffered(t *tes
 
 	deps, workspace := newBaseDeps(t, stub)
 	// Use deployAgentOptionCatalog which has "non-allowlisted-utility" in utilityAgents;
-	// the default tool config's allow-list is empty (DefaultToolConfig), so this utility
-	// agent would be invisible to askUtilityAgents — but must appear for askDeployAgents.
+	// the default tool config's allow-list does not include this utility agent, so it
+	// is invisible to the workspace flow's askUtilityAgents — but must still be offered
+	// by the agents flow's askDeployAgents.
 	deps.Catalog = deployAgentOptionCatalog()
 	deps.Planner = &stubPlanner{plan: deployAgentsPlanNoOrchestrator(workspace)}
 	deps.Interaction = capInteraction

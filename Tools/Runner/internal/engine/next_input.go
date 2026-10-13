@@ -13,8 +13,17 @@ import (
 // parameters cannot safely precede.
 type NextInput struct {
 	Workflow domain.AdmittedWorkflow
-	Stages   *domain.StageSet
-	State    domain.ArtifactState
+
+	// Schedules is the current schedule per block.
+	Schedules domain.BlockSchedules
+
+	// RetrySchedules holds block schedules withheld from routing because the
+	// latest produced schedule is defective, keyed by block. They are read only
+	// when a mechanical re-dispatch of the same row resolves its defaults, so a
+	// writer of such a block is retried over its last accepted schedule.
+	RetrySchedules domain.BlockSchedules
+
+	State domain.ArtifactState
 
 	// LastResponse is the response that triggered this decision, or nil when
 	// there is none (the first decision of a new run).
@@ -26,11 +35,15 @@ type NextInput struct {
 	// every other case. Empty or nil is valid and injects nothing.
 	LastOutputArtifacts []string
 
-	Agents          map[string]domain.AgentReference
-	Seq             int
-	Now             time.Time
-	RefreshedStages *domain.StageSet
-	StageSource     domain.StageSource
+	Agents      map[string]domain.AgentReference
+	Seq         int
+	Now         time.Time
+	// StageSources describes where each block's schedule was looked for, one
+	// per declared block. A stop for a block without a schedule names the
+	// entry for that block; StageSource is the fallback descriptor when no
+	// entry names the block.
+	StageSources []domain.StageSource
+	StageSource  domain.StageSource
 
 	// Mode selects the routing behaviour. ExecutionModeUnset is a programming
 	// error: Next never coerces it to ExecutionModeOrchestrated or to any
@@ -52,7 +65,7 @@ type NextInput struct {
 	// step.Request.OutputArtifacts -- the resolved, bare paths produced by
 	// buildDispatchStep for the target row -- NOT against raw
 	// row.OutputArtifacts (which may still contain unresolved template
-	// tokens like {StageNumber} or Stage-*). This ensures injection fires
+	// tokens like {Stage} or Stage-*). This ensures injection fires
 	// correctly even for rows whose declared output artifacts use templates.
 	//
 	// NORMALIZATION INVARIANT: Each entry's Artifact field must contain the

@@ -41,11 +41,12 @@ type OrchestratorConsultant struct {
 //   - ConsultFailTransport: harness error from InvokeRaw
 //   - ConsultFailMalformedJSON: reply is not valid JSON
 //   - ConsultFailUnknownAction: action is not "dispatch" or "stop"
-//   - ConsultFailMissingField: required field (agent, task_description) absent or empty
+//   - ConsultFailMissingField: required field (action, agent, task_description)
+//     absent or empty; an absent action is not retried
 //   - ConsultFailUnknownAgent: dispatch agent not in the routing table
 //
 // A dispatch reply must name the row (1-based) and, for a staged row, the
-// stage; it is validated against the table and req.Stages. An invalid reply is
+// stage; it is validated against the table and req.Schedules. An invalid reply is
 // retried like a malformed one and, once the attempts are spent, fails with
 // ConsultFailMalformedJSON.
 func (c *OrchestratorConsultant) ConsultRouting(ctx context.Context, req domain.ConsultationRequest) (domain.RoutingInstruction, error) {
@@ -121,6 +122,13 @@ func (c *OrchestratorConsultant) ConsultRouting(ctx context.Context, req domain.
 			return domain.RoutingInstruction{}, parseErr
 		}
 
+		if resp.ActionAbsent {
+			return domain.RoutingInstruction{}, &domain.ConsultationError{
+				Failure: domain.ConsultFailMissingField,
+				Detail:  "missing required field: action",
+			}
+		}
+
 		switch resp.Action {
 		case "dispatch":
 			dispatch, dispErr := c.dispatchFromReply(req, resp)
@@ -153,8 +161,8 @@ func (c *OrchestratorConsultant) ConsultRouting(ctx context.Context, req domain.
 }
 
 // dispatchFromReply turns a parsed dispatch reply into a DispatchInstruction.
-// A reply whose row or stage fails domain.ValidateDispatchTarget against the
-// routing table and the request's current stage set is reported as
+// A reply whose row or stage fails domain.ValidateDispatchIteration against the
+// routing table and the request's current block schedules is reported as
 // ConsultFailMalformedJSON, so the caller retries it like any malformed reply.
 // An unknown agent keeps its own failure class and is not retried.
 func (c *OrchestratorConsultant) dispatchFromReply(req domain.ConsultationRequest, resp wireRoutingResponse) (*domain.DispatchInstruction, error) {
@@ -173,8 +181,10 @@ func (c *OrchestratorConsultant) dispatchFromReply(req domain.ConsultationReques
 	agents := make([]string, 0, len(c.Table.Rows))
 	known := false
 	for _, row := range c.Table.Rows {
-		agents = append(agents, row.Agent)
-		if row.Agent == resp.Agent {
+		agents = append(agents, row.BareAgentID())
+		// A whole qualified cell is a known agent named wrongly: the row
+		// cross-check rejects it as an agent-row mismatch, which is retried.
+		if row.BareAgentID() == resp.Agent || row.Agent == resp.Agent {
 			known = true
 		}
 	}
@@ -185,11 +195,10 @@ func (c *OrchestratorConsultant) dispatchFromReply(req domain.ConsultationReques
 			Agents:  agents,
 		}
 	}
-	resolved, err := domain.ValidateDispatchTarget(c.Table, req.Stages, domain.DispatchTarget{
-		Agent:      resp.Agent,
-		Row:        resp.Row,
-		Stage:      resp.Stage,
-		StageGroup: resp.StageGroup,
+	resolved, err := domain.ValidateDispatchIteration(c.Table, req.Schedules, domain.DispatchTarget{
+		Agent:     resp.Agent,
+		Row:       resp.Row,
+		Iteration: resp.Iteration,
 	})
 	if err != nil {
 		return nil, &domain.ConsultationError{
@@ -201,7 +210,7 @@ func (c *OrchestratorConsultant) dispatchFromReply(req domain.ConsultationReques
 	return &domain.DispatchInstruction{
 		Agent:           resp.Agent,
 		RowIndex:        resolved.Row.Index,
-		Stage:           resolved.StageNumber,
+		Iteration:       resolved.Iteration,
 		TaskDescription: resp.TaskDescription,
 		Constraints:     resp.Constraints,
 		InputArtifacts:  resp.InputArtifacts,
@@ -221,11 +230,17 @@ func describeTargetError(err error) string {
 
 // PreConsult implements domain.PreConsultant. It invokes the orchestrator with
 // context=pre_consultation and last_status_message=null (always, per the contract),
-// then parses the optional-string-pair reply into a PreConsultationAdvice.
+// then parses the reply into a PreConsultationAdvice: the optional-string-pair
+// advice, or a stop ({"action":"stop","reason":...}) carried in advice.Stop.
+// It never retries.
 //
 // Failure classes returned:
 //   - ConsultFailTransport: harness error from InvokeRaw
-//   - ConsultFailMalformedJSON: reply is not valid JSON
+//   - ConsultFailNoInstruction: reply holds no JSON object
+//   - ConsultFailMalformedJSON: reply is not valid JSON, "action" is not a
+//     string, or a stop's "reason" is not a string
+//   - ConsultFailUnknownAction: "action" is a string other than "stop"
+//   - ConsultFailMissingField: a stop without a non-blank "reason"
 func (c *OrchestratorConsultant) PreConsult(ctx context.Context, req domain.ConsultationRequest) (domain.PreConsultationAdvice, error) {
 	wr := wireRequest{
 		OrchestrationArtifact: req.OrchestrationArtifact,
@@ -273,17 +288,5 @@ func (c *OrchestratorConsultant) PreConsult(ctx context.Context, req domain.Cons
 	if err != nil {
 		return domain.PreConsultationAdvice{}, err
 	}
-	var resp wirePreConsultResponse
-	if err := json.Unmarshal(extracted, &resp); err != nil {
-		return domain.PreConsultationAdvice{}, &domain.ConsultationError{
-			Failure: domain.ConsultFailMalformedJSON,
-			Detail:  fmt.Sprintf("malformed pre-consultation response JSON: %v", err),
-			Err:     err,
-		}
-	}
-
-	return domain.PreConsultationAdvice{
-		TaskDescription: resp.TaskDescription,
-		Constraints:     resp.Constraints,
-	}, nil
+	return parsePreConsultReply(extracted)
 }

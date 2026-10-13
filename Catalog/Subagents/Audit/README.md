@@ -14,6 +14,7 @@ Audit agents perform deep, evidence-based analysis of existing code — evaluati
 | 21 | [contracts-audit](./contracts-audit.md) | 3.3.0 | Audits existing interfaces, contracts, and data structures for quality issues with verbose findings |
 | 22 | [implementation-audit](./implementation-audit.md) | 4.2.1 | Audits existing code quality — readability, correctness, security, and maintainability with verbose findings |
 | 23 | [tests-audit](./tests-audit.md) | 4.2.1 | Audits existing test quality — coverage, clarity, determinism, and edge case handling with verbose findings |
+| 32 | [audit-review](./audit-review.md) | 3.2.0 | Reviews audit findings for quality — evidence accuracy, false positives, severity ratings, and actionable recommendations |
 
 ## Audit vs Validation Distinction
 

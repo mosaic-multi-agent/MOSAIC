@@ -1,5 +1,8 @@
 package workflow_test
 
+// Row parsing of the quick-fix shape (two PLANNING rows, one ungrouped Stage
+// block row, one REVIEW row) by the strict parser.
+
 import (
 	"testing"
 
@@ -26,8 +29,8 @@ func TestParse_QuickFix_RowIndices_ZeroBasedConsecutive(t *testing.T) {
 	}
 }
 
-func TestParse_QuickFix_HITL_False_ForCrossmark(t *testing.T) {
-	// Row 1 (plan-review) has FALSE in the HITL column → HITL must be false.
+func TestParse_QuickFix_HITL_False_ForFalseCell(t *testing.T) {
+	// Row 1 (plan-review) has FALSE in the HITL column -> HITL must be false.
 	table := mustParseQuickFix(t)
 
 	if table.Rows[1].HITL {
@@ -35,8 +38,8 @@ func TestParse_QuickFix_HITL_False_ForCrossmark(t *testing.T) {
 	}
 }
 
-func TestParse_QuickFix_HITL_True_ForCheckmark(t *testing.T) {
-	// Row 0 (planner-tdd-soft) has TRUE in the HITL column → HITL must be true.
+func TestParse_QuickFix_HITL_True_ForTrueCell(t *testing.T) {
+	// Row 0 (planner-tdd-soft) has TRUE in the HITL column -> HITL must be true.
 	table := mustParseQuickFix(t)
 
 	if !table.Rows[0].HITL {
@@ -44,16 +47,19 @@ func TestParse_QuickFix_HITL_True_ForCheckmark(t *testing.T) {
 	}
 }
 
-func TestParse_QuickFix_NonExecutionRow_NotStaged(t *testing.T) {
-	// PLANNING rows must not be flagged as staged.
+func TestParse_QuickFix_PlainRow_NotInABlock(t *testing.T) {
+	// PLANNING rows carry no block reference.
 	table := mustParseQuickFix(t)
 
 	if table.Rows[0].PhaseParsed.IsStaged {
-		t.Errorf("Rows[0] (PLANNING): PhaseParsed.IsStaged must be false for a non-EXECUTION phase")
+		t.Errorf("Rows[0] (PLANNING): PhaseParsed.IsStaged must be false for a row outside every block")
+	}
+	if got := table.Rows[0].PhaseParsed.Blocks; len(got) != 0 {
+		t.Errorf("Rows[0].PhaseParsed.Blocks: want none, got %v", got)
 	}
 }
 
-func TestParse_QuickFix_NonExecutionRow_PhaseName(t *testing.T) {
+func TestParse_QuickFix_PlainRow_PhaseName(t *testing.T) {
 	// For a PLANNING row, PhaseParsed.Name must be "PLANNING".
 	table := mustParseQuickFix(t)
 
@@ -63,7 +69,7 @@ func TestParse_QuickFix_NonExecutionRow_PhaseName(t *testing.T) {
 	}
 }
 
-func TestParse_QuickFix_NonExecutionRow_Phase_LiteralPreserved(t *testing.T) {
+func TestParse_QuickFix_PlainRow_Phase_LiteralPreserved(t *testing.T) {
 	// The Phase field must carry the literal text from the table cell.
 	table := mustParseQuickFix(t)
 
@@ -73,17 +79,21 @@ func TestParse_QuickFix_NonExecutionRow_Phase_LiteralPreserved(t *testing.T) {
 	}
 }
 
-func TestParse_QuickFix_ExecutionRow_IsStaged(t *testing.T) {
-	// Row 2 (EXECUTION.[StageNumber]) must be flagged as staged.
+func TestParse_QuickFix_BlockRow_IsInTheStageBlock(t *testing.T) {
+	// Row 2 (EXECUTION.[Stage]) must carry the block reference Stage.
 	table := mustParseQuickFix(t)
 
-	if !table.Rows[2].PhaseParsed.IsStaged {
-		t.Errorf("Rows[2] (EXECUTION.[StageNumber]): PhaseParsed.IsStaged must be true")
+	row := table.Rows[2]
+	if !row.PhaseParsed.IsStaged {
+		t.Errorf("Rows[2] (EXECUTION.[Stage]): PhaseParsed.IsStaged must be true")
+	}
+	if b, ok := row.Block(); !ok || b != "Stage" {
+		t.Errorf("Rows[2].Block(): want (Stage, true), got (%q, %v)", b, ok)
 	}
 }
 
-func TestParse_QuickFix_ExecutionRow_PhaseName(t *testing.T) {
-	// The PhaseParsed.Name for an EXECUTION.[StageNumber] row must be "EXECUTION".
+func TestParse_QuickFix_BlockRow_PhaseName(t *testing.T) {
+	// The PhaseParsed.Name for an EXECUTION.[Stage] row must be "EXECUTION".
 	table := mustParseQuickFix(t)
 
 	got := table.Rows[2].PhaseParsed.Name
@@ -92,13 +102,13 @@ func TestParse_QuickFix_ExecutionRow_PhaseName(t *testing.T) {
 	}
 }
 
-func TestParse_QuickFix_ExecutionRow_Phase_LiteralPreserved(t *testing.T) {
-	// The Phase field must preserve the literal "EXECUTION.[StageNumber]" string.
+func TestParse_QuickFix_BlockRow_Phase_LiteralPreserved(t *testing.T) {
+	// The Phase field must preserve the literal "EXECUTION.[Stage]" string.
 	table := mustParseQuickFix(t)
 
 	got := table.Rows[2].Phase
-	if got != "EXECUTION.[StageNumber]" {
-		t.Errorf("Rows[2].Phase: want %q, got %q", "EXECUTION.[StageNumber]", got)
+	if got != "EXECUTION.[Stage]" {
+		t.Errorf("Rows[2].Phase: want %q, got %q", "EXECUTION.[Stage]", got)
 	}
 }
 
@@ -108,38 +118,24 @@ func TestParse_QuickFix_GlobPattern_PreservedVerbatim_OutputArtifact(t *testing.
 	table := mustParseQuickFix(t)
 
 	artifacts := table.Rows[0].OutputArtifacts
-	found := false
-	for _, a := range artifacts {
-		if a == "Stage-*/Plan.md" {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !containsArtifact(artifacts, "Stage-*/Plan.md") {
 		t.Errorf("Rows[0].OutputArtifacts: want %q to be present verbatim, got %v", "Stage-*/Plan.md", artifacts)
 	}
 }
 
-func TestParse_QuickFix_TemplatePattern_PreservedVerbatim_InputArtifact(t *testing.T) {
-	// Row 2 input: "Stage-{StageNumber}/Plan.md, Stage-{StageNumber}/PlanProgress.md".
-	// The Stage-{StageNumber}/... template must survive verbatim.
+func TestParse_QuickFix_FillIn_PreservedVerbatim_InputArtifact(t *testing.T) {
+	// Row 2 input: "Stage-{Stage}/Plan.md, Stage-{Stage}/PlanProgress.md".
+	// The Stage-{Stage}/... fill-in must survive verbatim.
 	table := mustParseQuickFix(t)
 
 	artifacts := table.Rows[2].InputArtifacts
-	found := false
-	for _, a := range artifacts {
-		if a == "Stage-{StageNumber}/Plan.md" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("Rows[2].InputArtifacts: want %q to be present verbatim, got %v", "Stage-{StageNumber}/Plan.md", artifacts)
+	if !containsArtifact(artifacts, "Stage-{Stage}/Plan.md") {
+		t.Errorf("Rows[2].InputArtifacts: want %q to be present verbatim, got %v", "Stage-{Stage}/Plan.md", artifacts)
 	}
 }
 
 func TestParse_QuickFix_CommaSeparatedArtifacts_SplitAndTrimmed(t *testing.T) {
-	// Row 0 output has three comma-separated paths → OutputArtifacts must have 3 elements.
+	// Row 0 output has three comma-separated paths -> OutputArtifacts must have 3 elements.
 	table := mustParseQuickFix(t)
 
 	got := len(table.Rows[0].OutputArtifacts)
@@ -158,45 +154,42 @@ func TestParse_QuickFix_DashInput_ProducesEmptyArtifacts(t *testing.T) {
 	}
 }
 
-func TestParse_QuickFix_OnSuccess_ColumnPresent(t *testing.T) {
-	// The On Success column exists in the quick-fix table, so ColumnPresent must be true.
+func TestParse_QuickFix_OnSuccess_NamedTargetResolvesToItsRow(t *testing.T) {
+	// Row 0 On Success = "plan-review" -> a target entry at row index 1.
 	table := mustParseQuickFix(t)
 
-	if !table.Rows[0].OnSuccess.ColumnPresent {
-		t.Error("Rows[0].OnSuccess.ColumnPresent: want true (column exists in table), got false")
+	got := table.Rows[0].Success
+	if got.Kind != domain.SuccessTarget || got.Target.Index != 1 || got.Target.Cell != "plan-review" {
+		t.Errorf("Rows[0].Success: want target plan-review at index 1, got %+v", got)
 	}
 }
 
-func TestParse_QuickFix_OnSuccess_Value_WhenNotDash(t *testing.T) {
-	// Row 0 On Success = "plan-review" → Value must be "plan-review".
+func TestParse_QuickFix_OnSuccess_BlockReferenceIsABlockEntry(t *testing.T) {
+	// Row 1 On Success = "[Stage]" -> a block-entry entry naming Stage.
 	table := mustParseQuickFix(t)
 
-	got := table.Rows[0].OnSuccess.Value
-	if got != "plan-review" {
-		t.Errorf("Rows[0].OnSuccess.Value: want %q, got %q", "plan-review", got)
+	got := table.Rows[1].Success
+	if got.Kind != domain.SuccessBlockEntry || got.Block != "Stage" {
+		t.Errorf("Rows[1].Success: want block entry of Stage, got %+v", got)
 	}
 }
 
-func TestParse_QuickFix_OnFindings_Dash_IsNoHint(t *testing.T) {
-	// Row 0 On Findings = "-" → ColumnPresent true, Value "".
+func TestParse_QuickFix_OnFindings_Dash_IsNone(t *testing.T) {
+	// Row 0 On Findings = "-" -> no fix target.
 	table := mustParseQuickFix(t)
 
-	hint := table.Rows[0].OnFindings
-	if !hint.ColumnPresent {
-		t.Error("Rows[0].OnFindings.ColumnPresent: want true (column exists), got false")
-	}
-	if hint.Value != "" {
-		t.Errorf("Rows[0].OnFindings.Value: want %q for dash (no hint), got %q", "", hint.Value)
+	if got := table.Rows[0].Findings.Kind; got != domain.FindingsNone {
+		t.Errorf("Rows[0].Findings.Kind: want none for dash, got %q", got)
 	}
 }
 
-func TestParse_QuickFix_OnFindings_Value_WhenNotDash(t *testing.T) {
-	// Row 1 On Findings = "planner-tdd-soft" → Value must be "planner-tdd-soft".
+func TestParse_QuickFix_OnFindings_NamedTargetResolvesToItsRow(t *testing.T) {
+	// Row 1 On Findings = "planner-tdd-soft" -> a target entry at row index 0.
 	table := mustParseQuickFix(t)
 
-	got := table.Rows[1].OnFindings.Value
-	if got != "planner-tdd-soft" {
-		t.Errorf("Rows[1].OnFindings.Value: want %q, got %q", "planner-tdd-soft", got)
+	got := table.Rows[1].Findings
+	if got.Kind != domain.FindingsTarget || got.Target.Index != 0 || got.Target.Cell != "planner-tdd-soft" {
+		t.Errorf("Rows[1].Findings: want target planner-tdd-soft at index 0, got %+v", got)
 	}
 }
 
@@ -212,7 +205,7 @@ func TestParse_QuickFix_AgentIdentifier_PreservedVerbatim(t *testing.T) {
 
 func TestParse_QuickFix_WorkflowInfo_CarriedIntoTable(t *testing.T) {
 	// The WorkflowInfo passed to Parse must appear unchanged in RoutingTable.Info.
-	info := domain.WorkflowInfo{ID: "quick-fix", Version: "3.0"}
+	info := domain.WorkflowInfo{ID: "quick-fix", Version: "4.0"}
 	table, err := workflow.Parse([]byte(quickFixContent), info)
 	if err != nil {
 		t.Fatalf("Parse: %v", err)

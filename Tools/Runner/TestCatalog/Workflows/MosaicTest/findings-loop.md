@@ -1,5 +1,5 @@
 ---
-version: "1.1"
+version: "1.2"
 name: "MosaicTest Findings Loop Workflow"
 description: "Runner mode fixture — the one difference between Auto and Auto-review. A reviewer returns COMPLETED_NEEDS_ACTION; in Auto-review the engine routes it back automatically, in Auto it deviates to the orchestrator. Same workflow and fixtures, run twice, two different logs."
 hint: "Mode 2 vs Mode 3 test — COMPLETED_NEEDS_ACTION routing, review artifact injection"
@@ -20,21 +20,21 @@ smoke_set:
   - auto-review
 ---
 
-<Workflow type="core" name="findings-loop" version="1.1">
+<Workflow type="core" name="findings-loop" version="1.2">
 ## MosaicTest Findings Loop Workflow
 
 **Use when:** Proving that Auto and Auto-review differ in exactly one way: how `COMPLETED_NEEDS_ACTION` is routed when the row has an unambiguous `On Findings` target.
 
 | Phase | Subagent | HITL | On Success | On Findings | Input | Output |
 |-------|----------|:----:|------------|-------------|-------|--------|
-| RESEARCH | mosaictest-scripted | FALSE | next | - | MosaicTestScript/findings-create.md | MosaicTestCreated.md |
-| REVIEW | mosaictest-scripted | FALSE | COMPLETE | mosaictest-scripted | MosaicTestScript/findings-loop.md | MosaicTestMarker.md |
+| RESEARCH | mosaictest-scripted(create) | FALSE | NEXT | - | MosaicTestScript/findings-create.md | MosaicTestCreated.md |
+| REVIEW | mosaictest-scripted(review) | FALSE | COMPLETE | mosaictest-scripted(create) | MosaicTestScript/findings-loop.md | MosaicTestMarker.md |
 
 **Notes:**
 - **Run this workflow twice: once in Auto mode, once in Auto-review mode.** The two runs use identical fixtures and produce different logs. That difference is the proof.
 - Row 1 is the creator and always returns `SUCCESS`. Row 2 is the reviewer and is marker-gated. First invocation (marker absent): writes the marker and returns `COMPLETED_NEEDS_ACTION`. Second invocation (marker present): returns `SUCCESS`.
-- Row 2's `On Findings` names `mosaictest-scripted`, which resolves to the nearest row above it: row 1, the creator. In Auto-review this triggers the engine's findings auto-route. In Auto it deviates to the orchestrator.
-- The two rows use different phases (RESEARCH, REVIEW) because the engine identifies a non-EXECUTION row by agent and phase.
+- The same agent holds both rows, so their `Subagent` cells are told apart by mode qualifiers, `mosaictest-scripted(create)` and `mosaictest-scripted(review)`. Dispatch, instance ids and logs use the bare id `mosaictest-scripted`; the qualifier only adds a focus line to the task description, which the script ignores.
+- Row 2's `On Findings` names the whole cell `mosaictest-scripted(create)`: row 1, the creator. In Auto-review this triggers the engine's findings auto-route. In Auto it deviates to the orchestrator.
 - `On Success = COMPLETE` on row 2 ends the run after the reviewer's second invocation succeeds.
 - Seed `Fixtures/findings-loop` — the whole directory, not anything inside it.
 
@@ -54,20 +54,20 @@ Using **the same workflow and fixtures for both runs** makes the mode the only v
 
 The reviewer script returns `COMPLETED_NEEDS_ACTION` on the first pass (marker absent, writes the marker) and `SUCCESS` on the second pass (marker present). The creator always returns `SUCCESS`. This gives exactly four workflow steps:
 
-1. Creator -> SUCCESS -> `next`
+1. Creator -> SUCCESS -> `NEXT`
 2. Reviewer -> CNA (writes the marker)
-3. Route-back to the creator (by the engine or by the orchestrator) -> SUCCESS -> `next`
+3. Route-back to the creator (by the engine or by the orchestrator) -> SUCCESS -> `NEXT`
 4. Reviewer -> SUCCESS (marker present) -> COMPLETE
 
 The marker is the reviewer's output artifact `MosaicTestMarker.md`. It sits at the run folder root, so the reviewer finds it on its second pass however the route-back was made.
 
 ### Why a creator row and a reviewer row
 
-`On Findings` resolves to the nearest row **above** the row that ran whose agent is the target; the row that ran is never a candidate (Runner `Design.md` §2.4, nearest-preceding rule). A one-row workflow whose reviewer names itself therefore has no target, and Auto-review deviates exactly like Auto, which would erase the difference under test. Version 1.0 was built that way and broke when the rule was introduced.
+`On Findings` is a fix target that names a row of the table by its whole `Subagent` cell. A one-row workflow whose reviewer names itself offers the engine no row to route the findings back to but the one that just reported them, and Auto-review would deviate exactly like Auto, which would erase the difference under test. Version 1.0 was built that way and broke when that self-target stopped resolving.
 
 Two rows also match the real pattern this stands in for: a creator followed by its reviewer, with the reviewer's findings going back to the creator (e.g. `planner-tdd-soft` -> `plan-review`).
 
-In Auto mode the orchestrator's re-dispatch names `mosaictest-scripted`, and the Runner binds a consultant dispatch to the **first** row naming that agent: row 1, the creator. Both modes therefore re-run the same row, and their Execution Logs have the same shape.
+In Auto mode the orchestrator's re-dispatch names the bare agent `mosaictest-scripted` and `row` 1, and the Runner dispatches the row the reply names: row 1, the creator. Both modes therefore re-run the same row, and their Execution Logs have the same shape.
 
 ### Review artifact injection (Auto-review only)
 
@@ -117,12 +117,12 @@ Four Orchestration.md log rows. The engine routes CNA itself via `On Findings`.
 
 | Observation | Where to look |
 |---|---|
-| Auto-review run shows a routing consultation after Seq 2 | The engine treated CNA as a deviation instead of auto-routing via On Findings. Check `isUnambiguousHint` and `findNearestPrecedingRowForAgent` (the target must resolve to row 1), and that the run is really in Auto-review mode |
+| Auto-review run shows a routing consultation after Seq 2 | The engine treated CNA as a deviation instead of auto-routing via On Findings. Check that the row's single `On Findings` target resolves to row 1 by its whole `Subagent` cell, and that the run is really in Auto-review mode |
 | Auto run shows NO consultation in the dispatch log | The engine auto-routed CNA in Auto mode; only Auto-review should do this |
-| Seq 3 is the reviewer (REVIEW) instead of the creator | The findings target or the consultant-dispatch row binding resolved to the wrong row |
+| Seq 3 is the reviewer (REVIEW) instead of the creator | The findings target (`mosaictest-scripted(create)`) or the consultant reply's `row` resolved to the wrong row |
 | Seq 4 returns CNA again instead of SUCCESS | The marker was not written on the reviewer's first pass, or the marker check is broken |
 | Auto-review Seq 3 Inputs shows only the script | Review artifact injection failed: the engine did not add the reviewer's output to the route-back |
-| The run loops, or ends after Seq 3 | `next` on row 1 or `On Success = COMPLETE` on row 2 is not being evaluated, or the engine misidentified which row ran |
+| The run loops, or ends after Seq 3 | `NEXT` on row 1 or `On Success = COMPLETE` on row 2 is not being evaluated, or the engine misidentified which row ran |
 | The stub stops with "no matching rule" (Auto mode) | The routing fixture does not cover the state the orchestrator was consulted in |
 | An `orchestrator-script` row appears in `Orchestration.md` (either mode) | Consultations must leave no row in the artifact; a routing consultation wrongly called `Store.Apply` or allocated a `Seq` |
 
@@ -134,6 +134,7 @@ Four Orchestration.md log rows. The engine routes CNA itself via `On Findings`.
 |---------|------|--------|---------|
 | 1.0 | 2026-08-17 | MOSAIC | Initial version. The single workflow exercising Auto vs Auto-review difference. |
 | 1.1 | 2026-10-04 | MOSAIC | Split into a creator row and a reviewer row. The one-row self-targeting `On Findings` stopped resolving under the nearest-preceding rule (Runner `Design.md` §2.4, introduced 2026-10-03), so Auto-review deviated like Auto. Four workflow steps per run instead of two. |
+| 1.2 | 2026-10-12 | MOSAIC | WorkflowFormat 2.16 notation: `NEXT` instead of `next`, unique `Subagent` cells through the mode qualifiers `create` and `review`, `On Findings` names the whole cell. Notes, rationale and failure table describe whole-cell targets and the consultant reply's `row`. Dispatch sequence unchanged. |
 
 ---
 
@@ -145,4 +146,4 @@ Four Orchestration.md log rows. The engine routes CNA itself via `On Findings`.
 
 **Dead ends (tried and rejected):**
 - Two separate workflows, one per mode. Defeats the purpose: the same fixtures under different modes is the proof.
-- A single row whose `On Findings` names its own agent (v1.0). The row that ran is never a findings-target candidate, so the self-loop has no target and Auto-review deviates.
+- A single row whose `On Findings` names its own agent (v1.0). The self-loop has no other row to route to, so Auto-review deviates.

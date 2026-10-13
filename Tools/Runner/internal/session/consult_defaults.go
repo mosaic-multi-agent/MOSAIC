@@ -2,7 +2,6 @@ package session
 
 import (
 	"mosaic-run/internal/domain"
-	"mosaic-run/internal/engine"
 )
 
 // consultPayload is the artifact and HITL payload of a consultation-routed
@@ -24,22 +23,22 @@ type consultOutputs struct {
 
 // resolveConsultPayload builds the payload of a consultation-routed dispatch.
 // An instruction field left unset takes the row default resolved by the same
-// routine the engine uses for that row and stage; an explicit field passes
+// routine the engine uses for that row and iteration; an explicit field passes
 // through verbatim. effectiveStage is the recorded stage value, empty for a
 // non-staged row.
 func resolveConsultPayload(
 	dispInstr *domain.DispatchInstruction,
 	row domain.RoutingRow,
 	effectiveStage string,
-	stages, refreshedStages *domain.StageSet,
+	stages domain.BlockSchedules,
 ) (consultPayload, error) {
-	var stageNum domain.StageNumber
+	var iteration domain.IterationID
 	if row.PhaseParsed.IsStaged && effectiveStage != "" {
-		if _, n, ok := domain.ParseStageValue(effectiveStage); ok {
-			stageNum = n
+		if value, err := domain.ReadIterationValue(effectiveStage, row); err == nil {
+			iteration = value.ID
 		}
 	}
-	defaults, err := engine.ResolveRowDefaults(row, stageNum, stages, refreshedStages)
+	defaults, err := resolveRowDefaults(row, iteration, stages)
 	if err != nil {
 		return consultPayload{}, err
 	}

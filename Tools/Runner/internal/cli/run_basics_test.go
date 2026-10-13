@@ -168,7 +168,7 @@ func TestProgressOutputFormat(t *testing.T) {
 	interact.Notify(context.Background(), interaction.Notice{
 		Level:   interaction.NoticeInfo,
 		Title:   "implementation-tdd#3",
-		Message: `phase=EXECUTION stage="Stage-1" status=SUCCESS`,
+		Message: `phase=EXECUTION iteration="1" status=SUCCESS`,
 	})
 
 	output := buf.String()
@@ -200,7 +200,7 @@ func TestProgressOutputParseable(t *testing.T) {
 	interact.Notify(context.Background(), interaction.Notice{
 		Level:   interaction.NoticeWarning,
 		Title:   "research#1",
-		Message: `phase=RESEARCH stage="" status=PARTIALLY_DONE`,
+		Message: `phase=RESEARCH iteration="" status=PARTIALLY_DONE`,
 	})
 
 	output := strings.TrimRight(buf.String(), "\n")

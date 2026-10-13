@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"mosaic-run/internal/domain"
-	"mosaic-run/internal/engine"
 )
 
 // runLog builds an Execution Log one step at a time. Seq numbers are assigned
@@ -62,58 +61,6 @@ func responseFor(entry domain.ExecutionLogEntry) *domain.ProtocolResponse {
 	default:
 		return nonSuccessResponse(entry.Agent, entry.Status)
 	}
-}
-
-// nextAfterLog calls engine.Next in auto-review mode for the step that ended
-// the log.
-func nextAfterLog(
-	aw domain.AdmittedWorkflow,
-	stages *domain.StageSet,
-	agents map[string]domain.AgentReference,
-	log *runLog,
-) domain.EngineDecision {
-	last := log.last()
-	return engine.Next(engine.NextInput{
-		Workflow:     aw,
-		Stages:       stages,
-		State:        log.state(),
-		LastResponse: responseFor(last),
-		Agents:       agents,
-		Seq:          last.Seq,
-		Now:          fixedNow,
-		Mode:         domain.ExecutionModeAutoReview,
-	})
-}
-
-// engineNextAuto calls engine.Next in auto-review mode with an explicit state.
-func engineNextAuto(
-	aw domain.AdmittedWorkflow,
-	stages *domain.StageSet,
-	state domain.ArtifactState,
-	resp *domain.ProtocolResponse,
-) domain.EngineDecision {
-	return engine.Next(engine.NextInput{
-		Workflow:     aw,
-		Stages:       stages,
-		State:        state,
-		LastResponse: resp,
-		Agents:       buildVerifiedAgents(),
-		Seq:          state.GlobalSequence,
-		Now:          fixedNow,
-		Mode:         domain.ExecutionModeAutoReview,
-	})
-}
-
-// requireNextStep calls nextAfterLog and requires a single dispatch.
-func requireNextStep(
-	t *testing.T,
-	aw domain.AdmittedWorkflow,
-	stages *domain.StageSet,
-	agents map[string]domain.AgentReference,
-	log *runLog,
-) domain.DispatchStep {
-	t.Helper()
-	return requireDispatch(t, nextAfterLog(aw, stages, agents, log))
 }
 
 // buildVerifiedAgents returns the agent references for the build-verified

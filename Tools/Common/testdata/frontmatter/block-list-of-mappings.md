@@ -1,7 +1,7 @@
 ---
 name: test-agent
 triggers:
-  - trigger: STAGE_END
+  - trigger: ITERATION_END
     trigger_param: null
   - trigger: MANUAL
     trigger_param: "run-all"

@@ -68,8 +68,8 @@ func storeWithLog(log ...domain.ExecutionLogEntry) *readOnlyStore {
 func sampleLog() []domain.ExecutionLogEntry {
 	return []domain.ExecutionLogEntry{
 		{Seq: 1, Agent: "planner#1", Phase: "PLANNING", Stage: "", WorkflowRow: 1, Status: domain.StatusSUCCESS},
-		{Seq: 2, Agent: "builder#2", Phase: "EXECUTION", Stage: "Implementation.1", WorkflowRow: 2, Status: domain.StatusBLOCKED},
-		{Seq: 3, Agent: "checkpoint#3", Phase: "EXECUTION", Stage: "Implementation.1", Status: domain.StatusSUCCESS},
+		{Seq: 2, Agent: "builder#2", Phase: "EXECUTION", Stage: "1.Implementation", WorkflowRow: 2, Status: domain.StatusBLOCKED},
+		{Seq: 3, Agent: "checkpoint#3", Phase: "EXECUTION", Stage: "1.Implementation", Status: domain.StatusSUCCESS},
 	}
 }
 
@@ -77,8 +77,8 @@ func sampleLog() []domain.ExecutionLogEntry {
 func sampleHistory() []runflow.ProgressRow {
 	return []runflow.ProgressRow{
 		{AgentInstance: "planner#1", Phase: "PLANNING", Stage: "", Status: "SUCCESS"},
-		{AgentInstance: "builder#2", Phase: "EXECUTION", Stage: "Implementation.1", Status: "BLOCKED"},
-		{AgentInstance: "checkpoint#3", Phase: "EXECUTION", Stage: "Implementation.1", Status: "SUCCESS"},
+		{AgentInstance: "builder#2", Phase: "EXECUTION", Stage: "1.Implementation", Status: "BLOCKED"},
+		{AgentInstance: "checkpoint#3", Phase: "EXECUTION", Stage: "1.Implementation", Status: "SUCCESS"},
 	}
 }
 

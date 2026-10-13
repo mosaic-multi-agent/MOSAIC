@@ -246,7 +246,7 @@ func TestNavigation_NoticeMsg_UpdatesProgressStatus(t *testing.T) {
 		notice: interaction.Notice{
 			Level:   interaction.NoticeInfo,
 			Title:   "agent#1",
-			Message: "phase=PLANNING stage=\"\" status=SUCCESS",
+			Message: "phase=PLANNING iteration=\"\" status=SUCCESS",
 		},
 	})
 

@@ -106,6 +106,7 @@ func (f *fileStore) Create(ctx context.Context, info domain.WorkflowInfo, task s
 		Started:         now.UTC(),
 		LastUpdated:     now.UTC(),
 		GlobalSequence:  0,
+		Dispatch:        domain.DispatchField{Present: true, Value: domain.DispatchSequential},
 		RunSettings:     settings,
 	}
 

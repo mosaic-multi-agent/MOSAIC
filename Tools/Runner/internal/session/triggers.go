@@ -2,12 +2,9 @@ package session
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 
-	"mosaic-run/internal/agentresolve"
 	"mosaic-run/internal/domain"
-	"mosaic-run/internal/engine"
 )
 
 // reviewConsultSignal carries the status message from the last successful
@@ -16,20 +13,6 @@ import (
 // supplying StatusMessage as last_status_message.
 type reviewConsultSignal struct {
 	StatusMessage string
-}
-
-// allowedTriggersForClass returns the set of trigger names that are permitted
-// for the given infrastructure agent class. A nil return means all triggers
-// are allowed (no class-level restriction). Currently:
-//   - "commit" class: only STAGE_END is permitted
-//   - All other classes: no restriction
-func allowedTriggersForClass(class string) map[string]bool {
-	switch class {
-	case "commit":
-		return map[string]bool{"STAGE_END": true}
-	default:
-		return nil
-	}
 }
 
 // lastInfraSeqInLog returns the Seq of the most recent execution log entry
@@ -52,11 +35,11 @@ func lastInfraSeqInLog(agentName string, log []domain.ExecutionLogEntry) int {
 // evaluation pass). log is the current execution log, used for
 // INVOCATION_INTERVAL interval arithmetic.
 //
-// rowIdx is the routing table row index of the completed step. admitted and
-// stages are the admitted workflow and stage set, used for prospective look-ahead
-// in STAGE_END and PHASE_END evaluation.
+// boundaries carries the completed step's table row, the admitted workflow,
+// the schedule and the run mode; ITERATION_END and PHASE_END are answered from them
+// and from log, which holds the completed step.
 //
-// STAGE_END and PHASE_END additionally require that the completed step returned
+// ITERATION_END and PHASE_END additionally require that the completed step returned
 // SUCCESS and that hitlAccepted is true (the step passed HITL verification
 // where HITL applies). Interval and manual triggers ignore both conditions.
 func infraTriggerFires(
@@ -65,13 +48,11 @@ func infraTriggerFires(
 	log []domain.ExecutionLogEntry,
 	agentName string,
 	completedStep domain.CompletedStep,
-	rowIdx int,
-	admitted domain.AdmittedWorkflow,
-	stages *domain.StageSet,
+	boundaries triggerBoundaries,
 	hitlAccepted bool,
 ) bool {
 	switch trigger.Trigger {
-	case "INVOCATION_INTERVAL":
+	case domain.InfraTriggerInvocationInterval:
 		param, convErr := strconv.Atoi(trigger.Param)
 		if convErr != nil || param <= 0 {
 			return false
@@ -83,32 +64,36 @@ func infraTriggerFires(
 		}
 		return (currentSeq - lastSeq) >= param
 
-	case "STAGE_END":
+	case domain.InfraTriggerIterationEnd:
 		if !boundaryConditionsMet(completedStep, hitlAccepted) {
 			return false
 		}
 		// Prospective semantics: fires when the completed step is the last
 		// step of its stage (look-ahead), not by comparing against a prior step.
-		// STAGE_END only applies to EXECUTION-phase steps (Stage != "").
+		// ITERATION_END only applies to EXECUTION-phase steps (Stage != ""); the
+		// comparison is a presence check, not a split of the value.
 		if completedStep.Stage == "" {
 			return false
 		}
-		_, stageNum, ok := domain.ParseStageValue(completedStep.Stage)
-		if !ok || stageNum == 0 {
+		value, readErr := boundaries.readValue(completedStep.Stage)
+		if readErr != nil {
 			return false
 		}
-		return engine.IsLastRowOfStage(admitted, stages, rowIdx, stageNum)
+		return boundaries.endsIteration(value.ID, log)
 
-	case "PHASE_END":
+	case domain.InfraTriggerPhaseEnd:
 		if !boundaryConditionsMet(completedStep, hitlAccepted) {
 			return false
 		}
 		// Prospective semantics: fires when the completed step is the last
 		// step of its phase (look-ahead), not by comparing against a prior step.
-		_, stageNum, _ := domain.ParseStageValue(completedStep.Stage)
-		return engine.IsLastRowOfPhase(admitted, stages, rowIdx, stageNum)
+		// An unreadable value leaves the zero value: a step outside every
+		// block records none, and the phase boundary is then judged without
+		// an iteration. (ITERATION_END above returns false instead: it needs one.)
+		value, _ := boundaries.readValue(completedStep.Stage)
+		return boundaries.endsPhase(value.ID, log)
 
-	case "MANUAL":
+	case domain.InfraTriggerManual:
 		// MANUAL triggers never fire automatically.
 		return false
 
@@ -118,7 +103,7 @@ func infraTriggerFires(
 }
 
 // boundaryConditionsMet reports whether a completed step qualifies to fire
-// STAGE_END or PHASE_END: its routed status must be SUCCESS and it must have
+// ITERATION_END or PHASE_END: its routed status must be SUCCESS and it must have
 // been accepted by HITL verification. Rejected attempts and non-SUCCESS
 // routed outcomes never fire; a gate-discharging re-dispatch is judged by the
 // original attempt's status.
@@ -132,7 +117,7 @@ func boundaryConditionsMet(step domain.CompletedStep, hitlAccepted bool) bool {
 // evaluation even if multiple triggers match.
 //
 // hitlAccepted carries the HITL verification outcome of completedStep; it gates
-// STAGE_END and PHASE_END only.
+// ITERATION_END and PHASE_END only.
 //
 // Dispatch is performed synchronously: each matching agent's invocation
 // completes (including its Execution Log row via Store.Apply) before the
@@ -158,7 +143,7 @@ func (s *sessionImpl) evaluateTriggers(
 	orchDir string,
 	rowIdx int,
 	admitted domain.AdmittedWorkflow,
-	stages *domain.StageSet,
+	stages domain.BlockSchedules,
 	hitlAccepted bool,
 ) (haltRun bool, stopRequested bool, reviewConsult *reviewConsultSignal, err error) {
 	var reviewSignal *reviewConsultSignal
@@ -183,20 +168,20 @@ func (s *sessionImpl) evaluateTriggers(
 			continue
 		}
 
-		// Check whether any declared trigger fires. An agent fires at most once
-		// per evaluation pass even if multiple triggers match.
-		fired := false
+		// Collect every declared trigger that fires; the agent is still
+		// dispatched once per evaluation pass, carrying all of them.
+		boundaries := triggerBoundaries{Workflow: admitted, Stages: stages, RowIndex: rowIdx, Mode: config.Mode}
+		var matched []string
 		for _, trigger := range agent.Triggers {
-			if infraTriggerFires(trigger, *seq, state.ExecutionLog, agent.Name, completedStep, rowIdx, admitted, stages, hitlAccepted) {
-				fired = true
-				break
+			if infraTriggerFires(trigger, *seq, state.ExecutionLog, agent.Name, completedStep, boundaries, hitlAccepted) {
+				matched = append(matched, trigger.Trigger)
 			}
 		}
-		if !fired {
+		if len(matched) == 0 {
 			continue
 		}
 
-		halt, stop, rev, trigErr := s.dispatchInfraAgent(ctx, state, seq, completedStep, agent, config, orchDir)
+		halt, stop, rev, trigErr := s.dispatchInfraAgent(ctx, state, seq, completedStep, agent, matched, config, orchDir, boundaries)
 		if trigErr != nil {
 			return false, false, nil, trigErr
 		}
@@ -212,155 +197,4 @@ func (s *sessionImpl) evaluateTriggers(
 		_ = prevWorkflowStep // kept for future use
 	}
 	return false, false, reviewSignal, nil
-}
-
-// dispatchInfraAgent dispatches a single infrastructure agent that has fired
-// its trigger and records the result in the Execution Log. It returns
-// (halt, stop, reviewSignal, err) matching the semantics of evaluateTriggers.
-func (s *sessionImpl) dispatchInfraAgent(
-	ctx context.Context,
-	state *domain.ArtifactState,
-	seq *int,
-	completedStep domain.CompletedStep,
-	agent domain.DeclaredInfraAgent,
-	config domain.RunConfig,
-	orchDir string,
-) (haltRun bool, stopRequested bool, reviewSignal *reviewConsultSignal, err error) {
-	infraSeq := *seq + 1
-	req := domain.ProtocolRequest{
-		AgentInstanceID: fmt.Sprintf("%s#%d", agent.Name, infraSeq),
-		RunID:           state.RunID,
-		TaskDescription: fmt.Sprintf("infrastructure agent dispatch: %s", agent.Name),
-	}
-
-	agentRef, resolveErr := agentresolve.ResolveOne(orchDir, agent.Name)
-	var response domain.ProtocolResponse
-	if resolveErr != nil {
-		// Cannot locate the agent definition file; treat as non-SUCCESS and
-		// apply the on_failure policy without dispatching.
-		response = domain.ProtocolResponse{
-			AgentInstanceID: req.AgentInstanceID,
-			StatusCode:      domain.StatusBLOCKED,
-			StatusMessage:   resolveErr.Error(),
-		}
-	} else {
-		// Graceful-stop checkpoint before dispatching.
-		if s.deps.StopRequested() {
-			s.deps.Debug.Log(domain.EventSessionStopObserved, "graceful stop observed; not dispatching",
-				domain.F("checkpoint", StopCheckpointInfraDispatch),
-			)
-			return false, true, nil, nil
-		}
-
-		var invokeErr error
-		response, invokeErr = s.invokeAndLog(ctx, agentRef, req)
-		if invokeErr != nil {
-			if ctx.Err() != nil {
-				return true, false, nil, ctx.Err()
-			}
-			// Harness-level error: treat as non-SUCCESS and apply on_failure policy.
-			response = domain.ProtocolResponse{
-				AgentInstanceID: req.AgentInstanceID,
-				StatusCode:      domain.StatusBLOCKED,
-				StatusMessage:   invokeErr.Error(),
-			}
-		}
-	}
-
-	// Extract a checkpoint content-reference from checkpoint-class responses.
-	checkpoint := ""
-	if agent.Class == "checkpoint" {
-		checkpoint = extractCheckpointRef(response.StatusMessage)
-	}
-
-	// Record the completed infrastructure step in the Execution Log.
-	infraStep := domain.CompletedStep{
-		Seq:              infraSeq,
-		AgentInstance:    req.AgentInstanceID,
-		Phase:            completedStep.Phase,
-		Stage:            completedStep.Stage,
-		Status:           response.StatusCode,
-		Summary:          response.StatusMessage,
-		Timestamp:        s.deps.Clock.Now(),
-		Checkpoint:       checkpoint,
-		IsInfrastructure: true,
-	}
-	newState, applyErr := s.deps.Store.Apply(ctx, *state, infraStep)
-	if applyErr != nil {
-		return false, false, nil, applyErr
-	}
-	*state = newState
-	*seq = infraSeq
-
-	// Apply on_failure policy for non-SUCCESS outcomes.
-	if response.StatusCode != domain.StatusSUCCESS {
-		if agent.OnFailure == "halt" {
-			return true, false, nil, nil
-		}
-		// continue policy: record the failure and proceed.
-	} else if agent.Class == "review" {
-		// Accumulate review signal: overwrite on each successful review so
-		// the last successful review's message is used for the consultation.
-		reviewSignal = &reviewConsultSignal{StatusMessage: response.StatusMessage}
-	}
-	return false, false, reviewSignal, nil
-}
-
-// validateAndApplyOverrides validates each infrastructure_overrides entry
-// against the declared infrastructure agents, then applies replacement semantics:
-// each override replaces the named agent's trigger list entirely.
-//
-// Returns an error if:
-//   - An override names an agent not in declaredAgents (unknown agent name).
-//   - An override specifies a trigger not allowed for the agent's class.
-//
-// Returns the modified declared-agent slice (with trigger lists replaced by
-// any matching overrides). When overrides is empty, the input slice is returned
-// unchanged.
-func validateAndApplyOverrides(overrides []domain.InfrastructureOverride, declared []domain.DeclaredInfraAgent) ([]domain.DeclaredInfraAgent, error) {
-	if len(overrides) == 0 {
-		return declared, nil
-	}
-
-	// Build a lookup map of declared agents by name.
-	agentByName := make(map[string]domain.DeclaredInfraAgent, len(declared))
-	for _, a := range declared {
-		agentByName[a.Name] = a
-	}
-
-	for _, ov := range overrides {
-		agent, ok := agentByName[ov.AgentName]
-		if !ok {
-			return nil, fmt.Errorf("infrastructure_overrides: agent %q is not declared in the orchestrator file", ov.AgentName)
-		}
-
-		// Validate trigger restrictions for the agent's class.
-		allowed := allowedTriggersForClass(agent.Class)
-		if allowed != nil {
-			for _, tr := range ov.Triggers {
-				if !allowed[tr.Trigger] {
-					return nil, fmt.Errorf(
-						"infrastructure_overrides: trigger %q is not allowed for %s-class agent %q",
-						tr.Trigger, agent.Class, ov.AgentName,
-					)
-				}
-			}
-		}
-	}
-
-	// Build a map of overrides by agent name for fast lookup.
-	overrideMap := make(map[string][]domain.DeclaredInfraTrigger, len(overrides))
-	for _, ov := range overrides {
-		overrideMap[ov.AgentName] = ov.Triggers
-	}
-
-	// Apply replacement semantics: copy the slice and replace trigger lists.
-	result := make([]domain.DeclaredInfraAgent, len(declared))
-	copy(result, declared)
-	for i := range result {
-		if newTriggers, ok := overrideMap[result[i].Name]; ok {
-			result[i].Triggers = newTriggers
-		}
-	}
-	return result, nil
 }

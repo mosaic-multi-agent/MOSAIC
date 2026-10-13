@@ -1,0 +1,66 @@
+schema_version: 1
+name: unknown-trigger-override-refusal
+id: 83
+version: 1
+changelog:
+  - version: 1
+    date: "2026-10-12"
+    changes: "Initial."
+description: >
+  I-9: An unknown trigger in infrastructure_overrides refuses the resume. The
+  deployed declaration of checkpoint-iteration-end-only is valid
+  (ITERATION_END), but the seeded run's infrastructure_overrides replaces its
+  trigger list with the retired STAGE_END. A checkpoint-class agent is used so
+  the commit-class restriction (precondition 4) cannot be the reason for the
+  refusal - only the trigger vocabulary (precondition 6) is violated. The
+  orchestrator must refuse to resume - telling the user the override must
+  name ITERATION_END instead - and dispatch nothing. Proceeding would dispatch
+  implementation-review at once. The refusal wording itself is not observable
+  to AgentTest.
+layer: orchestrator
+negative: false
+
+subject:
+  identity: orchestrator
+  agent: orchestrator
+  workflows: [brownfield-tdd]
+  infrastructure_agents: [checkpoint-iteration-end-only]
+  opening_message: |
+    Continue the existing workflow run. Read the Orchestration.md in the
+    run-scoped folder and resume from where it left off. Do not ask me any
+    further questions - proceed immediately and autonomously.
+  invocation_kind: orchestrator
+  allowed_tools: [Task, Read, Write, Edit, Bash, Glob, Grep]
+
+stub_registry: unknown-trigger-override-refusal.stubs.json
+
+timeout: 5m
+turn_limit: 10
+stop_after_invocations: 1
+
+seed_files:
+  - path: Orchestration-{run_id}/Orchestration.md
+    ref: stage1-impl-done-override-stage-end.md
+  - path: Orchestration-{run_id}/Plan.md
+    ref: Plan.md
+  - path: Orchestration-{run_id}/Research.md
+    ref: Research.md
+  - path: Orchestration-{run_id}/Requirements.md
+    ref: Requirements.md
+  - path: Orchestration-{run_id}/ContractsDesign.md
+    ref: ContractsDesign.md
+  - path: Orchestration-{run_id}/Stage-1/Plan.md
+    ref: Stage-1-Plan.md
+  - path: Orchestration-{run_id}/Stage-1/PlanProgress.md
+    ref: Stage-1-PlanProgress.md
+  - path: Orchestration-{run_id}/Stage-1/tests-review-tdd.md
+    ref: Stage-1-tests-review-tdd.md
+  - path: Orchestration-{run_id}/Stage-2/Plan.md
+    ref: Stage-2-Plan.md
+  - path: Orchestration-{run_id}/Stage-2/PlanProgress.md
+    ref: Stage-2-PlanProgress.md
+
+assertions:
+  invocation_sequence:
+    exact: true
+    steps: []

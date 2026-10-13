@@ -1,5 +1,5 @@
 ---
-version: "1.0"
+version: "1.1"
 name: "MosaicTest Pre-Consultation Advice Workflow"
 description: "Runner mode fixture — Auto mode pre-consultation advice. Proves that pre-consultation strings reach auto-routed dispatches and do NOT reach orchestrator-written dispatches. Uses {task_description} echo to make the presence or absence observable."
 hint: "Mode 2 test — pre-consultation advice reaches auto-routed dispatches only"
@@ -15,22 +15,23 @@ modes:
   - auto
 ---
 
-<Workflow type="core" name="preconsult-advice" version="1.0">
+<Workflow type="core" name="preconsult-advice" version="1.1">
 ## MosaicTest Pre-Consultation Advice Workflow
 
 **Use when:** Verifying that pre-consultation advice strings are appended to auto-routed dispatches and are NOT appended to orchestrator-written dispatches.
 
 | Phase | Subagent | HITL | On Success | On Findings | Input | Output |
 |-------|----------|:----:|------------|-------------|-------|--------|
-| RESEARCH | mosaictest-scripted | FALSE | next | - | MosaicTestScript/preconsult-blocked.md | MosaicTestMarker.md |
-| PLANNING | mosaictest-scripted | FALSE | COMPLETE | - | MosaicTestScript/preconsult-echo.md | - |
+| RESEARCH | mosaictest-scripted(blocked) | FALSE | NEXT | - | MosaicTestScript/preconsult-blocked.md | MosaicTestMarker.md |
+| PLANNING | mosaictest-scripted(echo) | FALSE | COMPLETE | - | MosaicTestScript/preconsult-echo.md | - |
 
 **Notes:**
 - **Run this workflow in Auto mode.**
 - The routing fixture's `## Pre-Consultation` section carries two advice strings with distinctive markers: `PRECONSULT-ADVICE-MARKER` in `task_description` and `PRECONSULT-CONSTRAINT-MARKER` in `constraints`. The orchestrator-script returns these during the pre-consultation invocation, and the Runner stores them in session state.
 - **Row 1** is marker-gated. First invocation (marker absent): returns `BLOCKED`/`E401` and writes the marker. The `BLOCKED` triggers a deviation; the orchestrator re-dispatches the same agent with its own `task_description` (which does NOT contain the preconsult advice). Second invocation (marker present): returns `SUCCESS` with `{task_description}` echo.
-- **Row 2** is auto-routed by the engine (SUCCESS on row 1 routes via `next`). The Runner builds this dispatch itself and appends the pre-consultation strings. The stub echoes `{task_description}`, which should contain the `PRECONSULT-ADVICE-MARKER`.
+- **Row 2** is auto-routed by the engine (SUCCESS on row 1 routes via `NEXT`). The Runner builds this dispatch itself and appends the pre-consultation strings. The stub echoes `{task_description}`, which should contain the `PRECONSULT-ADVICE-MARKER`.
 - The proof is in comparing the `{task_description}` echoes: row 1's second invocation (orchestrator-dispatched) shows the orchestrator's own text, and row 2 (auto-routed) shows the marker.
+- The two rows run the same agent, so their `Subagent` cells are told apart by the mode qualifiers `blocked` and `echo`. Dispatch, instance ids and logs use the bare id `mosaictest-scripted`. A qualifier adds a focus paragraph to a row's task description; it does not touch the pre-consultation marker, which the echo checks for.
 - Seed `Fixtures/preconsult-advice` — the whole directory, not anything inside it.
 
 </Workflow>
@@ -67,7 +68,7 @@ Three Orchestration.md log rows. Pre-consultation and the deviation-routing cons
 | 2 | `mosaictest-scripted#2` | RESEARCH | SUCCESS | marker present, echoes task_description — should NOT contain PRECONSULT-ADVICE-MARKER |
 | 3 | `mosaictest-scripted#3` | PLANNING | SUCCESS | echoes task_description — SHOULD contain PRECONSULT-ADVICE-MARKER |
 
-**Run outcome:** COMPLETE. Row 2 SUCCESS routes via `next`; row 3 SUCCESS routes to COMPLETE.
+**Run outcome:** COMPLETE. Row 2 SUCCESS routes via `NEXT`; row 3 SUCCESS routes to COMPLETE.
 
 **The proof (two observations):**
 1. Row 2's `status_message` echoes the orchestrator's task_description. It should contain `MOSAICTEST-PRECONSULT-REDISPATCH` (the orchestrator's own text) and should NOT contain `PRECONSULT-ADVICE-MARKER`.
@@ -94,6 +95,7 @@ Three Orchestration.md log rows. Pre-consultation and the deviation-routing cons
 | Version | Date | Author | Summary |
 |---------|------|--------|---------|
 | 1.0 | 2026-09-20 | MOSAIC | Initial version. Pre-consultation advice presence and absence via {task_description} echo. |
+| 1.1 | 2026-10-12 | MOSAIC | WorkflowFormat 2.16 notation: `NEXT` instead of `next`, unique `Subagent` cells through the mode qualifiers `blocked` and `echo`. Dispatch sequence unchanged. |
 
 ---
 

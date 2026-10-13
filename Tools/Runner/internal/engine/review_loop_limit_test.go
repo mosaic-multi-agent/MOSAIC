@@ -34,8 +34,8 @@ func rllRow(seq int, agent, phase, stage string, status domain.StatusCode) domai
 // with the supplied log and limit.
 func rllNext(t *testing.T, mode domain.ExecutionMode, limit int, log []domain.ExecutionLogEntry) domain.EngineDecision {
 	t.Helper()
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
 	agents := newTestAgents(
 		"codebase-research", "requirements-refinement", "requirements-review",
 		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
@@ -56,7 +56,7 @@ func rllNext(t *testing.T, mode domain.ExecutionMode, limit int, log []domain.Ex
 	state.ReviewLoopLimit = limit
 	return engine.Next(engine.NextInput{
 		Workflow:     aw,
-		Stages:       stages,
+		Schedules:    schedules,
 		State:        state,
 		LastResponse: cnaResponse(last.Agent),
 		Agents:       agents,
@@ -152,10 +152,10 @@ func TestNext_Mode3_ReviewLoopLimit_OtherReviewerRows_DoNotCount(t *testing.T) {
 
 func TestNext_Mode3_ReviewLoopLimit_OtherStageRows_DoNotCount(t *testing.T) {
 	log := []domain.ExecutionLogEntry{
-		rllRow(1, rllReviewer, rllPhase, "Stage-1", domain.StatusCOMPLETED_NEEDS_ACTION),
-		rllRow(2, rllFixer, rllPhase, "Stage-1", domain.StatusSUCCESS),
-		rllRow(3, rllReviewer, rllPhase, "Stage-1", domain.StatusCOMPLETED_NEEDS_ACTION),
-		rllRow(4, rllFixer, rllPhase, "Stage-2", domain.StatusSUCCESS),
+		rllRow(1, rllReviewer, rllPhase, "1", domain.StatusCOMPLETED_NEEDS_ACTION),
+		rllRow(2, rllFixer, rllPhase, "1", domain.StatusSUCCESS),
+		rllRow(3, rllReviewer, rllPhase, "1", domain.StatusCOMPLETED_NEEDS_ACTION),
+		rllRow(4, rllFixer, rllPhase, "2", domain.StatusSUCCESS),
 		rllRow(5, rllReviewer, rllPhase, "", domain.StatusCOMPLETED_NEEDS_ACTION),
 	}
 	requireRoutedTo(t, rllNext(t, domain.ExecutionModeAutoReview, 2, log), rllFixer)

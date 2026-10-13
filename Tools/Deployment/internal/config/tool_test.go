@@ -9,8 +9,9 @@ package config_test
 //   - DefaultToolConfig is an exact match for the value Load returns on an absent file.
 //
 // Default allow-list (AC14.7):
-//   - DefaultToolConfig includes all six utility agents shipped with MOSAIC.
-//   - The list has exactly six entries with no duplicates.
+//   - DefaultToolConfig's allow-list is exactly [injections-helper]; the creator
+//     agents (which depend on MOSAIC-repository-only files) are not offered by default.
+//   - The list has no duplicates and no empty keys.
 //   - AllowExternalModules defaults to false.
 //   - LogRetentionRuns defaults to 0 (unbounded).
 //
@@ -58,20 +59,6 @@ func writeToolConfig(t *testing.T, root string, content []byte) {
 	}
 }
 
-// knownUtilityAgents returns the canonical set of utility agent keys shipped with MOSAIC.
-// These are the six agents listed in Catalog/UtilityAgents/ and referenced by
-// the Plan and ContractsDesign. They must all appear in the default allow-list (AC14.7).
-func knownUtilityAgents() []string {
-	return []string{
-		"anthropic-subagent-creator",
-		"harness-bug-hunter",
-		"orchestration-architect",
-		"system-prompt-capturer",
-		"transformation",
-		"workflow-creator",
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Load-with-defaults: absent file
 // ---------------------------------------------------------------------------
@@ -111,32 +98,35 @@ func TestToolConfigStore_AbsentFile_ReturnsDefaultConfig(t *testing.T) {
 // Default allow-list (AC14.7)
 // ---------------------------------------------------------------------------
 
-// TestDefaultToolConfig_AllowListContainsAllSixUtilityAgents verifies that the default
-// allow-list includes every utility agent shipped with MOSAIC. The decision to include
-// all six by default is documented in DefaultToolConfig's doc comment (AC14.7).
-func TestDefaultToolConfig_AllowListContainsAllSixUtilityAgents(t *testing.T) {
+// TestDefaultToolConfig_AllowListIsExactlyInjectionsHelper verifies that the built-in
+// default allow-list holds exactly one key, "injections-helper". It is the only utility
+// agent that applies outside the MOSAIC repository.
+func TestDefaultToolConfig_AllowListIsExactlyInjectionsHelper(t *testing.T) {
 	cfg := config.DefaultToolConfig()
 
-	allowSet := make(map[string]bool, len(cfg.UtilityAgentAllowList))
-	for _, key := range cfg.UtilityAgentAllowList {
-		allowSet[key] = true
-	}
-
-	for _, want := range knownUtilityAgents() {
-		if !allowSet[want] {
-			t.Errorf("DefaultToolConfig().UtilityAgentAllowList missing %q; "+
-				"all six utility agents must be in the default allow-list (AC14.7)", want)
-		}
+	want := []string{"injections-helper"}
+	if !reflect.DeepEqual(cfg.UtilityAgentAllowList, want) {
+		t.Errorf("DefaultToolConfig().UtilityAgentAllowList = %v, want exactly %v",
+			cfg.UtilityAgentAllowList, want)
 	}
 }
 
-// TestDefaultToolConfig_AllowListHasExactlySixAgents verifies that the default allow-list
-// has exactly six entries — one per utility agent — with no extras.
-func TestDefaultToolConfig_AllowListHasExactlySixAgents(t *testing.T) {
+// TestDefaultToolConfig_AllowListOffersNoCreatorAgent verifies that none of the creator
+// agents is in the default allow-list. They depend on files that exist only in the MOSAIC
+// repository and run from MOSAIC root, so the workspace flow must not offer them by default.
+func TestDefaultToolConfig_AllowListOffersNoCreatorAgent(t *testing.T) {
 	cfg := config.DefaultToolConfig()
-	if len(cfg.UtilityAgentAllowList) != 6 {
-		t.Errorf("DefaultToolConfig().UtilityAgentAllowList has %d entries, want exactly 6; got: %v",
-			len(cfg.UtilityAgentAllowList), cfg.UtilityAgentAllowList)
+
+	creators := map[string]bool{
+		"subagent-creator":           true,
+		"workflow-creator":           true,
+		"anthropic-subagent-creator": true,
+	}
+	for _, key := range cfg.UtilityAgentAllowList {
+		if creators[key] {
+			t.Errorf("DefaultToolConfig().UtilityAgentAllowList contains creator agent %q; "+
+				"creators must not be offered by default", key)
+		}
 	}
 }
 
@@ -346,7 +336,7 @@ func TestToolConfigStore_OldSchemaVersion_PreservesUtilityAgentAllowList(t *test
 	root := makeRoot(t)
 	store := config.NewToolConfigStore(root)
 	// The old-schema config includes a deliberately restricted allow-list (one agent only),
-	// which is different from the six-agent default, making a reset to defaults detectable.
+	// which is different from the built-in default, making a reset to defaults detectable.
 	oldConfig := []byte("schema_version: \"0\"\nutility_agent_allow_list:\n  - anthropic-subagent-creator\nallow_external_modules: true\nlog_retention_runs: 5\n")
 	writeToolConfig(t, root, oldConfig)
 

@@ -52,7 +52,7 @@ func TestSession_ManualRouting_BuildReviewAtRow12Stage3WithAnExtraInput_Dispatch
 	if len(steps) != 1 {
 		t.Fatalf("want one recorded workflow step, got %+v", steps)
 	}
-	requireStepAt(t, steps[0], "EXECUTION", 12, "Implementation.3")
+	requireStepAt(t, steps[0], "EXECUTION", 12, "3.Implementation")
 	if steps[0].AgentInstance != "build-review#3" {
 		t.Errorf("want build-review#3 recorded, got %q", steps[0].AgentInstance)
 	}
@@ -104,7 +104,7 @@ func TestSession_ManualRouting_StageOutsideTheSetIsCorrected_ThenDispatchesAtThe
 	if len(steps) != 1 {
 		t.Fatalf("want one recorded workflow step, got %+v", steps)
 	}
-	requireStepAt(t, steps[0], "EXECUTION", 12, "Implementation.3")
+	requireStepAt(t, steps[0], "EXECUTION", 12, "3.Implementation")
 }
 
 func TestSession_ManualRouting_StopOption_StopsResumablyWithItsReason(t *testing.T) {

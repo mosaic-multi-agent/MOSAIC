@@ -3,11 +3,8 @@ package session
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 
-	"mosaic-common/interaction"
 	"mosaic-run/internal/domain"
-	"mosaic-run/internal/planstages"
 )
 
 // autoHITLResult carries the outcome of the runAutoDispatchHITL loop.
@@ -43,24 +40,19 @@ func (s *sessionImpl) runAutoDispatchHITL(ctx context.Context, rs *runStartCtx, 
 	hitlResponse := response
 	var original *domain.ProtocolResponse
 
-	// Pre-HITL stage set re-derivation for self-referential rows.
-	if rs.stages == nil && hasStageStarArtifact(hitlStep.Request.OutputArtifacts) {
-		earlyPlanPath := filepath.Join(rs.config.RunFolder, "Plan.md")
-		ss, ssErr := planstages.ReadStages(earlyPlanPath, rs.admitted.GroupsDeclared)
-		if ssErr != nil {
-			s.deps.Interact.Notify(ctx, interaction.Notice{
-				Level:   interaction.NoticeWarning,
-				Message: fmt.Sprintf("failed to re-read stage set after Stage-* output: %v", ssErr),
-			})
-		} else {
-			rs.refreshedStages = &ss
-			rs.stages = &ss
-		}
+	// Pre-HITL schedule re-derivation for the blocks this row produces or
+	// writes, so the written outputs are resolved over the schedule it wrote.
+	if current, changed := s.rereadSchedules(ctx, rs.admitted, rs.config.RunFolder,
+		hitlStep.RowIndex, rs.stages); changed {
+		rs.stages = current
 	}
 
 	for {
-		written := s.writtenOutputs(ctx, rs.stages)
-		approvals := s.readApprovals(ctx, written)
+		written := s.writtenOutputs(ctx)
+		var approvals []domain.ArtifactApproval
+		if hitlStep.EffectiveHITL {
+			approvals = s.readApprovals(ctx, written)
+		}
 		hitlDec := domain.DecideHITLCompliance(domain.HITLComplianceInput{
 			EffectiveHITL:  hitlStep.EffectiveHITL,
 			Status:         hitlResponse.StatusCode,
@@ -176,7 +168,7 @@ func (s *sessionImpl) handleAutoHITLRedispatch(ctx context.Context, rs *runStart
 			ArtifactState: rs.state,
 		}
 		done, out, outErr := s.consultRoute(ctx, &alDevInfo, &rs.state, &rs.seq,
-			&rs.lastResponse, &rs.prevWorkflowStep, &rs.refreshedStages, &rs.stages,
+			&rs.lastResponse, &rs.prevWorkflowStep, &rs.stages,
 			rs.table, rs.agents, rs.config, rs.declaredInfraAgents, rs.admitted, &rs.antiLoop)
 		return hitlRedispatchState{}, done, true, out, outErr
 	}
@@ -256,7 +248,7 @@ func (s *sessionImpl) handleAutoHITLRedispatchError(ctx context.Context, rs *run
 	}
 	rs.lastResponse = &rdResp
 	done, out, outErr := s.consultRoute(ctx, &rdDevInfo, &rs.state, &rs.seq,
-		&rs.lastResponse, &rs.prevWorkflowStep, &rs.refreshedStages, &rs.stages,
+		&rs.lastResponse, &rs.prevWorkflowStep, &rs.stages,
 		rs.table, rs.agents, rs.config, rs.declaredInfraAgents, rs.admitted, &rs.antiLoop)
 	return hitlRedispatchState{}, done, true, out, outErr
 }
@@ -302,7 +294,7 @@ func (s *sessionImpl) handleAutoHITLEscalate(ctx context.Context, rs *runStartCt
 		return true, domain.RunOutcome{Status: domain.RunDeviationUnresolved, Message: escMsg}, nil
 	}
 	done, out, outErr := s.consultRoute(ctx, &escDevInfo, &rs.state, &rs.seq,
-		&rs.lastResponse, &rs.prevWorkflowStep, &rs.refreshedStages, &rs.stages,
+		&rs.lastResponse, &rs.prevWorkflowStep, &rs.stages,
 		rs.table, rs.agents, rs.config, rs.declaredInfraAgents, rs.admitted, &rs.antiLoop)
 	return done, out, outErr
 }

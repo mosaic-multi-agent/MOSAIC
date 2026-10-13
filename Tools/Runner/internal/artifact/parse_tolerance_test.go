@@ -49,10 +49,10 @@ type tableSpec struct {
 var toleranceTables = []tableSpec{
 	{
 		section: "ExecutionLog",
-		header:  []string{"Seq", "Agent", "Phase", "Stage", "WorkflowRow", "Status", "Timestamp", "Summary", "Inputs", "Checkpoint"},
+		header:  []string{"Seq", "Agent", "Phase", "Iteration", "WorkflowRow", "Status", "Timestamp", "Summary", "Inputs", "Checkpoint"},
 		rows: [][]string{
 			{"1", "researcher#1", "RESEARCH", "-", "2", "SUCCESS", "2026-10-07T17:40:11Z", "done", "Requirements.md", "-"},
-			{"2", "builder#2", "EXECUTION", "Implementation.1", "3", "BLOCKED", "2026-10-07T17:41:11Z", "tool down [error:E501]", "-", "-"},
+			{"2", "builder#2", "EXECUTION", "1.Implementation", "3", "BLOCKED", "2026-10-07T17:41:11Z", "tool down [error:E501]", "-", "-"},
 		},
 	},
 	{
@@ -80,7 +80,7 @@ func toleranceFrontmatter() string {
 		"checkpoints: disabled\n" +
 		"current_state:\n" +
 		"  phase: EXECUTION\n" +
-		"  stage: Implementation.1\n" +
+		"  iteration: \"1.Implementation\"\n" +
 		"  last_status: BLOCKED\n" +
 		"  last_agent: \"builder#2\"\n" +
 		"  error_code: E501\n" +
@@ -175,7 +175,7 @@ func assertToleranceReference(t *testing.T, s domain.ArtifactState) {
 			len(s.ExecutionLog), len(s.ArtifactRegistry), len(s.WorkflowNotes))
 	}
 	blocked := s.ExecutionLog[1]
-	if blocked.Summary != "tool down" || blocked.ErrorCode != domain.ErrorCode("E501") || blocked.Stage != "Implementation.1" || blocked.WorkflowRow != 3 {
+	if blocked.Summary != "tool down" || blocked.ErrorCode != domain.ErrorCode("E501") || blocked.Stage != "1.Implementation" || blocked.WorkflowRow != 3 {
 		t.Errorf("reference BLOCKED row = %+v", blocked)
 	}
 	if s.WorkflowNotes[1].Note != "second note" || s.ArtifactRegistry[0].Artifact != "Research.md" {

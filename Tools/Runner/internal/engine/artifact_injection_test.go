@@ -11,21 +11,21 @@ func TestNext_ArtifactInjection_AutoReview_CNA_InjectsLastOutputArtifacts(t *tes
 	// brownfield-tdd-build-verified row 8: build-review, OnFindings="test-writer-tdd".
 	// build-review's own output artifact (LastOutputArtifacts) must be appended
 	// to the dispatched test-writer-tdd step's InputArtifacts.
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	stages := singleStageSet("TDD")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
+	schedules := singleSchedules("TDD")
 	agents := newTestAgents(
 		"codebase-research", "requirements-refinement", "requirements-review",
 		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
 		"test-writer-tdd", "build-review", "tests-review-tdd",
 		"implementation-tdd", "implementation-review",
 	)
-	state := stateAfterRow("EXECUTION", "Test.1", "build-review#9", domain.StatusCOMPLETED_NEEDS_ACTION, 9, 9)
+	state := stateAfterRow("EXECUTION", "1.Test", "build-review#9", domain.StatusCOMPLETED_NEEDS_ACTION, 9, 9)
 	// These are the output artifacts of the build-review step that just ran.
 	reviewOutputs := []string{"Stage-1/build-review-tests.md"}
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:            aw,
-		Stages:              stages,
+		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("build-review#9"),
 		LastOutputArtifacts: reviewOutputs,
@@ -55,21 +55,21 @@ func TestNext_ArtifactInjection_AutoReview_CNA_InjectsLastOutputArtifacts(t *tes
 // that when LastOutputArtifacts contains paths not already in the table row's
 // InputArtifacts, all of them are appended.
 func TestNext_ArtifactInjection_AutoReview_CNA_NoDeduplication_WhenUnique(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	stages := singleStageSet("TDD")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
+	schedules := singleSchedules("TDD")
 	agents := newTestAgents(
 		"codebase-research", "requirements-refinement", "requirements-review",
 		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
 		"test-writer-tdd", "build-review", "tests-review-tdd",
 		"implementation-tdd", "implementation-review",
 	)
-	state := stateAfterRow("EXECUTION", "Test.1", "build-review#9", domain.StatusCOMPLETED_NEEDS_ACTION, 9, 9)
+	state := stateAfterRow("EXECUTION", "1.Test", "build-review#9", domain.StatusCOMPLETED_NEEDS_ACTION, 9, 9)
 	// Two unique review outputs not in the table row's inputs.
 	reviewOutputs := []string{"Stage-1/build-review-tests.md", "Stage-1/extra-finding.md"}
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:            aw,
-		Stages:              stages,
+		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("build-review#9"),
 		LastOutputArtifacts: reviewOutputs,
@@ -107,22 +107,22 @@ func TestNext_ArtifactInjection_AutoReview_CNA_DeduplicatesExisting(t *testing.T
 	// This combination tests both dedup (existing path) and injection (unique path)
 	// in a single call, so a missing-injection bug would cause the unique path to
 	// be absent and the test would fail.
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	stages := singleStageSet("TDD")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
+	schedules := singleSchedules("TDD")
 	agents := newTestAgents(
 		"codebase-research", "requirements-refinement", "requirements-review",
 		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
 		"test-writer-tdd", "build-review", "tests-review-tdd",
 		"implementation-tdd", "implementation-review",
 	)
-	state := stateAfterRow("EXECUTION", "Test.1", "build-review#9", domain.StatusCOMPLETED_NEEDS_ACTION, 9, 9)
+	state := stateAfterRow("EXECUTION", "1.Test", "build-review#9", domain.StatusCOMPLETED_NEEDS_ACTION, 9, 9)
 	// Stage-1/Plan.md is already in test-writer-tdd's table InputArtifacts;
 	// Stage-1/build-review-findings.md is not.
 	reviewOutputs := []string{"Stage-1/Plan.md", "Stage-1/build-review-findings.md"}
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:            aw,
-		Stages:              stages,
+		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("build-review#9"),
 		LastOutputArtifacts: reviewOutputs,
@@ -168,14 +168,14 @@ func TestNext_ArtifactInjection_AutoReview_Success_NoInjection(t *testing.T) {
 	// planner-tdd-soft returns SUCCESS; routes to plan-review.
 	// plan-review's table InputArtifacts do not include any "review-output.md".
 	// Even with LastOutputArtifacts = ["review-output.md"], it must not appear.
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
 	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
 	state := stateAfter("PLANNING", "", "planner-tdd-soft#1", domain.StatusSUCCESS, 1)
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:            aw,
-		Stages:              stages,
+		Schedules:           schedules,
 		State:               state,
 		LastResponse:        successResponse("planner-tdd-soft#1"),
 		LastOutputArtifacts: []string{"review-output.md"},
@@ -200,19 +200,19 @@ func TestNext_ArtifactInjection_AutoReview_Success_NoInjection(t *testing.T) {
 func TestNext_ArtifactInjection_Auto_CNA_NoInjection(t *testing.T) {
 	// In auto mode CNA deviates, so injection is irrelevant. This test also
 	// confirms that the deviation decision itself is returned (not a dispatch).
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	stages := singleStageSet("TDD")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
+	schedules := singleSchedules("TDD")
 	agents := newTestAgents(
 		"codebase-research", "requirements-refinement", "requirements-review",
 		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
 		"test-writer-tdd", "build-review", "tests-review-tdd",
 		"implementation-tdd", "implementation-review",
 	)
-	state := stateAfterRow("EXECUTION", "Test.1", "build-review#9", domain.StatusCOMPLETED_NEEDS_ACTION, 9, 9)
+	state := stateAfterRow("EXECUTION", "1.Test", "build-review#9", domain.StatusCOMPLETED_NEEDS_ACTION, 9, 9)
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:            aw,
-		Stages:              stages,
+		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("build-review#9"),
 		LastOutputArtifacts: []string{"Stage-1/build-review-tests.md"},
@@ -230,21 +230,21 @@ func TestNext_ArtifactInjection_Auto_CNA_NoInjection(t *testing.T) {
 // that injected artifacts are appended AFTER the table row's existing entries,
 // not prepended or interleaved.
 func TestNext_ArtifactInjection_AutoReview_CNA_InjectsAfterTableEntries(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	stages := singleStageSet("TDD")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
+	schedules := singleSchedules("TDD")
 	agents := newTestAgents(
 		"codebase-research", "requirements-refinement", "requirements-review",
 		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
 		"test-writer-tdd", "build-review", "tests-review-tdd",
 		"implementation-tdd", "implementation-review",
 	)
-	state := stateAfterRow("EXECUTION", "Test.1", "build-review#9", domain.StatusCOMPLETED_NEEDS_ACTION, 9, 9)
+	state := stateAfterRow("EXECUTION", "1.Test", "build-review#9", domain.StatusCOMPLETED_NEEDS_ACTION, 9, 9)
 	injectedArtifact := "Stage-1/build-review-tests.md"
 	reviewOutputs := []string{injectedArtifact}
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:            aw,
-		Stages:              stages,
+		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("build-review#9"),
 		LastOutputArtifacts: reviewOutputs,
@@ -296,25 +296,26 @@ func TestNext_ArtifactInjection_AutoReview_CNA_InjectsAfterTableEntries(t *testi
 		}
 	}
 }
+
 // ===== Nil / empty LastOutputArtifacts on auto-review CNA path (Stage 2) =====
 
 // TestNext_ArtifactInjection_AutoReview_CNA_NilLastOutputArtifacts verifies that
 // when LastOutputArtifacts is nil the dispatched step's InputArtifacts match the
 // table row exactly — no injection, no panic.
 func TestNext_ArtifactInjection_AutoReview_CNA_NilLastOutputArtifacts(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	stages := singleStageSet("TDD")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
+	schedules := singleSchedules("TDD")
 	agents := newTestAgents(
 		"codebase-research", "requirements-refinement", "requirements-review",
 		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
 		"test-writer-tdd", "build-review", "tests-review-tdd",
 		"implementation-tdd", "implementation-review",
 	)
-	state := stateAfterRow("EXECUTION", "Test.1", "build-review#9", domain.StatusCOMPLETED_NEEDS_ACTION, 9, 9)
+	state := stateAfterRow("EXECUTION", "1.Test", "build-review#9", domain.StatusCOMPLETED_NEEDS_ACTION, 9, 9)
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:            aw,
-		Stages:              stages,
+		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("build-review#9"),
 		LastOutputArtifacts: nil,
@@ -355,19 +356,19 @@ func TestNext_ArtifactInjection_AutoReview_CNA_NilLastOutputArtifacts(t *testing
 // when LastOutputArtifacts is an empty slice the dispatched step's InputArtifacts
 // match the table row exactly — same expectation as nil.
 func TestNext_ArtifactInjection_AutoReview_CNA_EmptyLastOutputArtifacts(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	stages := singleStageSet("TDD")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
+	schedules := singleSchedules("TDD")
 	agents := newTestAgents(
 		"codebase-research", "requirements-refinement", "requirements-review",
 		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
 		"test-writer-tdd", "build-review", "tests-review-tdd",
 		"implementation-tdd", "implementation-review",
 	)
-	state := stateAfterRow("EXECUTION", "Test.1", "build-review#9", domain.StatusCOMPLETED_NEEDS_ACTION, 9, 9)
+	state := stateAfterRow("EXECUTION", "1.Test", "build-review#9", domain.StatusCOMPLETED_NEEDS_ACTION, 9, 9)
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:            aw,
-		Stages:              stages,
+		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("build-review#9"),
 		LastOutputArtifacts: []string{},

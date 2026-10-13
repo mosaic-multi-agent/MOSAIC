@@ -6,8 +6,10 @@ package session
 // escalates to the routing consultant instead.
 //
 // The guard bounds consultant-requested dispatches. Mechanical re-dispatches
-// of the engine (PARTIALLY_DONE bound, E501 budget) are counted but never
-// blocked by it: their own bounds, read from the Execution Log, own them.
+// of the engine (PARTIALLY_DONE bound, E501 budget) and the Runner's own
+// schedule-defect re-dispatches (domain.RetryScheduleDefect) are not counted
+// and never blocked by it: their own bounds, read from the Execution Log, own
+// them.
 const maxConsecutiveSameAgentDispatches = 4
 
 // antiLoopState tracks consecutive same-agent dispatches for the current

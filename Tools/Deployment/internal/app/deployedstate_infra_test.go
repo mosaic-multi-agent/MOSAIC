@@ -49,7 +49,7 @@ func TestProbeDeployedArtifact_AssembledDeclarations_ListsKeysVersionsAndParsedF
 		probeInfraBlock("code-review", "1.2", "review", "continue",
 			domain.InfrastructureTrigger{Trigger: "INVOCATION_INTERVAL", TriggerParam: "30"}),
 		probeInfraBlock("checkpoint-agent", "2.0", "checkpoint", "halt",
-			domain.InfrastructureTrigger{Trigger: "STAGE_END"},
+			domain.InfrastructureTrigger{Trigger: "ITERATION_END"},
 			domain.InfrastructureTrigger{Trigger: "PHASE_END"}),
 	})
 
@@ -66,7 +66,7 @@ func TestProbeDeployedArtifact_AssembledDeclarations_ListsKeysVersionsAndParsedF
 	}
 	if second.Key != "checkpoint-agent" || second.Version != "2.0" || !second.Parsed ||
 		second.Class != "checkpoint" || second.OnFailure != "halt" ||
-		len(second.Triggers) != 2 || second.Triggers[0].Trigger != "STAGE_END" ||
+		len(second.Triggers) != 2 || second.Triggers[0].Trigger != "ITERATION_END" ||
 		second.Triggers[0].TriggerParam != "" || second.Triggers[1].Trigger != "PHASE_END" {
 		t.Errorf("second declaration = %+v, want parsed checkpoint-agent 2.0 checkpoint/halt with two triggers", second)
 	}
@@ -89,7 +89,7 @@ func TestProbeDeployedArtifact_EmptyInfrastructureRegion_NoDeclarations(t *testi
 func TestProbeDeployedArtifact_HandWrittenSection_ListedAsUnparsed(t *testing.T) {
 	assembled, _ := transform.AssembleInfrastructureBlocks([]transform.InfrastructureBlock{
 		probeInfraBlock("code-review", "1.0", "review", "continue",
-			domain.InfrastructureTrigger{Trigger: "STAGE_END"}),
+			domain.InfrastructureTrigger{Trigger: "ITERATION_END"}),
 	})
 
 	got := probeInfra(t, deployedOrchestratorWithInfra(string(assembled)+probeHandWrittenSection))

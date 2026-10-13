@@ -22,11 +22,12 @@ func (s *sessionImpl) beginOutputs(ctx context.Context, runFolder string, declar
 
 // writtenOutputs returns the declared outputs the step's attempts created or
 // modified since beginOutputs. Without a wired detector it conservatively
-// reports every declared concrete path (Stage-* wildcards expanded through the
-// current stage set), so the HITL gate stays fail-closed.
-func (s *sessionImpl) writtenOutputs(ctx context.Context, stages *domain.StageSet) []string {
+// reports every declared concrete path, so the HITL gate stays fail-closed: a
+// wildcard Output is replaced by every existing file matching it.
+func (s *sessionImpl) writtenOutputs(ctx context.Context) []string {
 	if s.deps.Outputs == nil {
-		return expandStageGlobs(s.outputBaseline.Query.Declared, stages)
+		q := s.outputBaseline.Query
+		return listOutputWildcards(q.Root, q.Declared)
 	}
 	return s.deps.Outputs.Written(ctx, s.outputBaseline)
 }

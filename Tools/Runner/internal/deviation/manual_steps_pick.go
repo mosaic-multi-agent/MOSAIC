@@ -28,7 +28,7 @@ func (d *manualDialogue) stageOrRow() manualStep {
 // and the artifact selections made for the previous one; the task is kept.
 func (d *manualDialogue) setRow(n int, choice string) {
 	if n != d.rowNum {
-		d.stage, d.stageChoice = 0, ""
+		d.stage, d.stageChoice = "", ""
 		d.inputs, d.outputs = listState{}, listState{}
 	}
 	d.rowNum, d.rowChoice = n, choice
@@ -36,11 +36,11 @@ func (d *manualDialogue) setRow(n int, choice string) {
 
 // setStage records the chosen stage; a different stage discards the artifact
 // selections made for the previous one.
-func (d *manualDialogue) setStage(n domain.StageNumber, choice string) {
-	if n != d.stage {
+func (d *manualDialogue) setStage(id domain.IterationID, choice string) {
+	if id != d.stage {
 		d.inputs, d.outputs = listState{}, listState{}
 	}
-	d.stage, d.stageChoice = n, choice
+	d.stage, d.stageChoice = id, choice
 }
 
 // rowDefaults resolves the default payload of the chosen row and stage. Without
@@ -87,7 +87,7 @@ func (d *manualDialogue) rowQuestion() interaction.ChoiceQuestion {
 	for i, row := range d.table.Rows {
 		options = append(options, interaction.Option{
 			ID:    strconv.Itoa(i + 1),
-			Label: fmt.Sprintf("[%d] %s (%s)", i+1, row.Agent, row.Phase),
+			Label: fmt.Sprintf("[%d] %s (%s)", i+1, row.BareAgentID(), row.Phase),
 		})
 	}
 	options = append(options, interaction.Option{ID: domain.ManualStopOptionID, Label: "Stop the run"})
@@ -108,21 +108,46 @@ func (d *manualDialogue) rowPreselection() string {
 	if d.rowChoice != "" {
 		return d.rowChoice
 	}
-	dev := d.req.Deviation
-	if dev == nil || dev.CurrentRow < 0 || dev.CurrentRow >= len(d.table.Rows) {
+	row, _, ok := d.deviationTarget()
+	if !ok || row < 0 || row >= len(d.table.Rows) {
 		return ""
 	}
-	return strconv.Itoa(dev.CurrentRow + 1)
+	return strconv.Itoa(row + 1)
+}
+
+// deviationTarget is the step the manual dispatch offers by default: the
+// already-finished next step for a finished-work deviation, else the step that
+// deviated. ok is false without a deviation.
+func (d *manualDialogue) deviationTarget() (row int, stage string, ok bool) {
+	dev := d.req.Deviation
+	if dev == nil {
+		return 0, "", false
+	}
+	if dev.Kind == domain.DeviationFinishedWork && dev.PlannedContinuation != nil {
+		return dev.PlannedContinuation.RowIndex, dev.PlannedContinuation.Stage, true
+	}
+	return dev.CurrentRow, dev.CurrentStage, true
 }
 
 // ---- stage ----
 
+// rowSchedule is the schedule of the chosen row's block in the request. ok is
+// false when the request carries none for that block or it holds no iteration.
+func (d *manualDialogue) rowSchedule() (sched domain.BlockSchedule, ok bool) {
+	block, inBlock := d.currentRow().Block()
+	if !inBlock {
+		return domain.BlockSchedule{}, false
+	}
+	sched, ok = d.req.Schedules[block]
+	return sched, ok && len(sched.Iterations) > 0
+}
+
 func (d *manualDialogue) stepStage(ctx context.Context) error {
-	stages := d.req.Stages
-	if stages == nil || stages.Count() == 0 {
+	sched, ok := d.rowSchedule()
+	if !ok {
 		return d.invalidResult(ctx, "the chosen row is a staged row but no stage set is available", stepRow)
 	}
-	ans, cancelled, err := d.askOne(ctx, d.stageQuestion(stages))
+	ans, cancelled, err := d.askOne(ctx, d.stageQuestion(sched))
 	if err != nil {
 		return err
 	}
@@ -134,19 +159,34 @@ func (d *manualDialogue) stepStage(ctx context.Context) error {
 	if choice == "" {
 		return d.unavailable("the stage question was answered without a choice", nil)
 	}
-	n, convErr := strconv.Atoi(choice)
-	if convErr != nil || n < 1 {
-		return d.invalidResult(ctx, fmt.Sprintf("stage choice %q is not a stage number", choice), stepStage)
+	id, valid := stageChoiceID(sched, choice)
+	if !valid {
+		return d.invalidResult(ctx, fmt.Sprintf("stage choice %q is not a stage of the row's block", choice), stepStage)
 	}
-	d.setStage(domain.StageNumber(n), choice)
+	d.setStage(id, choice)
 	d.step = stepTask
 	return nil
 }
 
-func (d *manualDialogue) stageQuestion(stages *domain.StageSet) interaction.ChoiceQuestion {
-	options := make([]interaction.Option, 0, stages.Count())
-	for _, n := range stages.Numbers() {
-		options = append(options, interaction.Option{ID: strconv.Itoa(int(n)), Label: fmt.Sprintf("Stage %d", n)})
+// stageChoiceID maps a stage answer to an iteration ID. An answer naming an
+// iteration of the schedule (ignoring case) gives the schedule's spelling. A
+// decimal number >= 1 outside the schedule is accepted as that number: the
+// final check of the result rejects it with the stage named. Any other answer
+// is not valid.
+func stageChoiceID(sched domain.BlockSchedule, choice string) (domain.IterationID, bool) {
+	if it, found := sched.Find(domain.IterationID(choice)); found {
+		return it.ID, true
+	}
+	if n, err := strconv.Atoi(choice); err == nil && n >= 1 {
+		return domain.IterationID(strconv.Itoa(n)), true
+	}
+	return "", false
+}
+
+func (d *manualDialogue) stageQuestion(sched domain.BlockSchedule) interaction.ChoiceQuestion {
+	options := make([]interaction.Option, 0, len(sched.Iterations))
+	for _, id := range sched.IDs() {
+		options = append(options, interaction.Option{ID: string(id), Label: fmt.Sprintf("Stage %s", id)})
 	}
 	return interaction.ChoiceQuestion{
 		Question: interaction.Question{
@@ -154,30 +194,31 @@ func (d *manualDialogue) stageQuestion(stages *domain.StageSet) interaction.Choi
 			Prompt:          "Choose the stage to dispatch:",
 			AllowCustom:     true,
 			CustomPrompt:    "Stage number",
-			DefaultOptionID: d.stagePreselection(stages),
+			DefaultOptionID: d.stagePreselection(sched),
 		},
 		Options: options,
 	}
 }
 
 // stagePreselection is the earlier stage answer, else the stage that deviated
-// when it is of the chosen row's group and still in the stage set.
-func (d *manualDialogue) stagePreselection(stages *domain.StageSet) string {
+// when it is of the chosen row's group and still in the schedule.
+func (d *manualDialogue) stagePreselection(sched domain.BlockSchedule) string {
 	if d.stageChoice != "" {
 		return d.stageChoice
 	}
-	dev := d.req.Deviation
-	if dev == nil {
+	row, stage, ok := d.deviationTarget()
+	if !ok || row < 0 || row >= len(d.table.Rows) {
 		return ""
 	}
-	group, n, ok := domain.ParseStageValue(dev.CurrentStage)
-	if !ok || group != d.currentRow().PhaseParsed.Group {
+	value, err := domain.ReadIterationValue(stage, d.table.Rows[row])
+	if err != nil || value.Group != d.currentRow().PhaseParsed.Group {
 		return ""
 	}
-	if _, inSet := stages.Entry(n); !inSet {
+	it, inSchedule := sched.Find(value.ID)
+	if !inSchedule {
 		return ""
 	}
-	return strconv.Itoa(int(n))
+	return string(it.ID)
 }
 
 // ---- HITL ----

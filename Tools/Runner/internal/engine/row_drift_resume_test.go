@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"mosaic-run/internal/domain"
-	"mosaic-run/internal/engine"
 )
 
 // Zero-based group positions in the admitted workflow's Groups.
@@ -90,17 +89,6 @@ func resumeState(log *runLog, interrupted bool) domain.ArtifactState {
 	return state
 }
 
-// resumeLog calls ResumePoint with the checkpoint infrastructure agent declared.
-func resumeLog(
-	aw domain.AdmittedWorkflow,
-	stages *domain.StageSet,
-	log *runLog,
-	interrupted bool,
-) (domain.ResumeInfo, error) {
-	infra := domain.NewInfraAgentSet(declaredCheckpointInfraAgent())
-	return engine.ResumePoint(aw, stages, resumeState(log, interrupted), infra)
-}
-
 // requireResumeAt asserts a successful resume at the given zero-based row.
 func requireResumeAt(
 	t *testing.T,
@@ -108,7 +96,7 @@ func requireResumeAt(
 	err error,
 	wantRow int,
 	wantRerun bool,
-	wantStage domain.StageNumber,
+	wantIteration domain.IterationID,
 	wantGroup int,
 ) {
 	t.Helper()
@@ -121,8 +109,8 @@ func requireResumeAt(
 	if info.RerunLast != wantRerun {
 		t.Errorf("RerunLast: want %v, got %v", wantRerun, info.RerunLast)
 	}
-	if info.StageNumber != wantStage {
-		t.Errorf("StageNumber: want %d, got %d", wantStage, info.StageNumber)
+	if info.Iteration != wantIteration {
+		t.Errorf("Iteration: want %q, got %q", wantIteration, info.Iteration)
 	}
 	if info.GroupIndex != wantGroup {
 		t.Errorf("GroupIndex: want %d, got %d", wantGroup, info.GroupIndex)
@@ -134,15 +122,15 @@ func requireResumeAt(
 // buildVerifiedRun is one stage of the build-verified workflow with a
 // tests-review-tdd findings route-back after the Test group's build-review.
 var buildVerifiedRun = []runStep{
-	{"test-writer-tdd", "Test.1", domain.StatusSUCCESS, bvRowTestWriter},
-	{"build-review", "Test.1", domain.StatusSUCCESS, bvRowTestBuild},
-	{"tests-review-tdd", "Test.1", domain.StatusCOMPLETED_NEEDS_ACTION, bvRowTestsReview},
-	{"test-writer-tdd", "Test.1", domain.StatusSUCCESS, bvRowTestWriter},
-	{"build-review", "Test.1", domain.StatusSUCCESS, bvRowTestBuild},
-	{"tests-review-tdd", "Test.1", domain.StatusSUCCESS, bvRowTestsReview},
-	{"implementation-tdd", "Implementation.1", domain.StatusSUCCESS, bvRowImplementation},
-	{"build-review", "Implementation.1", domain.StatusSUCCESS, bvRowImplBuild},
-	{"implementation-review", "Implementation.1", domain.StatusSUCCESS, bvRowImplReview},
+	{"test-writer-tdd", "1.Test", domain.StatusSUCCESS, bvRowTestWriter},
+	{"build-review", "1.Test", domain.StatusSUCCESS, bvRowTestBuild},
+	{"tests-review-tdd", "1.Test", domain.StatusCOMPLETED_NEEDS_ACTION, bvRowTestsReview},
+	{"test-writer-tdd", "1.Test", domain.StatusSUCCESS, bvRowTestWriter},
+	{"build-review", "1.Test", domain.StatusSUCCESS, bvRowTestBuild},
+	{"tests-review-tdd", "1.Test", domain.StatusSUCCESS, bvRowTestsReview},
+	{"implementation-tdd", "1.Implementation", domain.StatusSUCCESS, bvRowImplementation},
+	{"build-review", "1.Implementation", domain.StatusSUCCESS, bvRowImplBuild},
+	{"implementation-review", "1.Implementation", domain.StatusSUCCESS, bvRowImplReview},
 }
 
 // Each case resumes after the first n steps of buildVerifiedRun. A clean
@@ -164,32 +152,32 @@ var buildVerifiedResumeCases = []struct {
 }
 
 func TestResumePoint_BuildVerifiedAfterRouteBack_CleanCompletionContinuesFromRecordedRow(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	for _, tc := range buildVerifiedResumeCases {
 		t.Run(tc.name, func(t *testing.T) {
 			log := newBuildVerifiedLog().play(buildVerifiedRun, tc.n)
 
-			info, err := resumeLog(aw, singleStageSet("TDD"), log, false)
+			info, err := resumeLogIDs(aw, singleSchedules("TDD"), log, false)
 
-			wantStage := domain.StageNumber(1)
+			wantIteration := domain.IterationID("1")
 			if tc.cleanGroup < 0 { // run complete
-				wantStage = 0
+				wantIteration = ""
 			}
-			requireResumeAt(t, info, err, tc.cleanRow, false, wantStage, tc.cleanGroup)
+			requireResumeAt(t, info, err, tc.cleanRow, false, wantIteration, tc.cleanGroup)
 		})
 	}
 }
 
 func TestResumePoint_BuildVerifiedAfterRouteBack_InterruptedStepRerunsRecordedRow(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	for _, tc := range buildVerifiedResumeCases {
 		t.Run(tc.name, func(t *testing.T) {
 			log := newBuildVerifiedLog().play(buildVerifiedRun, tc.n)
 			wantRow := buildVerifiedRun[tc.n-1].row - 1
 
-			info, err := resumeLog(aw, singleStageSet("TDD"), log, true)
+			info, err := resumeLogIDs(aw, singleSchedules("TDD"), log, true)
 
-			requireResumeAt(t, info, err, wantRow, true, 1, tc.rerunGroup)
+			requireResumeAt(t, info, err, wantRow, true, "1", tc.rerunGroup)
 		})
 	}
 }
@@ -199,18 +187,18 @@ func TestResumePoint_BuildVerifiedAfterRouteBack_InterruptedStepRerunsRecordedRo
 // stagedLoopRun repeats the route-back cycle twice: the gate asks for findings
 // to be fixed twice before it passes.
 var stagedLoopRun = []runStep{
-	{"loop-agent", "Test.1", domain.StatusSUCCESS, loopRowWriter},
-	{"loop-agent", "Test.1", domain.StatusCOMPLETED_NEEDS_ACTION, loopRowGate},
-	{"loop-agent", "Test.1", domain.StatusSUCCESS, loopRowWriter},
-	{"loop-agent", "Test.1", domain.StatusCOMPLETED_NEEDS_ACTION, loopRowGate},
-	{"loop-agent", "Test.1", domain.StatusSUCCESS, loopRowWriter},
-	{"loop-agent", "Test.1", domain.StatusSUCCESS, loopRowGate},
-	{"loop-agent", "Test.1", domain.StatusSUCCESS, loopRowReview},
-	{"loop-agent", "Implementation.1", domain.StatusSUCCESS, loopRowImpl},
+	{"loop-agent", "1.Test", domain.StatusSUCCESS, loopRowWriter},
+	{"loop-agent", "1.Test", domain.StatusCOMPLETED_NEEDS_ACTION, loopRowGate},
+	{"loop-agent", "1.Test", domain.StatusSUCCESS, loopRowWriter},
+	{"loop-agent", "1.Test", domain.StatusCOMPLETED_NEEDS_ACTION, loopRowGate},
+	{"loop-agent", "1.Test", domain.StatusSUCCESS, loopRowWriter},
+	{"loop-agent", "1.Test", domain.StatusSUCCESS, loopRowGate},
+	{"loop-agent", "1.Test", domain.StatusSUCCESS, loopRowReview},
+	{"loop-agent", "1.Implementation", domain.StatusSUCCESS, loopRowImpl},
 }
 
 func TestResumePoint_StagedFindingsLoop_CleanCompletionContinuesFromRecordedRow(t *testing.T) {
-	aw := mustParseAndAdmit(t, stagedFindingsLoopContent, "staged-findings-loop", "1.0")
+	aw := mustParseAndAdmitV216(t, findingsLoopContent, "staged-findings-loop", "1.0")
 	// n is the number of steps logged; steps ending in a findings status are
 	// not resumed cleanly.
 	cases := []struct {
@@ -227,19 +215,19 @@ func TestResumePoint_StagedFindingsLoop_CleanCompletionContinuesFromRecordedRow(
 		t.Run("after step "+strconv.Itoa(tc.n), func(t *testing.T) {
 			log := (&runLog{}).play(stagedLoopRun, tc.n)
 
-			info, err := resumeLog(aw, singleStageSet("TDD"), log, false)
+			info, err := resumeLogIDs(aw, singleSchedules("TDD"), log, false)
 
-			wantStage := domain.StageNumber(1)
+			wantIteration := domain.IterationID("1")
 			if tc.wantGroup < 0 { // run complete
-				wantStage = 0
+				wantIteration = ""
 			}
-			requireResumeAt(t, info, err, tc.wantRow, false, wantStage, tc.wantGroup)
+			requireResumeAt(t, info, err, tc.wantRow, false, wantIteration, tc.wantGroup)
 		})
 	}
 }
 
 func TestResumePoint_StagedFindingsLoop_InterruptedStepRerunsRecordedRow(t *testing.T) {
-	aw := mustParseAndAdmit(t, stagedFindingsLoopContent, "staged-findings-loop", "1.0")
+	aw := mustParseAndAdmitV216(t, findingsLoopContent, "staged-findings-loop", "1.0")
 	for n := 1; n <= len(stagedLoopRun); n++ {
 		t.Run("step "+strconv.Itoa(n), func(t *testing.T) {
 			log := (&runLog{}).play(stagedLoopRun, n)
@@ -249,9 +237,9 @@ func TestResumePoint_StagedFindingsLoop_InterruptedStepRerunsRecordedRow(t *test
 				wantGroup = groupImpl
 			}
 
-			info, err := resumeLog(aw, singleStageSet("TDD"), log, true)
+			info, err := resumeLogIDs(aw, singleSchedules("TDD"), log, true)
 
-			requireResumeAt(t, info, err, row-1, true, 1, wantGroup)
+			requireResumeAt(t, info, err, row-1, true, "1", wantGroup)
 		})
 	}
 }
@@ -261,45 +249,45 @@ func TestResumePoint_StagedFindingsLoop_InterruptedStepRerunsRecordedRow(t *test
 const checkpointAgent = "checkpoint-manager-git"
 
 func TestResumePoint_BuildVerified_TrailingInfrastructureEntry_ResumesFromRecordedRow(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	log := newBuildVerifiedLog().play(buildVerifiedRun, 5).infraStep(checkpointAgent, "Test.1")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
+	log := newBuildVerifiedLog().play(buildVerifiedRun, 5).infraStep(checkpointAgent, "1.Test")
 
-	clean, cleanErr := resumeLog(aw, singleStageSet("TDD"), log, false)
-	rerun, rerunErr := resumeLog(aw, singleStageSet("TDD"), log, true)
+	clean, cleanErr := resumeLogIDs(aw, singleSchedules("TDD"), log, false)
+	rerun, rerunErr := resumeLogIDs(aw, singleSchedules("TDD"), log, true)
 
-	requireResumeAt(t, clean, cleanErr, bvRowTestsReview-1, false, 1, groupTest)
-	requireResumeAt(t, rerun, rerunErr, bvRowTestBuild-1, true, 1, groupTest)
+	requireResumeAt(t, clean, cleanErr, bvRowTestsReview-1, false, "1", groupTest)
+	requireResumeAt(t, rerun, rerunErr, bvRowTestBuild-1, true, "1", groupTest)
 }
 
 func TestResumePoint_BuildVerified_InterleavedInfrastructureEntries_ResumeFromRecordedRow(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	log := newBuildVerifiedLog().play(buildVerifiedRun, 2).
-		infraStep(checkpointAgent, "Test.1").
+		infraStep(checkpointAgent, "1.Test").
 		play(buildVerifiedRun[2:], 2).
-		infraStep(checkpointAgent, "Test.1").
+		infraStep(checkpointAgent, "1.Test").
 		play(buildVerifiedRun[4:], 1)
 
-	clean, cleanErr := resumeLog(aw, singleStageSet("TDD"), log, false)
-	rerun, rerunErr := resumeLog(aw, singleStageSet("TDD"), log, true)
+	clean, cleanErr := resumeLogIDs(aw, singleSchedules("TDD"), log, false)
+	rerun, rerunErr := resumeLogIDs(aw, singleSchedules("TDD"), log, true)
 
-	requireResumeAt(t, clean, cleanErr, bvRowTestsReview-1, false, 1, groupTest)
-	requireResumeAt(t, rerun, rerunErr, bvRowTestBuild-1, true, 1, groupTest)
+	requireResumeAt(t, clean, cleanErr, bvRowTestsReview-1, false, "1", groupTest)
+	requireResumeAt(t, rerun, rerunErr, bvRowTestBuild-1, true, "1", groupTest)
 }
 
 func TestResumePoint_StagedFindingsLoop_InfrastructureAfterRouteBack_ResumesFromRecordedRow(t *testing.T) {
-	aw := mustParseAndAdmit(t, stagedFindingsLoopContent, "staged-findings-loop", "1.0")
+	aw := mustParseAndAdmitV216(t, findingsLoopContent, "staged-findings-loop", "1.0")
 	log := (&runLog{}).play(stagedLoopRun, 2).
-		infraStep(checkpointAgent, "Test.1").
+		infraStep(checkpointAgent, "1.Test").
 		play(stagedLoopRun[2:], 1).
-		infraStep(checkpointAgent, "Test.1").
+		infraStep(checkpointAgent, "1.Test").
 		play(stagedLoopRun[5:], 1)
 
-	clean, cleanErr := resumeLog(aw, singleStageSet("TDD"), log, false)
-	rerun, rerunErr := resumeLog(aw, singleStageSet("TDD"), log, true)
+	clean, cleanErr := resumeLogIDs(aw, singleSchedules("TDD"), log, false)
+	rerun, rerunErr := resumeLogIDs(aw, singleSchedules("TDD"), log, true)
 
 	// The log ends with the gate passing after two route-backs.
-	requireResumeAt(t, clean, cleanErr, loopRowReview-1, false, 1, groupTest)
-	requireResumeAt(t, rerun, rerunErr, loopRowGate-1, true, 1, groupTest)
+	requireResumeAt(t, clean, cleanErr, loopRowReview-1, false, "1", groupTest)
+	requireResumeAt(t, rerun, rerunErr, loopRowGate-1, true, "1", groupTest)
 }
 
 // ===== Second stage =====
@@ -308,72 +296,73 @@ func TestResumePoint_StagedFindingsLoop_InfrastructureAfterRouteBack_ResumesFrom
 // findings route-back and infrastructure steps.
 func stageOneWithRouteBackAndInfra() *runLog {
 	return newBuildVerifiedLog().play(buildVerifiedRun, 3).
-		infraStep(checkpointAgent, "Test.1").
+		infraStep(checkpointAgent, "1.Test").
 		play(buildVerifiedRun[3:], 4).
-		infraStep(checkpointAgent, "Implementation.1").
+		infraStep(checkpointAgent, "1.Implementation").
 		play(buildVerifiedRun[7:], 2).
-		infraStep(checkpointAgent, "Implementation.1")
+		infraStep(checkpointAgent, "1.Implementation")
 }
 
 // buildVerifiedStageTwo is the same run, in stage 2.
 func buildVerifiedStageTwo() []runStep {
 	steps := make([]runStep, len(buildVerifiedRun))
 	for i, s := range buildVerifiedRun {
-		s.stage = strings.TrimSuffix(s.stage, "1") + "2"
+		s.stage = "2" + strings.TrimPrefix(s.stage, "1")
 		steps[i] = s
 	}
 	return steps
 }
 
 func TestResumePoint_TwoStages_FirstStageCompleteAfterRouteBackAndInfra_ResumesAtStageTwoStart(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	log := stageOneWithRouteBackAndInfra()
 
-	info, err := resumeLog(aw, twoStageSet("TDD"), log, false)
+	info, err := resumeLogIDs(aw, twoSchedules("TDD"), log, false)
 
-	requireResumeAt(t, info, err, bvRowTestWriter-1, false, 2, groupTest)
+	requireResumeAt(t, info, err, bvRowTestWriter-1, false, "2", groupTest)
 }
 
 func TestResumePoint_TwoStages_SecondStageAfterRouteBack_CleanAndInterrupted(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	stageTwo := buildVerifiedStageTwo()
 	for _, tc := range buildVerifiedResumeCases[:5] {
 		t.Run(tc.name, func(t *testing.T) {
 			log := stageOneWithRouteBackAndInfra().play(stageTwo, tc.n)
 
-			clean, cleanErr := resumeLog(aw, twoStageSet("TDD"), log, false)
-			rerun, rerunErr := resumeLog(aw, twoStageSet("TDD"), log, true)
+			clean, cleanErr := resumeLogIDs(aw, twoSchedules("TDD"), log, false)
+			rerun, rerunErr := resumeLogIDs(aw, twoSchedules("TDD"), log, true)
 
-			requireResumeAt(t, clean, cleanErr, tc.cleanRow, false, 2, tc.cleanGroup)
-			requireResumeAt(t, rerun, rerunErr, stageTwo[tc.n-1].row-1, true, 2, tc.rerunGroup)
+			requireResumeAt(t, clean, cleanErr, tc.cleanRow, false, "2", tc.cleanGroup)
+			requireResumeAt(t, rerun, rerunErr, stageTwo[tc.n-1].row-1, true, "2", tc.rerunGroup)
 		})
 	}
 }
 
 func TestResumePoint_TwoStages_SecondStageLastRow_CompletesRun(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	log := stageOneWithRouteBackAndInfra().play(buildVerifiedStageTwo(), len(buildVerifiedRun))
 
-	info, err := resumeLog(aw, twoStageSet("TDD"), log, false)
+	info, err := resumeLogIDs(aw, twoSchedules("TDD"), log, false)
 
-	requireResumeAt(t, info, err, len(aw.Table.Rows), false, 0, -1)
+	requireResumeAt(t, info, err, len(aw.Table.Rows), false, "", -1)
 }
 
 // ===== Stop and report =====
 
 // resumeStopCases are last-entry defects of the Test-group build-review
-// (build-review fills rows 9 and 12). Each makes resume stop.
+// (build-review fills rows 9 and 12). Each makes resume stop. A missing row
+// is not among them: the stage names the group, so it is covered by an agent
+// that repeats within one group.
 var resumeStopCases = []struct {
 	name      string
 	stage     string
 	row       int
 	wantCause domain.PositionUnresolvedCause
 }{
-	{"no recorded row", "Test.1", int(domain.NoWorkflowRow), domain.CauseNoRecordedRow},
-	{"row outside table", "Test.1", 14, domain.CauseRecordedRowInvalid},
-	{"row far outside table", "Test.1", 99, domain.CauseRecordedRowInvalid},
-	{"row holds another agent", "Test.1", bvRowTestsReview, domain.CauseRecordedRowInvalid},
-	{"row in other group than stage", "Implementation.1", bvRowTestBuild, domain.CauseRecordedRowInvalid},
+	{"row outside table", "1.Test", 14, domain.CauseRecordedRowInvalid},
+	{"row far outside table", "1.Test", 99, domain.CauseRecordedRowInvalid},
+	{"row holds another agent", "1.Test", bvRowTestsReview, domain.CauseRecordedRowInvalid},
+	{"row in other group than stage", "1.Implementation", bvRowTestBuild, domain.CauseRecordedRowInvalid},
 	{"empty stage", "", bvRowTestBuild, domain.CauseStagedRowWithoutStage},
 	{"legacy stage value", "Stage-1", bvRowTestBuild, domain.CauseRecordedRowInvalid},
 }
@@ -413,7 +402,7 @@ func requireResumeStop(
 }
 
 func TestResumePoint_MultiRowAgentWithUnusableRecordedRow_StopsAndReports(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	for _, tc := range resumeStopCases {
 		for _, interrupted := range []bool{false, true} {
 			name := tc.name + "/clean"
@@ -422,10 +411,10 @@ func TestResumePoint_MultiRowAgentWithUnusableRecordedRow_StopsAndReports(t *tes
 			}
 			t.Run(name, func(t *testing.T) {
 				log := newBuildVerifiedLog().
-					workflowStep("test-writer-tdd", "Test.1", domain.StatusSUCCESS, bvRowTestWriter).
+					workflowStep("test-writer-tdd", "1.Test", domain.StatusSUCCESS, bvRowTestWriter).
 					workflowStep("build-review", tc.stage, domain.StatusSUCCESS, tc.row)
 
-				info, err := resumeLog(aw, singleStageSet("TDD"), log, interrupted)
+				info, err := resumeLogIDs(aw, singleSchedules("TDD"), log, interrupted)
 
 				requireResumeStop(t, info, err, "build-review#9", tc.row, tc.wantCause)
 			})
@@ -434,25 +423,44 @@ func TestResumePoint_MultiRowAgentWithUnusableRecordedRow_StopsAndReports(t *tes
 }
 
 func TestResumePoint_StagedFindingsLoop_RecordedRowInOtherGroupThanStage_StopsAndReports(t *testing.T) {
-	aw := mustParseAndAdmit(t, stagedFindingsLoopContent, "staged-findings-loop", "1.0")
+	aw := mustParseAndAdmitV216(t, findingsLoopContent, "staged-findings-loop", "1.0")
 	// Row 4 is the Implementation row; the entry's stage names the Test group.
 	log := (&runLog{}).
-		workflowStep("loop-agent", "Test.1", domain.StatusSUCCESS, loopRowWriter).
-		workflowStep("loop-agent", "Test.1", domain.StatusSUCCESS, loopRowImpl)
+		workflowStep("loop-agent", "1.Test", domain.StatusSUCCESS, loopRowWriter).
+		workflowStep("loop-agent", "1.Test", domain.StatusSUCCESS, loopRowImpl)
 
-	info, err := resumeLog(aw, singleStageSet("TDD"), log, false)
+	info, err := resumeLogIDs(aw, singleSchedules("TDD"), log, false)
 
 	requireResumeStop(t, info, err, "loop-agent#2", loopRowImpl, domain.CauseRecordedRowInvalid)
 }
 
-func TestResumePoint_MultiRowAgentWithUnusableRecordedRow_TrailingInfrastructureStillStops(t *testing.T) {
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	log := newBuildVerifiedLog().
-		workflowStep("test-writer-tdd", "Test.1", domain.StatusSUCCESS, bvRowTestWriter).
-		workflowStep("build-review", "Test.1", domain.StatusSUCCESS, int(domain.NoWorkflowRow)).
-		infraStep(checkpointAgent, "Test.1")
+func TestResumePoint_RepeatedAgentInGroupWithoutRecordedRow_StopsAndReports(t *testing.T) {
+	aw := mustParseAndAdmitV216(t, findingsLoopContent, "staged-findings-loop", "1.0")
+	for _, interrupted := range []bool{false, true} {
+		name := "clean"
+		if interrupted {
+			name = "interrupted"
+		}
+		t.Run(name, func(t *testing.T) {
+			log := (&runLog{}).
+				workflowStep("loop-agent", "1.Test", domain.StatusSUCCESS, loopRowWriter).
+				workflowStep("loop-agent", "1.Test", domain.StatusSUCCESS, int(domain.NoWorkflowRow))
 
-	info, err := resumeLog(aw, singleStageSet("TDD"), log, false)
+			info, err := resumeLogIDs(aw, singleSchedules("TDD"), log, interrupted)
 
-	requireResumeStop(t, info, err, "build-review#9", 0, domain.CauseNoRecordedRow)
+			requireResumeStop(t, info, err, "loop-agent#2", 0, domain.CauseNoRecordedRow)
+		})
+	}
+}
+
+func TestResumePoint_RepeatedAgentInGroupWithoutRecordedRow_TrailingInfrastructureStillStops(t *testing.T) {
+	aw := mustParseAndAdmitV216(t, findingsLoopContent, "staged-findings-loop", "1.0")
+	log := (&runLog{}).
+		workflowStep("loop-agent", "1.Test", domain.StatusSUCCESS, loopRowWriter).
+		workflowStep("loop-agent", "1.Test", domain.StatusSUCCESS, int(domain.NoWorkflowRow)).
+		infraStep(checkpointAgent, "1.Test")
+
+	info, err := resumeLogIDs(aw, singleSchedules("TDD"), log, false)
+
+	requireResumeStop(t, info, err, "loop-agent#2", 0, domain.CauseNoRecordedRow)
 }

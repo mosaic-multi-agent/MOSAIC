@@ -2,7 +2,7 @@
 
 > **Status:** Draft
 > **Created:** 2026-08-15
-> **Last Updated:** 2026-10-08
+> **Last Updated:** 2026-10-13
 > **Scope:** The contract between the Runner (`mosaic-run`) and the script-mode orchestrator agent. Defines when the Runner invokes the orchestrator, what it sends, what it expects back, and the constraints both sides must respect. This is not the orchestrator's internal design (how it reasons about routing) — it is the wire protocol between two systems.
 
 ---
@@ -12,6 +12,8 @@
 The Runner and the orchestrator agent collaborate to execute workflows. The Runner handles mechanical routing (reading the workflow table, building protocol requests, recording results, evaluating triggers). The orchestrator handles intelligent routing (deciding which agent runs next, stating its task, handling deviations) under the Routing Policy it shares word for word with the conversational orchestrator. When the Runner needs a routing decision it cannot make from the workflow table alone — or, in Mode 1, for every routing decision — it invokes the orchestrator through the same harness adapter used for subagents.
 
 This document defines the contract for that invocation: the request the Runner sends, the response it expects, and the guarantees both sides provide.
+
+The Runner requires `orchestrator-script` v3.3.0, the orchestrator version that states this contract. It runs every run sequentially: new runs record `dispatch: sequential` in the artifact frontmatter, and a resumed artifact recording any other `dispatch` value is refused before any dispatch. The wire schema is unchanged by this requirement.
 
 ### 1.1 Why a Contract Document
 
@@ -51,7 +53,7 @@ The Runner needs a routing decision. The orchestrator reads `Orchestration.md`, 
 
 This context is used:
 - **Mode 1 (every step):** After every subagent completion, regardless of status code. The orchestrator makes all routing decisions, including for `PARTIALLY_DONE` and `BLOCKED` with `E501`.
-- **Modes 2/3 (deviation):** When the engine cannot determine the next step from the workflow table — non-SUCCESS status codes the engine can't auto-route, harness errors, ambiguous routing. In these modes the Runner handles two outcomes itself before consulting (§2.3).
+- **Modes 2/3 (deviation):** When the engine cannot determine the next step from the workflow table — non-SUCCESS status codes the engine can't auto-route, harness errors, ambiguous routing — and after a `SUCCESS` whose next step already finished: the table leads to a row that has a `SUCCESS` in the Execution Log at that iteration, so following it would repeat finished work (`Design.md` §2.10). In these modes the Runner handles two outcomes itself before consulting (§2.3).
 - **After orchestration-review:** When the review infrastructure agent fires and produces observations, the Runner follows up with a routing consultation that includes the review's `status_message`. This gives the orchestrator the chance to act on the findings.
 
 The orchestrator does not need to know whether it is being consulted for routine routing (Mode 1) or because something went wrong (Modes 2/3). It reads the artifact, sees the current state, and decides. The `last_status_message` and `last_error_reason` fields (§3.2) carry the triggering agent's full verbatim `status_message` and, for `BLOCKED`, its `error_reason`. These are the only pieces of context not already in the artifact: the Execution Log truncates `status_message` and has no column for `error_reason`.
@@ -60,7 +62,7 @@ The orchestrator does not need to know whether it is being consulted for routine
 
 A one-shot invocation at run start (before the dispatch loop) for Modes 2 and 3, enabled by default. The orchestrator returns explicit environment facts from its deployed instructions that apply to every auto-routed subagent. The Runner appends them to subsequent auto-routed dispatches. Pre-consultation can be disabled with `--pre-consult=false`.
 
-Pre-consultation has a different response schema from routing consultation (§5 vs §4).
+Pre-consultation has a different response schema from routing consultation (§5 vs §4); the one routing action it admits is `stop` (§5).
 
 **When orchestration-review is not deployed** (absent from the `<InfrastructureAgents>` region), review-triggered consultations never occur.
 
@@ -72,8 +74,8 @@ Two outcomes are re-dispatched mechanically by the Runner, without consulting th
 
 | Outcome | Runner behavior | When the orchestrator is consulted |
 |---------|-----------------|------------------------------------|
-| `PARTIALLY_DONE` | Re-dispatches the same assignment (same row and stage) with the previous output artifacts added to the inputs and the previous `status_message` appended to the task description, up to 3 times in a row | Once the trailing run of `PARTIALLY_DONE` at that row and stage exceeds 3 |
-| `BLOCKED` with `E501` | Re-dispatches the same assignment, with a budget of 3 `E501` attempts per row and stage since the last `SUCCESS` there | Once the budget is spent |
+| `PARTIALLY_DONE` | Re-dispatches the same assignment (same row and iteration) with the previous output artifacts added to the inputs and the previous `status_message` appended to the task description, up to 3 times in a row | Once the trailing run of `PARTIALLY_DONE` at that row and iteration exceeds 3 |
+| `BLOCKED` with `E501` | Re-dispatches the same assignment, with a budget of 3 `E501` attempts per row and iteration since the last `SUCCESS` there | Once the budget is spent |
 
 Orchestrated mode (Mode 1) never applies these shortcuts: the orchestrator is consulted on every decision, including every `PARTIALLY_DONE` and `E501`, and applies the shared Routing Policy itself (a fresh invocation for `PARTIALLY_DONE`, the Tiered Error Strategy for `E501`). The Runner-only bound of 3 consecutive `PARTIALLY_DONE` re-dispatches does not exist in the Routing Policy; after the bound the orchestrator applies the unchanged policy with judgement. Every other non-`SUCCESS` outcome the engine cannot route from the table reaches the orchestrator in all modes.
 
@@ -88,6 +90,8 @@ The position of a step in the routing table is carried in three places, with dif
 | Routing reply `row` (§4.1) | The row the orchestrator dispatches | Mandatory on every `dispatch`; there is no optional phase and no fallback that resolves the row from `agent` |
 
 All three use the same numbering: the table's `Row` column value, or the 1-based position among the table's data rows when there is none.
+
+A row inside a block also has an iteration. The routing reply names it in `iteration` (§4.1) in exactly the form the Execution Log writes in its `Iteration` column for that row, so the orchestrator copies the value from the log.
 
 ---
 
@@ -110,8 +114,8 @@ All three use the same numbering: the table's `Row` column value, or the 1-based
 |-------|------|----------|-------------|
 | `orchestration_artifact` | string | Yes | Path to `Orchestration.md` for this run. The orchestrator reads this to understand the run's full state — execution log, current position, workflow notes. This is the orchestrator's single source of truth. |
 | `context` | string | Yes | `"routing"` or `"pre_consultation"`. Tells the orchestrator which response schema the Runner expects. |
-| `last_status_message` | string or null | Yes | The full verbatim `status_message` from the agent that triggered this consultation. The artifact does not carry it in full: the Execution Log truncates `status_message` for readability. `null` on the first step of a new run (no prior agent) and for pre-consultation. For harness errors, which the Runner records as `BLOCKED` with `E501` (`Design.md` §3.3), this carries the Runner-constructed error description. |
-| `last_error_reason` | string or null | Yes | The full verbatim `error_reason` from the triggering agent's response when its status is `BLOCKED`; for a harness error, the Runner-constructed error description. `null` for every other status, on the first step of a new run, and for pre-consultation. Like `last_status_message`, it is not persisted in the artifact. It is what lets the orchestrator correct the defect an `E100` names. |
+| `last_status_message` | string or null | Yes | The full verbatim `status_message` from the agent that triggered this consultation. The artifact does not carry it in full: the Execution Log truncates `status_message` for readability. `null` on the first step of a new run (no prior agent), for pre-consultation, and for a consultation made on resume: a resumed run holds no response from the process that produced the last step, so the Runner has no verbatim message to send, and a finished-work consultation (§2.1) made on resume carries `null` too (the artifact's Execution Log row is then the only record of that step). For harness errors, which the Runner records as `BLOCKED` with `E501` (`Design.md` §3.3), this carries the Runner-constructed error description. |
+| `last_error_reason` | string or null | Yes | The full verbatim `error_reason` from the triggering agent's response when its status is `BLOCKED`; for a harness error, the Runner-constructed error description; when the consultation follows a block schedule that stayed defective after the Runner's re-dispatches of the producing row, the Runner-constructed defect description (the rule ID, or that the Source is missing or unreadable, the block, the Source and Section, and the offending row, ID or token), while `last_status_message` stays the producer's verbatim `status_message` (`Design.md` §3.6). `null` for every other status, on the first step of a new run, on resume, and for pre-consultation. Like `last_status_message`, it is not persisted in the artifact. It is what lets the orchestrator correct the defect an `E100` names. |
 
 ---
 
@@ -128,7 +132,7 @@ Route to a specific agent in the workflow table.
   "action": "dispatch",
   "agent": "contracts-designer",
   "row": 4,
-  "stage": null,
+  "iteration": null,
   "task_description": "Revise ContractsDesign.md to resolve the findings recorded in contracts-review.md.",
   "constraints": null,
   "input_artifacts": ["Requirements.md", "ContractsDesign.md", "contracts-review.md"],
@@ -140,20 +144,22 @@ Route to a specific agent in the workflow table.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `action` | string | Yes | `"dispatch"` |
-| `agent` | string | Yes | Agent identifier from the routing table. Must equal the agent of the row named by `row`. |
+| `agent` | string | Yes | The bare agent id, without the mode qualifier: `build-review` for a row whose `Subagent` cell reads `build-review(tests)`. Must equal the bare id of the row named by `row`. The whole `Subagent` cell is rejected as an agent-row mismatch. |
 | `row` | integer | Yes | The 1-based routing table row dispatched, in the numbering of §2.4. The Runner takes the defaults from this row. A JSON integer or a decimal string is accepted. A missing `row`, a row outside the table, or a row whose agent differs from `agent` is invalid (§7.1, §7.2). |
-| `stage` | integer, string, or null | Required for a staged row; invalid otherwise | The plan stage for a staged (`[StageNumber]`) row: an integer, a decimal string, or the Execution Log's group form `"Group.N"` (for example `"Test.2"`). The stage must exist in the current stage set and a given group must be the row's group. Absent or `null` on a staged row, or any stage on a non-staged row, is invalid. |
+| `iteration` | string or null | Required for a row in a block; invalid otherwise | The iteration of the row's block, as a string holding exactly the value the Execution Log writes in its `Iteration` column for that row (`OrchestrationArtifactFormat.md` §4.1: `{ID}` for an ungrouped row, `{ID}.{Group}` for a grouped row), for example `"A"`, `"4"`, `"1.Test"`, `"b-2.Implementation"`. The value is split using the row's `Phase` cell: one ID per block reference, then the row's group when it has one (the Runner admits one block reference per row, so one ID). The ID must exist in the current schedule of the row's block (compared ignoring case; recorded as the schedule spells it). On a grouped row the group segment is required and must equal the row's group; on an ungrouped row a group segment is invalid. `null` or absent on a row outside every block is the only valid form there; any iteration on such a row is invalid, as is `null`, absent or `""` on a row in a block. The `stage` member of earlier contract versions is no longer accepted: a `stage` value other than `null` is a malformed reply. |
 | `task_description` | string | Yes | The task for the next subagent, stated minimally under the orchestrators' shared Task Descriptions rule (what to accomplish, never how, never reshaped from domain content). The Runner uses this verbatim in the protocol request's `task_description` field. |
 | `constraints` | string or null | No | If non-null, used as the `constraints` field in the protocol request. `null` or absent means the Runner uses any table-level or deployment-level constraints. |
 | `input_artifacts` | array of strings or null | No | If non-null, overrides the table row's Input column for this dispatch. The orchestrator specifies exactly which artifacts this invocation should read — e.g., adding a review artifact that isn't in the table's default set. `null` or absent means the Runner uses the table row's Input column. |
 | `output_artifacts` | array of strings or null | No | If non-null, overrides the table row's Output column for this dispatch. `null` or absent means the Runner uses the table row's Output column. |
 | `hitl_override` | bool or null | No | `true` adds HITL. `false` applies an explicit user waiver recorded in Workflow Notes and applicable to this invocation. `null` or absent defers to workflow and Plan resolution. |
 
+**Why `iteration` and a bare `agent`.** The `iteration` string reuses the vocabulary the orchestrator already reads in the Execution Log, so no second iteration form exists and the orchestrator copies the value instead of translating it; the Runner splits it with the row's `Phase` cell, which it already holds. The bare `agent` id is what is dispatched and logged (agent file, instance ids) and what `orchestrator-script.md` already tells the orchestrator to dispatch, so the qualified table cell is never an accepted spelling.
+
 **Artifact paths are bare and run-relative.** An override names artifacts the way the workflow table, the Execution Log's `Inputs` column, and the Artifacts registry name them — `Requirements.md`, `Stage-2/Plan.md` — without the `Orchestration-{run_id}/` prefix. The Runner adds the prefix when it builds the protocol request, which is the one place the contract requires a fully-qualified path. Keeping the prefix out of everything the run configures or records means `run_id` is stated once, in the folder name, rather than repeated into every path. The Runner normalises an already-prefixed path rather than doubling it, but that is tolerance for a hand-edited or legacy value, not an alternative form to emit.
 
 **Defaults and overrides:** The table row provides the default artifact set — what the workflow author designed for the first happy-path invocation of each agent. On re-invocations (after review loops, deviation recovery, backward jumps), the artifact set often differs: a creator routed back after review needs the review artifact as additional input; an agent re-invoked after upstream changes may need a different output scope. The orchestrator overrides only the fields that differ from table defaults — `null` means "use the table."
 
-**Runner behavior:** The Runner validates `row` and `stage` against the routing table and the current stage set, and never corrects them. For each protocol request field, it applies the orchestrator's value if provided, otherwise falls back to the table row's default. Sequence number is always assigned by the Runner. Once that invocation's outcome is accepted, `current_state` takes the dispatched row's position — including phase and stage changes, even if the dispatch jumps backward in the table.
+**Runner behavior:** The Runner validates `row` and `iteration` against the routing table and the current block schedules, and never corrects them. For each protocol request field, it applies the orchestrator's value if provided, otherwise falls back to the table row's default. Sequence number is always assigned by the Runner. Once that invocation's outcome is accepted, `current_state` takes the dispatched row's position — including phase and iteration changes, even if the dispatch jumps backward in the table.
 
 **Free table navigation:** The orchestrator can name any agent in the routing table, regardless of the current position. A reviewer finding upstream problems (bad contracts, incomplete requirements, wrong plan) is a normal reason to jump backward. The Runner imposes no ordering constraint — the orchestrator's routing decision is authoritative.
 
@@ -173,7 +179,7 @@ Stop the run.
 | `action` | string | Yes | `"stop"` |
 | `reason` | string | Yes | Human-readable reason for stopping. Surfaced in the Runner's exit message. The script orchestrator records any conclusion needed for later resume in Workflow Notes before returning. |
 
-**Runner behavior:** The run ends. The artifact is left in its current state (resumable if the underlying issue is fixed).
+**Runner behavior:** The run ends. The reason is surfaced in the Runner's exit message and is not persisted in the artifact. The artifact is left in its current state (resumable if the underlying issue is fixed).
 
 ---
 
@@ -198,6 +204,26 @@ Both fields are optional. The orchestrator includes only explicit facts that app
 
 **Not applied to orchestrator-routed dispatches.** When the orchestrator crafts a dispatch instruction (§4.1), it includes any relevant explicit environment facts itself. Pre-consultation strings are only for auto-routed dispatches where the orchestrator was not involved.
 
+### 5.1 Pre-Consultation Stop
+
+The orchestrator may end the run at pre-consultation, before any workflow dispatch, with the routing `stop` shape of §4.2:
+
+```json
+{
+  "action": "stop",
+  "reason": "The workflow requires a database that is not reachable from this environment"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `action` | string | Yes for a stop | `"stop"`. No other `action` value is allowed in a pre-consultation reply. |
+| `reason` | string | Yes | Human-readable reason, non-empty after trimming whitespace. Surfaced in the Runner's exit message. |
+
+**Runner behavior:** A pre-consultation stop is a decision, not a failure. The run ends before any dispatch as a consultant stop (exit code 6) with the reason on stderr. Pre-consultation runs before the Runner records the advice, so the artifact is left exactly as a pre-consultation failure leaves it: resumable, nothing written for the stop, and a resume runs pre-consultation again. Advice members (`task_description`, `constraints`) sent next to a `stop` are ignored: the stop wins. A reply with no `action` member is advice as before, and any `reason` member in it is ignored. The TUI offers Retry only, because manual dispatch replaces a routing decision and a pre-consultation stop has none; Retry resumes the run, which asks the orchestrator for pre-consultation again.
+
+**Malformed cases (pre-consultation failure, §7.4):** an `action` that is not the string `"stop"` (including `"dispatch"`, `null`, an empty string and any non-string value), and a `stop` whose `reason` is missing, `null`, empty, blank or not a string. Pre-consultation is never retried within the attempt.
+
 ---
 
 ## 6. Orchestrator-Side Constraints
@@ -206,10 +232,10 @@ Both fields are optional. The orchestrator includes only explicit facts that app
 
 | Constraint | Rationale |
 |-----------|-----------|
-| Return valid JSON conforming to the expected response schema | The Runner parses the response structurally. Malformed JSON and an invalid `row`/`stage` are retried within the attempt budget (§7.1); a missing required field stops the run. |
+| Return valid JSON conforming to the expected response schema | The Runner parses the response structurally. Malformed JSON and an invalid `row`/`iteration` are retried within the attempt budget (§7.1); a missing required field stops the run. |
 | Use only the two defined actions (`dispatch`, `stop`) for routing consultation | Unknown actions are parse errors. |
 | Use only agent identifiers from the routing table in `dispatch.agent` | An unknown agent stops the run (§7.2). |
-| Always provide `row` in `dispatch`, and `stage` exactly when the row is staged | Both are validated against the table and the current stage set; an invalid pair is retried like a malformed reply (§7.1). The row's agent must equal `agent`. |
+| Always provide `row` in `dispatch`, and `iteration` exactly when the row is in a block; give `agent` as the bare id | Both are validated against the table and the current block schedules; an invalid pair is retried like a malformed reply (§7.1). The row's bare agent id must equal `agent`. |
 | Always provide `task_description` in `dispatch` | The protocol requires a non-empty task; the Runner does not synthesize one for an orchestrator-routed dispatch. |
 
 ### 6.2 Artifact Constraints
@@ -226,6 +252,7 @@ Both fields are optional. The orchestrator includes only explicit facts that app
 |-----------|-----------|
 | Must NOT invoke subagents directly | All subagent dispatch goes through the Runner. The orchestrator DECIDES what runs next; the Runner EXECUTES it. |
 | Must NOT modify project files | The orchestrator is a routing agent, not an execution agent. It reads the artifact for context; it does not touch the codebase. |
+| Judge finished work before repeating it | A consultation can follow a `SUCCESS` because the table's next step already finished (§2.1). Following `On Success` there reruns that work; a creator rewrites approved output that must pass review again. Dispatch it again only when the work since then changed what it depends on; otherwise dispatch the first work not yet finished. This is a Routing Policy judgement and applies to the conversational orchestrator too when a run has been sent back upstream. |
 | Decision continuity must live in the artifact | Record every conclusion or routing decision that a later consultation may need in Workflow Notes. Never rely on memory or conversation history from a previous consultation; the current request's `last_status_message` remains current evidence, not persisted decision state. |
 
 ---
@@ -236,22 +263,28 @@ Both fields are optional. The orchestrator includes only explicit facts that app
 
 The Runner retries a malformed reply by re-invoking the orchestrator with the same request: three attempts in total, and the run stops with the last parse or validation error when the third attempt also fails. One budget covers both kinds of malformed reply:
 
-- invalid JSON, or a field of an unusable type (for example a `row` or `stage` that is not an integer);
-- an invalid `row` or `stage`: `row` missing or not in the table, the row's agent differing from `agent` (§7.2), `stage` missing on a staged row, present on a non-staged row, not in the current stage set, or carrying a group other than the row's.
+- invalid JSON, or a field of an unusable type (for example a `row` that is not an integer or an `iteration` that is not a string), or a `stage` member other than `null`;
+- an invalid `row` or `iteration`: `row` missing or not in the table, the row's agent differing from `agent` (§7.2), `iteration` missing on a block row, present on a row outside every block, malformed for the row (too many segments, a group segment on an ungrouped row, an ID outside the iteration ID character set), naming an ID not in the current schedule of the row's block, or carrying a group other than the row's.
 
-These stop the run immediately, without retry: a reply with no JSON object at all, an unknown `action`, a missing or empty `agent` or `task_description`, and an unknown agent (§7.2). A valid reply that routes to the wrong place is carried out and not retried.
+An iteration that is valid against the schedule but whose approach does not include the row's group is not retried: the run stops with the consultation's invalid-target message.
+
+These stop the run immediately, without retry: a reply with no JSON object at all, a missing required field (a reply with no `action` field at all counts as one; an explicitly empty `"action": ""` is an unknown `action`), an unknown `action`, a missing or empty `agent` or `task_description`, and an unknown agent (§7.2). A valid reply that routes to the wrong place is carried out and not retried.
 
 ### 7.2 Unknown Agent and Agent-Row Mismatch
 
 An unknown agent in `dispatch.agent` stops the run at once. The error message identifies the unknown agent and lists available agents from the routing table.
 
-A known agent whose `row` belongs to a different agent is an invalid row and is retried under the §7.1 budget; the error names the row's actual agent.
+A known agent whose `row` belongs to a different agent is an invalid row and is retried under the §7.1 budget; the error names the row's actual agent. This includes the whole `Subagent` cell of a mode-qualified row (`build-review(tests)`): only the bare id (`build-review`) matches.
 
 ### 7.3 Harness Error Invoking Orchestrator
 
 The run stops without retry. The error message includes the harness error (timeout, crash, connection failure). The malformed-reply retries of §7.1 apply only to a reply that arrived.
 
-### 7.4 Pre-Consultation Failure
+### 7.4 Pre-Consultation Failure and Pre-Consultation Stop
+
+A pre-consultation stop (§5.1) is not a failure. It is the orchestrator's decision: the run ends as a consultant stop (exit code 6) and the reason is reported as in §4.2. A pre-consultation failure ends the run as a start failure (exit code 7). Both leave the artifact resumable and both are re-run by a resume.
+
+Failures of the pre-consultation reply: a harness or transport error, a reply with no JSON object, invalid JSON, an `action` that is not the string `"stop"` (§5.1) and a stop without a usable `reason`.
 
 The Runner creates or resumes the artifact before pre-consultation. If pre-consultation fails, the run stops before any workflow dispatch and retains the artifact for inspection and resume; resuming retries pre-consultation. The failed coordinator consultation remains available in Runner diagnostic/MOSAIC logs but does not consume `global_sequence`, create an Execution Log row, or update `current_state`.
 
@@ -268,10 +301,12 @@ Unlike subagent failures (which become deviations that the orchestrator can reso
 | Always provide the current artifact path in `orchestration_artifact` | The orchestrator must read the latest state. A stale or wrong path leads to decisions on wrong state. |
 | Write the preceding subagent's result to the artifact BEFORE invoking the orchestrator | The orchestrator reads the artifact for context. If the artifact doesn't reflect the most recent subagent completion, the orchestrator makes decisions on stale state. |
 | Always provide the full `status_message` from the triggering agent in `last_status_message` | The Execution Log truncates messages. The orchestrator needs the full response to make informed routing decisions. |
-| Provide the triggering agent's `error_reason` in `last_error_reason` when its status is `BLOCKED`, otherwise `null` | The artifact has no column for `error_reason`. Without it, the shared Routing Policy's `E100` rule ("correct the invocation or routing named in `error_reason`") cannot be applied in script mode. |
+| Provide the triggering agent's `error_reason` in `last_error_reason` when its status is `BLOCKED`, and the Runner-constructed description for a harness error or for a block schedule that stayed defective after the re-dispatch limit; otherwise `null` | The artifact has no column for `error_reason`. Without it, the shared Routing Policy's `E100` rule ("correct the invocation or routing named in `error_reason`") cannot be applied in script mode, and the orchestrator could not tell why a producer that returned `SUCCESS` is being consulted about. |
+| Never offer the orchestrator a block schedule the Runner found defective: its consultation request holds no schedule for that block, and a reply that dispatches a row of that block is invalid | A block row dispatched against a defective schedule would run on guessed iterations. The producing row may be dispatched again; the reply is otherwise handled like any invalid dispatch target (§7.1). |
 | Re-read the artifact after the orchestrator returns | The orchestrator may have updated Workflow Notes. The Runner must pick up those changes before the next dispatch. |
 | Keep consultation diagnostics outside `Orchestration.md` | A consultation is a fresh turn of the run's coordinator, not a protocol subagent invocation. It does not consume `global_sequence`, create an Execution Log row, or update `current_state`. Runner diagnostic/MOSAIC logs record the individual call; continuity needed for routing belongs in Workflow Notes. |
-| Re-invoke the orchestrator on a malformed reply, within the attempt budget of §7.1 | A reply with invalid JSON or an invalid `row`/`stage` is a recoverable orchestrator slip; the retry costs one consultation, not the run. |
+| Re-invoke the orchestrator on a malformed reply, within the attempt budget of §7.1 | A reply with invalid JSON or an invalid `row`/`iteration` is a recoverable orchestrator slip; the retry costs one consultation, not the run. |
+| Run sequentially and refuse another `dispatch` value on resume | The artifact's `dispatch` field records how the run is scheduled. The Runner writes `sequential` on new runs and refuses a present value other than exactly `sequential`; a missing field is read as `sequential`. The orchestrator's consultation never carries a parallel schedule. |
 | Never parse orchestrator responses beyond the defined schema | If the orchestrator returns extra fields, ignore them. Forward compatibility. |
 
 ---
@@ -327,6 +362,11 @@ Considered treating the orchestrator as another row in the routing table (a "met
 
 | Version | Date | Summary |
 |---------|------|---------|
+| 0.8 | 2026-10-13 | A pre-consultation reply may be the routing `stop` (§5.1): a decision that ends the run before any dispatch as a consultant stop (exit code 6), leaving the artifact as a pre-consultation failure does. Any other `action`, and a stop with a missing or empty `reason`, is malformed (pre-consultation failure, §7.4). A routing reply with no `action` field is a missing required field and stops at once, not retried (§7.1). A consultation made on resume, a finished-work consultation included, carries `last_status_message: null` (§3.2). §4.2 states that the stop reason is not persisted. No schema field is added. `orchestrator-script` stays at v3.3.0. |
+| 0.7 | 2026-10-13 | Modes 2/3 also consult after a `SUCCESS` whose next step already finished (`Design.md` §2.10); §2.1 lists the trigger and §6.3 states the judgement the orchestrator makes there. The wire schema is unchanged: the request carries the succeeding step's message in `last_status_message`, and no deviation kind is sent. The Runner requires `orchestrator-script` v3.3.0, whose Routing Policy states that judgement and whose Deviation Triggers list the case. |
+| 0.6 | 2026-10-12 | The Runner requires `orchestrator-script` v3.2.0 and runs every run with `dispatch: sequential`, refusing other recorded values on resume. Section 4.1 speaks of phase and iteration changes. The wire schema is unchanged. |
+| 0.5 | 2026-10-12 | **Breaking:** the `dispatch` reply names the iteration of a block row in `iteration`, a string holding exactly the Execution Log's `Iteration` value for that row (`"A"`, `"4"`, `"1.Test"`), split using the row's `Phase` cell; it replaces `stage`, which is no longer accepted. `agent` is the bare agent id, without the mode qualifier; the whole `Subagent` cell is an agent-row mismatch. Validation failures keep their handling classes (retried within the malformed-reply budget, or stopping at once). `orchestrator-script` v3.1.0 states the same contract and the new Runner requires it (§4.1, §7.1, §7.2). |
+| 0.4 | 2026-10-11 | `last_error_reason` also carries a Runner-constructed description when the consultation follows a block schedule that a producing row (or a row of the block that writes it) left defective after the Runner's two re-dispatches of that row: the rule ID (or that the Source is missing or unreadable), the block, the Source and Section, and the offending row, ID or token. `last_status_message` stays the producer's verbatim `status_message`. While a block's schedule is defective the request holds no schedule for it, so a reply that dispatches a row of that block is invalid (§3.2, §8; behaviour in `Design.md` §3.6). The request and response schemas are unchanged. |
 | 0.3 | 2026-10-08 | **Breaking:** every `dispatch` reply must carry `row` (1-based, numbered as the Execution Log's `WorkflowRow`) and, for a staged row, `stage`; a reply without them is invalid. Added the three row carriers (workflow table `Row` column - optional; Execution Log `WorkflowRow` - `-` allowed; routing reply `row` - mandatory) and which outcomes the Runner handles itself (`PARTIALLY_DONE`, `BLOCKED`/`E501`; auto and auto-review modes only; orchestrated mode consults on every decision). Malformed replies (invalid JSON, invalid `row`/`stage`, agent-row mismatch) are retried up to three attempts in total before the run stops; other orchestrator failures remain terminal. |
 | 0.2 | 2026-09-27 | Both orchestrators now share one word-for-word Routing Policy (round-six R6-13): the script orchestrator's `task_description` follows the same minimal rule as native, so "targeted task descriptions as primary value" wording and the findings-quoting example were replaced. The request gains `last_error_reason`: the triggering response's `error_reason` for `BLOCKED` (the Runner-constructed description for a harness error, which is recorded as `BLOCKED`/`E501`), otherwise `null`. It gives script mode the `error_reason` the shared `E100` rule depends on and the artifact never persists (round-seven R7-04, R7-05). Clarified the script orchestrator's continuity boundary. Prior consultation conclusions and routing decisions needed later must be recorded in Workflow Notes rather than retained as conversation memory; the current request's `last_status_message` remains current evidence, not persisted decision state. Script-orchestrator consultations are coordinator turns rather than protocol subagent invocations: Runner diagnostic/MOSAIC logs retain the individual calls, while consultations do not consume `global_sequence` or create Execution Log rows (round-eight R8-04). Pre-consultation now consistently occurs after artifact creation or resume and any required commit setup; failure stops before workflow dispatch while retaining the artifact for inspection and resume (round-eight R8-05). Response schemas are unchanged. §6.1's unknown-agent cross-reference now points to §7.2. §4.1's `current_state` sentence now takes the dispatched row's position once the invocation's outcome is accepted, not at dispatch (round-six R6-05). §5 pre-consultation: environment facts belong in `task_description`; the `py` example moved there, and `constraints` is limited to scope or deliverable restrictions (R6-06). |
 | 0.1 | 2026-08-16 | Initial design. Purpose-built wire schema (not Communication Protocol). Request: `orchestration_artifact` + `context` + `last_status_message`. Two-action response: `dispatch` (with optional artifact/constraint overrides) or `stop`. Pre-consultation response for environment strings. Dead ends: CommProtocol reuse, three-action schema, context hint field, structured deviation payload, bidirectional communication, orchestrator as subagent. |

@@ -143,10 +143,10 @@ func TestSession_Start_OnFindings_LoopBack_HarnessInvokedNotDeviation(t *testing
 	f := harness.NewMockAdapter()
 	store := &memStore{}
 	ses := session.New(session.Deps{
-		Harness:   f,
-		Store:     store,
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:  f,
+		Store:    store,
+		Clock:    fixedClock{t: epoch},
+		Interact: &noopInteraction{},
 	})
 
 	// First agent-a call → SUCCESS.
@@ -201,15 +201,15 @@ func TestSession_Start_OnFindings_LoopBack_HarnessInvokedNotDeviation(t *testing
 func TestSession_Start_Deviation_ReturnsDeviationUnresolved(t *testing.T) {
 	dir := t.TempDir()
 
-	// Workflow where agent-a has absent On Findings → any non-SUCCESS triggers
+	// Workflow where agent-a has no On Findings route (`-`): any non-SUCCESS triggers
 	// a deviation (the engine can't route it automatically).
 	const deviationWorkflow = `<Workflow type="core" name="deviate" version="1.0">
 ## Deviation Workflow
 
-| Phase | Subagent | HITL | On Success | Input | Output |
-|-------|----------|:----:|------------|-------|--------|
-| PLANNING | agent-a | FALSE | agent-b | - | plan.md |
-| PLANNING | agent-b | FALSE | COMPLETE | plan.md | result.md |
+| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
+|-------|----------|:----:|------------|-------------|-------|--------|
+| PLANNING | agent-a | FALSE | agent-b | - | - | plan.md |
+| PLANNING | agent-b | FALSE | COMPLETE | - | plan.md | result.md |
 </Workflow>
 `
 	orchPath := filepath.Join(dir, "deviation-orch.md")
@@ -261,14 +261,14 @@ func TestSession_Start_Deviation_ResolverStop_ReturnsDeviationUnresolved(t *test
 	dir := t.TempDir()
 
 	// Same deviation workflow as TestSession_Start_Deviation_ResolvesAndResumes:
-	// agent-a has no On Findings column, so PARTIALLY_DONE triggers a deviation.
+	// agent-a has no On Findings route (`-`), so PARTIALLY_DONE triggers a deviation.
 	const deviationWorkflow = `<Workflow type="core" name="deviate-stop" version="1.0">
 ## Deviation Stop Workflow
 
-| Phase | Subagent | HITL | On Success | Input | Output |
-|-------|----------|:----:|------------|-------|--------|
-| PLANNING | agent-a | FALSE | agent-b | - | plan.md |
-| PLANNING | agent-b | FALSE | COMPLETE | plan.md | result.md |
+| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
+|-------|----------|:----:|------------|-------------|-------|--------|
+| PLANNING | agent-a | FALSE | agent-b | - | - | plan.md |
+| PLANNING | agent-b | FALSE | COMPLETE | - | plan.md | result.md |
 </Workflow>
 `
 	orchPath := filepath.Join(dir, "deviation-stop-orch.md")
@@ -349,10 +349,10 @@ func TestSession_Start_GracefulStop_ReturnsRunStopped(t *testing.T) {
 	}
 
 	ses := session.New(session.Deps{
-		Harness:   harnessCb,
-		Store:     store,
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:  harnessCb,
+		Store:    store,
+		Clock:    fixedClock{t: epoch},
+		Interact: &noopInteraction{},
 	})
 
 	// Only queue agent-a. The cancel fires before agent-b is dispatched, so
@@ -394,10 +394,10 @@ func TestSession_Start_InfrastructureAgentTrigger_CalledPerDispatch(t *testing.T
 	f := harness.NewMockAdapter()
 	hookCount := 0
 	ses := session.New(session.Deps{
-		Harness:   f,
-		Store:     &memStore{},
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:                 f,
+		Store:                   &memStore{},
+		Clock:                   fixedClock{t: epoch},
+		Interact:                &noopInteraction{},
 		OnInfrastructureTrigger: func() { hookCount++ },
 	})
 

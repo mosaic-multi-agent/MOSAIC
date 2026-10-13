@@ -25,10 +25,10 @@ func TestSession_Start_MissingOrchestratorFile_ReturnsRefusal(t *testing.T) {
 	dir := t.TempDir()
 	store := &memStore{}
 	ses := session.New(session.Deps{
-		Harness:   harness.NewMockAdapter(),
-		Store:     store,
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:  harness.NewMockAdapter(),
+		Store:    store,
+		Clock:    fixedClock{t: epoch},
+		Interact: &noopInteraction{},
 	})
 
 	cfg := domain.RunConfig{
@@ -52,10 +52,10 @@ func TestSession_Start_WorkflowNotFound_ReturnsRefusal(t *testing.T) {
 	writeAgentFile(t, dir, "agent-b")
 	store := &memStore{}
 	ses := session.New(session.Deps{
-		Harness:   harness.NewMockAdapter(),
-		Store:     store,
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:  harness.NewMockAdapter(),
+		Store:    store,
+		Clock:    fixedClock{t: epoch},
+		Interact: &noopInteraction{},
 	})
 
 	cfg := domain.RunConfig{
@@ -88,10 +88,10 @@ func TestSession_Start_NonCanonicalArtifact_ReturnsRefusal(t *testing.T) {
 		},
 	}
 	ses := session.New(session.Deps{
-		Harness:   harness.NewMockAdapter(),
-		Store:     refusalStore,
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:  harness.NewMockAdapter(),
+		Store:    refusalStore,
+		Clock:    fixedClock{t: epoch},
+		Interact: &noopInteraction{},
 	})
 
 	cfg := baseLinearConfig(orchPath)
@@ -102,33 +102,45 @@ func TestSession_Start_NonCanonicalArtifact_ReturnsRefusal(t *testing.T) {
 }
 
 // TestSession_Start_AdmissionFailure_ReturnsRefusal verifies that a workflow
-// pattern that compat refuses (e.g. parallel dispatch notation) produces
-// RunRefused before any agent is invoked.
+// that parses but that admission refuses (a fork list on a block row in an
+// engine-routed mode, which breaks rule B1) produces RunRefused naming the
+// rule, before any agent is invoked.
 func TestSession_Start_AdmissionFailure_ReturnsRefusal(t *testing.T) {
 	dir := t.TempDir()
 
-	// Write an orchestrator file with a workflow that compat will refuse:
-	// agent-with-mode notation "agent-a(mode)" is refused by FR-18a.6.
 	const refusedContent = `<Workflow type="core" name="refused" version="1.0">
 ## Refused Workflow
 
-| Phase | Subagent | HITL | Input | Output |
-|-------|----------|:----:|-------|--------|
-| PLANNING | agent-a(mode) | FALSE | - | out.md |
+| Phase | Subagent | HITL | On Success | On Findings | Waits For | Input | Output |
+|-------|----------|:----:|------------|-------------|-----------|-------|--------|
+| PLANNING | planner | FALSE | [Stage] | - | - | - | Plan.md |
+| EXECUTION.[Stage] | agent-a | FALSE | agent-b, agent-c | - | - | Plan.md | a-{Stage}.md |
+| EXECUTION.[Stage] | agent-b | FALSE | agent-d | - | - | - | b-{Stage}.md |
+| EXECUTION.[Stage] | agent-c | FALSE | agent-d | - | - | - | c-{Stage}.md |
+| EXECUTION.[Stage] | agent-d | FALSE | COMPLETE | - | agent-b, agent-c | - | d-{Stage}.md |
+
+**Blocks:**
+
+| Block | Source | Section |
+|-------|--------|---------|
+| Stage | Plan.md | Stages |
 </Workflow>
 `
 	orchPath := filepath.Join(dir, "refused-orch.md")
 	if err := os.WriteFile(orchPath, []byte(refusedContent), 0600); err != nil {
 		t.Fatalf("write refused-orch.md: %v", err)
 	}
-	writeAgentFile(t, dir, "agent-a(mode)")
+	for _, agent := range []string{"planner", "agent-a", "agent-b", "agent-c", "agent-d"} {
+		writeAgentFile(t, dir, agent)
+	}
 
+	f := harness.NewMockAdapter()
 	store := &memStore{}
 	ses := session.New(session.Deps{
-		Harness:   harness.NewMockAdapter(),
-		Store:     store,
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:  f,
+		Store:    store,
+		Clock:    fixedClock{t: epoch},
+		Interact: &noopInteraction{},
 	})
 
 	cfg := domain.RunConfig{
@@ -136,11 +148,18 @@ func TestSession_Start_AdmissionFailure_ReturnsRefusal(t *testing.T) {
 		WorkflowID:           "refused",
 		Task:                 "task",
 		IsNewRun:             true,
+		RunSettings:          domain.RunSettings{Mode: domain.ExecutionModeAuto},
 	}
 
 	got, err := ses.Start(context.Background(), cfg)
 
-	requireRefused(t, got, err)
+	msg := requireRefused(t, got, err)
+	if !strings.Contains(msg, "B1") {
+		t.Errorf("want the refusal to name rule B1, got %q", msg)
+	}
+	if n := len(f.Invocations()); n != 0 {
+		t.Errorf("want no agent invoked before the refusal, got %d invocation(s)", n)
+	}
 }
 
 // TestSession_Start_AgentNotFound_ReturnsRefusal verifies that when an agent
@@ -153,10 +172,10 @@ func TestSession_Start_AgentNotFound_ReturnsRefusal(t *testing.T) {
 
 	store := &memStore{}
 	ses := session.New(session.Deps{
-		Harness:   harness.NewMockAdapter(),
-		Store:     store,
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:  harness.NewMockAdapter(),
+		Store:    store,
+		Clock:    fixedClock{t: epoch},
+		Interact: &noopInteraction{},
 	})
 
 	cfg := baseLinearConfig(orchPath)
@@ -207,10 +226,10 @@ func TestSession_Start_VersionMismatchArtifact_ReturnsRefusal(t *testing.T) {
 		exists: true,
 	}
 	ses := session.New(session.Deps{
-		Harness:   harness.NewMockAdapter(),
-		Store:     store,
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:  harness.NewMockAdapter(),
+		Store:    store,
+		Clock:    fixedClock{t: epoch},
+		Interact: &noopInteraction{},
 	})
 
 	cfg := baseLinearConfig(orchPath)
@@ -250,10 +269,10 @@ func TestSession_Start_RefusalOrder_ArtifactBeforeAgentResolution(t *testing.T) 
 		},
 	}
 	ses := session.New(session.Deps{
-		Harness:   harness.NewMockAdapter(),
-		Store:     refusalStore,
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:  harness.NewMockAdapter(),
+		Store:    refusalStore,
+		Clock:    fixedClock{t: epoch},
+		Interact: &noopInteraction{},
 	})
 
 	cfg := baseLinearConfig(orchPath)

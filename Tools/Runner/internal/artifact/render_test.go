@@ -23,7 +23,7 @@ func TestRoundTrip_CanonicalFile_IdenticalBytes(t *testing.T) {
 	// - Parse reads all fields correctly.
 	// - Render produces exactly the same bytes for an unmodified state.
 	// - No content is silently dropped or reformatted.
-	original, err := os.ReadFile(fixturePath("canonical.md"))
+	original, err := os.ReadFile(fixturePath("canonical_v3.md"))
 	if err != nil {
 		t.Fatalf("reading fixture: %v", err)
 	}
@@ -72,26 +72,26 @@ func TestTruncateSummary_ShortMessage_ReturnedUnchanged(t *testing.T) {
 	}
 }
 
-func TestTruncateSummary_ExactlyHundredChars_NotTruncated(t *testing.T) {
-	input := strings.Repeat("a", 100)
+func TestTruncateSummary_ExactlyHundredFiftyChars_NotTruncated(t *testing.T) {
+	input := strings.Repeat("a", 150)
 	got := artifact.TruncateSummary(input)
 	if got != input {
-		t.Errorf("TruncateSummary(100 chars): want unchanged (100 chars), got %d chars", len(got))
+		t.Errorf("TruncateSummary(150 chars): want unchanged (150 chars), got %d chars", len(got))
 	}
 }
 
-func TestTruncateSummary_LongMessage_HeadFiftyEllipsisTailFifty(t *testing.T) {
-	// Messages longer than 100 characters are truncated to head-50 + " ... " + tail-50.
+func TestTruncateSummary_LongMessage_HeadFiftyEllipsisTailHundred(t *testing.T) {
+	// Messages longer than 150 characters are truncated to head-50 + " ... " + tail-100.
 	// This ensures verbose messages retain both the opening context and final conclusion.
 	head := strings.Repeat("h", 50)
-	tail := strings.Repeat("t", 50)
-	input := head + strings.Repeat("m", 20) + tail // 120 chars total
+	tail := strings.Repeat("t", 100)
+	input := head + strings.Repeat("m", 20) + tail // 170 chars total
 
 	got := artifact.TruncateSummary(input)
 
 	want := head + " ... " + tail
 	if got != want {
-		t.Errorf("TruncateSummary(120 chars):\n  want: %q\n   got: %q", want, got)
+		t.Errorf("TruncateSummary(170 chars):\n  want: %q\n   got: %q", want, got)
 	}
 }
 
@@ -115,12 +115,12 @@ func TestTruncateSummary_Newline_Stripped(t *testing.T) {
 
 func TestTruncateSummary_StripBeforeTruncation_HeadTailFromCleanString(t *testing.T) {
 	// Stripping (pipe/newline removal) happens before truncation so that the
-	// 50/50 split is counted on the clean string, not the raw input.
-	// Input: 100 clean chars preceded by a pipe that would be stripped.
-	clean := strings.Repeat("c", 100)
-	input := "|" + clean // 101 chars raw, but 100 chars after strip
+	// head/tail split is counted on the clean string, not the raw input.
+	// Input: 150 clean chars preceded by a pipe that would be stripped.
+	clean := strings.Repeat("c", 150)
+	input := "|" + clean // 151 chars raw, but 150 chars after strip
 	got := artifact.TruncateSummary(input)
-	// After stripping the pipe, we have exactly 100 chars — no truncation.
+	// After stripping the pipe, we have exactly 150 chars — no truncation.
 	if got != clean {
 		t.Errorf("TruncateSummary(%q): want %q (stripped, no truncation), got %q", input, clean, got)
 	}

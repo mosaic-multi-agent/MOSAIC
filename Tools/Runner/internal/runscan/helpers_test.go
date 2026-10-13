@@ -89,14 +89,14 @@ global_sequence: 1
 checkpoints: disabled
 current_state:
   phase: %s
-  stage: ""
+  iteration: null
   last_status: SUCCESS
   last_agent: "agent#1"
   error_code: null
 ---
 
 <ExecutionLog type="core">
-| Seq | Agent   | Phase     | Stage | Status  | Timestamp            | Summary | Checkpoint |
+| Seq | Agent   | Phase     | Iteration | Status  | Timestamp            | Summary | Checkpoint |
 | --- | ------- | --------- | ----- | ------- | -------------------- | ------- | ---------- |
 | 1   | agent#1 | EXECUTION | -     | SUCCESS | 2026-01-01T00:00:00Z | done    | -          |
 </ExecutionLog>
@@ -128,14 +128,14 @@ global_sequence: 1
 checkpoints: disabled
 current_state:
   phase: %s
-  stage: ""
+  iteration: null
   last_status: SUCCESS
   last_agent: "agent#1"
   error_code: null
 ---
 
 <ExecutionLog type="core">
-| Seq | Agent   | Phase     | Stage | Status  | Timestamp            | Summary | Checkpoint |
+| Seq | Agent   | Phase     | Iteration | Status  | Timestamp            | Summary | Checkpoint |
 | --- | ------- | --------- | ----- | ------- | -------------------- | ------- | ---------- |
 | 1   | agent#1 | EXECUTION | -     | SUCCESS | 2026-01-01T00:00:00Z | done    | -          |
 </ExecutionLog>
@@ -168,14 +168,14 @@ global_sequence: 1
 checkpoints: disabled
 current_state:
   phase: %s
-  stage: %q
+  iteration: %q
   last_status: SUCCESS
   last_agent: %q
   error_code: null
 ---
 
 <ExecutionLog type="core">
-| Seq | Agent   | Phase     | Stage | Status  | Timestamp            | Summary | Checkpoint |
+| Seq | Agent   | Phase     | Iteration | Status  | Timestamp            | Summary | Checkpoint |
 | --- | ------- | --------- | ----- | ------- | -------------------- | ------- | ---------- |
 | 1   | agent#1 | EXECUTION | -     | SUCCESS | 2026-01-01T00:00:00Z | done    | -          |
 </ExecutionLog>
@@ -241,14 +241,14 @@ global_sequence: 1
 checkpoints: disabled
 current_state:
   phase: EXECUTION
-  stage: ""
+  iteration: null
   last_status: SUCCESS
   last_agent: "agent#1"
   error_code: null
 ---
 
 <ExecutionLog type="core">
-| Seq | Agent   | Phase     | Stage | Status  | Timestamp            | Summary | Checkpoint |
+| Seq | Agent   | Phase     | Iteration | Status  | Timestamp            | Summary | Checkpoint |
 | --- | ------- | --------- | ----- | ------- | -------------------- | ------- | ---------- |
 | 1   | agent#1 | EXECUTION | -     | SUCCESS | 2026-01-01T00:00:00Z | done    | -          |
 </ExecutionLog>

@@ -30,7 +30,7 @@ func candidate(runID, folder string) runscan.RunCandidate {
 			Workflow:    "test-workflow",
 			Task:        "test task",
 			Phase:       "EXECUTION",
-			Stage:       "Stage-1",
+			Stage:       "1.Implementation",
 			LastAgent:   "impl#1",
 		},
 	}

@@ -6,7 +6,7 @@ package engine_test
 // Rows are given as the 1-based routing-table number, exactly as the
 // Execution Log shows them. Phase and stage follow the format the Runner
 // records: a bare "EXECUTION" phase with a group-qualified stage such as
-// "Test.1" (see domain.FormatStageValue).
+// "1.Test" (see domain.FormatIterationValue).
 
 import (
 	"mosaic-run/internal/domain"

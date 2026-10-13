@@ -20,7 +20,7 @@ All three production adapters share the same `mosaic-common/harness` spawner inf
 | Component | Purpose |
 |-----------|---------|
 | `ClaudeCodeAdapter` | Spawns Claude Code CLI per invocation. Extracts the agent's `tools` frontmatter field before spawning and passes tool names to `BuildArgs` via `SpawnRequest.DerivedTools`. Sets `SpawnRequest.ToolsDerived=true` after a successful extraction call so `BuildArgs` knows derivation was performed. Uses `--permission-mode dontAsk` + `--allowedTools` when tools are present; uses `--permission-mode dontAsk` with no `--allowedTools` when the tools field is empty (strict mode, no tools permitted); rejects the invocation before spawning only when the tools field is missing. |
-| `GHCPCLIAdapter` | Spawns GHCP CLI per invocation. Supports two permission modes: Blanket (`--yolo --no-ask-user`) and Partial Allowlist (`--allow-tool` entries from `SpawnRequest.DerivedTools` + `--no-ask-user`). Mode is resolved once at adapter construction and stored on the struct. |
+| `GHCPCLIAdapter` | Spawns GHCP CLI per invocation. Supports two permission modes: Blanket (`--yolo --no-ask-user`) and Partial Allowlist (`--allow-tool` entries from `SpawnRequest.DerivedTools` + `--no-ask-user`). Mode is resolved once at adapter construction and stored on the struct. The whole JSON event stream is scanned: `subagent.deselected` and `session.error` fail the invocation (harness errors) wherever they sit relative to the result event. Each invocation's closing debug-log entry carries a `ghcp_version` field read from `pkg/<platform>/<version>` paths in the stdout (`commonharness.GHCPCLIVersions`). |
 | `OpenCodeAdapter` | Spawns OpenCode per invocation. Always passes `--auto`, which converts every `ask` permission to `allow` for that invocation while leaving explicitly-denied capabilities unchanged. No per-tool allowlist is extracted or needed. |
 | `MockAdapter` | Test double. Queues scripted `ProtocolResponse`, `error`, or raw JSON payloads per agent identifier (FIFO). Records all invocations so tests can assert call order and arguments. |
 | Protocol helpers | `MarshalRequest` / `UnmarshalResponse` encode and decode Communication Protocol v1.12 JSON messages. |
@@ -111,6 +111,8 @@ Additional sentinels:
 | `ErrStreamIncomplete` | OpenCode | Stream ended without a terminal event. |
 | `ErrGHCPCLIStreamError` | GHCP CLI | Terminal result event reported the run failed. |
 | `ErrGHCPCLIStreamIncomplete` | GHCP CLI | Stream ended without a terminal result event. |
+| `ErrGHCPCLIAgentDeselected` | GHCP CLI | Stream held `subagent.deselected`: GHCP ran its default agent instead of the requested one. Wrapped by the spawner and the adapter's raw invocation so the message names the requested agent. |
+| `ErrGHCPCLISessionError` | GHCP CLI | Stream held `session.error` (for example an exhausted quota); the message carries the event's type, code, status and message. |
 | `ErrToolsMissing` | Claude Code, GHCP CLI (Partial) | Agent definition has no `tools` field in frontmatter. |
 | `ErrToolsEmpty` | Claude Code, GHCP CLI (Partial) | `tools` field is present but has a wrong shape (not the expected kind) or contains only unrecognised names (misconfiguration). An empty tools field is no longer an error -- it returns `([]string{}, nil)` and the adapter proceeds with `ToolsDerived=true`. |
 | `ErrGHCPCLIModeUnresolved` | GHCP CLI | `GHCPCLIMode` is zero (mode not resolved before spawning). |

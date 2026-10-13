@@ -151,7 +151,7 @@ func TestSerializeListEntry_BlockListOfMappings_MappingPairsNotEmptyAfterSet(t *
 }
 
 // TestSerializeListEntry_BlockListOfMappings_SpecificPairKeyValuePreservedAfterSet asserts
-// that the first trigger item's "trigger" key is preserved with value "STAGE_END" after
+// that the first trigger item's "trigger" key is preserved with value "ITERATION_END" after
 // the full round-trip.
 //
 // This test is RED for the same reason as the tests above: the serializer drops all
@@ -177,7 +177,7 @@ func TestSerializeListEntry_BlockListOfMappings_SpecificPairKeyValuePreservedAft
 		t.Fatalf("Parse re-serialized output: %v", err)
 	}
 
-	// Assert: first item must have key "trigger" with scalar value "STAGE_END".
+	// Assert: first item must have key "trigger" with scalar value "ITERATION_END".
 	v2, ok := doc2.Frontmatter().Get("triggers")
 	if !ok {
 		t.Fatal("triggers field absent from re-serialized frontmatter")
@@ -195,8 +195,8 @@ func TestSerializeListEntry_BlockListOfMappings_SpecificPairKeyValuePreservedAft
 	if first.Pairs[0].Key != "trigger" {
 		t.Errorf("triggers[0].Pairs[0].Key: want %q, got %q", "trigger", first.Pairs[0].Key)
 	}
-	if first.Pairs[0].Value.Scalar != "STAGE_END" {
-		t.Errorf("triggers[0].Pairs[0].Value.Scalar: want %q, got %q", "STAGE_END", first.Pairs[0].Value.Scalar)
+	if first.Pairs[0].Value.Scalar != "ITERATION_END" {
+		t.Errorf("triggers[0].Pairs[0].Value.Scalar: want %q, got %q", "ITERATION_END", first.Pairs[0].Value.Scalar)
 	}
 }
 

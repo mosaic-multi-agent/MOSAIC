@@ -44,7 +44,7 @@ import (
 	_ "mosaic-deploy/internal/harness/builtin/vscodeghcp"
 )
 
-const ToolVersion = "1.1.4"
+const ToolVersion = "1.1.5"
 
 // wantsTUI reports whether mosaic-deploy should launch the interactive TUI: no subcommand
 // was given, and both stdin and stdout are attached to a real terminal (not a pipe/redirect).
@@ -152,9 +152,10 @@ func main() {
 	// hook wires config-declared tool-destination mappings into each harness module's
 	// descriptor at construction time, so that destination fields are emitted on every
 	// deploy and update without any further module-level knowledge of config stores.
-	// The ModelCatalog hook overlays the shared catalog's model data onto the three
-	// CLI-backed harnesses, so Descriptor().Models reflects the single source of truth
-	// for model IDs and format hints; any harness the shared catalog does not know keeps
+	// The ModelCatalog hook overlays the shared catalog's model data onto every
+	// harness the catalog knows, builtin VS Code GHCP included, so
+	// Descriptor().Models reflects the single source of truth for model IDs and
+	// format hints; any harness the shared catalog does not know keeps
 	// its own descriptor-sourced catalog unchanged.
 	reg, err := registry.Discover(registry.Options{
 		MosaicRoot:    mosaicRoot,

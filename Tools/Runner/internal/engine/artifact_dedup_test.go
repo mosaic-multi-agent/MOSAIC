@@ -21,19 +21,19 @@ var dedupRunPrefix = domain.RunScopedFolder(dedupRunID) + "/"
 // step's input artifacts.
 func routeBackInputs(t *testing.T, reviewOutputs []string) []string {
 	t.Helper()
-	aw := mustParseAndAdmit(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
+	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	agents := newTestAgents(
 		"codebase-research", "requirements-refinement", "requirements-review",
 		"planner-tdd-soft", "plan-review", "contracts-designer", "contracts-review",
 		"test-writer-tdd", "build-review", "tests-review-tdd",
 		"implementation-tdd", "implementation-review",
 	)
-	state := stateAfterRow("EXECUTION", "Test.1", "build-review#9", domain.StatusCOMPLETED_NEEDS_ACTION, 9, 9)
+	state := stateAfterRow("EXECUTION", "1.Test", "build-review#9", domain.StatusCOMPLETED_NEEDS_ACTION, 9, 9)
 	state.RunID = dedupRunID
 
 	dec := engine.Next(engine.NextInput{
 		Workflow:            aw,
-		Stages:              singleStageSet("TDD"),
+		Schedules:           singleSchedules("TDD"),
 		State:               state,
 		LastResponse:        cnaResponse("build-review#9"),
 		LastOutputArtifacts: reviewOutputs,

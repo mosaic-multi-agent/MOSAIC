@@ -38,6 +38,9 @@ func validateRowColumn(t mdtable.Table, workflowID string) error {
 				Resource:  workflowID,
 				Reason: fmt.Sprintf("%q column of row %d must hold %s, found %q",
 					rowColumnName, i+1, want, got),
+				Rule:  "T4",
+				Row:   domain.WorkflowRow(i + 1),
+				Token: got,
 			}
 		}
 	}

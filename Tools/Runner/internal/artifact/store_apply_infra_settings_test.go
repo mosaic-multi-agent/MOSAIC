@@ -174,7 +174,7 @@ func TestApply_ExecutionLog_Entry_Inputs_Propagated(t *testing.T) {
 		Seq:           1,
 		AgentInstance: "implementation-tdd#1",
 		Phase:         "EXECUTION",
-		Stage:         "Stage-1",
+		Stage:         "1",
 		Status:        domain.StatusSUCCESS,
 		Timestamp:     time.Now(),
 		Summary:       "implementation done",

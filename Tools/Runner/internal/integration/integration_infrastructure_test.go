@@ -125,14 +125,14 @@ runner_manual_resolution: disabled
 checkpoints: disabled
 current_state:
   phase: PLANNING
-  stage: null
+  iteration: null
   last_status: SUCCESS
   last_agent: "agent-a#1"
   error_code: null
 ---
 
 <ExecutionLog type="core">
-| Seq | Agent | Phase | Stage | Status | Timestamp | Summary | Checkpoint |
+| Seq | Agent | Phase | Iteration | Status | Timestamp | Summary | Checkpoint |
 | --- | ----- | ----- | ----- | ------ | --------- | ------- | ---------- |
 | 1 | agent-a#1 | PLANNING | - | SUCCESS | 2026-01-01T00:00:00Z | planning done | - |
 | 2 | checkpoint-manager-git#2 | PLANNING | - | SUCCESS | 2026-01-01T00:00:00Z | checkpoint taken | - |
@@ -224,14 +224,14 @@ runner_manual_resolution: disabled
 checkpoints: disabled
 current_state:
   phase: PLANNING
-  stage: null
+  iteration: null
   last_status: SUCCESS
   last_agent: "agent-a#1"
   error_code: null
 ---
 
 <ExecutionLog type="core">
-| Seq | Agent | Phase | Stage | Status | Timestamp | Summary | Checkpoint |
+| Seq | Agent | Phase | Iteration | Status | Timestamp | Summary | Checkpoint |
 | --- | ----- | ----- | ----- | ------ | --------- | ------- | ---------- |
 | 1 | agent-a#1 | PLANNING | - | SUCCESS | 2026-01-01T00:00:00Z | planning done | - |
 | 2 | checkpoint-manager-git#2 | PLANNING | - | SUCCESS | 2026-01-01T00:00:00Z | checkpoint taken | - |

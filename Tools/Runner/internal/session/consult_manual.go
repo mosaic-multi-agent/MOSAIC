@@ -6,28 +6,26 @@ import (
 	"strings"
 
 	"mosaic-run/internal/domain"
-	"mosaic-run/internal/engine"
 )
 
 // newConsultRequest builds the routing consultation request. Besides the
-// orchestration artifact and the current stage set it carries what the manual
+// orchestration artifact and the current schedules it carries what the manual
 // resolver needs and must not read from files itself: the Artifacts registry
 // (paths in recorded, unprefixed form) and the row-defaults resolver bound to
-// the stage sets in force when the row defaults are asked for.
+// the schedules in force when the row defaults are asked for.
 func newConsultRequest(
 	config domain.RunConfig,
 	deviation *domain.DeviationInfo,
 	state domain.ArtifactState,
-	stages, refreshedStages **domain.StageSet,
+	stages *domain.BlockSchedules,
 ) domain.ConsultationRequest {
 	return domain.ConsultationRequest{
 		OrchestrationArtifact: filepath.Join(config.RunFolder, "Orchestration.md"),
 		Context:               domain.ConsultContextRouting,
 		Deviation:             deviation,
-		Stages:                currentStageSet(*stages, *refreshedStages),
 		ArtifactRegistry:      recordedRegistry(state),
-		RowDefaults: func(row domain.RoutingRow, stage domain.StageNumber) (domain.DispatchDefaults, error) {
-			return engine.ResolveRowDefaults(row, stage, *stages, *refreshedStages)
+		RowDefaults: func(row domain.RoutingRow, iteration domain.IterationID) (domain.DispatchDefaults, error) {
+			return resolveRowDefaults(row, iteration, *stages)
 		},
 	}
 }

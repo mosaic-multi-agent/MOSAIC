@@ -20,7 +20,7 @@ COMPLETED_NEEDS_ACTION
 
 ### Message
 ~~~
-row 2 / EXECUTION.Test / gate / staged-findings-loop / marker absent, wrote MosaicTestLoopGate.md / returning COMPLETED_NEEDS_ACTION
+row 2 / EXECUTION / Test group / gate / staged-findings-loop / marker absent, wrote MosaicTestLoopGate.md / returning COMPLETED_NEEDS_ACTION
 ~~~
 
 ### Write
@@ -37,7 +37,7 @@ SUCCESS
 
 ### Message
 ~~~
-row 2 / EXECUTION.Test / gate / staged-findings-loop / marker present, second pass / returning SUCCESS
+row 2 / EXECUTION / Test group / gate / staged-findings-loop / marker present, second pass / returning SUCCESS
 ~~~
 
 ### Write

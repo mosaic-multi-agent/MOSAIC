@@ -1,5 +1,5 @@
 ---
-version: "1.0"
+version: "1.1"
 name: "MosaicTest Infrastructure Review+Consult Workflow"
 description: "Runner mode fixture — Auto mode with a review-class infrastructure agent. After 3 workflow steps, INVOCATION_INTERVAL(3) fires the review agent. The Runner then does a follow-up routing consultation with the orchestrator, passing the review's status_message as last_status_message. Proves the review-to-orchestrator chain end to end."
 hint: "Harness test — review trigger (INVOCATION_INTERVAL), post-review orchestrator consultation"
@@ -15,22 +15,23 @@ infrastructure_agents:
   - mosaictest-review
 ---
 
-<Workflow type="core" name="infra-review-consult" version="1.0">
+<Workflow type="core" name="infra-review-consult" version="1.1">
 ## MosaicTest Infrastructure Review+Consult Workflow
 
 **Use when:** Verifying that a review-class infrastructure agent fires on its declared trigger and that the Runner follows up with an orchestrator routing consultation, passing the review's `status_message` as `last_status_message`.
 
 | Phase | Subagent | HITL | On Success | On Findings | Input | Output |
 |-------|----------|:----:|------------|-------------|-------|--------|
-| RESEARCH | mosaictest-scripted | FALSE | next | - | MosaicTestScript/review-echo.md | - |
-| PLANNING | mosaictest-scripted | FALSE | next | - | MosaicTestScript/review-echo.md | - |
-| DESIGN | mosaictest-scripted | FALSE | COMPLETE | - | MosaicTestScript/review-echo.md | - |
+| RESEARCH | mosaictest-scripted(research) | FALSE | NEXT | - | MosaicTestScript/review-echo.md | - |
+| PLANNING | mosaictest-scripted(planning) | FALSE | NEXT | - | MosaicTestScript/review-echo.md | - |
+| DESIGN | mosaictest-scripted(design) | FALSE | COMPLETE | - | MosaicTestScript/review-echo.md | - |
 
 **Notes:**
 - **Run this workflow in Auto mode.**
 - **Infrastructure agents are not in `referenced_agents`.** The review agent (`mosaictest-review`) is deployed from the catalog based on its `infrastructure: review` frontmatter field and injected into the orchestrator's `<InfrastructureAgents>` region by the deploy tool. The workflow does not name it.
 - Three rows are needed because `mosaictest-review` declares `INVOCATION_INTERVAL(3)` — the trigger fires after 3 workflow step completions since the review agent's last dispatch (or since run start).
 - All three rows return unconditional SUCCESS, so no deviations occur before the trigger fires.
+- The three rows run the same agent, so their `Subagent` cells are told apart by the mode qualifiers `research`, `planning` and `design`. Dispatch, instance ids and logs use the bare id `mosaictest-scripted`.
 - After the review agent fires and returns, the Runner performs a **follow-up routing consultation** with the orchestrator. The routing fixture handles this consultation with a `stop` action.
 - The `stop` proves two things: (1) the consultation happened at all, and (2) the orchestrator received the review's `status_message` as `last_status_message` in the consultation context.
 
@@ -42,7 +43,7 @@ infrastructure_agents:
 
 ### Why three phases instead of three rows in one phase
 
-Three distinct phases (RESEARCH, PLANNING, DESIGN) make the log easier to read than three rows in the same phase. Each row has a unique phase label, so the sequence is visually unambiguous. This is a cosmetic choice — the trigger evaluation counts workflow step completions regardless of phase.
+Three distinct phases (RESEARCH, PLANNING, DESIGN) make the log easier to read than three rows in the same phase. Each row has a unique phase label, so the sequence is visually unambiguous. This is a cosmetic choice — the trigger evaluation counts workflow step completions regardless of phase. The rows' `Subagent` cells are unique through mode qualifiers named after the phase.
 
 ### Why the orchestrator stops the run
 
@@ -50,7 +51,7 @@ After the post-review consultation, the orchestrator could dispatch another work
 
 ### Why no routing fixture for the three SUCCESS steps
 
-In Auto mode, SUCCESS with `On Success = next` or `COMPLETE` is handled by the engine — no orchestrator consultation needed. The routing fixture is only consulted for the post-review follow-up. If the orchestrator were consulted after a regular SUCCESS step (which would be a bug), the absence of a matching rule causes the stub to stop with "no matching rule", making the bug visible.
+In Auto mode, SUCCESS with `On Success = NEXT` or `COMPLETE` is handled by the engine — no orchestrator consultation needed. The routing fixture is only consulted for the post-review follow-up. If the orchestrator were consulted after a regular SUCCESS step (which would be a bug), the absence of a matching rule causes the stub to stop with "no matching rule", making the bug visible.
 
 ### What makes review different from checkpoint and commit
 
@@ -99,7 +100,7 @@ log — and the STOPPED run outcome is the evidence the post-review one occurred
 | Review row appears but no consultation follows | The Runner dispatched the review agent but did not follow up with a routing consultation — the review-class special handling is missing from `evaluateTriggers` |
 | Consultation appears but the run does not stop | The routing fixture's stop rule did not match — check the selector in MosaicTestRouting.md |
 | Review fires after step 2 instead of step 3 | The invocation interval is counting wrong — it should fire after 3 completions, not 2. Off-by-one in the interval check. |
-| Orchestrator consulted after a regular SUCCESS step | Auto mode should not consult for SUCCESS with `On Success = next` — the engine handles routing mechanically. A routing fixture rule matched unexpectedly, or the mode logic is broken. |
+| Orchestrator consulted after a regular SUCCESS step | Auto mode should not consult for SUCCESS with `On Success = NEXT` — the engine handles routing mechanically. A routing fixture rule matched unexpectedly, or the mode logic is broken. |
 | Review row updates `current_state` | Infrastructure rows must not update `current_state`; the engine is treating an infra step as a workflow step |
 | An `orchestrator-script` row appears in `Orchestration.md`, or `Seq` skips a number | Consultations must leave no row in the artifact; a consultation wrongly called `Store.Apply` or allocated a `Seq` |
 
@@ -110,6 +111,7 @@ log — and the STOPPED run outcome is the evidence the post-review one occurred
 | Version | Date | Author | Summary |
 |---------|------|--------|---------|
 | 1.0 | 2026-09-20 | MOSAIC | Initial version. Review trigger + post-review orchestrator consultation. |
+| 1.1 | 2026-10-12 | MOSAIC | WorkflowFormat 2.16 notation: `NEXT` instead of `next`, unique `Subagent` cells through the mode qualifiers `research`, `planning`, `design`. Dispatch sequence unchanged. |
 
 ---
 

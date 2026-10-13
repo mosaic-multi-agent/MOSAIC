@@ -17,7 +17,7 @@ SUCCESS
 
 ### Message
 ~~~
-EXECUTION.Test / staged-multigroup / wrote MosaicTestStageTest.md / received task_description: {task_description} / returning SUCCESS
+EXECUTION / Test group / staged-multigroup / wrote MosaicTestStageTest.md / received task_description: {task_description} / returning SUCCESS
 ~~~
 
 ### Write
@@ -26,7 +26,7 @@ EXECUTION.Test / staged-multigroup / wrote MosaicTestStageTest.md / received tas
 
 Written by the multigroup-test script (Test group). The content is fixture data.
 
-The file path this landed in carries the stage number, substituted from the row's
-`{StageNumber}` token. The Implementation group's row takes this file as input,
+The file path this landed in carries the stage ID, filled in from the row's
+`{Stage}` token. The Implementation group's row takes this file as input,
 so its existence at the expected path proves group ordering was correct.
 ~~~

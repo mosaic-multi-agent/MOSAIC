@@ -1,6 +1,6 @@
 ---
 id: 41
-version: 2.1.1
+version: 2.2.0
 name: mosaictest-checkpoint
 description: Harness conformance test fixture — a checkpoint-class infrastructure stub that returns SUCCESS with a fake checkpoint marker and performs no git operations
 role: subagent
@@ -11,7 +11,7 @@ tier_rationale: emits one fixed-shape string; no branching and no tool use
 required_skills: []
 infrastructure: checkpoint
 triggers:
-  - trigger: STAGE_END
+  - trigger: ITERATION_END
     trigger_param: null
 on_failure: halt
 ---
@@ -73,10 +73,10 @@ The marker must be the final characters of `status_message`, with no trailing wh
 The full message, for `mosaictest-checkpoint#12`:
 
 ```
-MosaicTest infrastructure stub / class=checkpoint / declared trigger=STAGE_END / instance=mosaictest-checkpoint#12 / no git performed / returning SUCCESS [checkpoint:f00d0012]
+MosaicTest infrastructure stub / class=checkpoint / declared trigger=ITERATION_END / instance=mosaictest-checkpoint#12 / no git performed / returning SUCCESS [checkpoint:f00d0012]
 ```
 
-**Say the trigger you declare, not the trigger you observed.** You cannot see which trigger fired — the dispatch does not carry it. `STAGE_END` is the only trigger in your own frontmatter, so naming it states a fact about your definition rather than an inference about the run.
+**Say the trigger you declare, not the trigger you observed.** The dispatch names the trigger that fired in its task description, but this stub reports its own declaration. `ITERATION_END` is the only trigger in your own frontmatter, so naming it states a fact about your definition rather than an inference about the run.
 
 **Say "no git performed" every time.** A checkpoint row in a log ordinarily promises a restore point. Anyone reading a MosaicTest run should be told in the same line that this one does not, because that line may outlive the context that explains it.
 
@@ -131,7 +131,7 @@ Your entire response is the JSON object below. Nothing else — no commentary, n
 
 | Status | `error_code` | Example `status_message` |
 |--------|--------------|--------------------------|
-| `SUCCESS` | — | "MosaicTest infrastructure stub / class=checkpoint / declared trigger=STAGE_END / instance=mosaictest-checkpoint#12 / no git performed / returning SUCCESS [checkpoint:f00d0012]" |
+| `SUCCESS` | — | "MosaicTest infrastructure stub / class=checkpoint / declared trigger=ITERATION_END / instance=mosaictest-checkpoint#12 / no git performed / returning SUCCESS [checkpoint:f00d0012]" |
 | `BLOCKED` | `E503` | "mosaictest-checkpoint#12 / human_in_the_loop true / no user contact tool / returning BLOCKED E503 as designed" |
 | `BLOCKED` | `E101` | "mosaictest-checkpoint / agent_instance_id carries no #N suffix / cannot build a checkpoint marker without fabricating one / returning BLOCKED E101" |
 

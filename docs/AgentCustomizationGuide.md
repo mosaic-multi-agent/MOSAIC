@@ -79,7 +79,6 @@ Managed regions are filled from MOSAIC's canonical sources — the communication
 | `AuthorityHierarchy` | How the agent ranks conflicting instructions |
 | `ClosingProcedure` | HITL review gate and response procedure |
 | `CommunicationProtocol` | The orchestration contract — message format, status codes |
-| `ProtocolConstraints` | Artifact access and status code discipline |
 | `HarnessConstraints` | Platform-specific rules for your AI coding tool |
 | `ErrorHandlingCommon` | Shared error handling (retry rules) |
 | `ExecutionPhilosophyCommon` | Shared working posture (context, memory, quality) |

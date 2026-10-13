@@ -1,5 +1,5 @@
 ---
-version: "1.0"
+version: "1.1"
 name: "MosaicTest Deviation Stop Workflow"
 description: "Runner mode fixture — Auto mode deviation where the orchestrator stops the run instead of re-dispatching. Proves the stop path works from a deviation context and that the artifact is left in a resumable state."
 hint: "Mode 2 test — deviation followed by orchestrator stop, artifact resumability"
@@ -13,7 +13,7 @@ modes:
   - auto
 ---
 
-<Workflow type="core" name="deviation-stop" version="1.0">
+<Workflow type="core" name="deviation-stop" version="1.1">
 ## MosaicTest Deviation Stop Workflow
 
 **Use when:** Verifying that the orchestrator can stop a run after a deviation, and that the resulting artifact is left in a state where the run can be resumed later.
@@ -41,7 +41,7 @@ modes:
 
 ### Why BLOCKED/E501
 
-`E501` (`TOOL_UNAVAILABLE`) is the one BLOCKED code the engine re-dispatches mechanically in Auto mode: up to three attempts per row and stage, counted from the Execution Log. The deviation therefore arrives only after the third BLOCKED/E501 attempt, which makes this workflow exercise the whole budget. `deviation-blocked` uses `E401` instead, which deviates immediately.
+`E501` (`TOOL_UNAVAILABLE`) is the one BLOCKED code the engine re-dispatches mechanically in Auto mode: up to three attempts per row and iteration, counted from the Execution Log. The deviation therefore arrives only after the third BLOCKED/E501 attempt, which makes this workflow exercise the whole budget. `deviation-blocked` uses `E401` instead, which deviates immediately.
 
 ### Resumability
 
@@ -93,6 +93,7 @@ Three Orchestration.md log rows, one per attempt. Pre-run consultation and the s
 | Version | Date | Author | Summary |
 |---------|------|--------|---------|
 | 1.0 | 2026-08-17 | MOSAIC | Initial version. Deviation stop and artifact resumability. |
+| 1.1 | 2026-10-12 | MOSAIC | WorkflowFormat 2.16 wording: the E501 budget is counted per row and iteration. Routing table and dispatch sequence unchanged. |
 
 ---
 

@@ -121,7 +121,7 @@ func TestAnnounce_ResumedRun_ContainsRunIDAndPosition(t *testing.T) {
 		IsNewRun: false,
 		Position: &runselect.Position{
 			Phase:     "EXECUTION",
-			Stage:     "Stage-1",
+			Stage:     "1.Implementation",
 			LastAgent: "implementation-tdd#2",
 		},
 	}
@@ -135,8 +135,8 @@ func TestAnnounce_ResumedRun_ContainsRunIDAndPosition(t *testing.T) {
 	if !strings.Contains(text, "EXECUTION") {
 		t.Errorf("Announce text %q does not contain the recorded phase %q", text, "EXECUTION")
 	}
-	if !strings.Contains(text, "Stage-1") {
-		t.Errorf("Announce text %q does not contain the recorded stage %q", text, "Stage-1")
+	if !strings.Contains(text, "1.Implementation") {
+		t.Errorf("Announce text %q does not contain the recorded stage %q", text, "1.Implementation")
 	}
 	if !strings.Contains(text, "implementation-tdd#2") {
 		t.Errorf("Announce text %q does not contain the last agent %q", text, "implementation-tdd#2")

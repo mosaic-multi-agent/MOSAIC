@@ -525,7 +525,7 @@ all team members share the same settings.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `schema_version` | string | `"1"` | Config schema version. Do not change. |
-| `utility_agent_allow_list` | list of strings | `[]` | Keys of utility agents that may be selected during deployment. An empty list means no utility agents are offered. |
+| `utility_agent_allow_list` | list of strings | `[injections-helper]` | Keys of utility agents that may be selected during deployment. An empty list means no utility agents are offered. |
 | `allow_external_modules` | bool | `false` | Whether external harness modules in `MosaicDeploy/harnesses/` may be used. Must be `true` for the external harness module tier to work. |
 | `log_retention_runs` | int | `0` | Maximum history log entries to keep. `0` means keep all. |
 | `tool_destinations` | map | `{}` | Generic-tool → harness-tool mappings, keyed by harness id. Declaring a tool here permanently answers the "custom tool" prompt for it. See [docs/configuration.md](docs/configuration.md#tool_destinations). |
@@ -547,8 +547,10 @@ tool_destinations:
           names: ["mcp__mosaic-kb__search"]
 ```
 
-> **Note on defaults:** when this file is absent entirely, all six shipped
-> utility agents are enabled by default. Once the file exists, its values are
+> **Note on defaults:** when this file is absent entirely, only
+> `injections-helper` is offered by default; the creator agents ship at MOSAIC
+> root and remain available through the Deploy agents flow. Once the file
+> exists, its values are
 > authoritative — `utility_agent_allow_list: []` really does mean "none".
 
 ### user-config.yaml

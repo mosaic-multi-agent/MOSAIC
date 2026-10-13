@@ -126,22 +126,15 @@ func (s *toolConfigStore) Load() (ToolConfig, error) {
 //
 // # Allow-list decision (AC14.7)
 //
-// The default allow-list includes all six utility agents shipped with MOSAIC. Rationale:
+// The default allow-list offers only injections-helper, the one utility agent that applies
+// outside the MOSAIC repository. Rationale:
 //
-//   - Opting out of a specific agent is simpler UX than opting in: a user who never edits
-//     the config still has access to every utility agent and does not need to discover the
-//     allow-list mechanism before utility agents appear.
-//   - The six utility agents are scoped to MOSAIC workflow operations; none of them perform
-//     arbitrary user-defined actions, so the security risk of enabling them by default is low.
-//   - Operators who want to restrict the set update UtilityAgentAllowList in tool-config.yaml.
-//
-// The six agents and their justification for default inclusion:
-//   - anthropic-subagent-creator: common in agentic orchestration patterns
-//   - harness-bug-hunter: self-service debugging; expected to be used during onboarding
-//   - orchestration-architect: core workflow design capability
-//   - system-prompt-capturer: diagnostic tool, low risk
-//   - transformation: generic MOSAIC transformation capability
-//   - workflow-creator: core workflow design capability
+//   - The creator agents (subagent-creator, workflow-creator, anthropic-subagent-creator)
+//     depend on files that exist only in the MOSAIC repository, and they ship as committed
+//     agents at MOSAIC root, so offering them to project workspaces would deploy agents
+//     that cannot reach their references.
+//   - The Deploy agents flow is unaffected: it still offers every utility agent on disk.
+//   - Operators who want a different set update UtilityAgentAllowList in tool-config.yaml.
 //
 // # External-module default
 //
@@ -157,14 +150,7 @@ func (s *toolConfigStore) Load() (ToolConfig, error) {
 func DefaultToolConfig() ToolConfig {
 	return ToolConfig{
 		SchemaVersion: toolConfigSchemaVersion,
-		UtilityAgentAllowList: []string{
-			"anthropic-subagent-creator",
-			"harness-bug-hunter",
-			"orchestration-architect",
-			"system-prompt-capturer",
-			"transformation",
-			"workflow-creator",
-		},
+		UtilityAgentAllowList: []string{"injections-helper"},
 		AllowExternalModules: false,
 		LogRetentionRuns:     0,
 	}

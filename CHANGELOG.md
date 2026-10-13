@@ -1,3 +1,38 @@
+# 0.7.0 (2026-10-13)
+
+> **Breaking: the workflow format is finalized, and the new orchestrators accept nothing else.** The format is close to what 0.6.2 workflows already used. It is now fully specified, and "stages" are generalized into "blocks" and "iterations". Workflow logic is unchanged and all catalog workflows have been migrated. The new `orchestrator` (v8), `orchestrator-script` (v3) and Runner (v1.6) refuse workflows in the old format and cannot resume runs started with earlier versions.
+>
+> **To upgrade:** redeploy the orchestrator and workflows together, and finish any runs still in progress before upgrading. To migrate a custom workflow, use `workflow-creator`. The logic carries over as is, so every workflow is expected to migrate without problems.
+
+## Tools
+
+### Runner v1.6.1
+#### Changes
+- Accepts only the finalized workflow format. Requires `orchestrator-script` v3.3.0
+- Workflows with parallel branches (forks and joins) run only in Mode 1, one branch at a time
+- GHCP CLI: clear errors when GHCP runs its default agent instead of the requested one, or when the session fails (for example an exhausted quota)
+#### Bugfixes
+- Fix finished work being repeated after a route-back in Modes 2 and 3
+
+### Deploy v1.1.5
+#### Changes
+- `subagent-creator` and `workflow-creator` are no longer offered by default when deploying a workspace. They ship ready to use in the MOSAIC repository root, so run them there
+#### Bugfixes
+- VS Code GHCP model list is fixed and now offers the same models as GHCP CLI
+
+## Catalog
+- **orchestrator** (v8.2.1) / **orchestrator-script** (v3.3.0): finalized workflow format only. Stage-based wording becomes iterations, including the infrastructure trigger `STAGE_END`, renamed `ITERATION_END`
+- All catalog workflows migrated to the finalized format
+- **product-comparison** (v2.0): a new **comparison-planner** agent plans the products, research topics and comparison dimensions up front
+- **workflow-creator** (v2.1.0): authors workflows in the finalized format
+- **commit-manager-git** (v2.3.1): commits once per finished iteration. The `Mosaic-Stage` commit trailer is replaced by `Mosaic-Iteration`
+- Infrastructure, planning and research agents updated for the finalized format
+
+## Documentation
+- Workflow format fully specified in `Development/Designs/WorkflowFormat.md`
+- Getting Started and Deployment Guide: creator agents are run from the MOSAIC repository root
+- Orchestration and Runner guides use iteration terminology
+
 # 0.6.2 (2026-10-10)
 
 ## Tools

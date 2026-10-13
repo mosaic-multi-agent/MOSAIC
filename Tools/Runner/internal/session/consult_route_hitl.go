@@ -7,7 +7,6 @@ import (
 
 	"mosaic-common/interaction"
 	"mosaic-run/internal/domain"
-	"mosaic-run/internal/planstages"
 )
 
 // runConsultHITL runs the HITL compliance check loop for a consultant-routed
@@ -34,8 +33,7 @@ func (s *sessionImpl) runConsultHITL(
 	seq *int,
 	lastResponse **domain.ProtocolResponse,
 	prevWorkflowStep **domain.CompletedStep,
-	refreshedStages **domain.StageSet,
-	stages **domain.StageSet,
+	stages *domain.BlockSchedules,
 	table domain.RoutingTable,
 	agents map[string]domain.AgentReference,
 	config domain.RunConfig,
@@ -43,20 +41,11 @@ func (s *sessionImpl) runConsultHITL(
 	admitted domain.AdmittedWorkflow,
 	antiLoop *antiLoopState,
 ) (finalResponse domain.ProtocolResponse, finalSeq int, routed *domain.RoutedOutcome, routedResp *domain.ProtocolResponse, cont bool, done bool, outcome domain.RunOutcome, err error) {
-	currentOutputArts := agentReq.OutputArtifacts
-	// Pre-HITL stage set re-derivation for self-referential rows.
-	if *stages == nil && hasStageStarArtifact(currentOutputArts) {
-		earlyPlanPath := filepath.Join(config.RunFolder, "Plan.md")
-		ss, ssErr := planstages.ReadStages(earlyPlanPath, admitted.GroupsDeclared)
-		if ssErr != nil {
-			s.deps.Interact.Notify(ctx, interaction.Notice{
-				Level:   interaction.NoticeWarning,
-				Message: fmt.Sprintf("failed to re-read stage set after Stage-* output: %v", ssErr),
-			})
-		} else {
-			*refreshedStages = &ss
-			*stages = &ss
-		}
+	// Pre-HITL schedule re-derivation for the blocks this row produces or
+	// writes, so the written outputs are resolved over the schedule it wrote.
+	if current, changed := s.rereadSchedules(ctx, admitted, config.RunFolder,
+		dispInstr.RowIndex, *stages); changed {
+		*stages = current
 	}
 
 	currentResp := response
@@ -66,7 +55,10 @@ func (s *sessionImpl) runConsultHITL(
 
 hitlLoop:
 	for {
-		approvals := s.readApprovals(ctx, s.writtenOutputs(ctx, *stages))
+		var approvals []domain.ArtifactApproval
+		if effectiveHITL {
+			approvals = s.readApprovals(ctx, s.writtenOutputs(ctx))
+		}
 		hitlDec := domain.DecideHITLCompliance(domain.HITLComplianceInput{
 			EffectiveHITL:  effectiveHITL,
 			Status:         currentResp.StatusCode,
@@ -82,7 +74,7 @@ hitlLoop:
 			updResp, updSeq, rdCont, rdDone, rdOut, rdErr := s.consultHITLRedispatch(
 				ctx, agentRef, agentReq, currentResp, currentAttemptSeq, effectiveHITL,
 				effectiveStage, phase, dispInstr, state, seq, lastResponse, prevWorkflowStep,
-				refreshedStages, stages, table, agents, config, declaredInfraAgents, admitted, antiLoop,
+				stages, table, agents, config, declaredInfraAgents, admitted, antiLoop,
 			)
 			if rdDone || rdErr != nil {
 				return domain.ProtocolResponse{}, 0, nil, nil, false, rdDone, rdOut, rdErr
@@ -102,7 +94,7 @@ hitlLoop:
 			escDone, escOut, escErr := s.consultHITLEscalate(
 				ctx, agentRef, agentReq, currentResp, currentAttemptSeq,
 				effectiveStage, phase, dispInstr, state, seq, lastResponse, prevWorkflowStep,
-				refreshedStages, stages, table, agents, config, declaredInfraAgents, admitted, antiLoop,
+				stages, table, agents, config, declaredInfraAgents, admitted, antiLoop,
 			)
 			return domain.ProtocolResponse{}, 0, nil, nil, true, escDone, escOut, escErr
 		}
@@ -136,8 +128,7 @@ func (s *sessionImpl) consultHITLRedispatch(
 	seq *int,
 	lastResponse **domain.ProtocolResponse,
 	prevWorkflowStep **domain.CompletedStep,
-	refreshedStages **domain.StageSet,
-	stages **domain.StageSet,
+	stages *domain.BlockSchedules,
 	table domain.RoutingTable,
 	agents map[string]domain.AgentReference,
 	config domain.RunConfig,
@@ -180,7 +171,7 @@ func (s *sessionImpl) consultHITLRedispatch(
 			ArtifactState: *state,
 		}
 		crDone, crOut, crErr := s.consultRoute(ctx, &alrlDevInfo, state, seq, lastResponse, prevWorkflowStep,
-			refreshedStages, stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
+			stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
 		return domain.ProtocolResponse{}, 0, true, crDone, crOut, crErr
 	}
 	s.deps.Debug.Log(domain.EventSessionHITLRedispatch, "HITL non-compliant; redispatching same agent",
@@ -215,7 +206,7 @@ func (s *sessionImpl) consultHITLRedispatch(
 			ArtifactState: *state,
 		}
 		crDone, crOut, crErr := s.consultRoute(ctx, &rdDevInfo, state, seq, lastResponse, prevWorkflowStep,
-			refreshedStages, stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
+			stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
 		return domain.ProtocolResponse{}, 0, true, crDone, crOut, crErr
 	}
 	return rdResp, newAttemptSeq, false, false, domain.RunOutcome{}, nil
@@ -235,8 +226,7 @@ func (s *sessionImpl) consultHITLEscalate(
 	seq *int,
 	lastResponse **domain.ProtocolResponse,
 	prevWorkflowStep **domain.CompletedStep,
-	refreshedStages **domain.StageSet,
-	stages **domain.StageSet,
+	stages *domain.BlockSchedules,
 	table domain.RoutingTable,
 	agents map[string]domain.AgentReference,
 	config domain.RunConfig,
@@ -275,7 +265,7 @@ func (s *sessionImpl) consultHITLEscalate(
 		ArtifactState: *state,
 	}
 	return s.consultRoute(ctx, &escDevInfo, state, seq, lastResponse, prevWorkflowStep,
-		refreshedStages, stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
+		stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
 }
 
 // applyConsultStep applies the HITL-compliant response to the artifact,
@@ -295,8 +285,7 @@ func (s *sessionImpl) applyConsultStep(
 	seq *int,
 	lastResponse **domain.ProtocolResponse,
 	prevWorkflowStep **domain.CompletedStep,
-	refreshedStages **domain.StageSet,
-	stages **domain.StageSet,
+	stages *domain.BlockSchedules,
 	table domain.RoutingTable,
 	agents map[string]domain.AgentReference,
 	config domain.RunConfig,
@@ -306,8 +295,7 @@ func (s *sessionImpl) applyConsultStep(
 ) (done bool, outcome domain.RunOutcome, err error) {
 	workflowSeq := state.GlobalSequence + 1
 	finalAgentInstanceID := fmt.Sprintf("%s#%d", agentRef.Identifier, currentAttemptSeq)
-	currentOutputArts := agentReq.OutputArtifacts
-	written := s.writtenOutputs(ctx, *stages)
+	written := s.writtenOutputs(ctx)
 	completedStep := domain.CompletedStep{
 		Seq:              workflowSeq,
 		AgentInstance:    finalAgentInstanceID,
@@ -340,7 +328,7 @@ func (s *sessionImpl) applyConsultStep(
 	s.deps.Interact.Notify(ctx, interaction.Notice{
 		Level:   interaction.NoticeInfo,
 		Title:   finalAgentInstanceID,
-		Message: fmt.Sprintf("phase=%s stage=%q status=%s", phase, effectiveStage, string(finalResponse.StatusCode)),
+		Message: fmt.Sprintf("phase=%s iteration=%q status=%s", phase, iterationNoticeValue(admitted.Table, dispInstr.RowIndex, effectiveStage), string(finalResponse.StatusCode)),
 	})
 	orchDir := filepath.Dir(config.OrchestratorFilePath)
 	if !completedStep.IsInfrastructure {
@@ -373,7 +361,7 @@ func (s *sessionImpl) applyConsultStep(
 			syntheticResp := domain.ProtocolResponse{StatusMessage: reviewConsult.StatusMessage}
 			*lastResponse = &syntheticResp
 			done, outcome, consultErr := s.consultRoute(ctx, nil, state, seq, lastResponse, prevWorkflowStep,
-				refreshedStages, stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
+				stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
 			if consultErr != nil {
 				return true, domain.RunOutcome{Status: domain.RunFailed, Message: consultErr.Error()}, consultErr
 			}
@@ -382,19 +370,8 @@ func (s *sessionImpl) applyConsultStep(
 			}
 		}
 	}
-	if hasStageStarArtifact(currentOutputArts) {
-		rederivePlanPath := filepath.Join(config.RunFolder, "Plan.md")
-		ss, ssErr := planstages.ReadStages(rederivePlanPath, admitted.GroupsDeclared)
-		if ssErr != nil {
-			s.deps.Interact.Notify(ctx, interaction.Notice{
-				Level:   interaction.NoticeWarning,
-				Message: fmt.Sprintf("failed to re-read stage set after Stage-* output: %v", ssErr),
-			})
-		} else {
-			*refreshedStages = &ss
-			*stages = &ss
-		}
-	}
+	s.rereadAccepted(ctx, admitted, config.RunFolder, dispInstr.RowIndex, effectiveStage,
+		finalResponse, stages)
 	return false, domain.RunOutcome{}, nil
 }
 

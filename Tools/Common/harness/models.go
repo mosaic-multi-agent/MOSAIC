@@ -1,9 +1,12 @@
 package harness
 
-// ModelCatalog is one CLI-backed harness's model data: the identifiers it
-// accepts, and how to describe their shape to a person.
+// ModelCatalog is one harness's model data: the identifiers it accepts, and
+// how to describe their shape to a person. A harness having a ModelCatalog
+// does not make it CLI-backed or spawnable.
 type ModelCatalog struct {
-	// HarnessID is the CLIHarness.ID this catalog belongs to.
+	// HarnessID is the harness identity this catalog belongs to: a
+	// CLIHarness.ID for CLI-backed harnesses, or another builtin harness ID
+	// (e.g. "vscode-ghcp") for non-CLI entries.
 	HarnessID string
 
 	// IDs are the valid model identifiers, in stable declared order — the
@@ -16,14 +19,15 @@ type ModelCatalog struct {
 	FormatHint string
 }
 
-// cliModelCatalogs is the single declaration of every CLI-backed harness's
-// model data, in the same stable order as cliHarnesses. Each entry is seeded
-// verbatim from the Deploy tool's builtin harness descriptors.
+// modelCatalogs is the single declaration of every builtin harness's model
+// data. CLI-backed harnesses come first, in the same stable order as
+// cliHarnesses; non-CLI entries (e.g. "vscode-ghcp") follow.
 //
-// This must mirror cliHarnesses one-for-one. The coverage test
-// TestModelCatalog_EveryIdentityCatalogEntryHasModelData enforces that
-// invariant at test time.
-var cliModelCatalogs = []ModelCatalog{
+// Every CLI-backed harness must have an entry; the coverage test
+// TestModelCatalog_EveryIdentityCatalogEntryHasModelData enforces that at test
+// time. Non-CLI entries are allowed, and membership here does not make a
+// harness spawnable.
+var modelCatalogs = []ModelCatalog{
 	{
 		HarnessID:  HarnessIDClaudeCode,
 		FormatHint: "claude-<model>-<version>",
@@ -74,6 +78,9 @@ var cliModelCatalogs = []ModelCatalog{
 			"anthropic/claude-haiku-4-5",
 		},
 	},
+	// GHCP CLI and VS Code GHCP both use the GitHub Copilot provider, so the two
+	// entries must offer the same model set in the same order. A test enforces
+	// this by converting each GHCP CLI ID to its VS Code display name.
 	{
 		HarnessID:  HarnessIDGHCPCLI,
 		FormatHint: "claude-<model>-<version> or gpt-<version>",
@@ -88,7 +95,6 @@ var cliModelCatalogs = []ModelCatalog{
 			"claude-opus-4.8-fast",
 			"claude-sonnet-4.6",
 			"claude-haiku-4-5",
-			"claude-fable-5",
 			"gpt-6.1-sol",
 			"gpt-6-astra",
 			"gpt-6-sol",
@@ -111,6 +117,42 @@ var cliModelCatalogs = []ModelCatalog{
 			"grok-4.5",
 		},
 	},
+	{
+		HarnessID:  "vscode-ghcp",
+		FormatHint: "display-name",
+		IDs: []string{
+			"Claude Opus 5.5",
+			"Claude Sonnet 5.5",
+			"Claude Fable 5.1",
+			"Claude Fable 5",
+			"Claude Opus 5",
+			"Claude Sonnet 5",
+			"Claude Opus 4.8",
+			"Claude Opus 4.8 Fast",
+			"Claude Sonnet 4.6",
+			"Claude Haiku 4.5",
+			"Gpt 6.1 Sol",
+			"Gpt 6 Astra",
+			"Gpt 6 Sol",
+			"Gpt 6 Luna",
+			"Gpt 5.6 Sol",
+			"Gpt 5.6 Terra",
+			"Gpt 5.6 Luna",
+			"Gpt 5.5",
+			"Gpt 5.4",
+			"Gpt 5.4 Mini",
+			"Gpt 5.4 Nano",
+			"Gpt 5.3 Codex",
+			"Gpt 5 Mini",
+			"Gemini 3.8 Flash",
+			"Gemini 3.7 Flash",
+			"Mai Code 1.1 Flash",
+			"Kimi K3",
+			"Grok 4.7",
+			"Grok 4.6",
+			"Grok 4.5",
+		},
+	},
 }
 
 // copyIDs returns a fresh copy of ids so a caller mutating the returned slice
@@ -124,12 +166,15 @@ func copyIDs(ids []string) []string {
 	return out
 }
 
-// ModelCatalogs returns every CLI-backed harness's model catalog, in the same
-// stable order CLIHarnesses uses, as fresh values the caller may not corrupt
-// for the next caller.
+// ModelCatalogs returns every catalog entry as fresh values the caller may not
+// corrupt for the next caller. Entries whose HarnessID is a CLI-backed harness
+// come first, in CLIHarnesses order; non-CLI entries (e.g. "vscode-ghcp")
+// follow in declared order. Membership does not make a harness spawnable;
+// callers needing spawnable harnesses filter by IsCLIHarness or their own
+// predicate.
 func ModelCatalogs() []ModelCatalog {
-	out := make([]ModelCatalog, len(cliModelCatalogs))
-	for i, e := range cliModelCatalogs {
+	out := make([]ModelCatalog, len(modelCatalogs))
+	for i, e := range modelCatalogs {
 		out[i] = ModelCatalog{
 			HarnessID:  e.HarnessID,
 			FormatHint: e.FormatHint,
@@ -139,11 +184,11 @@ func ModelCatalogs() []ModelCatalog {
 	return out
 }
 
-// LookupModelCatalog returns the model catalog for harnessID. The second
-// result distinguishes "no such harness" from a harness with no models; it
+// LookupModelCatalog returns the model catalog for harnessID, CLI-backed or
+// not. The second result distinguishes "no catalog entry" from an entry; it
 // never panics. The returned IDs slice is a fresh copy.
 func LookupModelCatalog(harnessID string) (ModelCatalog, bool) {
-	for _, e := range cliModelCatalogs {
+	for _, e := range modelCatalogs {
 		if e.HarnessID == harnessID {
 			return ModelCatalog{
 				HarnessID:  e.HarnessID,
@@ -156,7 +201,7 @@ func LookupModelCatalog(harnessID string) (ModelCatalog, bool) {
 }
 
 // ModelIDs returns harnessID's valid model identifiers as a fresh slice, or
-// nil when harnessID names no known CLI-backed harness. It is the convenience
+// nil when the catalog has no entry for harnessID. It is the convenience
 // form for a caller that only needs the list.
 func ModelIDs(harnessID string) []string {
 	cat, ok := LookupModelCatalog(harnessID)

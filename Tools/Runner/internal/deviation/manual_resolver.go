@@ -24,7 +24,7 @@ type ManualResolver struct {
 // Esc (a cancelled answer) returns to the previous step. See manualDialogue.
 //
 // Choosing the stop option returns a StopInstruction. A complete result is
-// checked with domain.ValidateDispatchTarget before it is returned; a rejected
+// checked with domain.ValidateDispatchIteration before it is returned; a rejected
 // one is never returned, the user is taken back to correct it.
 //
 // Routing that ends without a dispatch (Esc at the first step, an unavailable

@@ -80,10 +80,10 @@ func TestApply_ExecutionLog_Entry_Phase(t *testing.T) {
 }
 
 func TestApply_ExecutionLog_Entry_StageFormatting_Execution(t *testing.T) {
-	// During EXECUTION phase, stage is "Stage-N". Must be stored as-is.
+	// During EXECUTION phase, the recorded iteration is its ID. Must be stored as-is.
 	store, state := mustCreateStore(t)
 	ctx := context.Background()
-	step := newTestStep(1, "test-writer#1", "EXECUTION", "Stage-1", domain.StatusSUCCESS, time.Now(), nil)
+	step := newTestStep(1, "test-writer#1", "EXECUTION", "1", domain.StatusSUCCESS, time.Now(), nil)
 
 	after, err := store.Apply(ctx, state, step)
 	if err != nil {
@@ -91,8 +91,8 @@ func TestApply_ExecutionLog_Entry_StageFormatting_Execution(t *testing.T) {
 	}
 
 	last := after.ExecutionLog[len(after.ExecutionLog)-1]
-	if last.Stage != "Stage-1" {
-		t.Errorf("last entry Stage: want %q for EXECUTION phase, got %q", "Stage-1", last.Stage)
+	if last.Stage != "1" {
+		t.Errorf("last entry Stage: want %q for EXECUTION phase, got %q", "1", last.Stage)
 	}
 }
 
@@ -142,13 +142,13 @@ func TestApply_ArtifactRegistry_ExistingEntry_UpdatedOnRework(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now()
 
-	step1 := newTestStep(1, "test-writer#1", "EXECUTION", "Stage-1", domain.StatusSUCCESS, now, []string{"Stage-1/PlanProgress.md"})
+	step1 := newTestStep(1, "test-writer#1", "EXECUTION", "1", domain.StatusSUCCESS, now, []string{"Stage-1/PlanProgress.md"})
 	state1, err := store.Apply(ctx, state, step1)
 	if err != nil {
 		t.Fatalf("Apply step1: %v", err)
 	}
 
-	step2 := newTestStep(2, "test-writer#2", "EXECUTION", "Stage-1", domain.StatusSUCCESS, now.Add(time.Minute), []string{"Stage-1/PlanProgress.md"})
+	step2 := newTestStep(2, "test-writer#2", "EXECUTION", "1", domain.StatusSUCCESS, now.Add(time.Minute), []string{"Stage-1/PlanProgress.md"})
 	state2, err := store.Apply(ctx, state1, step2)
 	if err != nil {
 		t.Fatalf("Apply step2: %v", err)
@@ -188,15 +188,15 @@ func TestApply_CurrentState_PhaseUpdated(t *testing.T) {
 func TestApply_CurrentState_StageUpdated(t *testing.T) {
 	store, state := mustCreateStore(t)
 	ctx := context.Background()
-	step := newTestStep(1, "test-writer#1", "EXECUTION", "Stage-2", domain.StatusSUCCESS, time.Now(), nil)
+	step := newTestStep(1, "test-writer#1", "EXECUTION", "2", domain.StatusSUCCESS, time.Now(), nil)
 
 	after, err := store.Apply(ctx, state, step)
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 
-	if after.CurrentState.Stage != "Stage-2" {
-		t.Errorf("CurrentState.Stage: want %q, got %q", "Stage-2", after.CurrentState.Stage)
+	if after.CurrentState.Stage != "2" {
+		t.Errorf("CurrentState.Stage: want %q, got %q", "2", after.CurrentState.Stage)
 	}
 }
 
@@ -367,7 +367,7 @@ func TestApply_ExecutionLog_Entry_Checkpoint_Propagated(t *testing.T) {
 		Seq:           1,
 		AgentInstance: "test-writer-tdd#1",
 		Phase:         "EXECUTION",
-		Stage:         "Stage-1",
+		Stage:         "1",
 		Status:        domain.StatusSUCCESS,
 		Timestamp:     time.Now(),
 		Summary:       "tests written",

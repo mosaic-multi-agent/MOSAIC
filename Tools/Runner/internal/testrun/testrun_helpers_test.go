@@ -186,6 +186,7 @@ type MockChecker struct {
 	loadResults       []*testcheck.ExpectedOutcome // one per LoadExpected call
 	loadErrors        []error                      // one per LoadExpected call
 	checkResults      []testcheck.CheckResult      // one per Check call
+	checkInputs       []testcheck.CheckInput       // actual input of every Check call
 }
 
 func (f *MockChecker) LoadExpected(path string) (*testcheck.ExpectedOutcome, error) {
@@ -206,6 +207,7 @@ func (f *MockChecker) LoadExpected(path string) (*testcheck.ExpectedOutcome, err
 }
 
 func (f *MockChecker) Check(actual testcheck.CheckInput, expected *testcheck.ExpectedOutcome) testcheck.CheckResult {
+	f.checkInputs = append(f.checkInputs, actual)
 	idx := len(f.loadExpectedPaths) - 1
 	if idx < len(f.checkResults) {
 		return f.checkResults[idx]

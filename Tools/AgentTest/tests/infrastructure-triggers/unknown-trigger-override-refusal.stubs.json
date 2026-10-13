@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "test_id": "unknown-trigger-override-refusal",
+  "on_unmatched": "halt",
+  "stubs": [
+    {
+      "match": {
+        "tool": "dispatch",
+        "agent": "implementation-review",
+        "invocation": 1
+      },
+      "response": {
+        "agent_instance_id": "implementation-review#11",
+        "run_id": "{run_id}",
+        "status_code": "SUCCESS",
+        "status_message": "Implementation review passed for stage 1. No findings."
+      }
+    }
+  ]
+}

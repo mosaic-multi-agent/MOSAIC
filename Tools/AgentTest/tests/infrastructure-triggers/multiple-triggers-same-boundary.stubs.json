@@ -21,9 +21,9 @@
       }
     },
     {
-      "match": { "tool": "dispatch", "agent": "checkpoint-stage-end-only", "invocation": 1 },
+      "match": { "tool": "dispatch", "agent": "checkpoint-iteration-end-only", "invocation": 1 },
       "response": {
-        "agent_instance_id": "checkpoint-stage-end-only#12",
+        "agent_instance_id": "checkpoint-iteration-end-only#12",
         "run_id": "{run_id}",
         "status_code": "SUCCESS",
         "status_message": "Checkpoint committed for stage 1 boundary."

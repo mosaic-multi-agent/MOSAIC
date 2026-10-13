@@ -14,19 +14,19 @@ import (
 // artifact has no execution history, Next dispatches the very first row of
 // the workflow (a pre-execution row when the workflow starts before EXECUTION).
 func TestNext_FirstCall_DispatchesFirstPreExecutionRow(t *testing.T) {
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
-	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
+	agents := scopeAgents(aw)
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           emptyState(),
-		LastResponse:    nil,
-		Agents:          agents,
-		Seq:             0,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        emptyState(),
+		LastResponse: nil,
+		Agents:       agents,
+		Seq:          0,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
@@ -43,23 +43,23 @@ func TestNext_FirstCall_DispatchesFirstPreExecutionRow(t *testing.T) {
 // workflow with no pre-execution rows dispatches the first EXECUTION row of
 // stage 1 on the initial call.
 func TestNext_FirstCall_StagedOnly_DispatchesFirstExecutionRow(t *testing.T) {
-	aw := mustParseAndAdmit(t, implOnlyContent, "implementation-only", "3.1")
-	stages := singleStageSet("Implementation-Only")
-	agents := newTestAgents("implementation-tdd", "implementation-review", "test-runner")
+	aw := mustParseAndAdmitV216(t, implOnlyV216Content, "implementation-only", "3.1")
+	schedules := singleSchedules("Implementation-Only")
+	agents := scopeAgents(aw)
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           emptyState(),
-		LastResponse:    nil,
-		Agents:          agents,
-		Seq:             0,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        emptyState(),
+		LastResponse: nil,
+		Agents:       agents,
+		Seq:          0,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
-	// implementation-only has no pre-execution rows; row 0 is EXECUTION.[StageNumber].
+	// implementation-only has no pre-execution rows; row 0 is EXECUTION.[Stage].
 	if step.RowIndex != 0 {
 		t.Errorf("want RowIndex=0 (first EXECUTION row), got %d", step.RowIndex)
 	}
@@ -81,50 +81,48 @@ func TestNext_FirstCall_StagedOnly_DispatchesFirstExecutionRow(t *testing.T) {
 // never had one". stageSource is optional and variadic; omitting it (or
 // passing the zero value) must still yield a non-empty stop reason.
 
-// TestNext_NoStageSet_Omitted_StillProducesNonEmptyStopReason verifies that
+// TestNext_NoSchedules_Omitted_StillProducesNonEmptyStopReason verifies that
 // calling Next without a stageSource argument at all (the pre-existing call
 // shape used everywhere else in this file) continues to produce a stop with
-// a non-empty reason for a staged workflow with no stage set.
-func TestNext_NoStageSet_Omitted_StillProducesNonEmptyStopReason(t *testing.T) {
-	aw := mustParseAndAdmit(t, implOnlyContent, "implementation-only", "3.1")
-	agents := newTestAgents("implementation-tdd", "implementation-review", "test-runner")
+// a non-empty reason for a staged workflow with no schedule.
+func TestNext_NoSchedules_Omitted_StillProducesNonEmptyStopReason(t *testing.T) {
+	aw := mustParseAndAdmitV216(t, implOnlyV216Content, "implementation-only", "3.1")
+	agents := scopeAgents(aw)
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          nil,
-		State:           emptyState(),
-		LastResponse:    nil,
-		Agents:          agents,
-		Seq:             0,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		State:        emptyState(),
+		LastResponse: nil,
+		Agents:       agents,
+		Seq:          0,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	stop := requireStop(t, dec)
 	if stop.Reason == "" {
-		t.Error("want non-empty StopDecision.Reason when no stage set is available, got empty")
+		t.Error("want non-empty StopDecision.Reason when no schedule is available, got empty")
 	}
 }
 
-// TestNext_NoStageSet_InitialDispatch_NeverSeeded_NamesPathLookedFor verifies
+// TestNext_NoSchedules_InitialDispatch_NeverSeeded_NamesPathLookedFor verifies
 // that on the very first call (initial dispatch into a staged-only workflow),
 // a stageSource whose Seeded field is false still names the path that was
 // looked for in the stop reason.
-func TestNext_NoStageSet_InitialDispatch_NeverSeeded_NamesPathLookedFor(t *testing.T) {
-	aw := mustParseAndAdmit(t, implOnlyContent, "implementation-only", "3.1")
-	agents := newTestAgents("implementation-tdd", "implementation-review", "test-runner")
+func TestNext_NoSchedules_InitialDispatch_NeverSeeded_NamesPathLookedFor(t *testing.T) {
+	aw := mustParseAndAdmitV216(t, implOnlyV216Content, "implementation-only", "3.1")
+	agents := scopeAgents(aw)
 	src := domain.StageSource{Path: "/runs/example/Plan.md", Seeded: false}
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          nil,
-		State:           emptyState(),
-		LastResponse:    nil,
-		Agents:          agents,
-		Seq:             0,
-		Now:             fixedNow,
-		StageSource:     src,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		State:        emptyState(),
+		LastResponse: nil,
+		Agents:       agents,
+		Seq:          0,
+		Now:          fixedNow,
+		StageSource:  src,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	stop := requireStop(t, dec)
@@ -133,25 +131,24 @@ func TestNext_NoStageSet_InitialDispatch_NeverSeeded_NamesPathLookedFor(t *testi
 	}
 }
 
-// TestNext_NoStageSet_InitialDispatch_SeededButMissing_NamesPathLookedFor
+// TestNext_NoSchedules_InitialDispatch_SeededButMissing_NamesPathLookedFor
 // verifies that a stageSource whose Seeded field is true also names the path
 // that was looked for -- the seeded-but-missing case must still identify
 // where the table should have been.
-func TestNext_NoStageSet_InitialDispatch_SeededButMissing_NamesPathLookedFor(t *testing.T) {
-	aw := mustParseAndAdmit(t, implOnlyContent, "implementation-only", "3.1")
-	agents := newTestAgents("implementation-tdd", "implementation-review", "test-runner")
+func TestNext_NoSchedules_InitialDispatch_SeededButMissing_NamesPathLookedFor(t *testing.T) {
+	aw := mustParseAndAdmitV216(t, implOnlyV216Content, "implementation-only", "3.1")
+	agents := scopeAgents(aw)
 	src := domain.StageSource{Path: "/runs/example/Plan.md", Seeded: true}
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          nil,
-		State:           emptyState(),
-		LastResponse:    nil,
-		Agents:          agents,
-		Seq:             0,
-		Now:             fixedNow,
-		StageSource:     src,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		State:        emptyState(),
+		LastResponse: nil,
+		Agents:       agents,
+		Seq:          0,
+		Now:          fixedNow,
+		StageSource:  src,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	stop := requireStop(t, dec)
@@ -160,37 +157,35 @@ func TestNext_NoStageSet_InitialDispatch_SeededButMissing_NamesPathLookedFor(t *
 	}
 }
 
-// TestNext_NoStageSet_InitialDispatch_SeededVsNeverSeeded_DistinctMessages
+// TestNext_NoSchedules_InitialDispatch_SeededVsNeverSeeded_DistinctMessages
 // verifies that Seeded actually changes the rendered stop reason: the
 // seeded-but-missing case and the never-seeded case, for the same Path, must
 // be distinguishable from each other -- this is the entire point of carrying
 // the Seeded field rather than just Path.
-func TestNext_NoStageSet_InitialDispatch_SeededVsNeverSeeded_DistinctMessages(t *testing.T) {
-	aw := mustParseAndAdmit(t, implOnlyContent, "implementation-only", "3.1")
-	agents := newTestAgents("implementation-tdd", "implementation-review", "test-runner")
+func TestNext_NoSchedules_InitialDispatch_SeededVsNeverSeeded_DistinctMessages(t *testing.T) {
+	aw := mustParseAndAdmitV216(t, implOnlyV216Content, "implementation-only", "3.1")
+	agents := scopeAgents(aw)
 	path := "/runs/example/Plan.md"
 
 	neverSeeded := requireStop(t, engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          nil,
-		State:           emptyState(),
-		LastResponse:    nil,
-		Agents:          agents,
-		Seq:             0,
-		Now:             fixedNow,
-		StageSource:     domain.StageSource{Path: path, Seeded: false},
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		State:        emptyState(),
+		LastResponse: nil,
+		Agents:       agents,
+		Seq:          0,
+		Now:          fixedNow,
+		StageSource:  domain.StageSource{Path: path, Seeded: false},
+		Mode:         domain.ExecutionModeAutoReview,
 	}))
 	seededMissing := requireStop(t, engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          nil,
-		State:           emptyState(),
-		LastResponse:    nil,
-		Agents:          agents,
-		Seq:             0,
-		Now:             fixedNow,
-		StageSource:     domain.StageSource{Path: path, Seeded: true},
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		State:        emptyState(),
+		LastResponse: nil,
+		Agents:       agents,
+		Seq:          0,
+		Now:          fixedNow,
+		StageSource:  domain.StageSource{Path: path, Seeded: true},
+		Mode:         domain.ExecutionModeAutoReview,
 	}))
 
 	if neverSeeded.Reason == seededMissing.Reason {
@@ -199,28 +194,27 @@ func TestNext_NoStageSet_InitialDispatch_SeededVsNeverSeeded_DistinctMessages(t 
 	}
 }
 
-// TestNext_NoStageSet_EnteringExecution_NeverSeeded_NamesPathLookedFor
+// TestNext_NoSchedules_EnteringExecution_NeverSeeded_NamesPathLookedFor
 // verifies that the second call site where a staged row can be reached with
-// no stage set -- transitioning from a pre-EXECUTION row's SUCCESS into the
+// no schedule -- transitioning from a pre-EXECUTION row's SUCCESS into the
 // staged EXECUTION phase -- also renders the stageSource path into the stop
 // reason.
-func TestNext_NoStageSet_EnteringExecution_NeverSeeded_NamesPathLookedFor(t *testing.T) {
-	// quick-fix row 1: plan-review, OnSuccess="implementation-tdd" (an EXECUTION row).
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
-	state := stateAfter("PLANNING", "", "plan-review#2", domain.StatusSUCCESS, 2)
+func TestNext_NoSchedules_EnteringExecution_NeverSeeded_NamesPathLookedFor(t *testing.T) {
+	// quick-fix row 1: plan-review, On Success = [Stage] (enters the block).
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	agents := scopeAgents(aw)
+	state := stateAfterRow("PLANNING", "", "plan-review#2", domain.StatusSUCCESS, 2, 2)
 	src := domain.StageSource{Path: "/runs/example/Plan.md", Seeded: false}
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          nil,
-		State:           state,
-		LastResponse:    successResponse("plan-review#2"),
-		Agents:          agents,
-		Seq:             2,
-		Now:             fixedNow,
-		StageSource:     src,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		State:        state,
+		LastResponse: successResponse("plan-review#2"),
+		Agents:       agents,
+		Seq:          2,
+		Now:          fixedNow,
+		StageSource:  src,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	stop := requireStop(t, dec)
@@ -228,8 +222,3 @@ func TestNext_NoStageSet_EnteringExecution_NeverSeeded_NamesPathLookedFor(t *tes
 		t.Errorf("want StopDecision.Reason to name the looked-for path %q; got %q", src.Path, stop.Reason)
 	}
 }
-
-// ===== Linear pre/post-execution advance =====
-
-// TestNext_PreExecution_OnSuccess_AdvancesToNamedAgent verifies that a SUCCESS
-// response from a pre-execution row routes to the agent named in On Success.

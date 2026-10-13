@@ -44,10 +44,10 @@ type ConsultationRequest struct {
 	// deviation.
 	Deviation *DeviationInfo
 
-	// Stages is the session's current stage set at consultation time (stages
-	// added mid-run included). Nil when no plan has been read. Like Deviation,
-	// it is NEVER serialised onto the wire.
-	Stages *StageSet
+	// Schedules is the current schedule per block at consultation time
+	// (iterations added mid-run included). Nil when no plan has been read. Like
+	// Deviation, it is NEVER serialised onto the wire.
+	Schedules BlockSchedules
 
 	// ArtifactRegistry is the run's Artifacts registry at consultation time,
 	// paths in the recorded (unprefixed) form. Used by the ManualResolver for
@@ -61,12 +61,12 @@ type ConsultationRequest struct {
 	RowDefaults RowDefaultsFunc
 }
 
-// RowDefaultsFunc resolves the DispatchDefaults of row at stage (0 for a
-// non-staged row) exactly as an engine-routed dispatch would. A non-nil error
+// RowDefaultsFunc resolves the DispatchDefaults of row at iteration ("" for a
+// row outside every block) exactly as an engine-routed dispatch would. A non-nil error
 // names the row and either the pattern that could not be resolved or the stage
 // argument that is invalid for the row. It never returns zero defaults in place
 // of such an error.
-type RowDefaultsFunc func(row RoutingRow, stage StageNumber) (DispatchDefaults, error)
+type RowDefaultsFunc func(row RoutingRow, iteration IterationID) (DispatchDefaults, error)
 
 // RoutingInstruction is a routing consultant's answer. Exactly one field is
 // non-nil; a value with neither or both set is a programming error and the
@@ -108,12 +108,13 @@ type DispatchInstruction struct {
 	// HITLOverride overrides the effective HITL when non-nil.
 	HITLOverride *bool
 
-	// Stage is the validated plan stage for a staged row, 0 for a non-staged row.
-	Stage StageNumber
+	// Iteration is the validated iteration ID for a block row, "" for a row
+	// outside every block.
+	Iteration IterationID
 }
 
-// StopInstruction ends the run. The artifact is left exactly as it stands and
-// remains resumable.
+// StopInstruction ends the run. It is used by routing and by pre-consultation.
+// The artifact is left exactly as it stands and remains resumable.
 type StopInstruction struct {
 	// Reason is human-readable and non-empty. It is surfaced in the CLI exit
 	// message and the TUI stop screen. The consultation itself writes no
@@ -133,6 +134,11 @@ const GenericTaskDescription = "Proceed with your task."
 type PreConsultationAdvice struct {
 	TaskDescription string
 	Constraints     string
+
+	// Stop is non-nil when the orchestrator stopped the run at
+	// pre-consultation ({"action":"stop","reason":...}). When set,
+	// TaskDescription and Constraints are empty and must not be applied.
+	Stop *StopInstruction
 }
 
 // ConsultationFailure classifies why a consultation failed. Callers switch on
@@ -146,10 +152,13 @@ const (
 	// ConsultFailMalformedJSON covers a reply that is not valid JSON or not a JSON object.
 	ConsultFailMalformedJSON ConsultationFailure = "malformed-json"
 
-	// ConsultFailMissingField covers a required field that is absent or empty.
+	// ConsultFailMissingField covers a required field that is absent or empty,
+	// including the routing action and the pre-consultation stop reason.
 	ConsultFailMissingField ConsultationFailure = "missing-field"
 
-	// ConsultFailUnknownAction covers an action value that is not "dispatch" or "stop".
+	// ConsultFailUnknownAction covers an action value that is not allowed in its
+	// context: not "dispatch" or "stop" for routing, not "stop" for
+	// pre-consultation.
 	ConsultFailUnknownAction ConsultationFailure = "unknown-action"
 
 	// ConsultFailUnknownAgent covers a dispatch agent identifier absent from the routing table.

@@ -1,9 +1,9 @@
 <Workflow type="core" name="staged" version="1.0">
 ## Two-Stage EXECUTION Workflow for PHASE_END Prospective Semantics Test
 
-A two-stage EXECUTION workflow using the [StageNumber] template syntax with
-agent-a and agent-b. Requires Plan.md with Stage-1 and Stage-2 in RunFolder
-for template expansion.
+A two-stage EXECUTION workflow using the [Stage] block with agent-a and
+agent-b. Requires Plan.md with Stage-1 and Stage-2 in RunFolder for
+iteration expansion.
 
 Used to verify that EXECUTION PHASE_END fires only after the last step of the
 *last* stage (the last step of the entire EXECUTION phase), not after the last
@@ -11,7 +11,7 @@ step of each individual stage.
 
 FR-3 prospective semantics: the look-ahead for EXECUTION PHASE_END spans the
 entire EXECUTION phase across all stages. PHASE_END fires only when the
-completed row is the last row of the last stage in the stage set.
+completed row is the last row of the last stage in the schedule.
 
 Row index mapping after plan expansion with Stage-1 and Stage-2 (zero-based):
   0 = EXECUTION.Stage-1 / agent-a
@@ -21,8 +21,14 @@ Row index mapping after plan expansion with Stage-1 and Stage-2 (zero-based):
 
 | Phase | Subagent | HITL | On Success | On Findings | Input | Output |
 |-------|----------|:----:|------------|-------------|-------|--------|
-| EXECUTION.[StageNumber] | agent-a | FALSE | agent-b | - | - | - |
-| EXECUTION.[StageNumber] | agent-b | FALSE | COMPLETE | agent-a | - | - |
+| EXECUTION.[Stage] | agent-a | FALSE | NEXT | - | - | - |
+| EXECUTION.[Stage] | agent-b | FALSE | COMPLETE | agent-a | - | - |
+
+**Blocks:**
+
+| Block | Source | Section |
+|-------|--------|---------|
+| Stage | Plan.md | Stages |
 </Workflow>
 
 <InfrastructureAgents type="managed">

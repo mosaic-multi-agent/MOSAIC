@@ -31,9 +31,12 @@ type wireRoutingResponse struct {
 	OutputArtifacts *[]string          `json:"output_artifacts"` // optional; same semantics
 	HITLOverride    *bool              `json:"hitl_override"`    // optional; nil = fall back
 	Row             domain.WorkflowRow // dispatch only; required; 1-based, NoWorkflowRow = absent (see wire_row_stage.go)
-	Stage           domain.StageNumber // dispatch only; required exactly for a staged row; 0 = absent
-	StageGroup      domain.GroupName   // group of a "Group.N" stage value; empty for a bare number
+	Iteration       string             // dispatch only; the run artifact's Iteration value, required exactly for a block row; "" = absent
 	Reason          string             `json:"reason"` // stop only
+
+	// ActionAbsent is true when the reply has no "action" member at all, as
+	// opposed to an empty or null one.
+	ActionAbsent bool
 }
 
 // wirePreConsultResponse is the JSON payload the orchestrator returns for a
@@ -49,7 +52,7 @@ type wirePreConsultResponse struct {
 // captured as raw bytes so the coercion step can inspect and convert them.
 // All other fields unmarshal directly into their target types.
 type wireRoutingRaw struct {
-	Action          string          `json:"action"`
+	Action          json.RawMessage `json:"action"` // raw to tell an absent member from "" or null
 	Agent           string          `json:"agent"`
 	TaskDescription string          `json:"task_description"`
 	Constraints     *string         `json:"constraints"`
@@ -57,7 +60,8 @@ type wireRoutingRaw struct {
 	OutputArtifacts json.RawMessage `json:"output_artifacts"`
 	HITLOverride    json.RawMessage `json:"hitl_override"`
 	Row             json.RawMessage `json:"row"`
-	Stage           json.RawMessage `json:"stage"`
+	Iteration       json.RawMessage `json:"iteration"`
+	Stage           json.RawMessage `json:"stage"` // the pre-3.0 member; any value but null is refused
 	Reason          string          `json:"reason"`
 }
 
@@ -82,12 +86,24 @@ func unmarshalRoutingResponseLenient(data []byte) (wireRoutingResponse, error) {
 		}
 	}
 
+	var action string
+	if len(raw.Action) > 0 && string(raw.Action) != "null" {
+		if err := json.Unmarshal(raw.Action, &action); err != nil {
+			return wireRoutingResponse{}, &domain.ConsultationError{
+				Failure: domain.ConsultFailMalformedJSON,
+				Detail:  fmt.Sprintf("malformed routing response JSON: action: %v", err),
+				Err:     err,
+			}
+		}
+	}
+
 	resp := wireRoutingResponse{
-		Action:          raw.Action,
+		Action:          action,
 		Agent:           raw.Agent,
 		TaskDescription: raw.TaskDescription,
 		Constraints:     raw.Constraints,
 		Reason:          raw.Reason,
+		ActionAbsent:    len(raw.Action) == 0,
 	}
 
 	var err error
@@ -106,7 +122,10 @@ func unmarshalRoutingResponseLenient(data []byte) (wireRoutingResponse, error) {
 	if resp.Row, err = coerceRowField(raw.Row); err != nil {
 		return wireRoutingResponse{}, err
 	}
-	if resp.Stage, resp.StageGroup, err = coerceStageField(raw.Stage); err != nil {
+	if err = refuseStageField(raw.Stage); err != nil {
+		return wireRoutingResponse{}, err
+	}
+	if resp.Iteration, err = coerceIterationField(raw.Iteration); err != nil {
 		return wireRoutingResponse{}, err
 	}
 

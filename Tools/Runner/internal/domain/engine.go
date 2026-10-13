@@ -81,6 +81,19 @@ const (
 	// DeviationReviewLoopLimit: Mode 3 stopped auto-routing a reviewer's findings
 	// because its COMPLETED_NEEDS_ACTION count reached review_loop_limit.
 	DeviationReviewLoopLimit DeviationKind = "review-loop-limit"
+	// DeviationScheduleDefect: a block schedule a producing or in-block writer
+	// row produced is still defective after the schedule-defect re-dispatch
+	// limit. The session itself enters the consultation; the engine never
+	// produces this kind.
+	DeviationScheduleDefect DeviationKind = "schedule-defect"
+	// DeviationFinishedWork: after an engine-routed SUCCESS, the step the
+	// engine would dispatch next (row + iteration value) already has a SUCCESS
+	// entry with that recorded WorkflowRow and Iteration, so the engine
+	// consults instead of repeating finished work. PlannedContinuation is that
+	// step. Internal only: never serialised. Response is the zero
+	// ProtocolResponse when Next runs on resume (LastResponse == nil) and must
+	// not be relied on by any consumer.
+	DeviationFinishedWork DeviationKind = "finished-work"
 )
 
 // DeviationInfo carries everything the deviation resolver needs.
@@ -90,8 +103,14 @@ type DeviationInfo struct {
 	CurrentRow          int              // row index of the row that deviated
 	CurrentPhase        string
 	CurrentStage        string
-	PlannedContinuation *DispatchStep // where the happy path would have gone (nil if unknown)
+	// PlannedContinuation is where the happy path would have gone; set for
+	// DeviationFinishedWork (the already-finished step), nil otherwise.
+	PlannedContinuation *DispatchStep
 	ArtifactState       ArtifactState // current state at time of deviation
+	// ErrorReason is a Runner-constructed error description. When non-empty it
+	// becomes the consultation's last_error_reason; otherwise the reason is
+	// derived from the deviating response as before.
+	ErrorReason string
 }
 
 // ResumeInfo is the output of engine resume-point derivation: where to continue
@@ -105,14 +124,19 @@ type ResumeInfo struct {
 	// Phase is the phase of the row identified by RowIndex.
 	Phase string
 
-	// Stage is the stage context for the row. For an interrupted row it is the
-	// recorded stage value of the log entry (domain.FormatStageValue, e.g.
-	// "Test.1"); for an advanced row it is the stage path form "Stage-N". It is ""
-	// outside a staged phase. Consumers should rely on StageNumber.
+	// Stage is the iteration value for the row. For an interrupted row it is the
+	// recorded value of the log entry as read; for an advanced row it is the
+	// OAF 3.0 value (domain.FormatIterationValue, e.g. "1.Test"). It is ""
+	// outside a block. Consumers should rely on Iteration.
 	Stage string
 
-	// StageNumber is the stage number when inside a staged phase, or 0 otherwise.
-	StageNumber StageNumber
+	// Block is the block of the row at RowIndex; "" outside every block, on a
+	// fresh start and when the run is complete.
+	Block BlockName
+
+	// Iteration is the ID of the iteration the position is in, verbatim as the
+	// schedule spells it (interrupted row: as recorded); "" when Block is "".
+	Iteration IterationID
 
 	// GroupIndex is the index into AdmittedWorkflow.Groups for the row's
 	// execution group (0 or 1), or -1 when the row is outside the staged phase.

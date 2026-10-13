@@ -1,5 +1,5 @@
 ---
-version: "1.0"
+version: "1.1"
 name: "MosaicTest Orchestrated Linear Workflow"
 description: "Runner mode fixture — Orchestrated mode end to end. The orchestrator is asked before every step, dispatches the same row three times with three different task descriptions, then stops."
 hint: "Mode 1 test — orchestrator consulted every step, task description delivery, stop instruction"
@@ -15,7 +15,7 @@ smoke_set:
   - orchestrated
 ---
 
-<Workflow type="core" name="orchestrated-linear" version="1.0">
+<Workflow type="core" name="orchestrated-linear" version="1.1">
 ## MosaicTest Orchestrated Linear Workflow
 
 **Use when:** Verifying that `mosaic-run` can execute a run in Orchestrated mode against a real harness — that it asks the orchestrator before every step including the first, carries the orchestrator's task description through to the subagent, and ends the run on a stop instruction.
@@ -27,7 +27,7 @@ smoke_set:
 **Notes:**
 - **Run this workflow in Orchestrated mode only.** In Auto or Auto-review the engine routes the single row to `COMPLETE` without ever consulting the orchestrator, and the run proves nothing this workflow exists to prove.
 - `On Success` is `COMPLETE` so that a mode confusion fails fast and harmlessly rather than looping.
-- Non-staged. With no staged rows, admission short-circuits and no stage table is required.
+- No block rows. The workflow has no `**Blocks:**` table, so no block schedule is read.
 - Seed `Fixtures/orchestrated-linear` — the whole directory, not anything inside it — as the single seed path.
 
 </Workflow>
@@ -38,11 +38,9 @@ smoke_set:
 
 ### Why one row, dispatched three times
 
-The obvious shape for this test is three rows, one per step. It does not work, and the reason is worth recording.
+The obvious shape for this test is three rows, one per step. Under WorkflowFormat 2.16 it is authorable: every `Subagent` cell must be unique, so three rows of one stub agent need three mode qualifiers, and the orchestrator's reply names the row it dispatches in `row`. But it would test row addressing as well as task-description delivery, and a failure could not be attributed to one of them.
 
-When the orchestrator names an agent, the Runner resolves that name to a routing table row by taking the **first row whose agent matches**. With one stub agent in three rows, all three dispatches resolve to row 1, so every step is recorded under row 1's phase and artifacts no matter which row the orchestrator meant. The log would then show three identical rows and prove nothing about which one was dispatched.
-
-One row removes the ambiguity entirely. Three dispatches of that row, each carrying a different orchestrator-written task description, exercise the same mechanism without depending on row addressing. Multi-row navigation belongs in `orchestrated-backjump`, which cannot be authored until row addressing for a repeated agent is settled.
+One row keeps the test on one mechanism. Three dispatches of that row, each carrying a different orchestrator-written task description, exercise the delivery without depending on row addressing. Multi-row navigation belongs in `orchestrated-backjump`.
 
 ### Why the subagent echoes its task description
 
@@ -96,6 +94,7 @@ Three Orchestration.md log rows. Every consultation — including the one before
 | Version | Date | Author | Summary |
 |---------|------|--------|---------|
 | 1.0 | 2026-08-17 | MOSAIC | Initial version. First workflow exercising Orchestrated mode. |
+| 1.1 | 2026-10-12 | MOSAIC | WorkflowFormat 2.16 wording: the rationale and the rejected three-row shape no longer rely on first-match agent resolution (a reply names `row`; repeated agents take mode qualifiers); the stage-table note became a block-schedule note. Routing table and dispatch sequence unchanged. |
 
 ---
 
@@ -105,4 +104,4 @@ Three Orchestration.md log rows. Every consultation — including the one before
 - A variant whose fixture omits the rule for the third SUCCESS, to assert that the stub stops loudly on an unmatched state rather than improvising. Cheap, and it tests the safety property the whole fixture design rests on.
 
 **Dead ends (tried and rejected):**
-- Three rows, one per step. The Runner resolves an orchestrator-named agent to the first matching row, so all three dispatches would collapse onto row 1 and the log could not show which row was meant. See Design Rationale.
+- Three rows, one per step. Authorable with mode qualifiers, but it adds row addressing to a test about task-description delivery, so a failure would be ambiguous. See Design Rationale.

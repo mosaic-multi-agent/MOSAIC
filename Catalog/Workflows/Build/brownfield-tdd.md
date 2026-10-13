@@ -1,5 +1,5 @@
 ---
-version: "3.10"
+version: "4.0"
 name: "Brownfield TDD Workflow"
 description: "New features or significant changes to an existing codebase requiring test-first development with full research and design."
 hint: "The main workhorse — best on shell-buildable codebases. Works best at a certain feature size, discovered through use rather than designed in. The two size-mismatch directions fail differently: too small wastes cost on overspecified Requirements/Plan and triggers unnecessary correction round-trips; too big genuinely starves execution agents of context, making them more error-prone and pushing you toward needing stronger models."
@@ -28,14 +28,14 @@ artifacts:
   - plan-review.md
   - ContractsDesign.md
   - contracts-review.md
-  - Stage-{StageNumber}/Plan.md
-  - Stage-{StageNumber}/PlanProgress.md
-  - Stage-{StageNumber}/tests-review-tdd.md
-  - Stage-{StageNumber}/implementation-review.md
+  - Stage-{Stage}/Plan.md
+  - Stage-{Stage}/PlanProgress.md
+  - Stage-{Stage}/tests-review-tdd.md
+  - Stage-{Stage}/implementation-review.md
   - TestResults.md
 ---
 
-<Workflow type="core" name="brownfield-tdd" version="3.10">
+<Workflow type="core" name="brownfield-tdd" version="4.0">
 ## Brownfield TDD Workflow
 
 **Use when:** New features or significant changes to an **existing codebase** requiring test-first development with full research and design.
@@ -48,28 +48,68 @@ artifacts:
 | PLANNING | planner-tdd-soft | TRUE | plan-review | - | Research.md, Requirements.md | Plan.md, Stage-*/Plan.md, Stage-*/PlanProgress.md |
 | PLANNING | plan-review | FALSE | contracts-designer | planner-tdd-soft | Requirements.md, Plan.md, Stage-*/Plan.md, Stage-*/PlanProgress.md | plan-review.md |
 | DESIGN | contracts-designer | TRUE | contracts-review | - | Research.md, Requirements.md, Plan.md, Stage-*/Plan.md | ContractsDesign.md |
-| DESIGN | contracts-review | FALSE | test-writer-tdd | contracts-designer | Plan.md, Stage-*/Plan.md, ContractsDesign.md | contracts-review.md |
-| EXECUTION.Test.[StageNumber] | test-writer-tdd | FALSE | tests-review-tdd | - | Stage-{StageNumber}/Plan.md, ContractsDesign.md, Stage-{StageNumber}/PlanProgress.md | Stage-{StageNumber}/PlanProgress.md |
-| EXECUTION.Test.[StageNumber] | tests-review-tdd | FALSE | implementation-tdd | test-writer-tdd | Stage-{StageNumber}/Plan.md, ContractsDesign.md, Stage-{StageNumber}/PlanProgress.md | Stage-{StageNumber}/tests-review-tdd.md |
-| EXECUTION.Implementation.[StageNumber] | implementation-tdd | FALSE | implementation-review | - | Stage-{StageNumber}/Plan.md, ContractsDesign.md, Stage-{StageNumber}/PlanProgress.md | Stage-{StageNumber}/PlanProgress.md |
-| EXECUTION.Implementation.[StageNumber] | implementation-review | FALSE | test-runner | implementation-tdd (or other based on issue) | Stage-{StageNumber}/Plan.md, ContractsDesign.md, Stage-{StageNumber}/PlanProgress.md | Stage-{StageNumber}/implementation-review.md |
-| REVIEW | test-runner | FALSE | COMPLETE | planner-tdd-soft  | - | TestResults.md |
+| DESIGN | contracts-review | FALSE | [Stage] | contracts-designer | Plan.md, Stage-*/Plan.md, ContractsDesign.md | contracts-review.md |
+| EXECUTION.[Stage].Test | test-writer-tdd | FALSE | tests-review-tdd | - | Stage-{Stage}/Plan.md, ContractsDesign.md, Stage-{Stage}/PlanProgress.md | Stage-{Stage}/PlanProgress.md |
+| EXECUTION.[Stage].Test | tests-review-tdd | FALSE | COMPLETE | test-writer-tdd | Stage-{Stage}/Plan.md, ContractsDesign.md, Stage-{Stage}/PlanProgress.md | Stage-{Stage}/tests-review-tdd.md |
+| EXECUTION.[Stage].Implementation | implementation-tdd | FALSE | implementation-review | - | Stage-{Stage}/Plan.md, ContractsDesign.md, Stage-{Stage}/PlanProgress.md | Stage-{Stage}/PlanProgress.md |
+| EXECUTION.[Stage].Implementation | implementation-review | FALSE | COMPLETE | implementation-tdd | Stage-{Stage}/Plan.md, ContractsDesign.md, Stage-{Stage}/PlanProgress.md | Stage-{Stage}/implementation-review.md |
+| REVIEW | test-runner | FALSE | COMPLETE | planner-tdd-soft | - | TestResults.md |
 
-**Execution Groups:**
+**Blocks:**
 
-| Approach | Groups |
-|----------|--------|
-| TDD | Test, Implementation |
-| Implementation-First | Implementation, Test |
-| Implementation-Only | Implementation |
-| Tests-Only | Test |
+| Block | Source | Section |
+|-------|--------|---------|
+| Stage | Plan.md | Stages |
 
-**EXECUTION Stages:** Loop per stage (stages defined in Plan.md). Subagent sequence per stage determined by the `Approach` column in the stage table.
+**Groups:**
 
-**Notes:**
-- **Brownfield** = existing codebase with patterns to discover and follow
-
+| Block | Approach | Groups |
+|-------|----------|--------|
+| Stage | TDD | Test, Implementation |
+| Stage | Implementation-First | Implementation, Test |
+| Stage | Implementation-Only | Implementation |
+| Stage | Tests-Only | Test |
 </Workflow>
+
+---
+
+## Flow
+
+Solid arrows: the happy path (`On Success`). Dotted arrows: where findings usually go (`On Findings`). `[HITL]`: a human stop. Each stage runs the groups its `Approach` lists, in that order: `TDD` = Test then Implementation (drawn here), `Implementation-First` = the reverse, `Implementation-Only` / `Tests-Only` = one group.
+
+```mermaid
+flowchart TD
+    subgraph RESEARCH
+        CR["codebase-research"] --> RF["requirements-refinement [HITL]"]
+        RF --> RV["requirements-review"]
+        RV -. findings .-> RF
+    end
+    subgraph PLANNING
+        PL["planner-tdd-soft [HITL]<br/>Plan.md + per-stage Plan / PlanProgress"] --> PR["plan-review"]
+        PR -. findings .-> PL
+    end
+    subgraph DESIGN
+        CD["contracts-designer [HITL]"] --> CRV["contracts-review"]
+        CRV -. findings .-> CD
+    end
+    subgraph STAGE["Stage block: one iteration per plan stage, parallel where Depends On allows"]
+        subgraph TEST["Test group"]
+            TW["test-writer-tdd"] --> TRV["tests-review-tdd"]
+            TRV -. findings .-> TW
+        end
+        subgraph IMPL["Implementation group"]
+            IT["implementation-tdd"] --> IR["implementation-review"]
+            IR -. findings .-> IT
+        end
+        TRV -- "TDD order: Approach decides" --> IT
+    end
+    RV --> PL
+    PR --> CD
+    CRV --> TW
+    IR --> TRN["test-runner"]
+    TRN -. failures: planner adds a fix stage .-> PL
+    TRN --> DONE(["Feature implemented, tests green"])
+```
 
 ---
 
@@ -83,6 +123,8 @@ Quality tracks feature sizing more than it tracks raw context budget. This was n
 
 **Too big:** Plan and Design tend to stay too vague to pin down the real scope, because the non-execution phases genuinely cannot hold enough context to spec a large feature precisely. This one is a real quality risk, not just wasted cost — the execution agents inherit under-specified direction, downstream errors become more likely, and the practical mitigation is reaching for stronger models to compensate, not just accepting slower convergence. Same underlying sensitivity as `greenfield-tdd`'s context-overload behavior, showing up here as an oversized-feature failure mode specifically rather than a general one.
 
+**Fix targets.** Each reviewer's suggested fix target is its own creator. `test-runner` runs after the Stage block has exited, so its fix target is `planner-tdd-soft`: completed stages are frozen, and the planner adds a fix stage, which runs when the block is entered again. When an implementation review traces a defect to the tests, the contracts or the plan rather than to the code, sending the findings there is the orchestrator's decision under its routing policy, not a declared route.
+
 ---
 
 ## Changelog
@@ -94,6 +136,7 @@ Quality tracks feature sizing more than it tracks raw context budget. This was n
 | 3.8 | 2026-08-26 | MOSAIC | Replace Unicode emoji with ASCII tokens in HITL column (TRUE/FALSE). |
 | 3.9 | 2026-09-28 | MOSAIC | Add Research.md to requirements-review inputs; its codebase alignment and feasibility checks run on research findings. |
 | 3.10 | 2026-10-05 | MOSAIC | Remove note making design phase optional, it decreased realibility for very little savings |
+| 4.0 | 2026-10-10 | MOSAIC | Migrated to WorkflowFormat 2.16: `[StageNumber]` → declared block `[Stage]` (`**Blocks:**` table), Phase cells in `PHASE.[Block].Group` order, `**Groups:**` table with `Block` column. Routing made scope-correct: `contracts-review` enters `[Stage]`; group-ending reviewers say `COMPLETE` (was a jump into the other group / out of the block). Prose removed from `implementation-review`'s `On Findings` (moved to Design Rationale). Notes removed — redundant with **Use when** and the tables. |
 
 ---
 

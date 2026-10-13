@@ -315,7 +315,7 @@ func Announce(id Identity) string {
 	if id.Position != nil {
 		fmt.Fprintf(&sb, " (phase=%s", id.Position.Phase)
 		if id.Position.Stage != "" {
-			fmt.Fprintf(&sb, " stage=%s", id.Position.Stage)
+			fmt.Fprintf(&sb, " iteration=%s", id.Position.Stage)
 		}
 		fmt.Fprintf(&sb, " last_agent=%s)", id.Position.LastAgent)
 	}

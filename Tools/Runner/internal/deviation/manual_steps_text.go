@@ -17,7 +17,7 @@ func (d *manualDialogue) stepTask(ctx context.Context) error {
 	ans, cancelled, err := d.askText(ctx, interaction.TextQuestion{
 		Question: interaction.Question{
 			ID:     domain.QuestionManualTask,
-			Prompt: fmt.Sprintf("Enter the task description for %s (row %d):", row.Agent, d.rowNum),
+			Prompt: fmt.Sprintf("Enter the task description for %s (row %d):", row.BareAgentID(), d.rowNum),
 		},
 		Default: d.task,
 		Validate: func(s string) error {
@@ -68,8 +68,10 @@ func (d *manualDialogue) stepConstraints(ctx context.Context) error {
 // rejected result sends the user back to the step that can correct it.
 func (d *manualDialogue) finish(ctx context.Context) error {
 	row := d.currentRow()
-	resolved, vErr := domain.ValidateDispatchTarget(d.table, d.req.Stages, domain.DispatchTarget{
-		Agent: row.Agent, Row: domain.WorkflowRow(d.rowNum), Stage: d.stage,
+	resolved, vErr := domain.ValidateDispatchIteration(d.table, d.req.Schedules, domain.DispatchTarget{
+		Agent:     row.BareAgentID(),
+		Row:       domain.WorkflowRow(d.rowNum),
+		Iteration: domain.IterationTargetValue(d.table, d.rowNum-1, d.stage),
 	})
 	if vErr != nil {
 		return d.invalidResult(ctx, describeTargetError(vErr), targetErrorStep(vErr, d.stageOrRow()))
@@ -79,9 +81,9 @@ func (d *manualDialogue) finish(ctx context.Context) error {
 		return d.invalidResult(ctx, "the row's defaults cannot be resolved: "+err.Error(), d.stageOrRow())
 	}
 	instr := &domain.DispatchInstruction{
-		Agent:           resolved.Row.Agent,
+		Agent:           resolved.Row.BareAgentID(),
 		RowIndex:        resolved.Row.Index,
-		Stage:           resolved.StageNumber,
+		Iteration:       resolved.Iteration,
 		TaskDescription: d.task,
 		InputArtifacts:  listOverride(d.inputs, defaults.InputArtifacts),
 		OutputArtifacts: listOverride(d.outputs, defaults.OutputArtifacts),

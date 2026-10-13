@@ -63,7 +63,7 @@ type manualDialogue struct {
 
 	rowNum      int    // chosen 1-based row; 0 until chosen
 	rowChoice   string // the row answer, to pre-select it when asked again
-	stage       domain.StageNumber
+	stage       domain.IterationID // chosen iteration of the row's block; "" until chosen
 	stageChoice string
 	task        string
 	inputs      listState

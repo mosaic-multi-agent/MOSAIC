@@ -1,5 +1,5 @@
 ---
-version: "3.5"
+version: "4.0"
 name: "Brownfield Design Workflow"
 description: "Architecture review, design proposals, or planning large features for an existing codebase without implementation."
 hint: "The RESEARCH/PLANNING/DESIGN head of brownfield-tdd, ending before EXECUTION — the mirror image of implementation-only's EXECUTION/REVIEW tail. Unlike implementation-only, this one has a genuine standalone reason to exist beyond resuming a split run: 'produce a design without implementing it' is a real, distinct request, not just a workaround for something native run-continuation now covers."
@@ -25,7 +25,7 @@ artifacts:
   - contracts-review.md
 ---
 
-<Workflow type="core" name="brownfield-design" version="3.5">
+<Workflow type="core" name="brownfield-design" version="4.0">
 ## Brownfield Design Workflow
 
 **Use when:** Architecture review, design proposals, or planning large features for an **existing codebase** without implementation.
@@ -39,10 +39,6 @@ artifacts:
 | PLANNING | plan-review | FALSE | contracts-designer | planner-tdd-soft | Requirements.md, Plan.md, Stage-*/Plan.md, Stage-*/PlanProgress.md | plan-review.md |
 | DESIGN | contracts-designer | TRUE | contracts-review | - | Research.md, Requirements.md, Plan.md, Stage-*/Plan.md | ContractsDesign.md |
 | DESIGN | contracts-review | FALSE | COMPLETE | contracts-designer | Plan.md, Stage-*/Plan.md, ContractsDesign.md | contracts-review.md |
-
-**Notes:**
-- **Brownfield** = existing codebase with patterns to follow
-
 </Workflow>
 
 ---
@@ -52,6 +48,10 @@ artifacts:
 Structurally the complement of `implementation-only`: together, RESEARCH → PLANNING → DESIGN (this workflow) plus EXECUTION → REVIEW (`implementation-only`) reconstitute `brownfield-tdd`. Both came from the same split.
 
 The difference is in why each half is still worth keeping. `implementation-only` existed mainly to let a run resume past DESIGN by hand-carrying Plan.md/ContractsDesign.md into a fresh run — a workaround now largely superseded by native mid-execution run persistence and continuation. This half doesn't have that problem: "produce architecture review, a design proposal, or a plan for a large feature, but stop before writing any code" is a legitimate, distinct request in its own right — not a workaround for anything. A user asking for a design review genuinely does not want implementation to happen next, run-continuation or not. That makes this workflow's standalone existence better justified than its sibling's.
+
+**No Stage block.** `planner-tdd-soft` still writes `Plan.md` with its `## Stages` schedule and the per-stage files, but no row iterates over them: the plan is a deliverable here, not something the run executes. The schedule becomes a block schedule only when the artifacts are carried into an implementing run (`implementation-only` declares `Plan.md` / `Stages` as its Stage block source).
+
+**Fix targets.** Each reviewer's suggested fix target is its own creator. A `contracts-review` finding that traces back to the plan, or a `plan-review` finding that traces back to requirements, is routed upstream by the orchestrator's routing policy, not by a declared route.
 
 ---
 
@@ -63,6 +63,7 @@ The difference is in why each half is still worth keeping. `implementation-only`
 | 3.3 | 2026-08-26 | MOSAIC | Replace Unicode emoji with ASCII tokens in HITL column (TRUE/FALSE). |
 | 3.4 | 2026-09-28 | MOSAIC | Add Research.md to requirements-review inputs; its codebase alignment and feasibility checks run on research findings. |
 | 3.5 | 2026-10-05 | MOSAIC | Remove note making design phase optional, it decreased realibility for very little savings |
+| 4.0 | 2026-10-10 | MOSAIC | Migrated to WorkflowFormat 2.16. The routing table was already compliant (no blocks, all targets in the run's scope); removed the `**Notes:**` "Brownfield" definition, redundant with **Use when:**. |
 
 ---
 

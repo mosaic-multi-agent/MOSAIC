@@ -177,5 +177,5 @@ You've deployed, run workflows, and seen the orchestration in action. Here's wha
 | Automate workflows with the Runner | [Runner Guide](RunnerGuide.md) |
 | Customize agents for your codebase | [Agent Customization Guide](AgentCustomizationGuide.md) |
 | Browse available workflows | `Catalog/Workflows/Index.md` |
-| Create your own subagents or workflows | Deploy utility agents via `mosaic-deploy` (separate mode — see [Deployment Guide](DeploymentGuide.md)) — `anthropic-subagent-creator` helps design agents, `workflow-creator` helps author workflows |
+| Create your own subagents or workflows | Open your harness in the MOSAIC repository root (not your project workspace) and use `subagent-creator` to design agents or `workflow-creator` to author workflows — they ship there ready to use. Then deploy the result with `mosaic-deploy` |
 | Understand the full architecture | `README.md` at the repository root |

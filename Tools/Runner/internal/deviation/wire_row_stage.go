@@ -13,12 +13,13 @@ import (
 //	"row":   1-based row number of the routing table (the Row column of the
 //	         workflow table and the WorkflowRow column of the Execution Log).
 //	         Required for every dispatch. A JSON integer or a decimal string.
-//	"stage": plan stage for a staged (EXECUTION) row, required exactly for such
-//	         rows. A JSON integer, a decimal string, or the Execution Log group
-//	         form "Group.N" (for example "Test.2").
+//	"iteration": the run artifact's Iteration value for that row, a string
+//	         ("A", "4", "1.Test"). Required exactly for a row in a block. It is
+//	         split by the row's group in domain.ValidateDispatchIteration.
+//	"stage": the pre-3.0 member; refused unless null.
 //
-// Absent and null both mean "not given". A value of the wrong JSON type or a
-// non-integer is a malformed reply.
+// Absent and null both mean "not given". A value of the wrong JSON type is a
+// malformed reply.
 
 // coerceRowField decodes the "row" member. Absent or null yields NoWorkflowRow.
 func coerceRowField(raw json.RawMessage) (domain.WorkflowRow, error) {
@@ -29,23 +30,30 @@ func coerceRowField(raw json.RawMessage) (domain.WorkflowRow, error) {
 	return domain.WorkflowRow(n), nil
 }
 
-// coerceStageField decodes the "stage" member into a stage number and, for
-// the group form, the group. Absent or null yields (0, "").
-func coerceStageField(raw json.RawMessage) (domain.StageNumber, domain.GroupName, error) {
-	if len(raw) > 0 && raw[0] == '"' {
-		var s string
-		if err := json.Unmarshal(raw, &s); err != nil {
-			return 0, "", malformedField("stage", err.Error())
-		}
-		if group, n, ok := domain.ParseStageValue(s); ok {
-			return n, group, nil
-		}
+// coerceIterationField decodes the "iteration" member: a JSON string holding
+// the run artifact's Iteration value. Absent, null and "" yield "". The value
+// is split and checked later, with the row's block and group known.
+func coerceIterationField(raw json.RawMessage) (string, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return "", nil
 	}
-	n, ok, err := coerceIntegerField("stage", raw)
-	if err != nil || !ok {
-		return 0, "", err
+	if raw[0] != '"' {
+		return "", malformedField("iteration", fmt.Sprintf("must be a string, got: %s", string(raw)))
 	}
-	return domain.StageNumber(n), "", nil
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return "", malformedField("iteration", err.Error())
+	}
+	return s, nil
+}
+
+// refuseStageField rejects the pre-3.0 "stage" member. A null value is not
+// given and passes.
+func refuseStageField(raw json.RawMessage) error {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	return malformedField("stage", "is no longer accepted; name the iteration in the \"iteration\" member")
 }
 
 // coerceIntegerField decodes a JSON integer or a decimal string. ok is false

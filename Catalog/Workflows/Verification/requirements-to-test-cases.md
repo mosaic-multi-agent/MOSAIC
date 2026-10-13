@@ -1,5 +1,5 @@
 ---
-version: "0.4"
+version: "1.0"
 name: "Requirements to Test Cases Workflow"
 description: "Derive abstract test cases from a requirement held in large external specification documents. Resolves the requirement to closure via runtime retrieval, models the test scenario space, authors test cases in a project-defined format, and exports them to the target system."
 hint: "Fresh and untested — theoretical only, no real-world runs yet. Open experiments already planned for first real use, e.g. dropping test-scenario-review once the full path is proven — check the workflow file's Design Rationale before running it for real."
@@ -27,32 +27,25 @@ artifacts:
   - ExportReport.md
 ---
 
-<Workflow type="core" name="requirements-to-test-cases" version="0.4">
+<Workflow type="core" name="requirements-to-test-cases" version="1.0">
 ## Requirements to Test Cases Workflow
-
-> **Version:** 0.3
 
 **Use when:** Deriving abstract test cases from requirements that live in **large external specification documents** the agents never ingest wholesale — accessed instead through retrieval tooling at runtime. Resolves one requirement (or a small set) to dependency closure, models the test scenario space, authors test cases in a project-defined format, and exports them to the target test management system. No implementation, no test code.
 
-| Phase | Subagent | HITL | On Success | On Findings | Waits For | Input | Output |
-|-------|----------|:----:|------------|-------------|-----------|-------|--------|
-| RESEARCH | document-research | FALSE | requirements-review | - | - | Requirements.md | Research.md |
-| RESEARCH | requirements-review | FALSE | test-scenario-designer | document-research | - | Requirements.md, Research.md | requirements-review.md |
-| DESIGN | test-scenario-designer | FALSE | test-scenario-review | - | - | Requirements.md, Research.md | TestScenarios.md |
-| DESIGN | test-scenario-review | FALSE | approval-presenter(scenarios) | test-scenario-designer | - | Requirements.md, Research.md, TestScenarios.md | test-scenario-review.md |
-| DESIGN | approval-presenter(scenarios) | TRUE | test-case-writer | test-scenario-designer | - | TestScenarios.md, test-scenario-review.md | TestScenarios.md, approval-presenter-scenarios.md |
-| EXECUTION | test-case-writer | FALSE | test-case-review | test-scenario-designer | - | Requirements.md, Research.md, TestScenarios.md | TestCases.md |
-| REVIEW | test-case-review | FALSE | approval-presenter(cases) | test-case-writer | - | Requirements.md, Research.md, TestScenarios.md, TestCases.md | test-case-review.md |
-| REVIEW | approval-presenter(cases) | TRUE | test-case-export | test-case-writer | - | TestCases.md, test-case-review.md | TestCases.md, approval-presenter-cases.md |
-| COMPLETION | test-case-export | TRUE | COMPLETE | test-case-writer | - | TestCases.md | ExportReport.md |
+| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
+|-------|----------|:----:|------------|-------------|-------|--------|
+| RESEARCH | document-research | FALSE | requirements-review | - | Requirements.md | Research.md |
+| RESEARCH | requirements-review | FALSE | test-scenario-designer | document-research | Requirements.md, Research.md | requirements-review.md |
+| DESIGN | test-scenario-designer | FALSE | test-scenario-review | - | Requirements.md, Research.md | TestScenarios.md |
+| DESIGN | test-scenario-review | FALSE | approval-presenter(scenarios) | test-scenario-designer | Requirements.md, Research.md, TestScenarios.md | test-scenario-review.md |
+| DESIGN | approval-presenter(scenarios) | TRUE | test-case-writer | test-scenario-designer | TestScenarios.md, test-scenario-review.md | TestScenarios.md, approval-presenter-scenarios.md |
+| EXECUTION | test-case-writer | FALSE | test-case-review | test-scenario-designer | Requirements.md, Research.md, TestScenarios.md | TestCases.md |
+| REVIEW | test-case-review | FALSE | approval-presenter(cases) | test-case-writer | Requirements.md, Research.md, TestScenarios.md, TestCases.md | test-case-review.md |
+| REVIEW | approval-presenter(cases) | TRUE | test-case-export | test-case-writer | TestCases.md, test-case-review.md | TestCases.md, approval-presenter-cases.md |
+| COMPLETION | test-case-export | TRUE | COMPLETE | test-case-writer | TestCases.md | ExportReport.md |
 
 **Notes:**
-
-- **Requirements.md is user-created** — names the target requirement identifier(s), the document set in scope, and any retrieval scope limits.
-- **`NEEDS_CLARIFICATION` from any row routes to `document-research`**, which is re-entrant and accepts a targeted "this is missing" invocation.
-- **Route findings one hop upstream**, to the agent that produced the artifact the finding is about — not further.
-- **`approval-presenter` rows are the only human gates.** Each is reachable only via `On Success` from its reviewer, so it runs once the loop has converged. Dispatch it with the approved artifact in **both** `input_artifacts` and `output_artifacts` — it stamps `human_approved` there and must be permitted to write it.
-
+- No agent asks the user a domain question: route `NEEDS_CLARIFICATION` from any row to `document-research`, which accepts a targeted "this is missing" invocation. Where the documents do not answer it, that is a finding about the specification, not a question for the user.
 </Workflow>
 
 ---
@@ -95,6 +88,16 @@ The three review agents keep the tool despite sitting on `FALSE` rows here. They
 ---
 
 ## Design Rationale
+
+### Seed and routing conventions
+
+**Requirements.md is user-created** — it names the target requirement identifier(s), the document set in scope, and any retrieval scope limits.
+
+**Findings go one hop upstream**, to the agent that produced the artifact the finding is about — not further. The `On Findings` cells encode exactly that; deeper re-targeting is left to the orchestrator's routing policy, and in this workflow it should rarely be needed.
+
+**Presenter dispatch.** Each `approval-presenter` row lists the approved artifact in both Input and Output: it stamps `human_approved` on that artifact and must be permitted to write it. `test-case-export` is also gated `TRUE`, because it writes to an external target system.
+
+**Why the one region note stays.** The orchestrator's general policy escalates a `NEEDS_CLARIFICATION` to the human when no agent can answer it. That would let a domain question reach the user, which this workflow forbids (see below). Status-code routing other than `SUCCESS` and `COMPLETED_NEEDS_ACTION` cannot be expressed in the table (WorkflowFormat §6.5), so the constraint is carried as guidance in the region's only note.
 
 ### Why there is no ingestion phase
 
@@ -154,13 +157,14 @@ In a safety context an agent's plausible guess is the most dangerous possible ou
 | 0.2 | 2026-08-06 | MOSAIC | Human approval moved from the review rows to dedicated `approval-presenter` rows, per the architect decision in `OnSuccessHITL.md` §7. Reviews now converge automatically (`FALSE`); the presenter is reachable only on convergence and stamps `human_approved` on the artifact the human actually approved, closing the §4.5 provenance gap. `requirements-review` gate becomes `FALSE` with no presenter. |
 | 0.3 | 2026-08-06 | MOSAIC | Terminology only, no routing or gate change. The provenance stamp field named throughout this document was renamed `hitl_confirmed` → `human_approved` in Communication Protocol v1.10; every reference here follows, including the two historical entries below, so the document carries one spelling of one field. |
 | 0.4 | 2026-08-26 | MOSAIC | Replace Unicode emoji with ASCII tokens in HITL column (TRUE/FALSE). |
+| 1.0 | 2026-10-10 | MOSAIC | Migrated to WorkflowFormat 2.16: removed the in-region `> **Version:**` line (stale at 0.3); dropped the all-`-` `Waits For` column (no row joins). No routing change. Notes reduced to the one that is not expressible in the table (`NEEDS_CLARIFICATION` goes to `document-research`, never to the user); the seed description, one-hop findings convention and presenter dispatch moved to Design Rationale (they duplicated the table, and the "only human gates" note was wrong — `test-case-export` is gated too). |
 
 ---
 
 ## Open Ideas / Dead Ends
 
 **Ideas under consideration:**
-- **Staged scale-up.** Planner after `requirements-review` splitting a requirement set into stages; DESIGN/EXECUTION/REVIEW rows become staged with `Stage-{StageNumber}/` artifacts. Deliberately deferred until the single-requirement path is proven.
+- **Staged scale-up.** Planner after `requirements-review` splitting a requirement set into stages; DESIGN/EXECUTION/REVIEW rows move into a declared `[Stage]` block (WorkflowFormat §6.8, §9) with `Stage-{Stage}/` artifacts and the planner's `Plan.md` as block schedule. Deliberately deferred until the single-requirement path is proven.
 - **Shared domain model.** At multi-requirement scale the scenario taxonomy (module variants, channel semantics, fault classes) is cross-cutting rather than per-requirement, and rebuilding it per stage is both wasteful and a consistency risk. Either a run-once phase producing a shared taxonomy artifact, or freeze it into the scenario designer's injection.
 - **Dropping `test-scenario-review`.** The first simplification to test once the full path works.
 - **A third `approval-presenter` row after `requirements-review`**, if running the workflow shows that retrieval gaps need catching before scenario design rather than surfacing as missing dimensions afterwards. Omitted in 0.2 because the dossier is large and dense and a human reading it is unlikely to spot what is absent.
@@ -171,6 +175,6 @@ In a safety context an agent's plausible guess is the most dangerous possible ou
 **Dead ends (tried and rejected):**
 - **KB ingestion of the specification** — rejected; see Design Rationale.
 - **A `TestProfile.md` input artifact** carrying the output format, glossary and gold examples. Rejected: the agent template architecture already solves this with `<OutputArtifactTemplate type="project">` and `<CodebaseContext type="project">`, which bind at deploy rather than per run. Format is stable; making it a per-run artifact would be paying run-time cost for deploy-time data.
-- **A third HITL column value (`TRUEˢ`, on-success)** firing the gate only on the converging pass, implemented by re-dispatching the reviewer. Rejected by architect review — see `OnSuccessHITL.md` §4. It encodes a *policy* into a flag that carries an *amount*, which breaks the additive `row.hitl OR stage_hitl` merge that stage HITL depends on; it needs `already_presented` state the orchestration artifact has nowhere to store; and the re-dispatched reviewer would re-review and could contradict its own prior `SUCCESS`. Superseded by the presenter row in 1.1.
+- **A third HITL column value (`TRUEˢ`, on-success)** firing the gate only on the converging pass, implemented by re-dispatching the reviewer. Rejected by architect review — see `OnSuccessHITL.md` §4. It encodes a *policy* into a flag that carries an *amount*, which breaks the additive `row.hitl OR stage_hitl` merge that stage HITL depends on; it needs `already_presented` state the orchestration artifact has nowhere to store; and the re-dispatched reviewer would re-review and could contradict its own prior `SUCCESS`. Superseded by the presenter row in 0.2.
 - **Reviewer-held approval gates (workflow v0.1).** Correct in ordering, but the human approved the *creator's* artifact while only the reviewer could stamp provenance — so the approved artifact stayed `human_approved: false` permanently. Superseded by the presenter row in 0.2.
 - **Specialising `document-research` per retrieval flavour** (vector / graph / hybrid). Rejected: would produce one agent per stack for a process that is identical across all of them.

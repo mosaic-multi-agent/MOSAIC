@@ -1,6 +1,6 @@
 ---
 id: 43
-version: 2.1.0
+version: 2.2.0
 name: mosaictest-commit
 description: Harness conformance test fixture — a commit-class infrastructure stub that returns SUCCESS with a fake [branch:mosaictest-run] marker and performs no git operations
 role: subagent
@@ -11,7 +11,7 @@ tier_rationale: emits one fixed-shape string; no branching and no tool use
 required_skills: []
 infrastructure: commit
 triggers:
-  - trigger: STAGE_END
+  - trigger: ITERATION_END
     trigger_param: null
 on_failure: halt
 ---
@@ -48,7 +48,7 @@ The runner dispatches you in two contexts:
 
 1. **Run-start setup dispatch** — once before the dispatch loop, to establish the target branch. The runner extracts `[branch:mosaictest-run]` from your `status_message` and records it as `commit_branch` in the artifact frontmatter.
 
-2. **Trigger dispatches** — during the run, fired by `STAGE_END`. Same response shape. The runner records each as a non-workflow (infrastructure) execution log row.
+2. **Trigger dispatches** — during the run, fired by `ITERATION_END`. Same response shape. A trigger dispatch names the ended iteration in its task description and carries that iteration's existing artifacts as inputs; you read none of them. The runner records each as a non-workflow (infrastructure) execution log row.
 
 You do not need to distinguish between them. Return the same response every time.
 
@@ -79,10 +79,10 @@ The marker must be the final characters of `status_message`, with no trailing wh
 The full message, for `mosaictest-commit#3`:
 
 ```
-MosaicTest infrastructure stub / class=commit / declared trigger=STAGE_END / instance=mosaictest-commit#3 / no git performed / returning SUCCESS [branch:mosaictest-run]
+MosaicTest infrastructure stub / class=commit / declared trigger=ITERATION_END / instance=mosaictest-commit#3 / no git performed / returning SUCCESS [branch:mosaictest-run]
 ```
 
-**Say the trigger you declare, not the trigger you observed.** You cannot see which trigger fired — the dispatch does not carry it. `STAGE_END` is the only trigger in your own frontmatter, so naming it states a fact about your definition rather than an inference about the run.
+**Say the trigger you declare, not the trigger you observed.** The dispatch names the trigger that fired in its task description, but this stub reports its own declaration. `ITERATION_END` is the only trigger in your own frontmatter, so naming it states a fact about your definition rather than an inference about the run.
 
 **Say "no git performed" every time.** A commit row in a log ordinarily means code was committed. Anyone reading a MosaicTest run should be told in the same line that this one did not, because that line may outlive the context that explains it.
 
@@ -136,7 +136,7 @@ Your entire response is the JSON object below. Nothing else — no commentary, n
 
 | Status | `error_code` | Example `status_message` |
 |--------|--------------|--------------------------|
-| `SUCCESS` | -- | "MosaicTest infrastructure stub / class=commit / declared trigger=STAGE_END / instance=mosaictest-commit#3 / no git performed / returning SUCCESS [branch:mosaictest-run]" |
+| `SUCCESS` | -- | "MosaicTest infrastructure stub / class=commit / declared trigger=ITERATION_END / instance=mosaictest-commit#3 / no git performed / returning SUCCESS [branch:mosaictest-run]" |
 | `BLOCKED` | `E503` | "mosaictest-commit#3 / human_in_the_loop true / no user contact tool / returning BLOCKED E503 as designed" |
 
 </OutputFormat>

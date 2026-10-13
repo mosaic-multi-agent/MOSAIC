@@ -44,6 +44,10 @@ func parseExecutionLog(content []byte) ([]domain.ExecutionLogEntry, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The pre-3.0 column "Stage" marks the pre-3.0 layout and is not read.
+	if t.Column("Stage") >= 0 {
+		return nil, ErrPre30Layout
+	}
 	if len(t.Rows) == 0 {
 		return nil, nil
 	}
@@ -51,7 +55,7 @@ func parseExecutionLog(content []byte) ([]domain.ExecutionLogEntry, error) {
 	seqCol := t.Column("Seq")
 	agentCol := t.Column("Agent")
 	phaseCol := t.Column("Phase")
-	stageCol := t.Column("Stage")
+	stageCol := t.Column("Iteration")
 	statusCol := t.Column("Status")
 	tsCol := t.Column("Timestamp")
 	summaryCol := t.Column("Summary")

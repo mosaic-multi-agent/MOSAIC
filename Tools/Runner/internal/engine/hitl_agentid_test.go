@@ -8,20 +8,20 @@ import (
 )
 
 func TestNext_AgentInstanceID_SeqIncrementedBeforeDispatch(t *testing.T) {
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
 	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
 
 	// seq=5: the next dispatch should be #6.
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           emptyState(),
-		LastResponse:    nil,
-		Agents:          agents,
-		Seq:             5,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        emptyState(),
+		LastResponse: nil,
+		Agents:       agents,
+		Seq:          5,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
@@ -34,19 +34,19 @@ func TestNext_AgentInstanceID_SeqIncrementedBeforeDispatch(t *testing.T) {
 
 // TestNext_AgentInstanceID_ZeroSeqProducesOne verifies seq=0 → ID uses #1.
 func TestNext_AgentInstanceID_ZeroSeqProducesOne(t *testing.T) {
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
 	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           emptyState(),
-		LastResponse:    nil,
-		Agents:          agents,
-		Seq:             0,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        emptyState(),
+		LastResponse: nil,
+		Agents:       agents,
+		Seq:          0,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
@@ -62,19 +62,19 @@ func TestNext_AgentInstanceID_ZeroSeqProducesOne(t *testing.T) {
 // produces an effective HITL=true regardless of stage HITL.
 func TestNext_HITL_RowTrue_EffectiveTrue(t *testing.T) {
 	// quick-fix row 0: planner-tdd-soft has HITL=TRUE (true)
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stages := singleStageSet("Implementation-Only")
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedules := singleSchedules("Implementation-Only")
 	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           emptyState(),
-		LastResponse:    nil,
-		Agents:          agents,
-		Seq:             0,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        emptyState(),
+		LastResponse: nil,
+		Agents:       agents,
+		Seq:          0,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
@@ -87,22 +87,22 @@ func TestNext_HITL_RowTrue_EffectiveTrue(t *testing.T) {
 // stage HITL are false, effective HITL is false.
 func TestNext_HITL_BothFalse_EffectiveFalse(t *testing.T) {
 	// quick-fix row 1: plan-review has HITL=FALSE (false), stage HITL=false
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stagesNoHITL := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: false, Approach: "Implementation-Only"},
-	})
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedulesNoHITL := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "Implementation-Only"},
+	)
 	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
 	state := stateAfter("PLANNING", "", "planner-tdd-soft#1", domain.StatusSUCCESS, 1)
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stagesNoHITL,
-		State:           state,
-		LastResponse:    successResponse("planner-tdd-soft#1"),
-		Agents:          agents,
-		Seq:             1,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedulesNoHITL,
+		State:        state,
+		LastResponse: successResponse("planner-tdd-soft#1"),
+		Agents:       agents,
+		Seq:          1,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
@@ -116,23 +116,23 @@ func TestNext_HITL_BothFalse_EffectiveFalse(t *testing.T) {
 // even when the row itself has HITL=false.
 func TestNext_HITL_StageTrue_InsideExecution_EffectiveTrue(t *testing.T) {
 	// quick-fix row 2: implementation-tdd has HITL=false, but stage HITL=true
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stagesHITL := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: true, Approach: "Implementation-Only"},
-	})
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedulesHITL := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: true, Approach: "Implementation-Only"},
+	)
 	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
 	// State: plan-review (row 1) just succeeded; next is EXECUTION row.
 	state := stateAfter("PLANNING", "", "plan-review#2", domain.StatusSUCCESS, 2)
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stagesHITL,
-		State:           state,
-		LastResponse:    successResponse("plan-review#2"),
-		Agents:          agents,
-		Seq:             2,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedulesHITL,
+		State:        state,
+		LastResponse: successResponse("plan-review#2"),
+		Agents:       agents,
+		Seq:          2,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
@@ -147,22 +147,22 @@ func TestNext_HITL_StageTrue_InsideExecution_EffectiveTrue(t *testing.T) {
 func TestNext_HITL_StageTrue_OutsideExecution_EffectiveFalse(t *testing.T) {
 	// quick-fix row 1: plan-review is a PLANNING row (pre-execution), HITL=false.
 	// Stage HITL=true should be ignored for this row.
-	aw := mustParseAndAdmit(t, quickFixContent, "quick-fix", "3.0")
-	stagesHITL := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: true, Approach: "Implementation-Only"},
-	})
+	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
+	schedulesHITL := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: true, Approach: "Implementation-Only"},
+	)
 	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
 	state := stateAfter("PLANNING", "", "planner-tdd-soft#1", domain.StatusSUCCESS, 1)
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stagesHITL,
-		State:           state,
-		LastResponse:    successResponse("planner-tdd-soft#1"),
-		Agents:          agents,
-		Seq:             1,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedulesHITL,
+		State:        state,
+		LastResponse: successResponse("planner-tdd-soft#1"),
+		Agents:       agents,
+		Seq:          1,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
@@ -170,4 +170,3 @@ func TestNext_HITL_StageTrue_OutsideExecution_EffectiveFalse(t *testing.T) {
 		t.Error("want EffectiveHITL=false (stage HITL not applied outside EXECUTION), got true")
 	}
 }
-

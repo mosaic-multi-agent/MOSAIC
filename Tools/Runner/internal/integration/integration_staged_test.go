@@ -97,31 +97,25 @@ func TestIntegration_StagedWorkflow_TwoStages_Completes(t *testing.T) {
 
 // ===== No Plan.md for staged workflow =====
 
-// TestIntegration_StagedWorkflow_NoPlanMd_StopsCleanlyAtExecution verifies
-// that when a staged workflow with no pre-EXECUTION rows is requested but no
-// Plan.md exists in the run folder, the session does not refuse to start —
-// absence of a plan file is a normal state, never a run-start refusal. The
-// run proceeds to the point where the workflow's topology requires a stage
-// set (its first, and here only, row is EXECUTION), where it stops cleanly
-// with a message naming the missing stage set, instead of panicking or
-// dispatching an agent it cannot route.
-//
-// This is the "never seeded" case of the Stage 5 diagnostic (AC5.5): no
-// SeedInputs were given at all, so the stop message must name what was
-// expected (Plan.md) and where it was looked for (the run folder path),
-// distinct from the "seeded but missing" case exercised elsewhere.
-func TestIntegration_StagedWorkflow_NoPlanMd_StopsCleanlyAtExecution(t *testing.T) {
+// TestIntegration_StagedWorkflow_NoPlanMd_RefusedAtStartNamingSource verifies
+// that when the workflow's first row begins a block, so that the block's
+// schedule source is a seed the run needs from its first dispatch, and no
+// Plan.md exists in the run folder, the session refuses the run before any
+// agent is dispatched. The refusal names the missing schedule source and the
+// schedule rule it breaks, instead of panicking or dispatching an agent it
+// cannot route.
+func TestIntegration_StagedWorkflow_NoPlanMd_RefusedAtStartNamingSource(t *testing.T) {
 	dir := t.TempDir()
 	orchPath := copyFile(t, dir, "orchestrator.md",
 		filepath.Join(sessionTestdataDir, "staged-orch.md"))
 	writeAgentFile(t, dir, "implementation-tdd")
 	writeAgentFile(t, dir, "implementation-review")
-	// Deliberately do NOT write Plan.md — absence must not refuse the run.
-	// SeedInputs is also deliberately unset: this run never had a stage table
-	// seeded into it at all.
+	// Deliberately do NOT write Plan.md. SeedInputs is also deliberately
+	// unset: this run never had a block schedule seeded into it at all.
 
 	artifactPath := filepath.Join(dir, "Orchestration.md")
-	sess := newSession(harness.NewMockAdapter(), artifactPath)
+	f := harness.NewMockAdapter()
+	sess := newSession(f, artifactPath)
 
 	cfg := domain.RunConfig{
 		RunID: integrationRunID,
@@ -135,20 +129,16 @@ func TestIntegration_StagedWorkflow_NoPlanMd_StopsCleanlyAtExecution(t *testing.
 
 	got, err := sess.Start(context.Background(), cfg)
 
-	if err != nil {
-		t.Fatalf("want nil error, got %v", err)
+	msg := requireRefused(t, got, err)
+
+	if !strings.Contains(msg, "Plan.md") {
+		t.Errorf("want refusal to name the missing schedule source Plan.md, got %q", msg)
 	}
-	if got.Status != domain.RunStopped {
-		t.Errorf("want RunStopped when EXECUTION is reached with no stage set, got %q (message: %q)", got.Status, got.Message)
+	if !strings.Contains(msg, "rule V1") {
+		t.Errorf("want refusal to name rule V1 (source file missing), got %q", msg)
 	}
-	if !strings.Contains(got.Message, "stage set") {
-		t.Errorf("want stop message to name the missing stage set, got %q", got.Message)
-	}
-	// AC5.5: the message must name where the stage table was looked for, not
-	// just that one is missing.
-	wantPath := filepath.Join(dir, "Plan.md")
-	if !strings.Contains(got.Message, wantPath) {
-		t.Errorf("want stop message to name the path looked for (%q); got %q", wantPath, got.Message)
+	if n := len(f.Invocations()); n != 0 {
+		t.Errorf("want no harness invocation before the refusal, got %d", n)
 	}
 }
 
@@ -196,17 +186,23 @@ func TestIntegration_StageWildcardResolution_NonExecutionRow(t *testing.T) {
 | 1 | Stage One | First stage | - | FALSE |
 | 2 | Stage Two | Second stage | 1 | FALSE |
 `
-	if err := os.WriteFile(filepath.Join(dir, "Plan.md"), []byte(planContent), 0600); err != nil {
+	// The run folder is Orchestration-{run id} beside the orchestrator file.
+	runFolder := filepath.Join(dir, domain.RunScopedFolder(integrationRunID))
+	if err := os.MkdirAll(runFolder, 0700); err != nil {
+		t.Fatalf("mkdir run folder: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(runFolder, "Plan.md"), []byte(planContent), 0600); err != nil {
 		t.Fatalf("write Plan.md: %v", err)
 	}
 
 	// Create Stage-N/Plan.md files to represent what the planner would have
-	// written on disk, so the file-based store can resolve the Stage-* paths.
+	// written on disk: the session lists the files that exist in the run
+	// folder for the Stage-*/Plan.md Input.
 	for _, sub := range []string{"Stage-1", "Stage-2"} {
-		if err := os.MkdirAll(filepath.Join(dir, sub), 0700); err != nil {
+		if err := os.MkdirAll(filepath.Join(runFolder, sub), 0700); err != nil {
 			t.Fatalf("mkdir %s: %v", sub, err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, sub, "Plan.md"), []byte("# Stage Plan\n"), 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(runFolder, sub, "Plan.md"), []byte("# Stage Plan\n"), 0600); err != nil {
 			t.Fatalf("write %s/Plan.md: %v", sub, err)
 		}
 	}
@@ -233,7 +229,7 @@ func TestIntegration_StageWildcardResolution_NonExecutionRow(t *testing.T) {
 		Task:                 "task",
 		IsNewRun:             true,
 		RunSettings:          domain.RunSettings{Mode: domain.ExecutionModeAuto},
-		RunFolder:            dir, // Plan.md was written into dir; the session must resolve it here.
+		RunFolder:            runFolder, // Plan.md was written into it; the session must resolve it here.
 	}
 
 	got, err := sess.Start(context.Background(), cfg)

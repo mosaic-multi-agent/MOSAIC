@@ -103,13 +103,13 @@ func TestInfrastructureStaleness_DeclaredKeyDiffers_StaleUnderBothIntents(t *tes
 		{"class", func(d *domain.DeployedInfrastructureDeclaration) { d.Class = "commit" }, []string{"class"}},
 		{"on failure", func(d *domain.DeployedInfrastructureDeclaration) { d.OnFailure = "halt" }, []string{"on_failure"}},
 		{"trigger", func(d *domain.DeployedInfrastructureDeclaration) {
-			d.Triggers = []domain.InfrastructureTrigger{{Trigger: "STAGE_END"}}
+			d.Triggers = []domain.InfrastructureTrigger{{Trigger: "ITERATION_END"}}
 		}, []string{"triggers"}},
 		{"trigger param", func(d *domain.DeployedInfrastructureDeclaration) {
 			d.Triggers = []domain.InfrastructureTrigger{{Trigger: "INVOCATION_INTERVAL", TriggerParam: "10"}}
 		}, []string{"triggers"}},
 		{"extra trigger", func(d *domain.DeployedInfrastructureDeclaration) {
-			d.Triggers = append(d.Triggers, domain.InfrastructureTrigger{Trigger: "STAGE_END"})
+			d.Triggers = append(d.Triggers, domain.InfrastructureTrigger{Trigger: "ITERATION_END"})
 		}, []string{"triggers"}},
 		{"several", func(d *domain.DeployedInfrastructureDeclaration) {
 			d.OnFailure = "halt"

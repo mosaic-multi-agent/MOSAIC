@@ -27,9 +27,9 @@ func hitlRig(t *testing.T, consultant *scriptedRoutingConsultant, seed domain.Ar
 
 func TestSession_ConsultRoute_HITLStagedRowAfterStagedStep_RejectedAndAcceptedRecordInstructionStage(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
-	consultant.queueStagedDispatch("implementer", "implement stage 2", rsImplementer, 2)
+	consultant.queueStagedDispatch("implementer", "implement stage 2", rsImplementer, "2")
 	consultant.queueStop("done")
-	rig := hitlRig(t, consultant, rowStageSeed("test-writer", 3, "EXECUTION", "Test.1"))
+	rig := hitlRig(t, consultant, rowStageSeed("test-writer", 3, "EXECUTION", "1.Test"))
 	queueSuccess(rig.f, "implementer", "implementer#3")
 	queueSuccess(rig.f, "implementer", "implementer#4")
 
@@ -43,15 +43,15 @@ func TestSession_ConsultRoute_HITLStagedRowAfterStagedStep_RejectedAndAcceptedRe
 	if !steps[0].HITLRejected || steps[1].HITLRejected {
 		t.Errorf("want first attempt rejected and second accepted, got rejected=%v/%v", steps[0].HITLRejected, steps[1].HITLRejected)
 	}
-	requireStepAt(t, steps[0], "EXECUTION", 4, "Implementation.2")
-	requireStepAt(t, steps[1], "EXECUTION", 4, "Implementation.2")
+	requireStepAt(t, steps[0], "EXECUTION", 4, "2.Implementation")
+	requireStepAt(t, steps[1], "EXECUTION", 4, "2.Implementation")
 }
 
 func TestSession_ConsultRoute_HITLNonStagedRowAfterStagedStep_RejectedAndAcceptedRecordNoStage(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
 	consultant.queueDispatch("plan-review", "re-review the plan", rsPlanReview)
 	consultant.queueStop("done")
-	rig := hitlRig(t, consultant, rowStageSeed("impl-review", 6, "EXECUTION", "Implementation.3"))
+	rig := hitlRig(t, consultant, rowStageSeed("impl-review", 6, "EXECUTION", "3.Implementation"))
 	queueSuccess(rig.f, "plan-review", "plan-review#3")
 	queueSuccess(rig.f, "plan-review", "plan-review#4")
 
@@ -75,9 +75,9 @@ func TestSession_ConsultRoute_HITLNonStagedRowAfterStagedStep_RejectedAndAccepte
 func TestSession_ConsultRoute_AntiLoopEscalation_RoutedStepRecordsInstructionRowAndStage(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
 	for i := 0; i < 5; i++ {
-		consultant.queueStagedDispatch("implementer", "implement stage 2", rsImplementer, 2)
+		consultant.queueStagedDispatch("implementer", "implement stage 2", rsImplementer, "2")
 	}
-	consultant.queueStagedDispatch("test-writer", "write the tests for stage 1", rsTestWriter, 1)
+	consultant.queueStagedDispatch("test-writer", "write the tests for stage 1", rsTestWriter, "1")
 	consultant.queueStop("done")
 	rig := newRowStageRig(t, consultant, domain.ExecutionModeOrchestrated, rowStageSeed("plan-review", 2, "PLANNING", ""))
 	for _, id := range []string{"implementer#3", "implementer#4", "implementer#5", "implementer#6"} {
@@ -93,13 +93,13 @@ func TestSession_ConsultRoute_AntiLoopEscalation_RoutedStepRecordsInstructionRow
 		t.Fatalf("want the guard to cap the agent at 4 recorded dispatches, got %d", len(impl))
 	}
 	for _, s := range impl {
-		requireStepAt(t, s, "EXECUTION", 4, "Implementation.2")
+		requireStepAt(t, s, "EXECUTION", 4, "2.Implementation")
 	}
 	routed := stepsByAgent(rig.store, "test-writer")
 	if len(routed) != 1 {
 		t.Fatalf("want the step routed after the escalation recorded once, got %d", len(routed))
 	}
-	requireStepAt(t, routed[0], "EXECUTION", 3, "Test.1")
+	requireStepAt(t, routed[0], "EXECUTION", 3, "1.Test")
 	var escalated bool
 	for _, req := range consultant.Requests {
 		escalated = escalated || req.Deviation != nil
@@ -117,18 +117,18 @@ func TestSession_ConsultRoute_InfrastructureReviewConsult_RoutedStepRecordsInstr
 		name    string
 		agent   string
 		row     int
-		stage   domain.StageNumber
+		stage   domain.IterationID
 		phase   string
 		wantRow domain.WorkflowRow
 		wantStg string
 	}{
-		{"staged row", "test-writer", rsTestWriter, 1, "EXECUTION", 3, "Test.1"},
-		{"non-staged row", "plan-review", rsPlanReview, 0, "PLANNING", 2, ""},
+		{"staged row", "test-writer", rsTestWriter, "1", "EXECUTION", 3, "1.Test"},
+		{"non-staged row", "plan-review", rsPlanReview, "", "PLANNING", 2, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			consultant := &scriptedRoutingConsultant{}
-			consultant.queueStagedDispatch("implementer", "implement stage 2", rsImplementer, 2)
+			consultant.queueStagedDispatch("implementer", "implement stage 2", rsImplementer, "2")
 			consultant.queueStagedDispatch(tc.agent, "routed by review", tc.row, tc.stage)
 			for i := 0; i < 3; i++ {
 				consultant.queueStop("done")

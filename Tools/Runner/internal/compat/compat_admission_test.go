@@ -1,168 +1,157 @@
 package compat_test
 
-// Tests for admission success and GroupsDeclared/ApproachTable/GroupByName carry-through.
+// Tests for admission success of the five catalog workflow shapes and the
+// per-block groups and approach rows, on WorkflowFormat 2.16 fixtures.
 
 import (
 	"testing"
 
-	"mosaic-run/internal/compat"
 	"mosaic-run/internal/domain"
 )
 
+// shapeFixture names one workflow shape fixture.
+type shapeFixture struct {
+	name    string
+	content string
+	id      string
+	grouped bool
+}
+
+func shapeFixtures() []shapeFixture {
+	return []shapeFixture{
+		{"brownfield-tdd-build-verified", brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", true},
+		{"greenfield-tdd", greenFieldTDDContent, "greenfield-tdd", true},
+		{"brownfield-tdd", brownfieldTDDContent, "brownfield-tdd", true},
+		{"quick-fix", quickFixContent, "quick-fix", false},
+		{"implementation-only", implOnlyContent, "implementation-only", false},
+	}
+}
+
 // ---- Admission success ----
 
-func TestAdmit_BrownfieldTDDBuildVerified_Succeeds(t *testing.T) {
-	table := mustParseTable(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	_, err := compat.Admit(table, domain.ExecutionModeAuto)
-	if err != nil {
-		t.Errorf("Admit(brownfield-tdd-build-verified): unexpected error: %v", err)
+func TestAdmit_CatalogShapes_AreAdmittedInEveryMode(t *testing.T) {
+	for _, fx := range shapeFixtures() {
+		t.Run(fx.name, func(t *testing.T) {
+			table := mustParseShape(t, fx.content, fx.id, "4.0")
+
+			forEachMode(t, func(t *testing.T, mode domain.ExecutionMode) {
+				admitIn(t, table, mode)
+			})
+		})
 	}
 }
 
-func TestAdmit_GreenFieldTDD_Succeeds(t *testing.T) {
-	table := mustParseTable(t, greenFieldTDDContent, "greenfield-tdd", "3.3")
-	_, err := compat.Admit(table, domain.ExecutionModeAuto)
-	if err != nil {
-		t.Errorf("Admit(greenfield-tdd): unexpected error: %v", err)
+// ---- One Stage block; groups are declared only for grouped shapes ----
+
+func TestAdmit_CatalogShapes_HaveOneStageBlock(t *testing.T) {
+	for _, fx := range shapeFixtures() {
+		t.Run(fx.name, func(t *testing.T) {
+			aw := mustAdmit(t, mustParseShape(t, fx.content, fx.id, "4.0"))
+
+			if len(aw.Blocks) != 1 || aw.Blocks[0].Name != "Stage" {
+				t.Errorf("want the one block Stage, got %+v", aw.Blocks)
+			}
+		})
 	}
 }
 
-func TestAdmit_BrownfieldTDD_Succeeds(t *testing.T) {
-	table := mustParseTable(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
-	_, err := compat.Admit(table, domain.ExecutionModeAuto)
-	if err != nil {
-		t.Errorf("Admit(brownfield-tdd): unexpected error: %v", err)
+func TestAdmit_CatalogShapes_GroupsDeclaredOnlyForGroupedRows(t *testing.T) {
+	for _, fx := range shapeFixtures() {
+		t.Run(fx.name, func(t *testing.T) {
+			aw := mustAdmit(t, mustParseShape(t, fx.content, fx.id, "4.0"))
+
+			if got := stageBlock(t, aw).Grouped; got != fx.grouped {
+				t.Errorf("block Grouped: want %v, got %v", fx.grouped, got)
+			}
+		})
 	}
 }
 
-func TestAdmit_QuickFix_Succeeds(t *testing.T) {
-	table := mustParseTable(t, quickFixContent, "quick-fix", "3.0")
-	_, err := compat.Admit(table, domain.ExecutionModeAuto)
-	if err != nil {
-		t.Errorf("Admit(quick-fix): unexpected error: %v", err)
+// ---- The approach table is carried onto the admitted workflow ----
+
+func TestAdmit_GroupedShapes_ApproachTableCarriedThrough(t *testing.T) {
+	for _, fx := range shapeFixtures() {
+		if !fx.grouped {
+			continue
+		}
+		t.Run(fx.name, func(t *testing.T) {
+			aw := mustAdmit(t, mustParseShape(t, fx.content, fx.id, "4.0"))
+
+			if !aw.Table.ApproachTable.Present() {
+				t.Fatal("ApproachTable: want present (the workflow declares a Groups table)")
+			}
+			want := []domain.Approach{"TDD", "Implementation-First", "Implementation-Only", "Tests-Only"}
+			got := stageBlock(t, aw).Approaches.Approaches()
+			if len(got) != len(want) {
+				t.Fatalf("block approaches: want %v, got %v", want, got)
+			}
+			for i := range want {
+				if got[i] != want[i] {
+					t.Errorf("block approach %d: want %q, got %q", i, want[i], got[i])
+				}
+			}
+		})
 	}
 }
 
-func TestAdmit_ImplementationOnly_Succeeds(t *testing.T) {
-	table := mustParseTable(t, implOnlyContent, "implementation-only", "3.1")
-	_, err := compat.Admit(table, domain.ExecutionModeAuto)
-	if err != nil {
-		t.Errorf("Admit(implementation-only): unexpected error: %v", err)
+func TestAdmit_UngroupedShapes_HaveNoApproachTable(t *testing.T) {
+	for _, fx := range shapeFixtures() {
+		if fx.grouped {
+			continue
+		}
+		t.Run(fx.name, func(t *testing.T) {
+			aw := mustAdmit(t, mustParseShape(t, fx.content, fx.id, "4.0"))
+
+			if aw.Table.ApproachTable.Present() {
+				t.Error("ApproachTable: want not present for an ungrouped workflow")
+			}
+			if stageBlock(t, aw).Approaches.Present() {
+				t.Error("block approaches: want none for an ungrouped block")
+			}
+		})
 	}
 }
 
-// ---- HasStagedPhase ----
+// ---- Group lookup by name ----
 
-func TestAdmit_BrownfieldTDDBuildVerified_HasStagedPhase(t *testing.T) {
-	table := mustParseTable(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	aw := mustAdmit(t, table)
-
-	if !aw.HasStagedPhase {
-		t.Error("brownfield-tdd-build-verified: HasStagedPhase must be true")
+// groupNamed finds the group of block b with exactly the given name.
+func groupNamed(b domain.AdmittedBlock, name domain.GroupName) (domain.ExecutionGroup, bool) {
+	for _, g := range b.Groups {
+		if g.Name == name {
+			return g, true
+		}
 	}
+	return domain.ExecutionGroup{}, false
 }
 
-func TestAdmit_QuickFix_HasStagedPhase(t *testing.T) {
-	table := mustParseTable(t, quickFixContent, "quick-fix", "3.0")
-	aw := mustAdmit(t, table)
+func TestAdmit_BlockGroups_FindGroupByName(t *testing.T) {
+	aw := mustAdmit(t, mustParseShape(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "4.0"))
 
-	if !aw.HasStagedPhase {
-		t.Error("quick-fix: HasStagedPhase must be true (has EXECUTION.[StageNumber] rows)")
-	}
-}
-
-func TestAdmit_GreenFieldTDD_HasStagedPhase(t *testing.T) {
-	table := mustParseTable(t, greenFieldTDDContent, "greenfield-tdd", "3.3")
-	aw := mustAdmit(t, table)
-
-	if !aw.HasStagedPhase {
-		t.Error("greenfield-tdd: HasStagedPhase must be true (has EXECUTION.[StageNumber] rows)")
-	}
-}
-
-func TestAdmit_BrownfieldTDD_HasStagedPhase(t *testing.T) {
-	table := mustParseTable(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
-	aw := mustAdmit(t, table)
-
-	if !aw.HasStagedPhase {
-		t.Error("brownfield-tdd: HasStagedPhase must be true (has EXECUTION.[StageNumber] rows)")
-	}
-}
-
-func TestAdmit_ImplementationOnly_HasStagedPhase(t *testing.T) {
-	table := mustParseTable(t, implOnlyContent, "implementation-only", "3.1")
-	aw := mustAdmit(t, table)
-
-	if !aw.HasStagedPhase {
-		t.Error("implementation-only: HasStagedPhase must be true (has EXECUTION.[StageNumber] rows)")
-	}
-}
-
-// ---- Phase-driven group resolution: workflow-defined names ----
-
-func TestAdmit_BrownfieldTDDBuildVerified_GroupsDeclared(t *testing.T) {
-	// brownfield-tdd-build-verified has EXECUTION rows with group segments.
-	// GroupsDeclared must be true.
-	table := mustParseTable(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	aw := mustAdmit(t, table)
-
-	if !aw.GroupsDeclared {
-		t.Error("GroupsDeclared: want true (workflow has EXECUTION rows with group segments)")
-	}
-}
-
-func TestAdmit_GreenFieldTDD_GroupsDeclared(t *testing.T) {
-	// greenfield-tdd EXECUTION rows carry group segments (Test, Implementation).
-	// GroupsDeclared must be true.
-	table := mustParseTable(t, greenFieldTDDContent, "greenfield-tdd", "3.3")
-	aw := mustAdmit(t, table)
-
-	if !aw.GroupsDeclared {
-		t.Error("GroupsDeclared: want true (greenfield-tdd EXECUTION rows carry group segments)")
-	}
-}
-
-func TestAdmit_BrownfieldTDD_GroupsDeclared(t *testing.T) {
-	// brownfield-tdd EXECUTION rows carry group segments (Test, Implementation).
-	// GroupsDeclared must be true.
-	table := mustParseTable(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
-	aw := mustAdmit(t, table)
-
-	if !aw.GroupsDeclared {
-		t.Error("GroupsDeclared: want true (brownfield-tdd EXECUTION rows carry group segments)")
-	}
-}
-
-func TestAdmit_BrownfieldTDDBuildVerified_ApproachTableCarriedThrough(t *testing.T) {
-	// The approach table declared in the workflow content must be carried onto the
-	// AdmittedWorkflow so downstream consumers can resolve group ordering.
-	table := mustParseTable(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	aw := mustAdmit(t, table)
-
-	if !aw.ApproachTable.Present() {
-		t.Error("ApproachTable: want present (workflow declares an Execution Groups table)")
-	}
-}
-
-func TestAdmit_GroupByName_FindsGroup(t *testing.T) {
-	table := mustParseTable(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	aw := mustAdmit(t, table)
-
-	g, ok := aw.GroupByName("Test")
+	g, ok := groupNamed(stageBlock(t, aw), "Test")
 	if !ok {
-		t.Fatal(`GroupByName("Test"): want found=true, got false`)
+		t.Fatal(`group "Test": want found=true, got false`)
 	}
-	if g.StartRow != 7 {
-		t.Errorf(`GroupByName("Test").StartRow: want 7, got %d`, g.StartRow)
+	if g.StartRow != 7 || g.EndRow != 10 {
+		t.Errorf(`group "Test": want rows [7,10), got [%d,%d)`, g.StartRow, g.EndRow)
 	}
 }
 
-func TestAdmit_GroupByName_MissingGroupReturnsFalse(t *testing.T) {
-	table := mustParseTable(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	aw := mustAdmit(t, table)
+func TestAdmit_BlockGroups_MissingGroupIsNotFound(t *testing.T) {
+	aw := mustAdmit(t, mustParseShape(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "4.0"))
 
-	_, ok := aw.GroupByName("NoSuchGroup")
+	_, ok := groupNamed(stageBlock(t, aw), "NoSuchGroup")
+
 	if ok {
-		t.Error(`GroupByName("NoSuchGroup"): want found=false, got true`)
+		t.Error(`group "NoSuchGroup": want found=false, got true`)
+	}
+}
+
+func TestAdmit_BlockGroups_NamesAreCaseSensitive(t *testing.T) {
+	aw := mustAdmit(t, mustParseShape(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "4.0"))
+
+	_, ok := groupNamed(stageBlock(t, aw), "test")
+
+	if ok {
+		t.Error(`group "test": group names are case-sensitive, want found=false`)
 	}
 }

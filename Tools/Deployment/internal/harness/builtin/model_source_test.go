@@ -1,20 +1,17 @@
 package builtin_test
 
-// model_source_test.go tests that each CLI-backed builtin harness, when discovered through
-// the registry with the ModelCatalog hook, offers the shared catalog's model ids and format
-// hint; and that vscodeghcp continues to offer its own descriptor-sourced list (T9.1).
+// model_source_test.go tests that every builtin harness known to the shared catalog (the
+// CLI-backed harnesses and vscode-ghcp), when discovered through the registry with the
+// ModelCatalog hook, offers the shared catalog's model ids and format hint.
 //
-// The test also verifies that a descriptor-only harness unknown to the shared catalog keeps
-// its own descriptor-sourced model catalog (AC9.5).
-//
-// All tests in this file reference registry.Options.ModelCatalog, which does not exist until
-// I9.1 is implemented. Every test therefore fails to compile until then — that is the intended
-// TDD RED state.
+// vscode-ghcp no longer declares a models: block in its descriptor, so with a hook miss it
+// offers no models at all. The test also verifies that a descriptor-only harness unknown to
+// the shared catalog keeps its own descriptor-sourced model catalog.
 //
 // The ModelCatalog hook is the seam that lets the registry overlay the shared catalog's data
 // onto a module's Descriptor().Models without any package importing builtin harness data
-// directly. The hook receives "no shared entry" (empty IDs) for vscodeghcp and any unknown
-// harness, so those modules fall back to their own descriptor-sourced catalog.
+// directly. The hook receives "no shared entry" (empty IDs) for any harness the shared
+// catalog does not know, so such modules fall back to their own descriptor-sourced catalog.
 
 import (
 	"os"
@@ -40,9 +37,9 @@ import (
 // ---------------------------------------------------------------------------
 
 // testSharedModelCatalog is the model data the hook installs for the three CLI-backed
-// harnesses. It uses deliberately invented IDs (prefixed "shared-") that appear in no
-// real YAML descriptor, so the presence of any of them in a module's Models.IDs proves
-// the hook was applied — not that the YAML happened to contain the same IDs.
+// harnesses and vscode-ghcp. It uses deliberately invented IDs (prefixed "shared-") that
+// appear in no real YAML descriptor, so the presence of any of them in a module's
+// Models.IDs proves the hook was applied — not that the YAML happened to contain the same IDs.
 var testSharedModelCatalog = map[string]domain.ModelCatalog{
 	"claude-code": {
 		IDs:        []string{"shared-claude-model-1", "shared-claude-model-2"},
@@ -56,14 +53,16 @@ var testSharedModelCatalog = map[string]domain.ModelCatalog{
 		IDs:        []string{"shared-ghcp-model-a", "shared-ghcp-model-b"},
 		FormatHint: "shared-ghcp-<model>-<version>",
 	},
-	// "vscode-ghcp" is intentionally absent: it is not a CLI-backed harness and has no
-	// entry in the shared catalog. The hook returns empty IDs for it, causing it to keep
-	// its own descriptor-sourced list.
+	"vscode-ghcp": {
+		IDs:        []string{"Shared VsCode Model One", "Shared VsCode Model Two"},
+		FormatHint: "shared-vscode-display-name",
+	},
 }
 
 // testModelCatalogHook returns a ModelCatalog hook function backed by testSharedModelCatalog.
-// It returns the catalog for known CLI harnesses and an empty catalog for all others,
-// mirroring what the composition root does with mosaic-common/harness.LookupModelCatalog.
+// It returns the catalog for every harness the shared catalog knows (CLI-backed harnesses
+// and vscode-ghcp) and an empty catalog for all others, mirroring what the composition
+// root does with mosaic-common/harness.LookupModelCatalog.
 func testModelCatalogHook() func(string, domain.ModelCatalog) domain.ModelCatalog {
 	return func(harnessID string, declared domain.ModelCatalog) domain.ModelCatalog {
 		if cat, ok := testSharedModelCatalog[harnessID]; ok {
@@ -102,20 +101,6 @@ func modelSlicesEqual(a, b []string) bool {
 		}
 	}
 	return true
-}
-
-// anyOfIn reports whether slice contains any element from want.
-func anyOfIn(slice []string, want []string) bool {
-	set := make(map[string]bool, len(slice))
-	for _, s := range slice {
-		set[s] = true
-	}
-	for _, w := range want {
-		if set[w] {
-			return true
-		}
-	}
-	return false
 }
 
 // ---------------------------------------------------------------------------
@@ -239,14 +224,12 @@ func TestModelSource_GHCPCLI_OffersSharedCatalogFormatHint(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// T9.1 — vscodeghcp keeps its own descriptor-sourced list
+// vscodeghcp is hook-sourced like the CLI-backed harnesses
 // ---------------------------------------------------------------------------
 
-// TestModelSource_VsCodeGHCP_KeepsDescriptorSourcedIDs verifies that the vscode-ghcp
-// module, when discovered with a ModelCatalog hook that returns empty IDs for "vscode-ghcp"
-// (because it is not in the shared CLI-only catalog), keeps its own YAML-sourced model
-// catalog unchanged. This satisfies AC9.3.
-func TestModelSource_VsCodeGHCP_KeepsDescriptorSourcedIDs(t *testing.T) {
+// TestModelSource_VsCodeGHCP_OffersSharedCatalogIDs verifies that the vscode-ghcp module,
+// when discovered with the ModelCatalog hook, offers exactly the shared catalog's model ids.
+func TestModelSource_VsCodeGHCP_OffersSharedCatalogIDs(t *testing.T) {
 	reg := discoverBuiltinsWithModelHook(t)
 
 	m, err := reg.Resolve("vscode-ghcp")
@@ -254,33 +237,18 @@ func TestModelSource_VsCodeGHCP_KeepsDescriptorSourcedIDs(t *testing.T) {
 		t.Fatalf("Resolve(%q): %v", "vscode-ghcp", err)
 	}
 
-	got := m.Descriptor().Models.IDs
-	if len(got) == 0 {
-		t.Fatal("vscode-ghcp: Descriptor().Models.IDs is empty after discovery with ModelCatalog hook; " +
-			"vscodeghcp must keep its own descriptor-sourced catalog when the hook returns empty IDs; " +
-			"the vscode-ghcp YAML declares model IDs and the empty-IDs fallback must preserve them")
-	}
+	want := testSharedModelCatalog["vscode-ghcp"]
+	got := m.Descriptor().Models
 
-	// The test hook's IDs (prefixed "shared-") appear in no real YAML descriptor. If any
-	// appear in vscode-ghcp's list, the fallback rule is broken.
-	sharedOnlyIDs := []string{
-		"shared-claude-model-1", "shared-claude-model-2",
-		"shared-opencode-provider/shared-model",
-		"shared-ghcp-model-a", "shared-ghcp-model-b",
-	}
-	if anyOfIn(got, sharedOnlyIDs) {
-		t.Errorf("vscode-ghcp: Descriptor().Models.IDs = %v; "+
-			"none of the shared-catalog hook IDs must appear; "+
-			"vscodeghcp must source its models from its own descriptor, not the CLI-only shared catalog",
-			got)
+	if !modelSlicesEqual(got.IDs, want.IDs) {
+		t.Errorf("vscode-ghcp: Descriptor().Models.IDs = %v; want %v (from shared catalog hook)",
+			got.IDs, want.IDs)
 	}
 }
 
-// TestModelSource_VsCodeGHCP_HasNonEmptyModelListFromDescriptor verifies that vscode-ghcp
-// offers a non-empty model list from its embedded YAML descriptor even when the hook applies.
-// This is the base assertion that the empty-IDs fallback correctly preserves a populated
-// descriptor-sourced catalog (AC9.3).
-func TestModelSource_VsCodeGHCP_HasNonEmptyModelListFromDescriptor(t *testing.T) {
+// TestModelSource_VsCodeGHCP_OffersSharedCatalogFormatHint verifies that the vscode-ghcp
+// module, when discovered with the ModelCatalog hook, offers the shared catalog's format hint.
+func TestModelSource_VsCodeGHCP_OffersSharedCatalogFormatHint(t *testing.T) {
 	reg := discoverBuiltinsWithModelHook(t)
 
 	m, err := reg.Resolve("vscode-ghcp")
@@ -288,11 +256,43 @@ func TestModelSource_VsCodeGHCP_HasNonEmptyModelListFromDescriptor(t *testing.T)
 		t.Fatalf("Resolve(%q): %v", "vscode-ghcp", err)
 	}
 
-	ids := m.Descriptor().Models.IDs
-	if len(ids) == 0 {
-		t.Errorf("vscode-ghcp: Descriptor().Models.IDs is empty after discovery with ModelCatalog hook; "+
-			"the vscode-ghcp YAML descriptor declares model IDs and the empty-IDs fallback must preserve them; "+
-			"confirm registry.Options.ModelCatalog empty-IDs fallback rule is implemented")
+	want := testSharedModelCatalog["vscode-ghcp"].FormatHint
+	got := m.Descriptor().Models.FormatHint
+
+	if got != want {
+		t.Errorf("vscode-ghcp: Descriptor().Models.FormatHint = %q; want %q (from shared catalog hook)",
+			got, want)
+	}
+}
+
+// TestModelSource_VsCodeGHCP_HookMissOffersNoDescriptorFallback verifies that when the hook
+// returns a miss (empty IDs) for vscode-ghcp, the module offers no models: its embedded
+// descriptor no longer declares a models: block, so there is no fallback list to keep.
+func TestModelSource_VsCodeGHCP_HookMissOffersNoDescriptorFallback(t *testing.T) {
+	reg, err := registry.Discover(registry.Options{
+		MosaicRoot: repoRoot(t),
+		ModelCatalog: func(harnessID string, declared domain.ModelCatalog) domain.ModelCatalog {
+			return domain.ModelCatalog{} // miss for every harness
+		},
+	})
+	if err != nil {
+		t.Fatalf("Discover with always-miss ModelCatalog hook: %v", err)
+	}
+
+	m, err := reg.Resolve("vscode-ghcp")
+	if err != nil {
+		t.Fatalf("Resolve(%q): %v", "vscode-ghcp", err)
+	}
+
+	got := m.Descriptor().Models
+	if len(got.IDs) != 0 {
+		t.Errorf("vscode-ghcp: Descriptor().Models.IDs = %v after a hook miss; want empty; "+
+			"model data comes from the shared catalog only, the descriptor must not declare a models: block",
+			got.IDs)
+	}
+	if got.FormatHint != "" {
+		t.Errorf("vscode-ghcp: Descriptor().Models.FormatHint = %q after a hook miss; want empty",
+			got.FormatHint)
 	}
 }
 

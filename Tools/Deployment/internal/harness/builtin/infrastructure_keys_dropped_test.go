@@ -124,7 +124,7 @@ func TestOrchestrator_InfrastructureAgentsRegion_UnchangedByDropSet(t *testing.T
 	blocks := []transform.InfrastructureBlock{{
 		Key: "checkpoint-agent", Version: "1.0.0", Class: "checkpoint",
 		Description: "Saves progress after each stage.", OnFailure: "halt",
-		Triggers: []domain.InfrastructureTrigger{{Trigger: "STAGE_END"}},
+		Triggers: []domain.InfrastructureTrigger{{Trigger: "ITERATION_END"}},
 	}}
 	want, _ := transform.AssembleInfrastructureBlocks(blocks)
 	for _, h := range allBuiltinHarnesses() {

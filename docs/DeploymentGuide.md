@@ -146,6 +146,8 @@ Use this to add or update individual agents across any catalog category without 
 
 The TUI presents a browsable list grouped by catalog category (Subagents, Utility Agents, Standalone Agents, etc.), mirroring the folder structure in the catalog.
 
+> **Not every utility agent belongs in a workspace.** `subagent-creator` and `workflow-creator` write catalog source files and depend on the design documents in the MOSAIC repository, so they are meant to run in the MOSAIC repository root, where they ship ready to use. This list still offers them, but deployed into a project workspace they cannot reach their references. See `Catalog/UtilityAgents/README.md`.
+
 **CLI:**
 
 ```sh
@@ -265,7 +267,7 @@ log_retention_runs: 50
 
 | Field | What it controls |
 |-------|-----------------|
-| `utility_agent_allow_list` | Which utility agents are selectable. `[]` = none. File absent = all six defaults. |
+| `utility_agent_allow_list` | Which utility agents are selectable. `[]` = none. File absent = `[injections-helper]` only; the Deploy agents flow still offers every utility agent on disk. |
 | `allow_external_modules` | Whether external harness modules in `MosaicDeploy/harnesses/` are allowed |
 | `log_retention_runs` | Max history log entries (`0` = keep all) |
 | `tool_destinations` | Permanent generic-tool to harness-tool mappings (silences repeated prompts) |

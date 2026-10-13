@@ -2,7 +2,7 @@
 
 > **Status:** Draft for review
 > **Created:** 2026-07-31
-> **Last Updated:** 2026-08-01
+> **Last Updated:** 2026-10-13
 > **Scope:** Design for the two agents that make checkpointing real — one that preserves restorable state during a run, and one that restores it. Covers what a checkpoint captures, how it is stored in git, how its reference travels back into the orchestration artifact, how a rollback is requested and performed, how it reconciles with work already committed, and how both behave when several runs share a working tree. Committing completed work into the user's own history is a different purpose served by a different class; see `CommitAgent.md`.
 
 ---
@@ -42,7 +42,7 @@ Single responsibility is the standing rule in this system, and here it also happ
 | Principle | Description |
 |---|---|
 | **Capture is safe, restore is dangerous** | Every asymmetry in this design follows from this one fact. Committing to git writes objects and moves a ref; it does not touch a single file in the working tree. Restoring overwrites files that other work may depend on. Guards therefore belong on restore, and capture needs none. |
-| **The agent uses only what it was given** | A checkpoint commit records `run_id` and its own sequence number, because those are the two things the agent actually holds. It does not record phase, stage, or trigger — those live in the orchestration artifact the agent cannot read, and requesting them would widen the invocation message to duplicate data that a single lookup already provides. |
+| **The agent uses only what it was given** | A checkpoint commit records `run_id` and its own sequence number, because those are the two things the agent actually holds. It does not record phase, iteration, or trigger — those live in the orchestration artifact the agent cannot read, and requesting them would widen the invocation message to duplicate data that a single lookup already provides. |
 | **Never restore orchestration state** | A rollback restores project files and nothing else. Restoring the run folder would delete the Execution Log rows containing the very reference used to perform the restore, and would contradict the schema's rule that the sequence counter is never rewound. The record of a rollback must survive the rollback. |
 | **Checkpoints stay out of the user's way** | Checkpoint commits are reachable only from a private ref namespace. They never appear in `git log`, `git branch`, or `git status`, are never pushed by default, and never interleave with the user's own commits. A user who never asks about checkpoints should never see one. Making run output *visible* is a different purpose, served by the `commit` class rather than by a checkpoint variant (§4.3). |
 | **A recorded checkpoint is always restorable** | Inherited from the artifact schema, and it is what makes `on_failure: halt` correct for capture. A run believing it can roll back when it cannot is worse than a run that stopped and said so. |
@@ -63,7 +63,7 @@ recommended_tier: LOW
 required_skills: []
 infrastructure: checkpoint
 triggers:
-  - trigger: STAGE_END
+  - trigger: ITERATION_END
     trigger_param: null
   - trigger: INVOCATION_INTERVAL
     trigger_param: 10
@@ -75,11 +75,13 @@ on_failure: halt
 
 **This agent declares two triggers, and needs both.**
 
-`STAGE_END` is the primary one, because a stage is the natural unit of restorable progress: it is the granularity at which work is planned, reviewed, and — when it goes wrong — abandoned. Redoing a stage is the most common rollback in this system, and it needs a restore point sitting exactly on the boundary it returns to.
+`ITERATION_END` is the primary one, because a block iteration — a plan stage, in `brownfield-tdd` — is the natural unit of restorable progress: it is the granularity at which work is planned, reviewed, and — when it goes wrong — abandoned. Redoing an iteration is the most common rollback in this system, and it needs a restore point sitting exactly on the boundary it returns to.
 
-`INVOCATION_INTERVAL` covers the inside of a stage. Without it, a stage that fails near its end can only be abandoned wholesale, discarding work that was fine. With a `commit`-class agent also running, the two triggers divide cleanly: the interval protects the window where nothing is committed yet — where rollback is always clean, because no branch has moved — and the stage-end checkpoint marks the boundary a redo returns to.
+`INVOCATION_INTERVAL` covers the inside of an iteration. Without it, an iteration that fails near its end can only be abandoned wholesale, discarding work that was fine. With a `commit`-class agent also running, the two triggers divide cleanly: the interval protects the window where nothing is committed yet — where rollback is always clean, because no branch has moved — and the iteration-end checkpoint marks the boundary a redo returns to.
 
-An earlier draft declared `STAGE_END` alone, on the reasoning that a run could override it if a finer grain was wanted. That was wrong: the two are not alternatives. Choosing the interval sacrifices the stage boundary a redo needs; choosing the boundary alone leaves the whole interior of a stage unprotected. Multi-trigger declaration is specified in `InfrastructureAgentConcept.md` §4, and this agent is its first consumer.
+An earlier draft declared `STAGE_END` (now `ITERATION_END`) alone, on the reasoning that a run could override it if a finer grain was wanted. That was wrong: the two are not alternatives. Choosing the interval sacrifices the iteration end a redo needs; choosing the boundary alone leaves the whole interior of an iteration unprotected. Multi-trigger declaration is specified in `InfrastructureAgentConcept.md` §4, and this agent is its first consumer.
+
+**Under `dispatch: parallel` an iteration-end checkpoint includes sibling work in progress** (`InfrastructureAgentConcept.md` §4.1). Iteration 2 can end while iteration 3 is half-done in the same working tree, and the checkpoint records both. That is still a true snapshot, and the Execution Log places it exactly. What it changes is rollback: restoring that checkpoint to redo iteration 2 also rewinds iteration 3 to its half-done state. This is a property of sharing one working tree, not of when the trigger fires, so the checkpoint is not deferred; a user who needs per-iteration rollback chooses `dispatch: sequential`.
 
 A run may override either trigger, or its parameter, at run start.
 
@@ -160,7 +162,7 @@ Mosaic-Seq: 15
 
 Both values come from what the agent already has — `run_id` from the invocation, `Seq` parsed from its own `agent_instance_id`. Nothing else is included.
 
-Phase, stage, trigger, and timestamp are deliberately absent. Not because they lack value, but because the agent cannot know them: they live in `Orchestration.md`, which subagents never read. Supplying them would mean widening the invocation message to carry data that `run_id` + `Seq` already reaches by lookup — those two fields are a foreign key into the Execution Log, and that row carries phase, stage, timestamp, and the invocation that preceded the checkpoint.
+Phase, iteration, trigger, and timestamp are deliberately absent. Not because they lack value, but because the agent cannot know them: they live in `Orchestration.md`, which subagents never read. Supplying them would mean widening the invocation message to carry data that `run_id` + `Seq` already reaches by lookup — those two fields are a foreign key into the Execution Log, and that row carries phase, iteration, timestamp, and the invocation that preceded the checkpoint.
 
 The trailers use git's standard trailer convention, so they are parseable by `git log --format` and `git interpret-trailers` without a custom parser. This makes an orphaned checkpoint self-describing: a commit found later can be attributed to its run even if the run folder was deleted.
 
@@ -186,7 +188,7 @@ The orchestrator or runner extracts the reference and writes it to the `Checkpoi
 **Why the tail of `status_message`, rather than a dedicated protocol field or `result_data`:**
 
 - It requires no protocol change and no per-agent invocation configuration. A dedicated field would mean a protocol version bump for one agent; `result_data` would require the orchestrator to remember to set `include_result_summary` on every checkpoint dispatch, and silently loses the reference if it forgets.
-- **It degrades instead of breaking.** `status_message` is copied verbatim into the Execution Log's `Summary` column, and when it exceeds the length limit the schema keeps the **first 50 and last 50 characters**. A marker at the very end therefore survives truncation. If extraction is never implemented, or is broken, or the run is being driven by a bare LLM with no tooling, **the hash is still sitting in `Summary` where a human can read it**. The structured column is an optimisation over a record that already exists.
+- **It degrades instead of breaking.** `status_message` is copied verbatim into the Execution Log's `Summary` column, and when it exceeds the length limit the schema keeps only its head and tail (`OrchestrationArtifactFormat.md` §5). A marker at the very end therefore survives truncation. If extraction is never implemented, or is broken, or the run is being driven by a bare LLM with no tooling, **the hash is still sitting in `Summary` where a human can read it**. The structured column is an optimisation over a record that already exists.
 
 The marker must be the final characters of `status_message`, with no trailing whitespace or punctuation after the closing bracket, so a consumer can anchor its match to the end of the string.
 
@@ -194,7 +196,7 @@ The marker must be the final characters of `status_message`, with no trailing wh
 
 This agent halts the run when it fails, which makes its failure modes unusually consequential: every one of them stops work that was otherwise healthy. They are therefore enumerated rather than left to the agent's judgement.
 
-**Checked at run start, not by this agent.** If `checkpoints: enabled` and the orchestrator's declaration region contains no agent with `Class = checkpoint`, the configuration is invalid and the run must not start. This is the position the artifact schema previously declined to take, and it can be taken now because the mechanism is discoverable by string comparison rather than inference. It is a start-up check precisely so the run fails before doing work, rather than at the first stage boundary.
+**Checked at run start, not by this agent.** If `checkpoints: enabled` and the orchestrator's declaration region contains no agent with `Class = checkpoint`, the configuration is invalid and the run must not start. This is the position the artifact schema previously declined to take, and it can be taken now because the mechanism is discoverable by string comparison rather than inference. It is a start-up check precisely so the run fails before doing work, rather than at the first iteration end.
 
 **Checked by the agent, on each invocation:**
 
@@ -202,7 +204,7 @@ This agent halts the run when it fails, which makes its failure modes unusually 
 |---|---|
 | Not a git repository | `BLOCKED`. The run halts. A checkpointing run in a non-repository was misconfigured at start; failing loudly is the only honest outcome. |
 | Repository with no commits yet | Proceed. `-p` is omitted (§4.3); the checkpoint is a root commit. This is a normal first-checkpoint case, not a failure. |
-| Working tree identical to the previous checkpoint | Proceed and commit anyway. An empty checkpoint is cheap — git stores no new tree objects — and skipping it would leave a stage boundary with no restore point, which is exactly the gap the `Checkpoint` column is supposed to make impossible. |
+| Working tree identical to the previous checkpoint | Proceed and commit anyway. An empty checkpoint is cheap — git stores no new tree objects — and skipping it would leave an iteration end with no restore point, which is exactly the gap the `Checkpoint` column is supposed to make impossible. |
 | Mid-rebase, mid-merge, or detached `HEAD` | Proceed. None of these prevent `write-tree`, `commit-tree`, or `update-ref`, and none are modified by them. The operation reads the working tree and writes objects; the repository's in-progress state is irrelevant to both. |
 | `update-ref` fails, or the ref already exists | `BLOCKED`. A ref collision means two invocations shared a `run_id` and a `Seq`, which the sequence counter is supposed to make impossible. Overwriting would destroy an existing restore point. |
 | Any git command fails for another reason | `BLOCKED`, with the git error in `status_message`. The agent does not retry and does not work around it. |
@@ -260,17 +262,17 @@ Before touching anything, the agent verifies:
 
 When a `commit`-class agent is running (`CommitAgent.md`), some of the work being abandoned may already be committed. Restoring the tree without addressing that leaves the tree disagreeing with the branch tip, and the next commit's diff would contain the undo of the abandoned work mixed into whatever else it captures. Leaving that unreconciled is the worst available outcome — it silently corrupts a commit the user will keep — so the agent resolves it, choosing by what the branch will tolerate.
 
-**Only the branch is ever undone.** A rollback is one operation, not two, and there is no counterpart to it on the checkpoint side. A checkpoint is a value: a snapshot in a private namespace that nothing references and nothing builds on, so checkpoints taken during the abandoned work are neither reverted nor deleted — they are simply no longer used, and §9 retains them like any other. A branch is state: a pointer the user reads and the next stage commit extends, so it is the only thing a rollback has to correct. Where both classes are running, this is the practical difference between them, and it is why the reconciliation table below has entries for the branch and none for the checkpoints.
+**Only the branch is ever undone.** A rollback is one operation, not two, and there is no counterpart to it on the checkpoint side. A checkpoint is a value: a snapshot in a private namespace that nothing references and nothing builds on, so checkpoints taken during the abandoned work are neither reverted nor deleted — they are simply no longer used, and §9 retains them like any other. A branch is state: a pointer the user reads and the next iteration commit extends, so it is the only thing a rollback has to correct. Where both classes are running, this is the practical difference between them, and it is why the reconciliation table below has entries for the branch and none for the checkpoints.
 
-The two agents having fired on the same boundary is what makes the correction well-defined: neither modifies the working tree, so a stage-end checkpoint and a stage-end commit record the same tree, and returning the branch to that commit returns it to a state the checkpoint also describes.
+The two agents having fired on the same boundary is what makes the correction well-defined: neither modifies the working tree, so an iteration-end checkpoint and an iteration-end commit record the same tree, and returning the branch to that commit returns it to a state the checkpoint also describes.
 
 | Case | Condition | Action |
 |---|---|---|
 | **1. Nothing committed past the target** | `commits: disabled`, or the target checkpoint's `Mosaic-Seq` is ≥ that of the newest run commit | Restore the tree. Nothing to reconcile. |
 | **2. Branch is MOSAIC-owned and provably unshared** | `commit_branch` is `mosaic/run/{run_id}`, with no upstream and not contained in any other local branch | Reset the branch to the *reset target* below, then restore the tree. No revert commit, no residue: the abandoned commits are discarded exactly as a checkpoint would be. |
-| **3. Anything else** | The user's own branch, or a MOSAIC branch that has been pushed or merged | Restore the tree, then commit the result as a revert. The abandoned attempt and its undo both remain in history, and the next stage's commit is clean. |
+| **3. Anything else** | The user's own branch, or a MOSAIC branch that has been pushed or merged | Restore the tree, then commit the result as a revert. The abandoned attempt and its undo both remain in history, and the next iteration's commit is clean. |
 
-**Which case applies is decided by sequence number, not by git ancestry.** The checkpoint chain and the commit-agent's branch are **disconnected graphs** — a checkpoint parents to the previous checkpoint (§4.3), a stage commit to the branch tip — so no ancestry test relates them. `git merge-base` between a checkpoint and a branch commit answers a question about the user's history, not about this run, and using it here silently produces wrong answers.
+**Which case applies is decided by sequence number, not by git ancestry.** The checkpoint chain and the commit-agent's branch are **disconnected graphs** — a checkpoint parents to the previous checkpoint (§4.3), an iteration commit to the branch tip — so no ancestry test relates them. `git merge-base` between a checkpoint and a branch commit answers a question about the user's history, not about this run, and using it here silently produces wrong answers.
 
 The comparison is on `Mosaic-Seq`, which both agents stamp for exactly this reason (§4.4, `CommitAgent.md` §4.5). Newest run commit means the newest commit **on `commit_branch`** carrying `Mosaic-Run-Id: {run_id}`; its `Mosaic-Seq` against the target checkpoint's `Mosaic-Seq` decides case 1 versus the rest. Both values are readable with `git interpret-trailers` and need no MOSAIC knowledge beyond the run id.
 
@@ -285,15 +287,15 @@ The comparison is on `Mosaic-Seq`, which both agents stamp for exactly this reas
 
 **`{first}` is the numerically lowest sequence in the ref namespace, not the lexicographically lowest.** Refs are `refs/mosaic/checkpoints/{run_id}/{seq}` with an unpadded integer, so a plain sort places `10` before `9` and selects the wrong checkpoint — and therefore the wrong base commit. The error is silent until a run exceeds nine checkpoints, at which point it resets the branch to a point later than intended and the abandoned commits it was meant to discard survive.
 
-**Rule 1 exists because the sequence test alone is wrong at a stage boundary.** Both agents fire there, checkpoint first, so the boundary's checkpoint carries a lower `Mosaic-Seq` than the commit recording the same work. A target chosen at that boundary would therefore fall through a Seq-only test to the *previous* stage's commit — discarding a commit that holds exactly the wanted state, along with its prose message, and returning the whole stage as uncommitted changes for no reason. The files would still come out right; the history would be gratuitously damaged.
+**Rule 1 exists because the sequence test alone is wrong at an iteration end.** Both agents fire there, checkpoint first, so the boundary's checkpoint carries a lower `Mosaic-Seq` than the commit recording the same work. A target chosen at that boundary would therefore fall through a Seq-only test to the *previous* iteration's commit — discarding a commit that holds exactly the wanted state, along with its prose message, and returning the whole iteration as uncommitted changes for no reason. The files would still come out right; the history would be gratuitously damaged.
 
 **Rule 1's pathspec is load-bearing and easy to omit.** The two agents exclude different things — the checkpoint keeps other runs' folders and drops only its own (§4.2), the commit drops all of them (`CommitAgent.md` §4.4) — so their trees are never identical even when their project content is. Comparing tree hashes directly would report a mismatch at every boundary and the rule would silently never fire, leaving the defect it exists to fix. The comparison must be restricted to project paths.
 
 Rule 1 also removes the design's sensitivity to declaration order here: whichever of the two agents takes the lower sequence number, the content test settles the target the same way.
 
-**Resetting the branch to the checkpoint's own sha is prohibited**, and the prohibition is stated because the operation looks correct and its damage is delayed. A branch reset to a checkpoint commit *descends from* it, which destroys every property §4.3 relies on at once: the checkpoint commits become reachable from a branch, so `git log` shows `MOSAIC checkpoint: checkpoint-manager-git#15` interleaved with the user's work, `git push` will carry them, and §9's namespace deletion no longer discards anything because the branch holds them. A restore that did this would convert the run's entire private history into permanent public history as a side effect of undoing one stage.
+**Resetting the branch to the checkpoint's own sha is prohibited**, and the prohibition is stated because the operation looks correct and its damage is delayed. A branch reset to a checkpoint commit *descends from* it, which destroys every property §4.3 relies on at once: the checkpoint commits become reachable from a branch, so `git log` shows `MOSAIC checkpoint: checkpoint-manager-git#15` interleaved with the user's work, `git push` will carry them, and §9's namespace deletion no longer discards anything because the branch holds them. A restore that did this would convert the run's entire private history into permanent public history as a side effect of undoing one iteration.
 
-Resetting to a run commit has none of that. It is already an ancestor of the branch tip, so the branch's ancestry is unchanged apart from being shorter, and the checkpoint chain stays unreferenced and deletable. The tree afterwards comes from the checkpoint and may sit ahead of that commit — the target may be a mid-stage checkpoint with no commit of its own — which is the ordinary state of a branch with uncommitted work, and needs no further reconciliation.
+Resetting to a run commit has none of that. It is already an ancestor of the branch tip, so the branch's ancestry is unchanged apart from being shorter, and the checkpoint chain stays unreferenced and deletable. The tree afterwards comes from the checkpoint and may sit ahead of that commit — the target may be a mid-iteration checkpoint with no commit of its own — which is the ordinary state of a branch with uncommitted work, and needs no further reconciliation.
 
 **Ownership is decided by the branch name, not by inspection.** `commit_branch` equal to `mosaic/run/{run_id}` means the branch is MOSAIC's, because that name is reserved and derivable from a field the agent already holds (`CommitAgent.md` §4.3). Anything else is the user's. No heuristic, no configuration, and no question the agent has to ask.
 
@@ -301,7 +303,7 @@ Resetting to a run commit has none of that. It is already an ancestor of the bra
 
 Reading the current branch instead would not substitute for this. It reports where `HEAD` *is*, which is trivially available and always looks correct; it cannot report where the run has been *committing*, which is the only thing that matters. The two agree right up until the moment they matter — the user having switched branches mid-run is exactly the case a live read cannot see, because whatever it finds is self-consistent. A recorded value is what makes the divergence detectable.
 
-The failure this prevents is worse than the commit agent's. A stage commit on the wrong branch is misplaced work; a revert on the wrong branch undoes work that branch never contained, while the real branch keeps the abandoned commits and silently corrupts its next commit — both halves of the reconciliation land wrong.
+The failure this prevents is worse than the commit agent's. An iteration commit on the wrong branch is misplaced work; a revert on the wrong branch undoes work that branch never contained, while the real branch keeps the abandoned commits and silently corrupts its next commit — both halves of the reconciliation land wrong.
 
 **Case 3's revert commit uses the commit agent's pathspec**, `git add -A -- . ':!Orchestration-*'` (`CommitAgent.md` §4.4). Without it a rollback would drop run folders into the user's permanent history — the outcome that section rejects as worse than any tidiness it buys — and it would do so on the one path where nothing else is auditing what gets committed.
 
@@ -309,7 +311,7 @@ The failure this prevents is worse than the commit agent's. A stage commit on th
 
 **Case 3's revert commit carries the same provenance trailers as any MOSAIC-authored commit**, `Mosaic-Run-Id` and `Mosaic-Seq`, taken from the invocation and from this agent's own `agent_instance_id`. The reasoning is `CommitAgent.md` §4.5's: a commit found later should be attributable to its run without the run folder. It also removes an ambiguity rather than leaving it to chance — a second rollback has to identify the newest run commit on a branch where one of the candidates is itself a rollback, and both readings of an untrailered revert happen to produce correct behaviour today, which is not the same as the behaviour being specified.
 
-**Case 3's revert message is mechanical**, derived from the target and the run — `Revert to checkpoint {sha} (stage {N} state)` — and needs no plan artifact. This is why the restore agent performs it rather than dispatching the commit agent afterwards: the commit agent's message comes from a stage plan, and a rollback has none, so it would describe the abandoned work as though it were being done.
+**Case 3's revert message is mechanical**, derived from the target and the run — `Revert to checkpoint {sha} (Seq {target-seq})`, where `{target-seq}` is the target checkpoint's own `Mosaic-Seq` (the commit's `Mosaic-Seq` trailer still carries the restore agent's own sequence number) — and needs no plan artifact. This is why the restore agent performs it rather than dispatching the commit agent afterwards: the commit agent's message comes from an iteration's plan, and a rollback has none, so it would describe the abandoned work as though it were being done.
 
 **One case the agent reports rather than resolves.** If the user made *their own* commits after the checkpoint was taken, case 3's revert would also undo those. The agent detects this by comparing the branch tip's history against the run's own commits, and returns `NEEDS_CLARIFICATION` naming them, because undoing a user's own work is not a decision an agent should make from inference.
 
@@ -329,11 +331,11 @@ This is a hard exclusion implemented in the agent, deliberately not a consequenc
 An ordinary invocation row. Nothing is rewound.
 
 ```markdown
-| 21 | test-runner#21 | EXECUTION | Implementation.2 | COMPLETED_NEEDS_ACTION | ... | 6 tests failing | Stage-2/Plan.md | - |
-| 22 | checkpoint-restore-git#22 | EXECUTION | Implementation.2 | SUCCESS | ... | Restored working tree to 4f1a08d (Seq 15) | - | - |
+| 21 | implementation-review#21 | EXECUTION | 2.Implementation | 11 | COMPLETED_NEEDS_ACTION | ... | Implementation diverges from the design in 3 places | Stage-2/Plan.md, ContractsDesign.md, Stage-2/PlanProgress.md | - |
+| 22 | checkpoint-restore-git#22 | EXECUTION | 2.Implementation | - | SUCCESS | ... | Restored working tree to 4f1a08d (Seq 15) | - | - |
 ```
 
-`global_sequence` advances as for any invocation and is never decremented. No prior row is altered. `current_state` is not rewound to the checkpointed row's phase and stage: doing so would leave `current_state` disagreeing with the last accepted workflow row, and the schema's recovery procedure would conservatively re-dispatch that logged assignment. The run's files move backward; its history does not.
+`global_sequence` advances as for any invocation and is never decremented. No prior row is altered. `current_state` is not rewound to the checkpointed row's phase and iteration: doing so would leave `current_state` disagreeing with the last accepted workflow row, and the schema's recovery procedure would conservatively re-dispatch that logged assignment. The run's files move backward; its history does not.
 
 This is what the existing schema already prescribes when it says a rollback is "just another subagent invocation." This design adds no special row shape, agent name, or status value.
 
@@ -422,13 +424,14 @@ Only the first changes an existing guarantee's meaning, and it strengthens rathe
 
 - Whether `checkpoint-restore-git` should return `NEEDS_CLARIFICATION` or `BLOCKED` on detecting a concurrent run. `NEEDS_CLARIFICATION` invites a human override, which may be correct when the user knows the other run is idle; `BLOCKED` is firmer but forces a restart to proceed.
 - Whether the checkpoint marker should carry an abbreviated or full SHA. Abbreviated is more readable inside a truncated `Summary`; full is unambiguous forever.
-- What `INVOCATION_INTERVAL`'s default parameter should be. `10` is a guess. Too small wastes nothing in storage but clutters the Execution Log; too large leaves usable work unprotected inside a long stage.
-- Whether a workflow without stages should substitute `PHASE_END` for `STAGE_END` automatically, or require the user to override. Automatic substitution is friendlier; requiring the override makes the configuration honest about what it is protecting.
+- What `INVOCATION_INTERVAL`'s default parameter should be. `10` is a guess. Too small wastes nothing in storage but clutters the Execution Log; too large leaves usable work unprotected inside a long iteration.
 - Whether §5.2's branch-mismatch refusal should stay `BLOCKED` or invite a human override. Switching to `commit_branch` itself is not an option — the tree is dirty by definition at that point — so the recovery is the user checking the branch out and re-requesting, which `BLOCKED` states plainly. `NEEDS_CLARIFICATION` would read better but implies a choice the agent cannot actually offer.
 - Whether §5.2 case 2's "provably unshared" test is strict enough. It checks for an upstream and for containment in other local branches, which covers the realistic cases but cannot see a clone someone else made.
 
-**Resolved:** what happens to `current_state` after a rollback. Nothing, and nothing needs to. §5.4's refusal to rewind it leaves a window where the run's recorded stage is ahead of the files, but that window closes at the next dispatch: `current_state` is rewritten from the routing of whatever invocation follows, so an orchestrator resuming work at stage 3 records stage 3, and every consequence that looked alarming — the `Mosaic-Stage` trailer on the next commit, the stage a later checkpoint is attributed to — follows from the corrected value rather than the stale one. Correcting it is an orchestration decision made at dispatch time, which is where routing decisions belong; a restore agent writing it would be a subagent making one.
+**Resolved:** what happens to `current_state` after a rollback. Nothing, and nothing needs to. §5.4's refusal to rewind it leaves a window where the run's recorded iteration is ahead of the files, but that window closes at the next dispatch: `current_state` is rewritten from the routing of whatever invocation follows, so an orchestrator resuming work at iteration 3 records iteration 3, and every consequence that looked alarming — the `Mosaic-Iteration` trailer on the next commit, the iteration a later checkpoint is attributed to — follows from the corrected value rather than the stale one. Correcting it is an orchestration decision made at dispatch time, which is where routing decisions belong; a restore agent writing it would be a subagent making one.
 
-The stage number consequently repeats in the Execution Log — two runs of stage 3 rows, separated by the restore row. That is the honest record and needs no special handling: `Seq` remains unique, the log remains append-only, and a reader sees exactly what happened. The one thing this rests on is the orchestrator routing to the right stage after a rollback, which it must do in any case for the run to make sense.
+The iteration consequently repeats in the Execution Log — two runs of iteration 3 rows, separated by the restore row. That is the honest record and needs no special handling: `Seq` remains unique, the log remains append-only, and a reader sees exactly what happened. The one thing this rests on is the orchestrator routing to the right iteration after a rollback, which it must do in any case for the run to make sense.
 
-**Resolved:** no automatic checkpoint is taken before a restore. Making a rollback itself reversible was considered and rejected as disproportionate — a rollback is already a last resort reached only after escalation, and the work it discards is bounded by the checkpoint interval, which in a system organised around small stages is cheap to redo. The `PRE_ROLLBACK` trigger is dropped from the class vocabulary as a result, having had no other consumer.
+**Resolved:** no automatic checkpoint is taken before a restore. Making a rollback itself reversible was considered and rejected as disproportionate — a rollback is already a last resort reached only after escalation, and the work it discards is bounded by the checkpoint interval, which in a system organised around small iterations is cheap to redo. The `PRE_ROLLBACK` trigger is dropped from the class vocabulary as a result, having had no other consumer.
+
+**Resolved:** whether a workflow without stages should substitute `PHASE_END` for `STAGE_END` automatically. The question dissolved: `STAGE_END` became `ITERATION_END` and fires for every block, whatever its name (`InfrastructureAgentConcept.md` §4.1). A workflow with no block at all has only phase ends, and a run that wants checkpoints there overrides the triggers to `PHASE_END` explicitly; nothing is substituted.

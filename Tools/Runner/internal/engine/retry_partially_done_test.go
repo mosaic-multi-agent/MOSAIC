@@ -32,9 +32,9 @@ func TestNext_PartiallyDone_StagedRow_RedispatchesSameRowAndStage(t *testing.T) 
 	f := newRetryFixture(t)
 	for _, mode := range autoModes {
 		t.Run(modeName(mode), func(t *testing.T) {
-			log := (&runLog{}).partial(rtTestWriter, "Test.2", rtRowTestWriter)
+			log := (&runLog{}).partial(rtTestWriter, "2.Test", rtRowTestWriter)
 
-			requireRetryStep(t, f.next(mode, log, false), rtRowTestWriter, "Test.2", domain.RetryPartiallyDone)
+			requireRetryStep(t, f.next(mode, log, false), rtRowTestWriter, "2.Test", domain.RetryPartiallyDone)
 		})
 	}
 }
@@ -43,10 +43,10 @@ func TestNext_PartiallyDone_StagedRow_RedispatchesSameRowAndStage(t *testing.T) 
 // PARTIALLY_DONE reviewer is re-run itself.
 func TestNext_PartiallyDone_Reviewer_RedispatchesReviewerNotOnFindingsTarget(t *testing.T) {
 	f := newRetryFixture(t)
-	log := (&runLog{}).partial(rtTestsReview, "Test.1", rtRowTestsReview)
+	log := (&runLog{}).partial(rtTestsReview, "1.Test", rtRowTestsReview)
 
 	step := requireRetryStep(t, f.next(domain.ExecutionModeAutoReview, log, false),
-		rtRowTestsReview, "Test.1", domain.RetryPartiallyDone)
+		rtRowTestsReview, "1.Test", domain.RetryPartiallyDone)
 
 	if got := agentName(step.Request.AgentInstanceID); got != rtTestsReview {
 		t.Errorf("want %s re-run, got %s", rtTestsReview, got)
@@ -152,7 +152,7 @@ func TestNext_PartiallyDone_TrailingRun_BoundIsLimit(t *testing.T) {
 func TestNext_PartiallyDone_BoundExhausted_AutoReviewDeviatesToo(t *testing.T) {
 	f := newRetryFixture(t)
 	n := engine.PartiallyDoneRedispatchLimit + 1
-	log := (&runLog{}).repeat(n, func(l *runLog) { l.partial(rtTestWriter, "Test.1", rtRowTestWriter) })
+	log := (&runLog{}).repeat(n, func(l *runLog) { l.partial(rtTestWriter, "1.Test", rtRowTestWriter) })
 
 	requireNonSuccessDeviation(t, f.next(domain.ExecutionModeAutoReview, log, false))
 }
@@ -187,9 +187,9 @@ func TestNext_PartiallyDone_OtherStatusRowOrStageEndsRun(t *testing.T) {
 			return plannerRun().partial(rtPlanReview, "", rtRowPlanReview).inPhase(rtPlanPhase)
 		}, rtRowPlanReview, ""},
 		{"other stage", func() *runLog {
-			return (&runLog{}).repeat(n, func(l *runLog) { l.partial(rtTestWriter, "Test.1", rtRowTestWriter) }).
-				partial(rtTestWriter, "Test.2", rtRowTestWriter)
-		}, rtRowTestWriter, "Test.2"},
+			return (&runLog{}).repeat(n, func(l *runLog) { l.partial(rtTestWriter, "1.Test", rtRowTestWriter) }).
+				partial(rtTestWriter, "2.Test", rtRowTestWriter)
+		}, rtRowTestWriter, "2.Test"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -241,7 +241,7 @@ func TestNext_PartiallyDone_InfrastructureRowsDoNotCountTowardRun(t *testing.T) 
 func TestNext_PartiallyDone_LiveAndResumeAgree(t *testing.T) {
 	f := newRetryFixture(t)
 	for k := 1; k <= engine.PartiallyDoneRedispatchLimit+1; k++ {
-		log := (&runLog{}).repeat(k, func(l *runLog) { l.partial(rtTestWriter, "Test.1", rtRowTestWriter) })
+		log := (&runLog{}).repeat(k, func(l *runLog) { l.partial(rtTestWriter, "1.Test", rtRowTestWriter) })
 
 		live := f.next(domain.ExecutionModeAuto, log, false)
 		resumed := f.next(domain.ExecutionModeAuto, log, true)

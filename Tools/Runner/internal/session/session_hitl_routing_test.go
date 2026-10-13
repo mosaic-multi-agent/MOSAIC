@@ -326,7 +326,8 @@ func TestSession_HITLGate_RepairedSuccess_RoutesAsSuccess(t *testing.T) {
 // TestSession_HITLGate_RepairedCompletedNeedsAction_AutoReviewRoutesToOnFindings
 // verifies that a reviewer's COMPLETED_NEEDS_ACTION followed by a repaired
 // SUCCESS is routed to the On Findings target, exactly as if the original had
-// been accepted.
+// been accepted. The re-run of agent-a then succeeds into agent-b, which had
+// already finished, so the orchestrator is consulted and re-dispatches it.
 func TestSession_HITLGate_RepairedCompletedNeedsAction_AutoReviewRoutesToOnFindings(t *testing.T) {
 	rig := reviewRig(t)
 	rig.adapter.Queue("agent-a",
@@ -339,10 +340,15 @@ func TestSession_HITLGate_RepairedCompletedNeedsAction_AutoReviewRoutesToOnFindi
 		reviewAttempt(domain.StatusSUCCESS, domain.ErrorNone, "clean", "true", "v3"),
 	)
 	rig.adapter.Queue("agent-c", harness.ScriptedEntry{Response: resp(domain.StatusSUCCESS, "c done")})
+	rig.consult.queueDispatch("agent-b", "review the fixed work", 1)
 
 	got, err := rig.ses.Start(context.Background(), reviewConfig(rig, pathAuto, domain.ExecutionModeAutoReview, 0))
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
+	if len(rig.consult.Requests) != 1 {
+		t.Fatalf("want one finished-work consultation (agent-b already finished), got %d", len(rig.consult.Requests))
+	}
+	requireFinishedWorkConsultation(t, rig.consult.Requests[0], 1)
 	var order []string
 	for _, inv := range rig.adapter.Invocations() {
 		order = append(order, inv.Agent.Identifier)
@@ -361,7 +367,8 @@ func TestSession_HITLGate_RepairedCompletedNeedsAction_AutoReviewRoutesToOnFindi
 // TestSession_HITLGate_ReviewLoopLimit_CountsRepairedOriginalOnce verifies that
 // the review loop limit sees a rejected COMPLETED_NEEDS_ACTION and its repaired
 // SUCCESS re-dispatch as one findings iteration: limit 1 is reached by it,
-// limit 2 is not.
+// limit 2 is not. Under limit 2 the only consultation is the finished-work one
+// after the re-run of agent-a reaches the already finished agent-b.
 func TestSession_HITLGate_ReviewLoopLimit_CountsRepairedOriginalOnce(t *testing.T) {
 	setup := func(t *testing.T, limit int) *detectingRig {
 		rig := reviewRig(t)
@@ -375,7 +382,11 @@ func TestSession_HITLGate_ReviewLoopLimit_CountsRepairedOriginalOnce(t *testing.
 			reviewAttempt(domain.StatusSUCCESS, domain.ErrorNone, "clean", "true", "v3"),
 		)
 		rig.adapter.Queue("agent-c", harness.ScriptedEntry{Response: resp(domain.StatusSUCCESS, "c done")})
-		rig.consult.queueStop("done")
+		if limit == 1 {
+			rig.consult.queueStop("done")
+		} else {
+			rig.consult.queueDispatch("agent-b", "review the fixed work", 1)
+		}
 		rig.ses.Start(context.Background(), reviewConfig(rig, pathAuto, domain.ExecutionModeAutoReview, limit)) //nolint:errcheck
 		return rig
 	}
@@ -392,9 +403,15 @@ func TestSession_HITLGate_ReviewLoopLimit_CountsRepairedOriginalOnce(t *testing.
 	})
 	t.Run("limit 2 is not reached", func(t *testing.T) {
 		rig := setup(t, 2)
-		if len(rig.consult.Requests) != 0 {
-			t.Errorf("one repaired findings iteration must count once (no deviation under limit 2), got %d consultation(s)", len(rig.consult.Requests))
+		for _, req := range rig.consult.Requests {
+			if req.Deviation != nil && req.Deviation.Kind == domain.DeviationReviewLoopLimit {
+				t.Errorf("one repaired findings iteration must count once (no review loop limit deviation under limit 2)")
+			}
 		}
+		if len(rig.consult.Requests) != 1 {
+			t.Fatalf("want only the finished-work consultation under limit 2, got %d consultation(s)", len(rig.consult.Requests))
+		}
+		requireFinishedWorkConsultation(t, rig.consult.Requests[0], 1)
 		if n := rig.invocationsOf("agent-a"); n != 2 {
 			t.Errorf("agent-a must be re-dispatched via On Findings, got %d invocation(s)", n)
 		}
@@ -442,7 +459,7 @@ func TestSession_HITLGate_ResumeAfterRepairedReview_RoutesOnRecordedStatus(t *te
 
 // ===== Triggers follow the routed status =====
 
-const hitlStageEndPlan = `# Plan
+const hitlIterationEndPlan = `# Plan
 
 ## Stages
 
@@ -452,36 +469,36 @@ const hitlStageEndPlan = `# Plan
 | 2 | Stage Two | Second stage | 1 | FALSE |
 `
 
-// stageEndRig builds a rig where the stage's last step is a HITL reviewer and a
-// commit agent fires on STAGE_END.
-func stageEndRig(t *testing.T, kind dispatchPathKind, review ...harness.ScriptedEntry) *detectingRig {
+// iterationEndRig builds a rig where the stage's last step is a HITL reviewer and a
+// commit agent fires on ITERATION_END.
+func iterationEndRig(t *testing.T, kind dispatchPathKind, review ...harness.ScriptedEntry) *detectingRig {
 	t.Helper()
-	rig := newDetectingRig(t, "hitl-stage-end-staged-orch.md",
+	rig := newDetectingRig(t, "hitl-iteration-end-staged-orch.md",
 		"implementation-tdd", "implementation-review", "commit-manager-git")
-	writeRunFile(t, rig.runFolder, "Plan.md", hitlStageEndPlan)
+	writeRunFile(t, rig.runFolder, "Plan.md", hitlIterationEndPlan)
 	// The run is resumed with Stage-1's implementation step already done, so
 	// the reviewer (the last workflow step of Stage-1) is the next dispatch.
 	rig.store.exists = true
 	rig.store.state = domain.ArtifactState{
-		Workflow:        "hitl-stage-end",
+		Workflow:        "hitl-iteration-end",
 		WorkflowVersion: "1.0",
 		Task:            "test task",
 		GlobalSequence:  1,
 		RunSettings:     domain.RunSettings{Mode: modeFor(kind)},
 		CurrentState: domain.CurrentState{
-			Phase:      "EXECUTION.Stage-1",
-			Stage:      "Stage-1",
+			Phase:      "EXECUTION",
+			Stage:      "1",
 			LastStatus: domain.StatusSUCCESS,
 			LastAgent:  "implementation-tdd#1",
 		},
 		ExecutionLog: []domain.ExecutionLogEntry{
-			{Seq: 1, Agent: "implementation-tdd#1", Phase: "EXECUTION.Stage-1", Stage: "Stage-1", Status: domain.StatusSUCCESS},
+			{Seq: 1, Agent: "implementation-tdd#1", Phase: "EXECUTION", Stage: "1", Status: domain.StatusSUCCESS},
 		},
 	}
 	rig.adapter.Queue("implementation-review", review...)
 	rig.adapter.Queue("commit-manager-git", harness.ScriptedEntry{Response: resp(domain.StatusSUCCESS, "committed")})
 	if kind == pathConsult {
-		rig.consult.queueStagedDispatch("implementation-review", "review", 1, 1)
+		rig.consult.queueStagedDispatch("implementation-review", "review", 1, "1")
 	}
 	rig.consult.queueStop("done")
 	rig.consult.queueStop("done")
@@ -498,17 +515,17 @@ func stageReviewAttempt(status domain.StatusCode, stamp, tag string) harness.Scr
 	}
 }
 
-func startStageEnd(rig *detectingRig, kind dispatchPathKind) {
-	cfg := rig.config(kind, "hitl-stage-end")
+func startIterationEnd(rig *detectingRig, kind dispatchPathKind) {
+	cfg := rig.config(kind, "hitl-iteration-end")
 	cfg.IsNewRun = false
 	cfg.RunID = testRunID
 	rig.ses.Start(context.Background(), cfg) //nolint:errcheck
 }
 
-// TestSession_HITLGate_RepairedNonSuccess_FiresNoStageEnd verifies that a
+// TestSession_HITLGate_RepairedNonSuccess_FiresNoIterationEnd verifies that a
 // repaired COMPLETED_NEEDS_ACTION or PARTIALLY_DONE that is the last workflow
-// step of a stage does not fire STAGE_END.
-func TestSession_HITLGate_RepairedNonSuccess_FiresNoStageEnd(t *testing.T) {
+// step of a stage does not fire ITERATION_END.
+func TestSession_HITLGate_RepairedNonSuccess_FiresNoIterationEnd(t *testing.T) {
 	statuses := []domain.StatusCode{domain.StatusCOMPLETED_NEEDS_ACTION, domain.StatusPARTIALLY_DONE}
 	for _, kind := range []dispatchPathKind{pathAuto, pathConsult} {
 		for _, orig := range statuses {
@@ -516,42 +533,42 @@ func TestSession_HITLGate_RepairedNonSuccess_FiresNoStageEnd(t *testing.T) {
 				continue // routes as a mechanical re-dispatch in auto modes, covered by the retry tests
 			}
 			t.Run(string(kind)+"/"+string(orig), func(t *testing.T) {
-				rig := stageEndRig(t, kind,
+				rig := iterationEndRig(t, kind,
 					stageReviewAttempt(orig, "false", "v1"),
 					stageReviewAttempt(domain.StatusSUCCESS, "true", "v2"),
 				)
 
-				startStageEnd(rig, kind)
+				startIterationEnd(rig, kind)
 
 				if n := rig.invocationsOf("implementation-review"); n != 2 {
 					t.Fatalf("implementation-review invocations: want 2, got %d", n)
 				}
 				if n := rig.invocationsOf("commit-manager-git"); n != 0 {
-					t.Errorf("STAGE_END must follow the routed %s status and not fire, got %d commit dispatch(es)", orig, n)
+					t.Errorf("ITERATION_END must follow the routed %s status and not fire, got %d commit dispatch(es)", orig, n)
 				}
 			})
 		}
 	}
 }
 
-// TestSession_HITLGate_RepairedSuccess_FiresStageEndOnce verifies that a
-// gate-discharged original SUCCESS fires STAGE_END exactly once, not once per
+// TestSession_HITLGate_RepairedSuccess_FiresIterationEndOnce verifies that a
+// gate-discharged original SUCCESS fires ITERATION_END exactly once, not once per
 // attempt.
-func TestSession_HITLGate_RepairedSuccess_FiresStageEndOnce(t *testing.T) {
+func TestSession_HITLGate_RepairedSuccess_FiresIterationEndOnce(t *testing.T) {
 	for _, kind := range []dispatchPathKind{pathAuto, pathConsult} {
 		t.Run(string(kind), func(t *testing.T) {
-			rig := stageEndRig(t, kind,
+			rig := iterationEndRig(t, kind,
 				stageReviewAttempt(domain.StatusSUCCESS, "false", "v1"),
 				stageReviewAttempt(domain.StatusSUCCESS, "true", "v2"),
 			)
 
-			startStageEnd(rig, kind)
+			startIterationEnd(rig, kind)
 
 			if n := rig.invocationsOf("implementation-review"); n != 2 {
 				t.Fatalf("implementation-review invocations: want 2, got %d", n)
 			}
 			if n := rig.invocationsOf("commit-manager-git"); n != 1 {
-				t.Errorf("STAGE_END must fire exactly once, got %d commit dispatch(es)", n)
+				t.Errorf("ITERATION_END must fire exactly once, got %d commit dispatch(es)", n)
 			}
 		})
 	}

@@ -90,7 +90,7 @@ func TestScan_UnresumableRun_CarriesPhaseStageLastAgent(t *testing.T) {
 	// from current_state, not left zero-valued.
 	rootDir := t.TempDir()
 	folder := newTestRunFolder(t, rootDir, runID1)
-	writeArtifactWithState(t, folder, "COMPLETED", "Stage-2", "agent#3", t1)
+	writeArtifactWithState(t, folder, "COMPLETED", "2", "agent#3", t1)
 	scanner := runscan.NewDirScanner()
 
 	result, err := scanner.Scan(rootDir)
@@ -105,8 +105,8 @@ func TestScan_UnresumableRun_CarriesPhaseStageLastAgent(t *testing.T) {
 	if u.Phase != "COMPLETED" {
 		t.Errorf("Phase = %q, want %q", u.Phase, "COMPLETED")
 	}
-	if u.Stage != "Stage-2" {
-		t.Errorf("Stage = %q, want %q", u.Stage, "Stage-2")
+	if u.Stage != "2" {
+		t.Errorf("Stage = %q, want %q", u.Stage, "2")
 	}
 	if u.LastAgent != "agent#3" {
 		t.Errorf("LastAgent = %q, want %q", u.LastAgent, "agent#3")
@@ -118,7 +118,7 @@ func TestScan_ResumableCandidate_CarriesPhaseStageLastAgent(t *testing.T) {
 	// current_state, not left zero-valued.
 	rootDir := t.TempDir()
 	folder := newTestRunFolder(t, rootDir, runID1)
-	writeArtifactWithState(t, folder, "EXECUTION", "Stage-1", "agent#2", t1)
+	writeArtifactWithState(t, folder, "EXECUTION", "1", "agent#2", t1)
 	scanner := runscan.NewDirScanner()
 
 	result, err := scanner.Scan(rootDir)
@@ -133,8 +133,8 @@ func TestScan_ResumableCandidate_CarriesPhaseStageLastAgent(t *testing.T) {
 	if c.Phase != "EXECUTION" {
 		t.Errorf("Phase = %q, want %q", c.Phase, "EXECUTION")
 	}
-	if c.Stage != "Stage-1" {
-		t.Errorf("Stage = %q, want %q", c.Stage, "Stage-1")
+	if c.Stage != "1" {
+		t.Errorf("Stage = %q, want %q", c.Stage, "1")
 	}
 	if c.LastAgent != "agent#2" {
 		t.Errorf("LastAgent = %q, want %q", c.LastAgent, "agent#2")

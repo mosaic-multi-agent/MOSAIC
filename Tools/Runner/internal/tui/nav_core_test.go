@@ -78,6 +78,17 @@ func TestHarnessScreen_Enter_DiscoveryFailure_TransitionsToDoneScreen(t *testing
 	}
 }
 
+// navCoreOrchestratorContent is a minimal orchestrator file with one workflow
+// region, so that orchfile.EnumerateWorkflows returns successfully.
+const navCoreOrchestratorContent = `<Workflow type="core" name="test-workflow" version="1.0">
+## Test Workflow
+
+| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
+|-------|----------|:----:|------------|-------------|-------|--------|
+| PLANNING | planner | TRUE | COMPLETE | - | - | Plan.md |
+</Workflow>
+`
+
 // TestHarnessScreen_Enter_DiscoverySuccess_TransitionsToWorkflowScreen verifies
 // that when OrchestratorDiscoverer returns a valid orchestrator path, pressing
 // Enter on the harness screen transitions to screenSetupWorkflow and populates
@@ -92,15 +103,7 @@ func TestHarnessScreen_Enter_DiscoverySuccess_TransitionsToWorkflowScreen(t *tes
 	// orchfile.EnumerateWorkflows returns successfully.
 	orchDir := t.TempDir()
 	orchFilePath := filepath.Join(orchDir, "orchestrator-script.md")
-	orchContent := `<Workflow type="core" name="test-workflow" version="1.0">
-## Test Workflow
-
-| Phase | Subagent | HITL | Input | Output |
-|-------|----------|:----:|-------|--------|
-| PLANNING | planner | TRUE | - | Plan.md |
-</Workflow>
-`
-	if err := os.WriteFile(orchFilePath, []byte(orchContent), 0o644); err != nil {
+	if err := os.WriteFile(orchFilePath, []byte(navCoreOrchestratorContent), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 

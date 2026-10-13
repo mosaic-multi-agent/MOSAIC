@@ -48,28 +48,28 @@ func stage1DoneAutoStateArts() domain.ArtifactState {
 // TestSession_ConsultRoute_FallbackArtifacts_ResolvesTemplateTokens verifies
 // that when a consultant-routed dispatch falls back to a row's declared
 // OutputArtifacts (because the RoutingInstruction does not supply its own),
-// and those declared paths contain the {StageNumber} template token, the
+// and those declared paths contain the {Stage} template token, the
 // dispatched ProtocolRequest and the CompletedStep applied to the store both
-// carry fully resolved paths with no literal {StageNumber} token.
+// carry fully resolved paths with no literal {Stage} token.
 //
 // The test uses consult-staged-artifacts-orch.md, which declares
-// "Stage-{StageNumber}/Output.md" in the Output column. After plan expansion
+// "Stage-{Stage}/Output.md" in the Output column. After plan expansion
 // with Stage-1 and Stage-2, row 1 is EXECUTION.Stage-2/agent-a with
-// OutputArtifacts = ["Stage-{StageNumber}/Output.md"].
+// OutputArtifacts = ["Stage-{Stage}/Output.md"].
 //
 // Setup: Stage-1 pre-seeded as complete (Stage = "1"). The engine auto-dispatches
 // Stage-2/agent-a (row 1). The harness fails, triggering consultRoute with
 // deviation.CurrentStage = "2". The consultant re-routes to row 1 without
 // supplying OutputArtifacts, so consultRoute falls back to row.OutputArtifacts.
 //
-// With the current code, the unresolved "Stage-{StageNumber}/Output.md" is
+// With the current code, the unresolved "Stage-{Stage}/Output.md" is
 // passed directly to the request and CompletedStep. After the D3b fix,
 // engine.ResolveArtifacts is called, yielding "Stage-2/Output.md".
 func TestSession_ConsultRoute_FallbackArtifacts_ResolvesTemplateTokens(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
-	// Row 0 is EXECUTION.[StageNumber]/agent-a; the instruction names stage 2.
+	// Row 0 is EXECUTION.[Stage]/agent-a; the instruction names stage 2.
 	// No OutputArtifacts in the instruction: consultRoute falls back to row.OutputArtifacts.
-	consultant.queueStagedDispatch("agent-a", "re-route Stage-2/agent-a", 0, 2)
+	consultant.queueStagedDispatch("agent-a", "re-route Stage-2/agent-a", 0, "2")
 	consultant.queueStop("Stage-2/agent-a completed")
 
 	dir := scopedTempDir(t)
@@ -119,7 +119,7 @@ func TestSession_ConsultRoute_FallbackArtifacts_ResolvesTemplateTokens(t *testin
 		t.Fatalf("want nil error, got %v", err)
 	}
 
-	const unresolved = "{StageNumber}"
+	const unresolved = "{Stage}"
 
 	// Check the dispatched ProtocolRequest: the consultant-routed invocation
 	// (index 1, after the failed auto-routed attempt at index 0) must not
@@ -140,7 +140,7 @@ func TestSession_ConsultRoute_FallbackArtifacts_ResolvesTemplateTokens(t *testin
 	// the request arrives with no output artifacts.
 	if len(consultReq.OutputArtifacts) == 0 {
 		t.Fatal("want non-empty OutputArtifacts in consultant-routed ProtocolRequest " +
-			"(row declares Stage-{StageNumber}/Output.md), got empty; " +
+			"(row declares Stage-{Stage}/Output.md), got empty; " +
 			"consultRoute must populate the request from row.OutputArtifacts when the " +
 			"RoutingInstruction does not supply its own artifacts")
 	}

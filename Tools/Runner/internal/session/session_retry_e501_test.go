@@ -249,7 +249,7 @@ func TestSession_E501_RowsReadBackFromArtifactFileKeepTheirErrorCode(t *testing.
 	if err != nil {
 		t.Fatalf("read artifact: %v", err)
 	}
-	if left := engine.E501BudgetRemaining(state.ExecutionLog, domain.WorkflowRowFromIndex(0), ""); left != 0 {
+	if left := engine.E501BudgetRemaining(state.ExecutionLog, domain.RoutingRow{Index: 0}, ""); left != 0 {
 		t.Errorf("want the budget read back from the file as used up, got %d left", left)
 	}
 	n := 0

@@ -7,9 +7,9 @@ package builtin_test
 //
 // Coverage:
 //
-//   Model list invariants (three harnesses):
-//   - No duplicate model ID appears in any harness's Models.IDs list.
-//   - No stale embedded-only model ID survives in any harness.
+//   Model block retirement (four harnesses):
+//   - No builtin descriptor (claude-code, opencode, ghcp-cli, vscode-ghcp) declares a
+//     models: block; model data comes from the shared catalog.
 //
 //   Key order preservation (three harnesses):
 //   - mosaic_orchestrator_injections_version is present in FrontmatterSpec.KeyOrder for every
@@ -101,45 +101,15 @@ func indexInSlice(slice []string, name string) int {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// T1.1 — Model ID list migration (vscode-ghcp) and retirement (CLI harnesses)
+// Model block retirement (all builtin harnesses)
 // ─────────────────────────────────────────────────────────────────
 
-// TestDescriptorConsolidation_VsCodeGHCP_ModelIDs verifies the post-migration invariants
-// for vscode-ghcp's embedded descriptor: no duplicate model IDs, and no stale IDs that
-// appeared only in the old public copy. vscode-ghcp is not a CLI-backed harness and keeps
-// its own YAML-sourced model catalog unchanged.
-func TestDescriptorConsolidation_VsCodeGHCP_ModelIDs(t *testing.T) {
-	d := loadEmbeddedDescriptor(t, "vscodeghcp", "vscode-ghcp.yaml")
-
-	// Assert each ID appears at most once.
-	seen := make(map[string]int)
-	for _, id := range d.Models.IDs {
-		seen[id]++
-	}
-	for id, count := range seen {
-		if count > 1 {
-			t.Errorf("vscode-ghcp: model ID %q appears %d times in Models.IDs; each ID must appear exactly once",
-				id, count)
-		}
-	}
-
-	// Assert stale embedded-only IDs are absent.
-	staleIDs := []string{"Claude Haiku 4.6", "GPT-5", "GPT-5 mini"}
-	for _, stale := range staleIDs {
-		if containsStr(d.Models.IDs, stale) {
-			t.Errorf("vscode-ghcp: stale embedded-only model ID %q is still present; "+
-				"it must not survive the migration to the public list",
-				stale)
-		}
-	}
-}
-
-// TestDescriptorConsolidation_CLIHarnesses_ModelsBlockRetired verifies that the three
-// CLI-backed builtin descriptors (claude-code, opencode, ghcp-cli) no longer declare a
-// models: block in their YAML. Model data for these harnesses is now sourced exclusively
+// TestDescriptorConsolidation_BuiltinHarnesses_ModelsBlockRetired verifies that the four
+// builtin descriptors (claude-code, opencode, ghcp-cli, vscode-ghcp) no longer declare a
+// models: block in their YAML. Model data for these harnesses is sourced exclusively
 // from the shared catalog via the registry ModelCatalog hook. An accidentally re-added
 // models: block would create a silent disagreement between the YAML and the shared catalog.
-func TestDescriptorConsolidation_CLIHarnesses_ModelsBlockRetired(t *testing.T) {
+func TestDescriptorConsolidation_BuiltinHarnesses_ModelsBlockRetired(t *testing.T) {
 	cases := []struct {
 		harness string
 		dir     string
@@ -148,6 +118,7 @@ func TestDescriptorConsolidation_CLIHarnesses_ModelsBlockRetired(t *testing.T) {
 		{harness: "claude-code", dir: "claudecode", file: "claude-code.yaml"},
 		{harness: "opencode", dir: "opencode", file: "opencode.yaml"},
 		{harness: "ghcp-cli", dir: "ghcpcli", file: "ghcp-cli.yaml"},
+		{harness: "vscode-ghcp", dir: "vscodeghcp", file: "vscode-ghcp.yaml"},
 	}
 
 	for _, tc := range cases {
@@ -156,13 +127,14 @@ func TestDescriptorConsolidation_CLIHarnesses_ModelsBlockRetired(t *testing.T) {
 			d := loadEmbeddedDescriptor(t, tc.dir, tc.file)
 			if len(d.Models.IDs) != 0 {
 				t.Errorf("%s: descriptor Models.IDs is non-empty (%v); "+
-					"the models: block must be retired from CLI-backed harness YAML descriptors; "+
+					"the models: block must be retired from builtin harness YAML descriptors; "+
 					"model data for this harness now comes exclusively from the shared catalog",
 					tc.harness, d.Models.IDs)
 			}
 			if d.Models.FormatHint != "" {
 				t.Errorf("%s: descriptor Models.FormatHint = %q; "+
-					"the models: block must be retired from CLI-backed harness YAML descriptors",
+					"the models: block must be retired from builtin harness YAML descriptors; "+
+					"model data comes from the shared catalog",
 					tc.harness, d.Models.FormatHint)
 			}
 		})

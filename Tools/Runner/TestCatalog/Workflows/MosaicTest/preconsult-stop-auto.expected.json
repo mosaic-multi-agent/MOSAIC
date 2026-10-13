@@ -1,0 +1,7 @@
+{
+  "exit_code": 6,
+  "dispatches": [
+    { "agent": "orchestrator-script", "expect_status": "" }
+  ],
+  "stderr_contains": "PRECONSULT-STOP-MARKER"
+}

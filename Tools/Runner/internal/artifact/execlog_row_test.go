@@ -14,7 +14,7 @@ import (
 	"mosaic-run/internal/domain"
 )
 
-const wantExecLogHeader = "| Seq | Agent | Phase | Stage | WorkflowRow | Status | Timestamp | Summary | Inputs | Checkpoint |"
+const wantExecLogHeader = "| Seq | Agent | Phase | Iteration | WorkflowRow | Status | Timestamp | Summary | Inputs | Checkpoint |"
 
 const rowLogSeparator = "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
 
@@ -51,7 +51,7 @@ func renderLines(t *testing.T, st domain.ArtifactState) []string {
 	return strings.Split(string(data), "\n")
 }
 
-func TestRender_ExecutionLogHeader_HasWorkflowRowAfterStage(t *testing.T) {
+func TestRender_ExecutionLogHeader_HasWorkflowRowAfterIteration(t *testing.T) {
 	var header string
 	for _, l := range renderLines(t, rowTestState()) {
 		if strings.HasPrefix(l, "| Seq") {
@@ -125,7 +125,7 @@ func artifactWithLog(logLines ...string) []byte {
 		"checkpoints: disabled\n" +
 		"current_state:\n" +
 		"  phase: EXECUTION\n" +
-		"  stage: null\n" +
+		"  iteration: null\n" +
 		"  last_status: SUCCESS\n" +
 		"  last_agent: \"worker#1\"\n" +
 		"  error_code: null\n" +
@@ -145,7 +145,7 @@ func artifactWithLog(logLines ...string) []byte {
 
 func TestParse_LogWithoutWorkflowRowColumn_ParsesWithNoRow(t *testing.T) {
 	data := artifactWithLog(
-		"| Seq | Agent | Phase | Stage | Status | Timestamp | Summary | Inputs | Checkpoint |",
+		"| Seq | Agent | Phase | Iteration | Status | Timestamp | Summary | Inputs | Checkpoint |",
 		"| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
 		"| 1 | worker#1 | EXECUTION | 1 | SUCCESS | 2026-01-01T01:00:00Z | did it | - | - |",
 	)
@@ -166,9 +166,9 @@ func TestParse_LogWithoutWorkflowRowColumn_ParsesWithNoRow(t *testing.T) {
 }
 
 func TestParse_WorkflowRowColumn_LocatedByHeaderNotPosition(t *testing.T) {
-	// WorkflowRow is moved to the last position; Stage and Status stay readable.
+	// WorkflowRow is moved to the last position; Iteration and Status stay readable.
 	data := artifactWithLog(
-		"| Seq | Agent | Phase | Stage | Status | Timestamp | Summary | Inputs | Checkpoint | WorkflowRow |",
+		"| Seq | Agent | Phase | Iteration | Status | Timestamp | Summary | Inputs | Checkpoint | WorkflowRow |",
 		rowLogSeparator,
 		"| 1 | worker#1 | EXECUTION | 1 | SUCCESS | 2026-01-01T01:00:00Z | did it | - | - | 4 |",
 	)

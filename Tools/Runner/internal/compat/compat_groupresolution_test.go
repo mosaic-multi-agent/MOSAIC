@@ -1,318 +1,94 @@
 package compat_test
 
-// Tests for execution group resolution: row ranges and group names for
-// brownfield-tdd-build-verified, brownfield-tdd, greenfield-tdd, quick-fix,
-// and implementation-only workflows.
+// Tests for execution group resolution: group names and row ranges of the
+// brownfield-tdd-build-verified, brownfield-tdd, greenfield-tdd, quick-fix and
+// implementation-only shapes, asserted against the per-block admitted model.
 
 import (
+	"reflect"
 	"testing"
 
-	"mosaic-run/internal/compat"
 	"mosaic-run/internal/domain"
 )
 
-// ---- Execution group resolution: brownfield-tdd-build-verified ----
+func TestAdmit_CatalogShapes_GroupNamesAndRowRanges(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		want    []domain.ExecutionGroup
+	}{
+		{"brownfield-tdd-build-verified", brownfieldBuildVerifiedContent, []domain.ExecutionGroup{
+			{Name: "Test", StartRow: 7, EndRow: 10},
+			{Name: "Implementation", StartRow: 10, EndRow: 13},
+		}},
+		{"brownfield-tdd", brownfieldTDDContent, []domain.ExecutionGroup{
+			{Name: "Test", StartRow: 7, EndRow: 9},
+			{Name: "Implementation", StartRow: 9, EndRow: 11},
+		}},
+		{"greenfield-tdd", greenFieldTDDContent, []domain.ExecutionGroup{
+			{Name: "Test", StartRow: 8, EndRow: 10},
+			{Name: "Implementation", StartRow: 10, EndRow: 12},
+		}},
+		{"quick-fix", quickFixContent, []domain.ExecutionGroup{{Name: "", StartRow: 2, EndRow: 3}}},
+		{"implementation-only", implOnlyContent, []domain.ExecutionGroup{{Name: "", StartRow: 0, EndRow: 2}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			aw := mustAdmit(t, mustParseShape(t, tc.content, tc.name, "4.0"))
 
-func TestAdmit_BrownfieldTDDBuildVerified_TwoGroups(t *testing.T) {
-	table := mustParseTable(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) != 2 {
-		t.Errorf("Groups: want 2 groups, got %d", len(aw.Groups))
+			if got := stageBlock(t, aw).Groups; !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("block Groups: want %+v, got %+v", tc.want, got)
+			}
+		})
 	}
 }
 
-func TestAdmit_BrownfieldTDDBuildVerified_TestGroupName(t *testing.T) {
-	table := mustParseTable(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	aw := mustAdmit(t, table)
+func TestAdmit_TwoGroupShape_GroupsAreContiguousAndCoverTheBlock(t *testing.T) {
+	aw := mustAdmit(t, mustParseShape(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "4.0"))
 
-	if len(aw.Groups) < 1 {
-		t.Fatal("Groups: want at least 1 group")
-	}
-	if aw.Groups[0].Name != "Test" {
-		t.Errorf("Groups[0].Name: want %q, got %q", "Test", aw.Groups[0].Name)
-	}
-}
+	b := stageBlock(t, aw)
 
-func TestAdmit_BrownfieldTDDBuildVerified_TestGroupStartRow(t *testing.T) {
-	table := mustParseTable(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) < 1 {
-		t.Fatal("Groups: want at least 1 group")
+	if len(b.Groups) != 2 {
+		t.Fatalf("Groups: want 2, got %d", len(b.Groups))
 	}
-	if aw.Groups[0].StartRow != 7 {
-		t.Errorf("Groups[0].StartRow: want 7, got %d", aw.Groups[0].StartRow)
+	if b.Groups[0].EndRow != b.Groups[1].StartRow {
+		t.Errorf("groups not contiguous: first ends at %d, second starts at %d", b.Groups[0].EndRow, b.Groups[1].StartRow)
+	}
+	if b.Groups[0].StartRow != b.StartRow || b.Groups[1].EndRow != b.EndRow {
+		t.Errorf("groups must cover the block [%d,%d), got [%d,%d)",
+			b.StartRow, b.EndRow, b.Groups[0].StartRow, b.Groups[1].EndRow)
 	}
 }
 
-func TestAdmit_BrownfieldTDDBuildVerified_TestGroupEndRow(t *testing.T) {
-	table := mustParseTable(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	aw := mustAdmit(t, table)
+func TestAdmit_UngroupedBlock_HoldsOneImplicitGroupWithEmptyName(t *testing.T) {
+	for _, fx := range shapeFixtures() {
+		if fx.grouped {
+			continue
+		}
+		t.Run(fx.name, func(t *testing.T) {
+			aw := mustAdmit(t, mustParseShape(t, fx.content, fx.id, "4.0"))
 
-	if len(aw.Groups) < 1 {
-		t.Fatal("Groups: want at least 1 group")
-	}
-	if aw.Groups[0].EndRow != 10 {
-		t.Errorf("Groups[0].EndRow: want 10 (exclusive), got %d", aw.Groups[0].EndRow)
-	}
-}
+			b := stageBlock(t, aw)
 
-func TestAdmit_BrownfieldTDDBuildVerified_ImplementationGroupName(t *testing.T) {
-	table := mustParseTable(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) < 2 {
-		t.Fatal("Groups: want at least 2 groups")
-	}
-	if aw.Groups[1].Name != "Implementation" {
-		t.Errorf("Groups[1].Name: want %q, got %q", "Implementation", aw.Groups[1].Name)
+			if len(b.Groups) != 1 || b.Groups[0].Name != "" {
+				t.Errorf("Groups: want one implicit group with an empty name, got %+v", b.Groups)
+			}
+		})
 	}
 }
 
-func TestAdmit_BrownfieldTDDBuildVerified_ImplementationGroupStartRow(t *testing.T) {
-	table := mustParseTable(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	aw := mustAdmit(t, table)
+func TestAdmit_RepeatedAgentThroughModeQualifiers_IsAdmittedAsDistinctRows(t *testing.T) {
+	// build-review appears in two rows, told apart by the qualifiers (tests) and
+	// (impl); both rows keep the bare id build-review.
+	table := mustParseShape(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "4.0")
 
-	if len(aw.Groups) < 2 {
-		t.Fatal("Groups: want at least 2 groups")
+	aw := admitIn(t, table, domain.ExecutionModeAuto)
+
+	first, second := aw.Table.Rows[8], aw.Table.Rows[11]
+	if first.BareAgentID() != "build-review" || second.BareAgentID() != "build-review" {
+		t.Fatalf("rows 9 and 12 must both be build-review, got %q and %q", first.BareAgentID(), second.BareAgentID())
 	}
-	if aw.Groups[1].StartRow != 10 {
-		t.Errorf("Groups[1].StartRow: want 10, got %d", aw.Groups[1].StartRow)
-	}
-}
-
-func TestAdmit_BrownfieldTDDBuildVerified_ImplementationGroupEndRow(t *testing.T) {
-	table := mustParseTable(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) < 2 {
-		t.Fatal("Groups: want at least 2 groups")
-	}
-	if aw.Groups[1].EndRow != 13 {
-		t.Errorf("Groups[1].EndRow: want 13 (exclusive), got %d", aw.Groups[1].EndRow)
-	}
-}
-
-func TestAdmit_BrownfieldTDDBuildVerified_GroupsCoverAllExecutionRows(t *testing.T) {
-	table := mustParseTable(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) != 2 {
-		t.Fatalf("Groups: want 2, got %d", len(aw.Groups))
-	}
-	if aw.Groups[0].EndRow != aw.Groups[1].StartRow {
-		t.Errorf("Groups not contiguous: Groups[0].EndRow=%d, Groups[1].StartRow=%d",
-			aw.Groups[0].EndRow, aw.Groups[1].StartRow)
-	}
-	if aw.Groups[0].StartRow != 7 || aw.Groups[1].EndRow != 13 {
-		t.Errorf("Groups span: want rows 7-13, got %d-%d",
-			aw.Groups[0].StartRow, aw.Groups[1].EndRow)
-	}
-}
-
-func TestAdmit_BrownfieldTDDBuildVerified_DuplicateAgent_Allowed(t *testing.T) {
-	table := mustParseTable(t, brownfieldBuildVerifiedContent, "brownfield-tdd-build-verified", "2.0")
-
-	_, err := compat.Admit(table, domain.ExecutionModeAuto)
-
-	if err != nil {
-		t.Errorf("Admit must allow duplicate agent identifiers (build-review appears twice): %v", err)
-	}
-}
-
-// ---- Execution group resolution: brownfield-tdd ----
-
-func TestAdmit_BrownfieldTDD_TestGroupStartRow(t *testing.T) {
-	table := mustParseTable(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) < 1 {
-		t.Fatal("Groups: want at least 1")
-	}
-	if aw.Groups[0].StartRow != 7 {
-		t.Errorf("Groups[0].StartRow: want 7, got %d", aw.Groups[0].StartRow)
-	}
-}
-
-func TestAdmit_BrownfieldTDD_TestGroupEndRow(t *testing.T) {
-	table := mustParseTable(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) < 1 {
-		t.Fatal("Groups: want at least 1")
-	}
-	if aw.Groups[0].EndRow != 9 {
-		t.Errorf("Groups[0].EndRow: want 9, got %d", aw.Groups[0].EndRow)
-	}
-}
-
-func TestAdmit_BrownfieldTDD_ImplementationGroupStartRow(t *testing.T) {
-	table := mustParseTable(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) < 2 {
-		t.Fatal("Groups: want at least 2")
-	}
-	if aw.Groups[1].StartRow != 9 {
-		t.Errorf("Groups[1].StartRow: want 9, got %d", aw.Groups[1].StartRow)
-	}
-}
-
-func TestAdmit_BrownfieldTDD_ImplementationGroupEndRow(t *testing.T) {
-	table := mustParseTable(t, brownfieldTDDContent, "brownfield-tdd", "3.4")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) < 2 {
-		t.Fatal("Groups: want at least 2")
-	}
-	if aw.Groups[1].EndRow != 11 {
-		t.Errorf("Groups[1].EndRow: want 11, got %d", aw.Groups[1].EndRow)
-	}
-}
-
-// ---- Execution group resolution: greenfield-tdd ----
-
-func TestAdmit_GreenFieldTDD_TestGroupStartRow(t *testing.T) {
-	table := mustParseTable(t, greenFieldTDDContent, "greenfield-tdd", "3.3")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) < 1 {
-		t.Fatal("Groups: want at least 1")
-	}
-	if aw.Groups[0].StartRow != 8 {
-		t.Errorf("Groups[0].StartRow: want 8, got %d", aw.Groups[0].StartRow)
-	}
-}
-
-func TestAdmit_GreenFieldTDD_TestGroupEndRow(t *testing.T) {
-	table := mustParseTable(t, greenFieldTDDContent, "greenfield-tdd", "3.3")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) < 1 {
-		t.Fatal("Groups: want at least 1")
-	}
-	if aw.Groups[0].EndRow != 10 {
-		t.Errorf("Groups[0].EndRow: want 10, got %d", aw.Groups[0].EndRow)
-	}
-}
-
-func TestAdmit_GreenFieldTDD_ImplementationGroupStartRow(t *testing.T) {
-	table := mustParseTable(t, greenFieldTDDContent, "greenfield-tdd", "3.3")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) < 2 {
-		t.Fatal("Groups: want at least 2")
-	}
-	if aw.Groups[1].StartRow != 10 {
-		t.Errorf("Groups[1].StartRow: want 10, got %d", aw.Groups[1].StartRow)
-	}
-}
-
-func TestAdmit_GreenFieldTDD_ImplementationGroupEndRow(t *testing.T) {
-	table := mustParseTable(t, greenFieldTDDContent, "greenfield-tdd", "3.3")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) < 2 {
-		t.Fatal("Groups: want at least 2")
-	}
-	if aw.Groups[1].EndRow != 12 {
-		t.Errorf("Groups[1].EndRow: want 12, got %d", aw.Groups[1].EndRow)
-	}
-}
-
-// ---- Execution group resolution: quick-fix (single-group) ----
-
-func TestAdmit_QuickFix_OneGroup(t *testing.T) {
-	table := mustParseTable(t, quickFixContent, "quick-fix", "3.0")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) != 1 {
-		t.Errorf("Groups: want 1 group for single-group workflow, got %d", len(aw.Groups))
-	}
-}
-
-func TestAdmit_QuickFix_GroupStartRow(t *testing.T) {
-	table := mustParseTable(t, quickFixContent, "quick-fix", "3.0")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) < 1 {
-		t.Fatal("Groups: want at least 1")
-	}
-	if aw.Groups[0].StartRow != 2 {
-		t.Errorf("Groups[0].StartRow: want 2, got %d", aw.Groups[0].StartRow)
-	}
-}
-
-func TestAdmit_QuickFix_GroupEndRow(t *testing.T) {
-	table := mustParseTable(t, quickFixContent, "quick-fix", "3.0")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) < 1 {
-		t.Fatal("Groups: want at least 1")
-	}
-	if aw.Groups[0].EndRow != 3 {
-		t.Errorf("Groups[0].EndRow: want 3, got %d", aw.Groups[0].EndRow)
-	}
-}
-
-// ---- Execution group resolution: implementation-only (single-group) ----
-
-func TestAdmit_ImplementationOnly_OneGroup(t *testing.T) {
-	table := mustParseTable(t, implOnlyContent, "implementation-only", "3.1")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) != 1 {
-		t.Errorf("Groups: want 1 group for single-group workflow, got %d", len(aw.Groups))
-	}
-}
-
-func TestAdmit_ImplementationOnly_GroupStartRow(t *testing.T) {
-	table := mustParseTable(t, implOnlyContent, "implementation-only", "3.1")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) < 1 {
-		t.Fatal("Groups: want at least 1")
-	}
-	if aw.Groups[0].StartRow != 0 {
-		t.Errorf("Groups[0].StartRow: want 0, got %d", aw.Groups[0].StartRow)
-	}
-}
-
-func TestAdmit_ImplementationOnly_GroupEndRow(t *testing.T) {
-	table := mustParseTable(t, implOnlyContent, "implementation-only", "3.1")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) < 1 {
-		t.Fatal("Groups: want at least 1")
-	}
-	if aw.Groups[0].EndRow != 2 {
-		t.Errorf("Groups[0].EndRow: want 2, got %d", aw.Groups[0].EndRow)
-	}
-}
-
-// ---- GroupName for single-group workflows ----
-
-func TestAdmit_QuickFix_GroupName(t *testing.T) {
-	table := mustParseTable(t, quickFixContent, "quick-fix", "3.0")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) < 1 {
-		t.Fatal("Groups: want at least 1")
-	}
-	if aw.Groups[0].Name != "" {
-		t.Errorf("Groups[0].Name: want empty string for implicit group, got %q", aw.Groups[0].Name)
-	}
-}
-
-func TestAdmit_ImplementationOnly_GroupName(t *testing.T) {
-	table := mustParseTable(t, implOnlyContent, "implementation-only", "3.1")
-	aw := mustAdmit(t, table)
-
-	if len(aw.Groups) < 1 {
-		t.Fatal("Groups: want at least 1")
-	}
-	if aw.Groups[0].Name != "" {
-		t.Errorf("Groups[0].Name: want empty string for implicit group, got %q", aw.Groups[0].Name)
+	if first.Agent == second.Agent {
+		t.Errorf("the two build-review rows must keep distinct whole cells, both are %q", first.Agent)
 	}
 }

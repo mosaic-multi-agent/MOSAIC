@@ -63,9 +63,9 @@ type Options struct {
 	// returns the effective catalog for that module.
 	//
 	// Returning a catalog with an empty IDs list means "no shared entry for this harness; keep
-	// the descriptor's own declared catalog unchanged" — which is what keeps a non-CLI-backed
-	// builtin, a descriptor-tier harness and an external harness on their own model data rather
-	// than emptying them.
+	// the descriptor's own declared catalog unchanged" — which is what keeps a descriptor-tier or
+	// external harness (one the shared catalog does not know) on its own model data rather than
+	// emptying it.
 	//
 	// A non-nil return with a non-empty IDs list installs that catalog on the module's
 	// Descriptor(), through the same shallow-copy shim the ToolMappings hook uses: the inner

@@ -599,34 +599,38 @@ The most common fixture is a pre-built orchestration document used to seed the s
 type: orchestration-artifact
 run_id: "test-run"
 workflow: brownfield-tdd
-workflow_version: "3.7"
+workflow_version: "4.0"
 task: "Add rate limiting to the API gateway in src/gateway/"
 started: 2026-01-01T00:00:00Z
 last_updated: 2026-01-01T00:25:00Z
 global_sequence: 5
+dispatch: sequential
 checkpoints: disabled
 commits: disabled
 current_state:
   phase: PLANNING
-  stage: null
+  iteration: null
   last_status: SUCCESS
   last_agent: "plan-review#5"
   error_code: null
 ---
 
 <ExecutionLog type="core">
-| Seq | Agent | Phase | Stage | WorkflowRow | Status | Timestamp | Summary | Inputs | Checkpoint |
-|-----|-------|-------|-------|-------------|--------|-----------|---------|--------|------------|
+
+| Seq | Agent | Phase | Iteration | WorkflowRow | Status | Timestamp | Summary | Inputs | Checkpoint |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | codebase-research#1 | RESEARCH | - | 1 | SUCCESS | 2026-01-01T00:05:00Z | Analyzed gateway codebase. | - | - |
 | 2 | requirements-refinement#2 | RESEARCH | - | 2 | SUCCESS | 2026-01-01T00:10:00Z | Refined requirements. | Research.md | - |
 | 3 | requirements-review#3 | RESEARCH | - | 3 | SUCCESS | 2026-01-01T00:15:00Z | Requirements review passed. | Requirements.md | - |
 | 4 | planner-tdd-soft#4 | PLANNING | - | 4 | SUCCESS | 2026-01-01T00:20:00Z | Created 2-stage plan. | Research.md, Requirements.md | - |
 | 5 | plan-review#5 | PLANNING | - | 5 | SUCCESS | 2026-01-01T00:25:00Z | Plan review passed. | Plan.md, Stage-1/Plan.md | - |
+
 </ExecutionLog>
 
 <Artifacts type="core">
+
 | Artifact | Created In | Created By |
-|----------|------------|------------|
+| --- | --- | --- |
 | Research.md | RESEARCH | codebase-research#1 |
 | Requirements.md | RESEARCH | requirements-refinement#2 |
 | requirements-review.md | RESEARCH | requirements-review#3 |
@@ -636,17 +640,22 @@ current_state:
 | Stage-2/Plan.md | PLANNING | planner-tdd-soft#4 |
 | Stage-2/PlanProgress.md | PLANNING | planner-tdd-soft#4 |
 | plan-review.md | PLANNING | plan-review#5 |
+
 </Artifacts>
 
 <WorkflowNotes type="core">
+
 | Seq | Note |
-|-----|------|
+| --- | --- |
+
 </WorkflowNotes>
 ```
 
 **Frontmatter fields that matter for assertions:**
 - `current_state.phase` and `current_state.last_status` — what the `final_state` assertion checks against
 - `global_sequence` — must be consistent with the Execution Log; the orchestrator increments from this value
+- `dispatch` — `sequential` or `parallel`, set once at run start. Record `sequential` in ordinary seeds. `commits: enabled` requires `sequential`, and any value other than the two makes the orchestrator refuse to resume — so a seed with the wrong value tests a refusal, not your routing condition. An absent field is read as `sequential`; leave it out only when that is what you are testing (`dispatch-absent-resume-sequential`)
+- `infrastructure_overrides` — optional set-once block replacing a declared infrastructure agent's trigger list for the run (shape: `{agent}: { triggers: [ { trigger: ..., trigger_param: ... } ] }`). Leave it out unless the test is about overrides; every trigger it names must be in the vocabulary, or the run is refused
 
 **`WorkflowRow` column:** each workflow step records the workflow-table row it ran, matching the table's `Row` column. Infrastructure, out-of-band and ad-hoc steps record `-`. Seeded logs should carry it, because live routing and resume identify the last row from it and stop and report when the agent or group at that row no longer matches.
 
@@ -760,11 +769,12 @@ Each stub agent file carries a numeric ID unique within the `TestStubs/` directo
 | 19 | `checkpoint-restore-git.md` | `checkpoint-restore-git` |
 | 20 | `orchestration-review-interval-10.md` | `orchestration-review-interval-10` |
 | 21 | `infra-phase-end.md` | `infra-phase-end` |
-| 22 | `restore-stage-end.md` | `restore-stage-end` |
+| 22 | `restore-iteration-end.md` | `restore-iteration-end` |
 | 23 | `orchestration-review-interval-3.md` | `orchestration-review-interval-3` |
-| 24 | `checkpoint-stage-end-only.md` | `checkpoint-stage-end-only` |
+| 24 | `checkpoint-iteration-end-only.md` | `checkpoint-iteration-end-only` |
+| 25 | `checkpoint-stage-end.md` | `checkpoint-stage-end` |
 
-Infrastructure agent stubs (IDs 16-19) live in the same `TestStubs/` directory — the deploy tool classifies them by frontmatter (`infrastructure`, `triggers`, `on_failure` fields), not by subdirectory. Variant stubs (IDs 20+) are test-specific configurations with different trigger parameters. See the [Infrastructure Agent Stubs](#infrastructure-agent-stubs) section below.
+Infrastructure agent stubs (IDs 16-19) live in the same `TestStubs/` directory — the deploy tool classifies them by frontmatter (`infrastructure`, `triggers`, `on_failure` fields), not by subdirectory. Variant stubs (IDs 20+) are test-specific configurations with different trigger parameters. `checkpoint-stage-end` (ID 25) deliberately declares the retired `STAGE_END` trigger and exists only for the unknown-trigger refusal test (I-8); never use it where a working checkpoint is wanted. See the [Infrastructure Agent Stubs](#infrastructure-agent-stubs) section below.
 
 ---
 
@@ -778,8 +788,8 @@ The test catalogue ships four infrastructure agent stubs in `catalog/Subagents/T
 
 | ID | File | Agent Key | Class | Triggers | On Failure |
 |----|------|-----------|-------|----------|------------|
-| 16 | `checkpoint-manager-git.md` | `checkpoint-manager-git` | `checkpoint` | STAGE_END, INVOCATION_INTERVAL(10) | halt |
-| 17 | `commit-manager-git.md` | `commit-manager-git` | `commit` | STAGE_END | continue |
+| 16 | `checkpoint-manager-git.md` | `checkpoint-manager-git` | `checkpoint` | ITERATION_END, INVOCATION_INTERVAL(10) | halt |
+| 17 | `commit-manager-git.md` | `commit-manager-git` | `commit` | ITERATION_END | continue |
 | 18 | `orchestration-review.md` | `orchestration-review` | `review` | INVOCATION_INTERVAL(30) | continue |
 | 19 | `checkpoint-restore-git.md` | `checkpoint-restore-git` | `restore` | MANUAL | halt |
 
@@ -844,7 +854,9 @@ infrastructure_agents: [checkpoint-interval-3]
 **Guidelines for variants:**
 
 - Keep the echo-agent body identical across all variants — only frontmatter differs.
-- Use descriptive names that encode the variant's purpose: `checkpoint-interval-3`, `infra-phase-end`, `checkpoint-stage-end-only`.
+- Use descriptive names that encode the variant's purpose: `checkpoint-interval-3`, `infra-phase-end`, `checkpoint-iteration-end-only`.
+- The trigger vocabulary is exactly `INVOCATION_INTERVAL`, `ITERATION_END`, `PHASE_END`, `MANUAL`. `ITERATION_END` (formerly `STAGE_END`, renamed with no alias) fires at the end of every block iteration, whatever the block is called. A commit-class agent may use `ITERATION_END` only. The deploy tool does not validate trigger names, so a typo deploys cleanly and the orchestrator then refuses the run — that is a test of the refusal, not of your trigger.
+- A variant's `name` and `description` are rendered verbatim into the orchestrator's `<InfrastructureAgents>` region, which the subject reads. Keep them neutral — a description that says what the test expects ("for refusal tests") hands the subject the answer.
 - Assign the next available ID in `TestStubs/` (continuing from 19).
 - Variants are cheap — one file per configuration. Create as many as your tests need.
 - A gated class (checkpoint, commit, restore) allows at most one active agent per class. Two agents of the same gated class in `infrastructure_agents` is a deployment error.
@@ -982,6 +994,17 @@ assertions:
 
 **Artifact assertions** follow set semantics: every `required_*` entry must be present, each `optional_*` entry may be. Anything present that is in neither list fails the assertion.
 
+An omitted list is not evaluated; an explicit empty list (`required_input_artifacts: []`) asserts the empty set. Use the empty form for infrastructure trigger dispatches, which carry no orchestration artifacts except a commit-class `ITERATION_END` dispatch's inputs (see `iteration-end-trigger-inputs`):
+
+```yaml
+  task_messages:
+    - at: 2
+      identity: { tool: dispatch, agent: checkpoint-iteration-end-only }
+      required_input_artifacts: []
+      required_output_artifacts: []
+      task_description_contains: ["ITERATION_END"]
+```
+
 #### Artifact Path Leniency
 
 The orchestrator sometimes includes extra artifacts beyond the workflow table's declared set (e.g., stage sub-plans alongside the top-level Plan.md), or uses glob-style paths like `Stage-*/Plan.md`. It may also inconsistently omit the `Orchestration-{run_id}/` prefix from artifact paths, passing bare names like `Stage-1/Plan.md` instead of the fully-qualified `Orchestration-{run_id}/Stage-1/Plan.md`.
@@ -1115,34 +1138,38 @@ If your test needs a pre-existing orchestration state (e.g. testing a mid-workfl
 type: orchestration-artifact
 run_id: "test-run"
 workflow: brownfield-tdd
-workflow_version: "3.7"
+workflow_version: "4.0"
 task: "Add rate limiting to the API gateway in src/gateway/"
 started: 2026-01-01T00:00:00Z
 last_updated: 2026-01-01T00:25:00Z
 global_sequence: 5
+dispatch: sequential
 checkpoints: disabled
 commits: disabled
 current_state:
   phase: PLANNING
-  stage: null
+  iteration: null
   last_status: SUCCESS
   last_agent: "plan-review#5"
   error_code: null
 ---
 
 <ExecutionLog type="core">
-| Seq | Agent | Phase | Stage | WorkflowRow | Status | Timestamp | Summary | Inputs | Checkpoint |
-|-----|-------|-------|-------|-------------|--------|-----------|---------|--------|------------|
+
+| Seq | Agent | Phase | Iteration | WorkflowRow | Status | Timestamp | Summary | Inputs | Checkpoint |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | codebase-research#1 | RESEARCH | - | 1 | SUCCESS | 2026-01-01T00:05:00Z | Analyzed gateway codebase. | - | - |
 | 2 | requirements-refinement#2 | RESEARCH | - | 2 | SUCCESS | 2026-01-01T00:10:00Z | Refined requirements. | Research.md | - |
 | 3 | requirements-review#3 | RESEARCH | - | 3 | SUCCESS | 2026-01-01T00:15:00Z | Requirements review passed. | Requirements.md | - |
 | 4 | planner-tdd-soft#4 | PLANNING | - | 4 | SUCCESS | 2026-01-01T00:20:00Z | Created 2-stage plan. | Research.md, Requirements.md | - |
 | 5 | plan-review#5 | PLANNING | - | 5 | SUCCESS | 2026-01-01T00:25:00Z | Plan review passed. | Plan.md, Stage-1/Plan.md | - |
+
 </ExecutionLog>
 
 <Artifacts type="core">
+
 | Artifact | Created In | Created By |
-|----------|------------|------------|
+| --- | --- | --- |
 | Research.md | RESEARCH | codebase-research#1 |
 | Requirements.md | RESEARCH | requirements-refinement#2 |
 | requirements-review.md | RESEARCH | requirements-review#3 |
@@ -1152,11 +1179,14 @@ current_state:
 | Stage-2/Plan.md | PLANNING | planner-tdd-soft#4 |
 | Stage-2/PlanProgress.md | PLANNING | planner-tdd-soft#4 |
 | plan-review.md | PLANNING | plan-review#5 |
+
 </Artifacts>
 
 <WorkflowNotes type="core">
+
 | Seq | Note |
-|-----|------|
+| --- | --- |
+
 </WorkflowNotes>
 ```
 
@@ -1338,6 +1368,20 @@ assertions:
 ```
 
 This test passes if the invocation sequence assertion *fails* — i.e., the orchestrator did not re-dispatch `implementation-tdd` after SUCCESS.
+
+### Testing Refusals
+
+When the orchestrator must refuse to start or resume (an unknown trigger, `commits: enabled` with `dispatch: parallel`), assert zero dispatches with a positive test rather than a negative one:
+
+```yaml
+stop_after_invocations: 1
+assertions:
+  invocation_sequence:
+    exact: true
+    steps: []
+```
+
+Zero dispatches is also what any question to the user produces, and AgentTest cannot see the refusal text. Make the zero meaningful by seeding a **resume** whose next dispatch is fully determined (e.g. mid-iteration, so `implementation-review` is next), keep `checkpoints`/`commits` consistent with the deployed infrastructure agents so only the precondition under test fails, and stub the dispatch that proceeding would make so a wrong proceed shows up as a clean sequence failure. See `tests/infrastructure-triggers/unknown-trigger-*-refusal` and `commits-parallel-resume-refusal`.
 
 ### Statistical Testing (Repetitions)
 

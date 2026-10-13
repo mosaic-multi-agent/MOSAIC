@@ -41,15 +41,17 @@ func requireReasonShown(t *testing.T, d *dialogue, reasked interaction.QuestionI
 }
 
 func TestManualDialogue_StageRemovedFromTheSetBeforeTheFinalCheck_ReasksTheStageWithTheReason(t *testing.T) {
-	stages := stagesUpTo(3)
-	req := manualRequest(stages)
+	schedules := schedulesUpTo(3)
+	req := manualRequest(schedules)
 	d := newDialogue(t).standard("3", "3")
 	d.one[domain.QuestionManualStage] = []oneFn{pick("3"), pick("2")}
 	removed := false
 	d.one[domain.QuestionManualHITL] = []oneFn{func(interaction.ChoiceQuestion) interaction.ChoiceAnswer {
 		if !removed {
 			removed = true
-			stages.Entries = stages.Entries[:2] // stage 3 disappears while the user answers
+			sched := schedules["Stage"]
+			sched.Iterations = sched.Iterations[:2] // stage 3 disappears while the user answers
+			schedules["Stage"] = sched
 		}
 		return interaction.ChoiceAnswer{Status: interaction.Answered, OptionID: domain.ManualHITLDefault}
 	}}
@@ -57,8 +59,8 @@ func TestManualDialogue_StageRemovedFromTheSetBeforeTheFinalCheck_ReasksTheStage
 	instr, err := consultManual(t, d, stagedRoutingTable(), req)
 
 	disp := requireDispatch(t, instr, err)
-	if disp.Stage != 2 {
-		t.Errorf("want the corrected stage 2 dispatched, got %d", disp.Stage)
+	if disp.Iteration != "2" {
+		t.Errorf("want the corrected stage 2 dispatched, got %q", disp.Iteration)
 	}
 	if got := questionAfterFirst(d.calls, domain.QuestionManualHITL); got != domain.QuestionManualStage {
 		t.Errorf("want the stage asked again right after the rejected result, got %q (sequence %v)", got, d.calls)
@@ -82,8 +84,8 @@ func TestManualDialogue_TypedStageOutsideTheSet_IsCaughtWhenTheDefaultsResolveAn
 		domain.QuestionManualStage, domain.QuestionManualTask, domain.QuestionManualInputs,
 		domain.QuestionManualOutputs, domain.QuestionManualConstraints, domain.QuestionManualHITL)
 	requireReasonShown(t, d, domain.QuestionManualStage, 1)
-	if disp.Stage != 2 {
-		t.Errorf("want the corrected stage 2, got %d", disp.Stage)
+	if disp.Iteration != "2" {
+		t.Errorf("want the corrected stage 2, got %q", disp.Iteration)
 	}
 }
 
@@ -127,9 +129,9 @@ func TestManualDialogue_InvalidAnswer_IsReportedAndTheStepAskedAgain(t *testing.
 func TestManualDialogue_UnresolvableRowDefaults_AreAnInvalidResultThatReturnsToTheRowStep(t *testing.T) {
 	d := newDialogue(t).standard("4", "")
 	d.one[domain.QuestionManualRow] = []oneFn{pick("4"), pick("1")}
-	req := manualRequest(stagesUpTo(2))
+	req := manualRequest(schedulesUpTo(2))
 	inner := req.RowDefaults
-	req.RowDefaults = func(row domain.RoutingRow, stage domain.StageNumber) (domain.DispatchDefaults, error) {
+	req.RowDefaults = func(row domain.RoutingRow, stage domain.IterationID) (domain.DispatchDefaults, error) {
 		if row.Index == 3 {
 			return domain.DispatchDefaults{}, errors.New("cannot resolve the defaults of this row")
 		}
@@ -151,7 +153,7 @@ func TestManualDialogue_UnresolvableRowDefaults_AreAnInvalidResultThatReturnsToT
 
 func TestManualDialogue_NoDefaultsFunction_MeansEmptyListsAndNoHITLDefault(t *testing.T) {
 	d := newDialogue(t).standard("3", "2")
-	req := rowStageRequest(stagesUpTo(3)) // RowDefaults left nil
+	req := rowStageRequest(schedulesUpTo(3)) // RowDefaults left nil
 
 	instr, err := consultManual(t, d, stagedRoutingTable(), req)
 
@@ -210,8 +212,8 @@ func TestManualDialogue_AcceptedStepsBetweenInvalidResults_DoNotResetTheCount(t 
 
 func TestManualDialogue_RowDefaultsThatNeverResolve_EndAsBoundExceededWithoutDispatch(t *testing.T) {
 	d := newDialogue(t).standard("4", "")
-	req := manualRequest(stagesUpTo(2))
-	req.RowDefaults = func(domain.RoutingRow, domain.StageNumber) (domain.DispatchDefaults, error) {
+	req := manualRequest(schedulesUpTo(2))
+	req.RowDefaults = func(domain.RoutingRow, domain.IterationID) (domain.DispatchDefaults, error) {
 		return domain.DispatchDefaults{}, errors.New("defaults unavailable")
 	}
 

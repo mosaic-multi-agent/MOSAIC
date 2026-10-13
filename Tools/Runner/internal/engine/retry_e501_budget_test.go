@@ -66,10 +66,10 @@ func TestNext_E501_Orchestrated_Consults(t *testing.T) {
 
 func TestNext_E501_StagedRow_RedispatchesSameStage(t *testing.T) {
 	f := newRetryFixture(t)
-	log := (&runLog{}).blocked(rtTestWriter, "Test.2", e501, rtRowTestWriter)
+	log := (&runLog{}).blocked(rtTestWriter, "2.Test", e501, rtRowTestWriter)
 
 	requireRetryStep(t, f.next(domain.ExecutionModeAuto, log, false),
-		rtRowTestWriter, "Test.2", domain.RetryToolUnavailable)
+		rtRowTestWriter, "2.Test", domain.RetryToolUnavailable)
 }
 
 // A failed harness invocation is recorded as BLOCKED/E501 and spends the same
@@ -88,7 +88,7 @@ func TestNext_E501_HarnessErrorRows_CountTowardSameBudget(t *testing.T) {
 	next := func(log *runLog) domain.EngineDecision {
 		state := log.state()
 		return engine.Next(engine.NextInput{
-			Workflow: f.aw, Stages: f.stages, State: state, LastResponse: &harness,
+			Workflow: f.aw, Schedules: f.schedules, State: state, LastResponse: &harness,
 			Agents: f.agents, Seq: log.last().Seq, Now: fixedNow, Mode: domain.ExecutionModeAuto,
 		})
 	}
@@ -145,19 +145,19 @@ func TestNext_E501_InfrastructureRowInWindow_DoesNotReset(t *testing.T) {
 func TestNext_E501_NewStageOfStagedRow_HasFreshBudget(t *testing.T) {
 	f := newRetryFixture(t)
 	log := (&runLog{}).
-		repeat(engine.E501AttemptLimit-1, func(l *runLog) { l.blocked(rtTestWriter, "Test.1", e501, rtRowTestWriter) }).
-		blocked(rtTestWriter, "Test.2", e501, rtRowTestWriter)
+		repeat(engine.E501AttemptLimit-1, func(l *runLog) { l.blocked(rtTestWriter, "1.Test", e501, rtRowTestWriter) }).
+		blocked(rtTestWriter, "2.Test", e501, rtRowTestWriter)
 
 	requireRetryStep(t, f.next(domain.ExecutionModeAuto, log, false),
-		rtRowTestWriter, "Test.2", domain.RetryToolUnavailable)
+		rtRowTestWriter, "2.Test", domain.RetryToolUnavailable)
 }
 
 func TestNext_E501_SuccessAtOtherStage_DoesNotReset(t *testing.T) {
 	f := newRetryFixture(t)
 	log := (&runLog{}).
-		repeat(engine.E501AttemptLimit-1, func(l *runLog) { l.blocked(rtTestWriter, "Test.1", e501, rtRowTestWriter) }).
-		ok(rtTestWriter, "Test.2", rtRowTestWriter).
-		blocked(rtTestWriter, "Test.1", e501, rtRowTestWriter)
+		repeat(engine.E501AttemptLimit-1, func(l *runLog) { l.blocked(rtTestWriter, "1.Test", e501, rtRowTestWriter) }).
+		ok(rtTestWriter, "2.Test", rtRowTestWriter).
+		blocked(rtTestWriter, "1.Test", e501, rtRowTestWriter)
 
 	requireNonSuccessDeviation(t, f.next(domain.ExecutionModeAuto, log, false))
 }
@@ -229,8 +229,8 @@ func TestE501BudgetRemaining_CountsRecordedCodeSinceLastSuccessAtRowAndStage(t *
 		}, "", engine.E501AttemptLimit - 2},
 		{"other row ignored", []domain.ExecutionLogEntry{blockedE501(5, ""), blockedE501(4, "")}, "",
 			engine.E501AttemptLimit - 1},
-		{"other stage ignored", []domain.ExecutionLogEntry{blockedE501(8, "Test.1"), blockedE501(8, "Test.2")},
-			"Test.2", engine.E501AttemptLimit - 1},
+		{"other stage ignored", []domain.ExecutionLogEntry{blockedE501(8, "1.Test"), blockedE501(8, "2.Test")},
+			"2.Test", engine.E501AttemptLimit - 1},
 		{"other code ignored", []domain.ExecutionLogEntry{
 			entry(4, "", domain.StatusBLOCKED, e502), entry(4, "", domain.StatusBLOCKED, ""), blockedE501(4, ""),
 		}, "", engine.E501AttemptLimit - 1},
@@ -242,9 +242,9 @@ func TestE501BudgetRemaining_CountsRecordedCodeSinceLastSuccessAtRowAndStage(t *
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			row := domain.WorkflowRow(4)
+			row := ivOutsideRow(3) // 1-based row 4
 			if tc.stage != "" {
-				row = domain.WorkflowRow(8)
+				row = ivGroupedRow(7, "Test") // 1-based row 8
 			}
 
 			if got := engine.E501BudgetRemaining(tc.log, row, tc.stage); got != tc.want {

@@ -44,10 +44,10 @@ func TestSession_Start_StagedWorkflow_Completes(t *testing.T) {
 	f := harness.NewMockAdapter()
 	store := &memStore{}
 	ses := session.New(session.Deps{
-		Harness:   f,
-		Store:     store,
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:  f,
+		Store:    store,
+		Clock:    fixedClock{t: epoch},
+		Interact: &noopInteraction{},
 	})
 
 	// Stage 1: implementation-tdd → implementation-review → COMPLETE.
@@ -105,10 +105,10 @@ func TestSession_Start_PlanFile_ResolvedFromRunFolder_StagesApplied(t *testing.T
 	f := harness.NewMockAdapter()
 	store := &memStore{}
 	ses := session.New(session.Deps{
-		Harness:   f,
-		Store:     store,
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:  f,
+		Store:    store,
+		Clock:    fixedClock{t: epoch},
+		Interact: &noopInteraction{},
 	})
 
 	f.Queue("implementation-tdd", harness.ScriptedEntry{Response: &domain.ProtocolResponse{
@@ -138,9 +138,9 @@ func TestSession_Start_PlanFile_ResolvedFromRunFolder_StagesApplied(t *testing.T
 
 // TestSession_Start_PlanFile_InOrchestratorDir_NotPickedUp verifies that a
 // Plan.md placed in the orchestrator file's directory is not treated as the
-// run's plan file when config.RunFolder points elsewhere. The stage set must
-// stay nil, so a staged-only workflow (no pre-EXECUTION rows) stops with a
-// clear reason instead of silently reading the wrong file.
+// run's plan file when config.RunFolder points elsewhere. The schedule stays
+// unread, so a workflow whose first row is a block row (a seeded Plan.md) is
+// refused with a clear reason instead of silently reading the wrong file.
 func TestSession_Start_PlanFile_InOrchestratorDir_NotPickedUp(t *testing.T) {
 	orchDir := t.TempDir()
 	runFolder := scopedTempDir(t) // Plan.md is intentionally absent here
@@ -165,10 +165,10 @@ func TestSession_Start_PlanFile_InOrchestratorDir_NotPickedUp(t *testing.T) {
 	f := harness.NewMockAdapter()
 	store := &memStore{}
 	ses := session.New(session.Deps{
-		Harness:   f,
-		Store:     store,
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:  f,
+		Store:    store,
+		Clock:    fixedClock{t: epoch},
+		Interact: &noopInteraction{},
 	})
 
 	cfg := domain.RunConfig{
@@ -185,22 +185,18 @@ func TestSession_Start_PlanFile_InOrchestratorDir_NotPickedUp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("want nil error, got %v", err)
 	}
-	// The run must not be refused (a plan file "exists" only from the wrong
-	// directory's point of view; from RunFolder's point of view it is absent).
-	if got.Status == domain.RunRefused {
-		t.Fatalf("want run not refused, got RunRefused (message: %q)", got.Message)
+	// staged-orch.md has no row ahead of its block, so Plan.md is a seed that
+	// must exist in the run folder. The orchestrator-directory Plan.md does
+	// not count: the run is refused naming the missing source, before any
+	// dispatch.
+	if got.Status != domain.RunRefused {
+		t.Fatalf("want RunRefused (seeded Plan.md absent from the run folder), got %q (message: %q)", got.Status, got.Message)
 	}
-	// staged-orch.md has no pre-EXECUTION rows, so the first row is already an
-	// EXECUTION row. With no stage set available, the engine must stop cleanly
-	// rather than dispatch against the orchestrator-directory Plan.md.
-	if got.Status != domain.RunStopped {
-		t.Errorf("want RunStopped (no stage set available), got %q (message: %q)", got.Status, got.Message)
-	}
-	if !strings.Contains(got.Message, "stage set") {
-		t.Errorf("want stop message to name the missing stage set, got %q", got.Message)
+	if !strings.Contains(got.Message, "Plan.md") {
+		t.Errorf("want refusal to name the missing Plan.md, got %q", got.Message)
 	}
 	if len(f.Invocations()) != 0 {
-		t.Errorf("want no harness invocations (stopped before dispatch), got %d", len(f.Invocations()))
+		t.Errorf("want no harness invocations (refused before dispatch), got %d", len(f.Invocations()))
 	}
 }
 
@@ -223,10 +219,10 @@ func TestSession_Start_NoPlanFile_NewRun_DispatchesFirstPreExecutionRow(t *testi
 	f := harness.NewMockAdapter()
 	store := &memStore{}
 	ses := session.New(session.Deps{
-		Harness:   f,
-		Store:     store,
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:  f,
+		Store:    store,
+		Clock:    fixedClock{t: epoch},
+		Interact: &noopInteraction{},
 	})
 
 	f.Queue("planner", harness.ScriptedEntry{Response: &domain.ProtocolResponse{
@@ -300,10 +296,10 @@ func TestSession_Start_NoPlanFile_ResumedRun_DispatchesNextPreExecutionRow(t *te
 		exists: true,
 	}
 	ses := session.New(session.Deps{
-		Harness:   f,
-		Store:     store,
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:  f,
+		Store:    store,
+		Clock:    fixedClock{t: epoch},
+		Interact: &noopInteraction{},
 	})
 
 	f.Queue("reviewer", harness.ScriptedEntry{Response: &domain.ProtocolResponse{
@@ -317,9 +313,9 @@ func TestSession_Start_NoPlanFile_ResumedRun_DispatchesNextPreExecutionRow(t *te
 		WorkflowID:           "pre-exec-staged",
 		Task:                 "task",
 		IsNewRun:             false, // resume: artifact already exists
-		RunID:               testRunID,
+		RunID:                testRunID,
 
-		RunFolder:            runFolder,
+		RunFolder: runFolder,
 	}
 
 	got, err := ses.Start(context.Background(), cfg)
@@ -359,10 +355,10 @@ func TestSession_Start_MalformedPlanFile_NewRun_ReturnsRefusal(t *testing.T) {
 	}
 
 	ses := session.New(session.Deps{
-		Harness:   harness.NewMockAdapter(),
-		Store:     &memStore{},
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:  harness.NewMockAdapter(),
+		Store:    &memStore{},
+		Clock:    fixedClock{t: epoch},
+		Interact: &noopInteraction{},
 	})
 
 	cfg := domain.RunConfig{
@@ -371,7 +367,7 @@ func TestSession_Start_MalformedPlanFile_NewRun_ReturnsRefusal(t *testing.T) {
 		Task:                 "task",
 		IsNewRun:             true,
 
-		RunFolder:            runFolder,
+		RunFolder: runFolder,
 	}
 
 	got, err := ses.Start(context.Background(), cfg)
@@ -406,10 +402,10 @@ func TestSession_Start_MalformedPlanFile_ResumedRun_ReturnsRefusal(t *testing.T)
 		exists: true,
 	}
 	ses := session.New(session.Deps{
-		Harness:   harness.NewMockAdapter(),
-		Store:     store,
-		Clock:     fixedClock{t: epoch},
-		Interact:  &noopInteraction{},
+		Harness:  harness.NewMockAdapter(),
+		Store:    store,
+		Clock:    fixedClock{t: epoch},
+		Interact: &noopInteraction{},
 	})
 
 	cfg := domain.RunConfig{
@@ -417,9 +413,9 @@ func TestSession_Start_MalformedPlanFile_ResumedRun_ReturnsRefusal(t *testing.T)
 		WorkflowID:           "staged",
 		Task:                 "task",
 		IsNewRun:             false, // resume: artifact already exists
-		RunID:               testRunID,
+		RunID:                testRunID,
 
-		RunFolder:            runFolder,
+		RunFolder: runFolder,
 	}
 
 	got, err := ses.Start(context.Background(), cfg)

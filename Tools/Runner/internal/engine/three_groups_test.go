@@ -7,40 +7,38 @@ import (
 	"mosaic-run/internal/engine"
 )
 
-
-// ===== T4.1: Table-driven group ordering (three or more groups) =====
+// ===== Table-driven group ordering (three or more groups) =====
 //
-// threeGroupContent is a minimal staged workflow with three named execution groups
+// threeGroupV216Content is a minimal grouped block with three named groups
 // (Alpha, Beta, Gamma) and a four-row approach table. It is used to verify that
 // the engine uses the approach table for ordering rather than the natural group
 // declaration order or any hardcoded mapping.
 //
-// Group layout (zero-based row indices in the routing table, no pre-execution rows):
-//   Row 0: EXECUTION.Alpha  agent-alpha
-//   Row 1: EXECUTION.Beta   agent-beta
-//   Row 2: EXECUTION.Gamma  agent-gamma
+// Group layout (1-based routing-table rows, no pre-block rows):
+//
+//	Row 1: EXECUTION.[Stage].Alpha  agent-alpha
+//	Row 2: EXECUTION.[Stage].Beta   agent-beta
+//	Row 3: EXECUTION.[Stage].Gamma  agent-gamma
 //
 // Approach table:
-//   AlphaFirst       → Alpha, Beta, Gamma
-//   BetaFirst        → Beta, Alpha, Gamma
-//   GammaOnly        → Gamma
-//   AlphaBeta        → Alpha, Beta
-const threeGroupContent = `## Three-Group Workflow
+//
+//	AlphaFirst       -> Alpha, Beta, Gamma
+//	BetaFirst        -> Beta, Alpha, Gamma
+//	GammaOnly        -> Gamma
+//	AlphaBeta        -> Alpha, Beta
+const threeGroupV216Content = v216Columns +
+	`| EXECUTION.[Stage].Alpha | agent-alpha | FALSE | COMPLETE | - | - | - |
+| EXECUTION.[Stage].Beta | agent-beta | FALSE | COMPLETE | - | - | - |
+| EXECUTION.[Stage].Gamma | agent-gamma | FALSE | COMPLETE | - | - | - |
+` + v216StageBlock + `
+**Groups:**
 
-| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
-|-------|----------|:----:|------------|-------------|-------|--------|
-| EXECUTION.Alpha.[StageNumber] | agent-alpha | FALSE | - | - | - | - |
-| EXECUTION.Beta.[StageNumber] | agent-beta | FALSE | - | - | - | - |
-| EXECUTION.Gamma.[StageNumber] | agent-gamma | FALSE | - | - | - | - |
-
-**Execution Groups:**
-
-| Approach | Groups |
-|----------|--------|
-| AlphaFirst | Alpha, Beta, Gamma |
-| BetaFirst | Beta, Alpha, Gamma |
-| GammaOnly | Gamma |
-| AlphaBeta | Alpha, Beta |
+| Block | Approach | Groups |
+|-------|----------|--------|
+| Stage | AlphaFirst | Alpha, Beta, Gamma |
+| Stage | BetaFirst | Beta, Alpha, Gamma |
+| Stage | GammaOnly | Gamma |
+| Stage | AlphaBeta | Alpha, Beta |
 `
 
 // TestNext_ThreeGroups_BetaFirst_FirstDispatchIsBeta verifies that when the workflow
@@ -52,21 +50,21 @@ const threeGroupContent = `## Three-Group Workflow
 // The new orderedGroupsForStage implementation must look up the approach table to
 // honour the row's group sequence.
 func TestNext_ThreeGroups_BetaFirst_FirstDispatchIsBeta(t *testing.T) {
-	aw := mustParseAndAdmit(t, threeGroupContent, "three-group", "1.0")
-	stages := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: false, Approach: "BetaFirst"},
-	})
+	aw := mustParseAndAdmitV216(t, threeGroupV216Content, "three-group", "1.0")
+	schedules := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "BetaFirst"},
+	)
 	agents := newTestAgents("agent-alpha", "agent-beta", "agent-gamma")
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           emptyState(),
-		LastResponse:    nil,
-		Agents:          agents,
-		Seq:             0,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        emptyState(),
+		LastResponse: nil,
+		Agents:       agents,
+		Seq:          0,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
@@ -74,7 +72,7 @@ func TestNext_ThreeGroups_BetaFirst_FirstDispatchIsBeta(t *testing.T) {
 		t.Errorf("BetaFirst approach: want first dispatch to agent-beta (Beta group first in approach row), got %s",
 			step.Request.AgentInstanceID)
 	}
-	if step.Stage != "Beta.1" {
+	if step.Stage != "1.Beta" {
 		t.Errorf("want Beta.1, got %q", step.Stage)
 	}
 }
@@ -85,21 +83,21 @@ func TestNext_ThreeGroups_BetaFirst_FirstDispatchIsBeta(t *testing.T) {
 // This test is RED: the current implementation (TwoGroup=false) returns all groups
 // and would dispatch agent-alpha first, not agent-gamma.
 func TestNext_ThreeGroups_GammaOnly_SkipsAlphaAndBeta(t *testing.T) {
-	aw := mustParseAndAdmit(t, threeGroupContent, "three-group", "1.0")
-	stages := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: false, Approach: "GammaOnly"},
-	})
+	aw := mustParseAndAdmitV216(t, threeGroupV216Content, "three-group", "1.0")
+	schedules := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "GammaOnly"},
+	)
 	agents := newTestAgents("agent-alpha", "agent-beta", "agent-gamma")
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           emptyState(),
-		LastResponse:    nil,
-		Agents:          agents,
-		Seq:             0,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        emptyState(),
+		LastResponse: nil,
+		Agents:       agents,
+		Seq:          0,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
@@ -118,30 +116,30 @@ func TestNext_ThreeGroups_GammaOnly_SkipsAlphaAndBeta(t *testing.T) {
 // RED: the current implementation (TwoGroup=false) uses a single implicit group
 // covering all rows, so stage 2 starts with agent-alpha rather than agent-gamma.
 func TestNext_ThreeGroups_GammaOnly_AfterGamma_NextStageStartsWithGamma(t *testing.T) {
-	aw := mustParseAndAdmit(t, threeGroupContent, "three-group", "1.0")
-	// Two stages with GammaOnly: Gamma is the only dispatched group each stage.
+	aw := mustParseAndAdmitV216(t, threeGroupV216Content, "three-group", "1.0")
+	// Two schedules with GammaOnly: Gamma is the only dispatched group each stage.
 	// After Gamma in stage 1 the engine must begin stage 2 with Gamma, not Alpha.
-	stages := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: false, Approach: "GammaOnly"},
-		{Number: 2, HITL: false, Approach: "GammaOnly"},
-	})
+	schedules := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "GammaOnly"},
+		domain.ScheduleIteration{ID: "2", HITL: false, Approach: "GammaOnly"},
+	)
 	agents := newTestAgents("agent-alpha", "agent-beta", "agent-gamma")
 	// agent-gamma is the only dispatched row (seq=1) under GammaOnly.
-	state := stateAfter("EXECUTION.Gamma.[StageNumber]", "Stage-1", "agent-gamma#1", domain.StatusSUCCESS, 1)
+	state := stateAfterRow("EXECUTION", "1.Gamma", "agent-gamma#1", domain.StatusSUCCESS, 1, 3)
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           state,
-		LastResponse:    successResponse("agent-gamma#1"),
-		Agents:          agents,
-		Seq:             1,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        state,
+		LastResponse: successResponse("agent-gamma#1"),
+		Agents:       agents,
+		Seq:          1,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
-	if step.Stage != "Gamma.2" {
+	if step.Stage != "2.Gamma" {
 		t.Errorf("GammaOnly: after stage 1 Gamma, want Gamma.2, got %q", step.Stage)
 	}
 	if agentName(step.Request.AgentInstanceID) != "agent-gamma" {
@@ -156,27 +154,27 @@ func TestNext_ThreeGroups_GammaOnly_AfterGamma_NextStageStartsWithGamma(t *testi
 // This test is RED: the current implementation (TwoGroup=false) returns all groups
 // and would dispatch agent-gamma after agent-beta.
 func TestNext_ThreeGroups_AlphaBeta_SkipsGamma(t *testing.T) {
-	aw := mustParseAndAdmit(t, threeGroupContent, "three-group", "1.0")
-	// Two stages: stage 1 AlphaBeta, stage 2 AlphaBeta.
-	stages := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: false, Approach: "AlphaBeta"},
-		{Number: 2, HITL: false, Approach: "AlphaBeta"},
-	})
+	aw := mustParseAndAdmitV216(t, threeGroupV216Content, "three-group", "1.0")
+	// Two schedules: stage 1 AlphaBeta, stage 2 AlphaBeta.
+	schedules := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "AlphaBeta"},
+		domain.ScheduleIteration{ID: "2", HITL: false, Approach: "AlphaBeta"},
+	)
 	agents := newTestAgents("agent-alpha", "agent-beta", "agent-gamma")
 	// agent-beta is row 1 (last row in the Alpha+Beta sequence). After it completes
 	// in stage 1, the engine should advance to stage 2 Alpha (row 0), not dispatch
 	// Gamma (which is skipped by AlphaBeta).
-	state := stateAfter("EXECUTION.Beta.[StageNumber]", "Stage-1", "agent-beta#2", domain.StatusSUCCESS, 2)
+	state := stateAfterRow("EXECUTION", "1.Beta", "agent-beta#2", domain.StatusSUCCESS, 2, 2)
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           state,
-		LastResponse:    successResponse("agent-beta#2"),
-		Agents:          agents,
-		Seq:             2,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        state,
+		LastResponse: successResponse("agent-beta#2"),
+		Agents:       agents,
+		Seq:          2,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
@@ -185,7 +183,7 @@ func TestNext_ThreeGroups_AlphaBeta_SkipsGamma(t *testing.T) {
 		t.Errorf("AlphaBeta: after agent-beta in stage 1, want agent-alpha in stage 2, got %s",
 			step.Request.AgentInstanceID)
 	}
-	if step.Stage != "Alpha.2" {
+	if step.Stage != "2.Alpha" {
 		t.Errorf("AlphaBeta: want Alpha.2 after Alpha+Beta complete in stage 1, got %q", step.Stage)
 	}
 }
@@ -199,10 +197,10 @@ func TestNext_ThreeGroups_AlphaBeta_SkipsGamma(t *testing.T) {
 // RED: the current implementation (TwoGroup=false) uses declared order and
 // dispatches agent-alpha first rather than agent-beta.
 func TestNext_ThreeGroups_BetaFirst_FullSequence(t *testing.T) {
-	aw := mustParseAndAdmit(t, threeGroupContent, "three-group", "1.0")
-	stages := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: false, Approach: "BetaFirst"},
-	})
+	aw := mustParseAndAdmitV216(t, threeGroupV216Content, "three-group", "1.0")
+	schedules := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "BetaFirst"},
+	)
 	agents := newTestAgents("agent-alpha", "agent-beta", "agent-gamma")
 
 	// BetaFirst → Beta (row 1), Alpha (row 0), Gamma (row 2): the order diverges
@@ -210,8 +208,8 @@ func TestNext_ThreeGroups_BetaFirst_FullSequence(t *testing.T) {
 	wantSequence := []string{"agent-beta", "agent-alpha", "agent-gamma"}
 	states := []domain.ArtifactState{
 		emptyState(),
-		stateAfter("EXECUTION.Beta.[StageNumber]", "Stage-1", "agent-beta#1", domain.StatusSUCCESS, 1),
-		stateAfter("EXECUTION.Alpha.[StageNumber]", "Stage-1", "agent-alpha#2", domain.StatusSUCCESS, 2),
+		stateAfterRow("EXECUTION", "1.Beta", "agent-beta#1", domain.StatusSUCCESS, 1, 2),
+		stateAfterRow("EXECUTION", "1.Alpha", "agent-alpha#2", domain.StatusSUCCESS, 2, 1),
 	}
 	responses := []*domain.ProtocolResponse{
 		nil,
@@ -221,14 +219,14 @@ func TestNext_ThreeGroups_BetaFirst_FullSequence(t *testing.T) {
 
 	for i, want := range wantSequence {
 		dec := engine.Next(engine.NextInput{
-			Workflow:        aw,
-			Stages:          stages,
-			State:           states[i],
-			LastResponse:    responses[i],
-			Agents:          agents,
-			Seq:             i,
-			Now:             fixedNow,
-			Mode:            domain.ExecutionModeAutoReview,
+			Workflow:     aw,
+			Schedules:    schedules,
+			State:        states[i],
+			LastResponse: responses[i],
+			Agents:       agents,
+			Seq:          i,
+			Now:          fixedNow,
+			Mode:         domain.ExecutionModeAutoReview,
 		})
 		step := requireDispatch(t, dec)
 		if agentName(step.Request.AgentInstanceID) != want {
@@ -239,7 +237,7 @@ func TestNext_ThreeGroups_BetaFirst_FullSequence(t *testing.T) {
 
 // TestNext_ThreeGroups_GroupInEveryApproachRow_RunsInEveryStage verifies that a
 // group present in an approach row is dispatched in every stage that uses that
-// approach. Both stages use BetaFirst (→ Beta, Alpha, Gamma), so after Gamma
+// approach. Both schedules use BetaFirst (→ Beta, Alpha, Gamma), so after Gamma
 // completes stage 1 the engine must begin stage 2 with Beta, not with Alpha.
 // This fails without table-driven routing because the declared-order fallback
 // (single implicit group, all rows) always starts the next stage at row 0 (Alpha).
@@ -250,30 +248,30 @@ func TestNext_ThreeGroups_GroupInEveryApproachRow_RunsInEveryStage(t *testing.T)
 	// BetaFirst: Beta (row 1), Alpha (row 0), Gamma (row 2). Gamma is last.
 	// After Gamma finishes stage 1 the engine must pick up BetaFirst again for
 	// stage 2, dispatching Beta — not Alpha (row 0, which declared-order would use).
-	aw := mustParseAndAdmit(t, threeGroupContent, "three-group", "1.0")
-	stages := newTestStageSet([]domain.StageEntry{
-		{Number: 1, HITL: false, Approach: "BetaFirst"},
-		{Number: 2, HITL: false, Approach: "BetaFirst"},
-	})
+	aw := mustParseAndAdmitV216(t, threeGroupV216Content, "three-group", "1.0")
+	schedules := newTestSchedules(
+		domain.ScheduleIteration{ID: "1", HITL: false, Approach: "BetaFirst"},
+		domain.ScheduleIteration{ID: "2", HITL: false, Approach: "BetaFirst"},
+	)
 	agents := newTestAgents("agent-alpha", "agent-beta", "agent-gamma")
 
 	// Stage 1 BetaFirst: Beta=seq1, Alpha=seq2, Gamma=seq3. After Gamma (#3) the
 	// engine advances to stage 2 and must dispatch Beta first.
-	state := stateAfter("EXECUTION.Gamma.[StageNumber]", "Stage-1", "agent-gamma#3", domain.StatusSUCCESS, 3)
+	state := stateAfterRow("EXECUTION", "1.Gamma", "agent-gamma#3", domain.StatusSUCCESS, 3, 3)
 
 	dec := engine.Next(engine.NextInput{
-		Workflow:        aw,
-		Stages:          stages,
-		State:           state,
-		LastResponse:    successResponse("agent-gamma#3"),
-		Agents:          agents,
-		Seq:             3,
-		Now:             fixedNow,
-		Mode:            domain.ExecutionModeAutoReview,
+		Workflow:     aw,
+		Schedules:    schedules,
+		State:        state,
+		LastResponse: successResponse("agent-gamma#3"),
+		Agents:       agents,
+		Seq:          3,
+		Now:          fixedNow,
+		Mode:         domain.ExecutionModeAutoReview,
 	})
 
 	step := requireDispatch(t, dec)
-	if step.Stage != "Beta.2" {
+	if step.Stage != "2.Beta" {
 		t.Errorf("after Gamma in stage 1, want Beta.2, got %q", step.Stage)
 	}
 	if agentName(step.Request.AgentInstanceID) != "agent-beta" {
@@ -282,10 +280,10 @@ func TestNext_ThreeGroups_GroupInEveryApproachRow_RunsInEveryStage(t *testing.T)
 	}
 }
 
-// ===== T4.2: Unresolvable approach at the routing decision =====
+// ===== Unresolvable approach at the routing decision =====
 //
 // These tests verify that when a stage's Approach value has no matching row in
-// the workflow's Execution Groups table, the engine surfaces a StopDecision (or
+// the workflow's Groups table, the engine surfaces a StopDecision (or
 // error from ResumePoint) rather than falling back to a default order.
 // All tests are RED with the current implementation, which falls back to ApproachTDD.
 

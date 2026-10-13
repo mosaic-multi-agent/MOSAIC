@@ -32,7 +32,7 @@ runner_manual_resolution: disabled
 checkpoints: disabled
 current_state:
   phase: PLANNING
-  stage: null
+  iteration: null
   last_status: SUCCESS
   last_agent: "test-writer-tdd#1"
   error_code: null
@@ -40,7 +40,7 @@ current_state:
 
 <ExecutionLog type="core">
 
-| Seq | Agent | Phase | Stage | WorkflowRow | Status | Timestamp | Summary | Inputs | Checkpoint |
+| Seq | Agent | Phase | Iteration | WorkflowRow | Status | Timestamp | Summary | Inputs | Checkpoint |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | test-writer-tdd#1 | PLANNING | - | 1 | SUCCESS | 2026-01-01T00:00:00Z | designed | - | - |
 

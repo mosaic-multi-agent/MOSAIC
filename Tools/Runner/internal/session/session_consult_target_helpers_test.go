@@ -16,16 +16,16 @@ import (
 )
 
 // queueStagedDispatch enqueues a dispatch instruction for a staged row: the
-// plan stage is carried in DispatchInstruction.Stage.
-func (s *scriptedRoutingConsultant) queueStagedDispatch(agent, taskDesc string, rowIndex int, stage domain.StageNumber) {
+// plan iteration is carried in DispatchInstruction.Iteration.
+func (s *scriptedRoutingConsultant) queueStagedDispatch(agent, taskDesc string, rowIndex int, stage domain.IterationID) {
 	s.queueDispatch(agent, taskDesc, rowIndex)
 	s.stageLastDispatch(stage)
 }
 
 // stageLastDispatch sets the stage on the most recently queued dispatch
 // instruction. It lets the other queueDispatchWith* variants target a staged row.
-func (s *scriptedRoutingConsultant) stageLastDispatch(stage domain.StageNumber) {
-	s.instructions[len(s.instructions)-1].Dispatch.Stage = stage
+func (s *scriptedRoutingConsultant) stageLastDispatch(stage domain.IterationID) {
+	s.instructions[len(s.instructions)-1].Dispatch.Iteration = stage
 }
 
 // Row indices (zero-based) of consult-row-stage-orch.md.

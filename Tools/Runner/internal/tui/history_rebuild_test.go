@@ -150,11 +150,11 @@ func TestRestartHistory_LiveRowsAppendAfterHistoryWithoutDuplicates(t *testing.T
 	fx := newRestartFixture(t, storeWithLog(sampleLog()...))
 	driveDoneContinue(t, fx.m)
 
-	fx.m.Update(noticeMsg("reviewer#4", "phase=EXECUTION stage=\"Implementation.1\" status=running"))
-	fx.m.Update(noticeMsg("reviewer#4", "phase=EXECUTION stage=\"Implementation.1\" status=SUCCESS"))
+	fx.m.Update(noticeMsg("reviewer#4", "phase=EXECUTION iteration=\"1.Implementation\" status=running"))
+	fx.m.Update(noticeMsg("reviewer#4", "phase=EXECUTION iteration=\"1.Implementation\" status=SUCCESS"))
 
 	want := append(sampleHistory(), runflow.ProgressRow{
-		AgentInstance: "reviewer#4", Phase: "EXECUTION", Stage: "Implementation.1", Status: "SUCCESS",
+		AgentInstance: "reviewer#4", Phase: "EXECUTION", Stage: "1.Implementation", Status: "SUCCESS",
 	})
 	got := fx.m.progressScreen.Rows()
 	for i := range got {
@@ -172,7 +172,7 @@ func TestRestartHistory_CompletionNoticeDoesNotRewriteHistory(t *testing.T) {
 	fx := newRestartFixture(t, storeWithLog(sampleLog()...))
 	driveDoneContinue(t, fx.m)
 
-	fx.m.Update(noticeMsg("late#5", "phase=EXECUTION stage=\"\" status=SUCCESS"))
+	fx.m.Update(noticeMsg("late#5", "phase=EXECUTION iteration=\"\" status=SUCCESS"))
 
 	if want := sampleHistory(); !reflect.DeepEqual(fx.m.progressScreen.Rows(), want) {
 		t.Errorf("progress rows =\n%+v\nwant the history unchanged\n%+v", fx.m.progressScreen.Rows(), want)
@@ -224,7 +224,7 @@ func TestFreshProcessResume_LiveRowsAppendAfterHistory(t *testing.T) {
 	m := newFreshProcessResumeModel(storeWithLog(sampleLog()...))
 	m.launchSession()
 
-	m.Update(noticeMsg("reviewer#4", "phase=EXECUTION stage=\"\" status=running"))
+	m.Update(noticeMsg("reviewer#4", "phase=EXECUTION iteration=\"\" status=running"))
 
 	rows := m.progressScreen.Rows()
 	if len(rows) != len(sampleLog())+1 {
