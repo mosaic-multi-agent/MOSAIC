@@ -335,7 +335,7 @@ func TestDeployNew_ScriptedInteraction_WorkflowOptionsGroupedByCategory(t *testi
 				capturedQ = q
 			}
 		},
-		defaultSelectMany: domain.MultiChoiceAnswer{Status: domain.Answered, OptionIDs: []string{"quick-fix"}},
+		defaultSelectMany:    domain.MultiChoiceAnswer{Status: domain.Answered, OptionIDs: []string{"quick-fix"}},
 		defaultConfirmAnswer: domain.ConfirmAnswer{Status: domain.Answered, Confirm: true},
 	}
 	deps, workspace := newBaseDeps(t, nil)
@@ -391,7 +391,7 @@ func (c *captureInteraction) AskText(_ context.Context, q domain.TextQuestion) (
 func (c *captureInteraction) Confirm(_ context.Context, q domain.Question) (domain.ConfirmAnswer, error) {
 	return c.defaultConfirmAnswer, nil
 }
-func (c *captureInteraction) Notify(_ context.Context, n domain.Notice)       {}
+func (c *captureInteraction) Notify(_ context.Context, n domain.Notice)          {}
 func (c *captureInteraction) Progress(_ context.Context, e domain.ProgressEvent) {}
 func (c *captureInteraction) Review(_ context.Context, p domain.Plan) (domain.ConfirmAnswer, error) {
 	return c.defaultConfirmAnswer, nil
@@ -532,7 +532,7 @@ func TestDeployNew_TierRationaleCarriedToInteraction(t *testing.T) {
 				capturedDetail = q.Detail
 			}
 		},
-		defaultAnswer: domain.ChoiceAnswer{Status: domain.Answered, OptionID: "model-a"},
+		defaultAnswer:  domain.ChoiceAnswer{Status: domain.Answered, OptionID: "model-a"},
 		defaultConfirm: domain.ConfirmAnswer{Status: domain.Answered, Confirm: true},
 	}
 	deps, workspace := newBaseDeps(t, nil)
@@ -943,7 +943,7 @@ func (c *captureInfraInteraction) AskText(_ context.Context, q domain.TextQuesti
 func (c *captureInfraInteraction) Confirm(_ context.Context, q domain.Question) (domain.ConfirmAnswer, error) {
 	return c.defaultConfirmAnswer, nil
 }
-func (c *captureInfraInteraction) Notify(_ context.Context, n domain.Notice)       {}
+func (c *captureInfraInteraction) Notify(_ context.Context, n domain.Notice)          {}
 func (c *captureInfraInteraction) Progress(_ context.Context, e domain.ProgressEvent) {}
 func (c *captureInfraInteraction) Review(_ context.Context, p domain.Plan) (domain.ConfirmAnswer, error) {
 	return c.defaultConfirmAnswer, nil
@@ -970,7 +970,7 @@ func (c *captureTierInteraction) AskText(_ context.Context, q domain.TextQuestio
 func (c *captureTierInteraction) Confirm(_ context.Context, q domain.Question) (domain.ConfirmAnswer, error) {
 	return c.defaultConfirm, nil
 }
-func (c *captureTierInteraction) Notify(_ context.Context, n domain.Notice)         {}
+func (c *captureTierInteraction) Notify(_ context.Context, n domain.Notice)          {}
 func (c *captureTierInteraction) Progress(_ context.Context, e domain.ProgressEvent) {}
 func (c *captureTierInteraction) Review(_ context.Context, p domain.Plan) (domain.ConfirmAnswer, error) {
 	return c.defaultConfirm, nil

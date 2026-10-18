@@ -1,8 +1,8 @@
 package app
 
 // promote_service.go contains the service-level Promote flow: the Service.Promote method,
-// the promoteHarnessDropKeys helper, the category prompt helper, the nextNumericID helper,
-// and the promoteDestinationPath helper. All I/O for the promote capability belongs here;
+// the promoteHarnessDropKeys helper, the nextNumericID helper,
+// and the target-layer hook-ups (promote_target_layer.go). All I/O for the promote capability belongs here;
 // the pure generation core lives in promote.go (buildGenericAgent).
 
 import (
@@ -16,7 +16,6 @@ import (
 
 	"mosaic-common/docformat"
 	"mosaic-deploy/internal/catalog"
-	"mosaic-deploy/internal/catalog/catalogpaths"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
 )
@@ -365,26 +364,6 @@ func nextNumericID(c catalog.Catalog) string {
 	return strconv.Itoa(max + 1)
 }
 
-// promoteDestinationPath computes where the generated generic file is written, relative
-// to the active catalogue root:
-//
-//	category == PromoteCategoryUtility → <catalogRoot>/UtilityAgents/{key}.md
-//	otherwise                          → <catalogRoot>/Subagents/{category}/{key}.md
-//
-// No Catalog/ segment appears in these sub-paths: the catalogue root already is the catalogue.
-// With no --catalog-folder supplied the resulting absolute path is byte-identical to the
-// pre-feature default under the MOSAIC root.
-//
-// key is the source file's base name with a trailing ".agent.md" or ".md" removed — the
-// same derivation the catalog uses to key an agent, so the promoted file lands under the
-// key the user expects.
-func promoteDestinationPath(catalogRoot, category, key string) string {
-	if category == PromoteCategoryUtility {
-		return catalogpaths.UtilityAgentFile(catalogRoot, key)
-	}
-	return catalogpaths.SubagentFile(catalogRoot, category, key)
-}
-
 // Promote generates a generic agent source file from a single already boundary-tagged
 // harness-only agent file, so that a one-off harness-specific agent becomes reusable
 // across harnesses through the normal Deploy/Update flow.
@@ -449,11 +428,18 @@ func (s *service) Promote(ctx context.Context, req PromoteRequest) (PromoteResul
 		return PromoteResult{}, fmt.Errorf("%s: %w", req.FilePath, factsErr)
 	}
 
+	// Choose the catalog layer that receives the file before asking for a category, because the
+	// category options come from that layer's Subagents/ directory.
+	targetRoot, targetCatalogID, err := s.promoteTarget(ctx, req, key)
+	if err != nil {
+		return PromoteResult{}, err
+	}
+
 	// Resolve category: use the pre-answered value (pre-answer convention — a non-empty
 	// value suppresses the interactive question entirely) or ask through Interaction.
 	category := req.Category
 	if category == "" {
-		category, err = s.askPromoteCategory(ctx, req.FilePath)
+		category, err = s.askPromoteCategory(ctx, req.FilePath, targetRoot)
 		if err != nil {
 			return PromoteResult{}, err
 		}
@@ -466,11 +452,8 @@ func (s *service) Promote(ctx context.Context, req PromoteRequest) (PromoteResul
 		return PromoteResult{}, fmt.Errorf("invalid category %q: category must be a single directory name without path traversal or separators", category)
 	}
 
-	// Compute the destination path before checking for collisions. All promote writes
-	// target the active catalogue root, not the MOSAIC root, so a custom --catalog-folder
-	// receives the promoted file where the catalogue read side will also look.
-	catalogRoot := s.deps.Catalog.CatalogRoot()
-	destPath := promoteDestinationPath(catalogRoot, category, key)
+	// Compute the destination path before checking for collisions, inside the target layer.
+	destPath := promoteDestinationPath(targetRoot, category, key)
 
 	// Collision policy: refuse to overwrite an existing file without explicit consent.
 	// Promote never silently overwrites a generic agent; the caller must set Overwrite: true.
@@ -625,6 +608,7 @@ func (s *service) Promote(ctx context.Context, req PromoteRequest) (PromoteResul
 			NumericID:       numericID,
 			Category:        category,
 			DryRun:          true,
+			TargetCatalogID: targetCatalogID,
 			HarnessID:       req.HarnessID,
 			Tools:           resolvedTools,
 			VerbatimTools:   verbatimTools,
@@ -648,6 +632,7 @@ func (s *service) Promote(ctx context.Context, req PromoteRequest) (PromoteResul
 		NumericID:       numericID,
 		Category:        category,
 		DryRun:          false,
+		TargetCatalogID: targetCatalogID,
 		HarnessID:       req.HarnessID,
 		Tools:           resolvedTools,
 		VerbatimTools:   verbatimTools,
@@ -655,69 +640,4 @@ func (s *service) Promote(ctx context.Context, req PromoteRequest) (PromoteResul
 		StrippedFields:  strippedFields,
 		DivertedTools:   facts.DivertedTools,
 	}, nil
-}
-
-// askPromoteCategory asks the user to select a target category for the promoted agent.
-// It returns ErrPromoteCategoryRequired when the question is cancelled, skipped, or unanswered.
-// Placement is never guessed: any non-Answered outcome becomes a hard error.
-func (s *service) askPromoteCategory(ctx context.Context, srcPath string) (string, error) {
-	opts, err := s.buildPromoteCategoryOptions()
-	if err != nil {
-		return "", fmt.Errorf("reading promote category options: %w", err)
-	}
-
-	ans, err := s.deps.Interaction.SelectOne(ctx, domain.ChoiceQuestion{
-		Question: domain.Question{
-			ID:        domain.QPromoteCategory,
-			Subject:   srcPath,
-			Title:     "Select a target category for the promoted agent",
-			AllowSkip: true,
-		},
-		Options: opts,
-	})
-	if err != nil {
-		return "", fmt.Errorf("%w: %w", ErrPromoteCategoryRequired, err)
-	}
-	if ans.Status != domain.Answered {
-		return "", ErrPromoteCategoryRequired
-	}
-	return ans.OptionID, nil
-}
-
-// buildPromoteCategoryOptions returns the SelectOne options for QPromoteCategory.
-// Options are derived from the subdirectories present under Subagents/ in the active
-// catalogue root, each with Option.ID equal to the directory name, plus one option with
-// Option.ID equal to PromoteCategoryUtility. Options are sorted by ID so the presented
-// list is deterministic regardless of filesystem ordering.
-func (s *service) buildPromoteCategoryOptions() ([]domain.Option, error) {
-	agentsDir := catalogpaths.SubagentsDir(s.deps.Catalog.CatalogRoot())
-	entries, err := os.ReadDir(agentsDir)
-	if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("reading Subagents/: %w", err)
-	}
-
-	var opts []domain.Option
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		opts = append(opts, domain.Option{
-			ID:    name,
-			Label: name,
-		})
-	}
-
-	// Add the utility-agents placement option.
-	opts = append(opts, domain.Option{
-		ID:    PromoteCategoryUtility,
-		Label: "Utility Agents (UtilityAgents/)",
-	})
-
-	// Sort by ID for deterministic ordering regardless of filesystem readdir order.
-	sort.Slice(opts, func(i, j int) bool {
-		return opts[i].ID < opts[j].ID
-	})
-
-	return opts, nil
 }

@@ -2180,7 +2180,6 @@ func TestBuildGenericAgent_RecommendedTier_NonEmpty_WrittenAsScalar(t *testing.T
 	}
 }
 
-
 // TestBuildGenericAgent_TierRationale_NonEmpty_WrittenAsScalar verifies that when
 // PromoteInput.TierRationale is a non-empty string, the generated frontmatter carries
 // tier_rationale as a scalar with that exact value (AC5.4).
@@ -2208,7 +2207,6 @@ func TestBuildGenericAgent_TierRationale_NonEmpty_WrittenAsScalar(t *testing.T) 
 		t.Errorf("tier_rationale = %q, want %q", gotRationale, wantRationale)
 	}
 }
-
 
 // TestBuildGenericAgent_RequiredSkills_SingleEntry_WrittenAsFlowStyleList verifies that
 // a RequiredSkills slice with one entry is written to the generated frontmatter as a
@@ -2544,8 +2542,8 @@ func TestBuildGenericAgent_AllThreeMetadataFields_PresentWithEmptyValuesWhenNone
 		Key:             "field-recovery-agent",
 		Role:            domain.RoleSubagent,
 		Version:         "1.0.0",
-		RecommendedTier: "", // empty
-		TierRationale:   "", // empty
+		RecommendedTier: "",  // empty
+		TierRationale:   "",  // empty
 		RequiredSkills:  nil, // nil
 	})
 	if err != nil {
@@ -2587,8 +2585,8 @@ func TestBuildGenericAgent_EmptyMetadataFields_AppearInAD13OrderAfterCarriedKeys
 		Key:             "field-recovery-agent",
 		Role:            domain.RoleSubagent,
 		Version:         "1.0.0",
-		RecommendedTier: "", // empty
-		TierRationale:   "", // empty
+		RecommendedTier: "",  // empty
+		TierRationale:   "",  // empty
 		RequiredSkills:  nil, // nil
 	})
 	if err != nil {

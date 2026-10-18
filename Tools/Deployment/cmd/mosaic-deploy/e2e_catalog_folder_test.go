@@ -1,9 +1,9 @@
 package main
 
 // e2e_catalog_folder_test.go verifies the end-to-end wiring of --catalog-folder:
-// that parsing the flag via scanGlobalFlags, resolving it via resolveCatalogFolder,
-// and loading the catalog via catalog.Load together deliver agents and workflows from
-// the custom catalogue while the MOSAIC root continues to supply the bundle.
+// that pre-scanning the stack flags and building the catalog stack together deliver agents,
+// workflows, skills and hooks from the user catalogue alone (the default layer is left out
+// without --include-default-catalog) while the bundle follows the resolved layer.
 //
 // Contract under test (T5.5):
 //
@@ -16,10 +16,9 @@ package main
 //       in the default catalogue do not.
 //
 //   Bundle sourcing:
-//     - The bundle (DeployedSections.md) is always read from the MOSAIC root via
-//       BundleSourceRelPath, regardless of what the custom catalogue root contains.
-//     - A competing bundle file placed inside the custom catalogue root's tree at
-//       an arbitrary path does not affect FileBundleLoader.LoadBundle(mosaicRoot).
+//     - The bundle (DeployedSections.md) comes from the layer the stack resolved: the user
+//       layer's bundle is used when it has one, and there is no fallback to the MOSAIC root
+//       when the user layer lacks it.
 //
 //   Root identity after wiring:
 //     - catalog.Root() equals the resolved mosaicRoot (not the catalogFolder).
@@ -28,14 +27,17 @@ package main
 // scanGlobalFlags signature: (args []string) (mosaicRoot, catalogFolder, logDir string, allowExternal bool)
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"mosaic-deploy/internal/catalog"
 	"mosaic-deploy/internal/catalog/catalogpaths"
+	"mosaic-deploy/internal/catalog/stack/systemfile"
 	"mosaic-deploy/internal/harness/registry"
 )
 
@@ -52,6 +54,7 @@ func makeE2EMosaicRoot(t *testing.T) string {
 
 	// Marker files required by isMosaicRoot / ResolveRoot.
 	mustMkdirMain(t, root, "Catalog")
+	writeCatalogIdentityFile(t, filepath.Join(root, "Catalog"), "e2e-default")
 	mustWriteFileMain(t, root, catalogpaths.MosaicRelSourceFilesFormatFile,
 		[]byte("# CatalogFilesFormat\n"))
 	mustMkdirMain(t, root, "Workflows")
@@ -61,6 +64,8 @@ func makeE2EMosaicRoot(t *testing.T) string {
 	// Minimal bundle document at the canonical BundleSourceRelPath.
 	mustMkdirMain(t, root, "Catalog", "Agents", "Generic")
 	mustWriteFileMain(t, root, catalog.BundleSourceRelPath, []byte(minimalBundleDoc))
+	writeSystemFileCopies(t, filepath.Join(root, "Catalog"))
+	writeHarnessInjectionCopies(t, filepath.Join(root, "Catalog"))
 
 	return root
 }
@@ -154,7 +159,7 @@ func mustWriteFileMain(t *testing.T, root, relPath string, content []byte) {
 // catalog.Load supplies agents from that fixture catalogue rather than from the default.
 func TestE2E_CatalogFolder_AgentsSourcedFromFixtureCatalogue(t *testing.T) {
 	mosaicRoot := makeE2EMosaicRoot(t)
-	customCatalogRoot := t.TempDir()
+	customCatalogRoot := newIdentifiedCatalogRoot(t, "e2e-custom")
 
 	// Write an agent only into the custom catalogue root.
 	writeE2EAgentToCustomCatalogueRoot(t, customCatalogRoot, "Test", "fixture-e2e-agent")
@@ -163,22 +168,15 @@ func TestE2E_CatalogFolder_AgentsSourcedFromFixtureCatalogue(t *testing.T) {
 	// With --catalog-folder this agent must NOT appear.
 	writeE2EAgentToDefaultCatalogue(t, mosaicRoot, "Test", "default-only-agent")
 
-	// Step 1: Parse --catalog-folder from the argument list (simulates main.go step 1).
-	args := []string{"--catalog-folder", customCatalogRoot, "deploy", "--harness", "stub"}
-	_, catalogFolderFlag, _, _ := scanGlobalFlags(args)
+	// A default skill and hook must not be merged into a user-only stack.
+	writeStackSkill(t, filepath.Join(mosaicRoot, "Catalog"), "default-skill")
+	writeStackHook(t, filepath.Join(mosaicRoot, "Catalog"), "default-hook")
 
-	// Step 2: Resolve the catalog folder (simulates main.go step 2 after root resolution).
-	catalogFolder, err := resolveCatalogFolder(mosaicRoot, catalogFolderFlag)
+	// Pre-scan the stack flags and build the stack (simulates main.go).
+	cat, err := buildCatalogStack(mosaicRoot, scanStackInput(
+		[]string{"--catalog-folder", customCatalogRoot, "deploy", "--harness", "stub"}))
 	if err != nil {
-		t.Fatalf("resolveCatalogFolder(%q, %q): %v; "+
-			"a valid directory supplied via --catalog-folder must not produce an error",
-			mosaicRoot, catalogFolderFlag, err)
-	}
-
-	// Step 3: Load the catalog using both roots (simulates catalog.Load in main.go step 5).
-	cat, err := catalog.Load(mosaicRoot, catalogFolder)
-	if err != nil {
-		t.Fatalf("catalog.Load(%q, %q): %v; catalog must load without error", mosaicRoot, catalogFolder, err)
+		t.Fatalf("buildCatalogStack: %v; the stack must build without error", err)
 	}
 
 	// Assert: fixture agent from custom catalogue is present.
@@ -199,21 +197,13 @@ func TestE2E_CatalogFolder_AgentsSourcedFromFixtureCatalogue(t *testing.T) {
 // workflows present only in the default catalogue do not appear.
 func TestE2E_CatalogFolder_WorkflowsSourcedFromFixtureCatalogue(t *testing.T) {
 	mosaicRoot := makeE2EMosaicRoot(t)
-	customCatalogRoot := t.TempDir()
+	customCatalogRoot := newIdentifiedCatalogRoot(t, "e2e-custom")
 
 	writeE2EWorkflowToCustomCatalogueRoot(t, customCatalogRoot, "TestCategory", "fixture-wf")
 
-	args := []string{"--catalog-folder", customCatalogRoot, "workflows"}
-	_, catalogFolderFlag, _, _ := scanGlobalFlags(args)
-
-	catalogFolder, err := resolveCatalogFolder(mosaicRoot, catalogFolderFlag)
+	cat, err := buildCatalogStack(mosaicRoot, scanStackInput([]string{"--catalog-folder", customCatalogRoot, "workflows"}))
 	if err != nil {
-		t.Fatalf("resolveCatalogFolder: %v", err)
-	}
-
-	cat, err := catalog.Load(mosaicRoot, catalogFolder)
-	if err != nil {
-		t.Fatalf("catalog.Load: %v", err)
+		t.Fatalf("buildCatalogStack: %v", err)
 	}
 
 	if _, found := cat.Workflow("fixture-wf"); !found {
@@ -222,53 +212,46 @@ func TestE2E_CatalogFolder_WorkflowsSourcedFromFixtureCatalogue(t *testing.T) {
 	}
 }
 
-// TestE2E_CatalogFolder_BundleSourcedFromMosaicRoot verifies that the bundle is always
-// read from the MOSAIC root via BundleSourceRelPath, regardless of what the custom
-// catalogue root contains. Placing a competing "bundle" file inside the custom catalogue
-// root at an arbitrary path must not affect FileBundleLoader.LoadBundle(mosaicRoot).
-func TestE2E_CatalogFolder_BundleSourcedFromMosaicRoot(t *testing.T) {
+// TestE2E_CatalogFolder_BundleSourcedFromResolvedLayer verifies the stack rule for the bundle:
+// the user layer's bundle is the one loaded when it supplies one, even though the MOSAIC root
+// default catalog also carries a bundle, and a user-only stack whose layer has no bundle gets
+// no fallback to the MOSAIC root's bundle.
+func TestE2E_CatalogFolder_BundleSourcedFromResolvedLayer(t *testing.T) {
 	mosaicRoot := makeE2EMosaicRoot(t)
-	customCatalogRoot := t.TempDir()
+	withBundle := newIdentifiedCatalogRoot(t, "e2e-custom")
+	mustWriteFileMain(t, withBundle, "DeployedSections.md", []byte(
+		strings.Replace(minimalBundleDoc, `bundle_version: "1.0.0"`, `bundle_version: "7.7.7"`, 1)))
+	withoutBundle := newIdentifiedCatalogRoot(t, "e2e-bare")
 
-	// Place a file inside the custom catalogue root at a path that mimics BundleSourceRelPath.
-	// This file must not interfere with bundle loading.
-	competingDir := filepath.Join(customCatalogRoot, "Catalog", "Agents", "Generic")
-	if err := os.MkdirAll(competingDir, 0o755); err == nil {
-		_ = os.WriteFile(
-			filepath.Join(competingDir, "DeployedSections.md"),
-			[]byte("---\nbundle_version: \"WRONG-CUSTOM\"\nblocks: []\n---\nWrong bundle.\n"),
-			0o644,
-		)
-	}
+	t.Run("user layer bundle is used", func(t *testing.T) {
+		cat, err := buildCatalogStack(mosaicRoot, scanStackInput([]string{"--catalog-folder", withBundle, "deploy"}))
+		if err != nil {
+			t.Fatalf("buildCatalogStack: %v", err)
+		}
+		res := cat.SystemFiles().Bundle
+		if err := res.Err(); err != nil {
+			t.Fatalf("bundle resolution: %v", err)
+		}
+		content, err := catalog.FileBundleLoader{}.LoadBundle(res.Supplier.Root)
+		if err != nil {
+			t.Fatalf("LoadBundle(%q): %v", res.Supplier.Root, err)
+		}
+		if content.Version != "7.7.7" {
+			t.Errorf("BundleContent.Version = %q, want %q (the user layer's bundle)", content.Version, "7.7.7")
+		}
+	})
 
-	args := []string{"--catalog-folder", customCatalogRoot, "deploy"}
-	_, catalogFolderFlag, _, _ := scanGlobalFlags(args)
-
-	catalogFolder, err := resolveCatalogFolder(mosaicRoot, catalogFolderFlag)
-	if err != nil {
-		t.Fatalf("resolveCatalogFolder: %v", err)
-	}
-
-	// Load the bundle from the MOSAIC root. It must not be affected by the custom catalogue.
-	bundleContent, err := catalog.FileBundleLoader{}.LoadBundle(mosaicRoot)
-	if err != nil {
-		t.Fatalf("FileBundleLoader.LoadBundle(%q): %v; "+
-			"the real bundle at BundleSourceRelPath must be loadable from the MOSAIC root",
-			mosaicRoot, err)
-	}
-
-	if bundleContent.Version != "1.0.0" {
-		t.Errorf("BundleContent.Version = %q, want %q (from MOSAIC root); "+
-			"a competing file in the custom catalogue root must not affect the loaded bundle",
-			bundleContent.Version, "1.0.0")
-	}
-
-	// Confirm that the catalogFolder is correctly resolved to the custom root.
-	absCustom, _ := filepath.Abs(customCatalogRoot)
-	if catalogFolder != absCustom {
-		t.Errorf("resolved catalogFolder = %q, want %q (absolute form of custom catalogue root)",
-			catalogFolder, absCustom)
-	}
+	t.Run("absent in user layer is not supplied", func(t *testing.T) {
+		cat, err := buildCatalogStack(mosaicRoot, scanStackInput([]string{"--catalog-folder", withoutBundle, "deploy"}))
+		if err != nil {
+			t.Fatalf("buildCatalogStack: %v", err)
+		}
+		err = cat.SystemFiles().Bundle.Err()
+		var notSupplied *systemfile.NotSuppliedError
+		if !errors.As(err, &notSupplied) {
+			t.Errorf("bundle resolution error = %v; want *systemfile.NotSuppliedError (no fallback to the MOSAIC root)", err)
+		}
+	})
 }
 
 // TestE2E_CatalogFolder_CatalogRootAccessor_ReflectsCustomFolder verifies that after the
@@ -277,19 +260,11 @@ func TestE2E_CatalogFolder_BundleSourcedFromMosaicRoot(t *testing.T) {
 // reflect the two distinct roots independently.
 func TestE2E_CatalogFolder_CatalogRootAccessor_ReflectsCustomFolder(t *testing.T) {
 	mosaicRoot := makeE2EMosaicRoot(t)
-	customCatalogRoot := t.TempDir()
+	customCatalogRoot := newIdentifiedCatalogRoot(t, "e2e-custom")
 
-	args := []string{"--catalog-folder", customCatalogRoot, "deploy"}
-	_, catalogFolderFlag, _, _ := scanGlobalFlags(args)
-
-	catalogFolder, err := resolveCatalogFolder(mosaicRoot, catalogFolderFlag)
+	cat, err := buildCatalogStack(mosaicRoot, scanStackInput([]string{"--catalog-folder", customCatalogRoot, "deploy"}))
 	if err != nil {
-		t.Fatalf("resolveCatalogFolder: %v", err)
-	}
-
-	cat, err := catalog.Load(mosaicRoot, catalogFolder)
-	if err != nil {
-		t.Fatalf("catalog.Load: %v", err)
+		t.Fatalf("buildCatalogStack: %v", err)
 	}
 
 	absCustom, _ := filepath.Abs(customCatalogRoot)
@@ -321,7 +296,7 @@ func TestE2E_CatalogFolder_CatalogRootAccessor_ReflectsCustomFolder(t *testing.T
 // scanGlobalFlags signature: (args []string) (mosaicRoot, catalogFolder, logDir string, allowExternal bool)
 func TestE2E_CatalogFolder_HarnessDiscovery_UsesMosaicRoot_NotCatalogFolder(t *testing.T) {
 	mosaicRoot := makeE2EMosaicRoot(t)
-	catalogFolder := t.TempDir() // a plain directory, not a MOSAIC root
+	catalogFolder := newIdentifiedCatalogRoot(t, "e2e-custom") // a plain catalog directory, not a MOSAIC root
 
 	// Write a descriptor-only harness under the MOSAIC root's MosaicDeploy/harnesses/ tree.
 	// registry.Discover discovers on-disk harnesses from <MosaicRoot>/MosaicDeploy/harnesses/
@@ -422,23 +397,13 @@ func TestE2E_CatalogFolder_HarnessDiscovery_UsesMosaicRoot_NotCatalogFolder(t *t
 func TestE2E_CatalogFolder_AbsentFlag_UsesDefaultCatalogue(t *testing.T) {
 	mosaicRoot := makeE2EMosaicRoot(t)
 
-	// No --catalog-folder in args.
-	args := []string{"deploy", "--harness", "stub"}
-	_, catalogFolderFlag, _, _ := scanGlobalFlags(args)
-
-	if catalogFolderFlag != "" {
-		t.Fatalf("scanGlobalFlags returned catalogFolderFlag = %q, want \"\"; "+
-			"absent --catalog-folder must yield an empty pre-scan value", catalogFolderFlag)
-	}
-
-	catalogFolder, err := resolveCatalogFolder(mosaicRoot, "")
+	// No stack flags in args: the stack is the default catalogue alone.
+	cat, err := buildCatalogStack(mosaicRoot, scanStackInput([]string{"deploy", "--harness", "stub"}))
 	if err != nil {
-		t.Fatalf("resolveCatalogFolder with empty flagValue: %v", err)
+		t.Fatalf("buildCatalogStack: %v", err)
 	}
-
-	cat, err := catalog.Load(mosaicRoot, catalogFolder)
-	if err != nil {
-		t.Fatalf("catalog.Load: %v", err)
+	if layers := cat.Layers(); len(layers) != 1 || !layers[0].Default {
+		t.Fatalf("Layers() = %+v, want the default layer alone", layers)
 	}
 
 	wantCatalogRoot, _ := filepath.Abs(catalog.DefaultCatalogRoot(mosaicRoot))

@@ -38,6 +38,7 @@ const (
 	RelWorkflowsDir          = "Workflows"
 	RelSourceFilesFormatFile = "CatalogFilesFormat.md"
 	RelBundleFile            = "DeployedSections.md"
+	RelProtocolFile          = "CommunicationProtocol.md"
 )
 
 // OrchestratorFileName is the orchestrator document's base name.
@@ -66,6 +67,7 @@ const CatalogDirName = "Catalog"
 const (
 	MosaicRelSourceFilesFormatFile = CatalogDirName + "/" + RelSourceFilesFormatFile
 	MosaicRelBundleFile            = CatalogDirName + "/" + RelBundleFile
+	MosaicRelProtocolFile          = CatalogDirName + "/" + RelProtocolFile
 )
 
 // MosaicRelHarnessInjectionsDir is the MOSAIC-root-relative parent directory holding
@@ -169,6 +171,11 @@ func BundleFile(catalogRoot string) string {
 	return filepath.Join(catalogRoot, RelBundleFile)
 }
 
+// ProtocolFile returns the path to the CommunicationProtocol.md protocol document.
+func ProtocolFile(catalogRoot string) string {
+	return filepath.Join(catalogRoot, RelProtocolFile)
+}
+
 // RelStandaloneAgentsDir is the catalog-root-relative subpath for the standalone agents
 // directory. It must not contain a leading "Catalog/" segment.
 const RelStandaloneAgentsDir = "StandaloneAgents"
@@ -190,4 +197,22 @@ func StandaloneAgentFile(catalogRoot, category, agentKey string) string {
 		return filepath.Join(StandaloneAgentsDir(catalogRoot), agentKey+AgentFileExt)
 	}
 	return filepath.Join(StandaloneAgentCategoryDir(catalogRoot, category), agentKey+AgentFileExt)
+}
+
+// RelIdentityFile is the catalog-root-relative catalog identity file.
+const RelIdentityFile = "catalog-identity.yaml"
+
+// IdentityFile returns the path to the catalog identity file under catalogRoot.
+func IdentityFile(catalogRoot string) string {
+	return filepath.Join(catalogRoot, RelIdentityFile)
+}
+
+// RelHarnessInjectionsDir is the catalog-root-relative parent directory holding one
+// subdirectory of injection content per harness.
+const RelHarnessInjectionsDir = "HarnessInjections"
+
+// HarnessInjectionsDir returns <catalogRoot>/HarnessInjections/<harnessDirName>.
+// harnessDirName is one of the HarnessDirName* constants (or any dir name found on disk).
+func HarnessInjectionsDir(catalogRoot, harnessDirName string) string {
+	return filepath.Join(catalogRoot, RelHarnessInjectionsDir, harnessDirName)
 }

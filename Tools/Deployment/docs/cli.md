@@ -19,6 +19,54 @@ These flags are accepted by all subcommands.
 | `--verbose` | bool | Enable verbose progress output |
 | `--mosaic-root <path>` | string | Override the MOSAIC root directory |
 | `--allow-external` | bool | Enable external harness modules (opt-in for security) |
+| `--catalog-folder <dir>` | string (repeatable) | Add a user catalog as a stack layer. The first occurrence is the highest layer. See [Catalog stack flags](#catalog-stack-flags) |
+| `--include-default-catalog` | bool | Add the default catalog (`<mosaic-root>/Catalog`) as the bottom layer. Alone, it selects the default catalog alone |
+
+---
+
+## Catalog stack flags
+
+The two stack flags are persistent: every subcommand (`deploy`, `update`, `workflows`, `agents`, `hooks`, `render`, `promote`, `transform`, `check-index`) accepts them, and so does the TUI launch. The stack is decided from the raw arguments before any subcommand runs.
+
+| Input | Stack |
+|-------|-------|
+| `--catalog-folder A --catalog-folder B` | A over B; the default catalog is **not** included |
+| `--catalog-folder A --include-default-catalog` | A over the default catalog |
+| `--include-default-catalog` alone | the default catalog alone |
+| `--include-default-catalog=false` without `--catalog-folder` | empty stack: error |
+| no stack flag | the workspace's persisted stack, else the default catalog alone |
+
+Forms: `--catalog-folder <dir>` and `--catalog-folder=<dir>`; values are unquoted and made absolute against the working directory. `--include-default-catalog` is accepted bare (true) or with `=<bool>`; the last valid occurrence wins and the next argument is never taken as its value.
+
+A stack flag (any occurrence of either) is *stack input*: the resulting stack is used as given and never merged with the stack persisted in the workspace. The write subcommands (`deploy`, `update`, `workflows`, `agents`, `hooks`) store it in the workspace manifest. Without stack input, a subcommand reuses the persisted stack of its workspace:
+
+| Subcommand | Workspace used for reuse |
+|------------|-------------------------|
+| `deploy`, `update`, `workflows`, `agents`, `hooks`, `render` | `--workspace` (`render --dest` alone has none) |
+| `promote` | nearest ancestor of `--file` holding `.mosaic/manifest.yaml` |
+| `transform` | `--path` itself or its nearest such ancestor |
+| `check-index` | none: never reuses |
+
+`promote`, `transform` and `render` reuse a persisted stack but never persist one. To return a workspace to the default catalog alone, run a write subcommand with `--include-default-catalog` and no `--catalog-folder`.
+
+Stack errors (empty stack, missing or invalid catalog identity, duplicate catalog id, incomplete orchestrator pair, numeric-id collision, a persisted layer that no longer resolves or a malformed persisted stack) are printed to stderr and the process exits with code 1 before anything is written. In `--output json` mode stdout stays empty.
+
+### Stack in effect
+
+Every catalog-loading subcommand reports the stack it used.
+
+- Human output: a leading block `Catalog stack (<origin>):` with one line per layer, highest first, as `  <n>. <id> <name> <version> <root>[ (default)]`. It is written only when `<origin>` is `stack-input` or `persisted`; a default-only run keeps its output unchanged.
+- JSON output (all three origins `stack-input`, `persisted`, `default`): one extra top-level key in the subcommand's own document, merged into its existing object: `StackInEffect` in the run summary of `deploy`, `update`, `workflows`, `agents`, `hooks`; `stackInEffect` in the documents of `render`, `promote`, `transform`, `check-index`. Value: `{"layers":[{"identity":{"id","name","version"},"root":"...","default":false}],"origin":"stack-input"}`. Existing keys are unchanged. Error envelopes carry no such key.
+
+### Conflict report
+
+When a layer shadows an item of a lower layer, the run reports it:
+
+- Human output: one line per entry before the result, `<severity>: <kind>[:<key>] from <id> <version> shadows <id> <version>[, ...][; affects workflows: a, b]`. `info` means the winning catalog declared the override in `catalog-identity.yaml`; `warning` means it did not. The orchestrator pair is the kind `orchestrator-pair` (declared once with `orchestrator_pair: true`).
+- JSON output: the report is inside the document only: `ConflictReport` (`{"lines":[...]}`, always present, `{}` when empty) in the run summary, `conflictReport` in the `render` document (absent when nothing is shadowed). Each line has `item`, `winner`, `shadowed` (highest first), `severity` and `affectedWorkflows`.
+- Harness injections (kind `harness-injections`) are reported only for the harness the run deploys to; shadows of another harness's injection directory are left out of the lines, the warnings and the TODO entries. A descriptor-only or external harness reads no stack injections, so its runs report none.
+- Under `--auto-confirm` (or `--yes`) each `warning` line also adds a "Manual steps" entry to the TODO file.
+- The report never changes the outcome or the exit code. In JSON mode stdout is exactly one JSON document.
 
 ---
 
@@ -256,6 +304,43 @@ mosaic-deploy agents \
 
 ---
 
+## `promote` subcommand
+
+Turn a harness-only agent into a generic catalog source. Flags: `--file`, `--harness`, `--category`, `--overwrite`, `--dry-run`, `--output` (see the README for their meaning), plus:
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `--target-catalog <catalog id>` | string | Catalog id of the stack layer that receives a **new** agent. Required when promoting a new agent non-interactively into a stack of two or more layers |
+
+Layer targeting:
+
+| Case | Target layer |
+|------|--------------|
+| The agent key already resolves in the stack | the layer that supplies it; `--target-catalog` is not needed (an id naming no layer is rejected) |
+| New agent, stack of two or more layers, `--target-catalog` given | the layer with that id (the default layer included); an unknown id is an error |
+| New agent, stack of two or more layers, flag absent | the TUI asks; the CLI fails and writes nothing |
+| New agent, one layer | that layer; the flag may be absent or that layer's id |
+
+The category comes from the target layer's `Subagents/` folder. The new numeric agent id is one greater than the largest id across all agents of the stack. `--output json` adds `targetCatalogId` to the result (and the usual `stackInEffect` key). `DestinationPath` is relative to the MOSAIC root when the target layer lies inside it, otherwise absolute.
+
+---
+
+## `check-index` subcommand
+
+Report drift between each stack layer's workflow `Index.md` and the workflow files on disk.
+
+```
+mosaic-deploy check-index [--output json] [stack flags]
+```
+
+`check-index` never reuses a persisted stack: it checks the stack its flags describe, or the default catalog alone.
+
+Human output has one block per catalog in layer order, headed `catalog <id> (<root>)` (`catalog unknown (<root>)` for a root without identity), listing only that catalog's findings (`no index`, `clean`, `file-orphans`, `index-orphans`). JSON output keeps the existing top-level fields as an aggregate over all layers (counts summed, orphan lists concatenated highest layer first, `clean` true only when every layer is clean) and adds `catalogs`, one entry per layer with `catalog` (`id`, `name`, `version`), `catalogRoot`, `indexPath`, `indexPresent`, `fileOrphans`, `indexOrphans`, `diskCount`, `indexCount` and `clean`, plus `stackInEffect`.
+
+Exit code: `0` when every layer is clean (a missing index counts as clean), `2` when any layer has drift, `1` on a service error.
+
+---
+
 ## Exit codes
 
 | Code | Name | Meaning |
@@ -277,6 +362,8 @@ echo "$result" | jq '.Outcome'
 ```
 
 The JSON object always contains at least `Mode`, `Outcome`, and `WorkspacePath`. A JSON document is written even when `Outcome` is `"failed"`, so consumers can inspect the failure reason programmatically.
+
+Two keys are additive: `ConflictReport` (the [conflict report](#conflict-report)) and `StackInEffect` (the [stack in effect](#stack-in-effect)). Both appear inside the one document; stdout never carries anything else.
 
 ---
 

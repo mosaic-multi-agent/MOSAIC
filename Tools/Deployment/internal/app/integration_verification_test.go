@@ -213,7 +213,7 @@ func TestDeployNew_AllThreeFixes_ComposedIntegration(t *testing.T) {
 	infraOptions := capture.optionsFor(domain.QAgentModel, "checkpoint-agent")
 	if infraOptions == nil {
 		t.Fatal("QAgentModel was not asked for \"checkpoint-agent\"; " +
-			"infrastructure agents must participate in a second resolveModels batch "+
+			"infrastructure agents must participate in a second resolveModels batch " +
 			"(Stage 3 not implemented or the second resolveModels call is missing from DeployNew)")
 	}
 

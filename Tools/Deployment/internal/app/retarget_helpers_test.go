@@ -82,9 +82,9 @@ func (m *retargetTestModule) Close() error { return nil }
 func newAlphaHarnessModule() *retargetTestModule {
 	return &retargetTestModule{
 		d: domain.HarnessDescriptor{
-			ID:               "alpha-harness",
-			DisplayName:      "Alpha Harness",
-			TransformVersion: "alpha-1.0.0",
+			ID:                "alpha-harness",
+			DisplayName:       "Alpha Harness",
+			TransformVersion:  "alpha-1.0.0",
 			InjectionsVersion: "alpha-1.0.0",
 			Paths: domain.PathSpec{
 				Agents: domain.ScopedPaths{Supported: true, Project: "agents"},
@@ -138,9 +138,9 @@ func newAlphaHarnessModule() *retargetTestModule {
 func newBetaHarnessModule() *retargetTestModule {
 	return &retargetTestModule{
 		d: domain.HarnessDescriptor{
-			ID:               "beta-harness",
-			DisplayName:      "Beta Harness",
-			TransformVersion: "beta-2.0.0",
+			ID:                "beta-harness",
+			DisplayName:       "Beta Harness",
+			TransformVersion:  "beta-2.0.0",
 			InjectionsVersion: "beta-2.0.0",
 			Paths: domain.PathSpec{
 				Agents: domain.ScopedPaths{Supported: true, Project: "deployed"},
@@ -192,9 +192,9 @@ func newBetaHarnessModule() *retargetTestModule {
 func newGammaHarnessModule() *retargetTestModule {
 	return &retargetTestModule{
 		d: domain.HarnessDescriptor{
-			ID:               "gamma-harness",
-			DisplayName:      "Gamma Harness",
-			TransformVersion: "gamma-3.0.0",
+			ID:                "gamma-harness",
+			DisplayName:       "Gamma Harness",
+			TransformVersion:  "gamma-3.0.0",
 			InjectionsVersion: "gamma-3.0.0",
 			Paths: domain.PathSpec{
 				Agents: domain.ScopedPaths{Supported: true, Project: "gamma-agents"},

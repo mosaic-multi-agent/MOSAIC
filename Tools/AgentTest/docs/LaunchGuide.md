@@ -165,7 +165,7 @@ The precedence is enforced in `resolveConfiguredPath` in `cmd/mosaic-agent-test/
 
 **`--mosaic-root`** redirects the entire MOSAIC root, including the protocol document, skill folders, and bundle specifications that the deploy tool reads. Use it with care: a root that is missing these resources will cause the deploy tool to fail on them, not on the catalogue.
 
-**`--catalog-folder`** redirects only the catalogue source directories (where agents and workflows are scanned from) while leaving all other root-relative resources at the real MOSAIC root. This is the right override for pointing AgentTest at a test catalogue without duplicating the full MOSAIC root structure.
+**`--catalog-folder`** names the test catalogue as a standalone catalogue stack: agents, workflows, the protocol, the bundle and the built-in harnesses' injections all come from that folder (the shipped `Tools/AgentTest/catalog` carries its own copies), not from the real MOSAIC root. This is the right override for pointing AgentTest at a test catalogue without duplicating the full MOSAIC root structure. Do not combine it with the default-layer flag: the AgentTest catalogue's agent ids (1-25) collide with the default catalogue's.
 
 **`[.exe]`** in the default column means the binary appends `.exe` on Windows and nothing on Linux, matching the platform convention for executables.
 

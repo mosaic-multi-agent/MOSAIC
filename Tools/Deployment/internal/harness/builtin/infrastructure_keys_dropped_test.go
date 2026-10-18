@@ -52,11 +52,11 @@ func allBuiltinHarnesses() []harnessCase {
 func deployFixture(t *testing.T, h harnessCase, fixture string) *docformat.Document {
 	t.Helper()
 	frozen := deploymentTestdata(t, "frozen-catalog")
-	mod, err := h.build(registry.BuiltinOptions{MosaicRoot: frozen})
+	mod, err := h.build(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("build module: %v", err)
 	}
-	protocol, err := catalog.FileProtocolLoader{}.LoadProtocol(frozen)
+	protocol, err := catalog.FileProtocolLoader{}.LoadProtocol(filepath.Join(frozen, "Catalog"))
 	if err != nil {
 		t.Fatalf("load protocol: %v", err)
 	}
@@ -130,8 +130,7 @@ func TestOrchestrator_InfrastructureAgentsRegion_UnchangedByDropSet(t *testing.T
 	for _, h := range allBuiltinHarnesses() {
 		h := h
 		t.Run(h.name, func(t *testing.T) {
-			frozen := deploymentTestdata(t, "frozen-catalog")
-			mod, err := h.build(registry.BuiltinOptions{MosaicRoot: frozen})
+			mod, err := h.build(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 			if err != nil {
 				t.Fatalf("build module: %v", err)
 			}

@@ -22,6 +22,7 @@ from the templates in `Tools/Deployment/config/` by `task install`.
   - [Worked examples](#worked-examples)
   - [Validation errors](#validation-errors)
   - [Effect on update staleness](#effect-on-update-staleness)
+- [Catalog stack and catalog identity](#catalog-stack-and-catalog-identity)
 - [What is NOT configurable here](#what-is-not-configurable-here)
 - [Harness IDs and generic tool names](#harness-ids-and-generic-tool-names)
 
@@ -461,6 +462,48 @@ author or edit:
 
 ---
 
+## Catalog stack and catalog identity
+
+Neither `tool-config.yaml` nor `user-config.yaml` holds the catalog stack (the ordered list of catalogs a deployment draws from; see `docs/DeploymentGuide.md`, "Catalog Stacks"). Two other files carry the related state.
+
+### Where the stack is persisted
+
+The stack is stored **per workspace**, in the deployment manifest `<workspace>/.mosaic/manifest.yaml`, under the additive key `catalog_stack` (manifest schema stays `"1"`):
+
+```yaml
+catalog_stack:              # highest layer first
+  - {path: /abs/team-catalog, catalog_id: team-catalog}
+  - {default: true}         # the MOSAIC default catalog, resolved against the current MOSAIC root
+```
+
+- User layers are stored as absolute, cleaned paths with the catalog id they had when stored. The default layer is an entry with `default: true` and no path, always the last entry.
+- A run that writes (`deploy`, `update`, `workflows`, `agents`, `hooks`) stores the stack only when it was given stack input (`--catalog-folder` / `--include-default-catalog` flags, or a stack changed on the TUI stack screen). It replaces the stored list whole. Runs without stack input leave it as it is, and reuse it.
+- `promote`, `transform`, `render` and `check-index` never write it.
+- The stored stack is per machine. A layer whose folder moved or whose catalog id changed fails with an error naming the stored path; a list that breaks the structure above (for example the default entry not last) is rejected, never repaired. Passing new stack flags replaces it.
+- The same manifest records `protocol_source` and `bundle_source` (the catalogs that supplied the protocol and bundle in the last full `deploy` or `update`) and a `catalog` identity on every entry. They are provenance only; they are not read back as configuration. A manifest without these keys is valid.
+
+### The catalog identity file
+
+Every catalog used as a stack layer has `catalog-identity.yaml` at its root, next to its content folders:
+
+```yaml
+id: team-catalog              # required; ^[a-z0-9][a-z0-9._-]*$; unique within a stack
+name: Team Catalog            # required
+version: "1.2"                # required; kept as written
+overrides:                    # optional
+  agents: [code-reviewer]
+  workflows: [feature-dev]
+  skills: [efficient-file-reading]
+  hooks: [pre-commit-guard]
+  orchestrator_pair: true     # the single declaration for orchestrator + orchestrator-script
+  harness_injections: ["Claude Code"]
+  system_files: [CommunicationProtocol.md, DeployedSections.md]
+```
+
+`overrides` lists items the catalog replaces on purpose; a declared override is reported as `info` in the conflict report, an undeclared one as `warning`. The format and validation rules are in `Catalog/CatalogFilesFormat.md` (identity section). The shipped catalogs use the ids `mosaic-default` (`Catalog/`), `runner-test-catalog` (`Tools/Runner/TestCatalog/`) and `agenttest-catalog` (`Tools/AgentTest/catalog/`).
+
+---
+
 ## What is NOT configurable here
 
 These files tune *mappings and selection*. They cannot change a harness's tool
@@ -476,7 +519,10 @@ Discovery precedence is `external > descriptor-only > built-in`, and the `id:`
 field inside the YAML is authoritative — not the folder name. So a descriptor
 declaring `id: "claude-code"` **overrides the compiled-in built-in entirely, at
 runtime, with no rebuild**. You may place `HarnessInjections.md` and
-`HarnessInjectionsOrchestrator.md` alongside it.
+`HarnessInjectionsOrchestrator.md` alongside it. Those injection files are read
+from next to the descriptor: only the four built-in harnesses take their
+injections from the catalog stack, and a descriptor-only or external harness
+(including a descriptor that overrides a built-in id) keeps its own.
 
 Trade-off: a descriptor-only override loses any Go-side behaviour the built-in
 module adds beyond the shared descriptor algorithms. Prefer `tool_destinations`

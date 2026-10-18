@@ -43,26 +43,32 @@ type buildContentCatalog struct {
 	sources map[string][]byte
 }
 
-func (c *buildContentCatalog) Root() string                                    { return "" }
-func (c *buildContentCatalog) CatalogRoot() string                             { return "" }
-func (c *buildContentCatalog) Agents() []domain.Agent                          { return nil }
-func (c *buildContentCatalog) Agent(string) (domain.Agent, bool)               { return domain.Agent{}, false }
-func (c *buildContentCatalog) Orchestrator() domain.Agent                      { return domain.Agent{} }
-func (c *buildContentCatalog) OrchestratorScript() (domain.Agent, bool)        { return domain.Agent{}, false }
-func (c *buildContentCatalog) UtilityAgents() []domain.Agent                   { return nil }
-func (c *buildContentCatalog) StandaloneAgents() []domain.Agent                { return nil }
-func (c *buildContentCatalog) InfrastructureAgents() []domain.Agent            { return nil }
-func (c *buildContentCatalog) Skills() []domain.Skill                          { return nil }
-func (c *buildContentCatalog) Skill(string) (domain.Skill, bool)               { return domain.Skill{}, false }
-func (c *buildContentCatalog) Hooks() []domain.HookBundle                      { return nil }
-func (c *buildContentCatalog) Hook(string) (domain.HookBundle, bool)           { return domain.HookBundle{}, false }
-func (c *buildContentCatalog) Workflows() []domain.Workflow                    { return nil }
-func (c *buildContentCatalog) Workflow(string) (domain.Workflow, bool)         { return domain.Workflow{}, false }
-func (c *buildContentCatalog) WorkflowCategories() []domain.WorkflowCategory   { return nil }
-func (c *buildContentCatalog) Tiers() []domain.TierInfo                        { return nil }
-func (c *buildContentCatalog) WorkflowSection(string) ([]byte, error)          { return nil, nil }
-func (c *buildContentCatalog) Issues() []catalog.Issue                         { return nil }
-func (c *buildContentCatalog) AgentByNumericID(string) (domain.Agent, bool)    { return domain.Agent{}, false }
+func (c *buildContentCatalog) Root() string                             { return "" }
+func (c *buildContentCatalog) CatalogRoot() string                      { return "" }
+func (c *buildContentCatalog) Agents() []domain.Agent                   { return nil }
+func (c *buildContentCatalog) Agent(string) (domain.Agent, bool)        { return domain.Agent{}, false }
+func (c *buildContentCatalog) Orchestrator() domain.Agent               { return domain.Agent{} }
+func (c *buildContentCatalog) OrchestratorScript() (domain.Agent, bool) { return domain.Agent{}, false }
+func (c *buildContentCatalog) UtilityAgents() []domain.Agent            { return nil }
+func (c *buildContentCatalog) StandaloneAgents() []domain.Agent         { return nil }
+func (c *buildContentCatalog) InfrastructureAgents() []domain.Agent     { return nil }
+func (c *buildContentCatalog) Skills() []domain.Skill                   { return nil }
+func (c *buildContentCatalog) Skill(string) (domain.Skill, bool)        { return domain.Skill{}, false }
+func (c *buildContentCatalog) Hooks() []domain.HookBundle               { return nil }
+func (c *buildContentCatalog) Hook(string) (domain.HookBundle, bool) {
+	return domain.HookBundle{}, false
+}
+func (c *buildContentCatalog) Workflows() []domain.Workflow { return nil }
+func (c *buildContentCatalog) Workflow(string) (domain.Workflow, bool) {
+	return domain.Workflow{}, false
+}
+func (c *buildContentCatalog) WorkflowCategories() []domain.WorkflowCategory { return nil }
+func (c *buildContentCatalog) Tiers() []domain.TierInfo                      { return nil }
+func (c *buildContentCatalog) WorkflowSection(string) ([]byte, error)        { return nil, nil }
+func (c *buildContentCatalog) Issues() []catalog.Issue                       { return nil }
+func (c *buildContentCatalog) AgentByNumericID(string) (domain.Agent, bool) {
+	return domain.Agent{}, false
+}
 func (c *buildContentCatalog) ReadSource(path string) ([]byte, error) {
 	if c.sources != nil {
 		if b, ok := c.sources[path]; ok {
@@ -85,19 +91,19 @@ func newBuildContentService(sources map[string][]byte) *service {
 // closure with a skill PlanItem whose SourcePath resolves through the stub catalog.
 func invokeBuildContentForSkill(s *service, sourcePath string) ([]byte, error) {
 	callback := s.buildContent(
-		nil,                        // module — not used by skill path
-		nil,                        // agentByKey — not used by skill path
-		nil,                        // models — not used by skill path
-		nil,                        // customTools — not used by skill path
-		nil,                        // skippedTools — not used by skill path
-		nil,                        // workflowBlocks — not used by skill path
-		nil,                        // infrastructureBlocks — not used by skill path
+		nil, // module — not used by skill path
+		nil, // agentByKey — not used by skill path
+		nil, // models — not used by skill path
+		nil, // customTools — not used by skill path
+		nil, // skippedTools — not used by skill path
+		nil, // workflowBlocks — not used by skill path
+		nil, // infrastructureBlocks — not used by skill path
 		domain.ScopeProject,
-		nil,                        // deployedReader — not used by skill path
-		"",                         // toolMappingsVersion — not used by skill path
+		nil, // deployedReader — not used by skill path
+		"",  // toolMappingsVersion — not used by skill path
 		domain.ProtocolContent{},
 		domain.BundleContent{},
-		nil,                        // harnessOnly — empty, so not matched
+		nil, // harnessOnly — empty, so not matched
 	)
 	item := domain.PlanItem{
 		Ref:        domain.ArtifactRef{Kind: domain.ArtifactSkill, Key: "lean-tdd"},

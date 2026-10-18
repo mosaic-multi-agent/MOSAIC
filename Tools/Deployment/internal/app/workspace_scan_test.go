@@ -79,27 +79,44 @@ type scanCatalog struct {
 	byKey       map[string]domain.Agent
 }
 
-func (c *scanCatalog) Root() string                                       { return "" }
-func (c *scanCatalog) CatalogRoot() string                                { return "" }
-func (c *scanCatalog) Agents() []domain.Agent                             { panic("scanCatalog: Agents not used") }
-func (c *scanCatalog) Agent(key string) (domain.Agent, bool)              { a, ok := c.byKey[key]; return a, ok }
-func (c *scanCatalog) Orchestrator() domain.Agent                         { panic("scanCatalog: Orchestrator not used") }
-func (c *scanCatalog) OrchestratorScript() (domain.Agent, bool)           { panic("scanCatalog: OrchestratorScript not used") }
-func (c *scanCatalog) UtilityAgents() []domain.Agent                      { panic("scanCatalog: UtilityAgents not used") }
-func (c *scanCatalog) InfrastructureAgents() []domain.Agent               { panic("scanCatalog: InfrastructureAgents not used") }
-func (c *scanCatalog) StandaloneAgents() []domain.Agent                   { panic("scanCatalog: StandaloneAgents not used") }
-func (c *scanCatalog) Skills() []domain.Skill                             { panic("scanCatalog: Skills not used") }
-func (c *scanCatalog) Skill(key string) (domain.Skill, bool)              { panic("scanCatalog: Skill not used") }
-func (c *scanCatalog) Hooks() []domain.HookBundle                         { panic("scanCatalog: Hooks not used") }
-func (c *scanCatalog) Hook(key string) (domain.HookBundle, bool)          { panic("scanCatalog: Hook not used") }
-func (c *scanCatalog) Workflows() []domain.Workflow                       { panic("scanCatalog: Workflows not used") }
-func (c *scanCatalog) Workflow(id string) (domain.Workflow, bool)         { panic("scanCatalog: Workflow not used") }
-func (c *scanCatalog) WorkflowCategories() []domain.WorkflowCategory      { panic("scanCatalog: WorkflowCategories not used") }
-func (c *scanCatalog) Tiers() []domain.TierInfo                           { panic("scanCatalog: Tiers not used") }
-func (c *scanCatalog) WorkflowSection(id string) ([]byte, error)          { panic("scanCatalog: WorkflowSection not used") }
-func (c *scanCatalog) ReadSource(path string) ([]byte, error)             { panic("scanCatalog: ReadSource not used") }
-func (c *scanCatalog) Issues() []catalog.Issue                            { return nil }
-func (c *scanCatalog) AgentByNumericID(id string) (domain.Agent, bool)    { a, ok := c.byNumericID[id]; return a, ok }
+func (c *scanCatalog) Root() string                          { return "" }
+func (c *scanCatalog) CatalogRoot() string                   { return "" }
+func (c *scanCatalog) Agents() []domain.Agent                { panic("scanCatalog: Agents not used") }
+func (c *scanCatalog) Agent(key string) (domain.Agent, bool) { a, ok := c.byKey[key]; return a, ok }
+func (c *scanCatalog) Orchestrator() domain.Agent            { panic("scanCatalog: Orchestrator not used") }
+func (c *scanCatalog) OrchestratorScript() (domain.Agent, bool) {
+	panic("scanCatalog: OrchestratorScript not used")
+}
+func (c *scanCatalog) UtilityAgents() []domain.Agent { panic("scanCatalog: UtilityAgents not used") }
+func (c *scanCatalog) InfrastructureAgents() []domain.Agent {
+	panic("scanCatalog: InfrastructureAgents not used")
+}
+func (c *scanCatalog) StandaloneAgents() []domain.Agent {
+	panic("scanCatalog: StandaloneAgents not used")
+}
+func (c *scanCatalog) Skills() []domain.Skill                    { panic("scanCatalog: Skills not used") }
+func (c *scanCatalog) Skill(key string) (domain.Skill, bool)     { panic("scanCatalog: Skill not used") }
+func (c *scanCatalog) Hooks() []domain.HookBundle                { panic("scanCatalog: Hooks not used") }
+func (c *scanCatalog) Hook(key string) (domain.HookBundle, bool) { panic("scanCatalog: Hook not used") }
+func (c *scanCatalog) Workflows() []domain.Workflow              { panic("scanCatalog: Workflows not used") }
+func (c *scanCatalog) Workflow(id string) (domain.Workflow, bool) {
+	panic("scanCatalog: Workflow not used")
+}
+func (c *scanCatalog) WorkflowCategories() []domain.WorkflowCategory {
+	panic("scanCatalog: WorkflowCategories not used")
+}
+func (c *scanCatalog) Tiers() []domain.TierInfo { panic("scanCatalog: Tiers not used") }
+func (c *scanCatalog) WorkflowSection(id string) ([]byte, error) {
+	panic("scanCatalog: WorkflowSection not used")
+}
+func (c *scanCatalog) ReadSource(path string) ([]byte, error) {
+	panic("scanCatalog: ReadSource not used")
+}
+func (c *scanCatalog) Issues() []catalog.Issue { return nil }
+func (c *scanCatalog) AgentByNumericID(id string) (domain.Agent, bool) {
+	a, ok := c.byNumericID[id]
+	return a, ok
+}
 
 // newScanCatalog returns an empty scanCatalog. Callers populate byNumericID and byKey
 // to model whatever catalog state the test requires.
@@ -206,7 +223,7 @@ func TestScanWorkspaceAgents_NumericIDMatch_FileInMatched(t *testing.T) {
 
 	// Assert
 	if len(scan.Matched) == 0 {
-		t.Fatalf("scan.Matched is empty; expected one entry for file with id=5 matching catalog agent "+
+		t.Fatalf("scan.Matched is empty; expected one entry for file with id=5 matching catalog agent " +
 			"worker-agent. scanWorkspaceAgents must return a Matched entry when AgentByNumericID resolves.")
 	}
 	if scan.Matched[0].FileName != "worker-agent.md" {
@@ -354,8 +371,8 @@ func TestScanWorkspaceAgents_FilenameKeyMatch_FileInMatched(t *testing.T) {
 
 	// Assert
 	if len(scan.Matched) == 0 {
-		t.Fatalf("scan.Matched is empty; expected one Matched entry for file utility-tool.md "+
-			"whose filename key resolves via catalog.Agent. "+
+		t.Fatalf("scan.Matched is empty; expected one Matched entry for file utility-tool.md " +
+			"whose filename key resolves via catalog.Agent. " +
 			"scanWorkspaceAgents must use the filename-key fallback when no numeric id is present.")
 	}
 }
@@ -460,8 +477,8 @@ func TestScanWorkspaceAgents_UnmatchedEligible_InHarnessOnly(t *testing.T) {
 
 	// Assert
 	if len(scan.HarnessOnly) == 0 {
-		t.Fatalf("scan.HarnessOnly is empty; expected external-tool.md to appear in HarnessOnly "+
-			"(no catalog match, both eligibility signals present). "+
+		t.Fatalf("scan.HarnessOnly is empty; expected external-tool.md to appear in HarnessOnly " +
+			"(no catalog match, both eligibility signals present). " +
 			"scanWorkspaceAgents must route unmatched eligible files to HarnessOnly.")
 	}
 }
@@ -925,7 +942,7 @@ func TestScanWorkspaceAgents_MixedDirectory_ThreeOutcomesClassifiedCorrectly(t *
 // that Chmod sets, and the running process often retains read access regardless.
 func TestScanWorkspaceAgents_UnreadableFile_SkippedSilently(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skipf("chmod 0 does not reliably prevent reads on Windows; "+
+		t.Skipf("chmod 0 does not reliably prevent reads on Windows; " +
 			"this test requires Linux or macOS where POSIX permission bits are enforced")
 	}
 	// Arrange — create a catalog-matching .md file, then remove its read permission.
@@ -1028,9 +1045,9 @@ func TestScanWorkspaceAgents_ParseFailedFile_CatalogKeyMatch_InMatched(t *testin
 
 	// Assert — the parse-failed file must appear in Matched, not be silently skipped.
 	if len(scan.Matched) == 0 {
-		t.Fatalf("scan.Matched is empty; expected one entry for unparseable file whose filename key "+
-			"'worker-agent' resolves via catalog.Agent. "+
-			"scanWorkspaceAgents must perform a filename-key fallback after parse failure "+
+		t.Fatalf("scan.Matched is empty; expected one entry for unparseable file whose filename key " +
+			"'worker-agent' resolves via catalog.Agent. " +
+			"scanWorkspaceAgents must perform a filename-key fallback after parse failure " +
 			"instead of silently skipping the file (FR-1: identifiable files must not be dropped).")
 	}
 }
@@ -1056,8 +1073,8 @@ func TestScanWorkspaceAgents_ParseFailedFile_CatalogKeyMatch_ParseFailedIsTrue(t
 		t.Fatal("scan.Matched is empty; cannot check ParseFailed")
 	}
 	if !scan.Matched[0].ParseFailed {
-		t.Errorf("scan.Matched[0].ParseFailed = false, want true; "+
-			"a file matched by filename-key after a parse failure must carry ParseFailed == true "+
+		t.Errorf("scan.Matched[0].ParseFailed = false, want true; " +
+			"a file matched by filename-key after a parse failure must carry ParseFailed == true " +
 			"so the downstream planner can classify it as CONFLICT, not CREATE")
 	}
 }
@@ -1223,8 +1240,8 @@ func TestScanWorkspaceAgents_NormalMatchedFile_ParseFailedIsFalse(t *testing.T) 
 		t.Fatal("scan.Matched is empty; cannot check ParseFailed")
 	}
 	if scan.Matched[0].ParseFailed {
-		t.Errorf("scan.Matched[0].ParseFailed = true, want false; "+
-			"a normally parseable file that matches via numeric id must NOT have ParseFailed set; "+
+		t.Errorf("scan.Matched[0].ParseFailed = true, want false; " +
+			"a normally parseable file that matches via numeric id must NOT have ParseFailed set; " +
 			"ParseFailed must only be set for files that failed docformat.Parse")
 	}
 }
@@ -1305,8 +1322,8 @@ func TestScanWorkspaceAgents_ParseFailedFile_NotInHarnessOnly(t *testing.T) {
 	if len(scan.HarnessOnly) != 0 {
 		for _, h := range scan.HarnessOnly {
 			if h.FileName == "worker-agent.md" {
-				t.Errorf("worker-agent.md appeared in HarnessOnly; a parse-failed catalog-matched file "+
-					"must be in Matched, not HarnessOnly. HarnessOnly requires a successful parse "+
+				t.Errorf("worker-agent.md appeared in HarnessOnly; a parse-failed catalog-matched file " +
+					"must be in Matched, not HarnessOnly. HarnessOnly requires a successful parse " +
 					"to evaluate the two-signal eligibility check.")
 			}
 		}

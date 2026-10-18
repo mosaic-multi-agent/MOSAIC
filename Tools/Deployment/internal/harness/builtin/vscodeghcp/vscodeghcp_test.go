@@ -172,10 +172,10 @@ func agentFixturesDir(t *testing.T) string {
 	return abs
 }
 
-// frozenCatalogRoot returns the absolute path to the frozen Catalog fixture tree. This tree
-// is a snapshot of the protocol source document and all HarnessInjections files at the time
-// the golden files were last regenerated. Golden-file tests must use this root instead of the
-// live repo root so they remain immune to Catalog evolution (version bumps, prose edits, etc.).
+// frozenCatalogRoot returns the absolute path to the frozen MOSAIC-root-shaped fixture tree.
+// It snapshots Catalog/CommunicationProtocol.md and Catalog/HarnessInjections/ as of the last
+// golden regeneration. Golden-file tests must use this root instead of the live repo root so
+// they remain immune to Catalog evolution (version bumps, prose edits, etc.).
 func frozenCatalogRoot(t *testing.T) string {
 	t.Helper()
 	// testdata/frozen-catalog/ is at Tools/Deployment/testdata/frozen-catalog/
@@ -191,7 +191,7 @@ func frozenCatalogRoot(t *testing.T) string {
 // test immediately if construction fails.
 func newModule(t *testing.T) domain.HarnessModule {
 	t.Helper()
-	mod, err := vscodeghcp.New(registry.BuiltinOptions{MosaicRoot: repoRoot(t)})
+	mod, err := vscodeghcp.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("vscodeghcp.New(): %v", err)
 	}
@@ -203,7 +203,7 @@ func newModule(t *testing.T) domain.HarnessModule {
 // files in Catalog/ do not affect the committed golden files.
 func newModuleFromFrozen(t *testing.T) domain.HarnessModule {
 	t.Helper()
-	mod, err := vscodeghcp.New(registry.BuiltinOptions{MosaicRoot: frozenCatalogRoot(t)})
+	mod, err := vscodeghcp.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("vscodeghcp.New() from frozen catalog: %v", err)
 	}
@@ -215,7 +215,7 @@ func newModuleFromFrozen(t *testing.T) domain.HarnessModule {
 // must be populated for every transform.Apply call that processes those source files.
 func loadProtocol(t *testing.T, root string) domain.ProtocolContent {
 	t.Helper()
-	content, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	content, err := catalog.FileProtocolLoader{}.LoadProtocol(filepath.Join(root, "Catalog"))
 	if err != nil {
 		t.Fatalf("load protocol from %s: %v", root, err)
 	}
@@ -870,11 +870,10 @@ func TestModel_DescriptorDeclares_ModelKey(t *testing.T) {
 // normalise the ModelID (AC13.3, FR-11).
 func TestModel_CustomModelIDEmittedVerbatim(t *testing.T) {
 	mod := newModule(t)
-	root := repoRoot(t)
-	protocol := loadProtocol(t, root)
+	protocol := loadProtocol(t, frozenCatalogRoot(t))
 
 
-	srcPath := filepath.Join(root, "Catalog", "Subagents", "Execution", "test-runner.md")
+	srcPath := filepath.Join(agentFixturesDir(t), "test-runner.md")
 	src, err := os.ReadFile(srcPath)
 	if err != nil {
 		t.Skipf("generic test-runner agent not found at %s: %v", srcPath, err)

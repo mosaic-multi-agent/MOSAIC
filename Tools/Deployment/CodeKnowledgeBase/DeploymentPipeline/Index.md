@@ -11,7 +11,7 @@ the stages compose in one fixed direction — no stage reaches backward into an 
 
 ```mermaid
 flowchart LR
-    A[catalog\nread MOSAIC sources] --> B[plan\ncompute domain.Plan]
+    A[catalog + catalog/stack\nread and resolve the catalog stack] --> B[plan\ncompute domain.Plan]
     M[manifest\nprior deployment state] --> B
     B --> C[transform\napply harness shaping]
     C --> D[deploy\nwrite files + hooks]
@@ -30,7 +30,8 @@ to make anything happen on disk.
 
 | Component | Purpose |
 |-----------|---------|
-| **catalog** | Reads the MOSAIC repository tree exactly once per run and exposes agents, skills, hook bundles, workflows, and tiers as typed, immutable values. The only package that opens MOSAIC source files for reading. |
+| **catalog** | The per-layer loader: reads exactly one catalog root (`LoadSingleRoot`; `Load` delegates to it and never merges the default catalog) and exposes agents, skills, hook bundles, workflows, and tiers as typed, immutable values. With `docformat`, the only code that opens catalog source files for reading. There is no default skills/hooks merge for custom catalogs any more. |
+| **catalog/stack** | Composes an ordered list of single-root layers (highest first, each with a `catalog-identity.yaml` read by `catalog/identity`) into one resolved catalog that satisfies `catalog.Catalog`. Resolves keyed items (agents, workflows, skills, hooks) from the highest layer having the key, the orchestrator pair as one unit, and, through the pure sub-packages `systemfile` and `injections`, `CommunicationProtocol.md`, `DeployedSections.md` and per-harness injection directories as whole units with no fallback. Reports provenance and shadow records, per-layer `check-index`, and validates the stack (`stackerr`: empty stack, invalid layer, load or identity failure, duplicate catalog id, incomplete orchestrator pair, numeric-id collision). `app` takes the protocol and bundle from `SystemFiles()` and builds the conflict report and manifest provenance from `Shadows()` and `Provenance()`. |
 | **docformat** | The single authority on the MOSAIC document format (YAML-like frontmatter + markdown body with `<Name type="core">` / `<Name type="project">` boundary tags). Parses and serialises with byte-exact fidelity — untouched regions of a document round-trip unchanged. Used by both `catalog` (to extract workflow sections) and `transform` (to mutate frontmatter and injection regions). |
 | **plan** | Computes a complete `domain.Plan` — what would happen to every selected artifact — by resolving the artifact set, deriving each target path via the harness module, and classifying each item against the manifest snapshot and current on-disk hashes. Performs no I/O; the caller supplies all catalog/manifest reads and on-disk hash lookups as plain data. |
 | **transform** | A pure function (`Apply`): given one generic source file's bytes plus a harness module and request context, produces the harness-shaped output bytes and an audit `Report`. Drives all frontmatter field shaping and injection-region content through the harness module — no harness-specific logic lives in this package. |
@@ -44,7 +45,9 @@ to make anything happen on disk.
 
 ### Plan Computation (catalog → plan)
 
-1. The caller (app layer) loads the `catalog.Catalog` and a `manifest.Snapshot` for the
+1. The caller (app layer) takes the `catalog.Catalog` the composition root built from the
+   catalog stack (a `stack.Catalog`; the plain single-root catalog only in unit tests) and
+   loads a `manifest.Snapshot` for the
    target workspace, then probes every planned target path on disk to produce a
    `map[string]domain.DeployedArtifactState` (`plan.Input.DeployedState`). The state carries
    presence, a content hash, and the version stamps read directly from the deployed file's
@@ -104,6 +107,11 @@ Staleness is evaluated per-field, never as a single "is this stale" boolean:
   carrying only the bare `role` key is **not** classified as stale on that basis alone —
   key-name migration is not a staleness input, only version-stamp and content comparisons are.
 - **Skills** and **hook bundles** compare a single `version` field each.
+- **Catalog change.** Every agent, skill file and hook bundle with a manifest entry is also
+  stale when the catalog id recorded in its entry and the id of the catalog that supplies it
+  now are both known and differ (`plan.CatalogStaleness`, delta field `source_catalog`). The
+  reason names both ids and comes last. An unknown side (pre-stack manifest, non-stack
+  catalog) contributes nothing.
 
 Each mismatching field produces a `VersionDelta` (field name, deployed value, source value);
 the plan item's `Reason` is a human-readable join of all deltas. This granularity lets the
@@ -223,7 +231,7 @@ recorded is a real, detectable local modification, not noise to be smoothed over
 
 ## Boundaries
 
-- **Owns:** Reading MOSAIC sources; computing what a run would do; shaping generic content
+- **Owns:** Reading catalog sources (every layer of the stack; the protocol and bundle come from the layer that supplies them, not a fixed MOSAIC-root path); computing what a run would do; shaping generic content
   into harness-specific bytes; performing the actual writes, backups, hook registration, and
   manifest/TODO/log persistence for one run.
 - **Does Not Own:** Deciding *which* harness, workspace, workflows, or agents to use (that's
@@ -247,6 +255,12 @@ recorded is a real, detectable local modification, not noise to be smoothed over
   an absent target or defer to a manual TODO item.
 - The manifest written after execution reflects actual on-disk state, including through a
   partial failure — it is never derived purely from the pre-execution plan.
+- Catalog ids are unique within a stack, and the numeric agent ids of the resolved agents are
+  unique across it; a violation is a composition error raised before any plan is built.
+- Conflict-report lines (either severity) and the stack in effect never change a run's outcome
+  or exit code. The persisted stack is written to the manifest only by runs given stack input,
+  as `catalog_stack`; manifest entries carry the supplying catalog, and workflows (embedded in
+  the orchestrator, no manifest entries) get provenance per resolved item in the stack.
 - Every gap raised anywhere in the pipeline (plan, transform, deploy) flows into exactly one
   `todo.Collector`, so the TODO file and on-screen summary are always in agreement.
 

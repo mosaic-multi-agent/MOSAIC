@@ -13,8 +13,9 @@ target AI harness workspace. It handles several operations:
   touching workflows or hooks; declarations for new infrastructure agents are
   added to an existing orchestrator.
 
-The tool reads from the MOSAIC source tree (generic agents, skills, hook bundles,
-workflow definitions) and writes harness-specific files to a workspace you own.
+The tool reads from a stack of catalogs (generic agents, skills, hook bundles,
+workflow definitions; by default the MOSAIC default catalog alone, see
+[Catalog stacks](#catalog-stacks)) and writes harness-specific files to a workspace you own.
 It never modifies MOSAIC sources.
 
 ---
@@ -33,6 +34,7 @@ It never modifies MOSAIC sources.
   - [Refresh-scope prompt](#refresh-scope-prompt)
   - [What is never touched](#what-is-never-touched)
   - [Version staleness](#version-staleness)
+- [Catalog stacks](#catalog-stacks)
 - [Promote — generate a generic agent from a harness-only file](#promote--generate-a-generic-agent-from-a-harness-only-file)
 - [Config file reference](#config-file-reference)
   - [tool-config.yaml](#tool-configyaml)
@@ -404,6 +406,27 @@ file is written.
 
 ---
 
+## Catalog stacks
+
+The tool reads its sources from a **catalog stack**: an ordered list of catalogs, highest layer first. By default the stack is the MOSAIC default catalog (`<mosaic-root>/Catalog`) alone. `--catalog-folder <dir>` (repeatable; first is highest) adds user layers; `--include-default-catalog` adds the default catalog as the bottom layer. A CLI run that names a user catalog leaves the default catalog out unless `--include-default-catalog` is given, and that flag alone means the default catalog alone. The TUI shows a stack screen after the path screen in every mode. The user-facing walkthrough (TUI keys, conflict report, provenance, persistence, reset to default-only, migration notice) is in [docs/DeploymentGuide.md](../../docs/DeploymentGuide.md#catalog-stacks); flags and output are in [docs/cli.md](docs/cli.md#catalog-stack-flags).
+
+Resolution rules:
+
+- Keyed items (agents of every role, workflows, skills, hook bundles) come from the highest layer that has the key; a skill or hook bundle is replaced whole.
+- The orchestrator pair (`orchestrator` + `orchestrator-script`) comes from one layer, the highest that supplies the pair. A layer supplying only one of the two is a composition error. The pair is declared as an override with the single flag `orchestrator_pair: true`.
+- `CommunicationProtocol.md` and `DeployedSections.md` are each taken whole from the highest layer that has the file.
+- Harness injections are resolved per harness directory (`HarnessInjections/<Harness>/`): the highest layer having the directory supplies all of that harness's files, with no fallback to lower layers.
+- There is no merge of the default catalog's skills and hooks into a custom catalog any more; skills and hooks come only from the layers.
+- Every layer needs a `catalog-identity.yaml` (id, name, version, optional declared overrides). Stack validation (before anything is written) fails on: an empty stack, an invalid layer list, a layer that fails to load or has no valid identity, a duplicate catalog id, an incomplete orchestrator pair, and a numeric agent id used by two different resolved agents (a numeric-id collision is a composition error). `check-index` reports each layer in its own block.
+
+**Boundary for harness injections.** Only the four built-in harnesses (`claude-code`, `opencode`, `ghcp-cli`, `vscode-ghcp`) resolve their injections through the stack. Descriptor-only and external harnesses (under `<mosaic-root>/MosaicDeploy/harnesses/`) keep loading their injections next to their descriptors, and `cmd/harness-opencode-module` keeps reading `<mosaic-root>/Catalog/HarnessInjections`. A built-in harness whose injections no layer supplies is listed as not usable, and resolving it fails with an error naming the missing `HarnessInjections/<Harness>`. If the winning layer's directory exists but lacks `HarnessInjections.md` or `HarnessInjectionsOrchestrator.md`, or holds a file that cannot be parsed, the run fails and writes nothing; the error names the layer (id and root), the harness directory and the file, and says that injections are not merged across layers, so the layer must supply a valid file or drop the directory.
+
+**Reports and provenance.** Items a higher layer shadows are listed in a conflict report (`info` when the winner declares the override, `warning` otherwise; it never changes the exit code). Harness-injection shadows are reported only for the harness the run deploys to. The manifest records the supplying catalog per entry (and the protocol and bundle suppliers); workflows have no manifest entries, so their provenance is per resolved item in the stack. A change of supplying catalog makes an item stale: when the catalog recorded for an agent, skill file or hook differs from the catalog that supplies it now, `deploy` and `update` replace the file from the current catalog and the reason names both catalogs (an unknown recorded or current catalog, e.g. a manifest written before stacks, changes nothing). CLI output reports the stack in effect (layers in precedence order and whether it came from stack input, the persisted stack, or the default alone).
+
+**Persistence.** A write run (`deploy`, `update`, `workflows`, `agents`, `hooks`) given stack input stores the stack in the workspace manifest; later runs reuse it unless new stack flags are given (they replace it, never merge). `promote` and `transform` reuse the stack of the workspace containing their path and never persist; `check-index` never reuses. `--include-default-catalog` alone resets a workspace to the default catalog.
+
+---
+
 ## Promote — generate a generic agent from a harness-only file
 
 The `promote` command produces a generic source file from a harness-only agent,
@@ -434,7 +457,7 @@ The generated generic file:
   from the source as-is.**
 - **Writes frontmatter per a defined field policy:**
   - `id` — assigned automatically as one greater than the largest numeric id
-    currently in the catalog.
+    across all agents of the catalog stack in effect.
   - `version` — taken from the source file's `version` field, or `"1.0.0"`
     when the field is absent (common in hand-authored harness-only agents).
   - `name` — taken from the source `name` field when present; otherwise derived
@@ -457,9 +480,18 @@ The source (harness-only) file is **never modified or deleted**.
 
 The target category is required and is never inferred from the source file.
 The tool asks interactively when `--category` is absent. Available categories
-are derived from the subdirectories present under `Catalog/Subagents/`, plus
-a special `UtilityAgents` option that places the file under
-`Catalog/UtilityAgents/`.
+are derived from the subdirectories present under the target layer's
+`Subagents/` folder (`Catalog/Subagents/` for the default catalog), plus
+a special `UtilityAgents` option that places the file under the layer's
+`UtilityAgents/` folder.
+
+### Target layer
+
+With a catalog stack, promote writes into one layer. An agent whose key already
+resolves in the stack goes to the layer that supplies it. A **new** agent in a
+stack of two or more layers needs a target layer: `--target-catalog <catalog id>`
+on the CLI (the command fails and writes nothing without it), or a choice the TUI
+asks for; the default layer is a valid target. With one layer there is no choice.
 
 Registration is automatic: writing a well-formed file into the chosen directory
 IS the registration — the catalog discovers agents by scanning those directories.
@@ -483,13 +515,14 @@ workspace is a separate, user-initiated step:
 ### CLI
 
 ```
-mosaic-deploy promote --file <path> [--category <category>] [--overwrite] [--dry-run] [--output json]
+mosaic-deploy promote --file <path> [--category <category>] [--target-catalog <catalog id>] [--overwrite] [--dry-run] [--output json]
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--file <path>` | Path to a single harness-only agent file to promote. Must be an existing regular file, not a directory. Required. |
 | `--category <name>` | Destination category. When absent, the tool asks interactively. |
+| `--target-catalog <catalog id>` | Catalog id of the stack layer that receives a new agent. Required when promoting a new agent non-interactively into a stack of two or more layers. |
 | `--overwrite` | Replace an existing generic file at the destination path. |
 | `--dry-run` | Validate and compute everything; write no file. |
 | `--output json` | Emit the result as a single JSON document instead of human-readable text. |
@@ -779,6 +812,10 @@ For a custom descriptor file, pass the full path:
 ```sh
 ./mosaic-deploy deploy --harness /path/to/my-harness.yaml ...
 ```
+
+### Catalog stack errors
+
+A stack that cannot be built stops the run before anything is written (exit code 1). The message names the layer. Typical causes: no valid `catalog-identity.yaml` in a `--catalog-folder`, two layers with the same catalog id, a layer with only one orchestrator file, two resolved agents with the same numeric id, no layer supplying `CommunicationProtocol.md`, `DeployedSections.md` or a built-in harness's `HarnessInjections/<Harness>/`, or a persisted layer whose folder moved (pass new stack flags to replace it). See [docs/cli.md](docs/cli.md#catalog-stack-flags).
 
 ### "external harness modules require explicit opt-in"
 

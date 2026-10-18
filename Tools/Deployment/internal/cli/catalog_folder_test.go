@@ -28,10 +28,9 @@ package cli_test
 //       that cobra's own re-parse of the same argument list does not reject it.
 //       A cobra rejection produces ExitUsage; its absence is the assertion.
 //
-// NOTE: These tests fail in the TDD RED phase because --catalog-folder is not yet
-// registered in cli.Run (I5.5). Cobra will return an unknown flag error, causing
-// cli.Run to return ExitUsage. Once I5.5 registers the persistent flag, these tests
-// will pass (assuming the underlying service behaviour is unchanged).
+// NOTE: --catalog-folder adds a user layer of the catalog stack; it is repeatable and a user
+// catalog excludes the default catalog unless --include-default-catalog is given. These
+// tests cover acceptance only; repeated use and the default-layer flag are in stack_flags_test.go.
 
 import (
 	"bytes"
@@ -42,14 +41,6 @@ import (
 	"mosaic-deploy/internal/cli"
 	"mosaic-deploy/internal/domain"
 )
-
-// catalogFolderDir returns a temporary directory path to use as a --catalog-folder
-// value in CLI invocations. The directory is created by t.TempDir() so it exists
-// on disk and is cleaned up automatically.
-func catalogFolderDir(t *testing.T) string {
-	t.Helper()
-	return t.TempDir()
-}
 
 // ---------------------------------------------------------------------------
 // deploy subcommand

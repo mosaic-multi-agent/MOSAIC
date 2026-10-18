@@ -68,7 +68,7 @@ func (m *bomFixtureModule) Ref() domain.HarnessRef {
 	return domain.HarnessRef{ID: m.desc.ID, DisplayName: m.desc.DisplayName, Tier: domain.TierDescriptor, Usable: true}
 }
 func (m *bomFixtureModule) Descriptor() *domain.HarnessDescriptor { return m.desc }
-func (m *bomFixtureModule) Close() error                           { return nil }
+func (m *bomFixtureModule) Close() error                          { return nil }
 func (m *bomFixtureModule) Tools(req domain.ToolRequest) (domain.ToolResult, error) {
 	return descriptor.MapTools(m.desc, req)
 }

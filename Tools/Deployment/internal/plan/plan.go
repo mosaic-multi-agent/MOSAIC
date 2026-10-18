@@ -108,11 +108,12 @@ type ArtifactSet struct {
 
 var (
 	// ErrUnknownWorkflow is returned by ResolveArtifacts when a workflow ID is not found
-	// in the catalog.
+	// in the catalog. The wrapping message names the id and the catalogs searched.
 	ErrUnknownWorkflow = errors.New("workflow not found")
 
 	// ErrUnknownAgent is returned by ResolveArtifacts when a workflow references an agent
-	// that does not exist in the catalog. The error is not silent: the caller must handle
+	// that does not exist in the catalog, and (as a RequestedAgentNotFoundError) when an
+	// agent requested directly is not found. The error is not silent: the caller must handle
 	// it rather than deploying a subtly incomplete artifact set.
 	ErrUnknownAgent = errors.New("workflow references an agent that does not exist")
 

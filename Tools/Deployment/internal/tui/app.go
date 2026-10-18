@@ -9,18 +9,22 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"mosaic-deploy/internal/app"
+	"mosaic-deploy/internal/app/stackconfig"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/tui/screens"
 )
 
 // screenID identifies which screen the root model is currently showing.
+//
+// Entry order: harness -> mode -> path screen -> stack -> running. The stack screen is omitted
+// when no reload capability is configured.
 type screenID int
 
 const (
 	screenHarness       screenID = iota // harness selection (entry screen 1)
-	screenMode                          // Deploy workspace vs update (entry screen 2)
-	screenCatalogFolder                 // catalogue folder path entry (entry screen 3)
-	screenWorkspace                     // workspace path entry (entry screen 4)
+	screenMode                          // run mode selection (entry screen 2)
+	screenWorkspace                     // workspace, file or directory path entry (entry screen 3)
+	screenStack                         // catalogue stack (entry screen 4)
 	screenQuestion                      // inline question overlay from the Interaction port
 	screenRunning                       // service call in progress
 	screenDone                          // run completed; showing final status / summary
@@ -37,16 +41,15 @@ type Options struct {
 	// service reach the TUI overlay system. If nil, service questions are silently skipped.
 	Interaction *ProgramRef
 
-	// CatalogFolder is the catalogue root the session started with — the resolved
-	// --catalog-folder value, or the default {mosaic-root}/Catalog. It pre-fills the
-	// catalogue folder screen so an ordinary deployment is Enter-through. Empty omits
-	// the catalogue folder screen entirely; the user proceeds directly from mode
-	// selection to the workspace screen.
-	CatalogFolder string
+	// LaunchStack is the stack the session started with (from the CLI stack flags, or
+	// {IncludeDefault: true} without stack input).
+	LaunchStack stackconfig.Description
 
-	// ReloadCatalog rebuilds the session's service against a different catalogue folder.
-	// Supplied by the composition root; nil disables reloading, in which case the catalogue
-	// screen still displays and validates but the confirmed value has no further effect.
+	// LaunchStackGiven is true when the session was launched with stack input.
+	LaunchStackGiven bool
+
+	// ReloadCatalog rebuilds the session's service from a confirmed stack and its origin.
+	// Supplied by the composition root; nil omits the stack screen in every mode.
 	ReloadCatalog CatalogReloadFunc
 
 	// ToolVersion is the semver string of the mosaic-deploy binary (e.g. "1.0.0").
@@ -88,7 +91,6 @@ func Run(ctx context.Context, svc app.Service, opts Options) error {
 type entrySelections struct {
 	harnessID     string
 	mode          domain.RunMode
-	catalogFolder string
 	workspacePath string
 }
 
@@ -108,12 +110,14 @@ type rootModel struct {
 	// Entry screens (concrete types, not interfaces, so back-navigation preserves state).
 	harnessScreen      *screens.HarnessScreen
 	modeScreen         *screens.ModeScreen
-	catalogFolderScreen *screens.WorkspaceScreen // catalogue folder path entry; nil until Stage 7 wires it
 	wsScreen           *screens.WorkspaceScreen
 
-	// reloadCatalog is the optional capability to rebuild the service against a new
-	// catalogue folder. Supplied by the composition root via Options.ReloadCatalog.
-	// Nil means no reload is performed even when a different folder is confirmed.
+	// stack is the catalogue-stack step that follows the path screen (see stack_flow.go).
+	stack stackStep
+
+	// reloadCatalog is the optional capability to rebuild the service from a confirmed
+	// stack. Supplied by the composition root via Options.ReloadCatalog. Nil omits the
+	// stack screen in every mode.
 	reloadCatalog CatalogReloadFunc
 
 	// Collected entry selections.
@@ -132,6 +136,7 @@ type rootModel struct {
 	infraAgentOverlay     *screens.InfrastructureAgentScreen // QInfrastructureAgents multi-select
 	deployAgentOverlay    *screens.DeployAgentScreen         // QDeployAgents multi-select
 	hookOverlay           *screens.HookScreen                // QHooks multi-select
+	standaloneOverlay     *screens.StandaloneAgentScreen     // QStandaloneAgents multi-select
 
 	// Post-run summary screen (shown on screenDone after a successful or partial run).
 	summaryScreen *screens.SummaryScreen
@@ -176,17 +181,6 @@ func newRootModel(ctx context.Context, svc app.Service, opts Options) *rootModel
 		wsScreen.SetPrefilledPath(opts.InitialRequest.WorkspacePath)
 	}
 
-	// Create the catalogue folder screen when a catalogue folder was supplied.
-	// When no CatalogFolder is set the screen is omitted and mode advances directly
-	// to the workspace screen (preserving existing flow for callers that do not supply
-	// the option).
-	var cfScreen *screens.WorkspaceScreen
-	if opts.CatalogFolder != "" {
-		cfScreen = screens.NewWorkspaceScreen(w, h, style)
-		cfScreen.SetPathKind(screens.PathKindCatalogFolder)
-		cfScreen.SetPrefilledPath(opts.CatalogFolder)
-	}
-
 	startScreen := screenHarness
 	preHarness := ""
 	if opts.InitialRequest != nil {
@@ -207,12 +201,11 @@ func newRootModel(ctx context.Context, svc app.Service, opts Options) *rootModel
 		height:              h,
 		harnessScreen:       hScreen,
 		modeScreen:          mScreen,
-		catalogFolderScreen: cfScreen,
 		wsScreen:            wsScreen,
+		stack:               newStackStep(svc, opts, w, h, style),
 		reloadCatalog:       opts.ReloadCatalog,
 		selections: entrySelections{
-			harnessID:     preHarness,
-			catalogFolder: opts.CatalogFolder,
+			harnessID: preHarness,
 		},
 	}
 }
@@ -261,10 +254,8 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = sizeMsg.Height
 		m.harnessScreen.Resize(m.width, m.height)
 		m.modeScreen.Resize(m.width, m.height)
-		if m.catalogFolderScreen != nil {
-			m.catalogFolderScreen.Resize(m.width, m.height)
-		}
 		m.wsScreen.Resize(m.width, m.height)
+		m.stack.resize(m.width, m.height)
 		m.resizeQuestionOverlays(m.width, m.height)
 		if m.summaryScreen != nil {
 			m.summaryScreen.Resize(m.width, m.height)
@@ -309,6 +300,7 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.screen = screenHarness
 			m.errMsg = ""
 			m.selections = entrySelections{}
+			m.stack.key = "" // the next stack screen restarts from its path's stack
 			m.activeQuestion = nil
 			m.reviewOverlay = nil
 			return m, nil
@@ -331,10 +323,10 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateHarness(msg)
 	case screenMode:
 		return m.updateMode(msg)
-	case screenCatalogFolder:
-		return m.updateCatalogFolder(msg)
 	case screenWorkspace:
 		return m.updateWorkspace(msg)
+	case screenStack:
+		return m.updateStack(msg)
 	case screenQuestion:
 		return m.updateQuestion(msg)
 	case screenRunning:
@@ -408,6 +400,9 @@ func (m *rootModel) resizeQuestionOverlays(width, height int) {
 	if m.hookOverlay != nil {
 		m.hookOverlay.Resize(width, height)
 	}
+	if m.standaloneOverlay != nil {
+		m.standaloneOverlay.Resize(width, height)
+	}
 }
 
 func (m *rootModel) updateHarness(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -447,46 +442,8 @@ func (m *rootModel) updateMode(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			m.wsScreen.SetPathKind(screens.PathKindDirectory)
 		}
-		// When a catalogue folder screen is configured, show it before the workspace
-		// screen so the user can confirm or change the catalogue source.
-		if m.catalogFolderScreen != nil {
-			m.screen = screenCatalogFolder
-			return m, m.catalogFolderScreen.InputInit()
-		}
 		m.screen = screenWorkspace
 		// Start the text input cursor blink.
-		return m, m.wsScreen.InputInit()
-	}
-	return m, cmd
-}
-
-func (m *rootModel) updateCatalogFolder(msg tea.Msg) (tea.Model, tea.Cmd) {
-	cmd := m.catalogFolderScreen.Update(msg)
-	if m.catalogFolderScreen.Back() {
-		// Back from catalogue folder returns to mode selection.
-		m.catalogFolderScreen.Reset()
-		m.screen = screenMode
-		return m, nil
-	}
-	if m.catalogFolderScreen.Done() {
-		confirmedPath := m.catalogFolderScreen.WorkspacePath()
-
-		// Only reload when the confirmed path differs from the currently loaded one.
-		if confirmedPath != m.selections.catalogFolder && m.reloadCatalog != nil {
-			newSvc, err := m.reloadCatalog(confirmedPath)
-			if err != nil {
-				// Reload failed: show the error inline, keep the user on this screen,
-				// and do not replace the session's working service.
-				m.catalogFolderScreen.Reset()
-				m.catalogFolderScreen.SetExternalError(err.Error())
-				// m.screen stays as screenCatalogFolder — no transition.
-				return m, nil
-			}
-			m.svc = newSvc
-		}
-		m.selections.catalogFolder = confirmedPath
-		m.catalogFolderScreen.Reset()
-		m.screen = screenWorkspace
 		return m, m.wsScreen.InputInit()
 	}
 	return m, cmd
@@ -495,29 +452,14 @@ func (m *rootModel) updateCatalogFolder(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *rootModel) updateWorkspace(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmd := m.wsScreen.Update(msg)
 	if m.wsScreen.Back() {
-		// Back from workspace returns to the catalogue folder screen when it is in the
-		// flow, or directly to mode selection when it is not.
 		m.wsScreen.Reset()
-		if m.catalogFolderScreen != nil {
-			m.screen = screenCatalogFolder
-		} else {
-			m.screen = screenMode
-		}
+		m.screen = screenMode
 		return m, nil
 	}
 	if m.wsScreen.Done() {
 		m.selections.workspacePath = m.wsScreen.WorkspacePath()
 		m.wsScreen.Reset()
-		m.screen = screenRunning
-		switch m.selections.mode {
-		case domain.ModePromoteToGeneric:
-			m.statusMsg = "Running promote…"
-		case domain.ModeTransformHarness:
-			m.statusMsg = "Running transform…"
-		default:
-			m.statusMsg = "Running deployment…"
-		}
-		return m, m.startService()
+		return m.afterPath()
 	}
 	return m, cmd
 }
@@ -654,6 +596,10 @@ func (m *rootModel) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.hookOverlay = nil
 			m.screen = screenRunning
 		}
+		return m, cmd
+	}
+
+	if cmd, handled := m.updateStandaloneOverlay(msg); handled {
 		return m, cmd
 	}
 
@@ -809,12 +755,15 @@ func (m *rootModel) handleQuestionMsg(qMsg questionMsg) (tea.Model, tea.Cmd) {
 		case domain.QDeployAgents:
 			tree := optionsToAgentTree(qMsg.choiceQ.Options)
 			m.deployAgentOverlay = screens.NewDeployAgentScreen(tree, m.width, m.height, style, "")
+		case domain.QStandaloneAgents:
+			m.standaloneOverlay = screens.NewStandaloneAgentScreen(optionsToAgentCategories(qMsg.choiceQ.Options), m.width, m.height, style, "")
 		case domain.QHooks:
 			bundles, supported := optionsToHookBundles(qMsg.choiceQ.Options)
 			m.hookOverlay = screens.NewHookScreen(bundles, supported, m.width, m.height, style, "")
 		default:
 			m.selectOverlay = newInlineSelectOne(qMsg.choiceQ, m.theme, m.width, m.height)
 		}
+		m.applyProvenance(qMsg.choiceQ)
 		m.screen = screenQuestion
 		return m, nil
 
@@ -962,13 +911,10 @@ func (m *rootModel) View() string {
 		return m.harnessScreen.View()
 	case screenMode:
 		return m.modeScreen.View()
-	case screenCatalogFolder:
-		if m.catalogFolderScreen != nil {
-			return m.catalogFolderScreen.View()
-		}
-		return ""
 	case screenWorkspace:
 		return m.wsScreen.View()
+	case screenStack:
+		return m.stack.screen.View()
 	case screenQuestion:
 		return m.viewQuestion()
 	case screenRunning:
@@ -1006,6 +952,9 @@ func (m *rootModel) viewQuestion() string {
 	}
 	if m.hookOverlay != nil {
 		return m.hookOverlay.View()
+	}
+	if m.standaloneOverlay != nil {
+		return m.standaloneOverlay.View()
 	}
 	if m.selectOverlay != nil {
 		return m.selectOverlay.view()

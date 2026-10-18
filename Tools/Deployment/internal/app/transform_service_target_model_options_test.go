@@ -37,9 +37,9 @@ import (
 // Use it when a test needs to assert on the shape of the question — specifically the
 // Options field — rather than just whether the question was asked.
 type capturingTargetModelSpy struct {
-	base                  domain.Interaction
-	capturedTargetModelQ  *domain.ChoiceQuestion
-	targetModelAnswer     domain.ChoiceAnswer
+	base                 domain.Interaction
+	capturedTargetModelQ *domain.ChoiceQuestion
+	targetModelAnswer    domain.ChoiceAnswer
 }
 
 func (s *capturingTargetModelSpy) SelectOne(ctx context.Context, q domain.ChoiceQuestion) (domain.ChoiceAnswer, error) {

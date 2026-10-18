@@ -15,6 +15,7 @@ type VersionStamp struct {
 	InjectionsVersion             string // role-selected injection version (agents only)
 	OrchestratorInjectionsVersion string // reserved; no longer populated after Stage 3
 	ToolMappingsVersion           string // hash of the effective tool-destination mapping set; agents only; empty when no config mappings
+	Catalog                       CatalogIdentity // source catalog of the item; zero = unknown
 }
 
 // Manifest is the deployment tool's bookkeeping record for every artifact it has written to
@@ -28,6 +29,13 @@ type Manifest struct {
 	UpdatedAt     time.Time
 	Entries       []ManifestEntry // sorted by TargetPath
 	ToolVersion   string          // version of the mosaic-deploy binary that wrote this manifest; empty means not recorded
+	// ProtocolSource and BundleSource are the catalogs that supplied the protocol and the
+	// deployed-sections bundle of the last full run; zero = unknown.
+	ProtocolSource CatalogIdentity
+	BundleSource   CatalogIdentity
+	// CatalogStack is the catalog stack persisted with the deployment, highest layer first;
+	// nil = none.
+	CatalogStack []PersistedCatalogLayer
 }
 
 // ManifestEntry records one deployed artifact: its identity, the path it was written to,
@@ -42,6 +50,7 @@ type ManifestEntry struct {
 	ToolMappingsVersion           string    // agents only; hash of the effective tool-destination mapping set at deploy time
 	ContentHash                   string    // "sha256:<hex>" over the exact deployed bytes (CD-11)
 	DeployedAt                    time.Time
+	Catalog                       CatalogIdentity // source catalog of the deployed file; zero = unknown
 }
 
 // Lookup finds the manifest entry for one artifact. The second return value is false when

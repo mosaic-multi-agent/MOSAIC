@@ -490,7 +490,7 @@ func TestTransformHarness_SkippedModelQuestion_LeavesGroupTargetEmpty(t *testing
 	// Assert: model-b group received "target-b" in AppliedModelMap.
 	// RED: result.AppliedModelMap is nil (not populated by stub implementation).
 	if result.AppliedModelMap == nil {
-		t.Errorf("result.AppliedModelMap is nil; want a non-nil mapping recording what was applied "+
+		t.Errorf("result.AppliedModelMap is nil; want a non-nil mapping recording what was applied " +
 			"(RED: deliver I7.3 to populate AppliedModelMap)")
 		return
 	}

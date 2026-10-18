@@ -27,6 +27,7 @@ import (
 	"testing"
 
 	"mosaic-deploy/internal/app"
+	"mosaic-deploy/internal/app/stackservicetest"
 	"mosaic-deploy/internal/cli"
 	"mosaic-deploy/internal/domain"
 )
@@ -169,6 +170,7 @@ func TestRun_AcceptsStubService_WithoutRealInfrastructure(t *testing.T) {
 
 // countingService implements app.Service and counts method calls via injected callbacks.
 type countingService struct {
+	stackservicetest.MockStackService
 	onDeploy func() domain.RunSummary
 	onUpdate func() domain.RunSummary
 }

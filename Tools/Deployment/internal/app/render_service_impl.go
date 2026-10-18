@@ -28,10 +28,11 @@ import (
 //
 // Validation order (so the caller gets the most actionable message and nothing is read or
 // written before the request is known to be coherent):
-//   source arity → destination arity → harness required → harness resolvable →
-//   source exists/resolvable → source parseable → role/version derived →
-//   workflow applicability → workflow ids resolvable →
-//   destination resolution → overwrite check → render → write.
+//
+//	source arity → destination arity → harness required → harness resolvable →
+//	source exists/resolvable → source parseable → role/version derived →
+//	workflow applicability → workflow ids resolvable →
+//	destination resolution → overwrite check → render → write.
 func renderAgent(_ context.Context, s *service, req RenderAgentRequest) (RenderAgentResult, error) {
 	// -----------------------------------------------------------------------
 	// 1. Source arity
@@ -65,7 +66,7 @@ func renderAgent(_ context.Context, s *service, req RenderAgentRequest) (RenderA
 	// -----------------------------------------------------------------------
 	module, err := s.deps.Registry.Resolve(req.TargetHarnessID)
 	if err != nil {
-		return RenderAgentResult{}, fmt.Errorf("%w: %v", ErrRenderHarnessUnresolvable, err)
+		return RenderAgentResult{}, fmt.Errorf("%w: %w", ErrRenderHarnessUnresolvable, err)
 	}
 	defer module.Close()
 
@@ -183,8 +184,8 @@ func renderAgent(_ context.Context, s *service, req RenderAgentRequest) (RenderA
 			}
 			wfBlocks = append(wfBlocks, transform.WorkflowBlock{ID: id, Block: section})
 		}
-	// else: req.Workflows == nil && role != RoleOrchestrator — wfBlocks stays nil;
-	// the source has no AvailableWorkflows region so no workflow handling is needed.
+		// else: req.Workflows == nil && role != RoleOrchestrator — wfBlocks stays nil;
+		// the source has no AvailableWorkflows region so no workflow handling is needed.
 	}
 
 	// Assemble infrastructure blocks. nil InfrastructureAgents = not specified.
@@ -326,6 +327,7 @@ func renderAgent(_ context.Context, s *service, req RenderAgentRequest) (RenderA
 		InfrastructureAgents:  resultInfraAgents,
 		Tools:                 tools,
 		DryRun:                req.DryRun,
+		ConflictReport:        s.renderConflictReport(req.TargetHarnessID, resultWorkflows),
 	}, nil
 }
 

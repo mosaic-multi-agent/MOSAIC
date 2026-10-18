@@ -110,7 +110,7 @@ func TestTransformHarness_AppliedModelMap_RecordsResolvedMapping(t *testing.T) {
 	// Assert: AppliedModelMap is non-nil.
 	// RED: current implementation does not populate AppliedModelMap (nil).
 	if result.AppliedModelMap == nil {
-		t.Errorf("result.AppliedModelMap is nil; want a non-nil mapping of source→target models "+
+		t.Errorf("result.AppliedModelMap is nil; want a non-nil mapping of source→target models " +
 			"(RED: deliver I7.4 to populate AppliedModelMap)")
 		return
 	}
@@ -340,7 +340,7 @@ func TestTransformHarness_PreAnsweredModelMap_AppliedMapMatchesRequest(t *testin
 	// Assert: AppliedModelMap reflects the pre-answered mapping.
 	// RED: AppliedModelMap is nil.
 	if result.AppliedModelMap == nil {
-		t.Errorf("result.AppliedModelMap is nil; want the applied mapping to be recorded "+
+		t.Errorf("result.AppliedModelMap is nil; want the applied mapping to be recorded " +
 			"(RED: deliver I7.4)")
 		return
 	}
@@ -472,7 +472,7 @@ func TestTransformHarness_UnsetGroupAgents_ReceiveTargetModelFromUnsetKey(t *tes
 	// Assert: AppliedModelMap records the correct target for both groups.
 	// RED: AppliedModelMap is nil.
 	if result.AppliedModelMap == nil {
-		t.Errorf("result.AppliedModelMap is nil; want the resolved mapping to be recorded "+
+		t.Errorf("result.AppliedModelMap is nil; want the resolved mapping to be recorded " +
 			"(RED: deliver I7.4)")
 		return
 	}
@@ -540,7 +540,7 @@ func TestTransformHarness_ModelMap_EmptyValue_LeavesModelEmpty(t *testing.T) {
 	// Assert: AppliedModelMap["model-a"] == "" (not TargetModel or any other fallback value).
 	// RED: AppliedModelMap is nil.
 	if result.AppliedModelMap == nil {
-		t.Errorf("result.AppliedModelMap is nil; want the applied mapping recorded "+
+		t.Errorf("result.AppliedModelMap is nil; want the applied mapping recorded " +
 			"(RED: deliver I7.4)")
 		return
 	}
@@ -607,7 +607,7 @@ func TestTransformHarness_MixedModelMapAndTargetModel_RuleOneOverRuleTwo(t *test
 	// Assert: AppliedModelMap carries the correct target for each source model.
 	// RED: AppliedModelMap is nil.
 	if result.AppliedModelMap == nil {
-		t.Errorf("result.AppliedModelMap is nil; want the applied mapping recorded "+
+		t.Errorf("result.AppliedModelMap is nil; want the applied mapping recorded " +
 			"(RED: deliver I7.4)")
 		return
 	}
@@ -665,7 +665,7 @@ func TestTransformHarness_LegacyTargetModel_SingleModelBatch_BehaviorUnchanged(t
 	// Assert: no model questions asked (TargetModel is pre-answered).
 	for _, c := range stub.Calls() {
 		if c.ID == domain.QTransformTargetModel {
-			t.Errorf("QTransformTargetModel was asked despite TargetModel being pre-answered; "+
+			t.Errorf("QTransformTargetModel was asked despite TargetModel being pre-answered; " +
 				"the TargetModel field must suppress model questions when set")
 		}
 	}

@@ -13,7 +13,7 @@ package claudecode_test
 //
 //   T6.2 — Run-time loading from declared directory:
 //   - A claudecode module constructed against a temporary root reads HarnessInjections.md
-//     and HarnessInjectionsOrchestrator.md from <MosaicRoot>/Catalog/HarnessInjections/Claude Code/.
+//     and HarnessInjectionsOrchestrator.md from the directory given by opts.ContentDir.
 //   - The injected content comes from those on-disk files, not from embedded bytes.
 //
 //   T6.3 — Failure modes:
@@ -78,14 +78,11 @@ func makeTempRoot(t *testing.T) (root string, contentDir string) {
 
 // newModuleFromOpts constructs a claudecode module against a temporary root and fails the
 // test if construction fails.
-//
-// RED: Fails via NewWithOptsForTesting returning an error until I6.4 implements New(opts).
 func newModuleFromOpts(t *testing.T, root string) domain.HarnessModule {
 	t.Helper()
-	mod, err := claudecode.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	mod, err := claudecode.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err != nil {
-		t.Fatalf("claudecode.New(opts): %v", err) // RED: fails until I6.4 implemented
-	}
+		t.Fatalf("claudecode.New(opts): %v", err)	}
 	return mod
 }
 
@@ -175,7 +172,7 @@ func TestRepoContentDir_AllHarnesses_AreDistinct(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestRuntimeLoading_ReadsDeclaredDirectory verifies that constructing a claudecode module
-// with a MosaicRoot reads content from <MosaicRoot>/<RepoContentDir>/.
+// with a MosaicRoot reads content from the directory returned by opts.ContentDir.
 func TestRuntimeLoading_ReadsDeclaredDirectory(t *testing.T) {
 	root, contentDir := makeTempRoot(t)
 	writeHarnessContentFile(t, contentDir, "HarnessInjections.md", sharedOnlyHarnessInjections)
@@ -223,7 +220,7 @@ func TestFailureMode_MissingSharedFile_ConstructionFails(t *testing.T) {
 	// Only write orchestrator file; shared file is missing.
 	writeHarnessContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md", orchestratorHarnessInjectionsOrchestrator)
 
-	_, err := claudecode.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := claudecode.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Error("expected non-nil error when HarnessInjections.md is missing, got nil")
 	}
@@ -235,7 +232,7 @@ func TestFailureMode_MissingSharedFile_ErrorNamesFile(t *testing.T) {
 	root, contentDir := makeTempRoot(t)
 	writeHarnessContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md", orchestratorHarnessInjectionsOrchestrator)
 
-	_, err := claudecode.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := claudecode.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Fatal("expected non-nil error when HarnessInjections.md is missing")
 	}
@@ -251,7 +248,7 @@ func TestFailureMode_MissingOrchestratorFile_ConstructionFails(t *testing.T) {
 	writeHarnessContentFile(t, contentDir, "HarnessInjections.md", sharedOnlyHarnessInjections)
 	// Orchestrator file is missing.
 
-	_, err := claudecode.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := claudecode.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Error("expected non-nil error when HarnessInjectionsOrchestrator.md is missing, got nil")
 	}
@@ -263,7 +260,7 @@ func TestFailureMode_MissingOrchestratorFile_ErrorNamesFile(t *testing.T) {
 	root, contentDir := makeTempRoot(t)
 	writeHarnessContentFile(t, contentDir, "HarnessInjections.md", sharedOnlyHarnessInjections)
 
-	_, err := claudecode.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := claudecode.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Fatal("expected non-nil error when HarnessInjectionsOrchestrator.md is missing")
 	}
@@ -280,7 +277,7 @@ func TestFailureMode_UnparseableSharedFile_ConstructionFails(t *testing.T) {
 	writeHarnessContentFile(t, contentDir, "HarnessInjections.md", "---\nversion: \"1.0\"\nunclosed-frontmatter\n")
 	writeHarnessContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md", orchestratorHarnessInjectionsOrchestrator)
 
-	_, err := claudecode.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := claudecode.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Error("expected non-nil error for unparseable HarnessInjections.md, got nil")
 	}
@@ -293,7 +290,7 @@ func TestFailureMode_UnparseableOrchestratorFile_ConstructionFails(t *testing.T)
 	writeHarnessContentFile(t, contentDir, "HarnessInjections.md", sharedOnlyHarnessInjections)
 	writeHarnessContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md", "---\nversion: \"1.0\"\nunclosed-frontmatter\n")
 
-	_, err := claudecode.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := claudecode.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Error("expected non-nil error for unparseable HarnessInjectionsOrchestrator.md, got nil")
 	}

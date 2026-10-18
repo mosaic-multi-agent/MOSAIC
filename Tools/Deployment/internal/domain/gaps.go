@@ -56,6 +56,10 @@ const (
 	// covers the managed-region parent case.
 	GapEnclosingSectionChanged GapKind = "enclosing-section-changed"
 
+	// GapCatalogShadowing reports an undeclared catalog override found in an auto-confirmed
+	// run: a higher catalog layer shadows an item of a lower layer without declaring it.
+	GapCatalogShadowing GapKind = "catalog-shadowing"
+
 )
 
 // Gap is produced by transform, plan, and deploy when a decision could not be made automatically.

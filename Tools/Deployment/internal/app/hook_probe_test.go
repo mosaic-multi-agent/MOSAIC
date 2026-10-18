@@ -409,9 +409,9 @@ func TestApplyHookPresence_NonHookEntriesUntouched(t *testing.T) {
 	agent := domain.DeployedArtifactState{Present: true, ContentHash: "sha256:agent", Version: "2.0"}
 	skill := domain.DeployedArtifactState{Present: false}
 	state := map[string]domain.DeployedArtifactState{
-		hookKey:                  {},
-		".claude/agents/foo.md":  agent,
-		".claude/skills/bar.md":  skill,
+		hookKey:                 {},
+		".claude/agents/foo.md": agent,
+		".claude/skills/bar.md": skill,
 	}
 	hookPlans := map[string]domain.HookPlan{hookKey: flatHookPlan(probeHooksDir, "logger.sh")}
 

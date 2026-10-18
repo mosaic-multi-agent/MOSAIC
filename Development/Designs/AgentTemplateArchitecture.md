@@ -1,7 +1,7 @@
 ---
 id: agent-template-architecture
 type: specification
-version: "2.3"
+version: "2.4"
 name: "Agent Template Architecture"
 description: "The structure of a MOSAIC agent file: frontmatter schema, the four region kinds and their ownership, canonical document order, the per-role region matrix, and what each section must contain."
 author: MOSAIC
@@ -232,7 +232,7 @@ Every managed-region name, its required parent, and where its content comes from
 
 | Name | Parent | Content comes from | Specified in |
 |------|--------|--------------------|--------------|
-| `CommunicationProtocol` | `""` (top level, slot 2) | The contract's own source, role-selected | `CommunicationProtocol.md` |
+| `CommunicationProtocol` | `""` (top level, slot 2) | The contract's own source, role-selected | `Catalog/CommunicationProtocol.md` |
 | `AuthorityHierarchy` | `Identity` | Bundle | `DeploymentBlocks/AuthorityHierarchy.md` |
 | `ClosingProcedure` | `Identity` | Bundle | `DeploymentBlocks/ClosingProcedure.md` |
 | `AvailableWorkflows` | `Identity` | Assembled from selected workflow files | Workflow schema |
@@ -244,7 +244,7 @@ Every managed-region name, its required parent, and where its content comes from
 Eight names. Three sources, and the distinction matters:
 
 - **Bundle** — `Catalog/DeployedSections.md`, the four blocks whose text is identical across every agent of a role and which are not contracts. Governed by `DeployedSectionsBundle.md`.
-- **Contract source** — `CommunicationProtocol.md` ships its own text. It is a contract, so it is deliberately not in the bundle and carries its own version.
+- **Contract source** — `Catalog/CommunicationProtocol.md` ships the contract's text, with its rationale in `CommunicationProtocol.md`. It is a contract, so it is deliberately not in the bundle and carries its own version.
 - **Assembled** — no canonical text exists; the content is built from a deployment's own selections. `AvailableWorkflows` and `InfrastructureAgents` are assembled from what the deployment selected; `HarnessConstraints` comes from the one harness module in play.
 
 #### 2.5.1 Every Managed Name Names Its Generator
@@ -386,7 +386,7 @@ The order is not arbitrary: the closing procedure continues the Process list and
 
 ### 4.2 CommunicationProtocol
 
-Top-level managed region `<CommunicationProtocol type="managed">`, slot 2. Empty in source. Content is the role-matched block from `CommunicationProtocol.md`, which is the whole orchestration contract: message shape, status and error vocabularies, the HITL gate, and the artifact provenance stamp.
+Top-level managed region `<CommunicationProtocol type="managed">`, slot 2. Empty in source. Content is the role-matched block from `Catalog/CommunicationProtocol.md`, which is the whole orchestration contract: message shape, status and error vocabularies, the HITL gate, and the artifact provenance stamp.
 
 No project injection is declared here. A project needing to extend protocol mechanics uses `<ProtocolExtension type="custom">` as a top-level sibling of this region, keeping project transport guidance distinct from the canonical contract; §6.2.1 covers what belongs there and what does not.
 
@@ -826,7 +826,7 @@ A change to this schema is never local. The table below lists what must be check
 | Injection name removed (§6.2) | Source agent files. Project content is orphaned to `TODO.md` on the first update — §6.2.2 states the discipline that makes removal rare. |
 | Managed region name added or removed (§2.5) | `vocabulary.go` (`CanonicalDeployed`, `DeployedParent`), `boundary_constants.py`, classifier, role matrix (§2.4), `Catalog/CatalogFilesFormat.md`. If bundle-sourced, the bundle gains a block and `DeployedSectionsBundle.md` is updated. |
 | Bundle block content changed | `bundle_version` bump, specifying document changelog, all deployed agents (redeploy). If the changed region has nested user regions, the deploy tool should emit a TODO advising the project to review their content against the new text. |
-| Communication Protocol content changed | Protocol version bump in `CommunicationProtocol.md`. Projects with `<ProtocolExtension type="custom">` must review their content against the new protocol. |
+| Communication Protocol content changed | Protocol version bump in `Catalog/CommunicationProtocol.md`. Projects with `<ProtocolExtension type="custom">` must review their content against the new protocol. |
 | Frontmatter field added or renamed (§3) | `CatalogFilesFormat.md`, harness descriptor `frontmatter_plan` (filter/add/remove lists), `agentfields` registry, all source agent files. |
 | Validator rule severity changed (§9) | `validate.go`. A promotion from warning to error may cause previously passing project agents to fail — this is intentional and motivated. |
 | Generic tool name changed in source `tools` list | Harness module tool mappings (internal). Projects with custom `tool_destinations` must update their configuration. |
@@ -839,6 +839,7 @@ A change to this schema is never local. The table below lists what must be check
 
 | Version | Date | Summary |
 |---------|------|---------|
+| 2.4 | 2026-10-17 | **Protocol payload path.** The `CommunicationProtocol` region's content source is now `Catalog/CommunicationProtocol.md`; the design document `CommunicationProtocol.md` keeps the rationale (its §10.7). §2.5's table and contract-source note, §4.2 and §13 name the new source. No schema change. |
 | 2.3 | 2026-09-26 | **Agent-specific status mapping, managed-region preservation, and schema scope aligned with current behavior.** `PARTIALLY_DONE` now covers every incomplete but continuable assignment, including unresolved acceptance criteria, rather than only deliberate quality stops. `COMPLETED_NEEDS_ACTION` is defined by an agent-specific action condition on a completed assignment, and mappings must not infer status from workflow position or outside-scope future work. Project/custom regions nested inside managed regions are valid and preserved; conformance compares only the canonical projection after excising those user-owned regions. Active counts now reflect four conduct blocks and six canonical top-level boundaries after the 2026 removals. §8's first reason no longer claims there is one orchestrator — the role has two hand-maintained sources, and the standing authority-hierarchy obligation now covers all three hierarchies and requires a newly added agent of either role to be checked for carrying one. The schema's `role` vocabulary is narrowed to the orchestration roles it governs (`subagent`, `orchestrator`); utility and standalone catalog/deployment formats remain valid under `CatalogFilesFormat.md` but no longer create a contradiction with conformance rule 2. §8's standing review obligation now also covers the orchestrators' shared Routing Policy, whose two copies must stay byte-identical. §3.1 lists the infrastructure agents' `infrastructure`, `triggers`, and `on_failure` fields as assembly defaults owned by `InfrastructureAgentConcept.md` §3.2; §3.2 and §3.5 no longer read as forbidding them — the runtime authority remains the orchestrator's declaration region. They are source only, stripped by every harness `drop` list (implementation follow-up). Stale references corrected: §2.1 counts three consequences, §2.2 cites §5.3 for nested template sections, and §7's hand-authored list no longer names the removed `status_message`/`error_code` table. §6.2.1 now precedes §6.2.2, rule 22 cites `DeployedSectionsBundle.md` §9 instead of itself, and §1.1 counts four block documents plus the retired `ProtocolConstraints` record. |
 | 2.2 | 2026-08-18 | **Custom-region placement rule stated unambiguously; enclosing-section change warning documented.** §6.4's "On normal update" paragraph rewritten: custom regions are no longer described as preserved "in their current position." On every update the tool resolves the region's parent section by name and appends the region at the end of that parent's content — no positional information is kept. A new paragraph in §6.4 documents the enclosing-section change warning: when the core section directly enclosing a custom region changes its own content, the tool emits a TODO asking the user to review their custom content for contradictions against the updated section text. §6.1's "Position on update" cell and §2.1's table and intro paragraph updated to match — the contradiction between "in their current position" / "writes them back where they were" and principle 10's "no positional information is kept" is resolved in favour of principle 10. |
 | 2.1 | 2026-08-15 | **`IdentityExtension` and `ErrorHandlingExtension` removed from catalogue and all agents.** Neither passed the inclusion test: `IdentityExtension` (47→0 agents) offered ambient "domain expertise" no instruction consumed; `ErrorHandlingExtension` (46→0) offered "project recovery guidance" no project would know how to fill. §6.5's inclusion guidance rewritten from the vague "could use" to a two-part test: the region must be generally applicable (most projects have something to put there) AND improve agent performance when provided. §4.1 and §4.5 project-injection lines removed. §6.2 catalogue drops from seven names to five. `CatalogFilesFormat.md` updated. Analysis in `SubagentProjectRegions-Review.md` §4.5 and §4.9. |

@@ -337,7 +337,7 @@ place user-authored content inside them; it will be overwritten.
 
 | Name | Required parent | Content source |
 |------|-----------------|----------------|
-| `CommunicationProtocol` | Body top level (second canonical slot) | `CommunicationProtocol.md` |
+| `CommunicationProtocol` | Body top level (second canonical slot) | `CommunicationProtocol.md` (catalog root) |
 | `AuthorityHierarchy` | `Identity` | Bundle |
 | `ClosingProcedure` | `Identity` | Bundle |
 | `AvailableWorkflows` | `Identity` | Assembled from selected workflows |
@@ -424,6 +424,48 @@ two of these that are both present must appear in this relative order:
 4. `Constraints` (core)
 5. `ErrorHandling` (core)
 6. `ExecutionPhilosophy` (core)
+
+---
+
+## Catalog Identity File
+
+Every catalog root carries a small identity file, `catalog-identity.yaml`, at
+its top level. It names the catalog and may declare which items the catalog
+overrides on purpose. The file sits next to the MOSAIC-root marker: this
+format reference (`Catalog/CatalogFilesFormat.md`) still marks the MOSAIC
+default catalog root only and is **not** copied into any other catalog.
+
+```yaml
+id: mosaic-default            # required; ^[a-z0-9][a-z0-9._-]*$
+name: MOSAIC Default Catalog  # required display name
+version: "0.7.0"              # required; any non-null scalar, kept as its source text
+overrides:                    # optional; every key optional
+  agents: [code-reviewer]
+  workflows: [feature-dev]
+  skills: [efficient-file-reading]
+  hooks: [pre-commit-guard]
+  orchestrator_pair: true     # one target for both orchestrator.md and orchestrator-script.md
+  harness_injections: ["Claude Code"]          # harness directory names under HarnessInjections/
+  system_files: [CommunicationProtocol.md, DeployedSections.md]  # only these two values
+```
+
+Rules:
+- `id`, `name` and `version` are required and must be non-empty. `version` may
+  be quoted or unquoted and is kept as written (`1.10` stays `1.10`). A list
+  or mapping value for any of the three is invalid, and `id` must match the
+  pattern above. The id must be unique within a catalog stack; two layers with
+  the same id are a stack error.
+- Unknown top-level keys are ignored.
+- `overrides` declares intentional overrides; a declared override is reported
+  as informational, an undeclared one as a warning. Entries are keys: agent
+  keys, workflow ids, skill folder names, hook bundle keys, harness directory
+  names.
+- The orchestrator pair resolves as one unit and is declared once with
+  `orchestrator_pair: true` (the value must be `true` or `false`). Listing
+  `orchestrator` or `orchestrator-script` under `agents` is rejected.
+- An unknown key under `overrides`, a non-list value where a list is
+  expected, or a `system_files` value other than the two names above is
+  rejected.
 
 ---
 

@@ -176,6 +176,13 @@ type injectionConfig struct {
 	withoutCatalogOrchestrator bool
 	// stub overrides the default interaction script (review confirmed, nothing else answered).
 	stub *interactiontest.Stub
+	// recorded is the catalog named by the manifest entry of every manifested file.
+	recorded domain.CatalogIdentity
+	// supplier, when its ID is set, makes the catalog report it as the supplier of both
+	// orchestrator-role agents.
+	supplier domain.CatalogIdentity
+	// customizeCatalog, when non-nil, adjusts the catalog before the run.
+	customizeCatalog func(*stubCatalog)
 }
 
 // injectionRecorder wraps the real executor and keeps the request it received.
@@ -217,7 +224,13 @@ func runInfraInjection(t *testing.T, cfg injectionConfig) *injectionRun {
 		cat.orchestrator = domain.Agent{}
 		cat.orchestratorScriptOK = false
 	}
+	if cfg.customizeCatalog != nil {
+		cfg.customizeCatalog(cat)
+	}
 	deps.Catalog = cat
+	if cfg.supplier.ID != "" {
+		deps.Catalog = newSupplierCatalog(cat, cfg.supplier)
+	}
 	deps.Planner = plan.New()
 	deps.Registry = newInjectionRegistry()
 	snap := manifest.Snapshot{State: manifest.StateAbsent}
@@ -229,6 +242,7 @@ func runInfraInjection(t *testing.T, cfg injectionConfig) *injectionRun {
 			entries = append(entries, domain.ManifestEntry{
 				Ref:        domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: key},
 				TargetPath: rel, Version: "0.9", ContentHash: manifest.Hash([]byte(content)),
+				Catalog: cfg.recorded,
 			})
 		}
 	}

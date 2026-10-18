@@ -31,16 +31,6 @@ const (
 	// the path exists; it is a readable regular file or a readable directory. Writability
 	// is not required — this mode's output goes to the target harness's own resolved path.
 	PathKindFileOrDirectory
-
-	// PathKindCatalogFolder accepts an existing, READABLE directory. Writability is NOT
-	// required — a catalogue is only ever read by the deploy flow.
-	//
-	// Screen wording: title "Catalogue Folder", label "Catalogue folder path:",
-	// placeholder "/path/to/catalog". Guidance states that the folder supplies the agents
-	// and workflows offered in this session and may override individual skills and hooks by
-	// supplying same-keyed ones, and that the protocol document, the deployed-sections
-	// bundle, and CatalogFilesFormat.md always come from the MOSAIC root regardless.
-	PathKindCatalogFolder
 )
 
 // WorkspaceScreen prompts the user for a workspace directory path and validates it before
@@ -55,11 +45,6 @@ const (
 //   1. Path must not be empty.
 //   2. Path must point to an existing regular file (not a directory).
 //   3. The file must be readable (checked by opening it for reading).
-//
-// Validation rules (PathKindCatalogFolder):
-//   1. Path must not be empty.
-//   2. Path must point to an existing directory (not a file).
-//   3. The directory must be readable. Writability is NOT required.
 //
 // Navigation contract:
 //   - Enter on a valid path -> Done() == true, WorkspacePath() returns the entered path.
@@ -127,10 +112,6 @@ func (s *WorkspaceScreen) SetPathKind(kind PathKind) {
 		label = "Agent file or folder path:"
 		placeholder = "/path/to/agent.md or /path/to/folder"
 		validateFn = validateFileOrDirPath
-	case PathKindCatalogFolder:
-		label = "Catalogue folder path:"
-		placeholder = "/path/to/catalog"
-		validateFn = validateCatalogFolderPath
 	default: // PathKindDirectory
 		label = "Workspace directory path:"
 		placeholder = "/path/to/workspace"
@@ -310,13 +291,6 @@ func (s *WorkspaceScreen) View() string {
 		subtitle = "Enter the path to an agent file or a folder of agent files."
 		guidanceText = "The path must be an existing, readable file or directory.\n" +
 			"For a folder, only files directly under it are processed (non-recursive).\n"
-	case PathKindCatalogFolder:
-		title = "Catalogue Folder"
-		subtitle = "Enter the catalogue directory supplying agents and workflows for this session."
-		guidanceText = "The folder supplies the agents and workflows offered in this session.\n" +
-			"It may also override individual skills and hooks by supplying same-keyed ones.\n" +
-			"The protocol document, the deployed-sections bundle, and CatalogFilesFormat.md\n" +
-			"always come from the MOSAIC root regardless of the catalogue folder.\n"
 	default: // PathKindDirectory
 		title = "Workspace Path"
 		subtitle = "Enter the directory where agents will be deployed."
@@ -377,8 +351,7 @@ func (s *WorkspaceScreen) Reset() { s.input.Reset() }
 func (s *WorkspaceScreen) InputInit() tea.Cmd { return s.input.Init() }
 
 // SetExternalError displays msg as the screen's inline error and holds the user on the
-// screen. Used to surface a failure that only the caller can detect — a failed catalogue
-// reload. The message is cleared on the next Update call.
+// screen. Used to surface a failure that only the caller can detect. The message is cleared on the next Update call.
 func (s *WorkspaceScreen) SetExternalError(msg string) {
 	s.externalError = msg
 }

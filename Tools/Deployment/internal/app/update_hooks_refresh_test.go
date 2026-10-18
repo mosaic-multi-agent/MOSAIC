@@ -16,7 +16,7 @@ import (
 // file the earlier deploy did not have) and an obsolete file the catalog no longer ships.
 func staleFlatFiles() map[string]string {
 	return map[string]string{
-		uhHooksDir + "/logger.sh":      "LOCALLY EDITED logger\n",
+		uhHooksDir + "/logger.sh":     "LOCALLY EDITED logger\n",
 		uhHooksDir + "/old-helper.sh": "obsolete helper\n",
 	}
 }

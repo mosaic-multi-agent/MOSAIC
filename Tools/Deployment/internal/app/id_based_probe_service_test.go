@@ -59,9 +59,9 @@ func newIDAwareHarnessModule(agentsSubdir string) *idAwareHarnessModule {
 	}
 }
 
-func (m *idAwareHarnessModule) Ref() domain.HarnessRef               { return m.ref }
+func (m *idAwareHarnessModule) Ref() domain.HarnessRef                { return m.ref }
 func (m *idAwareHarnessModule) Descriptor() *domain.HarnessDescriptor { return &m.descriptor }
-func (m *idAwareHarnessModule) Close() error                           { return nil }
+func (m *idAwareHarnessModule) Close() error                          { return nil }
 
 func (m *idAwareHarnessModule) Tools(req domain.ToolRequest) (domain.ToolResult, error) {
 	resolutions := make([]domain.ToolResolution, len(req.Generic))

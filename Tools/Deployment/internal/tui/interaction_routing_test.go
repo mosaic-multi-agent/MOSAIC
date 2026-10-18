@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"mosaic-deploy/internal/app"
+	"mosaic-deploy/internal/app/stackservicetest"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -20,7 +21,7 @@ import (
 // Stub service for routing tests
 // ---------------------------------------------------------------------------
 
-type stubRoutingService struct{}
+type stubRoutingService struct{ stackservicetest.MockStackService }
 
 func (s *stubRoutingService) ListHarnesses() []domain.HarnessRef { return nil }
 func (s *stubRoutingService) DeployNew(_ context.Context, _ app.DeployRequest) (domain.RunSummary, error) {

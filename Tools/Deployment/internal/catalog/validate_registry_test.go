@@ -489,9 +489,9 @@ func TestValidateBundleDeclarations_Rule20_AllSubchecksViolated_ReportsAllThreeI
 		Blocks: []domain.BundleBlock{
 			{
 				Name:        "BadTarget:Worker",
-				Target:      "BadTarget",  // NOT in CanonicalDeployed
-				AppliesTo:   "worker",     // NOT "subagent" or "orchestrator"
-				SpecifiedIn: "",           // empty → missing spec doc
+				Target:      "BadTarget", // NOT in CanonicalDeployed
+				AppliesTo:   "worker",    // NOT "subagent" or "orchestrator"
+				SpecifiedIn: "",          // empty → missing spec doc
 				Content:     []byte("Content.\n"),
 			},
 		},

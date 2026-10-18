@@ -77,9 +77,9 @@ func TestProbeDeployedArtifact_InjectionHarnessRegionNoVersionAttribute_HasInjec
 	// Assert: HasInjectionRegion must be true even though no version attribute is present.
 	if !state.HasInjectionRegion {
 		t.Errorf(
-			"probeDeployedArtifact on file with InjectionHarness region (no version attribute): "+
-				"HasInjectionRegion = false, want true; "+
-				"a region without a version attribute still counts as an injection region; "+
+			"probeDeployedArtifact on file with InjectionHarness region (no version attribute): " +
+				"HasInjectionRegion = false, want true; " +
+				"a region without a version attribute still counts as an injection region; " +
 				"HasInjectionRegion reflects region presence, not version presence",
 		)
 	}
@@ -106,7 +106,7 @@ func TestProbeDeployedArtifact_MultipleInjectionHarnessRegions_HasInjectionRegio
 	// Assert
 	if !state.HasInjectionRegion {
 		t.Errorf(
-			"probeDeployedArtifact on file with multiple InjectionHarness regions: "+
+			"probeDeployedArtifact on file with multiple InjectionHarness regions: " +
 				"HasInjectionRegion = false, want true",
 		)
 	}
@@ -134,8 +134,8 @@ func TestProbeDeployedArtifact_NoInjectionHarnessRegion_HasInjectionRegionFalse(
 	// Assert
 	if state.HasInjectionRegion {
 		t.Errorf(
-			"probeDeployedArtifact on file with no InjectionHarness regions: "+
-				"HasInjectionRegion = true, want false; "+
+			"probeDeployedArtifact on file with no InjectionHarness regions: " +
+				"HasInjectionRegion = true, want false; " +
 				"agents without injection harness content must not trigger the InjectionsVersion comparison",
 		)
 	}
@@ -157,7 +157,7 @@ func TestProbeDeployedArtifact_FileAbsent_HasInjectionRegionFalse(t *testing.T) 
 	}
 	if state.HasInjectionRegion {
 		t.Errorf(
-			"probeDeployedArtifact on absent file: HasInjectionRegion = true, want false; "+
+			"probeDeployedArtifact on absent file: HasInjectionRegion = true, want false; " +
 				"an absent file must leave HasInjectionRegion at its zero value (false)",
 		)
 	}

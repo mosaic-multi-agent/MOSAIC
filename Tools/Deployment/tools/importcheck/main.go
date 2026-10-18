@@ -113,6 +113,30 @@ var rules = []rule{
 		},
 	},
 	{
+		dir:  "internal/app/stackconfig",
+		desc: "the stack persistence operations are part of the use-case layer: they must not import any frontend package (tui or cli)",
+		forbidPrefix: []string{
+			modulePrefix + "internal/tui",
+			modulePrefix + "internal/cli",
+		},
+	},
+	{
+		dir:  "internal/app/stackservicetest",
+		desc: "the stack service test support is part of the use-case layer: it must not import any frontend package (tui or cli)",
+		forbidPrefix: []string{
+			modulePrefix + "internal/tui",
+			modulePrefix + "internal/cli",
+		},
+	},
+	{
+		dir:  "internal/app/conflictreport",
+		desc: "the conflict report builder is part of the use-case layer: it must not import any frontend package (tui or cli)",
+		forbidPrefix: []string{
+			modulePrefix + "internal/tui",
+			modulePrefix + "internal/cli",
+		},
+	},
+	{
 		dir: "internal/cli",
 		desc: "cli is an adapter: it must not reach past app into core infrastructure packages " +
 			"(catalog, deploy, manifest, plan, transform, harness, config, logging, docformat) or import the tui sibling",

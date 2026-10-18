@@ -95,9 +95,9 @@ type consumerStubModule struct {
 	desc *domain.HarnessDescriptor
 }
 
-func (m *consumerStubModule) Ref() domain.HarnessRef                    { return m.ref }
-func (m *consumerStubModule) Descriptor() *domain.HarnessDescriptor      { return m.desc }
-func (m *consumerStubModule) Close() error                               { return nil }
+func (m *consumerStubModule) Ref() domain.HarnessRef                { return m.ref }
+func (m *consumerStubModule) Descriptor() *domain.HarnessDescriptor { return m.desc }
+func (m *consumerStubModule) Close() error                          { return nil }
 func (m *consumerStubModule) Tools(_ domain.ToolRequest) (domain.ToolResult, error) {
 	return domain.ToolResult{}, nil
 }

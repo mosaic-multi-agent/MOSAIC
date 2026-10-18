@@ -198,7 +198,7 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 		ExcludeOrchestrator: plan.OrchestratorExcludedFor(domain.ModeUpdateWorkspace),
 	})
 	if err != nil {
-		return domain.RunSummary{}, err
+		return domain.RunSummary{}, withRemovedLayerHint(err, s.deployedWorkflowIDs(module, workspace, scope, true))
 	}
 
 	plannedPaths, err := plan.EnumerateTargetPaths(set, module, scope, s.deps.GOOS)
@@ -298,12 +298,12 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 		Manifest: snap, WorkflowIDs: workflowIDs, HookIDs: hookIDs,
 		// ScannedAgentKeys carries the same slice used for the app layer's ResolveArtifactsFrom
 		// call above, ensuring the probe map and the built plan resolve the identical artifact set.
-		ScannedAgentKeys:    scannedAgentKeys,
-		DeployedState:       deployedState,
-		Models:              allModels,
-		ToolMappingsVersion: toolMappingsVersion,
-		ProtocolVersion:     protocol.Version,
-		BundleVersion:       bundle.Version,
+		ScannedAgentKeys:           scannedAgentKeys,
+		DeployedState:              deployedState,
+		Models:                     allModels,
+		ToolMappingsVersion:        toolMappingsVersion,
+		ProtocolVersion:            protocol.Version,
+		BundleVersion:              bundle.Version,
 		InfrastructureDeclarations: refreshIntent(),
 	}
 	p, err := s.deps.Planner.Build(ctx, planInput)
@@ -353,14 +353,16 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 
 	harnessOnlyPlan := s.planHarnessOnlyRefresh(ctx, harnessOnlyAgents, &p)
 
+	report := s.conflictReportFor(module.Ref().ID, workflowIDs, unionPreserveOrder(existing, orchScriptState.Workflows.IDs()), req.AutoConfirmPlan)
 	// Review is always shown; AutoConfirmPlan only controls whether a decline/cancel answer
 	// aborts the run (see deploy.go for the same rationale).
+	p.ConflictReport = report
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {
 		return domain.RunSummary{}, rerr
 	}
 	if !req.AutoConfirmPlan && (ans.Status == domain.Cancelled || !ans.Confirm) {
-		return domain.RunSummary{}, ErrPlanNotConfirmed
+		return domain.RunSummary{ConflictReport: report}, ErrPlanNotConfirmed
 	}
 
 	agentByKey := make(map[string]domain.Agent, len(set.Agents))
@@ -377,7 +379,7 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	// catalog-backed ones in place (refresh-only merge), leaving all others byte-identical.
 	contentFn := s.buildContent(module, agentByKey, allModels, req.CustomTools, nil, workflowBlocks, nil, scope, deployedReader, toolMappingsVersion, protocol, bundle, harnessOnlyPlan, orchRefresh.refreshContentOptions(s)...)
 
-	versionStamps := buildVersionStamps(set.Agents, set.Skills, set.Hooks, p.Items, module.Descriptor(), toolMappingsVersion)
+	versionStamps := s.withProvenance(buildVersionStamps(set.Agents, set.Skills, set.Hooks, p.Items, module.Descriptor(), toolMappingsVersion), p.Items)
 
 	now := s.now()
 	execReq := deploy.ExecRequest{
@@ -386,6 +388,7 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 		Content:       contentFn,
 		Conflicts:     conflicts,
 		VersionStamps: versionStamps,
+		ManifestMeta:  s.fullRunManifestMeta(),
 		Hooks:         hookPlans,
 		TodoItems:     s.deps.Todo.Items,
 		TodoMeta: todo.Meta{
@@ -398,6 +401,10 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 		// excluded from reversal by the executor and keep today's non-atomic semantics.
 		Atomic:      true,
 		ToolVersion: s.deps.ToolVersion,
+	}
+
+	if err := s.supplyStack(&execReq); err != nil {
+		return domain.RunSummary{}, err
 	}
 
 	result, err := s.deps.Executor.Execute(ctx, execReq)
@@ -429,5 +436,5 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 		s.notifyPersistFailure(ctx, err)
 	}
 
-	return s.buildSummary(domain.ModeUpdateWorkspace, harnessRef, workspace, result), nil
+	return withConflictReport(s.buildSummary(domain.ModeUpdateWorkspace, harnessRef, workspace, result), report), nil
 }

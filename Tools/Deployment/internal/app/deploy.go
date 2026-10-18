@@ -137,7 +137,7 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 	// avoid duplicate prompts for the same agent.
 	probeSet, err := plan.ResolveArtifacts(s.deps.Catalog, workflowIDs, utilityIDs, foundInfraKeys, hookIDs)
 	if err != nil {
-		return domain.RunSummary{}, err
+		return domain.RunSummary{}, withRemovedLayerHint(err, s.deployedWorkflowIDs(module, workspace, scope, true))
 	}
 
 	// Build a set of infrastructure agent keys to exclude from the first model-resolution
@@ -278,15 +278,17 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 		}
 	}
 
+	report := s.conflictReportFor(module.Ref().ID, workflowIDs, s.plannedWorkflowIDs(plannedPaths, deployedState), req.AutoConfirmPlan)
 	// Review is always shown (it is the final step of both documented flows); AutoConfirmPlan
 	// only controls whether a decline/cancel answer aborts the run, so headless callers that
 	// pre-confirm still see it recorded as the last interaction before execution.
+	p.ConflictReport = report
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {
 		return domain.RunSummary{}, rerr
 	}
 	if !req.AutoConfirmPlan && (ans.Status == domain.Cancelled || !ans.Confirm) {
-		return domain.RunSummary{}, ErrPlanNotConfirmed
+		return domain.RunSummary{ConflictReport: report}, ErrPlanNotConfirmed
 	}
 
 	agentByKey := make(map[string]domain.Agent, len(probeSet.Agents)+len(infraAgents))
@@ -306,7 +308,8 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 		MosaicRoot:    s.deps.MosaicRoot,
 		Content:       contentFn,
 		Conflicts:     conflicts,
-		VersionStamps: buildVersionStamps(append(probeSet.Agents, infraAgents...), probeSet.Skills, probeSet.Hooks, p.Items, module.Descriptor(), toolMappingsVersion),
+		VersionStamps: s.withProvenance(buildVersionStamps(append(probeSet.Agents, infraAgents...), probeSet.Skills, probeSet.Hooks, p.Items, module.Descriptor(), toolMappingsVersion), p.Items),
+		ManifestMeta:  s.fullRunManifestMeta(),
 		Hooks:         buildHookPlans(module, probeSet.Hooks, scope),
 		TodoItems:     s.deps.Todo.Items,
 		TodoMeta: todo.Meta{
@@ -315,6 +318,10 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 		},
 		DryRun:      req.DryRun,
 		ToolVersion: s.deps.ToolVersion,
+	}
+
+	if err := s.supplyStack(&execReq); err != nil {
+		return domain.RunSummary{}, err
 	}
 
 	result, err := s.deps.Executor.Execute(ctx, execReq)
@@ -336,7 +343,7 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 		s.notifyPersistFailure(ctx, err)
 	}
 
-	return s.buildSummary(domain.ModeDeployWorkspace, harnessRef, workspace, result), nil
+	return withConflictReport(s.buildSummary(domain.ModeDeployWorkspace, harnessRef, workspace, result), report), nil
 }
 
 // orderedAgentsForModelResolution reorders agents into a processing sequence suitable for

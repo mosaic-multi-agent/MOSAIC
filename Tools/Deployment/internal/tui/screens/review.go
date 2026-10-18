@@ -145,6 +145,7 @@ func buildReviewLines(p domain.Plan) []reviewLine {
 	add(fmt.Sprintf("Mode: %s  Harness: %s  Workspace: %s",
 		modeDisplayName(p.Mode), p.Harness.DisplayName, p.WorkspacePath), "muted")
 	add("", "body")
+	lines = append(lines, conflictReportLines(p.ConflictReport)...)
 
 	// Count line.
 	var countParts []string
@@ -282,6 +283,8 @@ func versionDeltaLabel(field string) string {
 		return "orchestrator injection version"
 	case "protocol_version":
 		return "harness protocol version"
+	case "source_catalog":
+		return "source catalog"
 	}
 	const workflowPrefix = "workflow:"
 	if strings.HasPrefix(field, workflowPrefix) {

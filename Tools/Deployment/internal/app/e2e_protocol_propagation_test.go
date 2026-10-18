@@ -54,7 +54,7 @@ version: "%s"
 // and returns the path to the created file.
 func writeProtocolSource(t *testing.T, root, version, subagentContent, orchestratorContent string) string {
 	t.Helper()
-	dir := filepath.Join(root, "Development", "Designs")
+	dir := filepath.Join(root, "Catalog")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("create protocol dir: %v", err)
 	}
@@ -69,7 +69,7 @@ func writeProtocolSource(t *testing.T, root, version, subagentContent, orchestra
 // loadProtocolFrom loads ProtocolContent from the given root using the filesystem loader.
 func loadProtocolFrom(t *testing.T, root string) domain.ProtocolContent {
 	t.Helper()
-	content, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	content, err := catalog.FileProtocolLoader{}.LoadProtocol(filepath.Join(root, "Catalog"))
 	if err != nil {
 		t.Fatalf("load protocol from %s: %v", root, err)
 	}
@@ -212,11 +212,11 @@ func TestE2E_ProtocolPropagation_WorkerReceivesSubagentBlock(t *testing.T) {
 	output := applyProtocolTest(t, domain.RoleWorker, protocol)
 
 	if !bytes.Contains(output, []byte("SUBAGENT_PROTOCOL_MARKER")) {
-		t.Errorf("worker agent output does not contain the subagent protocol block marker; "+
+		t.Errorf("worker agent output does not contain the subagent protocol block marker; " +
 			"want the Subagent block to be selected for worker agents")
 	}
 	if bytes.Contains(output, []byte("ORCHESTRATOR_PROTOCOL_MARKER")) {
-		t.Errorf("worker agent output contains the orchestrator protocol block marker; "+
+		t.Errorf("worker agent output contains the orchestrator protocol block marker; " +
 			"the Orchestrator block must not appear in a worker agent's deployed file")
 	}
 }
@@ -234,11 +234,11 @@ func TestE2E_ProtocolPropagation_OrchestratorReceivesOrchestratorBlock(t *testin
 	output := applyProtocolTest(t, domain.RoleOrchestrator, protocol)
 
 	if !bytes.Contains(output, []byte("ORCHESTRATOR_PROTOCOL_MARKER")) {
-		t.Errorf("orchestrator agent output does not contain the orchestrator protocol block marker; "+
+		t.Errorf("orchestrator agent output does not contain the orchestrator protocol block marker; " +
 			"want the Orchestrator block to be selected for orchestrator agents")
 	}
 	if bytes.Contains(output, []byte("SUBAGENT_PROTOCOL_MARKER")) {
-		t.Errorf("orchestrator agent output contains the subagent protocol block marker; "+
+		t.Errorf("orchestrator agent output contains the subagent protocol block marker; " +
 			"the Subagent block must not appear in an orchestrator agent's deployed file")
 	}
 }

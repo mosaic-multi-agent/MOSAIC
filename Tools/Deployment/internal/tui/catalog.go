@@ -1,13 +1,15 @@
 package tui
 
-import "mosaic-deploy/internal/app"
+import (
+	"mosaic-deploy/internal/app"
+	"mosaic-deploy/internal/app/stackconfig"
+)
 
-// CatalogReloadFunc rebuilds an app.Service against a different catalogue folder.
-// The implementation is supplied by the composition root: it loads a catalogue from
-// catalogFolder (with the unchanged MOSAIC root), rebuilds app.Deps around it — reusing the
-// same Interaction ProgramRef, registry, logger, config stores, manifest store, and todo
-// collector — and returns app.New(deps).
+// CatalogReloadFunc rebuilds an app.Service from a confirmed catalog stack. The implementation
+// is supplied by the composition root: it builds the stack described by d with the same rules
+// as CLI stack input, rebuilds app.Deps around it (reusing every other dependency), records
+// origin as the origin of the rebuilt service's stack, and returns app.New(deps).
 //
-// It returns a non-nil error when the folder cannot be loaded. On error the caller must keep
-// its existing service; a partially-built service is never returned alongside an error.
-type CatalogReloadFunc func(catalogFolder string) (app.Service, error)
+// It returns a non-nil error when the stack cannot be built. On error the caller keeps its
+// existing service; a partially-built service is never returned alongside an error.
+type CatalogReloadFunc func(d stackconfig.Description, origin stackconfig.Origin) (app.Service, error)

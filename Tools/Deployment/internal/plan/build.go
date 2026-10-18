@@ -65,7 +65,7 @@ func (p *planner) Build(ctx context.Context, in Input) (domain.Plan, error) {
 		deployed := in.DeployedState[targetPath]
 
 		// Classify before evaluating gaps: the GapNoModel emission rule depends on the action.
-		item := classifyAgentItem(agent, targetPath, model, manifestUsable, in.Manifest.Manifest, deployed, desc, selectedWorkflows, in.ToolMappingsVersion, in.ProtocolVersion, in.BundleVersion, infrastructureInput{Catalog: in.Catalog, Intent: in.InfrastructureDeclarations})
+		item := classifyAgentItem(agent, targetPath, model, manifestUsable, in.Manifest.Manifest, deployed, desc, selectedWorkflows, in.ToolMappingsVersion, in.ProtocolVersion, in.BundleVersion, infrastructureInput{Catalog: in.Catalog, Intent: in.InfrastructureDeclarations}, supplierOf(in.Catalog))
 		items = append(items, item)
 
 		// Surface a GapNoModel gap only when the file write that would occur requires a model
@@ -138,7 +138,7 @@ func (p *planner) Build(ctx context.Context, in Input) (domain.Plan, error) {
 			sourcePath := filepath.Join(skill.SourceDir, file)
 			isEntryFile := file == skill.EntryFile
 			deployed := in.DeployedState[targetPath]
-			item := classifySkillItem(skill, sourcePath, targetPath, isEntryFile, manifestUsable, in.Manifest.Manifest, deployed)
+			item := classifySkillItem(skill, sourcePath, targetPath, isEntryFile, manifestUsable, in.Manifest.Manifest, deployed, supplierOf(in.Catalog))
 			items = append(items, item)
 		}
 	}
@@ -173,7 +173,7 @@ func (p *planner) Build(ctx context.Context, in Input) (domain.Plan, error) {
 		}
 
 		deployed := in.DeployedState[targetPath]
-		item := classifyHookItem(hook, targetPath, manifestUsable, in.Manifest.Manifest, deployed)
+		item := classifyHookItem(hook, targetPath, manifestUsable, in.Manifest.Manifest, deployed, supplierOf(in.Catalog))
 		items = append(items, item)
 	}
 
@@ -268,6 +268,7 @@ func classifyAgentItem(
 	protocolVersion string,
 	bundleVersion string,
 	infra infrastructureInput,
+	supplier supplierLookup,
 ) domain.PlanItem {
 	ref := domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: agent.Key}
 	item := domain.PlanItem{
@@ -315,7 +316,7 @@ func classifyAgentItem(
 
 	// Step 3: Target-path-aware manifest lookup. An entry for the same Kind+Key at a
 	// different target path (e.g. a different harness) does not apply to this run.
-	_, inManifest := m.LookupAt(ref, targetPath)
+	entry, inManifest := m.LookupAt(ref, targetPath)
 	if !inManifest {
 		item.Action = domain.ActionConflict
 		item.Conflict = &domain.LocalModification{
@@ -383,13 +384,14 @@ func classifyAgentItem(
 	}
 
 	// Step 6: Stale or no version info → update.
-	if len(deltas) > 0 || !deployed.HasVersionInfo() {
+	catDrift := entryCatalogDrift(supplier, ref, entry)
+	if len(deltas) > 0 || !deployed.HasVersionInfo() || catDrift.Stale() {
 		item.Action = domain.ActionUpdate
-		item.Stale = deltas
 		reasons := buildAgentUpdateReasons(deltas, !deployed.HasVersionInfo(), drift, protocolDrift, bundleDrift)
 		if infraDrift.IsStale() {
 			reasons = strings.Join(filterEmpty(reasons, infraDrift.Reason()), "; ")
 		}
+		item.Stale, reasons = withCatalogDrift(catDrift, deltas, reasons)
 		item.Reason = "stale: " + reasons
 		return item
 	}
@@ -409,6 +411,7 @@ func classifySkillItem(
 	manifestUsable bool,
 	m domain.Manifest,
 	deployed domain.DeployedArtifactState,
+	supplier supplierLookup,
 ) domain.PlanItem {
 	ref := domain.ArtifactRef{Kind: domain.ArtifactSkill, Key: skill.Key}
 	item := domain.PlanItem{
@@ -436,7 +439,7 @@ func classifySkillItem(
 	}
 
 	// Step 3: Target-path-aware manifest lookup.
-	_, inManifest := m.LookupAt(ref, targetPath)
+	entry, inManifest := m.LookupAt(ref, targetPath)
 	if !inManifest {
 		item.Action = domain.ActionConflict
 		item.Conflict = &domain.LocalModification{
@@ -450,16 +453,22 @@ func classifySkillItem(
 	// Step 5: Staleness check — entry files only. Non-entry files have no version frontmatter
 	// so SkillStaleness would always produce a spurious delta (deployed.Version == "").
 	var deltas []domain.VersionDelta
+	versionStale := false
 	if isEntryFile {
 		deltas = SkillStaleness(deployed, skill)
-		// Step 7.
-		if len(deltas) > 0 || !deployed.HasVersionInfo() {
-			item.Action = domain.ActionUpdate
-			item.Stale = deltas
-			reasons := buildUpdateReasons(deltas, !deployed.HasVersionInfo())
-			item.Reason = "stale: " + reasons
-			return item
+		versionStale = len(deltas) > 0 || !deployed.HasVersionInfo()
+	}
+	// Step 7: version staleness (entry files) or a changed supplying catalog (every file).
+	catDrift := entryCatalogDrift(supplier, ref, entry)
+	if versionStale || catDrift.Stale() {
+		item.Action = domain.ActionUpdate
+		reasons := ""
+		if versionStale {
+			reasons = buildUpdateReasons(deltas, !deployed.HasVersionInfo())
 		}
+		item.Stale, reasons = withCatalogDrift(catDrift, deltas, reasons)
+		item.Reason = "stale: " + reasons
+		return item
 	}
 
 	// Step 8.
@@ -474,6 +483,7 @@ func classifyHookItem(
 	manifestUsable bool,
 	m domain.Manifest,
 	deployed domain.DeployedArtifactState,
+	supplier supplierLookup,
 ) domain.PlanItem {
 	ref := domain.ArtifactRef{Kind: domain.ArtifactHook, Key: hook.Key}
 	item := domain.PlanItem{
@@ -535,10 +545,14 @@ func classifyHookItem(
 	// fields empty (a hook bundle carries no in-file marker), making HasVersionInfo()
 	// unconditionally false for every present hook bundle. Leaving that fallback in place
 	// would force every present hook to ActionUpdate regardless of step 5's result.
-	if len(deltas) > 0 {
+	catDrift := entryCatalogDrift(supplier, ref, entry)
+	if len(deltas) > 0 || catDrift.Stale() {
 		item.Action = domain.ActionUpdate
-		item.Stale = deltas
-		reasons := buildUpdateReasons(deltas, false)
+		reasons := ""
+		if len(deltas) > 0 {
+			reasons = buildUpdateReasons(deltas, false)
+		}
+		item.Stale, reasons = withCatalogDrift(catDrift, deltas, reasons)
 		item.Reason = "stale: " + reasons
 		return item
 	}

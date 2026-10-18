@@ -93,6 +93,10 @@ type Plan struct {
 	Gaps          []Gap
 	Registrations []RegistrationStep
 	Workflows     []string // selected workflow ids, in selection order
+	// ConflictReport is the catalog-stack conflict report shown on plan review. The app write
+	// paths set it, from the run's report, after the plan is built and before Review; plan
+	// building never fills it. Empty when nothing is shadowed.
+	ConflictReport ConflictReport
 }
 
 // Counts returns the number of items for each PlanAction.

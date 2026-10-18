@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	"mosaic-deploy/internal/app/stackconfig"
 	"mosaic-deploy/internal/catalog"
 	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/deploy"
@@ -24,6 +25,8 @@ import (
 // Service is the use-case layer entry point. Both frontends (tui, cli) call exactly these
 // methods. app imports neither frontend; the dependency arrow is strictly inward.
 type Service interface {
+	StackService
+
 	// ListHarnesses is exposed so a frontend can render a harness picker before a flow starts.
 	ListHarnesses() []domain.HarnessRef
 
@@ -268,6 +271,10 @@ type PromoteRequest struct {
 	// ErrPromoteHarnessRequired; a value naming no registered harness is
 	// ErrPromoteHarnessUnresolvable. Neither writes a file.
 	HarnessID string
+	// TargetCatalogID names the stack layer that receives a NEW item (no resolved source).
+	// Empty means ask (interactive) or error (non-interactive) when the stack has two or
+	// more layers.
+	TargetCatalogID string
 }
 
 // PromoteResult describes what a successful promote produced. It is returned populated only
@@ -307,6 +314,8 @@ type PromoteResult struct {
 	// frontmatter fields (as opposed to the harness's main tools key), in extraction
 	// order. Reported separately from Tools so the user can see the recovery happened.
 	DivertedTools []string `json:"divertedTools,omitempty"`
+	// TargetCatalogID is the id of the layer that received the file; empty for a plain catalog.
+	TargetCatalogID string `json:"targetCatalogId,omitempty"`
 }
 
 // New constructs a Service with the supplied dependency set.
@@ -332,7 +341,11 @@ func (s *service) loadProtocol() (domain.ProtocolContent, error) {
 	if s.deps.ProtocolLoader == nil {
 		return domain.ProtocolContent{}, fmt.Errorf("misconfigured service: ProtocolLoader dependency is nil")
 	}
-	return s.deps.ProtocolLoader.LoadProtocol(s.deps.MosaicRoot)
+	root, err := s.protocolCatalogRoot()
+	if err != nil {
+		return domain.ProtocolContent{}, err
+	}
+	return s.deps.ProtocolLoader.LoadProtocol(root)
 }
 
 // loadBundle loads the deployed-sections bundle once for the run. It is called before
@@ -341,7 +354,11 @@ func (s *service) loadBundle() (domain.BundleContent, error) {
 	if s.deps.BundleLoader == nil {
 		return domain.BundleContent{}, fmt.Errorf("misconfigured service: BundleLoader dependency is nil")
 	}
-	return s.deps.BundleLoader.LoadBundle(s.deps.MosaicRoot)
+	root, err := s.bundleCatalogRoot()
+	if err != nil {
+		return domain.BundleContent{}, err
+	}
+	return s.deps.BundleLoader.LoadBundle(root)
 }
 
 // now returns the injected clock, defaulting to time.Now when Deps.Now is nil.
@@ -355,18 +372,18 @@ func (s *service) now() time.Time {
 // Deps is the full dependency set the app service requires. Every field is mandatory except
 // Now (defaults to time.Now when nil).
 type Deps struct {
-	Catalog        catalog.Catalog
-	Registry       registry.Registry
-	Planner        plan.Planner
-	Executor       deploy.Executor
-	Manifest       manifest.Store
-	ToolConfig     config.ToolConfigStore
-	UserConfig     config.UserConfigStore
-	Logger         logging.Logger
-	Todo           todo.Collector
-	Interaction    domain.Interaction
-	MosaicRoot     string
-	GOOS           string
+	Catalog     catalog.Catalog
+	Registry    registry.Registry
+	Planner     plan.Planner
+	Executor    deploy.Executor
+	Manifest    manifest.Store
+	ToolConfig  config.ToolConfigStore
+	UserConfig  config.UserConfigStore
+	Logger      logging.Logger
+	Todo        todo.Collector
+	Interaction domain.Interaction
+	MosaicRoot  string
+	GOOS        string
 	// ProtocolLoader reads the canonical protocol source document once per run and returns
 	// the two role blocks and the source version. Mandatory; supplied at the composition root.
 	ProtocolLoader catalog.ProtocolLoader
@@ -380,19 +397,27 @@ type Deps struct {
 	// It is recorded in every manifest written during this process lifetime. An empty string
 	// means "not recorded" and results in no tool_version key in the YAML.
 	ToolVersion string
+	// StackDescription is the stack the service was built with.
+	StackDescription stackconfig.Description
+	// StackFromInput is true when that stack came from stack input (a user-catalog flag or the
+	// default-layer flag); write runs persist the stack only then.
+	StackFromInput bool
+	// StackOrigin is the three-valued origin of that stack; empty means not set, in which case
+	// StackFromInput decides (true: stack input, false: default). When set it wins.
+	StackOrigin stackconfig.Origin
 }
 
 // DeployRequest carries the caller's pre-answers for the deploy-new flow. A set field is
 // used directly without asking; an unset field causes the flow to ask through Interaction
 // (CD-6). This is the single mechanism that makes CLI flags and TUI screens interchangeable.
 type DeployRequest struct {
-	HarnessID               string
-	WorkspacePath           string
-	Scope                   domain.Scope
-	WorkflowIDs             []string
-	UtilityAgentIDs         []string
-	InfrastructureAgentIDs  []string
-	HookIDs                 []string
+	HarnessID              string
+	WorkspacePath          string
+	Scope                  domain.Scope
+	WorkflowIDs            []string
+	UtilityAgentIDs        []string
+	InfrastructureAgentIDs []string
+	HookIDs                []string
 	// TierModels pre-answers the per-tier model selection step (QTierModel) for each tier key.
 	TierModels  map[domain.Tier]string
 	AgentModels map[string]string // agent key -> model id; pre-answers QAgentModel per agent

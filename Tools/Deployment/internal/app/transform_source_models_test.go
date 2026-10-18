@@ -462,7 +462,7 @@ func TestIndexSourceModels_NonExistentPath_RecordsReadError(t *testing.T) {
 
 	// Assert: read error recorded.
 	if idx.Files[0].ReadErr == nil {
-		t.Errorf("Files[0].ReadErr = nil, want non-nil; a non-existent path must record the read error; "+
+		t.Errorf("Files[0].ReadErr = nil, want non-nil; a non-existent path must record the read error; " +
 			"(RED: stub sets ReadErr to nil)")
 	}
 
@@ -479,8 +479,8 @@ func TestIndexSourceModels_NonExistentPath_RecordsReadError(t *testing.T) {
 	// RED: stub returns SourceModelIndex{} with nil Files, so this assertion is not exercised
 	// until I7.2 delivers the real implementation; it pins the invariant for GREEN phase.
 	if idx.Files[0].ReadErr != nil && idx.Files[0].Content != nil {
-		t.Error("Files[0].Content is non-nil when ReadErr is non-nil; "+
-			"Content must be nil when the file could not be read "+
+		t.Error("Files[0].Content is non-nil when ReadErr is non-nil; " +
+			"Content must be nil when the file could not be read " +
 			"(design invariant: Content is Nil when ReadErr is non-nil)")
 	}
 }

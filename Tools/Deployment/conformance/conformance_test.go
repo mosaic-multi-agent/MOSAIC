@@ -100,10 +100,10 @@ func findRepoRoot(t *testing.T) string {
 	return abs
 }
 
-// frozenCatalogRoot returns the absolute path to the frozen Catalog fixture tree. This tree
-// is a snapshot of the protocol source document and all HarnessInjections files at the time
-// the golden files were last regenerated. Golden-file tests must use this root instead of the
-// live repo root so they remain immune to Catalog evolution (version bumps, prose edits, etc.).
+// frozenCatalogRoot returns the absolute path to the frozen MOSAIC-root-shaped fixture tree.
+// It snapshots Catalog/CommunicationProtocol.md and Catalog/HarnessInjections/ as of the last
+// golden regeneration. Golden-file tests must use this root instead of the live repo root so
+// they remain immune to Catalog evolution (version bumps, prose edits, etc.).
 func frozenCatalogRoot(t *testing.T) string {
 	t.Helper()
 	// Package is at Tools/Deployment/conformance/; testdata is at Tools/Deployment/testdata/
@@ -250,7 +250,7 @@ var testModel = domain.ModelSelection{
 func loadTestProtocol(t *testing.T, repoRoot string) domain.ProtocolContent {
 	t.Helper()
 	loader := catalog.FileProtocolLoader{}
-	content, err := loader.LoadProtocol(repoRoot)
+	content, err := loader.LoadProtocol(filepath.Join(repoRoot, "Catalog"))
 	if err != nil {
 		t.Fatalf("load protocol from %s: %v", repoRoot, err)
 	}
@@ -301,10 +301,8 @@ func applyTransform(t *testing.T, mod domain.HarnessModule, tc goldenCase, proto
 // run. If the binary builds but the protocol is not yet implemented (RED phase), the
 // external.New call will fail and this test will FAIL — which is the correct RED state.
 func TestConformance_BuiltinVsExternal_OpenCode(t *testing.T) {
-	moduleRoot := findRepoRoot(t)
-
 	// Construct the built-in OpenCode module (in-process path).
-	builtinMod, err := opencode.New(registry.BuiltinOptions{MosaicRoot: findRepoRoot(t)})
+	builtinMod, err := opencode.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("opencode.New: %v", err)
 	}
@@ -316,7 +314,7 @@ func TestConformance_BuiltinVsExternal_OpenCode(t *testing.T) {
 
 	externalMod, err := external.New(binPath, desc, external.Options{
 		Timeout:    15 * time.Second,
-		MosaicRoot: moduleRoot,
+		MosaicRoot: frozenCatalogRoot(t),
 	})
 	if err != nil {
 		t.Fatalf("external.New with reference module binary: %v\n"+
@@ -325,7 +323,7 @@ func TestConformance_BuiltinVsExternal_OpenCode(t *testing.T) {
 	}
 	defer externalMod.Close() //nolint:errcheck
 
-	protocol := loadTestProtocol(t, moduleRoot)
+	protocol := loadTestProtocol(t, frozenCatalogRoot(t))
 	cases := goldenCases(t)
 	for _, tc := range cases {
 		tc := tc
@@ -360,7 +358,7 @@ func TestConformance_BuiltinVsExternal_OutputsMatchOpenCodeGoldenFiles(t *testin
 	goModRoot := findGoModuleRoot(t)
 	goldenDir := filepath.Join(goModRoot, "testdata", "golden", "opencode")
 
-	builtinMod, err := opencode.New(registry.BuiltinOptions{MosaicRoot: frozenCatalogRoot(t)})
+	builtinMod, err := opencode.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("opencode.New: %v", err)
 	}
@@ -391,7 +389,7 @@ func TestConformance_BuiltinVsExternal_OutputsMatchOpenCodeGoldenFiles(t *testin
 // external.New for the reference OpenCode binary reports TierExternal provenance. This is
 // a prerequisite for RunSummary.External to be populated correctly during a real run.
 func TestConformance_ExternalModule_RefIsCorrectTier(t *testing.T) {
-	builtinMod, err := opencode.New(registry.BuiltinOptions{MosaicRoot: findRepoRoot(t)})
+	builtinMod, err := opencode.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("opencode.New: %v", err)
 	}
@@ -402,7 +400,7 @@ func TestConformance_ExternalModule_RefIsCorrectTier(t *testing.T) {
 
 	externalMod, err := external.New(binPath, desc, external.Options{
 		Timeout:    10 * time.Second,
-		MosaicRoot: findRepoRoot(t),
+		MosaicRoot: frozenCatalogRoot(t),
 	})
 	if err != nil {
 		t.Fatalf("external.New: %v", err)
@@ -711,8 +709,7 @@ func TestDescriptorOnly_ConformanceHarness_TransformOutputMatchesGolden(t *testi
 // transform.Apply on a descriptor-only harness is valid MOSAIC document format. This is a
 // structural sanity check independent of golden file comparison.
 func TestDescriptorOnly_TransformOutput_IsParseableByDocformat(t *testing.T) {
-	repoRoot := findRepoRoot(t)
-	protocol := loadTestProtocol(t, repoRoot)
+	protocol := loadTestProtocol(t, frozenCatalogRoot(t))
 	cases := goldenCases(t)
 
 	m := resolveDescriptorOnly(t)
@@ -822,7 +819,7 @@ func TestDescriptorOnly_DescriptorLoaded_SchemaVersionIsOne(t *testing.T) {
 func TestAllThreeTiers_AreExercisedByThisSuite(t *testing.T) {
 	// Tier 1: built-in (in-process)
 	t.Run("builtin", func(t *testing.T) {
-		m, err := opencode.New(registry.BuiltinOptions{MosaicRoot: findRepoRoot(t)})
+		m, err := opencode.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 		if err != nil {
 			t.Fatalf("opencode.New (builtin tier): %v", err)
 		}
@@ -845,7 +842,7 @@ func TestAllThreeTiers_AreExercisedByThisSuite(t *testing.T) {
 	t.Run("external", func(t *testing.T) {
 		binPath := buildReferenceExternalModule(t)
 
-		builtinMod, err := opencode.New(registry.BuiltinOptions{MosaicRoot: findRepoRoot(t)})
+		builtinMod, err := opencode.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 		if err != nil {
 			t.Fatalf("opencode.New: %v", err)
 		}
@@ -854,7 +851,7 @@ func TestAllThreeTiers_AreExercisedByThisSuite(t *testing.T) {
 
 		m, err := external.New(binPath, desc, external.Options{
 			Timeout:    10 * time.Second,
-			MosaicRoot: findRepoRoot(t),
+			MosaicRoot: frozenCatalogRoot(t),
 		})
 		if err != nil {
 			t.Fatalf("external.New (external tier): %v\n"+
@@ -907,7 +904,7 @@ func createRegistryExternalHarness(t *testing.T, harnessID, displayName, binPath
 	// reads HarnessInjections.md and HarnessInjectionsOrchestrator.md from
 	// <MOSAIC_ROOT>/Catalog/HarnessInjections/OpenCode/ on startup; without these files the binary
 	// exits before responding to the handshake and external.New returns an error.
-	repoRoot := findRepoRoot(t)
+	repoRoot := frozenCatalogRoot(t)
 	contentSrc := filepath.Join(repoRoot, "Catalog", "HarnessInjections", "OpenCode")
 	contentDst := filepath.Join(root, "Catalog", "HarnessInjections", "OpenCode")
 	if err := os.MkdirAll(contentDst, 0o755); err != nil {
@@ -997,7 +994,7 @@ func TestRegistryExternal_OpenCode_PassesContractTest(t *testing.T) {
 // a behavioral signal that the registry path is wrong. The definitive RED evidence is in
 // T7.2.
 func TestRegistryExternal_OpenCode_EndToEndTransformMatchesDirect(t *testing.T) {
-	repoRoot := findRepoRoot(t)
+	repoRoot := frozenCatalogRoot(t)
 	binPath := buildReferenceExternalModule(t)
 
 	harnessID := "registry-external-e2e"
@@ -1075,18 +1072,19 @@ func TestRegistryExternal_OpenCode_EndToEndTransformMatchesDirect(t *testing.T) 
 // remain passing because they now draw from frozen fixtures rather than from this live
 // catalog, so only this test is touched by catalog edits.
 //
+// Only the transformed agents are live: the module is built from the frozen fixture content.
 // The test is deliberately t.Skip-friendly on missing paths: CI environments that do not
 // mount the live catalog (e.g. a module-only checkout) skip gracefully rather than fail.
 func TestLiveCatalog_Smoke_TransformSucceeds(t *testing.T) {
 	repoRoot := findRepoRoot(t)
 
-	mod, err := opencode.New(registry.BuiltinOptions{MosaicRoot: repoRoot})
+	mod, err := opencode.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("opencode.New: %v", err)
 	}
 	defer mod.Close() //nolint:errcheck
 
-	protocol := loadTestProtocol(t, repoRoot)
+	protocol := loadProtocolViaDefaultStack(t, repoRoot)
 
 	smokeAgents := liveCatalogCases(t, repoRoot)
 	for _, tc := range smokeAgents {

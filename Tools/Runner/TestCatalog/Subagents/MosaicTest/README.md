@@ -55,10 +55,14 @@ The script format is specified inside [mosaictest-scripted.md](./mosaictest-scri
 - **They never guess.** Where a fixture fails to determine an answer, the response is `FIXTURE_ERROR` — a status code outside the protocol that the Runner cannot process, forcing a loud crash. A guessed status produces a green run that measured nothing — the only outcome worse than a loud failure.
 - **They are stateless across invocations.** `agent_instance_id` is `{agent}#{N}` over a global counter, so it carries no "which invocation of me is this" signal. A marker artifact, checked by content and reset by overwriting, is the only legitimate source of that.
 
+## Synced Copies
+
+This catalogue deploys as a standalone catalog stack, so the protocol, bundle and harness injections come from this catalogue, not from the default one. The copies of `CommunicationProtocol.md`, `DeployedSections.md`, `HarnessInjections/` and `Orchestrator/orchestrator-script.md` here and in `Tools/AgentTest/catalog` must be synced when the default ones in `Catalog/` change. The frozen golden fixture `Tools/Deployment/testdata/frozen-catalog/Catalog` is a deliberate snapshot and is not synced. `Tools/AgentTest/catalog` uses agent ids 1-25, which overlap the default catalog's ids, so a stack of the default layer plus the AgentTest catalog fails composition with a numeric-id collision. This is correct behaviour (the test catalog is meant to deploy standalone, without the default-layer flag), not a defect.
+
 ## Design Reference
 
 - [TestCatalogDesign.md](../../../docs/TestCatalogDesign.md) — the suite: what it tests, the stub cast, the fixture formats, the workflow set, and how a run is checked
-- [CommunicationProtocol.md](../../../../../Development/Designs/CommunicationProtocol.md) — the request and response envelopes these agents conform to
+- [CommunicationProtocol.md](../../../../../Catalog/CommunicationProtocol.md) — the request and response envelopes these agents conform to (rationale: [Development/Designs/CommunicationProtocol.md](../../../../../Development/Designs/CommunicationProtocol.md))
 - [InfrastructureAgentConcept.md](../../../../../Development/Designs/InfrastructureAgentConcept.md) — classes, triggers, evaluation, failure policy
 
 Block and group notation (`EXECUTION.[Stage]`, `EXECUTION.[Stage].Test`, the `**Blocks:**` and `**Groups:**` tables) is defined in `WorkflowFormat.md`; the staged MosaicTest workflows use it, and the agents in this folder reference none of it.

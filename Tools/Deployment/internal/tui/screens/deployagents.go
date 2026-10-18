@@ -52,6 +52,7 @@ type levelRow struct {
 // Folder rows never appear in SelectedIDs() — only agent keys are returned.
 type DeployAgentScreen struct {
 	root *AgentTreeNode
+	prov provenanceView // catalog labels of the agents
 
 	// Navigation state: path is the open folder chain; path[0] is always the root;
 	// the current level is the last element. Length 1 means "top level". Depth is
@@ -196,6 +197,7 @@ func (s *DeployAgentScreen) buildLevelWidget(node *AgentTreeNode) {
 		})
 	}
 
+	items = s.prov.apply(items)
 	s.levelRows = rows
 	lh := uaListHeight(s.height)
 	lw := uaListWidth(s.width)

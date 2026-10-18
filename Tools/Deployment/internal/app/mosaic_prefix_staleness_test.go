@@ -37,7 +37,7 @@ import (
 func matchingStamps(version, transformVersion, injectionsVersion string) domain.VersionStamps {
 	return domain.VersionStamps{
 		Version:           version,
-		HarnessVersion:  transformVersion,
+		HarnessVersion:    transformVersion,
 		InjectionsVersion: injectionsVersion,
 	}
 }
@@ -124,7 +124,7 @@ func TestStaleness_PrefixedNamedFile_AllStampsMatch_NotStale(t *testing.T) {
 	agent := domain.Agent{Key: "agent-x", Version: "2.0.0"}
 	stamps := domain.VersionStamps{
 		Version:             "2.0.0",
-		HarnessVersion:    "4.0.0",
+		HarnessVersion:      "4.0.0",
 		InjectionsVersion:   "2.0.0",
 		ToolMappingsVersion: "hash1",
 	}

@@ -87,23 +87,23 @@ func LoadDir(dir string) (HarnessContent, error) {
 	sharedPath := filepath.Join(dir, SharedFileName)
 	sharedBytes, err := os.ReadFile(sharedPath)
 	if err != nil {
-		return HarnessContent{}, fmt.Errorf("injectionfile: read %s: %w", sharedPath, err)
+		return HarnessContent{}, &LoadError{File: SharedFileName, Path: sharedPath, Kind: LoadErrorRead, Err: err}
 	}
 
 	shared, err := ParseDeployedRegions(sharedBytes)
 	if err != nil {
-		return HarnessContent{}, fmt.Errorf("injectionfile: parse %s: %w", sharedPath, err)
+		return HarnessContent{}, &LoadError{File: SharedFileName, Path: sharedPath, Kind: LoadErrorParse, Err: err}
 	}
 
 	orchPath := filepath.Join(dir, OrchestratorFileName)
 	orchBytes, err := os.ReadFile(orchPath)
 	if err != nil {
-		return HarnessContent{}, fmt.Errorf("injectionfile: read %s: %w", orchPath, err)
+		return HarnessContent{}, &LoadError{File: OrchestratorFileName, Path: orchPath, Kind: LoadErrorRead, Err: err}
 	}
 
 	orch, orchVersion, err := ParseDeployedRegionsWithVersion(orchBytes)
 	if err != nil {
-		return HarnessContent{}, fmt.Errorf("injectionfile: parse %s: %w", orchPath, err)
+		return HarnessContent{}, &LoadError{File: OrchestratorFileName, Path: orchPath, Kind: LoadErrorParse, Err: err}
 	}
 
 	return HarnessContent{

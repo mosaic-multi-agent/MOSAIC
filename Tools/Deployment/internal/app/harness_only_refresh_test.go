@@ -561,7 +561,7 @@ func TestRefreshHarnessOnly_ProtocolOnlyScope_CommunicationProtocolRegionIsRefre
 
 	// Canonical subagent block must be present.
 	if !bytes.Contains(content, []byte(fixtureRefreshSubagentProtocolBlock)) {
-		t.Errorf("CommunicationProtocol region does not contain the subagent protocol block; " +
+		t.Errorf("CommunicationProtocol region does not contain the subagent protocol block; "+
 			"got content: %q", content)
 	}
 }
@@ -1721,5 +1721,3 @@ func TestRefreshHarnessOnly_HarnessOnlyRegionContent_ReturnsRoleMatchedBlock(t *
 		})
 	}
 }
-
-

@@ -342,12 +342,14 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 		}
 	}
 
+	report := s.conflictReportFor(module.Ref().ID, nil, s.deployedWorkflowIDs(module, workspace, scope, true), req.AutoConfirmPlan)
+	p.ConflictReport = report
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {
 		return domain.RunSummary{}, rerr
 	}
 	if !req.AutoConfirmPlan && (ans.Status == domain.Cancelled || !ans.Confirm) {
-		return domain.RunSummary{}, ErrPlanNotConfirmed
+		return domain.RunSummary{ConflictReport: report}, ErrPlanNotConfirmed
 	}
 
 	// Build agent-by-key map for content generation, including infra agents.
@@ -370,7 +372,7 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 		MosaicRoot:    s.deps.MosaicRoot,
 		Content:       contentFn,
 		Conflicts:     conflicts,
-		VersionStamps: buildVersionStamps(append(probeSet.Agents, infraAgents...), probeSet.Skills, nil, p.Items, module.Descriptor(), toolMappingsVersion),
+		VersionStamps: s.withProvenance(buildVersionStamps(append(probeSet.Agents, infraAgents...), probeSet.Skills, nil, p.Items, module.Descriptor(), toolMappingsVersion), p.Items),
 		Hooks:         nil,
 		TodoItems:     s.deps.Todo.Items,
 		TodoMeta: todo.Meta{
@@ -379,6 +381,10 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 		},
 		DryRun:      req.DryRun,
 		ToolVersion: s.deps.ToolVersion,
+	}
+
+	if err := s.supplyStack(&execReq); err != nil {
+		return domain.RunSummary{}, err
 	}
 
 	result, err := s.deps.Executor.Execute(ctx, execReq)
@@ -399,5 +405,5 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 		s.notifyPersistFailure(ctx, err)
 	}
 
-	return s.buildSummary(domain.ModeDeployAgents, harnessRef, workspace, result), nil
+	return withConflictReport(s.buildSummary(domain.ModeDeployAgents, harnessRef, workspace, result), report), nil
 }
