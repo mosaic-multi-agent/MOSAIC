@@ -10,6 +10,7 @@ Informal, hand-maintained list of what's next for this project. Order within eac
 
 - Add Codex harness.
 - Review all harnesses MOSAIC logs for precision, focused on cost (especially Claude Code, seems to be cca 40% off).
+- Add configurable pricing threshold to LogAnalyzer.
 - Attempt to filter out potential secrets from MOSAIC logs.
 - Improve LogAnalyzer display once logs are more reliable.
 - Update External modules at Deploy tool, its functionality is very likely lagging behind current Deploy tool capabilities.

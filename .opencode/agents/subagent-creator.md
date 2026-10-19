@@ -1,7 +1,7 @@
 ---
 description: Creates high-quality orchestration subagent instructions through iterative collaboration, ensuring compliance with the multi-agent orchestration system architecture and protocols
 mode: primary
-model: openai/gpt-5.6-sol
+model: openai/gpt-6-sol
 permission:
   read: allow
   write: allow

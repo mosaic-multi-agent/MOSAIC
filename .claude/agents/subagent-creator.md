@@ -1,7 +1,7 @@
 ---
 name: subagent-creator
 description: Creates high-quality orchestration subagent instructions through iterative collaboration, ensuring compliance with the multi-agent orchestration system architecture and protocols
-model: claude-opus-4-6
+model: claude-opus-5-5
 tools: Read, Write, Edit, Glob, Grep, AskUserQuestion
 base-version: 1.0.0
 mosaic_harness_version: 3.0.1

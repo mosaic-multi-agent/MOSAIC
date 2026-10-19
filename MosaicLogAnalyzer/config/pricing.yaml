@@ -41,11 +41,11 @@ models:
     cached_input: "0.10"
     cache_write: "1.25"
     output_under_threshold: "5.00"
-  claude-haiku-4-5-20251001:
-    input: "1"
-    cached_input: "0.1"
-    cache_write: "1.25"
-    output_under_threshold: "5"
+  claude-haiku-5-5:
+    input: "0.1"
+    cached_input: "0.01"
+    cache_write: "0.125"
+    output_under_threshold: "0.5"
   claude-opus-4-6:
     input: "5"
     cached_input: "0.5"
