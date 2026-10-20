@@ -1,3 +1,35 @@
+# 0.7.1 (2026-10-20)
+
+## Tools
+
+### Runner v1.7.0
+#### Changes
+- The progress screen lets you step into a running run: `m` requests manual dispatch at the next routing decision, `h` runs the next agent with HITL on. Both are one-shot and pressing the key again cancels them
+- Orchestrator consultations show as a temporary row on the progress screen while they run
+- The progress screen shows the same rows during a run as after resuming it
+- Claude Haiku 5.5 added to the model list of every harness
+#### Bugfixes
+- GHCP CLI model IDs corrected (for example `claude-opus-5.5` instead of `claude-opus-5-5`)
+
+### Deploy v1.2.0
+#### Changes
+- **Catalog stacks:** deploy from several catalogs layered on top of each other (`--catalog-folder`, `--include-default-catalog`), in every subcommand and the TUI. A higher layer replaces agents, workflows, skills, hooks and the Communication Protocol of the layers below it. Every catalog needs a `catalog-identity.yaml`
+- `update` reuses the catalog stack saved with the workspace, and compares protocol versions against the protocol the stack supplies
+- `promote` asks which layer receives a new agent when the stack has more than one layer
+- Claude Haiku 5.5 added to the model list of every harness
+#### Bugfixes
+- GHCP CLI model IDs corrected
+
+## Catalog
+- The Communication Protocol moves into the catalog (`Catalog/CommunicationProtocol.md`), so a catalog layer can supply its own. The Runner still expects the default status and error codes
+- **planner-tdd-soft** (v7.5.0) / **plan-review** (v5.4.0): plans no longer decide interface or data design. Plan review goes stage by stage and records its progress in a ledger, so a revised plan only gets its changed stages re-read. The planner can decline review findings with a reason
+- **contracts-designer** (v4.4.0) / **contracts-review** (v4.5.0): designs define only the public surface, not internals. The design keeps a Revision Log, and review goes section by section with a ledger, re-reading only sections a revision changed. The designer can decline findings with a reason
+- **subagent-creator** (v3.1.2): reads the protocol from its new catalog location
+
+## Documentation
+- Deployment Guide: Catalog Stacks section
+- Runner Guide (Design): progress-screen controls, in-run requests and consultation rows
+
 # 0.7.0 (2026-10-13)
 
 > **Breaking: the workflow format is finalized, and the new orchestrators accept nothing else.** The format is close to what 0.6.2 workflows already used. It is now fully specified, and "stages" are generalized into "blocks" and "iterations". Workflow logic is unchanged and all catalog workflows have been migrated. The new `orchestrator` (v8), `orchestrator-script` (v3) and Runner (v1.6) refuse workflows in the old format and cannot resume runs started with earlier versions.
