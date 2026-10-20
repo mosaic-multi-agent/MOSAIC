@@ -125,6 +125,7 @@ func (s *sessionImpl) consultRoute(
 			stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
 	}
 
+	agentReq.HumanInTheLoop = s.takeHITLForNewStep(dispInstr.RowIndex, agentRef.Identifier, effectiveStage, agentReq.HumanInTheLoop)
 	s.deps.Debug.Log(domain.EventSessionDispatchStart, "dispatching consultant-routed step",
 		domain.F("agent", agentReq.AgentInstanceID),
 		domain.F("phase", phase),
@@ -194,11 +195,10 @@ func routingRequest(
 // missing dispatch instruction.
 func (s *sessionImpl) consultSelectResolver(ctx context.Context, req domain.ConsultationRequest, config domain.RunConfig) (instr domain.RoutingInstruction, done bool, outcome domain.RunOutcome, err error) {
 	var consultErr error
-	if s.manualDispatchPending && s.deps.Manual != nil {
-		s.manualDispatchPending = false
+	if s.useManualResolver(req) {
 		instr, consultErr = s.deps.Manual.ConsultRouting(ctx, req)
 	} else {
-		instr, consultErr = s.deps.Routing.ConsultRouting(ctx, req)
+		instr, consultErr = s.consultOrchestratorAgent(ctx, req)
 		if consultErr != nil && config.ManualResolution && s.deps.Manual != nil {
 			s.deps.Debug.Log(domain.EventSessionManualResolve, "primary consultation failed; trying manual resolver",
 				domain.F("error", consultErr.Error()),
@@ -324,7 +324,7 @@ func (s *sessionImpl) consultHandleHarnessErr(
 		Timestamp:     s.deps.Clock.Now(),
 		Inputs:        formatInputs(agentReq.InputArtifacts),
 	}
-	crNewState, crApplyErr := s.deps.Store.Apply(ctx, *state, crFailedStep)
+	crNewState, crApplyErr := s.applyAndAnnounce(ctx, *state, crFailedStep)
 	if crApplyErr != nil {
 		return true, domain.RunOutcome{Status: domain.RunFailed, Message: crApplyErr.Error()}, crApplyErr
 	}

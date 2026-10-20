@@ -134,7 +134,7 @@ func (s *sessionImpl) runCommitSetup(
 		step.ErrorCode = response.ErrorCode
 		step.Summary = response.StatusMessage
 	}
-	recorded, err := s.deps.Store.Apply(ctx, state, step)
+	recorded, err := s.applyAndAnnounce(ctx, state, step)
 	if err != nil {
 		return state, domain.RunOutcome{Status: domain.RunFailed, Message: "commit setup row apply failed: " + err.Error()}, true, err
 	}

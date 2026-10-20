@@ -36,6 +36,8 @@ type qualifiedOptions struct {
 	implFindings string
 	// omitBuildReviewFile leaves build-review.md out of the agent directory.
 	omitBuildReviewFile bool
+	// consultations is wired as Deps.Consultations when non-nil.
+	consultations domain.ConsultationObserver
 }
 
 // newQualifiedRun builds a session over the qualified-rows workflow with agent
@@ -77,6 +79,8 @@ func newQualifiedRun(t *testing.T, opts qualifiedOptions) qualifiedRun {
 		Routing:  r.consultant,
 		Clock:    fixedClock{t: epoch},
 		Interact: &noopInteraction{},
+
+		Consultations: opts.consultations,
 	})
 	return r
 }

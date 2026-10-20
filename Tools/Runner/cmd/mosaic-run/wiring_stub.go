@@ -59,6 +59,10 @@ type interactiveWiringInput struct {
 	// here would recreate the orphan-signal defect the seam exists to fix.
 	StopSignal *session.StopSignal
 
+	// Requests is the shared in-run request object, constructed exactly once in
+	// runTUIMode next to StopSignal. Nil is a programming error, not a default.
+	Requests *session.InRunRequests
+
 	// Debug is the process debug logger, reaching both the session and (from
 	// the stop-observability work) the TUI, so one ordered log holds both
 	// halves of the stop lifecycle. Deliberately typed as the narrow
@@ -163,7 +167,9 @@ func buildInteractiveWiring(in interactiveWiringInput) interactiveWiring {
 			Store:         store,
 			Clock:         in.Clock,
 			Interact:      in.ProgramRef,
-			Debug:         in.Debug,
+			StepRecords:   in.ProgramRef,
+			Consultations: in.ProgramRef,
+			Debug:        in.Debug,
 			DispatchLog:   in.DispatchLog,
 			Routing:       routingDeps.Routing,
 			Manual:        routingDeps.Manual,
@@ -171,6 +177,12 @@ func buildInteractiveWiring(in interactiveWiringInput) interactiveWiring {
 			Approvals:     routingDeps.Approvals,
 			Outputs:       artifact.NewOutputWriteDetector(),
 			StopRequested: in.StopSignal.Requested,
+			TakeManualDispatchRequest: func() bool {
+				return in.Requests.Take(domain.InRunRequestManualDispatch)
+			},
+			TakeHITLRequest: func() bool {
+				return in.Requests.Take(domain.InRunRequestHITLNext)
+			},
 		}
 	}
 
@@ -199,6 +211,7 @@ func buildInteractiveWiring(in interactiveWiringInput) interactiveWiring {
 			Clock:              in.Clock,
 			OnRunIDResolved:    in.OnRunIDResolved,
 			StopSignal:         in.StopSignal,
+			InRunRequests:      in.Requests,
 			Debug:              in.Debug,
 			ToolVersion:        ToolVersion,
 			TestCatalogLoader:  buildTestCatalogLoader(),

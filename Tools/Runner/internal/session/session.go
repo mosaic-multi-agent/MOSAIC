@@ -190,6 +190,25 @@ type Deps struct {
 	// false, so the dispatch loop never nil-checks it.
 	StopRequested func() bool
 
+	// TakeManualDispatchRequest takes a pending in-run manual-dispatch request
+	// (true = it was pending and is now consumed). Optional: nil is normalised
+	// in New to a function that always returns false.
+	TakeManualDispatchRequest func() bool
+
+	// TakeHITLRequest takes a pending in-run HITL request for the next new
+	// workflow step (true = it was pending and is now consumed). Optional: nil
+	// is normalised in New to a function that always returns false.
+	TakeHITLRequest func() bool
+
+	// StepRecords receives every Execution Log entry the session records.
+	// Optional: nil is normalised in New to domain.NopStepRecordObserver{}.
+	StepRecords domain.StepRecordObserver
+
+	// Consultations receives the start and end of every orchestrator-agent
+	// consultation. Optional: nil is normalised in New to
+	// domain.NopConsultationObserver{}.
+	Consultations domain.ConsultationObserver
+
 	// BackupStateHook is an optional function called immediately after
 	// SetupBackupAndTransform returns a non-nil *BackupState, before the
 	// deferred Cleanup is registered. Tests use this to inject RestoreFunc
@@ -214,8 +233,20 @@ func New(deps Deps) Session {
 	if deps.DispatchLog == nil {
 		deps.DispatchLog = domain.NopDispatchLogger{}
 	}
+	if deps.StepRecords == nil {
+		deps.StepRecords = domain.NopStepRecordObserver{}
+	}
+	if deps.Consultations == nil {
+		deps.Consultations = domain.NopConsultationObserver{}
+	}
 	if deps.Approvals == nil {
 		deps.Approvals = unreadableApprovalReader{}
+	}
+	if deps.TakeManualDispatchRequest == nil {
+		deps.TakeManualDispatchRequest = func() bool { return false }
+	}
+	if deps.TakeHITLRequest == nil {
+		deps.TakeHITLRequest = func() bool { return false }
 	}
 	if deps.StopRequested == nil {
 		deps.StopRequested = func() bool { return false }
@@ -241,6 +272,8 @@ func (unreadableApprovalReader) ApprovalsReadable() bool { return false }
 // sessionImpl is the concrete implementation of Session.
 type sessionImpl struct {
 	deps Deps
+	// raised is the step the in-run HITL request was last applied to.
+	raised raisedStep
 	// orchRef is the resolved orchestrator agent reference. It is assigned at
 	// step 2a of Start and used when recording each consultation log row so
 	// that the row's AgentInstance carries the real orchestrator identifier
@@ -251,6 +284,8 @@ type sessionImpl struct {
 	// when config.ManualDispatch is true; cleared after the first consultRoute
 	// call so that subsequent routing decisions use the configured consultant.
 	manualDispatchPending bool
+	// inRunManual is an in-run manual-dispatch request taken but not yet applied.
+	inRunManual inRunManualState
 	// outputBaseline is the pre-invocation output snapshot of the step in
 	// flight. It is set before the first attempt and reused by re-dispatches.
 	outputBaseline domain.OutputBaseline

@@ -75,7 +75,7 @@ func (s *sessionImpl) dispatchInfraAgent(
 	if response.StatusCode == domain.StatusBLOCKED {
 		infraStep.ErrorCode = response.ErrorCode
 	}
-	newState, applyErr := s.deps.Store.Apply(ctx, *state, infraStep)
+	newState, applyErr := s.applyAndAnnounce(ctx, *state, infraStep)
 	if applyErr != nil {
 		return false, false, nil, applyErr
 	}

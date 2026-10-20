@@ -150,7 +150,7 @@ func (s *sessionImpl) consultHITLRedispatch(
 		IsInfrastructure: true,
 		HITLRejected:     true,
 	}
-	newState, rlApplyErr := s.deps.Store.Apply(ctx, *state, rlRejStep)
+	newState, rlApplyErr := s.applyAndAnnounce(ctx, *state, rlRejStep)
 	if rlApplyErr != nil {
 		return domain.ProtocolResponse{}, 0, false, true, domain.RunOutcome{Status: domain.RunFailed, Message: rlApplyErr.Error()}, rlApplyErr
 	}
@@ -248,7 +248,7 @@ func (s *sessionImpl) consultHITLEscalate(
 		IsInfrastructure: true,
 		HITLRejected:     true,
 	}
-	newState, elApplyErr := s.deps.Store.Apply(ctx, *state, elRejStep)
+	newState, elApplyErr := s.applyAndAnnounce(ctx, *state, elRejStep)
 	if elApplyErr != nil {
 		return true, domain.RunOutcome{Status: domain.RunFailed, Message: elApplyErr.Error()}, elApplyErr
 	}
@@ -310,7 +310,7 @@ func (s *sessionImpl) applyConsultStep(
 		WrittenArtifacts: written,
 		Routed:           routed,
 	}
-	*state, err = s.deps.Store.Apply(ctx, *state, completedStep)
+	*state, err = s.applyAndAnnounce(ctx, *state, completedStep)
 	if err != nil {
 		return true, domain.RunOutcome{Status: domain.RunFailed, Message: err.Error()}, err
 	}

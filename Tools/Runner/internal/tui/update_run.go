@@ -21,7 +21,9 @@ import (
 // ---------------------------------------------------------------------------
 
 func (m *rootModel) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m.syncPendingRequests()
 	cmd := m.progressScreen.Update(msg)
+	m.applyRequestKeyEvents()
 
 	// Drain the gate transitions this update produced and record them. Draining
 	// rather than polling is what keeps the log honest: each transition is
@@ -146,6 +148,7 @@ func (m *rootModel) updateArtifact(msg tea.Msg) (tea.Model, tea.Cmd) {
 // Idempotent and nil-safe: safe to call when no progress screen exists yet.
 func (m *rootModel) resetStopStateForRestart() {
 	m.stopSignal.Reset()
+	m.discardRequests(requestDiscardRestart)
 	if m.progressScreen != nil {
 		m.progressScreen.ResetStopState()
 	}

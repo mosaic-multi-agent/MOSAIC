@@ -56,7 +56,7 @@ func (s *sessionImpl) recordFailedBypass(ctx context.Context, state *domain.Arti
 		Timestamp:     s.deps.Clock.Now(),
 		Inputs:        formatInputs(req.InputArtifacts),
 	}
-	newState, err := s.deps.Store.Apply(ctx, *state, failed)
+	newState, err := s.applyAndAnnounce(ctx, *state, failed)
 	if err != nil {
 		s.deps.Debug.Log(domain.EventSessionApplyFailed, err.Error())
 		return err

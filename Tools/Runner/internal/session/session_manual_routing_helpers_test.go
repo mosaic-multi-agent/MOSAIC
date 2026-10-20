@@ -33,6 +33,8 @@ type manualUser struct {
 	fallback interaction.AnswerStatus
 
 	asked  []interaction.QuestionID
+	// onAsk, when set, is called with the ID of every question asked.
+	onAsk func(interaction.QuestionID)
 	manyQs map[interaction.QuestionID][]interaction.ChoiceQuestion
 }
 
@@ -48,6 +50,9 @@ func newManualUser(t *testing.T) *manualUser {
 
 func (u *manualUser) count(id interaction.QuestionID) {
 	u.asked = append(u.asked, id)
+	if u.onAsk != nil {
+		u.onAsk(id)
+	}
 	if len(u.asked) > 300 {
 		u.t.Fatal("manual user was asked more than 300 questions; routing does not terminate")
 	}
@@ -153,7 +158,7 @@ type manualRig struct {
 	consultant *scriptedRoutingConsultant
 }
 
-func newManualRig(t *testing.T, user *manualUser, registry []domain.ArtifactRegistryEntry) *manualRig {
+func newManualRig(t *testing.T, user *manualUser, registry []domain.ArtifactRegistryEntry, obs ...domain.ConsultationObserver) *manualRig {
 	t.Helper()
 	dir := scopedTempDir(t)
 	orchPath := copyOrchestratorFile(t, dir, "manual-routing-orch.md")
@@ -172,14 +177,18 @@ func newManualRig(t *testing.T, user *manualUser, registry []domain.ArtifactRegi
 	consultant.queueStop("done")
 	f := harness.NewMockAdapter()
 	store := &memStore{state: seed, exists: true}
-	ses := session.New(session.Deps{
+	deps := session.Deps{
 		Harness:  f,
 		Store:    store,
 		Routing:  consultant,
 		Manual:   &deviation.ManualResolver{Interact: user},
 		Clock:    fixedClock{t: epoch},
 		Interact: &noopInteraction{},
-	})
+	}
+	if len(obs) > 0 {
+		deps.Consultations = obs[0]
+	}
+	ses := session.New(deps)
 	return &manualRig{ses: ses, f: f, store: store, consultant: consultant, cfg: domain.RunConfig{
 		OrchestratorFilePath: orchPath,
 		WorkflowID:           manualRoutingWorkflow,

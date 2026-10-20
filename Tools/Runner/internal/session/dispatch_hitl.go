@@ -140,7 +140,7 @@ func (s *sessionImpl) handleAutoHITLRedispatch(ctx context.Context, rs *runStart
 		IsInfrastructure: true,
 		HITLRejected:     true,
 	}
-	newState, err := s.deps.Store.Apply(ctx, rs.state, rejStep)
+	newState, err := s.applyAndAnnounce(ctx, rs.state, rejStep)
 	if err != nil {
 		s.deps.Debug.Log(domain.EventSessionApplyFailed, err.Error())
 		return hitlRedispatchState{}, true, false, domain.RunOutcome{Status: domain.RunFailed, Message: err.Error()}, err
@@ -217,7 +217,7 @@ func (s *sessionImpl) handleAutoHITLRedispatchError(ctx context.Context, rs *run
 		Timestamp:     s.deps.Clock.Now(),
 		Inputs:        formatInputs(hitlStep.Request.InputArtifacts),
 	}
-	newState, applyErr := s.deps.Store.Apply(ctx, rs.state, rdFailedStep)
+	newState, applyErr := s.applyAndAnnounce(ctx, rs.state, rdFailedStep)
 	if applyErr != nil {
 		s.deps.Debug.Log(domain.EventSessionApplyFailed, applyErr.Error())
 		return hitlRedispatchState{}, true, false, domain.RunOutcome{Status: domain.RunFailed, Message: applyErr.Error()}, applyErr
@@ -270,7 +270,7 @@ func (s *sessionImpl) handleAutoHITLEscalate(ctx context.Context, rs *runStartCt
 		IsInfrastructure: true,
 		HITLRejected:     true,
 	}
-	newState, err := s.deps.Store.Apply(ctx, rs.state, escRejStep)
+	newState, err := s.applyAndAnnounce(ctx, rs.state, escRejStep)
 	if err != nil {
 		s.deps.Debug.Log(domain.EventSessionApplyFailed, err.Error())
 		return true, domain.RunOutcome{Status: domain.RunFailed, Message: err.Error()}, err

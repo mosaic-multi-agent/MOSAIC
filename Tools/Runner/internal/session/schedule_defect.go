@@ -206,6 +206,7 @@ func (s *sessionImpl) scheduleDefectStep(rs *runStartCtx, p *pendingScheduleDefe
 	}
 	task += "\n\n" + p.fixMessage()
 	agentID := row.BareAgentID()
+	hitl := s.keepRaisedHITL(row.Index, agentID, defaults.HITL)
 	return domain.DispatchStep{
 		RowIndex: row.Index,
 		Agent:    rs.agents[agentID],
@@ -214,9 +215,9 @@ func (s *sessionImpl) scheduleDefectStep(rs *runStartCtx, p *pendingScheduleDefe
 			TaskDescription: task,
 			InputArtifacts:  inputs,
 			OutputArtifacts: defaults.OutputArtifacts,
-			HumanInTheLoop:  defaults.HITL,
+			HumanInTheLoop:  hitl,
 		},
-		EffectiveHITL: defaults.HITL,
+		EffectiveHITL: hitl,
 		Phase:         row.PhaseParsed.Name,
 		Stage:         p.stage,
 		Retry:         domain.RetryScheduleDefect,
@@ -229,7 +230,7 @@ func (s *sessionImpl) scheduleDefectStep(rs *runStartCtx, p *pendingScheduleDefe
 // routing consultant the run ends unresolved and no block row is dispatched.
 func (s *sessionImpl) consultScheduleDefect(ctx context.Context, rs *runStartCtx, p *pendingScheduleDefect, row domain.RoutingRow) (domain.RunOutcome, bool, error) {
 	reason := p.describe()
-	if s.deps.Routing == nil && !(s.manualDispatchPending && s.deps.Manual != nil) {
+	if s.deps.Routing == nil && !s.manualResolverReady() {
 		msg := fmt.Sprintf("deviation: no routing consultant configured (kind=%s): %s",
 			domain.DeviationScheduleDefect, reason)
 		s.deps.Debug.Log(domain.EventSessionDeviationUnresolved, msg)
