@@ -1262,7 +1262,7 @@ func TestRenderAgent_Orchestrator_WithCallerInfrastructureAgents_AppearsInOutput
 	dest := filepath.Join(dir, "out.md")
 
 	req := newPreAnsweredRenderRequest(src, dest)
-	req.Workflows = []string{}                                 // explicitly none — valid for orchestrator
+	req.Workflows = []string{}                                // explicitly none — valid for orchestrator
 	req.InfrastructureAgents = []string{"render-infra-agent"} // the key registered in the catalog above
 
 	// Act

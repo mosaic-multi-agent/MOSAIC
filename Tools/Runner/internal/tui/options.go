@@ -127,6 +127,12 @@ type Options struct {
 	// Request()/Reset() calls have no effect on the running session.
 	StopSignal *session.StopSignal
 
+	// InRunRequests is the shared in-run request object. The same instance must
+	// back session.Deps.TakeManualDispatchRequest / TakeHITLRequest of every
+	// session the SessionFactory builds. When nil, rootModel uses
+	// session.NewInRunRequests().
+	InRunRequests *session.InRunRequests
+
 	// Debug records the TUI-side stop-lifecycle events. It must be the same
 	// instance the session receives as session.Deps.Debug, so both halves of
 	// the stop lifecycle land in one ordered log and the sequence is

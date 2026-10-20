@@ -177,6 +177,11 @@ type rootModel struct {
 	// running session's dispatch loop.
 	stopSignal *session.StopSignal
 
+	// inRunRequests is the shared one-shot in-run request object. See
+	// Options.InRunRequests; the same instance backs every session's take
+	// functions.
+	inRunRequests *session.InRunRequests
+
 	// debug records the TUI-side stop-lifecycle entries. It is the same
 	// instance the session logs through, so both halves of the lifecycle land
 	// in one ordered log. See Options.Debug for the contract; never nil after
@@ -290,6 +295,7 @@ func newRootModel(ctx context.Context, sess session.Session, opts Options) *root
 		clock:                  opts.Clock,
 		onRunIDResolved:        opts.OnRunIDResolved,
 		stopSignal:             opts.StopSignal,
+		inRunRequests:          opts.InRunRequests,
 		debug:                  opts.Debug,
 		devMode:                opts.DevMode,
 		testCatalogLoader:      opts.TestCatalogLoader,
@@ -297,6 +303,9 @@ func newRootModel(ctx context.Context, sess session.Session, opts Options) *root
 	}
 	if m.stopSignal == nil {
 		m.stopSignal = session.NewStopSignal()
+	}
+	if m.inRunRequests == nil {
+		m.inRunRequests = session.NewInRunRequests()
 	}
 	if m.debug == nil {
 		m.debug = domain.NopDebugLogger{}

@@ -36,6 +36,19 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleQuestionMsg(qMsg)
 	}
 
+	// Execution Log entry recorded by the session.
+	if recMsg, ok := msg.(stepRecordedMsg); ok {
+		return m.handleStepRecorded(recMsg)
+	}
+
+	// Consultation start and end announced by the session.
+	if cMsg, ok := msg.(consultStartedMsg); ok {
+		return m.handleConsultStarted(cMsg)
+	}
+	if _, ok := msg.(consultEndedMsg); ok {
+		return m.handleConsultEnded()
+	}
+
 	// Session completed.
 	if doneMsg, ok := msg.(runDoneMsg); ok {
 		return m.handleRunDone(doneMsg)
@@ -64,6 +77,7 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // screen instead of the normal done/stop screens, because the user may be
 // able to fix it by supplying a working executable path.
 func (m *rootModel) handleRunDone(doneMsg runDoneMsg) (tea.Model, tea.Cmd) {
+	m.discardRequests(requestDiscardRunEnd)
 	style := stylesFromTheme(m.theme)
 	// Check for a launch-failure cause before any status-based branching.
 	// A RunRefused or RunStoppedByConsultant outcome caused by a harness
@@ -114,6 +128,7 @@ func (m *rootModel) handleRunDone(doneMsg runDoneMsg) (tea.Model, tea.Cmd) {
 // screen; all other errors continue to the existing done screen, because a
 // path override cannot fix them.
 func (m *rootModel) handleRunError(errMsg runErrorMsg) (tea.Model, tea.Cmd) {
+	m.discardRequests(requestDiscardRunEnd)
 	style := stylesFromTheme(m.theme)
 	var launchErr *domain.HarnessLaunchError
 	if errors.As(errMsg.err, &launchErr) {

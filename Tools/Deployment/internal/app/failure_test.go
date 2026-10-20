@@ -63,7 +63,7 @@ func TestDeployNew_UnwritableWorkspace_SummaryShowsFallback(t *testing.T) {
 		t.Error("summary.Fallback = FallbackNone; a fallback deployment must set a non-workspace fallback tier in the summary")
 	}
 	if summary.DeploymentRoot == workspace {
-		t.Errorf("summary.DeploymentRoot = %q (the primary workspace); " +
+		t.Errorf("summary.DeploymentRoot = %q (the primary workspace); "+
 			"a fallback must use a different deployment root and report it in the summary", workspace)
 	}
 }

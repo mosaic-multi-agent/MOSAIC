@@ -108,6 +108,11 @@ plan shape over JSON).
    re-checks the same gate independently of how the entry was listed, so no
    caller can obtain an external module purely by discovering it first.
 
+### Injection content source and the external-harness boundary
+A built-in module does not own a fixed MOSAIC-root path for its injection files. `registry.BuiltinOptions.ContentDir` is a per-harness resolver (`func(harnessDirName string) (string, error)`); each built-in asks it once, with its own `catalogpaths.HarnessDirName*` value, and reads injections only from the directory it returns. `Options.BuiltinContentDir` supplies the resolver to every built-in factory; when nil, `Discover` uses `MosaicRootContentDirs(mosaicRoot)` (`<mosaicRoot>/Catalog/HarnessInjections/<dir>`), which keeps existing callers and tests unchanged. `cmd/mosaic-deploy` passes a resolver backed by `stack.Catalog.HarnessInjections()` (`registry.StackContentDirs`, `DiscoverForStack`), so the injections of a built-in come, per harness directory and as one unit with no per-file fallback, from the highest catalog layer that has `HarnessInjections/<dir>`. When the active stack changes (the TUI stack screen), `RebuildForStack` re-runs only the built-in factories against the new stack's result and carries every other entry over unchanged. A built-in whose directory no layer supplies stays listed with `Usable: false`; `Resolve` returns an error wrapping `*injections.NotSuppliedError`.
+
+**Boundary.** Only the built-in tier resolves its injections through the stack. Descriptor-only and external harnesses (under `<MosaicRoot>/MosaicDeploy/harnesses/`) keep loading injections next to their descriptors, whatever stack is in effect, and `StackService.CheckHarnessInjections` returns nil for a usable one. `cmd/harness-opencode-module` is unchanged: it passes `registry.MosaicRootContentDirs(mosaicRoot)` and reads `<mosaicRoot>/Catalog/HarnessInjections`.
+
 ### External module protocol (client side)
 `external.New(execPath, descriptor, opts)` spawns the executable over
 anonymous pipes, sends a `handshake` request carrying `ProtocolVersion`
@@ -174,7 +179,8 @@ claim independently.
 | **docformat** | `contracttest` imports `docformat.CanonicalInjections` to assert unknown injection names are correctly rejected by every tier. |
 | **catalog** | Resolves hook variant reuse (e.g. `vscode-ghcp` reusing `claude-code`'s files) before calling a module's `HookPlan`, so modules never implement reuse logic themselves. |
 | **transform / plan / deploy** | Obtain a `HarnessModule` exclusively through `registry.Resolve`; never construct or import a `builtin/*` package directly. |
-| **cmd/mosaic-deploy** | The only place `registry.Discover` is called in production, wiring `AllowExternal` from the CLI flag or `tool-config.yaml`. |
+| **cmd/mosaic-deploy** | The only place `registry.Discover` is called in production, wiring `AllowExternal` from the CLI flag or `tool-config.yaml` and the stack-backed injection resolver for the built-ins. |
+| **catalog/stack/injections** | Resolves per harness directory which catalog layer supplies injections; the registry consumes its result only through the content-directory resolver and never imports `stack`. |
 | **cmd/harness-opencode-module** | A standalone binary that imports `opencode.New()` and speaks the `external` package's protocol server-side, serving as the reference implementation for anyone authoring a real external module. |
 
 ## Key Concepts
@@ -191,7 +197,7 @@ claim independently.
 ## Boundaries
 
 - **Owns:** the `HarnessModule` abstraction itself; descriptor parsing/validation; the three shared descriptor-driven algorithms; tier discovery and precedence; the external protocol's client-side wire format and error taxonomy; contract verification shared across tiers.
-- **Does not own:** applying a `FrontmatterPlan` to an actual document (that's `transform` + `docformat`); reading MOSAIC source files or resolving hook-variant reuse (that's `catalog`); writing any file to disk (that's `deploy`); deciding which harness the user picks or presenting the selection UI (that's `app`/frontends).
+- **Does not own:** choosing which catalog layer supplies a built-in's injections (the stack, via the content-directory resolver); injection loading for descriptor-only and external harnesses is its own and stays next to their descriptors. Also not owned: applying a `FrontmatterPlan` to an actual document (that's `transform` + `docformat`); reading MOSAIC source files or resolving hook-variant reuse (that's `catalog`); writing any file to disk (that's `deploy`); deciding which harness the user picks or presenting the selection UI (that's `app`/frontends).
 
 ## Invariants & Conventions
 

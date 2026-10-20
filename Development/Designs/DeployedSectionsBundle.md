@@ -1,7 +1,7 @@
 ---
 id: deployed-sections-bundle
 type: specification
-version: "1.3"
+version: "1.4"
 name: "Deployed Sections Bundle"
 description: "The design of the canonical block bundle: what qualifies as a block, why contracts are excluded, how bundle_version works, how the tool deploys blocks, and how staleness is detected."
 author: MOSAIC
@@ -142,7 +142,7 @@ What it does not catch is a **local edit that preserves the version** — someon
 
 ## 7. Why a Bundle Rather Than Per-Document Blocks
 
-The alternative — and the arrangement the orchestration contract itself still uses — is for each specifying document to hold its own deployable text in its first section, with the rationale below it. Rejected on three counts.
+The alternative — and the arrangement the orchestration contract used until protocol document v2.0 — is for each specifying document to hold its own deployable text in its first section, with the rationale below it. Rejected on three counts.
 
 **A tool wanting the text must parse a thousand-line design document to extract two blocks**, and must first know which documents to look in. There is no enumeration; the list of places to look is itself hand-maintained.
 
@@ -191,6 +191,7 @@ Rule 22 catches a hand-edited deployed file. Rule 23 catches a design document t
 
 | Version | Date | Summary |
 |---------|------|---------|
+| 1.4 | 2026-10-17 | **The contract followed the same split.** `CommunicationProtocol.md` v2.0 moved its deployed blocks to `Catalog/CommunicationProtocol.md` for the reasons §7 gives against keeping deployable text inside a design document. §7 no longer describes that arrangement as current. The contract is still outside the bundle and still carries its own version (§2.1). |
 | 1.3 | 2026-09-26 | **Membership aligned with bundle 2.0.0.** `ProtocolConstraints:Subagent` was removed because it restated the Communication Protocol; its remaining rules moved to their proper owners. The bundle now contains four blocks. Historical rows retain the five-block membership that existed at those versions. §8 no longer rests on there being a single orchestrator: the role has two hand-maintained sources, and the argument for keeping their text out of the bundle is restated on that basis. §5 step 4 now states that changing a block bumps the specifying document's own `version` as well as adding its changelog entry — the field tracks that document's prose, and leaving it unstated had produced one bumped block document and three unbumped ones for the same bundle change. §2's version-mismatch example no longer gives the orchestrator a bundle version (it carries none, §3.1), and §4 step 5 writes a project region's source content — empty or default — on create rather than always leaving it empty. |
 | 1.2 | 2026-08-08 | **Per-deployment region list corrected** to follow `AgentTemplateArchitecture.md` v1.4. `LanguagePatterns` and `CustomConstraints` are removed from §4's list of assembled managed-type regions: neither had a generator, both were listed under a content source that was never implemented, and both leave the deployed vocabulary entirely. No change to the bundle itself — it never held either one, and the five blocks are untouched. |
 | 1.1 | 2026-08-05 | **Aligned with the conformance rework** in `AgentTemplateArchitecture.md` v1.2. An absent deployed region is graded rather than uniformly permitted: the five bundle blocks fill conduct-tier regions, whose absence is a warning (§4). Bundle rules 20–23 gain severities and mechanisms — 20 errors, 21–23 warn, since a stale or hand-edited deployment still runs and `bundle_version` carries no wire semantics (§9). |

@@ -208,8 +208,8 @@ func TestDeployNew_InfraAgent_ModelQuestionsNotInterleaved(t *testing.T) {
 	cat := catalogWithOneInfraAgent()
 	capture := &optionCapturingInteraction{
 		selectOneAnswers: map[customModelPropagationKey]domain.ChoiceAnswer{
-			{domain.QAgentModel, "orchestrator"}:    {Status: domain.Answered, OptionID: "model-a"},
-			{domain.QAgentModel, "test-runner"}:     {Status: domain.Answered, OptionID: "model-a"},
+			{domain.QAgentModel, "orchestrator"}:     {Status: domain.Answered, OptionID: "model-a"},
+			{domain.QAgentModel, "test-runner"}:      {Status: domain.Answered, OptionID: "model-a"},
 			{domain.QAgentModel, "checkpoint-agent"}: {Status: domain.Answered, OptionID: "model-b"},
 		},
 	}
@@ -298,8 +298,8 @@ func TestDeployNew_InfraAgent_ResolvedModelInPlanInput(t *testing.T) {
 	}
 	sel, ok := cp.capturedInput.Models["checkpoint-agent"]
 	if !ok {
-		t.Errorf("plan.Input.Models does not contain an entry for \"checkpoint-agent\"; "+
-			"the models map returned by the infra-agent resolveModels call must be merged into "+
+		t.Errorf("plan.Input.Models does not contain an entry for \"checkpoint-agent\"; " +
+			"the models map returned by the infra-agent resolveModels call must be merged into " +
 			"plan.Input.Models before plan.Build is called")
 		return
 	}
@@ -626,8 +626,8 @@ func TestDeployNew_InfraAgent_VersionStampsIncludesInfraItems(t *testing.T) {
 	// Assert — VersionStamps must contain an entry for the infra agent's target path.
 	stamp, ok := exec.capturedReq.VersionStamps["checkpoint-agent.md"]
 	if !ok {
-		t.Errorf("VersionStamps does not contain an entry for \"checkpoint-agent.md\"; "+
-			"infra-agent structs must be merged into the agents slice passed to buildVersionStamps "+
+		t.Errorf("VersionStamps does not contain an entry for \"checkpoint-agent.md\"; " +
+			"infra-agent structs must be merged into the agents slice passed to buildVersionStamps " +
 			"so that version stamps are computed for infra-agent plan items (I3.4)")
 		return
 	}

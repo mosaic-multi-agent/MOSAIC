@@ -285,7 +285,7 @@ func TestDetectHarnessMatch_MixedPositiveAndUnknownEvidenceIsIndeterminate(t *te
 		"model: claude-3-5-sonnet\n" +
 		"tools:\n" +
 		"- AlphaBash\n" +
-		"alpha_stamp: alpha-v1\n" +          // ClassHarness for alpha: positive evidence
+		"alpha_stamp: alpha-v1\n" + // ClassHarness for alpha: positive evidence
 		"hand_added_annotation: my-value\n" + // unknown to alpha: not a different-harness identifier
 		"---\n" +
 		"<Identity type=\"core\">\n" +

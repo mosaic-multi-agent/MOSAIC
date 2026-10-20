@@ -49,11 +49,13 @@ The test catalogue is harness-agnostic, exactly like the normal catalogue. It co
 
 So the plan is:
 
-1. Deploy the test catalogue to a workspace, once per harness, using the normal deploy tool. Runner TestCatalog runs deploy through the `mosaic-deploy` binary (`Tools/Runner/internal/testdeploy`), so that binary must be rebuilt or reinstalled before catalogue runs exercise the workflow `Row` column, which mosaic-deploy adds when it rebuilds workflows.
+1. Deploy the test catalogue to a workspace, once per harness, using the normal deploy tool. Runner TestCatalog runs deploy through the `mosaic-deploy` binary (`Tools/Runner/internal/testdeploy`), so that binary must be rebuilt or reinstalled before catalogue runs exercise the workflow `Row` column, which mosaic-deploy adds when it rebuilds workflows. The deploy names the test catalogue with a single `--catalog-folder`, which is a standalone catalogue stack: the protocol, the bundle and the harness injections come from `Tools/Runner/TestCatalog` itself (its own `CommunicationProtocol.md`, `DeployedSections.md`, `HarnessInjections/` and `catalog-identity.yaml`), not from the real MOSAIC root.
 2. Run the same suite against each one.
 3. Expect the same results everywhere. A difference between harnesses **is** a finding — that is largely why the suite exists.
 
 There are no per-harness workflows or fixtures. The only per-harness work is in the Runner's own code: each harness adapter needs the code for asking the orchestrator what to run next (RUN-4 in `Requirements.md`). None of them has it today.
+
+**Sync obligation.** The copies of the protocol, bundle, harness injections and orchestrator-script in `Tools/Runner/TestCatalog` and `Tools/AgentTest/catalog` must be synced when the default ones in `Catalog/` change. The frozen golden fixture `Tools/Deployment/testdata/frozen-catalog/Catalog` is a deliberate snapshot and is not synced. `Tools/AgentTest/catalog` uses agent ids 1-25, which overlap the default catalog's ids, so a stack of the default layer plus the AgentTest catalog fails composition with a numeric-id collision. This is correct behaviour (the test catalog is meant to deploy standalone, without the default-layer flag), not a defect.
 
 ### 2.1 How a Test Is Run: Ground Rules
 

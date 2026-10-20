@@ -1,7 +1,7 @@
 ---
 description: Collaboratively creates and modifies orchestration workflow definitions with the user, deciding where agent boundaries fall, specifying missing subagents, and ensuring routing consistency and compliance with the workflow definition schema
 mode: primary
-model: github-copilot/claude-opus-4.6
+model: openai/gpt-6-sol
 permission:
   read: allow
   write: allow

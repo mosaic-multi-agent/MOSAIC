@@ -288,4 +288,3 @@ func TestDeployNew_InfraAgentSelected_PlanInputContainsInfraIDs(t *testing.T) {
 			cp.capturedInput.InfrastructureAgentIDs, infraAgentForProbeTest.Key)
 	}
 }
-

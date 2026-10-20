@@ -555,7 +555,7 @@ func TestManifest_UpdatedItem_UnversionedDeployed_StampsFromVersionStamps(t *tes
 	stamps := map[string]domain.VersionStamp{
 		item.TargetPath: {
 			Version:           "3.0",
-			HarnessVersion:  "2.0",
+			HarnessVersion:    "2.0",
 			InjectionsVersion: "1.5",
 		},
 	}
@@ -667,7 +667,7 @@ func TestManifest_WorkflowStalenessDeltas_DoNotCorruptVersionStamps(t *testing.T
 		VersionStamps: map[string]domain.VersionStamp{
 			"agents/orchestrator.md": {
 				Version:           wantVersion,
-				HarnessVersion:  wantTransform,
+				HarnessVersion:    wantTransform,
 				InjectionsVersion: wantInjections,
 			},
 		},

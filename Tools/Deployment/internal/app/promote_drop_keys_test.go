@@ -300,8 +300,8 @@ func TestPromoteHarnessDropKeys_ProtectedGenericKeysExcluded(t *testing.T) {
 			},
 		},
 		planSet: []domain.FrontmatterField{
-			{Key: "version", Value: domain.ScalarValue("3.0.0", domain.QuotePlain)}, // collides
-			{Key: "name", Value: domain.ScalarValue("bad", domain.QuotePlain)},       // collides
+			{Key: "version", Value: domain.ScalarValue("3.0.0", domain.QuotePlain)},     // collides
+			{Key: "name", Value: domain.ScalarValue("bad", domain.QuotePlain)},          // collides
 			{Key: "role", Value: domain.ScalarValue("orchestrator", domain.QuotePlain)}, // collides
 		},
 	}
@@ -570,7 +570,7 @@ func TestPromoteHarnessDropKeys_EmptyPlanSetKey_Ignored(t *testing.T) {
 			},
 		},
 		planSet: []domain.FrontmatterField{
-			{Key: "", Value: domain.ScalarValue("nokey", domain.QuotePlain)},  // empty key — must be ignored
+			{Key: "", Value: domain.ScalarValue("nokey", domain.QuotePlain)}, // empty key — must be ignored
 			{Key: "valid_key", Value: domain.ScalarValue("value", domain.QuotePlain)},
 		},
 	}

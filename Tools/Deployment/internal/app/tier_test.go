@@ -66,7 +66,7 @@ func TestDeployNew_TierDiscovery_SubjectIsTheTierString(t *testing.T) {
 	// Arrange
 	var capturedSubject string
 	capture := &tierSubjectCapture{
-		onTierModel: func(q domain.ChoiceQuestion) { capturedSubject = q.Subject },
+		onTierModel:   func(q domain.ChoiceQuestion) { capturedSubject = q.Subject },
 		defaultChoice: domain.ChoiceAnswer{Status: domain.Answered, OptionID: "model-a"},
 	}
 	deps, workspace := newBaseDeps(t, nil)
@@ -282,7 +282,7 @@ func TestDeployNew_TierSkipOne_OnlySkipsThatTier(t *testing.T) {
 	deps.Catalog = cat
 	// Force HIGH to return SkippedOne by inserting a custom interaction
 	skipHighStub := &skipOneTierInteraction{
-		skipTier: "HIGH",
+		skipTier:      "HIGH",
 		defaultAnswer: domain.ChoiceAnswer{Status: domain.Answered, OptionID: "model-a"},
 	}
 	deps.Interaction = skipHighStub

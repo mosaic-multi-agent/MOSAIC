@@ -43,6 +43,7 @@ var gapToCategory = map[domain.GapKind]domain.TodoCategory{
 	domain.GapSkippedFile:                  domain.TodoSkippedFiles,
 	domain.GapHookRegistration:         domain.TodoRegistration,
 	domain.GapManualStep:               domain.TodoManual,
+	domain.GapCatalogShadowing:         domain.TodoManual,
 	domain.GapFallbackLocation:         domain.TodoEnvironment,
 	domain.GapUnsupportedArtifact:      domain.TodoEnvironment,
 }

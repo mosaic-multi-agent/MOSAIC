@@ -26,6 +26,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"mosaic-deploy/internal/app"
+	"mosaic-deploy/internal/app/stackservicetest"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -233,6 +234,7 @@ func TestMultiSelectRoundTrip_QDeployAgents_Esc_ProducesCancelled(t *testing.T) 
 
 // spyDispatchService records which service method is called, for dispatch tests.
 type spyDispatchService struct {
+	stackservicetest.MockStackService
 	harnesses          []domain.HarnessRef
 	deployAgentsCalled int
 	deployHooksCalled  int

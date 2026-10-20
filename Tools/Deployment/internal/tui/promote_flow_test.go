@@ -40,6 +40,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"mosaic-deploy/internal/app"
+	"mosaic-deploy/internal/app/stackservicetest"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -633,6 +634,7 @@ func TestPromoteMode_RunningStatus_IsPromoteSpecific(t *testing.T) {
 // received by Promote. It is used to verify that the TUI wires the already-selected
 // harness id into the promote request without presenting any additional harness question.
 type capturingPromoteService struct {
+	stackservicetest.MockStackService
 	inner          *stubFlowService
 	lastPromoteReq *app.PromoteRequest
 }

@@ -228,9 +228,9 @@ func TestPromoteRole_StandaloneRole_CorrectValueInOutput(t *testing.T) {
 // The mosaic_role-source rows FAIL until I3.5 removes the prefixed key from the promote path.
 func TestPromoteRole_AllRoles_NoMosaicRoleInOutput(t *testing.T) {
 	cases := []struct {
-		name     string
-		src      []byte
-		role     domain.AgentRole
+		name string
+		src  []byte
+		role domain.AgentRole
 	}{
 		{"subagent_mosaic_source", minimalEligibleMosaicRoleSource("subagent"), domain.RoleSubagent},
 		{"orchestrator_mosaic_source", minimalEligibleMosaicRoleSource("orchestrator"), domain.RoleOrchestrator},

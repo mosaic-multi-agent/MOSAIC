@@ -374,6 +374,7 @@ func (m *rootModel) updateSetupConfig(msg tea.Msg) (tea.Model, tea.Cmd) {
 // This is the common terminal step from both updateSetupConfig (non-GHCP-CLI harnesses)
 // and updateSetupGHCPMode (GHCP CLI harness, after mode is resolved).
 func (m *rootModel) launchSession() tea.Cmd {
+	m.discardRequests(requestDiscardSessionStart)
 	// Reconstruct the session with the harness adapter and resolved config.
 	// This replaces the placeholder session (which used the fake adapter) with
 	// one using the real adapter and all resolved settings.

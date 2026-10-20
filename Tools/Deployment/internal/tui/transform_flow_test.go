@@ -50,6 +50,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"mosaic-deploy/internal/app"
+	"mosaic-deploy/internal/app/stackservicetest"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -359,6 +360,7 @@ func TestFullKeyboardFlow_Transform_FileInput_FromLaunchToScreenDone(t *testing.
 // TransformHarnessRequest received by TransformHarness. It is used to verify that the TUI
 // wires the already-selected harness id into the transform request as SourceHarnessID.
 type capturingTransformService struct {
+	stackservicetest.MockStackService
 	inner            *stubFlowService
 	lastTransformReq *app.TransformHarnessRequest
 }

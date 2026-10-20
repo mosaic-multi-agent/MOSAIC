@@ -30,9 +30,9 @@ import (
 	_ "embed"
 	"fmt"
 	"path"
-	"path/filepath"
 	"strings"
 
+	"mosaic-deploy/internal/catalog/catalogpaths"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
 	"mosaic-deploy/internal/harness/injectionfile"
@@ -65,7 +65,10 @@ func New(opts registry.BuiltinOptions) (domain.HarnessModule, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse embedded claude-code descriptor: %w", err)
 	}
-	contentDir := filepath.Join(opts.MosaicRoot, RepoContentDir)
+	contentDir, err := opts.ResolveContentDir(catalogpaths.HarnessDirNameClaudeCode)
+	if err != nil {
+		return nil, fmt.Errorf("claudecode: %w", err)
+	}
 	content, err := injectionfile.LoadDir(contentDir)
 	if err != nil {
 		return nil, fmt.Errorf("claude-code: load harness content: %w", err)

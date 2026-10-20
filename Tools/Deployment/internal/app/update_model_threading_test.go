@@ -154,8 +154,8 @@ func TestUpdate_AgentWithDeployedModel_PlanInputModelsHasResolvedEntry(t *testin
 		t.Fatal("plan.Input.Models[\"test-runner\"] is absent; prerequisite for resolved-selection check")
 	}
 	if !sel.Resolved() {
-		t.Errorf("plan.Input.Models[\"test-runner\"].Resolved() = false, want true; "+
-			"the selection built from a deployed file must satisfy Resolved() so the planner "+
+		t.Errorf("plan.Input.Models[\"test-runner\"].Resolved() = false, want true; " +
+			"the selection built from a deployed file must satisfy Resolved() so the planner " +
 			"does not emit a spurious GapNoModel gap for an agent that already has a model")
 	}
 }
@@ -650,10 +650,10 @@ func TestUpdate_PlanInputModelsAndContentShareConsistentModelID(t *testing.T) {
 
 	capExec := &contentCapturingExecutor{result: deploy.ExecResult{DeploymentRoot: ws}}
 	spy := &spyPlanner{response: domain.Plan{
-		Mode:    domain.ModeUpdateWorkspace,
-		Harness: minimalHarness,
+		Mode:          domain.ModeUpdateWorkspace,
+		Harness:       minimalHarness,
 		WorkspacePath: ws,
-		Items:   []domain.PlanItem{updateItem},
+		Items:         []domain.PlanItem{updateItem},
 	}}
 
 	stub := interactiontest.NewBuilder().AnswerReview(true).Build()

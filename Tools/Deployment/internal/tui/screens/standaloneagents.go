@@ -46,6 +46,7 @@ type StandaloneAgentScreen struct {
 	// non-nil for agent rows. Used to resolve the focused agent for the detail pane.
 	agents   []*domain.Agent
 	multisel *widgets.MultiSelect
+	prov     provenanceView // catalog labels of the agents
 	detail   *widgets.DetailPane
 
 	// Error / empty state.

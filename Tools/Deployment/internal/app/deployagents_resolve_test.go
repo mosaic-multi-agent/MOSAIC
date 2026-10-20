@@ -215,8 +215,8 @@ func TestDeployAgents_OptionBuilder_SubagentGroupPrefixedWithSubagents(t *testin
 	svc := app.New(deps)
 
 	_, _ = svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
 		AutoConfirmPlan: true,
 	})
 
@@ -260,8 +260,8 @@ func TestDeployAgents_OptionBuilder_UtilityAgentGroupIsUtilityAgents(t *testing.
 	svc := app.New(deps)
 
 	_, _ = svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
 		AutoConfirmPlan: true,
 	})
 
@@ -301,8 +301,8 @@ func TestDeployAgents_OptionBuilder_StandaloneGroupPrefixedWithStandaloneAgents(
 	svc := app.New(deps)
 
 	_, _ = svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
 		AutoConfirmPlan: true,
 	})
 
@@ -349,8 +349,8 @@ func TestDeployAgents_OptionBuilder_FixtureCategoryAppearsWithoutHardcoding(t *t
 	svc := app.New(deps)
 
 	_, _ = svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
 		AutoConfirmPlan: true,
 	})
 
@@ -399,8 +399,8 @@ func TestDeployAgents_OptionBuilder_OrchestratorNeverInOptions(t *testing.T) {
 	svc := app.New(deps)
 
 	_, _ = svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
 		AutoConfirmPlan: true,
 	})
 
@@ -444,8 +444,8 @@ func TestDeployAgents_OptionBuilder_UtilityAgentOutsideAllowListIsOffered(t *tes
 	svc := app.New(deps)
 
 	_, _ = svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
 		AutoConfirmPlan: true,
 	})
 

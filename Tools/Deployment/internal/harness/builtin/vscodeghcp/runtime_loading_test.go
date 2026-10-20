@@ -15,7 +15,7 @@ package vscodeghcp_test
 //
 //   Run-time loading from declared directory (T6.2):
 //   - A vscodeghcp module constructed against a temporary root reads HarnessInjections.md
-//     and HarnessInjectionsOrchestrator.md from <MosaicRoot>/Catalog/HarnessInjections/VS Code GHCP/.
+//     and HarnessInjectionsOrchestrator.md from the directory given by opts.ContentDir.
 //   - The injected content comes from those on-disk files, not from embedded bytes.
 //
 //   Failure modes (T6.3):
@@ -79,7 +79,7 @@ func makeTempRootForVsCodeGhcp(t *testing.T) (root string, contentDir string) {
 // RED: Fails via NewWithOptsForTesting returning an error until I6.4 implements New(opts).
 func newVsCodeGhcpModuleFromOpts(t *testing.T, root string) domain.HarnessModule {
 	t.Helper()
-	mod, err := vscodeghcp.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	mod, err := vscodeghcp.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err != nil {
 		t.Fatalf("vscodeghcp.New(opts): %v", err) // RED: fails until I6.4 implemented
 	}
@@ -127,7 +127,7 @@ func TestRepoContentDir_VsCodeGhcp_IsCorrect(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestVsCodeGhcp_ReadsDeclaredDirectory verifies that constructing a vscodeghcp module with
-// a MosaicRoot reads content from <MosaicRoot>/<RepoContentDir>/.
+// a MosaicRoot reads content from the directory returned by opts.ContentDir.
 func TestVsCodeGhcp_ReadsDeclaredDirectory(t *testing.T) {
 	root, contentDir := makeTempRootForVsCodeGhcp(t)
 	writeVsCodeGhcpContentFile(t, contentDir, "HarnessInjections.md", vsCodeGhcpSharedInjections)
@@ -176,7 +176,7 @@ func TestVsCodeGhcp_MissingSharedFile_ConstructionFails(t *testing.T) {
 	// Only write orchestrator file; shared file is missing.
 	writeVsCodeGhcpContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md", vsCodeGhcpOrchestratorInjections)
 
-	_, err := vscodeghcp.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := vscodeghcp.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Error("expected non-nil error when HarnessInjections.md is missing, got nil")
 	}
@@ -188,7 +188,7 @@ func TestVsCodeGhcp_MissingSharedFile_ErrorNamesFile(t *testing.T) {
 	root, contentDir := makeTempRootForVsCodeGhcp(t)
 	writeVsCodeGhcpContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md", vsCodeGhcpOrchestratorInjections)
 
-	_, err := vscodeghcp.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := vscodeghcp.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Fatal("expected non-nil error when HarnessInjections.md is missing")
 	}
@@ -204,7 +204,7 @@ func TestVsCodeGhcp_MissingOrchestratorFile_ConstructionFails(t *testing.T) {
 	writeVsCodeGhcpContentFile(t, contentDir, "HarnessInjections.md", vsCodeGhcpSharedInjections)
 	// Orchestrator file is missing.
 
-	_, err := vscodeghcp.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := vscodeghcp.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Error("expected non-nil error when HarnessInjectionsOrchestrator.md is missing, got nil")
 	}
@@ -216,7 +216,7 @@ func TestVsCodeGhcp_MissingOrchestratorFile_ErrorNamesFile(t *testing.T) {
 	root, contentDir := makeTempRootForVsCodeGhcp(t)
 	writeVsCodeGhcpContentFile(t, contentDir, "HarnessInjections.md", vsCodeGhcpSharedInjections)
 
-	_, err := vscodeghcp.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := vscodeghcp.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Fatal("expected non-nil error when HarnessInjectionsOrchestrator.md is missing")
 	}
@@ -232,7 +232,7 @@ func TestVsCodeGhcp_UnparseableSharedFile_ConstructionFails(t *testing.T) {
 	writeVsCodeGhcpContentFile(t, contentDir, "HarnessInjections.md", "---\nversion: \"1.0\"\nunclosed-frontmatter\n")
 	writeVsCodeGhcpContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md", vsCodeGhcpOrchestratorInjections)
 
-	_, err := vscodeghcp.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := vscodeghcp.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Error("expected non-nil error for unparseable HarnessInjections.md, got nil")
 	}
@@ -245,7 +245,7 @@ func TestVsCodeGhcp_UnparseableOrchestratorFile_ConstructionFails(t *testing.T) 
 	writeVsCodeGhcpContentFile(t, contentDir, "HarnessInjections.md", vsCodeGhcpSharedInjections)
 	writeVsCodeGhcpContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md", "---\nversion: \"1.0\"\nunclosed-frontmatter\n")
 
-	_, err := vscodeghcp.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := vscodeghcp.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Error("expected non-nil error for unparseable HarnessInjectionsOrchestrator.md, got nil")
 	}

@@ -3,6 +3,7 @@ package plan
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"mosaic-deploy/internal/catalog"
 	"mosaic-deploy/internal/domain"
@@ -88,9 +89,10 @@ func OrchestratorExcludedFor(mode domain.RunMode) bool {
 // Agents by key, Skills by key, Hooks by key.
 //
 // Errors:
-//   - ErrUnknownWorkflow if any workflow ID is not found in the catalog
-//   - ErrUnknownAgent if any workflow references an agent that does not exist, or if any
-//     infrastructure or standalone agent ID is not found in the catalog
+//   - ErrUnknownWorkflow if any workflow ID is not found; the message lists the searched catalogs
+//   - ErrUnknownAgent if any workflow references an agent that does not exist (message names the
+//     workflow), or if any directly requested subagent, utility, infrastructure or standalone
+//     agent ID is not found (a *RequestedAgentNotFoundError listing the searched catalogs)
 func ResolveArtifactsFrom(c catalog.Catalog, sel Selection) (ArtifactSet, error) {
 	agentsSeen := make(map[string]bool)
 	var agents []domain.Agent
@@ -100,7 +102,7 @@ func ResolveArtifactsFrom(c catalog.Catalog, sel Selection) (ArtifactSet, error)
 	if !sel.ExcludeOrchestrator {
 		orc := c.Orchestrator()
 		if orc.Key == "" {
-			return ArtifactSet{}, fmt.Errorf("%w: sought in catalogue %q", ErrMissingOrchestrator, c.CatalogRoot())
+			return ArtifactSet{}, fmt.Errorf("%w: %s", ErrMissingOrchestrator, searchedCatalogs(c))
 		}
 		agentsSeen[orc.Key] = true
 		agents = append(agents, orc)
@@ -116,7 +118,7 @@ func ResolveArtifactsFrom(c catalog.Catalog, sel Selection) (ArtifactSet, error)
 	for _, wfID := range sel.WorkflowIDs {
 		wf, ok := c.Workflow(wfID)
 		if !ok {
-			return ArtifactSet{}, fmt.Errorf("%w: %q", ErrUnknownWorkflow, wfID)
+			return ArtifactSet{}, unknownWorkflowError(c, wfID)
 		}
 		for _, agentKey := range wf.ReferencedAgents {
 			agent, ok := c.Agent(agentKey)
@@ -139,7 +141,7 @@ func ResolveArtifactsFrom(c catalog.Catalog, sel Selection) (ArtifactSet, error)
 		}
 		agent, ok := c.Agent(subagentKey)
 		if !ok {
-			return ArtifactSet{}, fmt.Errorf("%w: subagent %q not found in catalog", ErrUnknownAgent, subagentKey)
+			return ArtifactSet{}, requestedAgentNotFound(c, "subagent", subagentKey)
 		}
 		agentsSeen[agent.Key] = true
 		agents = append(agents, agent)
@@ -152,7 +154,7 @@ func ResolveArtifactsFrom(c catalog.Catalog, sel Selection) (ArtifactSet, error)
 		}
 		agent, ok := c.Agent(utilityKey)
 		if !ok {
-			return ArtifactSet{}, fmt.Errorf("%w: utility agent %q not found in catalog", ErrUnknownAgent, utilityKey)
+			return ArtifactSet{}, requestedAgentNotFound(c, "utility agent", utilityKey)
 		}
 		agentsSeen[agent.Key] = true
 		agents = append(agents, agent)
@@ -167,7 +169,7 @@ func ResolveArtifactsFrom(c catalog.Catalog, sel Selection) (ArtifactSet, error)
 		}
 		agent, ok := c.Agent(infraKey)
 		if !ok {
-			return ArtifactSet{}, fmt.Errorf("%w: infrastructure agent %q not found in catalog", ErrUnknownAgent, infraKey)
+			return ArtifactSet{}, requestedAgentNotFound(c, "infrastructure agent", infraKey)
 		}
 		agentsSeen[agent.Key] = true
 		agents = append(agents, agent)
@@ -181,7 +183,7 @@ func ResolveArtifactsFrom(c catalog.Catalog, sel Selection) (ArtifactSet, error)
 		}
 		agent, ok := c.Agent(standaloneKey)
 		if !ok {
-			return ArtifactSet{}, fmt.Errorf("%w: standalone agent %q not found in catalog", ErrUnknownAgent, standaloneKey)
+			return ArtifactSet{}, requestedAgentNotFound(c, "standalone agent", standaloneKey)
 		}
 		agentsSeen[agent.Key] = true
 		agents = append(agents, agent)
@@ -243,6 +245,20 @@ func ResolveArtifactsFrom(c catalog.Catalog, sel Selection) (ArtifactSet, error)
 	sort.Slice(hooks, func(i, j int) bool { return hooks[i].Key < hooks[j].Key })
 
 	return ArtifactSet{Agents: agents, Skills: skills, Hooks: hooks}, nil
+}
+
+// searchedCatalogs describes where a missing orchestrator, workflow or requested agent was sought: every stack layer
+// (id and root, highest first) when the catalog lists its layers, otherwise the catalog root.
+func searchedCatalogs(c catalog.Catalog) string {
+	lister, ok := c.(catalog.LayerLister)
+	if !ok || len(lister.Layers()) == 0 {
+		return fmt.Sprintf("sought in catalogue %q", c.CatalogRoot())
+	}
+	parts := make([]string, 0, len(lister.Layers()))
+	for _, l := range lister.Layers() {
+		parts = append(parts, fmt.Sprintf("%s (%q)", l.Identity.ID, l.Root))
+	}
+	return "sought in catalogue layers (highest first): " + strings.Join(parts, ", ")
 }
 
 // ResolveArtifacts is the positional form retained for existing call sites. It is exactly

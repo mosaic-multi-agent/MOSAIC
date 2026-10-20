@@ -3,8 +3,8 @@ package app
 // deployagents_orchestrator.go holds the orchestrator handling of the deploy-agents flow:
 // when infrastructure agents are deployed, every orchestrator-role file already present in
 // the workspace whose declarations need to change joins the run, so the new agents are
-// declared there. The files are never created, never rebuilt from the catalog beyond the
-// declarations, and keep their deployed workflows and model.
+// declared there. The files are never created. Each is rewritten from the agent source of the
+// catalog in effect with the declarations merged; the deployed workflows and model are kept.
 
 import (
 	"path/filepath"
@@ -157,8 +157,8 @@ func (o orchestratorInfra) withoutOrchestrators(agents []domain.Agent) []domain.
 // annotate makes each affected orchestrator item name the infrastructure agents behind it.
 // The planner compares against an empty workflow selection in this flow, so its own reason
 // and deltas would describe workflow removals that are never carried out; an update item is
-// therefore reported with the declaration drift alone. A conflict item keeps its reason and
-// gains the drift.
+// therefore reported with the declaration drift, followed by the catalog change when the
+// planner found one. A conflict item keeps its reason and gains the drift.
 func (o orchestratorInfra) annotate(items []domain.PlanItem) {
 	for i := range items {
 		t, ok := o.targetFor(items[i].TargetPath)
@@ -167,8 +167,18 @@ func (o orchestratorInfra) annotate(items []domain.PlanItem) {
 		}
 		switch items[i].Action {
 		case domain.ActionUpdate:
-			items[i].Stale = t.Drift.Deltas()
-			items[i].Reason = "stale: " + t.Drift.Reason()
+			stale := append([]domain.VersionDelta(nil), t.Drift.Deltas()...)
+			reason := t.Drift.Reason()
+			for _, d := range items[i].Stale {
+				if d.Field == plan.CatalogDeltaField {
+					stale = append(stale, d)
+					reason += "; " + plan.CatalogStaleness(
+						domain.CatalogIdentity{ID: d.Deployed}, domain.CatalogIdentity{ID: d.Source}).Reason()
+					break
+				}
+			}
+			items[i].Stale = stale
+			items[i].Reason = "stale: " + reason
 		case domain.ActionConflict:
 			items[i].Reason += "; " + t.Drift.Reason()
 		}

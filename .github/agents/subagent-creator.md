@@ -1,7 +1,7 @@
 ---
 name: subagent-creator
 description: Creates high-quality orchestration subagent instructions through iterative collaboration, ensuring compliance with the multi-agent orchestration system architecture and protocols
-model: claude-sonnet-5
+model: claude-opus-5.5
 tools: ['read', 'edit', 'search', 'ask_user']
 user-invocable: true
 base-version: 1.0.0

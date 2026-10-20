@@ -366,8 +366,8 @@ func TestDeployAgents_Classification_InfraSubagentRoutedToInfraIDs(t *testing.T)
 	svc := app.New(deps)
 
 	_, _ = svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
 		AutoConfirmPlan: true,
 	})
 
@@ -414,8 +414,8 @@ func TestDeployAgents_Classification_UtilityAgentRoutedToUtilityAgentIDs(t *test
 	svc := app.New(deps)
 
 	_, _ = svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
 		AutoConfirmPlan: true,
 	})
 
@@ -451,8 +451,8 @@ func TestDeployAgents_Classification_StandaloneAgentRoutedToStandaloneAgentIDs(t
 	svc := app.New(deps)
 
 	_, _ = svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
 		AutoConfirmPlan: true,
 	})
 
@@ -494,8 +494,8 @@ func TestDeployAgents_Classification_UnknownKeySkippedSilently(t *testing.T) {
 
 	// Act — the flow must not return an error for an unrecognised answer key.
 	_, err := svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
 		AutoConfirmPlan: true,
 	})
 
@@ -530,8 +530,8 @@ func TestDeployAgents_Classification_OrchestratorKeySkippedSilently(t *testing.T
 	svc := app.New(deps)
 
 	_, _ = svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
 		AutoConfirmPlan: true,
 	})
 

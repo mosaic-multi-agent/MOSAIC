@@ -347,7 +347,7 @@ func (s *sessionImpl) applyOverridesAndPreConsult(ctx context.Context, rs *runSt
 		missing := newPreConsultMissing(rs.config.Mode)
 		return s.startFailed("pre-consultation failed: "+missing.Error(), missing), true, nil
 	}
-	advice, pcErr := s.deps.PreConsult.PreConsult(ctx, domain.ConsultationRequest{
+	advice, pcErr := s.preConsultOrchestratorAgent(ctx, domain.ConsultationRequest{
 		Context:               domain.ConsultContextPreConsultation,
 		OrchestrationArtifact: filepath.Join(rs.config.RunFolder, "Orchestration.md"),
 	})

@@ -45,8 +45,8 @@ import (
 )
 
 // claudeHarnessConstraints is the expected shared content of the HarnessConstraints injection
-// for Claude Code, as declared in Catalog/HarnessInjections/Claude Code/HarnessInjections.md.
-const claudeHarnessConstraints = "**Output Artifacts Are Not Report Files:** Every file listed in `output_artifacts` is an orchestration artifact, not a report file. The orchestrator passes it as input to other agents, and your final message never reaches those agents. Write every listed output artifact as a file — review and findings documents included — even where general guidance tells you to return findings in your final message instead of writing them to a file."
+// in the frozen fixture catalog: the Claude Code harness declares the block with empty content.
+const claudeHarnessConstraints = ""
 
 // updateGolden regenerates the golden files from current engine output when -update is passed.
 // Run: go test ./internal/harness/builtin/claudecode/... -run TestGoldenFile -update
@@ -100,10 +100,10 @@ func agentFixturesDir(t *testing.T) string {
 	return abs
 }
 
-// frozenCatalogRoot returns the absolute path to the frozen Catalog fixture tree. This tree
-// is a snapshot of the protocol source document and all HarnessInjections files at the time
-// the golden files were last regenerated. Golden-file tests must use this root instead of the
-// live repo root so they remain immune to Catalog evolution (version bumps, prose edits, etc.).
+// frozenCatalogRoot returns the absolute path to the frozen MOSAIC-root-shaped fixture tree.
+// It snapshots Catalog/CommunicationProtocol.md and Catalog/HarnessInjections/ as of the last
+// golden regeneration. Golden-file tests must use this root instead of the live repo root so
+// they remain immune to Catalog evolution (version bumps, prose edits, etc.).
 func frozenCatalogRoot(t *testing.T) string {
 	t.Helper()
 	// testdata/frozen-catalog/ is at Tools/Deployment/testdata/frozen-catalog/
@@ -119,7 +119,7 @@ func frozenCatalogRoot(t *testing.T) string {
 // test immediately if construction fails.
 func newModule(t *testing.T) domain.HarnessModule {
 	t.Helper()
-	mod, err := claudecode.New(registry.BuiltinOptions{MosaicRoot: repoRoot(t)})
+	mod, err := claudecode.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("claudecode.New(): %v", err)
 	}
@@ -131,7 +131,7 @@ func newModule(t *testing.T) domain.HarnessModule {
 // files in Catalog/ do not affect the committed golden files.
 func newModuleFromFrozen(t *testing.T) domain.HarnessModule {
 	t.Helper()
-	mod, err := claudecode.New(registry.BuiltinOptions{MosaicRoot: frozenCatalogRoot(t)})
+	mod, err := claudecode.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("claudecode.New() from frozen catalog: %v", err)
 	}
@@ -143,7 +143,7 @@ func newModuleFromFrozen(t *testing.T) domain.HarnessModule {
 // must be populated for every transform.Apply call that processes those source files.
 func loadProtocol(t *testing.T, root string) domain.ProtocolContent {
 	t.Helper()
-	content, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	content, err := catalog.FileProtocolLoader{}.LoadProtocol(filepath.Join(root, "Catalog"))
 	if err != nil {
 		t.Fatalf("load protocol from %s: %v", root, err)
 	}

@@ -192,11 +192,11 @@ func unusableDeployedFiles() map[string]struct {
 		wantReason string
 	}
 	return map[string]fx{
-		"invalid-utf8":                   {[]byte("---\nid: \"50\"\nversion: \"1.0\"\n---\nbody \xff\xfe\n"), "line "},
+		"invalid-utf8":                    {[]byte("---\nid: \"50\"\nversion: \"1.0\"\n---\nbody \xff\xfe\n"), "line "},
 		"leading-blank-line-before-fence": {[]byte("\n---\nid: \"50\"\nversion: \"1.0\"\n---\nbody\n"), "line "},
-		"cr-only-line-endings":           {[]byte("---\rid: \"50\"\rversion: \"1.0\"\r---\rbody\r"), "line "},
-		"no-frontmatter":                 {[]byte("# Plan Review\nNo frontmatter.\n"), "no frontmatter"},
-		"frontmatter-without-id":         {[]byte("---\nversion: \"1.0\"\n---\nbody\n"), "no id"},
+		"cr-only-line-endings":            {[]byte("---\rid: \"50\"\rversion: \"1.0\"\r---\rbody\r"), "line "},
+		"no-frontmatter":                  {[]byte("# Plan Review\nNo frontmatter.\n"), "no frontmatter"},
+		"frontmatter-without-id":          {[]byte("---\nversion: \"1.0\"\n---\nbody\n"), "no id"},
 	}
 }
 

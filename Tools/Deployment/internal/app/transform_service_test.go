@@ -1218,7 +1218,9 @@ func (m *customTargetPathModule) TargetPath(req domain.TargetPathRequest) (strin
 	}
 	return req.Key + ".md", nil
 }
-func (m *customTargetPathModule) Injection(_ domain.InjectionRequest) (string, bool) { return "", false }
+func (m *customTargetPathModule) Injection(_ domain.InjectionRequest) (string, bool) {
+	return "", false
+}
 func (m *customTargetPathModule) HookPlan(_ domain.HookPlanRequest) (domain.HookPlan, error) {
 	return domain.HookPlan{Supported: false, Reason: "stub"}, nil
 }

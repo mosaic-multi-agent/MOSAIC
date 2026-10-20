@@ -162,9 +162,9 @@ func TestDeployAgents_SkipAllDeployAgents_QDeployAgentsNotAsked(t *testing.T) {
 
 	// Act — SkipAll latched for QDeployAgents.
 	_, _ = svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
-		SkipAll:       map[domain.QuestionID]bool{domain.QDeployAgents: true},
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
+		SkipAll:         map[domain.QuestionID]bool{domain.QDeployAgents: true},
 		AutoConfirmPlan: true,
 	})
 
@@ -196,8 +196,8 @@ func TestDeployAgents_QWorkflowsNeverAsked(t *testing.T) {
 
 	// Act
 	_, err := svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
 		AutoConfirmPlan: true,
 	})
 
@@ -229,8 +229,8 @@ func TestDeployAgents_QHooksNeverAsked(t *testing.T) {
 	svc := app.New(deps)
 
 	_, _ = svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
 		AutoConfirmPlan: true,
 	})
 
@@ -257,8 +257,8 @@ func TestDeployAgents_QUtilityAgentsNeverAsked(t *testing.T) {
 	svc := app.New(deps)
 
 	_, _ = svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
 		AutoConfirmPlan: true,
 	})
 
@@ -282,8 +282,8 @@ func TestDeployAgents_QInfrastructureAgentsNeverAsked(t *testing.T) {
 	svc := app.New(deps)
 
 	_, _ = svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
 		AutoConfirmPlan: true,
 	})
 
@@ -306,8 +306,8 @@ func TestDeployAgents_QStandaloneAgentsNeverAsked(t *testing.T) {
 	svc := app.New(deps)
 
 	_, _ = svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
 		AutoConfirmPlan: true,
 	})
 

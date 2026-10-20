@@ -16,6 +16,7 @@ import (
 // When svcErr is non-nil (an unrecoverable service error), the error is written to errOut
 // and ExitFailure is returned without a summary (the summary is empty in this case).
 func renderOutput(out, errOut io.Writer, format string, summary domain.RunSummary, svcErr error) int {
+	writeConflictReport(out, format, summary.ConflictReport)
 	if svcErr != nil {
 		fmt.Fprintf(errOut, "error: %v\n", svcErr)
 		return ExitFailure
@@ -165,6 +166,7 @@ func renderTransformHuman(out io.Writer, result app.TransformHarnessResult) {
 // The contract mirrors renderStandaloneOutput: svcErr → error on errOut + ExitFailure;
 // json → domain.RunSummary document; otherwise the human summary with optional dry-run prefix.
 func renderAgentsOutput(out, errOut io.Writer, format string, dryRun bool, summary domain.RunSummary, svcErr error) int {
+	writeConflictReport(out, format, summary.ConflictReport)
 	if svcErr != nil {
 		fmt.Fprintf(errOut, "error: %v\n", svcErr)
 		return ExitFailure
@@ -199,6 +201,7 @@ func renderAgentsHuman(out io.Writer, dryRun bool, summary domain.RunSummary) {
 // renderHooksOutput writes the deploy-hooks run summary and returns the exit code.
 // The contract mirrors renderAgentsOutput.
 func renderHooksOutput(out, errOut io.Writer, format string, dryRun bool, summary domain.RunSummary, svcErr error) int {
+	writeConflictReport(out, format, summary.ConflictReport)
 	if svcErr != nil {
 		fmt.Fprintf(errOut, "error: %v\n", svcErr)
 		return ExitFailure
@@ -251,33 +254,6 @@ func renderCheckIndexOutput(out, errOut io.Writer, format string, result app.Ind
 		return ExitSuccess
 	}
 	return ExitWithSkips
-}
-
-// renderCheckIndexHuman writes a human-readable summary of the index-check result to out.
-// When the index is absent, a single line notes that fact. When drift was found, orphans
-// are listed by class. When the catalog is clean, a single clean-state line is printed.
-func renderCheckIndexHuman(out io.Writer, result app.IndexCheckResult) {
-	if !result.IndexPresent {
-		fmt.Fprintf(out, "no index: Catalog/Workflows/Index.md does not exist; nothing to compare\n")
-		return
-	}
-	if result.Clean {
-		fmt.Fprintf(out, "clean: no drift between Index.md (%d entries) and disk (%d files)\n",
-			result.IndexCount, result.DiskCount)
-		return
-	}
-	if len(result.FileOrphans) > 0 {
-		fmt.Fprintf(out, "file-orphans: workflow files on disk not listed in Index.md:\n")
-		for _, o := range result.FileOrphans {
-			fmt.Fprintf(out, "  %s — %s\n", o.Subject, o.Path)
-		}
-	}
-	if len(result.IndexOrphans) > 0 {
-		fmt.Fprintf(out, "index-orphans: index entries with no file on disk:\n")
-		for _, o := range result.IndexOrphans {
-			fmt.Fprintf(out, "  %s — %s\n", o.Subject, o.Path)
-		}
-	}
 }
 
 // splitTrimmedParts splits a comma-separated string into trimmed, non-empty parts.

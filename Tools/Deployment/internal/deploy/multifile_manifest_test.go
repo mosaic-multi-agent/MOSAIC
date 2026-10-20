@@ -63,7 +63,7 @@ func TestExecute_MultiFileSkill_AllEntriesRetainedInManifest(t *testing.T) {
 
 	ref := domain.ArtifactRef{Kind: domain.ArtifactSkill, Key: "lean-tdd"}
 
-	entryFile    := newSkillItem("lean-tdd", "skills/lean-tdd/SKILL.md",      domain.ActionCreate)
+	entryFile := newSkillItem("lean-tdd", "skills/lean-tdd/SKILL.md", domain.ActionCreate)
 	companionFile := newSkillItem("lean-tdd", "skills/lean-tdd/companion.md", domain.ActionCreate)
 
 	req := deploy.ExecRequest{
@@ -107,8 +107,8 @@ func TestExecute_MultiFileSkill_ThreeFiles_AllEntriesRetained(t *testing.T) {
 	ref := domain.ArtifactRef{Kind: domain.ArtifactSkill, Key: "lean-tdd"}
 
 	items := []domain.PlanItem{
-		newSkillItem("lean-tdd", "skills/lean-tdd/SKILL.md",             domain.ActionCreate),
-		newSkillItem("lean-tdd", "skills/lean-tdd/examples/usage.md",    domain.ActionCreate),
+		newSkillItem("lean-tdd", "skills/lean-tdd/SKILL.md", domain.ActionCreate),
+		newSkillItem("lean-tdd", "skills/lean-tdd/examples/usage.md", domain.ActionCreate),
 		newSkillItem("lean-tdd", "skills/lean-tdd/templates/default.md", domain.ActionCreate),
 	}
 
@@ -173,7 +173,7 @@ func TestExecute_MultiFileSkill_UpdateOneFileDoesNotDropOther(t *testing.T) {
 	}
 
 	// Update the entry file; companion.md is unchanged (no write needed).
-	entryFileUpdate    := newSkillItem("lean-tdd", "skills/lean-tdd/SKILL.md",     domain.ActionUpdate)
+	entryFileUpdate := newSkillItem("lean-tdd", "skills/lean-tdd/SKILL.md", domain.ActionUpdate)
 	companionUnchanged := newSkillItem("lean-tdd", "skills/lean-tdd/companion.md", domain.ActionUnchanged)
 
 	req := deploy.ExecRequest{
@@ -214,8 +214,8 @@ func TestExecute_MultiFileSkill_ManifestEntriesSortedByTargetPath(t *testing.T) 
 
 	// Plan items are deliberately in reverse-alphabetical order; result must be sorted.
 	items := []domain.PlanItem{
-		newSkillItem("lean-tdd", "skills/lean-tdd/z-last.md",  domain.ActionCreate),
-		newSkillItem("lean-tdd", "skills/lean-tdd/SKILL.md",   domain.ActionCreate),
+		newSkillItem("lean-tdd", "skills/lean-tdd/z-last.md", domain.ActionCreate),
+		newSkillItem("lean-tdd", "skills/lean-tdd/SKILL.md", domain.ActionCreate),
 		newSkillItem("lean-tdd", "skills/lean-tdd/a-first.md", domain.ActionCreate),
 	}
 
@@ -278,7 +278,7 @@ func TestExecute_MultiFileSkill_UnchangedRoundTrip_AllEntriesPreserved(t *testin
 		SchemaVersion: "1",
 		HarnessID:     "test-harness",
 		Entries: []domain.ManifestEntry{
-			{Ref: ref, TargetPath: "skills/lean-tdd/SKILL.md",     ContentHash: priorHash1},
+			{Ref: ref, TargetPath: "skills/lean-tdd/SKILL.md", ContentHash: priorHash1},
 			{Ref: ref, TargetPath: "skills/lean-tdd/companion.md", ContentHash: priorHash2},
 		},
 	}
@@ -288,7 +288,7 @@ func TestExecute_MultiFileSkill_UnchangedRoundTrip_AllEntriesPreserved(t *testin
 
 	// Both files are unchanged on this run; no writes occur.
 	items := []domain.PlanItem{
-		newSkillItem("lean-tdd", "skills/lean-tdd/SKILL.md",     domain.ActionUnchanged),
+		newSkillItem("lean-tdd", "skills/lean-tdd/SKILL.md", domain.ActionUnchanged),
 		newSkillItem("lean-tdd", "skills/lean-tdd/companion.md", domain.ActionUnchanged),
 	}
 
@@ -344,7 +344,7 @@ func TestExecute_MultiFileSkill_PerFileContentHashes_AreIndependent(t *testing.T
 
 	ref := domain.ArtifactRef{Kind: domain.ArtifactSkill, Key: "lean-tdd"}
 
-	entryContent    := []byte("---\nversion: 1.0\n---\n# SKILL.md content")
+	entryContent := []byte("---\nversion: 1.0\n---\n# SKILL.md content")
 	companionContent := []byte("# companion reference content, no frontmatter")
 
 	contentByPath := map[string][]byte{
@@ -359,7 +359,7 @@ func TestExecute_MultiFileSkill_PerFileContentHashes_AreIndependent(t *testing.T
 	}
 
 	items := []domain.PlanItem{
-		newSkillItem("lean-tdd", "skills/lean-tdd/SKILL.md",     domain.ActionCreate),
+		newSkillItem("lean-tdd", "skills/lean-tdd/SKILL.md", domain.ActionCreate),
 		newSkillItem("lean-tdd", "skills/lean-tdd/companion.md", domain.ActionCreate),
 	}
 

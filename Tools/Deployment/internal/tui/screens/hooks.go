@@ -35,6 +35,7 @@ type HookScreen struct {
 	hooks              []domain.HookBundle
 	harnessSupported   bool // false → show "not supported" message instead of list
 	multisel           *widgets.MultiSelect
+	prov               provenanceView // catalog labels of the hooks
 	detail             *widgets.DetailPane
 
 	// Error state (catalog load failure etc.).

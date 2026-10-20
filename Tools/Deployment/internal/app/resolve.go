@@ -567,7 +567,7 @@ func (s *service) resolveModels(
 			q := domain.ChoiceQuestion{
 				Question: domain.Question{
 					ID: domain.QAgentModel, Subject: agent.Key,
-					Title: "Select a model for " + agent.Key,
+					Title:     "Select a model for " + agent.Key,
 					AllowSkip: true, AllowSkipAll: true, AllowCustom: true,
 				},
 				Options: options,

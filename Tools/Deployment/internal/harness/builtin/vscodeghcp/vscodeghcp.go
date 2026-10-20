@@ -48,8 +48,8 @@ import (
 	_ "embed"
 	"fmt"
 	"path"
-	"path/filepath"
 
+	"mosaic-deploy/internal/catalog/catalogpaths"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
 	"mosaic-deploy/internal/harness/injectionfile"
@@ -82,7 +82,10 @@ func New(opts registry.BuiltinOptions) (domain.HarnessModule, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse embedded vscode-ghcp descriptor: %w", err)
 	}
-	contentDir := filepath.Join(opts.MosaicRoot, RepoContentDir)
+	contentDir, err := opts.ResolveContentDir(catalogpaths.HarnessDirNameVSCodeGHCP)
+	if err != nil {
+		return nil, fmt.Errorf("vscodeghcp: %w", err)
+	}
 	content, err := injectionfile.LoadDir(contentDir)
 	if err != nil {
 		return nil, fmt.Errorf("vscode-ghcp: load harness content: %w", err)

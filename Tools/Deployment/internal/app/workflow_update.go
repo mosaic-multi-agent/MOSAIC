@@ -138,7 +138,7 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	// probe-preparation step.
 	set, err := plan.ResolveArtifacts(s.deps.Catalog, workflowIDs, nil, nil, nil)
 	if err != nil {
-		return domain.RunSummary{}, err
+		return domain.RunSummary{}, withRemovedLayerHint(err, s.deployedWorkflowIDs(module, workspace, scope, true))
 	}
 
 	plannedPaths, err := plan.EnumerateTargetPaths(set, module, scope, s.deps.GOOS)
@@ -290,13 +290,15 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 		}
 	}
 
+	report := s.conflictReportFor(module.Ref().ID, workflowIDs, unionPreserveOrder(orchState.Workflows.IDs(), s.deployedWorkflowIDs(module, workspace, scope, false)), req.AutoConfirmPlan)
 	// Review is always shown; AutoConfirmPlan only controls whether a decline/cancel aborts the run.
+	p.ConflictReport = report
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {
 		return domain.RunSummary{}, rerr
 	}
 	if !req.AutoConfirmPlan && (ans.Status == domain.Cancelled || !ans.Confirm) {
-		return domain.RunSummary{}, ErrPlanNotConfirmed
+		return domain.RunSummary{ConflictReport: report}, ErrPlanNotConfirmed
 	}
 
 	agentByKey := make(map[string]domain.Agent, len(set.Agents))
@@ -315,7 +317,7 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	// Version stamps cover the orchestrator and all admitted new-agent and new-skill items.
 	// set.Skills is passed so admitted skill items are stamped; set.Hooks is nil because hook
 	// artifacts are entirely out of scope for this flow.
-	versionStamps := buildVersionStamps(set.Agents, set.Skills, nil, p.Items, module.Descriptor(), toolMappingsVersion)
+	versionStamps := s.withProvenance(buildVersionStamps(set.Agents, set.Skills, nil, p.Items, module.Descriptor(), toolMappingsVersion), p.Items)
 
 	now := s.now()
 	execReq := deploy.ExecRequest{
@@ -337,6 +339,10 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 		// reversal by the executor and keep non-atomic semantics.
 		Atomic:      true,
 		ToolVersion: s.deps.ToolVersion,
+	}
+
+	if err := s.supplyStack(&execReq); err != nil {
+		return domain.RunSummary{}, err
 	}
 
 	result, err := s.deps.Executor.Execute(ctx, execReq)
@@ -373,5 +379,5 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 		}
 	}
 
-	return s.buildSummary(domain.ModeUpdateWorkflows, harnessRef, workspace, result), nil
+	return withConflictReport(s.buildSummary(domain.ModeUpdateWorkflows, harnessRef, workspace, result), report), nil
 }

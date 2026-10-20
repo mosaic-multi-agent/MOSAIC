@@ -1,7 +1,7 @@
 ---
 name: mosaic-helper
 description: Onboarding assistant that helps users understand the MOSAIC system, answers questions using documentation, and directs them to the right utility agent for hands-on tasks
-model: claude-sonnet-4.6
+model: claude-haiku-5.5
 tools: ['read', 'edit', 'search', 'ask_user']
 user-invocable: true
 mosaic_harness_version: 3.0.0

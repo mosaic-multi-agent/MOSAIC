@@ -60,19 +60,6 @@ func makeRoot(t *testing.T) string {
 	return root
 }
 
-// findRepoRoot_registry returns the absolute path to the MOSAIC repository root.
-// The module root (Tools/Deployment/, found by findGoModuleRoot_registry) is two directory
-// levels below the repository root (Tools/ and the repo root itself).
-func findRepoRoot_registry(t *testing.T) string {
-	t.Helper()
-	moduleRoot := findGoModuleRoot_registry(t)
-	abs, err := filepath.Abs(filepath.Join(moduleRoot, "..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root from module root %s: %v", moduleRoot, err)
-	}
-	return abs
-}
-
 // makeRootWithOpenCodeContent creates a temp MosaicRoot that contains both the harnesses
 // discovery directory and the content files the OpenCode harness module subprocess needs to
 // initialise. HarnessInjections.md and HarnessInjectionsOrchestrator.md are copied from the
@@ -87,10 +74,11 @@ func makeRootWithOpenCodeContent(t *testing.T) string {
 	must(t, os.MkdirAll(filepath.Join(root, "MosaicDeploy", "harnesses"), 0o755))
 
 	// The OpenCode subprocess reads its harness content from
-	// <MosaicRoot>/Catalog/HarnessInjections/OpenCode/. Copy those two files from the real
-	// repository so the binary can initialise when external.New spawns it with MOSAIC_ROOT=root.
-	repoRoot := findRepoRoot_registry(t)
-	contentSrc := filepath.Join(repoRoot, "Catalog", "HarnessInjections", "OpenCode")
+	// <MosaicRoot>/Catalog/HarnessInjections/OpenCode/. Copy those two files from the frozen
+	// fixture catalog (never the live Catalog) so the binary can initialise when external.New
+	// spawns it with MOSAIC_ROOT=root.
+	contentSrc := filepath.Join(findGoModuleRoot_registry(t), "testdata", "frozen-catalog",
+		"Catalog", "HarnessInjections", "OpenCode")
 	contentDst := filepath.Join(root, "Catalog", "HarnessInjections", "OpenCode")
 	must(t, os.MkdirAll(contentDst, 0o755))
 	for _, name := range []string{"HarnessInjections.md", "HarnessInjectionsOrchestrator.md"} {

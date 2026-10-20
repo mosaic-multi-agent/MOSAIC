@@ -78,7 +78,7 @@ Test workflows and test orchestrator variants do not belong in the product catal
 
 `--mosaic-root` replaces the **entire** MOSAIC root, not just the catalogue. The deploy tool reads non-catalogue resources from the root too:
 
-- `Development/Designs/CommunicationProtocol.md` — the protocol document injected into every agent
+- `Catalog/CommunicationProtocol.md` — the protocol text injected into every agent (rationale in `Development/Designs/CommunicationProtocol.md`)
 - `Catalog/CatalogFilesFormat.md` — the bundle spec
 - Skill folders under `Catalog/Skills/`
 
@@ -86,9 +86,9 @@ A test catalogue used as `--mosaic-root` would need copies of all of these, or p
 
 ### 3.2 `--catalog-folder`
 
-The deploy tool supports `--catalog-folder <dir>` as a persistent flag on all subcommands. It redirects only the **catalogue source directories** — where agents and workflows are scanned from — while keeping everything else (protocol, bundles, skills, harness descriptors) resolved from the real MOSAIC root.
+The deploy tool supports `--catalog-folder <dir>` as a persistent, repeatable flag on all subcommands. Each occurrence adds one layer to a **catalogue stack**; one `--catalog-folder` without `--include-default-catalog` is a stack of that folder alone, and the default catalogue (`{mosaicRoot}/Catalog`) is left out. Agents, workflows, skills and hooks, and also the protocol (`CommunicationProtocol.md`), the bundle (`DeployedSections.md`) and the harness injections (`HarnessInjections/<Harness>/`) of the built-in harnesses, all come from the stack's layers. The test catalogue therefore supplies its own copies of the protocol, bundle and harness injections; they do not come from the real MOSAIC root. Harness descriptors (external and descriptor-only harnesses) are not part of the stack.
 
-`catalog.Load(mosaicRoot, catalogFolder)` takes the two roots as separate arguments. When `--catalog-folder` is absent, the default `{mosaicRoot}/Catalog` is used. When present, agents and workflows resolve against the supplied folder while protocol, bundles, and other root-relative resources stay at the real root.
+Each layer is one catalogue root with a `catalog-identity.yaml`. When `--catalog-folder` is absent, the stack is the default `{mosaicRoot}/Catalog` alone (or the stack persisted with the workspace).
 
 For AgentTest, this means the test catalogue is a simple directory:
 
@@ -120,7 +120,9 @@ The second is heavier but fully parallel and automatable. The first is the commo
 
 AgentTest's `agentdeploy` port needs two additions: a `CatalogFolder` field in `Options` (emitting `--catalog-folder` to the subprocess), and a `Deploy` method that calls the `deploy` subcommand instead of `render`. The wiring through `WiringConfig` is identical to the existing `MosaicRoot` pattern.
 
-The net effect: the test author recreates just the agents/workflows directory structure, puts their orchestrator and test workflows there, and points the tool at it. Everything else — protocol injection, bundle loading, harness transformation — comes from the real MOSAIC root as it always has.
+The net effect: the test author recreates the agents/workflows directory structure, puts their orchestrator and test workflows there, and points the tool at it. Protocol injection, bundle loading and the built-in harnesses' injections come from the same catalogue stack, so the test catalogue carries its own copies; harness transformation itself is the tool's.
+
+**Maintenance obligation.** The copies of `CommunicationProtocol.md`, `DeployedSections.md`, `HarnessInjections/` and `Orchestrator/orchestrator-script.md` in `Tools/AgentTest/catalog` (and in `Tools/Runner/TestCatalog`) must be synced when the default ones in `Catalog/` change. The frozen golden fixture `Tools/Deployment/testdata/frozen-catalog/Catalog` is a deliberate snapshot and is not synced. `Tools/AgentTest/catalog` uses agent ids 1-25, which overlap the default catalogue's ids, so a stack of the default layer plus the AgentTest catalogue fails composition with a numeric-id collision. This is correct behaviour: the test catalogue is meant to deploy standalone, without the default-layer flag, and is not a defect.
 
 ### 3.4 Why Not Reuse the Product Catalogue
 
@@ -211,7 +213,7 @@ To test whether an orchestrator handles a specific routing condition correctly:
 ```
 
 1. **Preflight** dry-runs the deploy call to catch catalogue misses, bad workflow IDs, and missing agent definitions before any sandbox is created.
-2. **Setup** creates a fresh sandbox, deploys the orchestrator and all referenced agents into it via a single `mosaic-deploy deploy --catalog-folder <test-catalogue>` call (or via per-agent `render` calls when using the `stub_agents` path), seeds declared files, provisions the interception hooks. The deploy tool resolves agents and workflows from the test catalogue while loading protocol, bundles, and skills from the real MOSAIC root.
+2. **Setup** creates a fresh sandbox, deploys the orchestrator and all referenced agents into it via a single `mosaic-deploy deploy --catalog-folder <test-catalogue>` call (or via per-agent `render` calls when using the `stub_agents` path), seeds declared files, provisions the interception hooks. The deploy tool resolves agents, workflows, protocol, bundle and harness injections from the test catalogue (a stack of that one folder), not from the real MOSAIC root.
 3. **Launch** starts the orchestrator through the harness CLI. The orchestrator sees a real harness environment with its workflow(s) baked into its system prompt.
 4. **Interception** — every time the orchestrator dispatches a collaborator, the harness routes the call through the interception pipeline. The pipeline matches the collaborator identity against the stub registry and returns the declared response. The orchestrator receives it as if a real collaborator produced it.
 5. **Snapshot** captures the invocation log, the orchestration document the orchestrator wrote, and any side effects, while the sandbox still exists.
@@ -418,7 +420,7 @@ The `render` subcommand (single-agent rendering) remains available for edge case
 
 ### 7.3 Implementation Path
 
-The deploy tool's `--catalog-folder` is implemented. `catalog.Load(mosaicRoot, catalogFolder)` already separates catalogue loading from protocol/bundle loading.
+The deploy tool's `--catalog-folder` is implemented. With it, the catalogue stack (here the test catalogue alone) supplies the protocol, bundle and harness injections as well as agents and workflows.
 
 AgentTest's `agentdeploy` port needs:
 1. A `CatalogFolder` field in `Options`, emitting `--catalog-folder` when non-empty.

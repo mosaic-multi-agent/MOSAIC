@@ -602,7 +602,6 @@ func TestCatalog_ReadSource_InventedPath_ReturnsError(t *testing.T) {
 	}
 }
 
-
 // ---------------------------------------------------------------------------
 // Infrastructure agent frontmatter parsing — T3.1
 // ---------------------------------------------------------------------------

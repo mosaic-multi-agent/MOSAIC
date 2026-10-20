@@ -360,8 +360,8 @@ func BuildRetargetedAgent(in RetargetInput) ([]byte, RetargetReport, error) {
 
 	// Reverse-map main harness tools to their generic names.
 	// Tools that cannot be reverse-mapped are carried verbatim (FR-14).
-	var genericTools []string   // generic names for the forward leg
-	var customTools []string    // source names with no mapping — carry verbatim
+	var genericTools []string // generic names for the forward leg
+	var customTools []string  // source names with no mapping — carry verbatim
 	var strippedFields []StrippedField
 	seenGeneric := make(map[string]bool)
 

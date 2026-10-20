@@ -57,6 +57,7 @@ type WorkflowBrowserScreen struct {
 
 	// Level 0: category list.
 	catList *widgets.List
+	prov    provenanceView // catalog labels of the workflows
 
 	// Level 1: workflow multi-select and detail pane (created on folder enter).
 	wfMultisel *widgets.MultiSelect
@@ -274,7 +275,7 @@ func (s *WorkflowBrowserScreen) enterCategory(idx int) {
 	s.currentCatIdx = idx
 	cat := s.categories[idx]
 
-	items := makeWorkflowItems(cat.Workflows)
+	items := s.prov.apply(makeWorkflowItems(cat.Workflows))
 	msStyles := widgets.MultiSelectStyles{
 		Normal:   s.styles.Body,
 		Selected: s.styles.Selected,

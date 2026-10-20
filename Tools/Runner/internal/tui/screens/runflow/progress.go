@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"mosaic-run/internal/domain"
 	"mosaic-run/internal/tui/screens"
 )
 
@@ -48,10 +49,13 @@ const (
 type ProgressScreen struct {
 	rows           []ProgressRow
 	runningIdx     int // index of currently running row, or -1
+	consultation   *domain.ConsultationActivity
 	startTime      time.Time
 	stopRequest    bool
 	confirmPending bool
 	gateEvents     []StopGateEvent
+	pendingRequests PendingRequests
+	requestEvents   []RequestKeyEvent
 	artifactView   bool
 	status         string
 	statusErr      bool
@@ -98,6 +102,7 @@ func (s *ProgressScreen) CompleteRow(status string) {
 func (s *ProgressScreen) SetHistory(rows []ProgressRow) {
 	s.rows = append([]ProgressRow(nil), rows...)
 	s.runningIdx = -1
+	s.consultation = nil
 }
 
 // Rows returns a copy of the rows in display order.
@@ -145,6 +150,10 @@ func (s *ProgressScreen) Update(msg tea.Msg) tea.Cmd {
 				}
 			case "a", "A", "i", "I":
 				s.artifactView = true
+			default:
+				if !s.stopRequest {
+					s.recordRequestKey(key)
+				}
 			}
 		}
 	case tickMsg:
@@ -179,6 +188,9 @@ func (s *ProgressScreen) View() string {
 	if contentH < 1 {
 		contentH = 1
 	}
+	if s.consultation != nil && contentH > 1 {
+		contentH--
+	}
 	start := 0
 	if len(s.rows) > contentH {
 		start = len(s.rows) - contentH
@@ -212,10 +224,19 @@ func (s *ProgressScreen) View() string {
 		}
 		rowsBuilder.WriteString(line)
 	}
+	if line := s.consultationLine(); line != "" {
+		if rowsBuilder.Len() > 0 {
+			rowsBuilder.WriteString("\n")
+		}
+		rowsBuilder.WriteString(line)
+	}
 
-	help := s.styles.Help.Width(s.width).Render("s graceful-stop  a artifact-view  ctrl+c force-quit")
+	help := s.styles.Help.Width(s.width).Render(helpBarText)
 
 	parts := []string{title, statusLine, border, rowsBuilder.String()}
+	if pending := s.pendingLines(); pending != "" {
+		parts = append(parts, pending)
+	}
 	if s.confirmPending {
 		parts = append(parts, s.confirmBanner())
 	} else if s.stopRequest {

@@ -29,6 +29,7 @@ import (
 type UtilityAgentScreen struct {
 	agents   []domain.Agent
 	multisel *widgets.MultiSelect
+	prov     provenanceView // catalog labels of the agents
 	detail   *widgets.DetailPane
 
 	// Error / empty state.

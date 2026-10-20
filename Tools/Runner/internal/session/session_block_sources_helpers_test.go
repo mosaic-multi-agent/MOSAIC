@@ -43,6 +43,13 @@ func newBlockRig(t *testing.T, fixture string, approvals domain.ApprovalReader, 
 // scripted agents write.
 func newBlockRigWith(t *testing.T, fixture string, approvals domain.ApprovalReader, outputs domain.OutputWriteDetector, agents ...string) *blockRig {
 	t.Helper()
+	return newBlockRigObserved(t, fixture, approvals, outputs, nil, agents...)
+}
+
+// newBlockRigObserved is newBlockRigWith with a consultation observer, which
+// may be nil.
+func newBlockRigObserved(t *testing.T, fixture string, approvals domain.ApprovalReader, outputs domain.OutputWriteDetector, obs domain.ConsultationObserver, agents ...string) *blockRig {
+	t.Helper()
 	parent := t.TempDir()
 	if outputs != nil {
 		t.Chdir(parent)
@@ -67,6 +74,8 @@ func newBlockRigWith(t *testing.T, fixture string, approvals domain.ApprovalRead
 		Outputs:   outputs,
 		Clock:     fixedClock{t: epoch},
 		Interact:  &noopInteraction{},
+
+		Consultations: obs,
 	})
 	return &blockRig{ses: ses, adapter: f, store: store, consult: consult, orchPath: orchPath, runFolder: runFolder}
 }

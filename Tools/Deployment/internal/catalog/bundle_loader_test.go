@@ -124,7 +124,7 @@ func TestBundleLoader_WellFormedDoc_ReturnsNoError(t *testing.T) {
 	root := makeTempMosaicRoot(t)
 	writeBundleDoc(t, root, []byte(wellFormedBundleDoc))
 
-	_, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	_, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 
 	if err != nil {
 		t.Errorf("LoadBundle returned unexpected error for a well-formed bundle: %v", err)
@@ -137,7 +137,7 @@ func TestBundleLoader_WellFormedDoc_ReturnsBundleVersion(t *testing.T) {
 	root := makeTempMosaicRoot(t)
 	writeBundleDoc(t, root, []byte(wellFormedBundleDoc))
 
-	content, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	content, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 	if err != nil {
 		t.Fatalf("LoadBundle error: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestBundleLoader_WellFormedDoc_ReturnsFourBlocks(t *testing.T) {
 	root := makeTempMosaicRoot(t)
 	writeBundleDoc(t, root, []byte(wellFormedBundleDoc))
 
-	content, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	content, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 	if err != nil {
 		t.Fatalf("LoadBundle error: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestBundleLoader_WellFormedDoc_AuthorityHierarchyBlockFields(t *testing.T) 
 	root := makeTempMosaicRoot(t)
 	writeBundleDoc(t, root, []byte(wellFormedBundleDoc))
 
-	content, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	content, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 	if err != nil {
 		t.Fatalf("LoadBundle error: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestBundleLoader_WellFormedDoc_AllBlocksHaveNonEmptyContent(t *testing.T) {
 	root := makeTempMosaicRoot(t)
 	writeBundleDoc(t, root, []byte(wellFormedBundleDoc))
 
-	content, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	content, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 	if err != nil {
 		t.Fatalf("LoadBundle error: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestBundleLoader_WellFormedDoc_AllFourTargetsPresent(t *testing.T) {
 	root := makeTempMosaicRoot(t)
 	writeBundleDoc(t, root, []byte(wellFormedBundleDoc))
 
-	content, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	content, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 	if err != nil {
 		t.Fatalf("LoadBundle error: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestBundleLoader_WellFormedDoc_ContentExcludesOwnBoundaryTags(t *testing.T)
 	root := makeTempMosaicRoot(t)
 	writeBundleDoc(t, root, []byte(wellFormedBundleDoc))
 
-	content, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	content, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 	if err != nil {
 		t.Fatalf("LoadBundle error: %v", err)
 	}
@@ -291,7 +291,7 @@ func TestBundleLoader_WellFormedDoc_ContentExcludesOuterMaintainerText(t *testin
 	root := makeTempMosaicRoot(t)
 	writeBundleDoc(t, root, []byte(wellFormedBundleDoc))
 
-	content, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	content, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 	if err != nil {
 		t.Fatalf("LoadBundle error: %v", err)
 	}
@@ -313,7 +313,7 @@ func TestBundleLoader_WellFormedDoc_BlockForMatchesByTargetAndRole(t *testing.T)
 	root := makeTempMosaicRoot(t)
 	writeBundleDoc(t, root, []byte(wellFormedBundleDoc))
 
-	content, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	content, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 	if err != nil {
 		t.Fatalf("LoadBundle error: %v", err)
 	}
@@ -338,7 +338,7 @@ func TestBundleLoader_WellFormedDoc_BlockForMismatchedRoleReturnsFalse(t *testin
 	root := makeTempMosaicRoot(t)
 	writeBundleDoc(t, root, []byte(wellFormedBundleDoc))
 
-	content, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	content, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 	if err != nil {
 		t.Fatalf("LoadBundle error: %v", err)
 	}
@@ -361,7 +361,7 @@ func TestBundleLoader_MissingFile_ReturnsErrBundleSourceMissing(t *testing.T) {
 	root := makeTempMosaicRoot(t)
 	// Deliberately do NOT write the bundle document.
 
-	_, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	_, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 
 	if err == nil {
 		t.Fatal("LoadBundle returned nil error for a missing bundle file; expected ErrBundleSourceMissing")
@@ -384,7 +384,7 @@ func TestBundleLoader_UnparseableDocument_ReturnsErrBundleSourceUnparseable(t *t
 	unparseable := []byte("---\nbundle_version: \"1.0.0\"\nbundle_version: \"duplicate\"\n---\nBody text.\n")
 	writeBundleDoc(t, root, unparseable)
 
-	_, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	_, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 
 	if err == nil {
 		t.Fatal("LoadBundle returned nil error for an unparseable document; expected ErrBundleSourceUnparseable")
@@ -417,7 +417,7 @@ Authority hierarchy content.
 `)
 	writeBundleDoc(t, root, docNoVersion)
 
-	_, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	_, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 
 	if err == nil {
 		t.Fatal("LoadBundle returned nil error when bundle_version is absent; expected ErrBundleVersionMissing")
@@ -444,7 +444,7 @@ Some body text with no blocks declared.
 `)
 	writeBundleDoc(t, root, docNoBlocks)
 
-	_, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	_, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 
 	if err == nil {
 		t.Fatal("LoadBundle returned nil error when no blocks are declared; expected ErrBundleBlocksMissing")
@@ -473,7 +473,7 @@ Content.
 `)
 	writeBundleDoc(t, root, docMissingTarget)
 
-	_, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	_, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 
 	if err == nil {
 		t.Fatal("LoadBundle returned nil error when block declaration is missing `target`; expected ErrBundleBlockDeclInvalid")
@@ -502,7 +502,7 @@ Body text but no <AuthorityHierarchy type="core" name="Subagent"> region.
 `)
 	writeBundleDoc(t, root, docMissingSection)
 
-	_, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	_, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 
 	if err == nil {
 		t.Fatal("LoadBundle returned nil error when declared section is absent from body; expected ErrBundleBlockMissing")
@@ -537,7 +537,7 @@ blocks:
 `)
 	writeBundleDoc(t, root, docEmptySection)
 
-	_, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	_, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 
 	if err == nil {
 		t.Fatal("LoadBundle returned nil error for an empty block section; expected ErrBundleBlockEmpty")
@@ -559,7 +559,7 @@ func TestBundleLoader_WhitespaceOnlyBlockSection_ReturnsErrBundleBlockEmpty(t *t
 	docWhitespace := []byte("---\nbundle_version: \"1.0.0\"\nblocks:\n  - name: \"AuthorityHierarchy:Subagent\"\n    target: AuthorityHierarchy\n    applies_to: subagent\n    specified_in: Development/Designs/AgentTemplateArchitecture.md\n---\n\n<AuthorityHierarchy type=\"core\" name=\"Subagent\">\n   \n\t\n\n</AuthorityHierarchy>\n")
 	writeBundleDoc(t, root, docWhitespace)
 
-	_, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	_, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 
 	if err == nil {
 		t.Fatal("LoadBundle returned nil error for a whitespace-only section; " +
@@ -589,7 +589,7 @@ No matching section in the body.
 `)
 	writeBundleDoc(t, root, docMissingSection)
 
-	content, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	content, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 
 	if err == nil {
 		t.Fatal("expected error for a document with a missing section; got nil")
@@ -616,7 +616,7 @@ func TestBundleLoader_RealBundleDocument_CanBeLoaded(t *testing.T) {
 		t.Fatalf("ResolveRoot: %v — cannot locate MOSAIC repository root", err)
 	}
 
-	content, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	content, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 
 	if err != nil {
 		t.Fatalf("LoadBundle(real repository root): %v; "+
@@ -638,7 +638,7 @@ func TestBundleLoader_RealBundleDocument_CarriesAllFourBlocks(t *testing.T) {
 		t.Fatalf("ResolveRoot: %v", err)
 	}
 
-	content, err := catalog.FileBundleLoader{}.LoadBundle(root)
+	content, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
 	if err != nil {
 		t.Fatalf("LoadBundle: %v", err)
 	}

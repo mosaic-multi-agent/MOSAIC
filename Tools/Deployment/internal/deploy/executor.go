@@ -96,6 +96,8 @@ type ExecRequest struct {
 	// The executor threads it into the manifest written by buildManifest. An empty string
 	// means "not recorded" and results in no tool_version key in the YAML.
 	ToolVersion string
+	// ManifestMeta carries the manifest-level data this run supplies; see ManifestMeta.
+	ManifestMeta ManifestMeta
 }
 
 // RevertFailure names one journal entry the reversal could not apply.
@@ -354,7 +356,7 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 	}
 
 	// Build the manifest from what is actually on disk (entryMap reflects reality).
-	finalManifest := buildManifest(prior, entryMap, req.Plan, req.ToolVersion)
+	finalManifest := buildManifest(prior, entryMap, req.Plan, req.ToolVersion, req.ManifestMeta)
 
 	// Persist the manifest and the TODO file (skipped for DryRun).
 	todoFilePath := ""
@@ -756,6 +758,7 @@ func newManifestEntry(item domain.PlanItem, content []byte, stamp domain.Version
 		ToolMappingsVersion:           stamp.ToolMappingsVersion,
 		ContentHash:                   manifest.Hash(content),
 		DeployedAt:                    time.Now(),
+		Catalog:                       stamp.Catalog,
 	}
 }
 
@@ -803,7 +806,7 @@ func buildEntryMap(m domain.Manifest) map[entryKey]domain.ManifestEntry {
 }
 
 // buildManifest produces the final domain.Manifest from the entry map, sorted by TargetPath.
-func buildManifest(prior domain.Manifest, entryMap map[entryKey]domain.ManifestEntry, plan domain.Plan, toolVersion string) domain.Manifest {
+func buildManifest(prior domain.Manifest, entryMap map[entryKey]domain.ManifestEntry, plan domain.Plan, toolVersion string, meta ManifestMeta) domain.Manifest {
 	harnessID := plan.Harness.ID
 	if harnessID == "" {
 		harnessID = prior.HarnessID
@@ -814,6 +817,7 @@ func buildManifest(prior domain.Manifest, entryMap map[entryKey]domain.ManifestE
 		UpdatedAt:     time.Now(),
 		ToolVersion:   toolVersion,
 	}
+	applyManifestMeta(&m, prior, meta)
 
 	keys := make([]entryKey, 0, len(entryMap))
 	for k := range entryMap {

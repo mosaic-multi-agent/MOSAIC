@@ -35,7 +35,6 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 	// Global persistent flags, shared by all subcommands.
 	var verbose bool
 	var mosaicRoot string
-	var catalogFolder string
 	var logDir string
 	var allowExternal bool
 
@@ -55,8 +54,7 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 
 	root.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
 	root.PersistentFlags().StringVar(&mosaicRoot, "mosaic-root", "", "Override the MOSAIC root directory")
-	root.PersistentFlags().StringVar(&catalogFolder, "catalog-folder", "",
-		"Catalogue directory supplying agents and workflows (default: <mosaic-root>/Catalog)")
+	registerStackFlags(root)
 	root.PersistentFlags().StringVar(&logDir, "log-dir", "",
 		"Override the directory run logs are written to (default: <mosaic-root>/MosaicDeploy/logs)")
 	root.PersistentFlags().BoolVar(&allowExternal, "allow-external", false, "Enable external harness modules")
@@ -65,17 +63,17 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 	// deploy subcommand
 	// ------------------------------------------------------------------
 	var (
-		deployHarness              string
-		deployWorkspace            string
-		deploySelections           string
-		deployOutput               string
-		deployConflict             string
-		deployWorkflowsStr         string
-		deployWorkflowsSet         bool
-		deployInfrastructureStr    string
-		deployInfrastructureSet    bool
-		deployDryRun               bool
-		deployAutoConfirm          bool
+		deployHarness           string
+		deployWorkspace         string
+		deploySelections        string
+		deployOutput            string
+		deployConflict          string
+		deployWorkflowsStr      string
+		deployWorkflowsSet      bool
+		deployInfrastructureStr string
+		deployInfrastructureSet bool
+		deployDryRun            bool
+		deployAutoConfirm       bool
 	)
 
 	deployCmd := &cobra.Command{
@@ -153,6 +151,7 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 			}
 
 			summary, svcErr := svc.DeployNew(ctx, req)
+			out := withRunStackInEffect(out, svc, deployOutput)
 			exitCode = renderOutput(out, errOut, deployOutput, summary, svcErr)
 			return nil
 		},
@@ -215,6 +214,7 @@ hand-added declarations are never touched.`,
 			}
 
 			summary, svcErr := svc.Update(ctx, req)
+			out := withRunStackInEffect(out, svc, updateOutput)
 			exitCode = renderOutput(out, errOut, updateOutput, summary, svcErr)
 			return nil
 		},
@@ -286,6 +286,7 @@ hand-added declarations are never touched.`,
 			}
 
 			summary, svcErr := svc.UpdateWorkflows(ctx, req)
+			out := withRunStackInEffect(out, svc, workflowsOutput)
 			exitCode = renderOutput(out, errOut, workflowsOutput, summary, svcErr)
 			return nil
 		},
@@ -309,6 +310,7 @@ hand-added declarations are never touched.`,
 		promoteOverwrite bool
 		promoteDryRun    bool
 		promoteOutput    string
+		promoteTarget    string
 	)
 
 	promoteCmd := &cobra.Command{
@@ -333,9 +335,12 @@ hand-added declarations are never touched.`,
 				Category:  promoteCategory,
 				Overwrite: promoteOverwrite,
 				DryRun:    promoteDryRun,
+
+				TargetCatalogID: promoteTarget,
 			}
 
 			result, svcErr := svc.Promote(ctx, req)
+			out := withDocStackInEffect(out, svc, promoteOutput)
 			exitCode = renderPromoteOutput(out, errOut, promoteOutput, result, svcErr)
 			return nil
 		},
@@ -347,6 +352,7 @@ hand-added declarations are never touched.`,
 	promoteCmd.Flags().BoolVar(&promoteOverwrite, "overwrite", false, "Overwrite an existing generic agent at the destination path")
 	promoteCmd.Flags().BoolVar(&promoteDryRun, "dry-run", false, "Validate and compute without writing any file")
 	promoteCmd.Flags().StringVar(&promoteOutput, "output", "", "Output format (json)")
+	registerPromoteTargetFlag(promoteCmd, &promoteTarget)
 
 	// ------------------------------------------------------------------
 	// transform subcommand
@@ -413,6 +419,7 @@ are not descended into.`,
 			}
 
 			result, svcErr := svc.TransformHarness(ctx, req)
+			out := withDocStackInEffect(out, svc, transformOutput)
 			exitCode = renderTransformOutput(out, errOut, transformOutput, result, svcErr)
 			return nil
 		},
@@ -523,6 +530,7 @@ a prompt.`,
 			}
 
 			result, svcErr := svc.RenderAgent(ctx, req)
+			out := withDocStackInEffect(out, svc, renderOutput)
 			exitCode = renderRenderAgentOutput(out, errOut, renderOutput, result, svcErr)
 			return nil
 		},
@@ -545,12 +553,16 @@ a prompt.`,
 	var checkIndexOutput string
 
 	checkIndexCmd := &cobra.Command{
-		Use:           "check-index",
-		Short:         "Report drift between Catalog/Workflows/Index.md and the workflow files on disk",
+		Use:   "check-index",
+		Short: "Report drift between Catalog/Workflows/Index.md and the workflow files on disk",
+		Long: "Report drift between each catalog's Workflows/Index.md and its workflow files on disk.\n" +
+			"Findings are grouped per catalog; with --output json they are in the \"catalogs\" array.\n" +
+			"check-index has no workspace and never reuses a persisted stack: it uses its stack flags, or the default catalogue alone.",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			result, svcErr := svc.CheckWorkflowIndex(ctx)
+			out := withDocStackInEffect(out, svc, checkIndexOutput)
 			exitCode = renderCheckIndexOutput(out, errOut, checkIndexOutput, result, svcErr)
 			return nil
 		},
@@ -668,6 +680,7 @@ entirely and the unspecified classes are treated as explicitly empty.`,
 			// When no per-class flag is set, all four slices remain nil → QDeployAgents is asked.
 
 			summary, svcErr := svc.DeployAgents(ctx, req)
+			out := withRunStackInEffect(out, svc, agentsOutput)
 			exitCode = renderAgentsOutput(out, errOut, agentsOutput, agentsDryRun, summary, svcErr)
 			return nil
 		},
@@ -753,6 +766,7 @@ configuration, or orchestrator rewriting is performed.`,
 			}
 
 			summary, svcErr := svc.DeployHooks(ctx, req)
+			out := withRunStackInEffect(out, svc, hooksOutput)
 			exitCode = renderHooksOutput(out, errOut, hooksOutput, hooksDryRun, summary, svcErr)
 			return nil
 		},

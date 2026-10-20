@@ -81,6 +81,11 @@ type Issue struct {
 	Message  string // human-readable explanation
 	Path     string // absolute path of the file that produced the issue, when applicable
 	Node     string // region name (for bundle-region-drift) or other sub-object identifier
+
+	// Catalog identifies the catalog the issue was raised in. Zero for a single-root load
+	// (unattributed); always set by the stack catalog's Issues(). It carries the identity only,
+	// not the root: catalog ids are unique within a stack, so the id names the layer.
+	Catalog domain.CatalogIdentity
 }
 
 // Catalog is a read-only snapshot of the MOSAIC source tree. All methods are safe for
@@ -202,7 +207,12 @@ func ResolveRoot(dir string) (string, error) {
 // Load reads the full MOSAIC source tree and returns an immutable Catalog.
 // mosaicRoot is the MOSAIC repository root (required). catalogRoot is the catalogue root
 // from which agents, workflows, skills, and hooks are loaded; when empty, it defaults to
-// DefaultCatalogRoot(mosaicRoot). Bundle and protocol files are always resolved from mosaicRoot.
+// DefaultCatalogRoot(mosaicRoot). Loading is single-root: a custom catalogRoot yields only its
+// own skills and hooks, and nothing is merged in from the MOSAIC default catalogue. Load keeps
+// its two-argument signature and is equivalent to LoadSingleRoot apart from the empty-root
+// default. Load does not read the protocol or the bundle: the app layer loads each from the
+// catalog root of the layer the catalog stack resolved for it (FileProtocolLoader and
+// FileBundleLoader take that catalog root).
 // Structural problems are accumulated into Catalog.Issues rather than returned as errors.
 // Load returns a non-nil error when a root is unreadable or structurally invalid, and when any
 // source file cannot be interpreted: an agent, skill, or workflow that fails to parse, an agent
@@ -217,4 +227,10 @@ func Load(mosaicRoot, catalogRoot string) (Catalog, error) {
 		return nil, fmt.Errorf("catalog.Load: catalogue root: %w", err)
 	}
 	return loadCatalog(mosaicRoot, absCatalogRoot)
+}
+
+// LayerLister is implemented by catalogs composed from layers.
+type LayerLister interface {
+	// Layers returns the composed layers, highest precedence first. Never empty.
+	Layers() []domain.CatalogLayer
 }

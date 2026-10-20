@@ -1,7 +1,7 @@
 ---
 name: workflow-creator
 description: Collaboratively creates and modifies orchestration workflow definitions with the user, deciding where agent boundaries fall, specifying missing subagents, and ensuring routing consistency and compliance with the workflow definition schema
-model: claude-sonnet-5
+model: claude-opus-5.5
 tools: ['read', 'edit', 'search', 'ask_user', 'agent']
 user-invocable: true
 mosaic_harness_version: 3.0.0

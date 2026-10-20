@@ -104,12 +104,12 @@ func TestDeployAgents_RealPlanner_AlreadyDeployedStandaloneAgentNotActionCreate(
 	// Act — second run; the agent is already on disk so it must not be ActionCreate.
 	// Pre-answer all selections and skip model questions so the flow runs headlessly.
 	_, err := svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:          "stub-harness",
-		WorkspacePath:      workspace,
-		Scope:              domain.ScopeProject,
-		StandaloneAgentIDs: []string{"session-logger"},
-		SubagentIDs:        []string{},
-		UtilityAgentIDs:    []string{},
+		HarnessID:              "stub-harness",
+		WorkspacePath:          workspace,
+		Scope:                  domain.ScopeProject,
+		StandaloneAgentIDs:     []string{"session-logger"},
+		SubagentIDs:            []string{},
+		UtilityAgentIDs:        []string{},
 		InfrastructureAgentIDs: []string{},
 		SkipAll: map[domain.QuestionID]bool{
 			domain.QTierModel:  true,

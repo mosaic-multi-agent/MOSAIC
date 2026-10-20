@@ -733,9 +733,9 @@ func TestMapTools_ConfigMappingBeatsDescriptorCustomToolDefault(t *testing.T) {
 	// mcpServers must NOT appear as a separate frontmatter field.
 	for _, f := range result.Fields {
 		if f.Key == "mcpServers" {
-			t.Errorf("mcpServers field present in result; "+
-				"when a Mappings entry exists for the generic tool, "+
-				"the descriptor's CustomToolDestinations must not apply; "+
+			t.Errorf("mcpServers field present in result; " +
+				"when a Mappings entry exists for the generic tool, " +
+				"the descriptor's CustomToolDestinations must not apply; " +
 				"the config mapping entry must route the tool to DestMain instead")
 		}
 	}
@@ -816,11 +816,11 @@ tools: [my_mcp_tool]
 ---
 Body.
 `),
-		Kind:  domain.ArtifactAgent,
-		Key:   "precedence-test-agent",
+		Kind:   domain.ArtifactAgent,
+		Key:    "precedence-test-agent",
 		Module: m,
-		Model: domain.ModelSelection{Origin: domain.OriginUnresolved},
-		Scope: domain.ScopeProject,
+		Model:  domain.ModelSelection{Origin: domain.OriginUnresolved},
+		Scope:  domain.ScopeProject,
 		CustomTools: map[string]string{
 			"my_mcp_tool": "my-mcp-server",
 		},

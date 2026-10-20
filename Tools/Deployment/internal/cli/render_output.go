@@ -45,6 +45,9 @@ type RenderFailure struct {
 // errOut and, when format is "json", also emits a RenderFailure envelope to out.
 // Render has no partial-success state, so the only non-error exit code is ExitSuccess.
 func renderRenderAgentOutput(out, errOut io.Writer, format string, result app.RenderAgentResult, svcErr error) int {
+	if result.ConflictReport != nil {
+		writeConflictReport(out, format, *result.ConflictReport)
+	}
 	if svcErr != nil {
 		msg := svcErr.Error()
 		fmt.Fprintf(errOut, "error: %v\n", svcErr)

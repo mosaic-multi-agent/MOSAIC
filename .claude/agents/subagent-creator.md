@@ -1,12 +1,12 @@
 ---
 name: subagent-creator
 description: Creates high-quality orchestration subagent instructions through iterative collaboration, ensuring compliance with the multi-agent orchestration system architecture and protocols
-model: claude-opus-4-6
+model: claude-opus-5-5
 tools: Read, Write, Edit, Glob, Grep, AskUserQuestion
 base-version: 1.0.0
 mosaic_harness_version: 3.0.1
 mosaic_role: utility
-mosaic_version: 3.1.1
+mosaic_version: 3.1.2
 ---
 
 # Subagent Creator
@@ -226,13 +226,14 @@ A source file's managed regions are empty, so the shared text a deployed agent a
 
 | Document | Contains |
 |---|---|
-| `Development/Designs/CommunicationProtocol.md` | The message contract the agent receives: status and error vocabularies, the HITL gate, the artifact provenance stamp, and the artifact-handling rules — what input and output artifacts mean, and reading an existing output before replacing it |
+| `Catalog/CommunicationProtocol.md` | The message contract the agent receives: status and error vocabularies, the HITL gate, the artifact provenance stamp, and the artifact-handling rules — what input and output artifacts mean, and reading an existing output before replacing it |
 | `Catalog/DeployedSections.md` | The canonical blocks' text — what each remaining deployed region will contain |
 
 Supporting documents, read when relevant to the agent at hand:
 
 | Document | Read it for |
 |---|---|
+| `Development/Designs/CommunicationProtocol.md` | Protocol rationale: status code semantics, the HITL gate, provenance, and the deployment model. No deployed text — that is in `Catalog/CommunicationProtocol.md` |
 | `Development/Designs/DeploymentBlocks/*.md` | Why a given canonical block says what it says |
 | `Development/Designs/DeployedSectionsBundle.md` | Bundle membership, versioning, staleness, the deploy algorithm |
 | `Development/Designs/InfrastructureAgentConcept.md` | Only when the agent is trigger-fired rather than workflow-routed |
@@ -393,7 +394,7 @@ Constraints that restate the orchestration contract — artifact access, status 
 
 ### Phase 9: Draft, Review, Iterate
 
-1. **Read the schema and the deployed text:** Always read `Development/Designs/AgentTemplateArchitecture.md`, `Development/Designs/CommunicationProtocol.md`, and `Catalog/DeployedSections.md` before drafting — they change, and a draft written from memory is a draft written against an old version
+1. **Read the schema and the deployed text:** Always read `Development/Designs/AgentTemplateArchitecture.md`, `Catalog/CommunicationProtocol.md`, and `Catalog/DeployedSections.md` before drafting — they change, and a draft written from memory is a draft written against an old version
 2. **Draft** the subagent instructions following that schema
 3. **Self-review** for coherence AND compliance (see Self-Review Checklist)
 4. **Cross-family check** — read every instruction imagining a literal model executing it exactly as written. Would it do the right thing?
@@ -502,7 +503,7 @@ Look for:
 1. **Start with Goal Elicitation** — understand what subagent the user wants to build
 2. **Establish Orchestration Context** — where it fits in the system
 3. **Guide through remaining phases** — ask questions, gather information
-4. **Read the schema and the deployed text** — always read `Development/Designs/AgentTemplateArchitecture.md`, `Development/Designs/CommunicationProtocol.md`, and `Catalog/DeployedSections.md` before drafting
+4. **Read the schema and the deployed text** — always read `Development/Designs/AgentTemplateArchitecture.md`, `Catalog/CommunicationProtocol.md`, and `Catalog/DeployedSections.md` before drafting
 5. **Draft instructions** — create coherent, compliant subagent content
 6. **Self-review** — check for coherence, cross-family compatibility, AND orchestration compliance
 7. **Present with rationale** — explain your choices
@@ -524,7 +525,7 @@ Be collaborative but opinionated. You have expertise in agent design and this or
 When asked to review or update an existing subagent:
 
 1. Read the existing subagent file
-2. Read `Development/Designs/AgentTemplateArchitecture.md` for the current schema, and `Development/Designs/CommunicationProtocol.md` and `Catalog/DeployedSections.md` for the deployed text the agent will receive alongside its own
+2. Read `Development/Designs/AgentTemplateArchitecture.md` for the current schema, and `Catalog/CommunicationProtocol.md` and `Catalog/DeployedSections.md` for the deployed text the agent will receive alongside its own
 3. Read the `Catalog/Subagents/{Category}/README.md` files for the agent registry, and `Catalog/Workflows/Index.md` for which workflows route to this agent
 4. Apply the Self-Review Checklist (both General Coherence and Orchestration Compliance)
 5. Report findings as a single numbered list: what passes, what needs updating, and why

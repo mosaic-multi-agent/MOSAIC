@@ -81,4 +81,8 @@ type RunSummary struct {
 	Logs           LogPaths
 	LogDegraded    []string // non-fatal logging failures
 	Outcome        Outcome
+	// ConflictReport is the catalog-stack conflict report of the run; empty without shadowing.
+	// It is a value field on purpose (this struct has no omitempty fields), unlike the pointer
+	// on app.RenderAgentResult. Do not unify the two.
+	ConflictReport ConflictReport
 }

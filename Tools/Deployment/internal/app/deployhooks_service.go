@@ -169,12 +169,14 @@ func deployHooks(ctx context.Context, s *service, req DeployHooksRequest) (domai
 		}
 	}
 
+	report := s.conflictReportFor(module.Ref().ID, nil, s.deployedWorkflowIDs(module, workspace, scope, true), req.AutoConfirmPlan)
+	p.ConflictReport = report
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {
 		return domain.RunSummary{}, rerr
 	}
 	if !req.AutoConfirmPlan && (ans.Status == domain.Cancelled || !ans.Confirm) {
-		return domain.RunSummary{}, ErrPlanNotConfirmed
+		return domain.RunSummary{ConflictReport: report}, ErrPlanNotConfirmed
 	}
 
 	// No workflow blocks and no infrastructure blocks: this mode never rewrites the
@@ -187,7 +189,7 @@ func deployHooks(ctx context.Context, s *service, req DeployHooksRequest) (domai
 		MosaicRoot:    s.deps.MosaicRoot,
 		Content:       contentFn,
 		Conflicts:     conflicts,
-		VersionStamps: buildVersionStamps(probeSet.Agents, probeSet.Skills, probeSet.Hooks, p.Items, module.Descriptor(), toolMappingsVersion),
+		VersionStamps: s.withProvenance(buildVersionStamps(probeSet.Agents, probeSet.Skills, probeSet.Hooks, p.Items, module.Descriptor(), toolMappingsVersion), p.Items),
 		Hooks:         buildHookPlans(module, probeSet.Hooks, scope),
 		TodoItems:     s.deps.Todo.Items,
 		TodoMeta: todo.Meta{
@@ -198,10 +200,14 @@ func deployHooks(ctx context.Context, s *service, req DeployHooksRequest) (domai
 		ToolVersion: s.deps.ToolVersion,
 	}
 
+	if err := s.supplyStack(&execReq); err != nil {
+		return domain.RunSummary{}, err
+	}
+
 	result, err := s.deps.Executor.Execute(ctx, execReq)
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
 
-	return s.buildSummary(domain.ModeDeployHooks, harnessRef, workspace, result), nil
+	return withConflictReport(s.buildSummary(domain.ModeDeployHooks, harnessRef, workspace, result), report), nil
 }

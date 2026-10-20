@@ -72,13 +72,13 @@ func testModelCatalogHook() func(string, domain.ModelCatalog) domain.ModelCatalo
 	}
 }
 
-// discoverBuiltinsWithModelHook calls registry.Discover with the real repo root (so builtin
-// factories can load their content files from Catalog/HarnessInjections/) and the test
+// discoverBuiltinsWithModelHook calls registry.Discover with the frozen fixture root (so builtin
+// factories load their content files from its Catalog/HarnessInjections/) and the test
 // ModelCatalog hook. The four builtin harnesses must have registered themselves via init()
 // through the side-effect imports above before this function is called.
 func discoverBuiltinsWithModelHook(t *testing.T) registry.Registry {
 	t.Helper()
-	root := repoRoot(t)
+	root := deploymentTestdata(t, "frozen-catalog")
 	reg, err := registry.Discover(registry.Options{
 		MosaicRoot:   root,
 		ModelCatalog: testModelCatalogHook(), // field does not exist → compile error (TDD RED)
@@ -270,7 +270,7 @@ func TestModelSource_VsCodeGHCP_OffersSharedCatalogFormatHint(t *testing.T) {
 // descriptor no longer declares a models: block, so there is no fallback list to keep.
 func TestModelSource_VsCodeGHCP_HookMissOffersNoDescriptorFallback(t *testing.T) {
 	reg, err := registry.Discover(registry.Options{
-		MosaicRoot: repoRoot(t),
+		MosaicRoot: deploymentTestdata(t, "frozen-catalog"),
 		ModelCatalog: func(harnessID string, declared domain.ModelCatalog) domain.ModelCatalog {
 			return domain.ModelCatalog{} // miss for every harness
 		},

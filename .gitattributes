@@ -1,15 +1,18 @@
-# Root .gitattributes — LF line endings for all testdata fixtures and source files
+# Root .gitattributes — LF line endings for every text file
 #
-# Go test fixtures are compared byte-for-byte or with LF-expecting parsers,
-# so they must not be converted to CRLF on Windows checkout. These blanket
-# rules supersede the per-directory .gitattributes files that were added
-# reactively in individual tools.
+# All text files are stored and checked out as LF on every platform, which
+# overrides any core.autocrlf setting. Binary files are auto-detected and left
+# untouched.
 #
-# The broader *.md rule also covers non-testdata markdown files (e.g., design
-# documents, protocol sources) that are embedded verbatim into deployment
-# transform outputs. Keeping all markdown as LF ensures transform outputs are
-# deterministic across platforms.
+# Why: Go test fixtures are compared byte-for-byte or with LF-expecting
+# parsers; markdown (design documents, protocol sources) is embedded verbatim
+# into deployment transform outputs, which must be deterministic across
+# platforms; and agents and Go tooling write LF, so CRLF checkouts made
+# untouched files show up as modified.
 
+* text=auto eol=lf
+
+# Explicit rules kept so these files stay LF even if git misdetects them as binary.
 *.md text eol=lf
 **/testdata/**/*.golden.txt text eol=lf
 **/testdata/**/*.sh text eol=lf

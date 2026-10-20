@@ -93,7 +93,7 @@ func (s *sessionImpl) runDispatchLoop(ctx context.Context, rs *runStartCtx) (dom
 // handleEngineConsult handles an engine Consult decision by calling
 // consultRoute and returning (out, done, err) to the dispatch loop.
 func (s *sessionImpl) handleEngineConsult(ctx context.Context, rs *runStartCtx) (domain.RunOutcome, bool, error) {
-	if s.deps.Routing == nil && !(s.manualDispatchPending && s.deps.Manual != nil) {
+	if s.deps.Routing == nil && !s.manualResolverReady() {
 		return domain.RunOutcome{
 			Status:  domain.RunFailed,
 			Message: "orchestrated mode requires a RoutingConsultant but none was wired",
@@ -111,7 +111,7 @@ func (s *sessionImpl) handleEngineDeviation(ctx context.Context, rs *runStartCtx
 	s.deps.Debug.Log(domain.EventSessionDeviation, "engine returned deviation",
 		domain.F("kind", string(decision.Deviation.Info.Kind)),
 	)
-	if s.deps.Routing == nil && !(s.manualDispatchPending && s.deps.Manual != nil) {
+	if s.deps.Routing == nil && !s.manualResolverReady() {
 		msg := fmt.Sprintf("deviation: no routing consultant configured (kind=%s)", decision.Deviation.Info.Kind)
 		s.deps.Debug.Log(domain.EventSessionDeviationUnresolved, msg)
 		return domain.RunOutcome{Status: domain.RunDeviationUnresolved, Message: msg}, true, nil
@@ -132,6 +132,9 @@ func (s *sessionImpl) handleEngineDispatch(ctx context.Context, rs *runStartCtx,
 	if len(decision.Dispatch.Steps) == 0 {
 		return domain.RunOutcome{Status: domain.RunFailed, Message: "engine returned empty dispatch"}, true, false, nil
 	}
+	if out, done, diverted, err := s.divertEngineDispatch(ctx, rs, decision.Dispatch.Steps[0]); diverted {
+		return out, done, true, err
+	}
 	step := s.prepareAutoDispatchRequest(ctx, rs, decision.Dispatch.Steps[0])
 	// An engine dispatch is counted but never blocked. Mechanical re-dispatches
 	// are not counted at all: their own bounds (PARTIALLY_DONE limit, E501
@@ -149,6 +152,7 @@ func (s *sessionImpl) handleEngineDispatch(ctx context.Context, rs *runStartCtx,
 		return domain.RunOutcome{Status: domain.RunStopped, Message: "run stopped: graceful stop confirmed"}, true, false, nil
 	}
 
+	step = s.applyHITLToEngineStep(step)
 	s.beginOutputs(ctx, rs.config.RunFolder, step.Request.OutputArtifacts)
 	response, invokeErr := s.invokeAndLog(ctx, step.Agent, step.Request)
 	if invokeErr != nil {
@@ -250,7 +254,7 @@ func (s *sessionImpl) handleAutoHarnessErrorAndBypass(ctx context.Context, rs *r
 		Timestamp:     s.deps.Clock.Now(),
 		Inputs:        formatInputs(step.Request.InputArtifacts),
 	}
-	newState, applyErr := s.deps.Store.Apply(ctx, rs.state, failedStep)
+	newState, applyErr := s.applyAndAnnounce(ctx, rs.state, failedStep)
 	if applyErr != nil {
 		s.deps.Debug.Log(domain.EventSessionApplyFailed, applyErr.Error())
 		return domain.ProtocolResponse{}, step, true, false, domain.RunOutcome{Status: domain.RunFailed, Message: applyErr.Error()}, applyErr
@@ -307,7 +311,7 @@ func (s *sessionImpl) postAutoDispatchApply(ctx context.Context, rs *runStartCtx
 		WrittenArtifacts: written,
 		Routed:           routed,
 	}
-	newState, err := s.deps.Store.Apply(ctx, rs.state, completedStep)
+	newState, err := s.applyAndAnnounce(ctx, rs.state, completedStep)
 	if err != nil {
 		s.deps.Debug.Log(domain.EventSessionApplyFailed, err.Error())
 		return domain.RunOutcome{Status: domain.RunFailed, Message: err.Error()}, true, err
