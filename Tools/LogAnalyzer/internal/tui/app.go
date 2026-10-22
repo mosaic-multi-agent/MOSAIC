@@ -84,6 +84,8 @@ type Model struct {
 	sourceScreen    *screens.SourceScreen
 	runsScreen      *screens.RunsScreen
 	runDetailScreen *screens.RunDetailScreen
+	runView         screens.RunView // the active per-run view
+	viewRunID       string          // run shown by the per-run views
 	pricingScreen   *screens.PricingScreen
 	noDataScreen    *screens.NoDataScreen
 
@@ -233,8 +235,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateSource(msg)
 	case screenRuns:
 		return m.updateRuns(msg)
-	case screenRunDetail:
-		return m.updateRunDetail(msg)
+	case screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline, screenAcrossRuns:
+		return m.updateRunView(msg)
 	case screenPricing:
 		return m.updatePricing(msg)
 	case screenNoData:
@@ -409,6 +411,11 @@ func (m Model) updateRuns(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.sourceScreen.Init()
 	}
 
+	// Intercept 'a' to open the across-runs view.
+	if key, ok := msg.(tea.KeyMsg); ok && key.String() == screens.KeyAcrossRuns {
+		return m.openAcrossRuns(), nil
+	}
+
 	// Intercept 'p' for pricing navigation.
 	// Guard: require an active session; do nothing if analysis has not yet produced one.
 	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "p" {
@@ -437,26 +444,8 @@ func (m Model) updateRuns(msg tea.Msg) (tea.Model, tea.Cmd) {
 		runID := m.runsScreen.SelectedRunID()
 		m.runsScreen.Reset()
 		if runID != "" {
-			if run, ok := m.report.FindRun(runID); ok {
-				style := stylesFromTheme(m.theme)
-				m.runDetailScreen = screens.NewRunDetailScreen(run, m.width, m.height, style)
-				m.screen = screenRunDetail
-			}
+			m = m.openRunView(runID, screens.ScreenRunDetail)
 		}
-	}
-	return m, cmd
-}
-
-func (m Model) updateRunDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.runDetailScreen == nil {
-		return m, nil
-	}
-	updated, cmd := m.runDetailScreen.Update(msg)
-	m.runDetailScreen = updated.(*screens.RunDetailScreen)
-	if m.runDetailScreen.Back() {
-		m.runDetailScreen.Reset()
-		m.screen = screenRuns
-		return m, nil
 	}
 	return m, cmd
 }
@@ -599,10 +588,8 @@ func (m Model) View() string {
 			return m.runsScreen.View(m.width, m.height)
 		}
 
-	case screenRunDetail:
-		if m.runDetailScreen != nil {
-			return m.runDetailScreen.View(m.width, m.height)
-		}
+	case screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline, screenAcrossRuns:
+		return m.viewRunView()
 
 	case screenPricing:
 		if m.pricingScreen != nil {

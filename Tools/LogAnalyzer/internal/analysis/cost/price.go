@@ -9,16 +9,26 @@ type InvocationCost struct {
 	Priced bool // false when the model had no pricing entry
 	Tokens domain.TokenUsage
 	Money  domain.CategoryMoney
+	// AssumedTierCacheWrite is the number of cache-write tokens of this request
+	// priced at the 5m rate because the request carried no tier split. 0 when
+	// unpriced, when there is no cache write, or when the split was reported.
+	AssumedTierCacheWrite int64
 }
 
-// PriceInvocation prices one invocation.
+// PriceInvocation prices one request (one usage record, or one usage-bearing
+// event of a legacy actor).
 //
 // Binding rules:
-//   - The cliff is all-or-nothing: when TierLongContext is selected the ENTIRE
-//     invocation's output is priced at OutputAtThreshold, not only the tokens
-//     above the threshold. No graduated/split calculation exists in this package.
+//   - The tier is chosen per request. When TierLongContext is selected, EVERY
+//     token category of the request (input, cache read, both cache-write tiers,
+//     output) is priced from the long-context rate set; otherwise from the
+//     standard set. The cliff is all-or-nothing: no graduated calculation exists.
+//   - Cache-write tokens reported with the tier split are priced at the 5m and 1h
+//     rates. Cache-write tokens not covered by a split (the whole count when no
+//     split was reported) are priced at the 5m rate and counted in
+//     AssumedTierCacheWrite. Both tiers land in the one CacheCreation cell.
 //   - A model with no entry (found == false) yields Priced=false and every money
-//     cell MoneyUnpriced — never MoneyKnown(0).
+//     cell MoneyUnpriced - never MoneyKnown(0) - and no assumed-tier tokens.
 //   - An absent token category yields MoneyNoData for that category and
 //     contributes nothing to the total.
 func PriceInvocation(inv domain.InvocationUsage, table domain.PricingTable) InvocationCost {
@@ -29,7 +39,7 @@ func PriceInvocation(inv domain.InvocationUsage, table domain.PricingTable) Invo
 
 	entry, found := table.Lookup(inv.Model)
 	if !found {
-		// No pricing entry: all money cells are MoneyUnpriced — never MoneyKnown(0).
+		// No pricing entry: all money cells are MoneyUnpriced - never MoneyKnown(0).
 		unpriced := domain.UnpricedMoney()
 		total, complete := domain.SumMoney(unpriced, unpriced, unpriced, unpriced)
 		result.Priced = false
@@ -46,25 +56,20 @@ func PriceInvocation(inv domain.InvocationUsage, table domain.PricingTable) Invo
 
 	result.Priced = true
 
-	// Determine output tier from total context vs. threshold (per invocation).
 	tier, _ := SelectTier(inv.Usage, entry)
 	result.Tier = tier
 
-	// Price each category independently using its configured rate.
-	// An absent token category yields MoneyNoData via Rate.Apply.
-	inputMoney := entry.Input.Apply(inv.Usage.Input)
-	cacheReadMoney := entry.CachedInput.Apply(inv.Usage.CacheRead)
-	cacheCreationMoney := entry.CacheWrite.Apply(inv.Usage.CacheCreation)
-
-	// The cliff is all-or-nothing: TierLongContext reprices the ENTIRE output
-	// at OutputAtThreshold — no graduated/split calculation.
-	var outputRate domain.Rate
+	rates := entry.Standard
 	if tier == TierLongContext {
-		outputRate = entry.OutputAtThreshold
-	} else {
-		outputRate = entry.OutputUnderThreshold
+		rates = entry.LongContext.Rates
 	}
-	outputMoney := outputRate.Apply(inv.Usage.Output)
+
+	usage := inv.Usage
+	inputMoney := rates.Input.Apply(usage.Input)
+	cacheReadMoney := rates.CacheRead.Apply(usage.CacheRead)
+	cacheCreationMoney, assumed := priceCacheWrite(usage, rates)
+	outputMoney := rates.Output.Apply(usage.Output)
+	result.AssumedTierCacheWrite = assumed
 
 	total, complete := domain.SumMoney(inputMoney, cacheReadMoney, cacheCreationMoney, outputMoney)
 
@@ -78,6 +83,19 @@ func PriceInvocation(inv domain.InvocationUsage, table domain.PricingTable) Invo
 	}
 
 	return result
+}
+
+// priceCacheWrite prices the cache-write tokens of one request: the 5m and 1h
+// split at their own rates, the unsplit remainder at the 5m rate. It returns the
+// money and the number of tokens priced at that assumed 5m tier.
+func priceCacheWrite(usage domain.TokenUsage, rates domain.RateSet) (domain.MoneyValue, int64) {
+	unsplit := usage.UnsplitCacheCreation()
+	money, _ := domain.SumMoney(
+		rates.CacheWrite5m.Apply(usage.CacheCreation5m),
+		rates.CacheWrite1h.Apply(usage.CacheCreation1h),
+		rates.CacheWrite5m.Apply(unsplit),
+	)
+	return money, unsplit.ValueOr(0)
 }
 
 // SumCosts folds per-invocation costs into one CategoryMoney, setting Complete

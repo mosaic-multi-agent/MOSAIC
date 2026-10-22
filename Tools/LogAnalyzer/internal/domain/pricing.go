@@ -2,50 +2,78 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 )
 
-// ModelPricing is the five-rate entry for one model, plus its optional
-// long-context threshold.
+// RateSet holds the five per-category rates of one tier.
+type RateSet struct {
+	Input        Rate
+	CacheRead    Rate
+	CacheWrite5m Rate
+	CacheWrite1h Rate
+	Output       Rate
+}
+
+// LongContextPricing is the optional single long-context tier.
+type LongContextPricing struct {
+	Threshold int64 // tokens per request (input + cache read + cache write); > 0
+	Rates     RateSet
+}
+
+// ModelPricing is the entry for one model: a standard rate set plus an optional
+// long-context tier.
 type ModelPricing struct {
-	Model                ModelID
-	Input                Rate
-	CachedInput          Rate // cache read
-	CacheWrite           Rate // cache creation
-	OutputUnderThreshold Rate
-	OutputAtThreshold    Rate  // unused when HasThreshold is false
-	// ContextLengthThreshold is the total-context size at or above which the
-	// whole invocation's output is repriced at OutputAtThreshold.
-	ContextLengthThreshold int64
-	HasThreshold           bool // false => the model has no long-context tier
+	Model          ModelID
+	Standard       RateSet
+	LongContext    LongContextPricing // meaningful only when HasLongContext
+	HasLongContext bool
 }
 
 // HasLongContextTier reports whether tier selection applies to this model.
-func (p ModelPricing) HasLongContextTier() bool { return p.HasThreshold }
+func (p ModelPricing) HasLongContextTier() bool { return p.HasLongContext }
 
-// Validate reports why an entry is unusable. An entry with no threshold is valid;
-// an entry missing any of the four always-required rates is not. OutputAtThreshold
-// is required only when HasThreshold is true.
+// Validate reports why an entry is unusable. All five standard rates are
+// required; a long-context block additionally needs a positive threshold and its
+// own five rates. Errors name the model and the offending wire field.
 func (p ModelPricing) Validate() error {
 	if p.Model.IsEmpty() {
 		return errors.New("pricing entry has empty model ID")
 	}
-	if p.Input == 0 {
-		return errors.New("pricing entry for " + string(p.Model) + " has zero Input rate")
+	if field := p.Standard.firstMissing(""); field != "" {
+		return fmt.Errorf("pricing entry for %s has zero %s rate", p.Model, field)
 	}
-	if p.CachedInput == 0 {
-		return errors.New("pricing entry for " + string(p.Model) + " has zero CachedInput rate")
+	if !p.HasLongContext {
+		return nil
 	}
-	if p.CacheWrite == 0 {
-		return errors.New("pricing entry for " + string(p.Model) + " has zero CacheWrite rate")
+	if p.LongContext.Threshold <= 0 {
+		return fmt.Errorf("pricing entry for %s has non-positive long_context.threshold", p.Model)
 	}
-	if p.OutputUnderThreshold == 0 {
-		return errors.New("pricing entry for " + string(p.Model) + " has zero OutputUnderThreshold rate")
-	}
-	if p.HasThreshold && p.OutputAtThreshold == 0 {
-		return errors.New("pricing entry for " + string(p.Model) + " has HasThreshold=true but zero OutputAtThreshold rate")
+	if field := p.LongContext.Rates.firstMissing("long_context."); field != "" {
+		return fmt.Errorf("pricing entry for %s has zero %s rate", p.Model, field)
 	}
 	return nil
+}
+
+// firstMissing returns the wire name (with prefix) of the first zero rate, or ""
+// when all five are set.
+func (r RateSet) firstMissing(prefix string) string {
+	fields := []struct {
+		name string
+		rate Rate
+	}{
+		{"input", r.Input},
+		{"cache_read", r.CacheRead},
+		{"cache_write_5m", r.CacheWrite5m},
+		{"cache_write_1h", r.CacheWrite1h},
+		{"output", r.Output},
+	}
+	for _, f := range fields {
+		if f.rate == 0 {
+			return prefix + f.name
+		}
+	}
+	return ""
 }
 
 // PricingTable is an immutable, model-keyed lookup.

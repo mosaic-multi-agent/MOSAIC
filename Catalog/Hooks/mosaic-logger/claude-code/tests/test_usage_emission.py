@@ -423,6 +423,26 @@ class TestEmitUsageRecordsReemission(unittest.TestCase):
         self.assertEqual(2, len(usage_events))
         self.assertEqual(usage_events[0]["record_id"], usage_events[1]["record_id"])
 
+    def test_identical_records_within_one_scan_are_written_once(self):
+        """Claude Code writes one transcript line per content block, each
+        repeating the same message id and usage. A single firing writes that
+        record once; a later line with changed usage is still written."""
+        _write_transcript(self.transcript_path, [
+            _assistant_record(input_tokens=10, output_tokens=5, message_id="msg_blocks"),
+            _assistant_record(input_tokens=10, output_tokens=5, message_id="msg_blocks"),
+            _assistant_record(input_tokens=10, output_tokens=5, message_id="msg_blocks"),
+            _assistant_record(input_tokens=10, output_tokens=8, message_id="msg_blocks"),
+        ])
+        usage.emit_usage_records(
+            self.ctx, str(self.transcript_path), None, "orchestrator_transcript"
+        )
+        events = _read_jsonl(self.ctx.paths.orchestrator_events(_RUN_ID))
+        usage_events = [e for e in events if e["event"] == usage.USAGE_EVENT]
+        self.assertEqual(2, len(usage_events))
+        self.assertEqual(
+            [5, 8], [e["token_usage"]["output_tokens"] for e in usage_events]
+        )
+
     def test_file_remains_valid_jsonl_after_repeated_identical_firings(self):
         """Three identical firings still leave a well-formed JSONL file with
         exactly one usage record (only the first firing wrote anything)."""
@@ -475,7 +495,7 @@ class TestEmitUsageRecordsSchemaAndPruning(unittest.TestCase):
         )
         events = _read_jsonl(self.ctx.paths.orchestrator_events(_RUN_ID))
         usage_event = next(e for e in events if e["event"] == usage.USAGE_EVENT)
-        self.assertEqual("1.1.0", usage_event["schema_version"])
+        self.assertEqual("1.2.0", usage_event["schema_version"])
 
     def test_genuinely_zero_usage_field_survives(self):
         transcript_path = self.tmp_path / "transcript.jsonl"

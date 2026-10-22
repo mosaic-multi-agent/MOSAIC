@@ -18,6 +18,13 @@ const (
 	ScreenRunDetail ScreenID = "run-detail"
 	ScreenPricing   ScreenID = "pricing"
 	ScreenNoData    ScreenID = "no-data"
+
+	ScreenOverview   ScreenID = "run-overview"    // V1 run overview
+	ScreenAgentTypes ScreenID = "run-agent-types" // V2 by agent type
+	ScreenStatus     ScreenID = "run-status"      // V3 by returned status code
+	ScreenTools      ScreenID = "run-tools"       // V4 tools
+	ScreenTimeline   ScreenID = "run-timeline"    // V5 timeline
+	ScreenAcrossRuns ScreenID = "across-runs"     // V6 across runs
 )
 
 // Screen is the contract every screen satisfies so the top-level model can

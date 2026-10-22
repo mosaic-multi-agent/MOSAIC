@@ -160,12 +160,16 @@ func encodeCategoryMoney(cm domain.CategoryMoney) jsonCategoryMoney {
 type jsonTotals struct {
 	Tokens jsonTokenUsage    `json:"tokens"`
 	Money  jsonCategoryMoney `json:"money"`
+	// AssumedTierCacheWrite counts cache-write tokens priced at the assumed 5m
+	// tier; absent when zero.
+	AssumedTierCacheWrite int64 `json:"assumed_tier_cache_write_tokens,omitempty"`
 }
 
 func encodeTotals(t domain.Totals) jsonTotals {
 	return jsonTotals{
-		Tokens: encodeTokenUsage(t.Tokens),
-		Money:  encodeCategoryMoney(t.Money),
+		Tokens:                encodeTokenUsage(t.Tokens),
+		Money:                 encodeCategoryMoney(t.Money),
+		AssumedTierCacheWrite: t.AssumedTierCacheWrite,
 	}
 }
 
@@ -204,6 +208,12 @@ type jsonRunReport struct {
 	Orchestrator   jsonActorReport   `json:"orchestrator"`
 	Agents         []jsonActorReport `json:"agents"`
 	UnpricedModels []string          `json:"unpriced_models"`
+
+	Overview    jsonOverview         `json:"overview"`
+	ByAgentType []jsonAgentTypeGroup `json:"by_agent_type"`
+	ByStatus    jsonStatusBreakdown  `json:"by_status"`
+	Tools       jsonToolsBreakdown   `json:"tools"`
+	Timeline    jsonTimeline         `json:"timeline"`
 }
 
 func encodeRunReport(r domain.RunReport) jsonRunReport {
@@ -222,6 +232,12 @@ func encodeRunReport(r domain.RunReport) jsonRunReport {
 		Orchestrator:   encodeActorReport(r.Orchestrator),
 		Agents:         agents,
 		UnpricedModels: unpriced,
+
+		Overview:    encodeOverview(r.Overview),
+		ByAgentType: encodeAgentTypeGroups(r.ByAgentType),
+		ByStatus:    encodeStatusBreakdown(r.ByStatus),
+		Tools:       encodeToolsBreakdown(r.Tools),
+		Timeline:    encodeTimeline(r.Timeline),
 	}
 }
 
@@ -299,6 +315,7 @@ type jsonReportWire struct {
 	Runs           []jsonRunReport `json:"runs"`
 	Unattributable *jsonRunReport  `json:"unattributable,omitempty"`
 	UnpricedModels []string        `json:"unpriced_models"`
+	AcrossRuns     jsonAcrossRuns  `json:"across_runs"`
 	Quality        jsonQuality     `json:"quality"`
 }
 
@@ -334,6 +351,7 @@ func EncodeReport(w io.Writer, r domain.Report) error {
 		Runs:           runs,
 		Unattributable: unattributable,
 		UnpricedModels: unpriced,
+		AcrossRuns:     encodeAcrossRuns(r.AcrossRuns),
 		Quality:        encodeQuality(r.Quality),
 	}
 	return json.NewEncoder(w).Encode(wire)

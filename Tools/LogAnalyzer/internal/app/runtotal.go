@@ -41,6 +41,11 @@ type RunTotal struct {
 	// not be attributed to this run after merging. In a single-run-isolated
 	// source this is always 0. Non-zero signals an unexpected condition.
 	UnknownRunResidual int
+
+	// Activity is the named run's run model as aggregated on the total path
+	// (after any unknown-run merge). Go-side only: never encoded by
+	// cli.EncodeRunTotal.
+	Activity domain.RunActivity
 }
 
 // RunTotalFor extracts the basic total for one named run from a report.
@@ -148,6 +153,14 @@ func (s *Service) TotalForRun(ctx context.Context, req Request, runID string) (R
 	if !found {
 		// Analysis succeeded but the requested run was not among the results.
 		return RunTotal{}, OutcomeReport, nil
+	}
+
+	// Attach the run model aggregated alongside the totals (including any
+	// merged unknown-run streams).
+	for _, run := range agg.Runs {
+		if run.Run.ID == runID {
+			total.Activity = run.Activity
+		}
 	}
 
 	// Step 11: Populate merge metadata when a merge was performed.

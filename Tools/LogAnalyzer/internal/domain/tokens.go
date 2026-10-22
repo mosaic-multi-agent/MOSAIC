@@ -66,8 +66,32 @@ func SumTokens(counts ...TokenCount) TokenCount {
 type TokenUsage struct {
 	Input         TokenCount
 	CacheRead     TokenCount
-	CacheCreation TokenCount
+	CacheCreation TokenCount // always the cache-write total
 	Output        TokenCount
+
+	// Cache-write tier split. For one decoded usage block: both present (summing
+	// to CacheCreation) or both absent. Never present without CacheCreation.
+	CacheCreation5m TokenCount
+	CacheCreation1h TokenCount
+}
+
+// HasCacheWriteSplit reports whether both tier fields are present.
+func (u TokenUsage) HasCacheWriteSplit() bool {
+	return u.CacheCreation5m.present && u.CacheCreation1h.present
+}
+
+// UnsplitCacheCreation returns the cache-write tokens not covered by the split:
+// CacheCreation - (CacheCreation5m + CacheCreation1h), absent tiers counting 0.
+// Absent when CacheCreation is absent; never negative.
+func (u TokenUsage) UnsplitCacheCreation() TokenCount {
+	if !u.CacheCreation.present {
+		return AbsentTokens()
+	}
+	rest := u.CacheCreation.value - u.CacheCreation5m.ValueOr(0) - u.CacheCreation1h.ValueOr(0)
+	if rest < 0 {
+		rest = 0
+	}
+	return Tokens(rest)
 }
 
 // IsEmpty reports true when all four categories are absent.
@@ -82,6 +106,9 @@ func (u TokenUsage) Add(other TokenUsage) TokenUsage {
 		CacheRead:     u.CacheRead.Add(other.CacheRead),
 		CacheCreation: u.CacheCreation.Add(other.CacheCreation),
 		Output:        u.Output.Add(other.Output),
+
+		CacheCreation5m: u.CacheCreation5m.Add(other.CacheCreation5m),
+		CacheCreation1h: u.CacheCreation1h.Add(other.CacheCreation1h),
 	}
 }
 

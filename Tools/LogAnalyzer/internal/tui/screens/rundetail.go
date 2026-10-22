@@ -23,6 +23,7 @@ type RunDetailScreen struct {
 	height int
 	styles Styles
 	back   bool
+	nav    viewNav
 }
 
 // NewRunDetailScreen creates the run-detail screen for the given run report.
@@ -32,6 +33,7 @@ func NewRunDetailScreen(run domain.RunReport, width, height int, styles Styles) 
 		width:  width,
 		height: height,
 		styles: styles,
+		nav:    viewNav{self: ScreenRunDetail},
 	}
 }
 
@@ -61,6 +63,8 @@ func (s *RunDetailScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		}
 	case "esc", "q":
 		s.back = true
+	default:
+		s.nav.request(key.String())
 	}
 	return s, nil
 }
@@ -126,6 +130,10 @@ func (s *RunDetailScreen) View(width, height int) string {
 		))
 		varFooterSB.WriteByte('\n')
 	}
+	if assumed := s.run.Totals.AssumedTierCacheWrite; assumed > 0 {
+		varFooterSB.WriteString(s.styles.Warning.Width(width).Render(AssumedTierNotice(assumed)))
+		varFooterSB.WriteByte('\n')
+	}
 	varFooterStr := varFooterSB.String()
 	varFooterLines := strings.Count(varFooterStr, "\n")
 
@@ -141,7 +149,7 @@ func (s *RunDetailScreen) View(width, height int) string {
 
 	// --- Scroll hint for the help bar ---
 	hint := FormatScrollHint(w, actorCount)
-	helpText := "↑/↓ scroll  esc back  ctrl+c quit"
+	helpText := s.Help()
 	if hint != "" {
 		helpText += "  " + hint
 	}
@@ -181,6 +189,9 @@ func (s *RunDetailScreen) writeActorDetail(sb *strings.Builder, actor domain.Act
 	if len(actor.UnpricedModels) > 0 {
 		label += " (has unpriced models)"
 	}
+	if actor.Totals.AssumedTierCacheWrite > 0 {
+		label += " (has " + AssumedTierLabel + " cache writes)"
+	}
 	sb.WriteString(s.styles.Body.Width(width).Render("  " + label))
 	sb.WriteByte('\n')
 	sb.WriteString(s.styles.Muted.Width(width).Render("    " + FormatTotalsLine(actor.Totals)))
@@ -197,11 +208,17 @@ func (s *RunDetailScreen) writeActorDetail(sb *strings.Builder, actor domain.Act
 
 // Help returns the key hints for this screen.
 func (s *RunDetailScreen) Help() string {
-	return "↑/↓ scroll  esc back  ctrl+c quit"
+	return "↑/↓ scroll  " + viewKeysHelp(ScreenRunDetail) + "  esc back  ctrl+c quit"
 }
 
 // Back reports whether the user pressed Esc.
 func (s *RunDetailScreen) Back() bool { return s.back }
 
 // Reset clears the back flag.
-func (s *RunDetailScreen) Reset() { s.back = false }
+func (s *RunDetailScreen) Reset() {
+	s.back = false
+	s.nav.reset()
+}
+
+// Requested reports a view key pressed for a different per-run view.
+func (s *RunDetailScreen) Requested() (ScreenID, bool) { return s.nav.requested() }

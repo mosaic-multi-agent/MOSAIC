@@ -15,15 +15,18 @@ const (
 	EventInvocationEnd   EventType = "invocation_end"
 	EventTurn            EventType = "turn"
 	EventUsageRecord     EventType = "usage_record"
+	EventToolCallStart   EventType = "tool_call_start"
+	EventToolCallEnd     EventType = "tool_call_end"
+	EventCompaction      EventType = "compaction"
 	EventOther           EventType = "" // any type this tool does not consume
 )
 
 // SchemaVersionCurrent is the version this tool is written against.
-const SchemaVersionCurrent = "1.1.0"
+const SchemaVersionCurrent = "1.2.0"
 
 // supportedSchemaVersions is the backing slice for SupportedSchemaVersions,
 // newest first. Prior versions remain supported so older logs keep working.
-var supportedSchemaVersions = []string{"1.1.0", "1.0.0"}
+var supportedSchemaVersions = []string{"1.2.0", "1.1.0", "1.0.0"}
 
 // SupportedSchemaVersions returns every schema version this tool reads without
 // a finding, newest first. Prior versions remain supported so older logs keep
@@ -51,7 +54,7 @@ type Event struct {
 	// Envelope
 	SchemaVersion string
 	Type          EventType
-	RawType       string  // the wire "event" value, retained for EventOther
+	RawType       string // the wire "event" value, retained for EventOther
 	Timestamp     time.Time
 	Harness       Harness
 	SessionID     string // "" when absent
@@ -62,6 +65,39 @@ type Event struct {
 	InvocationEnd   *InvocationEndFields
 	Turn            *TurnFields
 	UsageRecord     *UsageRecordFields
+	ToolCallStart   *ToolCallStartFields
+	ToolCallEnd     *ToolCallEndFields
+	Compaction      *CompactionFields
+}
+
+// ToolCallStatus is the outcome reported on a tool_call_end event.
+type ToolCallStatus string
+
+const (
+	ToolCallSuccess ToolCallStatus = "success"
+	ToolCallError   ToolCallStatus = "error"
+	// "" = status absent; any other value is kept verbatim.
+)
+
+// ToolCallStartFields holds the fields from a tool_call_start event. The
+// tool_input payload is deliberately not decoded.
+type ToolCallStartFields struct {
+	CallID   string // "" when absent
+	ToolName string // "" when absent
+}
+
+// ToolCallEndFields holds the fields from a tool_call_end event. The
+// tool_output and error payloads are deliberately not decoded.
+type ToolCallEndFields struct {
+	CallID string
+	Status ToolCallStatus
+}
+
+// CompactionFields holds the fields from a compaction event.
+type CompactionFields struct {
+	Trigger      string // "auto" | "manual" | other verbatim | "" absent
+	TokensBefore TokenCount
+	TokensAfter  TokenCount
 }
 
 // InvocationStartFields holds the fields from an invocation_start event.

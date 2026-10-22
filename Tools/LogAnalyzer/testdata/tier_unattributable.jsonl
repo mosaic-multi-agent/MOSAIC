@@ -1,0 +1,1 @@
+{"schema_version":"1.2.0","event":"usage_record","timestamp":"2026-10-21T12:00:02.000Z","harness":"claude-code","session_id":"s-tier","agent_instance_id":"stray#1","record_id":"u1","model":"tier-model","token_usage":{"input_tokens":10,"cache_creation_tokens":2000,"output_tokens":1}}

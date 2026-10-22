@@ -110,8 +110,7 @@ idle, and the CLI wraps every command in `try ... finally { process.exit() }`.
 Pending plugin promises are dropped, but synchronous code cannot be interrupted.
 If live runs still show a final transcript with an incomplete last message, a
 raw/sidecar mismatch, or a `.tmp_*` file, implement a Runner-side repair that runs
-`opencode export --pure <sessionID>` after the process exits (option 3 in
-`Issue-OpenCode-RunnerTranscriptExport.md`).
+`opencode export --pure <sessionID>` after the process exits.
 
 Known Runner-mode field gaps for this adapter are listed in
 `Development/Designs/MosaicLogFormat.md` section 4.6 and in the header of

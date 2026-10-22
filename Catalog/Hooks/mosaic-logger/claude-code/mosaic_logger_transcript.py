@@ -115,6 +115,47 @@ _USAGE_KEY_MAP = [
 ]
 
 
+def _is_number(val):
+    """True for a real number (including 0); False for None, bool, other types."""
+    return isinstance(val, (int, float)) and not isinstance(val, bool)
+
+
+def _map_cache_tiers(raw_usage):
+    """Return the cache-write tier fields for a usage object, or {}.
+
+    Both tiers are returned only when message.usage.cache_creation carries
+    numeric ephemeral_5m_input_tokens and ephemeral_1h_input_tokens that sum
+    to cache_creation_input_tokens; otherwise neither (tier unknown).
+    """
+    tiers = raw_usage.get("cache_creation")
+    if not isinstance(tiers, dict):
+        return {}
+    five_min = tiers.get("ephemeral_5m_input_tokens")
+    one_hour = tiers.get("ephemeral_1h_input_tokens")
+    total = raw_usage.get("cache_creation_input_tokens")
+    if not (_is_number(five_min) and _is_number(one_hour) and _is_number(total)):
+        return {}
+    if five_min + one_hour != total:
+        return {}
+    return {"cache_creation_5m_tokens": five_min,
+            "cache_creation_1h_tokens": one_hour}
+
+
+def _map_usage(raw_usage):
+    """Map a transcript usage object to the schema token_usage block.
+
+    Each sub-field is included only when it is a real number (including 0).
+    Returns None when no sub-field resolved.
+    """
+    mapped = {}
+    for src_key, dst_key in _USAGE_KEY_MAP:
+        val = raw_usage.get(src_key)
+        if _is_number(val):
+            mapped[dst_key] = val
+    mapped.update(_map_cache_tiers(raw_usage))
+    return mapped or None
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -178,14 +219,7 @@ def read_last_assistant_facts(transcript_path):
                     if isinstance(message, dict):
                         raw_usage = message.get("usage")
                         if isinstance(raw_usage, dict):
-                            mapped = {}
-                            for src_key, dst_key in _USAGE_KEY_MAP:
-                                val = raw_usage.get(src_key)
-                                # Keep genuine numbers (including 0), reject None/bool
-                                if isinstance(val, (int, float)) and not isinstance(val, bool):
-                                    mapped[dst_key] = val
-                            if mapped:
-                                token_usage = mapped
+                            token_usage = _map_usage(raw_usage)
 
                     last_facts = TurnFacts(model=model, token_usage=token_usage)
 
@@ -227,14 +261,7 @@ def _resolve_record_token_usage(message):
     if isinstance(message, dict):
         raw_usage = message.get("usage")
         if isinstance(raw_usage, dict):
-            mapped = {}
-            for src_key, dst_key in _USAGE_KEY_MAP:
-                val = raw_usage.get(src_key)
-                # Keep genuine numbers (including 0), reject None/bool
-                if isinstance(val, (int, float)) and not isinstance(val, bool):
-                    mapped[dst_key] = val
-            if mapped:
-                token_usage = mapped
+            token_usage = _map_usage(raw_usage)
     return token_usage
 
 

@@ -7,7 +7,7 @@ usage_record event
 -------------------
 
     {
-      "schema_version": "1.1.0",
+      "schema_version": "1.2.0",
       "event": "usage_record",
       "timestamp": "2026-08-08T06:27:35.412Z",
       "harness": "claude-code",
@@ -64,11 +64,15 @@ Key                    | Source transcript field
 input_tokens            | message.usage.input_tokens
 output_tokens           | message.usage.output_tokens
 cache_read_tokens       | message.usage.cache_read_input_tokens
-cache_creation_tokens   | message.usage.cache_creation_input_tokens (flattened; the only cache-write representation on the wire)
+cache_creation_tokens   | message.usage.cache_creation_input_tokens (the total)
+cache_creation_5m_tokens | message.usage.cache_creation.ephemeral_5m_input_tokens
+cache_creation_1h_tokens | message.usage.cache_creation.ephemeral_1h_input_tokens
 
-These four keys are exactly the four the adapter maps today, unchanged. Each
-appears only when its source field is a genuine number, including 0. No
-ephemeral cache-write tier fields exist in this block.
+Each key appears only when its source field is a genuine number, including 0.
+The two tier fields are both-or-neither: they are written together only when
+both source tiers are numeric and sum to cache_creation_input_tokens, so they
+sum to cache_creation_tokens. When the tier data is missing, partial,
+non-numeric or inconsistent, neither tier field is written (tier unknown).
 """
 
 import hashlib
@@ -285,7 +289,7 @@ def emit_usage_records(ctx: "core.HookContext",
 
                 # Decide whether to emit this record.
                 if record_id and fp:
-                    stored_fp = state.get(record_id)
+                    stored_fp = updated_state.get(record_id)
                     if stored_fp == fp:
                         # Unchanged and already emitted — skip.
                         continue

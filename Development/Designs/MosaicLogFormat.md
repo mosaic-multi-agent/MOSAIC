@@ -2,7 +2,7 @@
 
 > **Status:** Draft for review
 > **Created:** 2026-07-27
-> **Last Updated:** 2026-10-04
+> **Last Updated:** 2026-10-21
 > **Scope:** The canonical log event schema, the on-disk artifact layout, run identity, and the merge utility's contract. 
 
 ---
@@ -128,7 +128,9 @@ No `duration_ms` field — see §3.5.
 | `status_code` | enum: `SUCCESS`, `COMPLETED_NEEDS_ACTION`, `PARTIALLY_DONE`, `NEEDS_CLARIFICATION`, `CAPABILITY_EXCEEDED`, `BLOCKED` | Optional | Populated when the adapter can determine the subagent's returned status; absent if the harness gives no access to response content. A failed invocation is reported here, never as a separate error event. |
 | `response` | string | Optional | Full final response text from the subagent. On Claude Code 2.1.271+ in auto mode this is the report the subagent delivers through its `SubagentHandback` tool call (`tool_input.message`, verbatim), and the event timestamp is the hand-back's PostToolUse time; the delivery to the caller happens just before that hook fires. Without a hand-back (older CLI, non-auto mode, or Haiku as the main model, which silently falls back from auto to default) the response is `SubagentStop`'s `last_assistant_message` and the timestamp is the stop time. After a hand-back, a later `SubagentStop` carries only post-hand-back commentary and produces no second `invocation_end`. |
 | `model` | string | Optional | Model identifier used for the invocation. For a Claude Code hand-back it is read from the agent transcript at hand-back time. |
-| `token_usage` | object | Optional | Present only if at least one sub-field is available. Sub-fields, each independently optional: `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens` (all numbers). For a Claude Code hand-back it is read from the agent transcript at hand-back time. |
+| `token_usage` | object | Optional | Present only if at least one sub-field is available. Sub-fields, each independently optional: `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens`, `cache_creation_5m_tokens`, `cache_creation_1h_tokens` (all numbers). Cache-write tier rules: see below. For a Claude Code hand-back it is read from the agent transcript at hand-back time. |
+
+**Cache-write tiers (`token_usage`, all events that carry it).** Providers price cache writes by time-to-live, and one harness can mix TTLs within a single run: Claude Code on a subscription writes 1-hour cache for the main session and 5-minute cache for subagents. `cache_creation_tokens` is always the total of all cache writes. `cache_creation_5m_tokens` and `cache_creation_1h_tokens` give the split and are present only when the harness reports it per API call. When an adapter writes either tier field it writes both, and their sum equals `cache_creation_tokens`. When neither is present, the cache-write tier is unknown; a consumer may apply its own default tier but must not present that result as reported data. Adapters never infer a tier from configuration or defaults (§2, "Fields degrade, never fabricate").
 
 Exactly one `invocation_end` is written per invocation. **Known limitation (Claude Code hand-back):** if the agent transcript has not been flushed at hand-back time, `invocation_end` omits `model` and `token_usage`, and they are never back-filled (no second `invocation_end`). `Tools/LogAnalyzer` reports the missing fields as an issue for that invocation. Tokens used after the hand-back are still counted through `usage_record` events.
 
@@ -198,7 +200,7 @@ Harnesses vary in whether a human-input prompt is observable as one event or two
 | `agent_instance_id` | string | Optional | Present on invocation streams only; omitted on the orchestrator stream. |
 | `model` | string | Optional | The model of this record, when resolvable. |
 | `service_tier` | string | Optional | Descriptive detail only; drives no pricing decision. |
-| `token_usage` | object | Optional | Present when at least one sub-field is resolvable. Sub-fields `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens`, each independently optional and present only when its source value is a genuine number, including 0. |
+| `token_usage` | object | Optional | Present when at least one sub-field is resolvable. Sub-fields `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens`, `cache_creation_5m_tokens`, `cache_creation_1h_tokens`, each independently optional and present only when its source value is a genuine number, including 0. Cache-write tier rules as for `invocation_end` (§3.4). |
 
 **Supersede rule (normative).** A producer may observe the same `record_id` more than once as its values settle. When the same `record_id` appears more than once within a stream, the later observation is authoritative and supersedes all earlier ones. A consumer totals the final observed value for each `record_id`, never the first.
 
@@ -366,6 +368,16 @@ MOSAIC's existing versioning convention — `X.Y.Z`, already carried by every ag
 | **Z** | Clarification or non-semantic fix (e.g., a corrected field description) with no wire-format change. |
 
 Every event carries `schema_version` in its common envelope (§3.3).
+
+**Version history:**
+
+| Version | Change |
+|---|---|
+| `1.0.0` | Initial schema. |
+| `1.1.0` | Added the `usage_record` event. |
+| `1.2.0` | Added the `cache_creation_5m_tokens` and `cache_creation_1h_tokens` sub-fields to `token_usage`. |
+
+Adapters emit the highest version whose fields they implement; an adapter that does not produce the 1.2.0 sub-fields keeps emitting its earlier version.
 
 ## 7. Merge Utility
 

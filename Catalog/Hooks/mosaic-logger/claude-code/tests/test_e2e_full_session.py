@@ -786,10 +786,10 @@ class TestSchemaConformance(unittest.TestCase):
                         f"Empty string for required field {field!r} in event {ev.get('event')}"
                     )
 
-    def test_schema_version_is_1_1_0(self):
+    def test_schema_version_is_1_2_0(self):
         for ev in self.all_events:
             self.assertEqual(
-                "1.1.0", ev.get("schema_version"),
+                "1.2.0", ev.get("schema_version"),
                 f"Unexpected schema_version in event {ev.get('event')}"
             )
 

@@ -23,6 +23,11 @@ const (
 	// format's single-stream invariant. The data is suspect, not partial:
 	// this kind is deliberately NOT a member of dataLossKinds.
 	FindingCrossStreamRecord FindingKind = "cross_stream_record"
+
+	// FindingInvalidCacheTierSplit reports a token_usage block whose cache-write
+	// tier fields were present but inconsistent; the split was ignored. Warning
+	// severity; NOT a data-loss kind.
+	FindingInvalidCacheTierSplit FindingKind = "invalid_cache_tier_split"
 )
 
 // FindingSeverity lets a frontend decide prominence without parsing kinds.
@@ -57,10 +62,10 @@ func (q QualitySummary) IsClean() bool { return len(q.Findings) == 0 }
 // dataLossKinds is the set of finding kinds that indicate the underlying data
 // is known to be partial (i.e. events were irrecoverably lost).
 var dataLossKinds = map[FindingKind]bool{
-	FindingMalformedLine:  true,
-	FindingTruncatedLine:  true,
-	FindingUnreadableFile: true,
-	FindingMissingEventFile: true,
+	FindingMalformedLine:      true,
+	FindingTruncatedLine:      true,
+	FindingUnreadableFile:     true,
+	FindingMissingEventFile:   true,
 	FindingUnrecognisedFolder: true,
 }
 

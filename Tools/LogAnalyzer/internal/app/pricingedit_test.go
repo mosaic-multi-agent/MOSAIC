@@ -704,7 +704,7 @@ func TestEditModelPricing_AllRatesSkipped_ReturnsNoChange_NothingPersisted(t *te
 
 func TestEditModelPricing_IncompleteRates_FailsValidation_NothingPersisted(t *testing.T) {
 	// Answering only the input rate and skipping the others produces an entry with
-	// zero CachedInput, CacheWrite and OutputUnderThreshold — which fails
+	// zero cache_read, cache_write_5m, cache_write_1h and output rates — which fails
 	// ModelPricing.Validate(). The flow must not persist such an entry.
 
 	// Arrange

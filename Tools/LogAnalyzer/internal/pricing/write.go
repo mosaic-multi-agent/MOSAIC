@@ -15,7 +15,8 @@ import (
 // Put persists one model entry to the pricing YAML file.
 //
 // If the file does not exist it is created, including any missing parent
-// directories. If the file exists the entry is added or the existing entry for
+// directories, and the built-in template documentation is written ahead of the
+// entries. If the file exists the entry is added or the existing entry for
 // that model is replaced; all other entries are preserved.
 //
 // Comment preservation: leading comments in the existing file (lines before the
@@ -30,7 +31,8 @@ func (s *Store) Put(_ context.Context, entry domain.ModelPricing) error {
 		if !os.IsNotExist(readErr) {
 			return fmt.Errorf("read pricing file: %w", readErr)
 		}
-		// File absent: start with an empty models map.
+		// File absent: start with the built-in template and an empty models map.
+		headerComments = pricingTemplate
 		file.Models = make(map[string]modelEntryYAML)
 	} else {
 		// Extract comment lines that precede the first non-comment content so they

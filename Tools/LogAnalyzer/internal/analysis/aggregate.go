@@ -22,6 +22,8 @@ type runState struct {
 	// FindingCrossStreamRecord has already been raised. Subsequent foreign
 	// observations of the same record_id produce no additional finding.
 	crossStreamReported map[string]bool
+	// activity accumulates the run model; nil until the first related event.
+	activity *runActivityState
 }
 
 // actorState holds mutable state for one actor within a run.
@@ -107,6 +109,11 @@ func (a *Aggregator) Add(ref domain.StreamRef, ev domain.Event) {
 	// They must be silently discarded with no finding and no totals change.
 	switch ev.Type {
 	case domain.EventOther, domain.EventRunStart, domain.EventSessionStart:
+		return
+	}
+
+	// Tool-call and compaction events feed the run model only.
+	if a.recordToolOrCompaction(rs, ref, ev) {
 		return
 	}
 
@@ -336,6 +343,7 @@ func (a *Aggregator) handleInvocationStart(rs *runState, ref domain.StreamRef, e
 		return
 	}
 
+	rs.recordInvocationStart(id, ev.Timestamp)
 	as := a.getOrCreateActorState(rs, id)
 	if ev.InvocationStart.AgentType != "" {
 		as.actor.Type = ev.InvocationStart.AgentType
@@ -367,6 +375,7 @@ func (a *Aggregator) handleInvocationEnd(rs *runState, ref domain.StreamRef, ev 
 		return
 	}
 
+	rs.recordInvocationEnd(id, end, ev.Timestamp)
 	actor := domain.AgentInstance(id)
 
 	// Quality findings do not halt aggregation; the invocation is still recorded.
@@ -467,6 +476,7 @@ func buildRunAggregate(rs *runState) domain.RunAggregate {
 			Actor:       rs.orchestrator.actor,
 			Invocations: rs.orchestrator.effective(),
 		},
-		Agents: agents,
+		Agents:   agents,
+		Activity: buildActivity(rs),
 	}
 }

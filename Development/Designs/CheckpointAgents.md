@@ -98,10 +98,13 @@ Uncommitted user edits are captured along with everything else. A checkpoint is 
 **Its own run folder is excluded, by the agent, explicitly.** The agent knows its `run_id`, so it excludes exactly `Orchestration-{run_id}/` and nothing else:
 
 ```
-git add -A -- . ':!Orchestration-{run_id}'
+git add -A -- .
+git rm --cached -r -q --ignore-unmatch -- Orchestration-{run_id}
 ```
 
-This is the agent's responsibility, not the repository's. Relying on an ignore rule would be relying on a file MOSAIC does not ship and does not control — the user's `.gitignore` belongs to the user's project, and a guarantee this design depends on cannot rest on whether someone configured it correctly.
+This is the agent's responsibility, not the repository's. Relying on an ignore rule would be relying on a file MOSAIC does not ship and does not control — the user's `.gitignore` belongs to the user's project, and a guarantee this design depends on cannot rest on whether someone configured it correctly. Ignore rules also do not apply to files git already tracks, so an ignored-but-committed run folder would be captured anyway.
+
+**Why two commands, not one exclusion pathspec.** The single-command form `git add -A -- . ':!Orchestration-{run_id}'` fails in exactly the repositories that already ignore run folders: naming an ignored path in a `git add` pathspec — even as an exclusion — makes git print "paths are ignored" and exit 1, although staging itself succeeded. An agent that correctly treats a non-zero exit as failure then reports `BLOCKED` on every checkpoint, and a retry cannot help. Adding everything and then unstaging the run folder never names an ignored path to `git add`, and produces the same tree in every configuration: the `rm --cached` is a no-op where the folder is ignored and untracked, and removes it where it is not ignored or is tracked. `--ignore-unmatch` is what makes the no-op case exit 0. (The commit class's wildcard pathspec `':!Orchestration-*'`, `CommitAgent.md` §4.4, was checked and does not trigger this error.)
 
 **The pathspec depends on run folders always being run-scoped.** Every run's orchestration state lives in `Orchestration-{run_id}/` — there is no un-namespaced `Orchestration/` variant. That is what lets both agents identify their own folder exactly (from `run_id`) and every other run's folder by pattern (`Orchestration-*/`), with no configuration and no ambiguity. A bare folder would be matched by neither: it would be captured into every checkpoint and, far worse, overwritten by every restore, silently destroying the audit trail of the rollback being performed. The single convention is a precondition of this design, not a stylistic preference.
 
@@ -122,7 +125,8 @@ No branch is created, updated, or checked out.
 **The commit is built through a temporary index**, so the user's staging area is never disturbed:
 
 ```
-GIT_INDEX_FILE=.git/mosaic-{run_id}.index  git add -A -- . ':!Orchestration-{run_id}'
+GIT_INDEX_FILE=.git/mosaic-{run_id}.index  git add -A -- .
+GIT_INDEX_FILE=.git/mosaic-{run_id}.index  git rm --cached -r -q --ignore-unmatch -- Orchestration-{run_id}
 GIT_INDEX_FILE=.git/mosaic-{run_id}.index  git write-tree
 git commit-tree {tree} -p {parent} -m "{message}"
 git update-ref refs/mosaic/checkpoints/{run_id}/{seq} {commit}
@@ -374,7 +378,7 @@ The orchestrator's warning is a **fixed string, not a finding**. It does not loo
 
 | Guarantee | Enforced by |
 |---|---|
-| The run's own orchestration state stays out of checkpoint commits | `checkpoint-manager-git`, via an explicit pathspec exclusion (§4.2) |
+| The run's own orchestration state stays out of checkpoint commits | `checkpoint-manager-git`, by unstaging its own run folder from the temporary index after staging (§4.2) |
 | No orchestration state is ever overwritten by a restore | `checkpoint-restore-git`, via a hard path refusal (§5.3) |
 
 An earlier draft of this design required the user to add `Orchestration-*/` to `.gitignore`. That was wrong on two counts. MOSAIC does not deploy a `.gitignore` and never will — the user's repository is theirs, and its ignore rules are a project decision that has nothing to do with orchestration. And more fundamentally, a safety guarantee cannot rest on configuration the system neither controls nor can verify: if the rule is missing or mistyped, the failure is silent and the consequence is destroyed orchestration state.

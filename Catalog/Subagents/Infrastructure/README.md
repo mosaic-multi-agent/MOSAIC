@@ -12,7 +12,7 @@ They are a new *reason to invoke*, not a new *kind of invocation*. In every prot
 
 | ID | Agent | Version | Class | Triggers | On Failure | Description |
 |----|-------|---------|-------|----------|------------|-------------|
-| 36 | [checkpoint-manager-git](./checkpoint-manager-git.md) | 2.2.2 | `checkpoint` | ITERATION_END, INVOCATION_INTERVAL(10) | halt | Commits a restorable checkpoint of the working tree to a private ref namespace; never modifies files |
+| 36 | [checkpoint-manager-git](./checkpoint-manager-git.md) | 2.2.3 | `checkpoint` | ITERATION_END, INVOCATION_INTERVAL(10) | halt | Commits a restorable checkpoint of the working tree to a private ref namespace; never modifies files |
 | 38 | [commit-manager-git](./commit-manager-git.md) | 2.3.1 | `commit` | ITERATION_END | continue | Commits completed iteration work to the user's branch with a prose message; not a restore point |
 | 39 | [orchestration-review](./orchestration-review.md) | 1.2.3 | `review` | INVOCATION_INTERVAL(30) | continue | Advisory — reports observations about the run's own bookkeeping and routing; never returns an instruction |
 | 37 | [checkpoint-restore-git](./checkpoint-restore-git.md) | 2.2.2 | `restore` | MANUAL | halt | Restores the working tree to a checkpoint; dispatched only on explicit human decision |

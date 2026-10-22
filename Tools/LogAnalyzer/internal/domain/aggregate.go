@@ -43,6 +43,8 @@ type RunAggregate struct {
 	Provisional  bool
 	Orchestrator ActorAggregate
 	Agents       []ActorAggregate // sorted by instance id
+	// Activity is the run model: invocations, tool calls and compactions.
+	Activity RunActivity
 }
 
 // Totals returns the combined token usage across all actors in the run.

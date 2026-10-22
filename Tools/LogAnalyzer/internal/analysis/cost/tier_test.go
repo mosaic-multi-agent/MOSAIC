@@ -1,15 +1,15 @@
 package cost_test
 
-// Tests for SelectTier: output tier selection per invocation.
+// Tests for SelectTier: rate-set (tier) selection per request.
 //
 // Key invariants under test:
 //   - Context below threshold   → TierStandard
 //   - Context exactly at threshold → TierLongContext  (>= comparison, not >)
 //   - Context above threshold   → TierLongContext
-//   - No threshold (HasThreshold=false) → always TierStandard regardless of context
+//   - No threshold (HasLongContext=false) → always TierStandard regardless of context
 //   - All context categories absent → TierStandard returned with ok=false
 //   - Output tokens are excluded from context (only input+cacheRead+cacheCreation count)
-//   - Selection is per invocation, not per run
+//   - Selection is per request, not per run
 
 import (
 	"testing"
@@ -29,15 +29,12 @@ func tierTestPricingWithThreshold(threshold int64) domain.ModelPricing {
 	if err != nil {
 		panic("ParseRate(1.00): " + err.Error())
 	}
+	rates := domain.RateSet{Input: r, CacheRead: r, CacheWrite5m: r, CacheWrite1h: r, Output: r}
 	return domain.ModelPricing{
-		Model:                  "tier-test-model",
-		Input:                  r,
-		CachedInput:            r,
-		CacheWrite:             r,
-		OutputUnderThreshold:   r,
-		OutputAtThreshold:      r,
-		ContextLengthThreshold: threshold,
-		HasThreshold:           true,
+		Model:          "tier-test-model",
+		Standard:       rates,
+		LongContext:    domain.LongContextPricing{Threshold: threshold, Rates: rates},
+		HasLongContext: true,
 	}
 }
 
@@ -48,12 +45,8 @@ func tierTestPricingFlat() domain.ModelPricing {
 		panic("ParseRate(1.00): " + err.Error())
 	}
 	return domain.ModelPricing{
-		Model:                "tier-test-model",
-		Input:                r,
-		CachedInput:          r,
-		CacheWrite:           r,
-		OutputUnderThreshold: r,
-		HasThreshold:         false,
+		Model:    "tier-test-model",
+		Standard: domain.RateSet{Input: r, CacheRead: r, CacheWrite5m: r, CacheWrite1h: r, Output: r},
 	}
 }
 
@@ -193,7 +186,7 @@ func TestSelectTier_PartialContext_CanStillExceedThreshold(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSelectTier_NoThreshold_AlwaysStandardRegardlessOfContext(t *testing.T) {
-	// A model with HasThreshold=false must always return TierStandard, regardless
+	// A model with HasLongContext=false must always return TierStandard, regardless
 	// of how large the total context is. This models flat-priced providers.
 	usage := domain.TokenUsage{
 		Input: domain.Tokens(999_999_999),
@@ -203,7 +196,7 @@ func TestSelectTier_NoThreshold_AlwaysStandardRegardlessOfContext(t *testing.T) 
 	tier, _ := cost.SelectTier(usage, entry)
 
 	if tier != cost.TierStandard {
-		t.Errorf("tier = %v, want TierStandard (model has no long-context tier, HasThreshold=false)", tier)
+		t.Errorf("tier = %v, want TierStandard (model has no long-context tier, HasLongContext=false)", tier)
 	}
 }
 

@@ -2,6 +2,7 @@ package screens
 
 import (
 	"fmt"
+	"time"
 
 	"mosaic-log-analyzer/internal/domain"
 )
@@ -20,6 +21,54 @@ const ProvisionalLabel = "in progress"
 
 // UnattributableLabel titles the separate unknown-run section.
 const UnattributableLabel = "Unattributable"
+
+// AssumedTierLabel marks cache-write tokens priced at the 5m rate because their
+// request reported no tier split. It labels an estimate, never reported data.
+const AssumedTierLabel = "assumed 5m tier"
+
+// Labels for figures whose data is incomplete or unnamed in the per-run views.
+const (
+	OpenLabel         = "open"           // invocation with no end event
+	NoStatusLabel     = "no status"      // ended without status_code
+	MissingUsageLabel = "no token usage" // invocation without any token count
+	UnknownTypeLabel  = "(unknown type)" // AgentType == ""
+	UnknownModelLabel = "(unknown model)"
+	UnnamedToolLabel  = "(unnamed tool)" // Tool == ""
+	UnpairedLabel     = "unpaired"       // tool call without an unambiguous start/end pair
+)
+
+// FormatDuration renders a duration, or AbsentMarker when ok is false.
+func FormatDuration(d time.Duration, ok bool) string {
+	if !ok {
+		return AbsentMarker
+	}
+	return d.Round(time.Millisecond).String()
+}
+
+// FormatAssumedTier renders a labelled count of cache-write tokens priced at an
+// assumed tier: "" when tokens == 0, otherwise a string containing
+// AssumedTierLabel and the grouped count.
+func FormatAssumedTier(tokens int64) string {
+	if tokens == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s: %s cache-write tokens", AssumedTierLabel, formatGrouped(tokens))
+}
+
+// FormatRatio renders a ratio as a percentage with one decimal ("66.7%"), or
+// AbsentMarker when the ratio is undefined.
+func FormatRatio(r domain.Ratio) string {
+	if r.Denominator <= 0 {
+		return AbsentMarker
+	}
+	return fmt.Sprintf("%.1f%%", float64(r.Numerator)/float64(r.Denominator)*100)
+}
+
+// AssumedTierNotice renders a labelled count of cache-write tokens priced at an
+// assumed tier.
+func AssumedTierNotice(tokens int64) string {
+	return fmt.Sprintf("Cache writes priced at %s: %s tokens (no tier split reported)", AssumedTierLabel, formatGrouped(tokens))
+}
 
 // FormatTokens renders a TokenCount: AbsentMarker when absent, the grouped
 // number otherwise (including "0" for a present zero).

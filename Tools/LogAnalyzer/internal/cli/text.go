@@ -74,6 +74,10 @@ func EncodeText(w io.Writer, r domain.Report) error {
 		}
 	}
 
+	if assumed := reportAssumedTierTokens(r); assumed > 0 {
+		fmt.Fprintf(w, "\nNote: these costs are estimates; cache writes priced at the assumed 5m tier (no tier split reported): %s tokens\n", formatGrouped(assumed))
+	}
+
 	return nil
 }
 
@@ -104,6 +108,9 @@ func writeTextTotals(w io.Writer, t domain.Totals, indent string) {
 	writeTextTokens(w, t.Tokens, indent)
 	// Money summary (total)
 	fmt.Fprintf(w, "%sMoney: %s\n", indent, formatTextMoney(t.Money.Total))
+	if t.AssumedTierCacheWrite > 0 {
+		fmt.Fprintf(w, "%sCache writes priced at assumed 5m tier: %s tokens\n", indent, formatGrouped(t.AssumedTierCacheWrite))
+	}
 }
 
 // writeTextTokens writes per-category token counts with thousand-separator grouping.
@@ -153,4 +160,14 @@ func formatTextMoney(mv domain.MoneyValue) string {
 	default: // MoneyNoData
 		return "-"
 	}
+}
+
+// reportAssumedTierTokens sums the assumed-tier cache-write tokens of the named
+// runs and the unattributable bucket.
+func reportAssumedTierTokens(r domain.Report) int64 {
+	total := r.AllRuns.AssumedTierCacheWrite
+	if r.Unattributable != nil {
+		total += r.Unattributable.Totals.AssumedTierCacheWrite
+	}
+	return total
 }
