@@ -1,3 +1,9 @@
+# Unreleased
+
+## Catalog
+- **orchestrator** (v8.2.2) / **commit-manager-git** (v2.4.0): the commit dispatch at an iteration end names the run's recorded commit branch, so the commit agent can check it instead of always blocking
+- **commit-manager-git** (v2.4.0) / **checkpoint-restore-git** (v2.2.3): commits and rollback reverts also leave out MOSAIC's log folders (`OrchestrationLogs/`, `RunnerLogs/`), and no longer fail when those folders are gitignored
+
 # 0.7.1 (2026-10-20)
 
 ## Tools

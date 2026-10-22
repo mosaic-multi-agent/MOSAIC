@@ -59,6 +59,12 @@ func (bs *BackupState) Cleanup() error {
 // completes and before filelock.Lock(.restoring) is called.
 var afterRecoveryInitialProbeForTest func()
 
+// afterRecoveryRestoringReleasedForTest is called inside a successful recovery
+// after .restoring is released and before the backup directory is removed. Nil
+// in production. Tests may set it to let a second recoverer acquire .restoring
+// inside the teardown window.
+var afterRecoveryRestoringReleasedForTest func()
+
 // isProtocolArtifact reports whether a file name inside the backup directory
 // is a recognized protocol artifact. Only recognized files are permitted;
 // subdirectories and any other file cause the ownership check to fail.

@@ -17,12 +17,13 @@ import (
 func TestSession_Start_IterationEnd_BlockNotNamedStage_FiresAfterEachIteration(t *testing.T) {
 	rig := newBlockRig(t, "iteration-end-product-block-orch.md", nil,
 		"planner", "builder", "checker", "commit-manager-git")
+	rig.queueCommitSetup()
 	rig.queueOK("planner", runFileWrite("ProductPlan.md", scheduleDoc("Product", "Products", ids("A", "B"))))
 	rig.queueOKTimes("builder", 2)
 	rig.queueOKTimes("checker", 2)
 	rig.queueOKTimes("commit-manager-git", 2)
 
-	got, err := rig.ses.Start(context.Background(), rig.config("product-block", domain.ExecutionModeAuto))
+	got, err := rig.ses.Start(context.Background(), rig.commitsConfig("product-block", domain.ExecutionModeAuto))
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
 	requireAgentSequence(t, invokedAgents(rig.adapter), []string{
@@ -38,12 +39,13 @@ func TestSession_Start_IterationEnd_BlockNotNamedStage_FiresAfterEachIteration(t
 func TestSession_Start_IterationEnd_BlockNotNamedStage_SingleIterationFiresOnce(t *testing.T) {
 	rig := newBlockRig(t, "iteration-end-product-block-orch.md", nil,
 		"planner", "builder", "checker", "commit-manager-git")
+	rig.queueCommitSetup()
 	rig.queueOK("planner", runFileWrite("ProductPlan.md", scheduleDoc("Product", "Products", ids("only"))))
 	rig.queueOK("builder")
 	rig.queueOK("checker")
 	rig.queueOK("commit-manager-git")
 
-	got, err := rig.ses.Start(context.Background(), rig.config("product-block", domain.ExecutionModeAuto))
+	got, err := rig.ses.Start(context.Background(), rig.commitsConfig("product-block", domain.ExecutionModeAuto))
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
 	requireAgentSequence(t, invokedAgents(rig.adapter),

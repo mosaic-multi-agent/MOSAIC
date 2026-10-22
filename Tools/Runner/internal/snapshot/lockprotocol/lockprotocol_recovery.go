@@ -83,10 +83,19 @@ func recoveryRestoreAndCleanup(agentsDir, backupDir string, restoringHandle *fil
 			domain.F("agents_dir", agentsDir))
 	}
 
+	// Mark the backup as torn down while .restoring is still held, so a
+	// recoverer that acquires .restoring next no longer sees a restorable full
+	// backup (same ordering as the last-out exit path).
+	os.Remove(filepath.Join(backupDir, manifest.ManifestFileName))    //nolint:errcheck
+	os.Remove(filepath.Join(backupDir, backup.SetupCompleteFileName)) //nolint:errcheck
+
 	// Release .restoring before RemoveAll (Windows-safe: close the handle so
 	// .restoring itself can be deleted by RemoveAll).
 	restoringHandle.Unlock() //nolint:errcheck
-	os.RemoveAll(backupDir)  //nolint:errcheck
+	if afterRecoveryRestoringReleasedForTest != nil {
+		afterRecoveryRestoringReleasedForTest()
+	}
+	os.RemoveAll(backupDir) //nolint:errcheck
 	return nil
 }
 

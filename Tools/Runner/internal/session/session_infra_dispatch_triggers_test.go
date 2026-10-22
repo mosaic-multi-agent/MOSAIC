@@ -17,15 +17,20 @@ import (
 
 // runProductWithInfra runs the fixture with one Product iteration A, the
 // iteration's files written by the builder and checker, and the given number
-// of scripted dispatches of the infrastructure agent. Checkpoints are enabled
-// when the agent is the checkpoint-class one.
+// of scripted dispatches of the infrastructure agent. Commits are enabled when
+// the agent is the commit-class one, checkpoints otherwise.
 func runProductWithInfra(t *testing.T, fixture, infraAgent string, dispatches int) *blockRig {
 	t.Helper()
 	rig := newProductRig(t, fixture, infraAgent, "A")
+	cfg := rig.config("product-block", domain.ExecutionModeAuto)
+	if infraAgent == infraCommitAgent {
+		rig.queueCommitSetup()
+		cfg = rig.commitsConfig("product-block", domain.ExecutionModeAuto)
+	} else {
+		cfg.Checkpoints = true
+	}
 	queueProductIteration(rig, "A")
 	rig.queueOKTimes(infraAgent, dispatches)
-	cfg := rig.config("product-block", domain.ExecutionModeAuto)
-	cfg.Checkpoints = infraAgent != infraCommitAgent
 
 	got, err := rig.ses.Start(context.Background(), cfg)
 

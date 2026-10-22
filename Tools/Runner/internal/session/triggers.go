@@ -163,8 +163,12 @@ func (s *sessionImpl) evaluateTriggers(
 		}
 
 		// Activation gating: checkpoint-class agents require checkpoints to be
-		// enabled for the run. Other classes are always active.
+		// enabled for the run, and commit-class agents require commits to be
+		// enabled. Other classes (e.g. review) are always active.
 		if agent.Class == "checkpoint" && !config.Checkpoints {
+			continue
+		}
+		if agent.Class == "commit" && !config.Commits {
 			continue
 		}
 

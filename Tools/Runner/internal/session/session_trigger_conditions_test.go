@@ -55,6 +55,7 @@ func newTriggerConditionSession(t *testing.T, plan string, approvals domain.Appr
 		t.Fatalf("write Plan.md: %v", err)
 	}
 	f = harness.NewMockAdapter()
+	f.Queue(condIterationEndAgent, commitSetupEntry()) // commit setup of the commits-enabled run
 	ses = session.New(session.Deps{
 		Harness:   f,
 		Store:     &memStore{},
@@ -72,7 +73,7 @@ func condConfig(orchPath string, mode domain.ExecutionMode) domain.RunConfig {
 		WorkflowID:           "staged",
 		Task:                 "task",
 		IsNewRun:             true,
-		RunSettings:          domain.RunSettings{Mode: mode},
+		RunSettings:          commitsRun(mode),
 		RunFolder:            filepath.Dir(orchPath),
 	}
 }
@@ -85,10 +86,11 @@ func queueCond(f *harness.MockAdapter, agent string, status domain.StatusCode) {
 	}})
 }
 
-// invokedAgents returns the agent identifiers in invocation order.
+// invokedAgents returns the agent identifiers in invocation order, without the
+// commit setup dispatch of a commits-enabled run.
 func invokedAgents(f *harness.MockAdapter) []string {
 	var out []string
-	for _, inv := range f.Invocations() {
+	for _, inv := range triggerInvocations(f) {
 		out = append(out, inv.Agent.Identifier)
 	}
 	return out
@@ -245,7 +247,7 @@ func newConsultTriggerSession(t *testing.T, plan string, approvals domain.Approv
 		WorkflowVersion: "1.0",
 		Task:            "task",
 		GlobalSequence:  1,
-		RunSettings:     domain.RunSettings{Mode: domain.ExecutionModeOrchestrated},
+		RunSettings:     commitsRecorded(domain.RunSettings{Mode: domain.ExecutionModeOrchestrated}),
 		CurrentState: domain.CurrentState{
 			Phase:      "EXECUTION",
 			Stage:      "1",

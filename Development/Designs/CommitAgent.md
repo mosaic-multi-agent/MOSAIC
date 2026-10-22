@@ -2,7 +2,7 @@
 
 > **Status:** Draft for review
 > **Created:** 2026-08-01
-> **Last Updated:** 2026-10-13
+> **Last Updated:** 2026-10-22
 > **Scope:** Design for the agent that commits completed iteration work into the user's own branch. Covers why this is a distinct class rather than a checkpoint variant, what it commits and where, how its commit message is derived without reading orchestration state, the preconditions that make writing to someone's history safe, what a rollback of committed work costs, and how a MOSAIC-owned branch is integrated afterwards.
 
 ---
@@ -138,13 +138,18 @@ An alternative was considered and rejected: leaving the user on their own branch
 
 ### 4.4 What it commits
 
-**Everything in the working tree, excluding every orchestration run folder:**
+**Everything in the working tree, excluding every folder MOSAIC itself writes into the workspace:**
 
 ```
-git add -A -- . ':!Orchestration-*'
+git add -A -- .
+git reset -q -- ':(glob)Orchestration-*/**' ':(glob)OrchestrationLogs/**' ':(glob)RunnerLogs/**'
 ```
 
-This is a **deliberate divergence** from `CheckpointAgents.md` §4.2, which excludes only the agent's own run folder and captures other runs' folders as ordinary project content. That is correct for a snapshot — those files existed on disk, and a restore point must correspond to a tree state that really occurred. It is wrong here. Orchestration bookkeeping is not the user's project history, and committing another run's transcript into their branch permanently is a worse outcome than any tidiness it might buy.
+The three are MOSAIC's own bookkeeping at the workspace root: every run folder `Orchestration-*/` (`CommunicationProtocol.md` §3.4), the session log tree `OrchestrationLogs/` (`MosaicLogFormat.md` §4.3), and the script runner's debug and dispatch logs `RunnerLogs/`. The list is closed and fixed here; a new folder MOSAIC writes into the workspace is added to it in the same change that introduces the folder.
+
+This is a **deliberate divergence** from `CheckpointAgents.md` §4.2, which excludes only the agent's own run folder and captures other runs' folders as ordinary project content. That is correct for a snapshot — those files existed on disk, and a restore point must correspond to a tree state that really occurred. It is wrong here. Orchestration bookkeeping and logs are not the user's project history, and committing a run's transcript or logs into their branch permanently is a worse outcome than any tidiness it might buy. The log folders were missing from an earlier version of this pathspec, which excluded only `Orchestration-*`; a run with commits enabled would have committed its own logs at every iteration end.
+
+**Why add-then-reset, not one exclusion pathspec.** The single-command form `git add -A -- . ':!Orchestration-*' ':!OrchestrationLogs' ':!RunnerLogs'` exits 1 with "paths are ignored" as soon as an excluded folder is listed in the user's `.gitignore` — which log folders routinely are — although staging itself succeeded, and the agent then reports `BLOCKED` at every iteration end. Wildcard and `:(glob)` exclusion forms fail the same way. This is the failure `CheckpointAgents.md` §4.2 found for its own exclusion, and the fix follows the same shape: stage everything without naming an ignored path, then take the excluded folders back out. `git reset` rather than that section's `git rm --cached` is the one difference, and it matters here: `reset` returns each excluded path to its state in `HEAD`, so a folder the user chose to track is neither updated nor deleted by the commit, whereas `rm --cached` would stage its deletion into the user's history. The form was checked against ignored, untracked, tracked-and-modified, and tracked-and-deleted folders and in a repository with no commits; it exits 0 and stages only project content in each.
 
 **The user's own unrelated edits are committed too.** Git cannot reliably attribute authorship of working-tree changes, and any filter would be guesswork; excluding some changes would also produce commits that do not correspond to any state the tree was ever in. So whatever the user was editing when the iteration ended lands in the commit, under a message describing MOSAIC's work.
 
@@ -175,6 +180,8 @@ The agent does not assume these names. Another workflow's iteration supplies dif
 
 **The iteration comes from `task_description`**, not from orchestration state and not from a path. The dispatch names the block and the ended iteration's ID (`Stage 2`; in a nested block `Domain Billing / Stage 2`), and the agent copies it into `Mosaic-Iteration` verbatim. An earlier version parsed a stage number from a `Stage-{N}/` path, which only worked for a block named `Stage` with that path convention. This is the same foreign-key reasoning `CheckpointAgents.md` §4.4 uses for `run_id` + `Seq`: the agent records what it holds, and everything else is reachable by lookup from those.
 
+**The destination also comes from `task_description`.** An `ITERATION_END` dispatch names the run's recorded `commit_branch` alongside the iteration (`InfrastructureAgentConcept.md` §8), and the agent checks `HEAD` against that name (§4.6). The agent cannot read `commit_branch` itself — `Orchestration.md` is not among its artifacts, and the strict-access rule gives no exception for it — and a live read of the current branch is not a substitute, for the reason §6 gives: it always looks self-consistent and so cannot detect the mid-run switch the recorded name exists to catch. This is the same channel and the same reasoning as the restore agent's (`CheckpointAgents.md` §5.1). An earlier version of §8 named only the iteration, so a correctly configured run could not pass its own branch check: every commit dispatch returned `BLOCKED`, unnoticed behind `on_failure: continue`.
+
 **A dispatch that names no iteration still commits**, without the `Mosaic-Iteration` trailer, and says so in `status_message`. Both executors always name it, so this is a defect in the dispatch rather than a run state; the missing trailer loses nothing that `Mosaic-Seq` cannot recover from the Execution Log, and refusing would cost a commit for no gain.
 
 **No artifacts supplied is a failed dispatch.** Without them the subject would describe work inferred from a diff, which is the one thing the message must not be, so the agent returns `BLOCKED` rather than guessing. This is a dispatch error, not a repository state, and `on_failure: continue` lets the run proceed; the next successful commit sweeps the work up (§4.7).
@@ -190,6 +197,7 @@ Stricter than the checkpoint agent's, and stricter in precisely the places where
 | Condition | Behaviour | Why it differs from `CheckpointAgents.md` §4.6 |
 |---|---|---|
 | Not a git repository | `BLOCKED` | Same. A run committing into a non-repository was misconfigured at start. |
+| `task_description` names no recorded branch | `BLOCKED` | **Diverges.** The checkpoint agent needs no destination. Without the name the next check cannot be made, and inferring it — from `HEAD`, or from whether `mosaic/run/{run_id}` exists — is the live read §4.3 rejects. A dispatch error rather than a repository state, like an empty `input_artifacts` (§4.5). |
 | `HEAD` is not on the run's recorded branch (§6) | `BLOCKED` | **Diverges.** The checkpoint agent has no branch to be on. Here, a user who switched branches mid-run would otherwise have MOSAIC's work committed onto whatever they switched to. |
 | Detached `HEAD` | `BLOCKED` | **Diverges.** The checkpoint agent proceeds — `write-tree` does not care. A commit made here belongs to no branch and is easily lost. |
 | Mid-rebase or mid-merge | `BLOCKED` | **Diverges.** Same reasoning. Committing into an in-progress operation produces a state the user did not ask for and may struggle to unpick. |
@@ -418,7 +426,8 @@ Applies to the MOSAIC-owned variant only. In the user's-own variant the work is 
 | `InfrastructureAgentConcept.md` | §5 | Declaration order is the tie-break when several triggers fire after the same invocation, described as arbitrary but deterministic. | Still arbitrary, but no longer inconsequential: where co-triggered agents differ in `on_failure`, order determines how much of a boundary's work is already done when a `halt` lands. `halt` agents are declared first. This pairing is the first case where it matters (§3). |
 | `CheckpointAgents.md` | §5.2 | A restore target is verified by its `Mosaic-Run-Id` trailer, and the agent writes working-tree files only. | Target check tightened to reachability from `refs/mosaic/checkpoints/{run_id}`, so commits authored by this agent are refused as targets (§7). The agent additionally reconciles with committed work in three cases — tree-only, branch move, or revert commit — which introduces a bounded exception to its never-touches-history guarantee. Because it now writes commits, it inherits this agent's repository-state preconditions (§4.6) and its run-folder pathspec (§4.4) on that path, and receives `commits` and `commit_branch` in `task_description`, since it cannot read them from `Orchestration.md`. |
 | `OrchestrationArtifactFormat.md` | §4 | `dispatch` frontmatter field. | `commits: enabled` requires `dispatch: sequential` (§6); the commits question precedes the dispatch question and fixes it. |
-| `InfrastructureAgentConcept.md` | §8 | No executor specifies what an infrastructure dispatch carries. | A `commit`-class `ITERATION_END` dispatch carries the ended iteration's own artifacts in `input_artifacts` and names the iteration in `task_description`; every other trigger dispatch carries none (§4.5). |
+| `InfrastructureAgentConcept.md` | §8 | No executor specifies what an infrastructure dispatch carries. | A `commit`-class `ITERATION_END` dispatch carries the ended iteration's own artifacts in `input_artifacts` and names the iteration and the recorded `commit_branch` in `task_description`; every other trigger dispatch carries none (§4.5). |
+| `CheckpointAgents.md` | §5.2 | Case 1's content match and case 3's revert commit use the commit pathspec `':!Orchestration-*'`. | Both follow §4.4's exclusion set, which now also covers `OrchestrationLogs/` and `RunnerLogs/`, and case 3 stages with §4.4's add-then-reset form. Case 1 must exclude the log folders too: a checkpoint captures them and a run commit does not, so a match test that compared them would never find a match. |
 
 ## 10. Non-Goals
 
@@ -440,6 +449,10 @@ Applies to the MOSAIC-owned variant only. In the user's-own variant the work is 
 **Resolved:** whether `PlanProgress.md` should be required in `input_artifacts`. Neither it nor any other named file is required: the dispatch supplies the ended iteration's own artifacts (§4.5), whose names depend on the workflow, and the agent writes from what it receives. Only an empty set is refused.
 
 **Resolved:** how the agent learns which iteration ended and what it was for, once blocks replaced stages. The dispatch supplies the iteration's artifacts and names the iteration (`InfrastructureAgentConcept.md` §8), and the trailer became `Mosaic-Iteration` (§4.5). Previously the agent parsed a stage number from a `Stage-{N}/` path, and the Runner supplied no artifacts at all, so every Runner-driven commit returned `BLOCKED` unnoticed behind `on_failure: continue`.
+
+**Resolved:** how a commit-mode dispatch learns the recorded branch. It is named in `task_description` (§4.5, `InfrastructureAgentConcept.md` §8). The agent's §4.6 check required the recorded branch from the start, but no dispatch carried it and the agent may not read `Orchestration.md`, so the check could only fail. Found from a Runner run in which every commit dispatch blocked on exactly that.
+
+**Resolved:** which folders a commit excludes. Every folder MOSAIC writes into the workspace — run folders and both log trees — staged out with add-then-reset (§4.4). Found from a run whose commit agent listed `RunnerLogs/` among the paths it would have committed.
 
 **Resolved:** how commits coexist with parallel dispatch. They do not: `commits: enabled` fixes `dispatch: sequential` (§6).
 
