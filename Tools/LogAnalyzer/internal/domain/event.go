@@ -22,11 +22,11 @@ const (
 )
 
 // SchemaVersionCurrent is the version this tool is written against.
-const SchemaVersionCurrent = "1.2.0"
+const SchemaVersionCurrent = "1.3.0"
 
 // supportedSchemaVersions is the backing slice for SupportedSchemaVersions,
 // newest first. Prior versions remain supported so older logs keep working.
-var supportedSchemaVersions = []string{"1.2.0", "1.1.0", "1.0.0"}
+var supportedSchemaVersions = []string{"1.3.0", "1.2.0", "1.1.0", "1.0.0"}
 
 // SupportedSchemaVersions returns every schema version this tool reads without
 // a finding, newest first. Prior versions remain supported so older logs keep
@@ -111,6 +111,7 @@ type InvocationEndFields struct {
 	AgentInstanceID AgentInstanceID
 	StatusCode      string // "" when absent
 	Model           ModelID
+	Provider        ProviderID // "" when absent
 	Usage           TokenUsage // all-absent when token_usage was absent
 	HasUsage        bool       // false when the token_usage key was absent entirely
 }
@@ -128,7 +129,9 @@ type UsageRecordFields struct {
 	HasRecordIndex  bool
 	Source          string // "orchestrator_transcript" | "agent_transcript"; forensic only
 	Model           ModelID
-	ServiceTier     string // "" when absent; descriptive only, never priced
+	ServiceTier     string     // "" when absent; descriptive only, never priced
+	Provider        ProviderID // "" when absent
+	Effort          string     // verbatim; "" when absent
 	Usage           TokenUsage
 	HasUsage        bool // false when the token_usage key was absent entirely
 }
@@ -145,6 +148,7 @@ const (
 type TurnFields struct {
 	Role     TurnRole
 	Model    ModelID
+	Provider ProviderID // "" when absent
 	Usage    TokenUsage
 	HasUsage bool
 }

@@ -24,6 +24,7 @@ type LongContextPricing struct {
 // ModelPricing is the entry for one model: a standard rate set plus an optional
 // long-context tier.
 type ModelPricing struct {
+	Provider       ProviderID // "" = top-level models section
 	Model          ModelID
 	Standard       RateSet
 	LongContext    LongContextPricing // meaningful only when HasLongContext
@@ -76,40 +77,51 @@ func (r RateSet) firstMissing(prefix string) string {
 	return ""
 }
 
-// PricingTable is an immutable, model-keyed lookup.
+// PricingTable is an immutable lookup keyed by (provider, model). Lookup is strict:
+// a provider never falls back to the provider-less entries, nor the reverse.
 type PricingTable struct {
-	entries map[ModelID]ModelPricing
+	entries map[PricingKey]ModelPricing
 }
 
 // NewPricingTable builds a PricingTable from a slice of entries.
 func NewPricingTable(entries []ModelPricing) PricingTable {
-	m := make(map[ModelID]ModelPricing, len(entries))
+	m := make(map[PricingKey]ModelPricing, len(entries))
 	for _, e := range entries {
-		m[e.Model] = e
+		m[PricingKey{e.Provider, e.Model}] = e
 	}
 	return PricingTable{entries: m}
 }
 
 // EmptyPricingTable returns a table with no entries.
 func EmptyPricingTable() PricingTable {
-	return PricingTable{entries: make(map[ModelID]ModelPricing)}
+	return PricingTable{entries: make(map[PricingKey]ModelPricing)}
 }
 
-// Lookup resolves a model. found=false is the explicit not-configured outcome and
-// is never represented by a zero-valued ModelPricing.
+// Lookup resolves a model in the provider-less (top-level models) section.
 func (t PricingTable) Lookup(m ModelID) (entry ModelPricing, found bool) {
-	entry, found = t.entries[m]
+	return t.LookupFor("", m)
+}
+
+// LookupFor resolves (provider, model) strictly. found=false is the explicit
+// not-configured outcome and is never represented by a zero-valued ModelPricing.
+func (t PricingTable) LookupFor(p ProviderID, m ModelID) (entry ModelPricing, found bool) {
+	entry, found = t.entries[PricingKey{p, m}]
 	return
 }
 
-// Models returns all model IDs in sorted order.
+// Models returns the distinct model IDs in sorted order.
 func (t PricingTable) Models() []ModelID {
 	if len(t.entries) == 0 {
 		return nil
 	}
+	seen := make(map[ModelID]struct{}, len(t.entries))
 	models := make([]ModelID, 0, len(t.entries))
-	for id := range t.entries {
-		models = append(models, id)
+	for k := range t.entries {
+		if _, dup := seen[k.Model]; dup {
+			continue
+		}
+		seen[k.Model] = struct{}{}
+		models = append(models, k.Model)
 	}
 	sort.Slice(models, func(i, j int) bool {
 		return string(models[i]) < string(models[j])
@@ -123,10 +135,10 @@ func (t PricingTable) Len() int { return len(t.entries) }
 // With returns a copy of the table with the entry added or replaced. The table is
 // never mutated in place, so a re-price cannot race a render.
 func (t PricingTable) With(entry ModelPricing) PricingTable {
-	m := make(map[ModelID]ModelPricing, len(t.entries)+1)
-	for id, e := range t.entries {
-		m[id] = e
+	m := make(map[PricingKey]ModelPricing, len(t.entries)+1)
+	for k, e := range t.entries {
+		m[k] = e
 	}
-	m[entry.Model] = entry
+	m[PricingKey{entry.Provider, entry.Model}] = entry
 	return PricingTable{entries: m}
 }

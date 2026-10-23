@@ -463,7 +463,7 @@ func (m Model) updatePricing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.pricingScreen.Done() {
-		selected := m.pricingScreen.SelectedModel()
+		selected := m.pricingScreen.SelectedKey()
 		m.pricingScreen.Reset()
 		m.screen = screenLoading
 		return m, m.buildPricingEditCmd(selected)
@@ -477,13 +477,13 @@ func (m Model) updatePricing(msg tea.Msg) (tea.Model, tea.Cmd) {
 // Binding rule: it returns ONLY that message. It must NOT start a second
 // waitForPending goroutine — the single long-lived waiter delivers the
 // editor's rate questions.
-func (m Model) buildPricingEditCmd(model domain.ModelID) tea.Cmd {
+func (m Model) buildPricingEditCmd(key domain.PricingKey) tea.Cmd {
 	svc := m.opts.Service
 	sess := m.session
 	report := m.report
 	ctx := m.ctx
 	return func() tea.Msg {
-		result, err := svc.EditModelPricing(ctx, sess, report, model)
+		result, err := svc.EditModelPricing(ctx, sess, report, key)
 		return pricingEditDoneMsg{result: result, err: err}
 	}
 }

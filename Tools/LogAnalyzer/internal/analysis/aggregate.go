@@ -177,9 +177,10 @@ func (a *Aggregator) handleOrchestratorEvent(rs *runState, ref domain.StreamRef,
 			return
 		}
 		rs.orchestrator.invocations = append(rs.orchestrator.invocations, domain.InvocationUsage{
-			Model:   ev.Turn.Model,
-			Harness: ev.Harness,
-			Usage:   ev.Turn.Usage,
+			Model:    ev.Turn.Model,
+			Provider: ev.Turn.Provider,
+			Harness:  ev.Harness,
+			Usage:    ev.Turn.Usage,
 		})
 
 	default:
@@ -262,9 +263,11 @@ func (a *Aggregator) handleUsageRecord(rs *runState, ref domain.StreamRef, ev do
 	}
 
 	entry := domain.InvocationUsage{
-		Model:   rec.Model,
-		Harness: ev.Harness,
-		Usage:   rec.Usage,
+		Model:    rec.Model,
+		Provider: rec.Provider,
+		Effort:   rec.Effort,
+		Harness:  ev.Harness,
+		Usage:    rec.Usage,
 	}
 
 	if rec.RecordID == "" {
@@ -402,9 +405,10 @@ func (a *Aggregator) handleInvocationEnd(rs *runState, ref domain.StreamRef, ev 
 	as := a.getOrCreateActorState(rs, id)
 	// Preserve the actor instance set at creation; only add the invocation record.
 	as.invocations = append(as.invocations, domain.InvocationUsage{
-		Model:   end.Model,
-		Harness: ev.Harness,
-		Usage:   end.Usage,
+		Model:    end.Model,
+		Provider: end.Provider,
+		Harness:  ev.Harness,
+		Usage:    end.Usage,
 	})
 }
 

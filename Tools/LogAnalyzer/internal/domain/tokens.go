@@ -8,7 +8,20 @@ const (
 	CategoryCacheRead     TokenCategory = "cache_read"
 	CategoryCacheCreation TokenCategory = "cache_creation"
 	CategoryOutput        TokenCategory = "output"
+
+	// CategoryReasoning is the display-only reasoning part of output. It is never
+	// billable and never has a money cell.
+	CategoryReasoning TokenCategory = "reasoning"
 )
+
+// IsBillable reports whether the category is one of the four billable ones.
+func (c TokenCategory) IsBillable() bool { return c != CategoryReasoning }
+
+// BreakdownCategories returns the categories a token breakdown shows: the four
+// billable ones in canonical order, then reasoning.
+func BreakdownCategories() []TokenCategory {
+	return append(BillableCategories(), CategoryReasoning)
+}
 
 // TokenCount is an optional token quantity. The zero value is absent.
 // Absent is a distinct state from present-zero and must survive all arithmetic.
@@ -73,6 +86,9 @@ type TokenUsage struct {
 	// to CacheCreation) or both absent. Never present without CacheCreation.
 	CacheCreation5m TokenCount
 	CacheCreation1h TokenCount
+
+	// Reasoning is the reasoning part of Output; display only, never billed.
+	Reasoning TokenCount
 }
 
 // HasCacheWriteSplit reports whether both tier fields are present.
@@ -109,6 +125,8 @@ func (u TokenUsage) Add(other TokenUsage) TokenUsage {
 
 		CacheCreation5m: u.CacheCreation5m.Add(other.CacheCreation5m),
 		CacheCreation1h: u.CacheCreation1h.Add(other.CacheCreation1h),
+
+		Reasoning: u.Reasoning.Add(other.Reasoning),
 	}
 }
 
@@ -146,6 +164,8 @@ func (c TokenCategory) Label() string {
 		return "cache write"
 	case CategoryOutput:
 		return "output"
+	case CategoryReasoning:
+		return "reasoning"
 	default:
 		return ""
 	}
@@ -173,6 +193,8 @@ func (u TokenUsage) Get(c TokenCategory) (TokenCount, bool) {
 		return u.CacheCreation, true
 	case CategoryOutput:
 		return u.Output, true
+	case CategoryReasoning:
+		return u.Reasoning, true
 	default:
 		return AbsentTokens(), false
 	}

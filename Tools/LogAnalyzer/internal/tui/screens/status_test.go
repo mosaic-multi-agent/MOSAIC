@@ -127,7 +127,7 @@ func TestStatus_AgentTypeNoStatusAndOpenAreSeparateLabelledGroups(t *testing.T) 
 func TestStatus_UnpricedModelsMarkTheGroupPartial(t *testing.T) {
 	run := statusRun()
 	g := &run.ByStatus.Run[0]
-	g.Figures.UnpricedModels = []domain.ModelID{"model-x"}
+	g.Figures.UnpricedModels = []domain.PricingKey{{Model: "model-x"}}
 	g.Figures.Totals.Money = domain.CategoryMoney{Total: known(1234), Complete: false}
 
 	line := rowFor(t, statusView(run, wideW, tallH), "$12.34")
@@ -201,7 +201,7 @@ func TestStatus_TallTerminalShowsEverythingWithoutHint(t *testing.T) {
 func TestStatus_NarrowTerminalNeverExceedsItsWidth(t *testing.T) {
 	const narrow = 40
 	run := statusRun()
-	run.ByStatus.Run[0].Figures.UnpricedModels = []domain.ModelID{"a-very-long-unpriced-model-name"}
+	run.ByStatus.Run[0].Figures.UnpricedModels = []domain.PricingKey{{Model: "a-very-long-unpriced-model-name"}}
 
 	view := statusView(run, narrow, tallH)
 

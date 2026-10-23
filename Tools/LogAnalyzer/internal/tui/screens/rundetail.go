@@ -123,7 +123,7 @@ func (s *RunDetailScreen) View(width, height int) string {
 		varFooterSB.WriteByte('\n')
 		models := make([]string, len(s.run.UnpricedModels))
 		for i, m := range s.run.UnpricedModels {
-			models[i] = string(m)
+			models[i] = m.String()
 		}
 		varFooterSB.WriteString(s.styles.Warning.Width(width).Render(
 			"Unpriced models: " + strings.Join(models, ", "),
@@ -192,6 +192,7 @@ func (s *RunDetailScreen) writeActorDetail(sb *strings.Builder, actor domain.Act
 	if actor.Totals.AssumedTierCacheWrite > 0 {
 		label += " (has " + AssumedTierLabel + " cache writes)"
 	}
+	label += "  " + effortSegment(actor.Effort)
 	sb.WriteString(s.styles.Body.Width(width).Render("  " + label))
 	sb.WriteByte('\n')
 	sb.WriteString(s.styles.Muted.Width(width).Render("    " + FormatTotalsLine(actor.Totals)))

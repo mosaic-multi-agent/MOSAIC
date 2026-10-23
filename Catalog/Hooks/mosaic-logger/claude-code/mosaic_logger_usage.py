@@ -7,7 +7,7 @@ usage_record event
 -------------------
 
     {
-      "schema_version": "1.2.0",
+      "schema_version": "1.3.0",
       "event": "usage_record",
       "timestamp": "2026-08-08T06:27:35.412Z",
       "harness": "claude-code",
@@ -19,6 +19,7 @@ usage_record event
       "source": "agent_transcript",
       "model": "claude-opus-4-6",
       "service_tier": "standard",
+      "effort": "medium",
       "token_usage": { }
     }
 
@@ -30,6 +31,7 @@ source          | string  | always                   | 'orchestrator_transcript'
 agent_instance_id | string | invocation streams only | Omitted on the orchestrator stream.
 model           | string  | when resolvable          | The model of this record.
 service_tier    | string  | when present             | Descriptive detail only; drives no pricing decision.
+effort          | string  | when present            | The transcript record's top-level effort, copied verbatim. Never read from agent files, settings or environment.
 token_usage     | object  | when at least one sub-field resolved | See below.
 
 The envelope (schema_version, event, timestamp, harness, session_id, run_id)
@@ -67,6 +69,7 @@ cache_read_tokens       | message.usage.cache_read_input_tokens
 cache_creation_tokens   | message.usage.cache_creation_input_tokens (the total)
 cache_creation_5m_tokens | message.usage.cache_creation.ephemeral_5m_input_tokens
 cache_creation_1h_tokens | message.usage.cache_creation.ephemeral_1h_input_tokens
+reasoning_tokens        | message.usage.output_tokens_details.thinking_tokens (already part of output_tokens)
 
 Each key appears only when its source field is a genuine number, including 0.
 The two tier fields are both-or-neither: they are written together only when
@@ -110,7 +113,7 @@ def record_fingerprint(record) -> str:
     """Return a short, stable fingerprint of the record content whose change
     must reach the analyzer.
 
-    Covers exactly model and token_usage — the two analyzer-significant
+    Covers model, token_usage and effort — the analyzer-significant
     fields. record_id, record_index and service_tier are excluded.
     Envelope fields are not inputs to this function.
 
@@ -126,7 +129,9 @@ def record_fingerprint(record) -> str:
         model = record.model or ""
         token_usage = record.token_usage or {}
         # Serialize with sorted keys for order-independence
-        content = json.dumps({"model": model, "token_usage": token_usage},
+        effort = getattr(record, "effort", None) or ""
+        content = json.dumps({"model": model, "token_usage": token_usage,
+                              "effort": effort},
                              sort_keys=True, ensure_ascii=False)
         return hashlib.sha256(content.encode("utf-8")).hexdigest()
     except Exception:
@@ -302,6 +307,7 @@ def emit_usage_records(ctx: "core.HookContext",
                     "source": source,
                     "model": rec.model,
                     "service_tier": rec.service_tier,
+                    "effort": rec.effort,
                     "token_usage": rec.token_usage,
                 }
                 if agent_instance_id is not None:

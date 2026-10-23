@@ -411,7 +411,7 @@ func TestRunDetailScreen_UnpricedModelsListed(t *testing.T) {
 			Money:  domain.CategoryMoney{Total: domain.UnpricedMoney()},
 		},
 		Orchestrator:   domain.ActorReport{Actor: domain.Orchestrator()},
-		UnpricedModels: []domain.ModelID{"claude-mystery-model"},
+		UnpricedModels: []domain.PricingKey{{Model: "claude-mystery-model"}},
 	}
 
 	styles := plainStyles()
@@ -645,6 +645,7 @@ func TestFormatTotalsLine_PresentZeroRendersAsZero(t *testing.T) {
 			CacheRead:     domain.Tokens(0),
 			CacheCreation: domain.Tokens(0),
 			Output:        domain.Tokens(0),
+			Reasoning:     domain.Tokens(0),
 		},
 		Money: domain.CategoryMoney{Total: domain.UnpricedMoney()},
 	}

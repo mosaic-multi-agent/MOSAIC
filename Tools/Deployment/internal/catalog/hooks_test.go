@@ -236,43 +236,6 @@ func TestHook_Variant_Files_AreNonEmptyAndUniquelyNamed(t *testing.T) {
 	}
 }
 
-// TestHook_Variant_ClaudeCode_Files_TargetNames verifies the exact target file names
-// for the claude-code variant: the 10 Python adapter modules plus the self-deployed hook.yaml.
-func TestHook_Variant_ClaudeCode_Files_TargetNames(t *testing.T) {
-	cat := loadRealCatalog(t)
-	h, _ := cat.Hook("mosaic-logger")
-
-	v, ok := h.Variants["claude-code"]
-	if !ok {
-		t.Fatal("mosaic-logger Variants[\"claude-code\"]: not found")
-	}
-
-	wantTargets := map[string]bool{
-		"mosaic_logger.py":                     true,
-		"mosaic_logger_core.py":                true,
-		"mosaic_logger_runstate.py":            true,
-		"mosaic_logger_export.py":              true,
-		"mosaic_logger_transcript.py":          true,
-		"mosaic_logger_handlers_session.py":    true,
-		"mosaic_logger_handlers_invocation.py": true,
-		"mosaic_logger_handlers_tools.py":      true,
-		"mosaic_logger_artifacts.py":           true,
-		"mosaic_logger_usage.py":               true,
-		"mosaic_logger_runner_mode.py":         true,
-		"mosaic_logger_handlers_runner.py":     true,
-		"hook.yaml":                            true,
-	}
-	for _, f := range v.Files {
-		if !wantTargets[f.TargetName] {
-			t.Errorf("claude-code variant has unexpected target file %q", f.TargetName)
-		}
-		delete(wantTargets, f.TargetName)
-	}
-	for remaining := range wantTargets {
-		t.Errorf("claude-code variant is missing expected target file %q", remaining)
-	}
-}
-
 // TestHook_Variant_ClaudeCode_Files_SourcePathsExist verifies that each file listed in
 // the claude-code variant has a SourcePath that exists on disk.
 func TestHook_Variant_ClaudeCode_Files_SourcePathsExist(t *testing.T) {

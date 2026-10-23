@@ -107,7 +107,7 @@ function makeDepsWithRegistry(
     sdkClient: sdk,
     adapterVersion: "0.1.0",
     buildEvent: (event, envelope, fields) => ({
-      schema_version: "1.0.0",
+      schema_version: "1.3.0",
       event,
       timestamp: envelope.timestamp,
       harness: "opencode",

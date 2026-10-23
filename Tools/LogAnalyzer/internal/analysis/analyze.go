@@ -37,7 +37,7 @@ func Price(agg domain.Aggregate, table domain.PricingTable, src domain.Source) (
 	allRunMoneys := make([]domain.CategoryMoney, 0, len(agg.Runs))
 	var allRunTokens domain.TokenUsage
 	var allRunsAssumed int64
-	allUnpricedModels := make(map[domain.ModelID]bool)
+	allUnpricedModels := make(map[domain.PricingKey]bool)
 
 	for _, run := range agg.Runs {
 		rr := priceRunAggregate(run, table)
@@ -76,7 +76,7 @@ func Price(agg domain.Aggregate, table domain.PricingTable, src domain.Source) (
 		AllRuns:        allRuns,
 		Runs:           runReports,
 		Unattributable: unattribReport,
-		UnpricedModels: sortedModelIDSet(allUnpricedModels),
+		UnpricedModels: domain.SortedPricingKeys(allUnpricedModels),
 		AcrossRuns:     buildAcrossRuns(runReports),
 		Quality:        domain.NewQualitySummary(nil),
 		Currency:       domain.Currency,
@@ -113,13 +113,16 @@ func priceActorAggregate(actor domain.ActorAggregate, table domain.PricingTable)
 
 	var assumed int64
 	seenModels := make(map[domain.ModelID]bool)
-	seenUnpriced := make(map[domain.ModelID]bool)
+	seenKeys := make(map[domain.PricingKey]bool)
+	seenUnpriced := make(map[domain.PricingKey]bool)
 	for _, c := range costs {
 		assumed += c.AssumedTierCacheWrite
 		if !c.Model.IsEmpty() {
+			key := domain.PricingKey{Provider: c.Provider, Model: c.Model}
 			seenModels[c.Model] = true
+			seenKeys[key] = true
 			if !c.Priced {
-				seenUnpriced[c.Model] = true
+				seenUnpriced[key] = true
 			}
 		}
 	}
@@ -127,13 +130,15 @@ func priceActorAggregate(actor domain.ActorAggregate, table domain.PricingTable)
 	return domain.ActorReport{
 		Actor:          actor.Actor,
 		Models:         sortedModelIDSet(seenModels),
-		UnpricedModels: sortedModelIDSet(seenUnpriced),
+		Keys:           domain.SortedPricingKeys(seenKeys),
+		UnpricedModels: domain.SortedPricingKeys(seenUnpriced),
 		Totals: domain.Totals{
 			Tokens: tokens,
 			Money:  money,
 
 			AssumedTierCacheWrite: assumed,
 		},
+		Effort: domain.CountEffort(usages...),
 	}
 }
 
@@ -160,7 +165,7 @@ func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable) domai
 	}
 
 	// Collect run-level unpriced models from all actors.
-	seenUnpriced := make(map[domain.ModelID]bool)
+	seenUnpriced := make(map[domain.PricingKey]bool)
 	for _, m := range orchReport.UnpricedModels {
 		seenUnpriced[m] = true
 	}
@@ -181,7 +186,7 @@ func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable) domai
 		},
 		Orchestrator:   orchReport,
 		Agents:         agentReports,
-		UnpricedModels: sortedModelIDSet(seenUnpriced),
+		UnpricedModels: domain.SortedPricingKeys(seenUnpriced),
 	}
 
 	dispatches := buildDispatches(run.Activity.Invocations, table)

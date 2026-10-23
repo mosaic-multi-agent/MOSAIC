@@ -3,7 +3,7 @@
 Owns: omit-absent event serializer, path layout, filename sanitization,
 atomic replace, JSONL append, adapter version reading, debug sink.
 
-Has no bundle dependencies (stdlib only) and must remain importable in isolation.
+Depends only on the sibling provider module (stdlib only) and must remain importable in isolation.
 """
 
 import datetime
@@ -14,11 +14,13 @@ import re
 import sys
 import tempfile
 
+import mosaic_logger_provider
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.2.0"
+SCHEMA_VERSION = "1.3.0"
 HARNESS = "claude-code"
 LOGS_DIRNAME = "OrchestrationLogs"
 AGENT_MAP_DIRNAME = ".agent-map"
@@ -136,6 +138,11 @@ def build_event(event: str, ctx: "HookContext", **fields) -> dict:
         pv, keep = _prune(v)
         if keep:
             result[k] = pv
+
+    if "model" in result:
+        provider = mosaic_logger_provider.derive_provider()
+        if provider:
+            result["provider"] = provider
 
     return result
 

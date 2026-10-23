@@ -26,9 +26,23 @@ import (
 //	      cache_write_1h: "12.00"
 //	      output: "22.50"
 //
+// A providers block prices requests that carry a provider (provider IDs follow
+// models.dev); the top-level models section prices only requests without one:
+//
+//	providers:
+//	  <provider-id>:
+//	    models:
+//	      <model-id>: { same fields as above }
+//
 // All rate values are decimal USD per 1,000,000 tokens stored as quoted strings
 // so YAML float parsing cannot silently lose precision.
 type pricingFileYAML struct {
+	Models    map[string]modelEntryYAML `yaml:"models"`
+	Providers map[string]providerYAML   `yaml:"providers,omitempty"`
+}
+
+// providerYAML is one provider section: the models priced for that provider.
+type providerYAML struct {
 	Models map[string]modelEntryYAML `yaml:"models"`
 }
 
@@ -86,7 +100,7 @@ func (e modelEntryYAML) oldKeys() []string {
 // toDomain converts the wire entry to a domain.ModelPricing. It returns an error
 // if the entry uses the old format or any rate string is unparseable so the
 // caller can emit a per-entry finding and skip without aborting the whole load.
-func (e modelEntryYAML) toDomain(modelID string) (domain.ModelPricing, error) {
+func (e modelEntryYAML) toDomain(provider, modelID string) (domain.ModelPricing, error) {
 	if old := e.oldKeys(); len(old) > 0 {
 		return domain.ModelPricing{}, fmt.Errorf(
 			"old pricing format (retired keys: %s); use input, cache_read, cache_write_5m, cache_write_1h, output and an optional long_context block",
@@ -96,7 +110,7 @@ func (e modelEntryYAML) toDomain(modelID string) (domain.ModelPricing, error) {
 	if err != nil {
 		return domain.ModelPricing{}, err
 	}
-	p := domain.ModelPricing{Model: domain.ModelID(modelID), Standard: standard}
+	p := domain.ModelPricing{Provider: domain.ProviderID(provider), Model: domain.ModelID(modelID), Standard: standard}
 	if e.LongContext != nil {
 		rates, err := e.LongContext.RateSetYAML.toDomain("long_context.")
 		if err != nil {

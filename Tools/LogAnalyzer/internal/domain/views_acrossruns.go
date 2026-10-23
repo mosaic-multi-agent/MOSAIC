@@ -5,7 +5,7 @@ type RunSummary struct {
 	Run            RunRef
 	Provisional    bool
 	Totals         Totals       // == RunReport.Totals (orchestrator + subagents)
-	UnpricedModels []ModelID    // == RunReport.UnpricedModels
+	UnpricedModels []PricingKey // == RunReport.UnpricedModels
 	Subagents      GroupFigures // == RunReport.Overview.Subagents (subagent dispatches only)
 }
 

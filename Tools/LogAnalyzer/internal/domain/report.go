@@ -26,9 +26,11 @@ type Totals struct {
 // ActorReport is one actor's priced breakdown within a run.
 type ActorReport struct {
 	Actor          ActorRef
-	Models         []ModelID // distinct, sorted
-	UnpricedModels []ModelID // subset of Models with no pricing entry
+	Models         []ModelID    // distinct, sorted
+	Keys           []PricingKey // distinct (provider, model) pairs of the actor's requests, sorted
+	UnpricedModels []PricingKey // subset of Keys with no pricing entry (strict lookup)
 	Totals         Totals
+	Effort         EffortLevels // effort levels of the actor's effective requests
 }
 
 // RunReport is one run's priced breakdown.
@@ -38,7 +40,7 @@ type RunReport struct {
 	Totals         Totals
 	Orchestrator   ActorReport
 	Agents         []ActorReport // sorted by instance id
-	UnpricedModels []ModelID
+	UnpricedModels []PricingKey
 
 	Overview    RunOverview      // V1
 	ByAgentType []AgentTypeGroup // V2 (orchestrator not included)
@@ -53,9 +55,9 @@ type Report struct {
 	// AllRuns totals NAMED runs only. The unattributable bucket is excluded.
 	AllRuns        Totals
 	Runs           []RunReport
-	Unattributable *RunReport // nil when absent; held separately by contract
-	UnpricedModels []ModelID  // distinct, sorted, across the whole report
-	AcrossRuns     AcrossRuns // V6; named runs only, never the unattributable bucket
+	Unattributable *RunReport   // nil when absent; held separately by contract
+	UnpricedModels []PricingKey // distinct, sorted, across the whole report
+	AcrossRuns     AcrossRuns   // V6; named runs only, never the unattributable bucket
 	Quality        QualitySummary
 	// Currency is always domain.Currency; emitted so machine consumers need not assume.
 	Currency string

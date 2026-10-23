@@ -141,14 +141,14 @@ func requireDispatch(t *testing.T, g domain.AgentTypeGroup, id domain.AgentInsta
 	return domain.Dispatch{}
 }
 
-func assertUnpricedModels(t *testing.T, name string, got []domain.ModelID, want ...domain.ModelID) {
+func assertUnpricedModels(t *testing.T, name string, got []domain.PricingKey, want ...domain.ModelID) {
 	t.Helper()
 	if len(got) != len(want) {
 		t.Errorf("%s: unpriced models = %v, want %v", name, got, want)
 		return
 	}
 	for i := range want {
-		if got[i] != want[i] {
+		if got[i] != (domain.PricingKey{Model: want[i]}) {
 			t.Errorf("%s: unpriced models = %v, want %v", name, got, want)
 			return
 		}

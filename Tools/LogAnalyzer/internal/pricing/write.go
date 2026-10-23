@@ -47,8 +47,9 @@ func (s *Store) Put(_ context.Context, entry domain.ModelPricing) error {
 		}
 	}
 
-	// Add or replace the entry.
-	file.Models[string(entry.Model)] = fromDomain(entry)
+	// Add or replace the entry in its provider section, or in top-level models
+	// when it carries no provider.
+	file.set(entry)
 
 	// Marshal the updated models map back to YAML.
 	data, err := yaml.Marshal(&file)
@@ -73,6 +74,27 @@ func (s *Store) Put(_ context.Context, entry domain.ModelPricing) error {
 	}
 
 	return nil
+}
+
+// set adds or replaces the entry at (provider, model); an entry without a
+// provider goes to the top-level models section.
+func (f *pricingFileYAML) set(entry domain.ModelPricing) {
+	if entry.Provider == "" {
+		if f.Models == nil {
+			f.Models = make(map[string]modelEntryYAML)
+		}
+		f.Models[string(entry.Model)] = fromDomain(entry)
+		return
+	}
+	if f.Providers == nil {
+		f.Providers = make(map[string]providerYAML)
+	}
+	section := f.Providers[string(entry.Provider)]
+	if section.Models == nil {
+		section.Models = make(map[string]modelEntryYAML)
+	}
+	section.Models[string(entry.Model)] = fromDomain(entry)
+	f.Providers[string(entry.Provider)] = section
 }
 
 // extractHeaderComments returns the leading comment and blank lines from a YAML

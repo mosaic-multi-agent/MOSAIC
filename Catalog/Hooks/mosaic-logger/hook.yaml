@@ -1,6 +1,6 @@
 schema_version: "1"
 id: mosaic-logger
-version: 1.6.0
+version: 1.7.0
 # description is user-facing: the Deploy tool shows it in the hook picker.
 # Keep it short and actionable; maintainer detail belongs in the comments below.
 description: >-
@@ -59,6 +59,8 @@ variants:
         target: mosaic_logger.py
       - source: mosaic_logger_core.py
         target: mosaic_logger_core.py
+      - source: mosaic_logger_provider.py
+        target: mosaic_logger_provider.py
       - source: mosaic_logger_runstate.py
         target: mosaic_logger_runstate.py
       - source: mosaic_logger_export.py
@@ -289,6 +291,10 @@ variants:
         target: lib/handlers_invocation.ts
       - source: lib/handlers_tools.ts
         target: lib/handlers_tools.ts
+      - source: lib/handlers_tool_parts.ts
+        target: lib/handlers_tool_parts.ts
+      - source: lib/failed_calls.ts
+        target: lib/failed_calls.ts
       - source: lib/handlers_messages.ts
         target: lib/handlers_messages.ts
       - source: lib/handlers_notifications.ts

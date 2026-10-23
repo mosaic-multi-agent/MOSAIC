@@ -40,6 +40,7 @@ import {
 } from "./lib/handlers_session.js";
 import { createInvocationHandlers } from "./lib/handlers_invocation.js";
 import { createToolHandlers } from "./lib/handlers_tools.js";
+import { createToolPartHandlers } from "./lib/handlers_tool_parts.js";
 import { createNotificationHandlers } from "./lib/handlers_notifications.js";
 import { createMessageHandlers } from "./lib/handlers_messages.js";
 import { createRunnerHandlers } from "./lib/handlers_runner.js";
@@ -109,6 +110,7 @@ export const MosaicLogger = async (ctx: {
     const sessionHandlers = createSessionHandlers(handlerDeps);
     const invHandlers = createInvocationHandlers(handlerDeps);
     const toolHandlers = createToolHandlers(handlerDeps);
+    const toolPartHandlers = createToolPartHandlers(handlerDeps);
     const notificationHandlers = createNotificationHandlers(handlerDeps);
     const msgHandlers = createMessageHandlers(handlerDeps);
 
@@ -156,6 +158,8 @@ export const MosaicLogger = async (ctx: {
           if (!runnerResult?.consumed) {
             if (event.type === "message.updated") {
               await msgHandlers.handleMessageEvent(event);
+            } else if (event.type === "message.part.updated") {
+              await toolPartHandlers.handleMessagePartUpdated(event);
             } else {
               await sessionHandlers.handleEvent(event);
             }

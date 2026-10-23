@@ -36,7 +36,7 @@ type AgentEntry struct {
 type RunEntry struct {
 	Run              RunRef
 	Dir              string
-	OrchestratorFile string   // "" when 00_orchestrator_events.jsonl is absent
+	OrchestratorFile string       // "" when 00_orchestrator_events.jsonl is absent
 	Agents           []AgentEntry // sorted by Dir
 }
 
@@ -58,7 +58,7 @@ func (i Inventory) IsEmpty() bool {
 type StreamKind uint8
 
 const (
-	StreamOrchestrator  StreamKind = iota
+	StreamOrchestrator StreamKind = iota
 	StreamAgentInstance
 )
 

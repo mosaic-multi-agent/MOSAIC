@@ -78,7 +78,7 @@ func TestOverview_UndefinedRatiosShowAbsentMarkerNotZeroPercent(t *testing.T) {
 
 func TestOverview_UnpricedModelMarksFiguresPartial(t *testing.T) {
 	run := overviewRun()
-	run.UnpricedModels = []domain.ModelID{"model-b"}
+	run.UnpricedModels = []domain.PricingKey{{Model: "model-b"}}
 	run.Overview.Totals.Money.Total = known(500)
 	run.Overview.Totals.Money.Complete = false
 	run.Totals = run.Overview.Totals

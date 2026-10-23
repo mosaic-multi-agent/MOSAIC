@@ -37,6 +37,7 @@ func dispatchRow(d domain.Dispatch) string {
 		status = NoStatusLabel
 	}
 	row := fmt.Sprintf("%-20s %-12s %s", inv.Actor.Label(), status, formatMoneyTotal(d.Totals.Money))
+	row += "  " + effortSegment(d.Effort)
 	var labels []string
 	if d.MissingUsage {
 		labels = append(labels, MissingUsageLabel)
@@ -48,4 +49,12 @@ func dispatchRow(d domain.Dispatch) string {
 		labels = append(labels, a)
 	}
 	return appendLabels(row, labels)
+}
+
+// effortSegment renders "effort: <levels>", or the absent marker when no level was reported.
+func effortSegment(l domain.EffortLevels) string {
+	if l.IsEmpty() {
+		return "effort: " + AbsentMarker
+	}
+	return "effort: " + l.Label()
 }

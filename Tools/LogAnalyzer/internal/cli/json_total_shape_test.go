@@ -48,7 +48,7 @@ func totalWithAssumedTier(t *testing.T, complete bool) app.RunTotal {
 		}},
 	}
 	if !complete {
-		report.Runs[0].UnpricedModels = []domain.ModelID{"unpriced-model"}
+		report.Runs[0].UnpricedModels = []domain.PricingKey{{Model: "unpriced-model"}}
 	}
 	total, ok := app.RunTotalFor(report, cliTestRunID)
 	if !ok {

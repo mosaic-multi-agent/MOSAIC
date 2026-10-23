@@ -139,151 +139,119 @@ func noticeContains(calls []interaction.Notice, substr string) bool {
 // ---------------------------------------------------------------------------
 
 func TestReportModels_EmptyReport_ReturnsEmpty(t *testing.T) {
-	// An empty report — no named runs and no unattributable bucket — has no models
-	// anywhere. ReportModels must return an empty slice without panicking.
-
-	// Arrange
+	// An empty report has no keys anywhere; ReportModels returns an empty slice.
 	report := domain.Report{}
 
-	// Act
 	got := app.ReportModels(report)
 
-	// Assert
 	if len(got) != 0 {
 		t.Errorf("ReportModels(empty report) = %v, want empty slice", got)
 	}
 }
 
-func TestReportModels_NilUnattributable_ReturnsNamedRunModels(t *testing.T) {
-	// When Unattributable is nil, ReportModels must still return models from
-	// named runs without panicking.
-
-	// Arrange
+func TestReportModels_NilUnattributable_ReturnsNamedRunKeys(t *testing.T) {
 	report := domain.Report{
 		Runs: []domain.RunReport{{
 			Run: appTestRunRef,
 			Orchestrator: domain.ActorReport{
 				Actor:  domain.Orchestrator(),
 				Models: []domain.ModelID{"model-a"},
+				Keys:   []domain.PricingKey{{Model: "model-a"}},
 			},
 		}},
 		Unattributable: nil,
 	}
 
-	// Act
 	got := app.ReportModels(report)
 
-	// Assert
-	want := []domain.ModelID{"model-a"}
+	want := []domain.PricingKey{{Model: "model-a"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ReportModels with nil Unattributable = %v, want %v", got, want)
 	}
 }
 
-func TestReportModels_MultipleRuns_ReturnsSortedDedupedModels(t *testing.T) {
-	// Models appearing in multiple actors or runs are deduplicated and the result
-	// is sorted by model id.
-
-	// Arrange
+func TestReportModels_MultipleRuns_ReturnsSortedDedupedKeys(t *testing.T) {
+	// Keys appearing in several actors are deduplicated and sorted by model id,
+	// then provider with the provider-less key first.
 	report := domain.Report{
 		Runs: []domain.RunReport{{
 			Run: appTestRunRef,
 			Orchestrator: domain.ActorReport{
-				Actor:  domain.Orchestrator(),
-				Models: []domain.ModelID{"model-c", "model-a"}, // unsorted
+				Actor: domain.Orchestrator(),
+				Keys:  []domain.PricingKey{{Model: "model-c"}, {Model: "model-a", Provider: "p2"}},
 			},
 			Agents: []domain.ActorReport{{
-				Actor:  domain.AgentInstance("Agent#1"),
-				Models: []domain.ModelID{"model-b", "model-a"}, // model-a is a duplicate
+				Actor: domain.AgentInstance("Agent#1"),
+				Keys:  []domain.PricingKey{{Model: "model-b"}, {Model: "model-a", Provider: "p2"}, {Model: "model-a"}},
 			}},
 		}},
 	}
 
-	// Act
 	got := app.ReportModels(report)
 
-	// Assert: model-a appears twice — result must deduplicate and sort.
-	want := []domain.ModelID{"model-a", "model-b", "model-c"}
+	want := []domain.PricingKey{
+		{Model: "model-a"},
+		{Model: "model-a", Provider: "p2"},
+		{Model: "model-b"},
+		{Model: "model-c"},
+	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ReportModels (dedup+sort) = %v, want %v", got, want)
 	}
 }
 
-func TestReportModels_UnattributableBucket_IncludesItsModels(t *testing.T) {
-	// Models that appear only in the unattributable bucket (Orchestrator or
-	// Agents) must still be included in the result.
-
-	// Arrange
+func TestReportModels_UnattributableBucket_IncludesItsKeys(t *testing.T) {
 	report := domain.Report{
 		Runs: []domain.RunReport{{
 			Run: appTestRunRef,
 			Orchestrator: domain.ActorReport{
-				Actor:  domain.Orchestrator(),
-				Models: []domain.ModelID{"model-a"},
+				Actor: domain.Orchestrator(),
+				Keys:  []domain.PricingKey{{Model: "model-a"}},
 			},
 		}},
 		Unattributable: &domain.RunReport{
 			Run: domain.UnattributableRun(),
 			Orchestrator: domain.ActorReport{
-				Models: []domain.ModelID{"model-b"},
+				Keys: []domain.PricingKey{{Model: "model-b", Provider: "p1"}},
 			},
 			Agents: []domain.ActorReport{{
-				Actor:  domain.AgentInstance("Agent#1"),
-				Models: []domain.ModelID{"model-c"},
+				Actor: domain.AgentInstance("Agent#1"),
+				Keys:  []domain.PricingKey{{Model: "model-c"}},
 			}},
 		},
 	}
 
-	// Act
 	got := app.ReportModels(report)
 
-	// Assert
-	want := []domain.ModelID{"model-a", "model-b", "model-c"}
+	want := []domain.PricingKey{{Model: "model-a"}, {Model: "model-b", Provider: "p1"}, {Model: "model-c"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ReportModels with unattributable = %v, want %v", got, want)
 	}
 }
 
 func TestReportModels_PricedModels_IncludedAlongsideUnpriced(t *testing.T) {
-	// ReportModels is a superset of Report.UnpricedModels. Models that have a
-	// pricing entry (absent from UnpricedModels) must still appear in the result.
-
-	// Arrange
+	// ReportModels is a superset of Report.UnpricedModels: priced keys appear too.
 	report := domain.Report{
 		Runs: []domain.RunReport{{
 			Run: appTestRunRef,
 			Orchestrator: domain.ActorReport{
-				Actor:  domain.Orchestrator(),
-				Models: []domain.ModelID{"model-priced"},
-				// UnpricedModels is empty: model-priced has a price.
+				Actor: domain.Orchestrator(),
+				Keys:  []domain.PricingKey{{Model: "model-priced"}},
 			},
 			Agents: []domain.ActorReport{{
 				Actor:          domain.AgentInstance("Agent#1"),
-				Models:         []domain.ModelID{"model-unpriced"},
-				UnpricedModels: []domain.ModelID{"model-unpriced"},
+				Keys:           []domain.PricingKey{{Model: "model-unpriced"}},
+				UnpricedModels: []domain.PricingKey{{Model: "model-unpriced"}},
 			}},
 		}},
-		UnpricedModels: []domain.ModelID{"model-unpriced"},
+		UnpricedModels: []domain.PricingKey{{Model: "model-unpriced"}},
 	}
 
-	// Act
 	got := app.ReportModels(report)
 
-	// Assert: both the priced and the unpriced model must appear.
-	foundPriced, foundUnpriced := false, false
-	for _, m := range got {
-		if m == "model-priced" {
-			foundPriced = true
-		}
-		if m == "model-unpriced" {
-			foundUnpriced = true
-		}
-	}
-	if !foundPriced {
-		t.Errorf("ReportModels must include already-priced models; got %v", got)
-	}
-	if !foundUnpriced {
-		t.Errorf("ReportModels must include unpriced models; got %v", got)
+	want := []domain.PricingKey{{Model: "model-priced"}, {Model: "model-unpriced"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ReportModels = %v, want %v", got, want)
 	}
 }
 
@@ -302,7 +270,7 @@ func TestModelPricingStates_UnpricedModel_HasPricedFalse(t *testing.T) {
 			Orchestrator: domain.ActorReport{
 				Actor:          domain.Orchestrator(),
 				Models:         []domain.ModelID{"model-x"},
-				UnpricedModels: []domain.ModelID{"model-x"},
+				UnpricedModels: []domain.PricingKey{{Model: "model-x"}},
 			},
 		}},
 	}
@@ -406,7 +374,7 @@ func TestEditModelPricing_ValidModel_AnsweredRates_PersistsEntryAndReprices(t *t
 	editSvc := newEditService(ia, editStore)
 
 	// Act
-	result, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, "model-x")
+	result, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, domain.PricingKey{Model: "model-x"})
 
 	// Assert
 	if err != nil {
@@ -455,7 +423,7 @@ func TestEditModelPricing_ValidModel_ReportRepricedWithoutRereadingLogs(t *testi
 	})
 
 	// Act
-	result, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, "model-x")
+	result, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, domain.PricingKey{Model: "model-x"})
 
 	// Assert
 	if err != nil {
@@ -492,7 +460,7 @@ func TestEditModelPricing_AlreadyPricedModel_NewRates_ReplacesEntryAndMoneyChang
 	editSvc := newEditService(allRateAnsweringIA("100.00"), editStore)
 
 	// Act
-	result, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, "model-a")
+	result, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, domain.PricingKey{Model: "model-a"})
 
 	// Assert
 	if err != nil {
@@ -554,7 +522,7 @@ func TestEditModelPricing_AlreadyPricedModel_IncompleteRates_OldPriceUntouched(t
 	editSvc := newEditService(ia, editStore)
 
 	// Act
-	result, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, "model-a")
+	result, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, domain.PricingKey{Model: "model-a"})
 
 	// Assert
 	if err != nil {
@@ -596,7 +564,7 @@ func TestEditModelPricing_QualityPreservedInRepricedReport(t *testing.T) {
 	editSvc := newEditService(ia, newFakePricingStore())
 
 	// Act
-	result, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, "model-x")
+	result, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, domain.PricingKey{Model: "model-x"})
 
 	// Assert
 	if err != nil {
@@ -626,7 +594,7 @@ func TestEditModelPricing_EmptyModelID_ReturnsCancelled_NoQuestionsAsked(t *test
 	editSvc := newEditService(ia, editStore)
 
 	// Act
-	result, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, "")
+	result, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, domain.PricingKey{Model: ""})
 
 	// Assert
 	if err != nil {
@@ -657,7 +625,7 @@ func TestEditModelPricing_NilSession_ReturnsCancelled_NoPanic(t *testing.T) {
 	editSvc := newEditService(ia, editStore)
 
 	// Act
-	result, err := editSvc.EditModelPricing(context.Background(), nil, domain.Report{}, "model-a")
+	result, err := editSvc.EditModelPricing(context.Background(), nil, domain.Report{}, domain.PricingKey{Model: "model-a"})
 
 	// Assert
 	if err != nil {
@@ -684,7 +652,7 @@ func TestEditModelPricing_AllRatesSkipped_ReturnsNoChange_NothingPersisted(t *te
 	editSvc := newEditService(&alwaysSkippingInteraction{}, editStore)
 
 	// Act
-	result, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, "model-x")
+	result, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, domain.PricingKey{Model: "model-x"})
 
 	// Assert
 	if err != nil {
@@ -723,7 +691,7 @@ func TestEditModelPricing_IncompleteRates_FailsValidation_NothingPersisted(t *te
 	editSvc := newEditService(ia, editStore)
 
 	// Act
-	result, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, "model-x")
+	result, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, domain.PricingKey{Model: "model-x"})
 
 	// Assert
 	if err != nil {
@@ -974,7 +942,7 @@ func TestEditModelPricing_AlwaysSkipping_Completes(t *testing.T) {
 	editSvc := newEditService(&alwaysSkippingInteraction{}, newFakePricingStore())
 
 	// Act
-	_, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, "model-x")
+	_, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, domain.PricingKey{Model: "model-x"})
 
 	// Assert
 	if err != nil {
@@ -1063,7 +1031,7 @@ func TestEditModelPricing_StorePutError_ReturnsNilResultAndError(t *testing.T) {
 	editSvc := newEditService(allRateAnsweringIA("3.00"), editStore)
 
 	// Act
-	result, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, "model-x")
+	result, err := editSvc.EditModelPricing(context.Background(), session.Session, session.Report, domain.PricingKey{Model: "model-x"})
 
 	// Assert
 	if err == nil {

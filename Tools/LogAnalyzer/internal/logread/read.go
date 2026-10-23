@@ -53,6 +53,8 @@ type wireEvent struct {
 	AgentType       string           `json:"agent_type"`
 	StatusCode      string           `json:"status_code"`
 	Model           string           `json:"model"`
+	Provider        string           `json:"provider"`
+	Effort          string           `json:"effort"`
 	Role            string           `json:"role"`
 	TokenUsage      *json.RawMessage `json:"token_usage"`
 	RecordID        string           `json:"record_id"`
@@ -77,6 +79,8 @@ type wireUsage struct {
 
 	CacheCreation5m *int64 `json:"cache_creation_5m_tokens"`
 	CacheCreation1h *int64 `json:"cache_creation_1h_tokens"`
+
+	Reasoning *int64 `json:"reasoning_tokens"`
 }
 
 // Read decodes path line by line, calling visit for each decoded event in
@@ -216,6 +220,7 @@ func buildEvent(wire wireEvent) domain.Event {
 			AgentInstanceID: domain.AgentInstanceID(wire.AgentInstanceID),
 			StatusCode:      wire.StatusCode,
 			Model:           domain.ModelID(wire.Model),
+			Provider:        domain.ProviderID(wire.Provider),
 		}
 		if wire.TokenUsage != nil {
 			fields.HasUsage = true
@@ -229,7 +234,8 @@ func buildEvent(wire wireEvent) domain.Event {
 		ev.Type = domain.EventTurn
 		fields := &domain.TurnFields{
 			Role:  domain.TurnRole(wire.Role),
-			Model: domain.ModelID(wire.Model),
+			Model:    domain.ModelID(wire.Model),
+			Provider: domain.ProviderID(wire.Provider),
 		}
 		if wire.TokenUsage != nil {
 			fields.HasUsage = true
@@ -247,6 +253,8 @@ func buildEvent(wire wireEvent) domain.Event {
 			Source:          wire.Source,
 			Model:           domain.ModelID(wire.Model),
 			ServiceTier:     wire.ServiceTier,
+			Provider:        domain.ProviderID(wire.Provider),
+			Effort:          wire.Effort,
 		}
 		if wire.RecordIndex != nil {
 			fields.RecordIndex, fields.HasRecordIndex = *wire.RecordIndex, true
@@ -299,6 +307,9 @@ func decodeUsage(wu wireUsage) domain.TokenUsage {
 	}
 	if wu.CacheCreation != nil {
 		u.CacheCreation = domain.Tokens(*wu.CacheCreation)
+	}
+	if wu.Reasoning != nil {
+		u.Reasoning = domain.Tokens(*wu.Reasoning)
 	}
 	decodeTiers(&u, wu)
 	return u

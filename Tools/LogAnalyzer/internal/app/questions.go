@@ -29,8 +29,9 @@ const (
 	QuestionRunSelect interaction.QuestionID = "run-select"
 
 	// QuestionPricingModel asks which model to set or overwrite a price for.
-	// Shape: SelectOne whose OptionIDs are model id strings, one per model in
-	// ReportModels order, each Label carrying the model id and its current
+	// Shape: SelectOne whose OptionIDs are the printed form of each (provider,
+	// model) key ("model [provider]", or the bare model id without provider), in
+	// sorted key order, each Label carrying that key and its current
 	// priced/unpriced state. Skipped/cancelled => no edit, report unchanged.
 	QuestionPricingModel interaction.QuestionID = "pricing-model"
 )

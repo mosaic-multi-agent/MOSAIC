@@ -113,7 +113,11 @@ func FormatTotalsLine(t domain.Totals) string {
 	parts := make([]string, 0, len(domain.BillableCategories())+1)
 	for _, cat := range domain.BillableCategories() {
 		count, _ := t.Tokens.Get(cat)
-		parts = append(parts, fmt.Sprintf("%s: %s", cat.Label(), FormatTokens(count)))
+		part := fmt.Sprintf("%s: %s", cat.Label(), FormatTokens(count))
+		if cat == domain.CategoryOutput {
+			part += fmt.Sprintf(" (%s: %s)", domain.CategoryReasoning.Label(), FormatTokens(t.Tokens.Reasoning))
+		}
+		parts = append(parts, part)
 	}
 	parts = append(parts, FormatTotal(t.Money))
 	result := ""

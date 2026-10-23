@@ -83,6 +83,7 @@ Event-specific fields are declared as named, typed fields, not an untyped free-f
 | `run_id` | string | Required | Overrides the envelope's optional status — a run event must identify its run. |
 | `cwd` | string | Optional | Working directory the run started in. |
 | `model` | string | Optional | Orchestrator model identifier. |
+| `provider` | string | Optional | Provider of `model`. See "Provider" below `invocation_end`. |
 | `adapter_version` | string | Optional | Version of the hook bundle that emitted this run's logs. There is no single "MOSAIC version" to report — agents, skills, hooks, and workflows are each versioned independently — so this names the one component that's actually meaningful here: the adapter itself. Sourced at runtime by reading the `version` field out of the hook bundle's own `hook.yaml`, which is deployed alongside the adapter scripts as an ordinary bundle file (no deploy-time content substitution, unlike the mechanism used to stamp agent files with their own version). This keeps the reported value permanently in sync with `hook.yaml` without requiring any change to the deployment tool. |
 
 **`run_end`**
@@ -102,6 +103,7 @@ No `duration_ms` field — see §3.5.
 | `resumed` | boolean | Optional | Whether this is a fresh session or a resume of an existing one. |
 | `cwd` | string | Optional | |
 | `model` | string | Optional | |
+| `provider` | string | Optional | Provider of `model`. |
 
 **`session_end`**
 
@@ -128,9 +130,14 @@ No `duration_ms` field — see §3.5.
 | `status_code` | enum: `SUCCESS`, `COMPLETED_NEEDS_ACTION`, `PARTIALLY_DONE`, `NEEDS_CLARIFICATION`, `CAPABILITY_EXCEEDED`, `BLOCKED` | Optional | Populated when the adapter can determine the subagent's returned status; absent if the harness gives no access to response content. A failed invocation is reported here, never as a separate error event. |
 | `response` | string | Optional | Full final response text from the subagent. On Claude Code 2.1.271+ in auto mode this is the report the subagent delivers through its `SubagentHandback` tool call (`tool_input.message`, verbatim), and the event timestamp is the hand-back's PostToolUse time; the delivery to the caller happens just before that hook fires. Without a hand-back (older CLI, non-auto mode, or Haiku as the main model, which silently falls back from auto to default) the response is `SubagentStop`'s `last_assistant_message` and the timestamp is the stop time. After a hand-back, a later `SubagentStop` carries only post-hand-back commentary and produces no second `invocation_end`. |
 | `model` | string | Optional | Model identifier used for the invocation. For a Claude Code hand-back it is read from the agent transcript at hand-back time. |
-| `token_usage` | object | Optional | Present only if at least one sub-field is available. Sub-fields, each independently optional: `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens`, `cache_creation_5m_tokens`, `cache_creation_1h_tokens` (all numbers). Cache-write tier rules: see below. For a Claude Code hand-back it is read from the agent transcript at hand-back time. |
+| `provider` | string | Optional | Provider that served `model`. Rules: see "Provider" below. |
+| `token_usage` | object | Optional | Present only if at least one sub-field is available. Sub-fields, each independently optional: `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens`, `cache_creation_5m_tokens`, `cache_creation_1h_tokens`, `reasoning_tokens` (all numbers). Cache-write tier and reasoning rules: see below. For a Claude Code hand-back it is read from the agent transcript at hand-back time. |
 
 **Cache-write tiers (`token_usage`, all events that carry it).** Providers price cache writes by time-to-live, and one harness can mix TTLs within a single run: Claude Code on a subscription writes 1-hour cache for the main session and 5-minute cache for subagents. `cache_creation_tokens` is always the total of all cache writes. `cache_creation_5m_tokens` and `cache_creation_1h_tokens` give the split and are present only when the harness reports it per API call. When an adapter writes either tier field it writes both, and their sum equals `cache_creation_tokens`. When neither is present, the cache-write tier is unknown; a consumer may apply its own default tier but must not present that result as reported data. Adapters never infer a tier from configuration or defaults (§2, "Fields degrade, never fabricate").
+
+**Reasoning tokens (`token_usage`, all events that carry it).** `output_tokens` is always the full billed output, reasoning (thinking) included. `reasoning_tokens` is the reasoning part of that total, so it is never larger than `output_tokens`. It is present only when the harness reports reasoning as its own count. A harness that reports reasoning separately from output (OpenCode: `tokens.reasoning` alongside `tokens.output`) has both added into `output_tokens`, and the reasoning count is also written to `reasoning_tokens`. On Claude Code, the transcript's `usage.output_tokens_details.thinking_tokens` is already part of `output_tokens` (Anthropic API semantics), so it is copied to `reasoning_tokens` and `output_tokens` is unchanged. A harness that reports no reasoning count omits `reasoning_tokens`. Adapters never estimate it from the thinking text.
+
+**Provider.** `provider` names who served the model call, because the same model can be priced differently by different providers. It is a separate field, never a prefix of `model`. Values are the provider IDs of the [models.dev](https://models.dev) registry, which OpenCode uses as its `providerID`; OpenCode's value is copied verbatim. Other adapters use the registry ID that unambiguously matches the provider, for example `anthropic`, `amazon-bedrock`, `google-vertex-anthropic` or `github-copilot`. The field is written only when the adapter knows the provider from the harness or its documented configuration. An adapter that cannot tell, or finds no unambiguous registry ID for the provider, omits it.
 
 Exactly one `invocation_end` is written per invocation. **Known limitation (Claude Code hand-back):** if the agent transcript has not been flushed at hand-back time, `invocation_end` omits `model` and `token_usage`, and they are never back-filled (no second `invocation_end`). `Tools/LogAnalyzer` reports the missing fields as an issue for that invocation. Tokens used after the hand-back are still counted through `usage_record` events.
 
@@ -143,6 +150,7 @@ No `duration_ms` field — see §3.5.
 | `role` | enum: `"user"` \| `"assistant"` | Required | Discriminates a human/orchestrator-issued turn from a model-produced turn. Covers both orchestrator and subagent conversations; actor is implicit from file location (§7). |
 | `content` | string | Required | Full message text, not truncated. |
 | `model` | string | Optional | Model that produced an assistant turn. |
+| `provider` | string | Optional | Provider of `model`. |
 | `token_usage` | object | Optional | Same sub-field structure as `invocation_end.token_usage`. Enables per-turn token accounting for both orchestrator and subagent conversations. |
 
 No `turn_index` field — see §3.5.
@@ -199,8 +207,10 @@ Harnesses vary in whether a human-input prompt is observable as one event or two
 | `source` | string | Required | `"orchestrator_transcript"` or `"agent_transcript"`. Forensic provenance only; stream placement is authoritative for attribution. |
 | `agent_instance_id` | string | Optional | Present on invocation streams only; omitted on the orchestrator stream. |
 | `model` | string | Optional | The model of this record, when resolvable. |
+| `provider` | string | Optional | The provider that served this record, when known. Consumers price a record by provider and model together. |
+| `effort` | string | Optional | The reasoning effort in effect for this API call, as the harness reports it, copied verbatim in the harness's own vocabulary (Claude Code: `low`, `medium`, `high`, `xhigh`, `max`). It is the effective value, not the configured one: Claude Code records the level it actually ran, which differs from the configured level when the model doesn't support it. Omitted when the harness doesn't report it for the record, for example when the model doesn't support effort. Adapters never derive it from agent files or configuration. |
 | `service_tier` | string | Optional | Descriptive detail only; drives no pricing decision. |
-| `token_usage` | object | Optional | Present when at least one sub-field is resolvable. Sub-fields `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens`, `cache_creation_5m_tokens`, `cache_creation_1h_tokens`, each independently optional and present only when its source value is a genuine number, including 0. Cache-write tier rules as for `invocation_end` (§3.4). |
+| `token_usage` | object | Optional | Present when at least one sub-field is resolvable. Sub-fields `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens`, `cache_creation_5m_tokens`, `cache_creation_1h_tokens`, `reasoning_tokens`, each independently optional and present only when its source value is a genuine number, including 0. Cache-write tier, reasoning and provider rules as for `invocation_end` (§3.4). |
 
 **Supersede rule (normative).** A producer may observe the same `record_id` more than once as its values settle. When the same `record_id` appears more than once within a stream, the later observation is authoritative and supersedes all earlier ones. A consumer totals the final observed value for each `record_id`, never the first.
 
@@ -376,8 +386,9 @@ Every event carries `schema_version` in its common envelope (§3.3).
 | `1.0.0` | Initial schema. |
 | `1.1.0` | Added the `usage_record` event. |
 | `1.2.0` | Added the `cache_creation_5m_tokens` and `cache_creation_1h_tokens` sub-fields to `token_usage`. |
+| `1.3.0` | Added the `reasoning_tokens` sub-field to `token_usage`, the `provider` field wherever `model` appears, and the `effort` field on `usage_record`. |
 
-Adapters emit the highest version whose fields they implement; an adapter that does not produce the 1.2.0 sub-fields keeps emitting its earlier version.
+Adapters emit the highest version whose fields they implement; an adapter that does not produce the 1.2.0 sub-fields keeps emitting its earlier version. A version covers its fields as a set of things the adapter implements, not as fields that must appear on every event: an adapter that implements 1.3.0 but cannot know the provider in a given run still emits 1.3.0 and omits `provider`. The version is per event, so an event type added in a version (for example `usage_record` in 1.1.0) is never written with an earlier version.
 
 ## 7. Merge Utility
 

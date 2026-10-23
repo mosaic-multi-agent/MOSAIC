@@ -92,15 +92,18 @@ class RecordFacts:
       service_tier  - str | None, first non-empty string among
                       message.usage.service_tier, message.service_tier,
                       message.usage.speed.
+      effort        - str | None, the record's top-level effort field, verbatim;
+                      None when absent or not a non-empty string.
     """
 
     def __init__(self, record_id, record_index,
-                 model=None, token_usage=None, service_tier=None):
+                 model=None, token_usage=None, service_tier=None, effort=None):
         self.record_id = record_id
         self.record_index = record_index
         self.model = model
         self.token_usage = token_usage
         self.service_tier = service_tier
+        self.effort = effort
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +156,9 @@ def _map_usage(raw_usage):
         if _is_number(val):
             mapped[dst_key] = val
     mapped.update(_map_cache_tiers(raw_usage))
+    details = raw_usage.get("output_tokens_details")
+    if isinstance(details, dict) and _is_number(details.get("thinking_tokens")):
+        mapped["reasoning_tokens"] = details["thinking_tokens"]
     return mapped or None
 
 
@@ -289,6 +295,14 @@ def _resolve_record_service_tier(message):
     return None
 
 
+def _resolve_record_effort(record):
+    """The record's top-level effort, verbatim; None unless a non-empty string."""
+    effort = record.get("effort")
+    if isinstance(effort, str) and effort:
+        return effort
+    return None
+
+
 def _resolve_record_id(record, record_index, record_line_bytes):
     """message.id, then record uuid, then a deterministic position hash (D1)."""
     message = record.get("message")
@@ -360,6 +374,7 @@ def read_assistant_records(transcript_path):
                         model=model,
                         token_usage=token_usage,
                         service_tier=service_tier,
+                        effort=_resolve_record_effort(record),
                     ))
                     record_index += 1
 

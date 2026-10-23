@@ -5,9 +5,11 @@ import "sort"
 // InvocationUsage is the pricing unit. Tier selection is per invocation, never
 // per run, so per-invocation records are retained rather than pre-summed.
 type InvocationUsage struct {
-	Model   ModelID // empty when the event carried no model
-	Harness Harness
-	Usage   TokenUsage
+	Model    ModelID    // empty when the event carried no model
+	Provider ProviderID // "" when the source event carried none
+	Effort   string     // usage_record only; "" otherwise
+	Harness  Harness
+	Usage    TokenUsage
 }
 
 // ActorAggregate holds one actor's invocation records within one run.

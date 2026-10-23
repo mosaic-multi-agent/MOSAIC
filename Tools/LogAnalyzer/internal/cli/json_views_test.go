@@ -56,7 +56,7 @@ func vwRun() domain.RunReport {
 	subagents := domain.GroupFigures{
 		Invocations:    2,
 		Totals:         vwTotals(300, false),
-		UnpricedModels: []domain.ModelID{"m-x"},
+		UnpricedModels: []domain.PricingKey{{Model: "m-x"}},
 		MissingUsage:   1,
 		Open:           1,
 	}
@@ -94,7 +94,7 @@ func vwRun() domain.RunReport {
 					Min: domain.NoMoneyData(), Max: domain.NoMoneyData(), Average: domain.NoMoneyData(),
 				},
 				Dispatches: []domain.Dispatch{{
-					Invocation: open, MissingUsage: true, UnpricedModels: []domain.ModelID{"m-x"},
+					Invocation: open, MissingUsage: true, UnpricedModels: []domain.PricingKey{{Model: "m-x"}},
 				}},
 			},
 		},

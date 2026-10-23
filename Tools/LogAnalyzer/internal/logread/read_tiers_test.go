@@ -257,7 +257,7 @@ func TestReader_SchemaVersions_OlderVersionsDecodeTotalsWithoutSplit(t *testing.
 }
 
 func TestReader_SchemaVersions_UnsupportedNewerVersionStillRaisesFinding(t *testing.T) {
-	_, findings := readTierLines(t, tierLine("1.3.0", "turn", `{"input_tokens":1}`))
+	_, findings := readTierLines(t, tierLine("1.4.0", "turn", `{"input_tokens":1}`))
 
 	found := false
 	for _, f := range findings {
@@ -266,6 +266,6 @@ func TestReader_SchemaVersions_UnsupportedNewerVersionStillRaisesFinding(t *test
 		}
 	}
 	if !found {
-		t.Errorf("findings = %v, want unknown_schema_version for 1.3.0", findings)
+		t.Errorf("findings = %v, want unknown_schema_version for 1.4.0", findings)
 	}
 }

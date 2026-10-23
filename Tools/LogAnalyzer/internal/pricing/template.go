@@ -6,8 +6,25 @@ package pricing
 // keep it because they preserve the file's leading comment block.
 const pricingTemplate = `# MosaicLogAnalyzer pricing configuration
 #
-# Each entry under "models:" prices one model. Every model has a standard rate
-# set with exactly these five rates:
+# Requests are priced by (provider, model). The provider is the one recorded on
+# the usage record; provider IDs follow models.dev, for example anthropic,
+# github-copilot, amazon-bedrock, google-vertex-anthropic.
+#
+#   providers:
+#     <provider-id>:
+#       models:
+#         <model-id>: ...   prices requests that carry that provider
+#   models:
+#     <model-id>: ...       prices only requests that carry no provider
+#
+# Lookup is strict: there is no fallback between the two sections. A request with
+# a provider is priced only from that provider's models; a request without a
+# provider only from the top-level models. A request that matches nothing is
+# unpriced. The same model ID may appear under several providers with different
+# rates.
+#
+# Each model entry (in either section) has a standard rate set with exactly
+# these five rates:
 #
 #   input           regular input tokens
 #   cache_read      tokens read from the prompt cache
@@ -25,29 +42,45 @@ const pricingTemplate = `# MosaicLogAnalyzer pricing configuration
 # When a usage record has no cache-write tier split, the cache write is assumed to
 # use the 5-minute tier (cache_write_5m) as the fallback.
 #
-# Example entry without a long-context tier:
+# Example provider entry without a long-context tier:
 #
-#   example-model:
-#     input: "3.00"
-#     cache_read: "0.30"
-#     cache_write_5m: "3.75"
-#     cache_write_1h: "6.00"
-#     output: "15.00"
+#   providers:
+#     anthropic:
+#       models:
+#         example-model:
+#           input: "3.00"
+#           cache_read: "0.30"
+#           cache_write_5m: "3.75"
+#           cache_write_1h: "6.00"
+#           output: "15.00"
 #
-# Example entry with a long-context tier:
+# Example provider entry with a long-context tier:
 #
-#   example-long-context-model:
-#     input: "3.00"
-#     cache_read: "0.30"
-#     cache_write_5m: "3.75"
-#     cache_write_1h: "6.00"
-#     output: "15.00"
-#     long_context:
-#       threshold: 200000
-#       input: "6.00"
-#       cache_read: "0.60"
-#       cache_write_5m: "7.50"
-#       cache_write_1h: "12.00"
-#       output: "22.50"
+#   providers:
+#     github-copilot:
+#       models:
+#         example-long-context-model:
+#           input: "3.00"
+#           cache_read: "0.30"
+#           cache_write_5m: "3.75"
+#           cache_write_1h: "6.00"
+#           output: "15.00"
+#           long_context:
+#             threshold: 200000
+#             input: "6.00"
+#             cache_read: "0.60"
+#             cache_write_5m: "7.50"
+#             cache_write_1h: "12.00"
+#             output: "22.50"
+#
+# Example top-level entry for records without a provider:
+#
+#   models:
+#     example-model:
+#       input: "3.00"
+#       cache_read: "0.30"
+#       cache_write_5m: "3.75"
+#       cache_write_1h: "6.00"
+#       output: "15.00"
 
 `

@@ -4,11 +4,12 @@ import "mosaic-log-analyzer/internal/domain"
 
 // InvocationCost is the priced result for one invocation.
 type InvocationCost struct {
-	Model  domain.ModelID
-	Tier   Tier
-	Priced bool // false when the model had no pricing entry
-	Tokens domain.TokenUsage
-	Money  domain.CategoryMoney
+	Model    domain.ModelID
+	Provider domain.ProviderID
+	Tier     Tier
+	Priced   bool // false when the model had no pricing entry
+	Tokens   domain.TokenUsage
+	Money    domain.CategoryMoney
 	// AssumedTierCacheWrite is the number of cache-write tokens of this request
 	// priced at the 5m rate because the request carried no tier split. 0 when
 	// unpriced, when there is no cache write, or when the split was reported.
@@ -33,11 +34,12 @@ type InvocationCost struct {
 //     contributes nothing to the total.
 func PriceInvocation(inv domain.InvocationUsage, table domain.PricingTable) InvocationCost {
 	result := InvocationCost{
-		Model:  inv.Model,
-		Tokens: inv.Usage,
+		Model:    inv.Model,
+		Provider: inv.Provider,
+		Tokens:   inv.Usage,
 	}
 
-	entry, found := table.Lookup(inv.Model)
+	entry, found := table.LookupFor(inv.Provider, inv.Model)
 	if !found {
 		// No pricing entry: all money cells are MoneyUnpriced - never MoneyKnown(0).
 		unpriced := domain.UnpricedMoney()

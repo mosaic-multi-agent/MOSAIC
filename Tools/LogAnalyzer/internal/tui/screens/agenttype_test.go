@@ -58,7 +58,7 @@ func TestAgentTypes_UnpricedGroupShowsUnpricedMarkerAndAbsentStatistics(t *testi
 	run := agentTypesRun()
 	g := &run.ByAgentType[1]
 	g.Figures.Totals.Money = domain.CategoryMoney{Total: domain.UnpricedMoney()}
-	g.Figures.UnpricedModels = []domain.ModelID{"model-x"}
+	g.Figures.UnpricedModels = []domain.PricingKey{{Model: "model-x"}}
 	g.PerInvocation = domain.MoneyStats{Min: domain.NoMoneyData(), Max: domain.NoMoneyData(), Average: domain.NoMoneyData()}
 
 	view := typesView(run, tallH)

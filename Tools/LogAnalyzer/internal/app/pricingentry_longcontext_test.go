@@ -82,7 +82,7 @@ func editModelX(t *testing.T, ia *scriptedInteraction) (app.PricingEditResult, *
 	t.Helper()
 	session, _, _ := buildEditorTestSession(t)
 	store := newFakePricingStore()
-	res, err := newEditService(ia, store).EditModelPricing(context.Background(), session.Session, session.Report, "model-x")
+	res, err := newEditService(ia, store).EditModelPricing(context.Background(), session.Session, session.Report, domain.PricingKey{Model: "model-x"})
 	if err != nil {
 		t.Fatalf("EditModelPricing: %v", err)
 	}

@@ -293,14 +293,14 @@ func TestEventType_EventUsageRecord_WireValue(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSchemaVersionCurrent_Value(t *testing.T) {
-	if domain.SchemaVersionCurrent != "1.2.0" {
-		t.Errorf("SchemaVersionCurrent = %q, want %q", domain.SchemaVersionCurrent, "1.2.0")
+	if domain.SchemaVersionCurrent != "1.3.0" {
+		t.Errorf("SchemaVersionCurrent = %q, want %q", domain.SchemaVersionCurrent, "1.3.0")
 	}
 }
 
 func TestSupportedSchemaVersions_ContainsAllVersions(t *testing.T) {
 	set := domain.SupportedSchemaVersions()
-	for _, want := range []string{"1.2.0", "1.1.0", "1.0.0"} {
+	for _, want := range []string{"1.3.0", "1.2.0", "1.1.0", "1.0.0"} {
 		found := false
 		for _, v := range set {
 			if v == want {
@@ -318,13 +318,13 @@ func TestSupportedSchemaVersions_NewestFirst(t *testing.T) {
 	if len(set) == 0 {
 		t.Fatal("SupportedSchemaVersions() must not be empty")
 	}
-	if set[0] != "1.2.0" {
-		t.Errorf("SupportedSchemaVersions()[0] = %q, want %q (newest first)", set[0], "1.2.0")
+	if set[0] != "1.3.0" {
+		t.Errorf("SupportedSchemaVersions()[0] = %q, want %q (newest first)", set[0], "1.3.0")
 	}
 }
 
 func TestIsSupportedSchemaVersion_PriorAndCurrent_True(t *testing.T) {
-	for _, v := range []string{"1.0.0", "1.1.0", "1.2.0"} {
+	for _, v := range []string{"1.0.0", "1.1.0", "1.2.0", "1.3.0"} {
 		if !domain.IsSupportedSchemaVersion(v) {
 			t.Errorf("IsSupportedSchemaVersion(%q) = false, want true", v)
 		}
@@ -332,7 +332,7 @@ func TestIsSupportedSchemaVersion_PriorAndCurrent_True(t *testing.T) {
 }
 
 func TestIsSupportedSchemaVersion_UnrecognisedVersion_False(t *testing.T) {
-	for _, v := range []string{"2.0.0", "0.9.0", "", "1.1.0-beta", "1.3.0"} {
+	for _, v := range []string{"2.0.0", "0.9.0", "", "1.1.0-beta", "1.4.0"} {
 		if domain.IsSupportedSchemaVersion(v) {
 			t.Errorf("IsSupportedSchemaVersion(%q) = true, want false", v)
 		}

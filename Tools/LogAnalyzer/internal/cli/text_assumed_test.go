@@ -79,7 +79,7 @@ func TestEncodeText_NoAssumedTierTokens_NeverMentionsAssumed(t *testing.T) {
 	report := domain.Report{
 		Currency:       domain.Currency,
 		Runs:           []domain.RunReport{runWithAssumedTier(0)},
-		UnpricedModels: []domain.ModelID{"mystery-model"},
+		UnpricedModels: []domain.PricingKey{{Model: "mystery-model"}},
 	}
 
 	out := encodeTextString(t, report)
@@ -93,7 +93,7 @@ func TestEncodeText_AssumedTierTokens_AddNoticeAfterUnpricedModelsSection(t *tes
 	report := domain.Report{
 		Currency:       domain.Currency,
 		AllRuns:        domain.Totals{AssumedTierCacheWrite: 4_321},
-		UnpricedModels: []domain.ModelID{"mystery-model"},
+		UnpricedModels: []domain.PricingKey{{Model: "mystery-model"}},
 	}
 
 	out := encodeTextString(t, report)
@@ -116,7 +116,7 @@ func TestEncodeText_UnattributableAssumedTierTokens_AddNoticeAfterUnpricedModels
 	report := domain.Report{
 		Currency:       domain.Currency,
 		Unattributable: &unattributable,
-		UnpricedModels: []domain.ModelID{"mystery-model"},
+		UnpricedModels: []domain.PricingKey{{Model: "mystery-model"}},
 	}
 
 	out := encodeTextString(t, report)
@@ -146,7 +146,7 @@ func TestEncodeText_AssumedTierInAllRunsAndUnattributable_NoticeShowsSummedCount
 		Currency:       domain.Currency,
 		AllRuns:        domain.Totals{AssumedTierCacheWrite: 4_321},
 		Unattributable: &unattributable,
-		UnpricedModels: []domain.ModelID{"mystery-model"},
+		UnpricedModels: []domain.PricingKey{{Model: "mystery-model"}},
 	}
 
 	out := encodeTextString(t, report)

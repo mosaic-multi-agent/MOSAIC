@@ -39,7 +39,7 @@ func encodeAcrossRuns(a domain.AcrossRuns) jsonAcrossRuns {
 			RunID:          s.Run.Label(),
 			Provisional:    s.Provisional,
 			Totals:         encodeTotals(s.Totals),
-			UnpricedModels: encodeModelIDs(s.UnpricedModels),
+			UnpricedModels: encodeUnpricedModels(s.UnpricedModels),
 			Subagents:      encodeGroupFigures(s.Subagents),
 		}
 	}

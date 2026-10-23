@@ -124,7 +124,7 @@ func TestRunDetailScreen_NoAssumedTierTokens_ShowsNoAssumedLabel(t *testing.T) {
 		Run:            domain.NamedRun("20260101T120000Z-abcd"),
 		Orchestrator:   domain.ActorReport{Actor: domain.Orchestrator()},
 		Agents:         []domain.ActorReport{{Actor: domain.AgentInstance("Alpha#1")}},
-		UnpricedModels: []domain.ModelID{"claude-mystery-model"},
+		UnpricedModels: []domain.PricingKey{{Model: "claude-mystery-model"}},
 	}
 
 	view := detailView(run)

@@ -19,8 +19,8 @@ type RunTotal struct {
 	Complete bool
 
 	// UnpricedModels names the model(s) contributing to this run that had no
-	// price entry. Empty when Complete is true. Populated from the run entry's
-	// own UnpricedModels, which already carries them.
+	// price entry. Empty when Complete is true. Populated from the run's
+	// unpriced gaps; a model id unpriced under several providers appears once.
 	UnpricedModels []domain.ModelID
 
 	// PartialAmount is the amount attributable to priced models when the run is
@@ -66,7 +66,7 @@ func RunTotalFor(r domain.Report, runID string) (RunTotal, bool) {
 		Tokens:         run.Totals.Tokens,
 		Money:          run.Totals.Money.Total,
 		Complete:       run.Totals.Money.Complete,
-		UnpricedModels: run.UnpricedModels,
+		UnpricedModels: domain.DistinctModelIDs(run.UnpricedModels),
 		PartialAmount:  partial,
 	}, true
 }

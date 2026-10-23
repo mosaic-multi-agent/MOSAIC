@@ -495,7 +495,7 @@ class TestEmitUsageRecordsSchemaAndPruning(unittest.TestCase):
         )
         events = _read_jsonl(self.ctx.paths.orchestrator_events(_RUN_ID))
         usage_event = next(e for e in events if e["event"] == usage.USAGE_EVENT)
-        self.assertEqual("1.2.0", usage_event["schema_version"])
+        self.assertEqual("1.3.0", usage_event["schema_version"])
 
     def test_genuinely_zero_usage_field_survives(self):
         transcript_path = self.tmp_path / "transcript.jsonl"

@@ -29,6 +29,15 @@ func encodeModelIDs(ids []domain.ModelID) []string {
 	return out
 }
 
+// encodeUnpricedModels encodes unpriced gaps for the wire as a list of
+// model-id strings. Wire contract (decoded by AgentTest as []string): each
+// model id is listed ONCE, even when it is unpriced under several providers,
+// and entries never carry the provider. The provider-level detail is shown by
+// the text and TUI frontends only.
+func encodeUnpricedModels(keys []domain.PricingKey) []string {
+	return encodeModelIDs(domain.DistinctModelIDs(keys))
+}
+
 func durationMillis(d time.Duration) *int64 {
 	ms := d.Milliseconds()
 	return &ms
@@ -55,7 +64,7 @@ func encodeGroupFigures(f domain.GroupFigures) jsonGroupFigures {
 	return jsonGroupFigures{
 		Invocations:    f.Invocations,
 		Totals:         encodeTotals(f.Totals),
-		UnpricedModels: encodeModelIDs(f.UnpricedModels),
+		UnpricedModels: encodeUnpricedModels(f.UnpricedModels),
 		MissingUsage:   f.MissingUsage,
 		Open:           f.Open,
 	}
@@ -63,6 +72,7 @@ func encodeGroupFigures(f domain.GroupFigures) jsonGroupFigures {
 
 type jsonModelFigures struct {
 	Model    string     `json:"model"`
+	Provider string     `json:"provider,omitempty"`
 	Priced   bool       `json:"priced"`
 	Requests int        `json:"requests"`
 	Totals   jsonTotals `json:"totals"`
@@ -82,7 +92,7 @@ func encodeOverview(o domain.RunOverview) jsonOverview {
 	models := make([]jsonModelFigures, len(o.ByModel))
 	for i, m := range o.ByModel {
 		models[i] = jsonModelFigures{
-			Model: string(m.Model), Priced: m.Priced, Requests: m.Requests, Totals: encodeTotals(m.Totals),
+			Model: string(m.Model), Provider: string(m.Provider), Priced: m.Priced, Requests: m.Requests, Totals: encodeTotals(m.Totals),
 		}
 	}
 	return jsonOverview{
@@ -106,20 +116,21 @@ type jsonMoneyStats struct {
 }
 
 type jsonDispatch struct {
-	Actor          string     `json:"actor"`
-	AgentType      string     `json:"agent_type"`
-	State          string     `json:"state"`
-	StatusCode     *string    `json:"status_code"`
-	Model          *string    `json:"model"`
-	StartedAt      *string    `json:"started_at"`
-	EndedAt        *string    `json:"ended_at"`
-	DurationMS     *int64     `json:"duration_ms"`
-	EndEvents      int        `json:"end_events"`
-	ToolCalls      int        `json:"tool_calls"`
-	MissingUsage   bool       `json:"missing_usage"`
-	Models         []string   `json:"models"`
-	UnpricedModels []string   `json:"unpriced_models"`
-	Totals         jsonTotals `json:"totals"`
+	Actor          string       `json:"actor"`
+	AgentType      string       `json:"agent_type"`
+	State          string       `json:"state"`
+	StatusCode     *string      `json:"status_code"`
+	Model          *string      `json:"model"`
+	StartedAt      *string      `json:"started_at"`
+	EndedAt        *string      `json:"ended_at"`
+	DurationMS     *int64       `json:"duration_ms"`
+	EndEvents      int          `json:"end_events"`
+	ToolCalls      int          `json:"tool_calls"`
+	MissingUsage   bool         `json:"missing_usage"`
+	Models         []string     `json:"models"`
+	UnpricedModels []string     `json:"unpriced_models"`
+	Totals         jsonTotals   `json:"totals"`
+	Effort         []jsonEffort `json:"effort"`
 }
 
 func stringOrNull(s string) *string {
@@ -152,8 +163,9 @@ func encodeDispatch(d domain.Dispatch) jsonDispatch {
 		ToolCalls:      len(inv.ToolCalls),
 		MissingUsage:   d.MissingUsage,
 		Models:         encodeModelIDs(d.Models),
-		UnpricedModels: encodeModelIDs(d.UnpricedModels),
+		UnpricedModels: encodeUnpricedModels(d.UnpricedModels),
 		Totals:         encodeTotals(d.Totals),
+		Effort:         encodeEffort(d.Effort),
 	}
 }
 
@@ -282,4 +294,22 @@ func encodeToolsBreakdown(b domain.ToolsBreakdown) jsonToolsBreakdown {
 		Orchestrator: encodeToolFigures(b.Orchestrator),
 		ByAgentType:  byType,
 	}
+}
+
+// jsonEffort is one effort level with the number of requests observed at it.
+type jsonEffort struct {
+	Level   string `json:"level"`
+	Records int    `json:"records"`
+}
+
+// encodeEffort returns nil (JSON null) when no request reported an effort level.
+func encodeEffort(l domain.EffortLevels) []jsonEffort {
+	if l.IsEmpty() {
+		return nil
+	}
+	out := make([]jsonEffort, len(l))
+	for i, c := range l {
+		out[i] = jsonEffort{Level: c.Level, Records: c.Records}
+	}
+	return out
 }

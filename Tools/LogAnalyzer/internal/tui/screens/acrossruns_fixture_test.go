@@ -33,7 +33,7 @@ func acrossReport() domain.Report {
 	partial := acrossTotals(321, false)
 	partial.AssumedTierCacheWrite = 1234
 	coder := domain.GroupFigures{
-		Invocations: 47, Totals: acrossTotals(1600, false), UnpricedModels: []domain.ModelID{"m-unpriced"}, MissingUsage: 1,
+		Invocations: 47, Totals: acrossTotals(1600, false), UnpricedModels: []domain.PricingKey{{Model: "m-unpriced"}}, MissingUsage: 1,
 	}
 	tester := domain.GroupFigures{Invocations: 2, Totals: acrossTotals(240, true), Open: 1}
 	tester.Totals.AssumedTierCacheWrite = 99
@@ -54,7 +54,7 @@ func acrossReport() domain.Report {
 				{Run: domain.NamedRun(acrossRunA), Totals: acrossTotals(1000, true), Subagents: domain.GroupFigures{Invocations: 3}},
 				{Run: domain.NamedRun(acrossRunB), Totals: acrossTotals(600, true), Subagents: domain.GroupFigures{Invocations: 2}},
 				{Run: domain.NamedRun(acrossRunC), Provisional: true, Totals: partial,
-					UnpricedModels: []domain.ModelID{"m-unpriced"}, Subagents: domain.GroupFigures{Invocations: 2, Open: 1}},
+					UnpricedModels: []domain.PricingKey{{Model: "m-unpriced"}}, Subagents: domain.GroupFigures{Invocations: 2, Open: 1}},
 			},
 			ByAgentType: []domain.AgentTypeAcrossRuns{
 				{AgentType: "coder", Runs: 3, ProvisionalRuns: 1, Figures: coder,

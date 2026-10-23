@@ -194,7 +194,7 @@ func TestAnalyze_RunWithOnlySplitAndUnpricedRequests_HasNoAssumedTokens(t *testi
 	// model without a price and is therefore not counted.
 	assertAssumedTokens(t, "worker#2", worker.Totals, 0)
 	assertAssumedTokens(t, "run t402", runB.Totals, 0)
-	if len(worker.UnpricedModels) != 1 || worker.UnpricedModels[0] != "unpriced-model" {
+	if len(worker.UnpricedModels) != 1 || worker.UnpricedModels[0].Model != "unpriced-model" {
 		t.Errorf("worker#2 UnpricedModels = %v, want [unpriced-model]", worker.UnpricedModels)
 	}
 }

@@ -39,13 +39,16 @@ func share(part, whole domain.MoneyValue) domain.Ratio {
 	return r
 }
 
-// buildByModel prices every request of the run and groups it by model: models
-// ascending, requests without a model last.
+// buildByModel prices every request of the run and groups it by (provider,
+// model): models ascending, requests without a model last, and within a model
+// the providers ascending with "" first. A row is priced only when the strict
+// lookup of its own provider finds an entry.
 func buildByModel(run domain.RunAggregate, table domain.PricingTable) []domain.ModelFigures {
-	byModel := make(map[domain.ModelID][]domain.InvocationUsage)
+	byKey := make(map[domain.PricingKey][]domain.InvocationUsage)
 	collect := func(a domain.ActorAggregate) {
 		for _, u := range withTokens(a.Invocations) {
-			byModel[u.Model] = append(byModel[u.Model], u)
+			key := domain.PricingKey{Provider: u.Provider, Model: u.Model}
+			byKey[key] = append(byKey[key], u)
 		}
 	}
 	collect(run.Orchestrator)
@@ -53,25 +56,29 @@ func buildByModel(run domain.RunAggregate, table domain.PricingTable) []domain.M
 		collect(a)
 	}
 
-	models := make([]domain.ModelID, 0, len(byModel))
-	for m := range byModel {
-		models = append(models, m)
+	keys := make([]domain.PricingKey, 0, len(byKey))
+	for k := range byKey {
+		keys = append(keys, k)
 	}
-	sort.Slice(models, func(i, j int) bool {
-		a, b := models[i], models[j]
-		if a.IsEmpty() != b.IsEmpty() {
-			return b.IsEmpty()
+	sort.Slice(keys, func(i, j int) bool {
+		a, b := keys[i], keys[j]
+		if a.Model.IsEmpty() != b.Model.IsEmpty() {
+			return b.Model.IsEmpty()
 		}
-		return a < b
+		return a.Less(b)
 	})
 
-	out := make([]domain.ModelFigures, len(models))
-	for i, m := range models {
-		usages := byModel[m]
-		_, totals := priceUsages(usages, table)
-		_, priced := table.Lookup(m)
+	out := make([]domain.ModelFigures, len(keys))
+	for i, k := range keys {
+		usages := byKey[k]
+		costs, totals := priceUsages(usages, table)
+		priced := len(costs) > 0
+		for _, c := range costs {
+			priced = priced && c.Priced
+		}
 		out[i] = domain.ModelFigures{
-			Model:    m,
+			Model:    k.Model,
+			Provider: k.Provider,
 			Priced:   priced,
 			Requests: len(usages),
 			Totals:   totals,

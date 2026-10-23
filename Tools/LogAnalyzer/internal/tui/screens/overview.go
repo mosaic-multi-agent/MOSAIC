@@ -80,6 +80,11 @@ func (s *OverviewScreen) body() []string {
 		count, _ := ov.Totals.Tokens.Get(cat)
 		out = append(out, line(fmt.Sprintf("  %-12s %12s  %s", cat.Label(), FormatTokens(count),
 			FormatMoney(categoryMoney(ov.Totals.Money, cat)))))
+		if cat == domain.CategoryOutput {
+			// Reasoning is part of output: shown beneath it, never as a cost line.
+			out = append(out, line(fmt.Sprintf("    %-10s %12s", domain.CategoryReasoning.Label(),
+				FormatTokens(ov.Totals.Tokens.Reasoning))))
+		}
 	}
 
 	out = append(out, "", clip(st.Subtitle, width, "By model"))
@@ -90,8 +95,8 @@ func (s *OverviewScreen) body() []string {
 }
 
 func modelRow(m domain.ModelFigures) string {
-	name := string(m.Model)
-	if name == "" {
+	name := domain.PricingKey{Provider: m.Provider, Model: m.Model}.String()
+	if m.Model == "" {
 		name = UnknownModelLabel
 	}
 	money := FormatMoney(m.Totals.Money.Total)

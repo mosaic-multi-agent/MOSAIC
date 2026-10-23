@@ -70,7 +70,7 @@ func EncodeText(w io.Writer, r domain.Report) error {
 	if len(r.UnpricedModels) > 0 {
 		fmt.Fprintf(w, "\nUnpriced models (no pricing entry found):\n")
 		for _, m := range r.UnpricedModels {
-			fmt.Fprintf(w, "  %s\n", string(m))
+			fmt.Fprintf(w, "  %s\n", m.String())
 		}
 	}
 
@@ -93,11 +93,13 @@ func writeTextRun(w io.Writer, run domain.RunReport) {
 
 	// Orchestrator actor
 	fmt.Fprintf(w, "  Orchestrator:\n")
+	writeTextEffort(w, run.Orchestrator.Effort, "    ")
 	writeTextTotals(w, run.Orchestrator.Totals, "    ")
 
 	// Agent-instance actors
 	for _, agent := range run.Agents {
 		fmt.Fprintf(w, "  Agent: %s\n", agent.Actor.Label())
+		writeTextEffort(w, agent.Effort, "    ")
 		writeTextTotals(w, agent.Totals, "    ")
 	}
 }
@@ -125,6 +127,12 @@ func writeTextTokens(w io.Writer, u domain.TokenUsage, indent string) {
 		} else {
 			fmt.Fprintf(w, "%s%s: -\n", indent, cat.Label())
 		}
+	}
+	// Reasoning is part of output, shown beneath it; it is never a cost line.
+	if v, ok := u.Reasoning.Value(); ok {
+		fmt.Fprintf(w, "%s  %s: %s tokens\n", indent, domain.CategoryReasoning.Label(), formatGrouped(v))
+	} else {
+		fmt.Fprintf(w, "%s  %s: -\n", indent, domain.CategoryReasoning.Label())
 	}
 }
 
@@ -170,4 +178,13 @@ func reportAssumedTierTokens(r domain.Report) int64 {
 		total += r.Unattributable.Totals.AssumedTierCacheWrite
 	}
 	return total
+}
+
+// writeTextEffort writes the effort line; "-" marks that no level was reported.
+func writeTextEffort(w io.Writer, l domain.EffortLevels, indent string) {
+	label := l.Label()
+	if l.IsEmpty() {
+		label = "-"
+	}
+	fmt.Fprintf(w, "%sEffort: %s\n", indent, label)
 }

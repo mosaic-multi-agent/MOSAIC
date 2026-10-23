@@ -12,10 +12,10 @@ type Ratio struct {
 // orchestrator; run-level totals are carried separately.
 type GroupFigures struct {
 	Invocations    int
-	Totals         Totals    // sum of the members' Dispatch.Totals
-	UnpricedModels []ModelID // distinct, sorted, across members
-	MissingUsage   int       // members with Dispatch.MissingUsage
-	Open           int       // members with State == InvocationOpen
+	Totals         Totals       // sum of the members' Dispatch.Totals
+	UnpricedModels []PricingKey // distinct, sorted, across members
+	MissingUsage   int          // members with Dispatch.MissingUsage
+	Open           int          // members with State == InvocationOpen
 }
 
 // MoneyStats summarises per-member money totals.
@@ -40,10 +40,11 @@ type DurationStats struct {
 
 // ModelFigures is one model's priced requests within a run.
 type ModelFigures struct {
-	Model    ModelID // "" = requests that logged no model
-	Priced   bool    // a pricing entry exists for Model
-	Requests int     // number of InvocationUsage entries
-	Totals   Totals  // priced sum of those requests
+	Model    ModelID    // "" = requests that logged no model
+	Provider ProviderID // "" = requests that logged no provider; rows are keyed by (Provider, Model)
+	Priced   bool       // a pricing entry exists for Model
+	Requests int        // number of InvocationUsage entries
+	Totals   Totals     // priced sum of those requests
 }
 
 // RunOverview is the per-run overview view (V1).
@@ -61,9 +62,10 @@ type RunOverview struct {
 type Dispatch struct {
 	Invocation     Invocation
 	Models         []ModelID // distinct, sorted, from Invocation.Usage
-	UnpricedModels []ModelID
-	Totals         Totals // priced sum of Invocation.Usage; all NoData when none
-	MissingUsage   bool   // no entry in Invocation.Usage carries any token count
+	UnpricedModels []PricingKey
+	Totals         Totals       // priced sum of Invocation.Usage; all NoData when none
+	MissingUsage   bool         // no entry in Invocation.Usage carries any token count
+	Effort         EffortLevels // effort levels of Invocation.Usage
 }
 
 // AgentTypeGroup is one agent type's dispatches (V2).

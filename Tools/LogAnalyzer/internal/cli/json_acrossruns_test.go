@@ -42,7 +42,7 @@ func arAcrossRunsReport() domain.Report {
 	}
 	group := domain.GroupFigures{Invocations: 3, Totals: complete}
 	partialGroup := domain.GroupFigures{
-		Invocations: 2, Totals: partial, UnpricedModels: []domain.ModelID{"m-unpriced"}, MissingUsage: 1, Open: 1,
+		Invocations: 2, Totals: partial, UnpricedModels: []domain.PricingKey{{Model: "m-unpriced"}}, MissingUsage: 1, Open: 1,
 	}
 	report := vwReport(
 		domain.RunReport{Run: domain.NamedRun(arRunOne), Totals: complete},
@@ -52,7 +52,7 @@ func arAcrossRunsReport() domain.Report {
 		Runs: []domain.RunSummary{
 			{Run: domain.NamedRun(arRunOne), Totals: complete, Subagents: group},
 			{Run: domain.NamedRun(arRunTwo), Provisional: true, Totals: partial,
-				UnpricedModels: []domain.ModelID{"m-unpriced"}, Subagents: partialGroup},
+				UnpricedModels: []domain.PricingKey{{Model: "m-unpriced"}}, Subagents: partialGroup},
 		},
 		ByAgentType: []domain.AgentTypeAcrossRuns{
 			{

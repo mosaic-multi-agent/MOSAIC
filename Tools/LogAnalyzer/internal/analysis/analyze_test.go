@@ -281,7 +281,7 @@ func TestPrice_UnpricedModel_AppearsInUnpricedModelsList(t *testing.T) {
 
 	found := false
 	for _, m := range report.UnpricedModels {
-		if m == "unknown-model" {
+		if m.Model == "unknown-model" {
 			found = true
 			break
 		}

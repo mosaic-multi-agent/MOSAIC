@@ -27,20 +27,20 @@ func TestPricingGaps_UnpricedModelInReport_ReturnedInGapList(t *testing.T) {
 	// PricingGaps must list every model that appears in Report.UnpricedModels,
 	// sorted by model id as specified by the design.
 	report := domain.Report{
-		UnpricedModels: []domain.ModelID{"model-b", "model-a"},
+		UnpricedModels: []domain.PricingKey{{Model: "model-b"}, {Model: "model-a"}},
 		Runs: []domain.RunReport{
 			{
 				Run:            appTestRunRef,
-				UnpricedModels: []domain.ModelID{"model-a", "model-b"},
+				UnpricedModels: []domain.PricingKey{{Model: "model-a"}, {Model: "model-b"}},
 				Orchestrator:   domain.ActorReport{Actor: domain.Orchestrator()},
 				Agents: []domain.ActorReport{
 					{
 						Actor:          domain.AgentInstance("Agent#1"),
-						UnpricedModels: []domain.ModelID{"model-a"},
+						UnpricedModels: []domain.PricingKey{{Model: "model-a"}},
 					},
 					{
 						Actor:          domain.AgentInstance("Agent#2"),
-						UnpricedModels: []domain.ModelID{"model-b"},
+						UnpricedModels: []domain.PricingKey{{Model: "model-b"}},
 					},
 				},
 			},

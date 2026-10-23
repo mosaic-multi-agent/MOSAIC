@@ -44,22 +44,23 @@ func buildDispatches(invocations []domain.Invocation, table domain.PricingTable)
 		usages := withTokens(inv.Usage)
 		costs, totals := priceUsages(usages, table)
 		models := make(map[domain.ModelID]bool)
-		unpriced := make(map[domain.ModelID]bool)
+		unpriced := make(map[domain.PricingKey]bool)
 		for _, c := range costs {
 			if c.Model.IsEmpty() {
 				continue
 			}
 			models[c.Model] = true
 			if !c.Priced {
-				unpriced[c.Model] = true
+				unpriced[domain.PricingKey{Provider: c.Provider, Model: c.Model}] = true
 			}
 		}
 		out[i] = domain.Dispatch{
 			Invocation:     inv,
 			Models:         sortedModelIDSet(models),
-			UnpricedModels: sortedModelIDSet(unpriced),
+			UnpricedModels: domain.SortedPricingKeys(unpriced),
 			Totals:         totals,
 			MissingUsage:   len(usages) == 0,
+			Effort:         domain.CountEffort(usages...),
 		}
 	}
 	return out
@@ -69,7 +70,7 @@ func buildDispatches(invocations []domain.Invocation, table domain.PricingTable)
 func groupFigures(members []domain.Dispatch) domain.GroupFigures {
 	moneys := make([]domain.CategoryMoney, len(members))
 	tokens := make([]domain.TokenUsage, len(members))
-	unpriced := make(map[domain.ModelID]bool)
+	unpriced := make(map[domain.PricingKey]bool)
 	f := domain.GroupFigures{Invocations: len(members)}
 	for i, d := range members {
 		moneys[i] = d.Totals.Money
@@ -87,7 +88,7 @@ func groupFigures(members []domain.Dispatch) domain.GroupFigures {
 	}
 	f.Totals.Tokens = domain.SumUsage(tokens...)
 	f.Totals.Money = sumCategoryMoneys(moneys...)
-	f.UnpricedModels = sortedModelIDSet(unpriced)
+	f.UnpricedModels = domain.SortedPricingKeys(unpriced)
 	return f
 }
 

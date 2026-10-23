@@ -128,12 +128,12 @@ func formatMoneyTotal(c domain.CategoryMoney) string {
 
 // incompleteness lists the labels for unpriced models, assumed cache-write tier,
 // missing token usage and open invocations that apply to a figure.
-func incompleteness(unpriced []domain.ModelID, assumed int64, missing, open int) []string {
+func incompleteness(unpriced []domain.PricingKey, assumed int64, missing, open int) []string {
 	var out []string
 	if len(unpriced) > 0 {
 		names := make([]string, len(unpriced))
 		for i, m := range unpriced {
-			names[i] = string(m)
+			names[i] = m.String()
 		}
 		out = append(out, UnpricedMarker+": "+strings.Join(names, ", "))
 	}

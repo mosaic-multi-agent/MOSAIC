@@ -107,10 +107,10 @@ func TestAgentTypesDrill_ClosedDispatchWithStatusHasNoOpenOrNoStatusLabel(t *tes
 func TestAgentTypesDrill_LabelsUnpricedAndPartialDispatches(t *testing.T) {
 	run := agentTypesRun()
 	d := closedDispatch("builder#1", "SUCCESS", 0)
-	d.UnpricedModels = []domain.ModelID{"model-x"}
+	d.UnpricedModels = []domain.PricingKey{{Model: "model-x"}}
 	d.Totals.Money = domain.CategoryMoney{Total: domain.UnpricedMoney()}
 	p := closedDispatch("builder#2", "SUCCESS", 343)
-	p.UnpricedModels = []domain.ModelID{"model-x"}
+	p.UnpricedModels = []domain.PricingKey{{Model: "model-x"}}
 	p.Totals.Money.Complete = false
 	run.ByAgentType[0].Dispatches = []domain.Dispatch{d, p}
 
