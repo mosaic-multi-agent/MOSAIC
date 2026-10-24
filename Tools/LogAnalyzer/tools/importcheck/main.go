@@ -168,6 +168,18 @@ var rules = []rule{
 		},
 	},
 	{
+		dir:  "internal/digest",
+		desc: "digest is an I/O adapter: must not import frontend or use-case packages",
+		forbidPrefix: []string{
+			modulePrefix + "internal/app",
+			modulePrefix + "internal/cli",
+			modulePrefix + "internal/tui",
+			modulePrefix + "internal/logscan",
+			modulePrefix + "internal/logread",
+			modulePrefix + "internal/pricing",
+		},
+	},
+	{
 		dir:  "internal/cli",
 		desc: "cli is an adapter frontend: must not import the tui sibling frontend",
 		forbidPrefix: []string{

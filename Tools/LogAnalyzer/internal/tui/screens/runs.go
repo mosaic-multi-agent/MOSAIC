@@ -169,7 +169,7 @@ func (s *RunsScreen) View(width, height int) string {
 
 	// --- Scroll hint for the help bar ---
 	hint := FormatScrollHint(w, n)
-	helpText := "↑/↓ navigate  enter open  a across runs  s source  p pricing  esc quit  ctrl+c quit"
+	helpText := "↑/↓ navigate  enter open  a across runs  e export run  E export all  s source  p pricing  esc quit  ctrl+c quit"
 	if hint != "" {
 		helpText += "  " + hint
 	}
@@ -207,7 +207,7 @@ func (s *RunsScreen) writeRunRow(sb *strings.Builder, idx int, run domain.RunRep
 
 // Help returns the key hints for this screen.
 func (s *RunsScreen) Help() string {
-	return "↑/↓ navigate  enter open  a across runs  s source  p pricing  esc quit  ctrl+c quit"
+	return "↑/↓ navigate  enter open  a across runs  e export run  E export all  s source  p pricing  esc quit  ctrl+c quit"
 }
 
 // Done reports whether the user selected a run.

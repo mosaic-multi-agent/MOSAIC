@@ -256,12 +256,14 @@ func stripActivity(a domain.Aggregate) domain.Aggregate {
 	runs := make([]domain.RunAggregate, len(a.Runs))
 	for i, r := range a.Runs {
 		r.Activity = domain.RunActivity{}
+		r.Facts = domain.RunFacts{}
 		runs[i] = r
 	}
 	a.Runs = runs
 	if a.Unattributable != nil {
 		u := *a.Unattributable
 		u.Activity = domain.RunActivity{}
+		u.Facts = domain.RunFacts{}
 		a.Unattributable = &u
 	}
 	return a

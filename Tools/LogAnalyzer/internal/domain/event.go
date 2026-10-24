@@ -18,6 +18,7 @@ const (
 	EventToolCallStart   EventType = "tool_call_start"
 	EventToolCallEnd     EventType = "tool_call_end"
 	EventCompaction      EventType = "compaction"
+	EventNotification    EventType = "notification"
 	EventOther           EventType = "" // any type this tool does not consume
 )
 
@@ -68,6 +69,11 @@ type Event struct {
 	ToolCallStart   *ToolCallStartFields
 	ToolCallEnd     *ToolCallEndFields
 	Compaction      *CompactionFields
+	RunStart        *RunStartFields
+	RunEnd          *RunEndFields
+	SessionStart    *SessionStartFields
+	SessionEnd      *SessionEndFields
+	Notification    *NotificationFields
 }
 
 // ToolCallStatus is the outcome reported on a tool_call_end event.
@@ -151,4 +157,37 @@ type TurnFields struct {
 	Provider ProviderID // "" when absent
 	Usage    TokenUsage
 	HasUsage bool
+}
+
+// RunStartFields holds the fields from a run_start event.
+type RunStartFields struct {
+	AdapterVersion string     // "" when absent
+	Model          ModelID    // orchestrator model; "" when absent
+	Provider       ProviderID // "" when absent
+}
+
+// RunEndFields holds the fields from a run_end event.
+type RunEndFields struct {
+	Outcome string // "" when absent
+}
+
+// SessionStartFields holds the fields from a session_start event.
+type SessionStartFields struct {
+	Resumed  OptionalBool
+	Model    ModelID
+	Provider ProviderID
+}
+
+// SessionEndFields holds the fields from a session_end event.
+type SessionEndFields struct {
+	Reason string // "" when absent
+}
+
+// NotificationFields holds the fields from a notification event. The message
+// is deliberately not decoded.
+type NotificationFields struct {
+	NotificationType string // "" when absent
+	RequiresResponse OptionalBool
+	Resolution       string // "" when absent
+	NotificationID   string // "" when absent
 }

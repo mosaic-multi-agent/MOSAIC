@@ -13,9 +13,11 @@ type Deps struct {
 	Source      domain.LogSource
 	Reader      domain.EventReader
 	Pricing     domain.PricingStore
+	Digests     domain.DigestStore // nil = no digest support (Analyze is logs-only)
 	Clock       domain.Clock
 	Interaction domain.Interaction
 	WorkDir     string // used for default-location probing
+	ToolVersion string // LogAnalyzer version recorded in exported digests
 }
 
 // Service is the single use-case layer both frontends drive.
@@ -78,7 +80,7 @@ func (s *Service) PricingPath() string {
 //     pricing document, or a context cancellation).
 func (s *Service) Analyze(ctx context.Context, req Request) (Result, error) {
 	// Resolve source following explicit → default → prompt order.
-	src, outcome, err := s.resolveSource(ctx, req)
+	src, digestFiles, outcome, err := s.resolveWith(ctx, req, s.digestResolver())
 	if err != nil {
 		return Result{}, err
 	}
@@ -92,33 +94,24 @@ func (s *Service) Analyze(ctx context.Context, req Request) (Result, error) {
 		return Result{}, err
 	}
 
-	// Enumerate the source to discover run folders and event files.
-	inv, enumFindings := s.deps.Source.Enumerate(src)
-
-	// Collect findings from infrastructure phases to carry into the quality summary.
-	carried := make([]domain.Finding, 0, len(pricingFindings)+len(enumFindings))
-	carried = append(carried, pricingFindings...)
-	carried = append(carried, enumFindings...)
+	loaded, err := s.readSource(ctx, src, digestFiles)
+	if err != nil {
+		return Result{}, err
+	}
 
 	// A structurally valid source with no run data is a named no-data outcome.
-	if inv.IsEmpty() {
+	if loaded.noData {
 		return Result{
 			Outcome: OutcomeNoData,
 			Source:  src,
 		}, nil
 	}
 
-	// Read every discovered event file exactly once.
-	streams, readFindings, err := s.readAllStreams(ctx, inv)
-	if err != nil {
-		return Result{}, err
-	}
-	carried = append(carried, readFindings...)
-
-	// Aggregate (pure attribution) then price (pure money computation).
-	in := analysis.Input{Streams: streams}
-	agg, aggFindings := analysis.Aggregate(in)
-	carried = append(carried, aggFindings...)
+	// Findings from infrastructure phases carry into the quality summary.
+	carried := make([]domain.Finding, 0, len(pricingFindings)+len(loaded.findings))
+	carried = append(carried, pricingFindings...)
+	carried = append(carried, loaded.findings...)
+	agg := loaded.aggregate
 
 	report, priceFindings := analysis.Price(agg, table, src)
 	carried = append(carried, priceFindings...)
@@ -127,9 +120,10 @@ func (s *Service) Analyze(ctx context.Context, req Request) (Result, error) {
 	report.Quality = domain.NewQualitySummary(carried)
 
 	sess := &Session{
-		aggregate: agg,
-		table:     table,
-		source:    src,
+		aggregate:      agg,
+		table:          table,
+		source:         src,
+		exportFindings: loaded.exportFindings,
 	}
 
 	result := Result{

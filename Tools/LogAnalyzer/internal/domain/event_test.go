@@ -372,3 +372,43 @@ func TestTurnRole_Constants_WireValues(t *testing.T) {
 		t.Errorf("TurnAssistant = %q, want %q", domain.TurnAssistant, "assistant")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// EventNotification constant and OptionalBool behaviour
+// ---------------------------------------------------------------------------
+
+func TestEventType_EventNotification_WireValue(t *testing.T) {
+	if domain.EventNotification != "notification" {
+		t.Errorf("EventNotification = %q, want %q", domain.EventNotification, "notification")
+	}
+}
+
+func TestOptionalBool_ZeroValue_IsAbsentNotFalse(t *testing.T) {
+	var o domain.OptionalBool
+
+	value, present := o.Value()
+
+	if present || value || o.IsPresent() || o != domain.BoolAbsent {
+		t.Errorf("zero OptionalBool = (%v,%v), want absent", value, present)
+	}
+}
+
+func TestOptionalBool_BoolOf_IsPresent(t *testing.T) {
+	cases := []struct {
+		in   bool
+		want domain.OptionalBool
+	}{{true, domain.BoolTrue}, {false, domain.BoolFalse}}
+	for _, c := range cases {
+		got := domain.BoolOf(c.in)
+		value, present := got.Value()
+		if got != c.want || value != c.in || !present || !got.IsPresent() {
+			t.Errorf("BoolOf(%v) = %v (value %v, present %v), want %v present", c.in, got, value, present, c.want)
+		}
+	}
+}
+
+func TestOptionalBool_FalseAndAbsent_AreDistinct(t *testing.T) {
+	if domain.BoolFalse == domain.BoolAbsent {
+		t.Error("BoolFalse must differ from BoolAbsent")
+	}
+}

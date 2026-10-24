@@ -24,6 +24,7 @@ type runState struct {
 	crossStreamReported map[string]bool
 	// activity accumulates the run model; nil until the first related event.
 	activity *runActivityState
+	facts    *factsState // digest facts; nil until the first event
 }
 
 // actorState holds mutable state for one actor within a run.
@@ -97,6 +98,7 @@ func NewAggregator() *Aggregator {
 // attributed to an actor produce a Finding rather than being dropped silently.
 func (a *Aggregator) Add(ref domain.StreamRef, ev domain.Event) {
 	rs := a.getOrCreateRunState(ref.Run)
+	a.recordFacts(rs, ref, ev)
 
 	// Handle run-completion markers before any other processing.
 	switch ev.Type {
@@ -108,7 +110,7 @@ func (a *Aggregator) Add(ref domain.StreamRef, ev domain.Event) {
 	// Benign event types carry no attribution-relevant field blocks.
 	// They must be silently discarded with no finding and no totals change.
 	switch ev.Type {
-	case domain.EventOther, domain.EventRunStart, domain.EventSessionStart:
+	case domain.EventOther, domain.EventRunStart, domain.EventSessionStart, domain.EventNotification:
 		return
 	}
 
@@ -181,6 +183,7 @@ func (a *Aggregator) handleOrchestratorEvent(rs *runState, ref domain.StreamRef,
 			Provider: ev.Turn.Provider,
 			Harness:  ev.Harness,
 			Usage:    ev.Turn.Usage,
+			At:       ev.Timestamp,
 		})
 
 	default:
@@ -268,6 +271,7 @@ func (a *Aggregator) handleUsageRecord(rs *runState, ref domain.StreamRef, ev do
 		Effort:   rec.Effort,
 		Harness:  ev.Harness,
 		Usage:    rec.Usage,
+		RecordID: rec.RecordID, At: ev.Timestamp, ServiceTier: rec.ServiceTier,
 	}
 
 	if rec.RecordID == "" {
@@ -409,6 +413,7 @@ func (a *Aggregator) handleInvocationEnd(rs *runState, ref domain.StreamRef, ev 
 		Provider: end.Provider,
 		Harness:  ev.Harness,
 		Usage:    end.Usage,
+		At:       ev.Timestamp,
 	})
 }
 
@@ -473,7 +478,7 @@ func buildRunAggregate(rs *runState) domain.RunAggregate {
 		})
 	}
 
-	return domain.RunAggregate{
+	out := domain.RunAggregate{
 		Run:         rs.run,
 		Provisional: rs.provisional,
 		Orchestrator: domain.ActorAggregate{
@@ -483,4 +488,6 @@ func buildRunAggregate(rs *runState) domain.RunAggregate {
 		Agents:   agents,
 		Activity: buildActivity(rs),
 	}
+	applyFacts(rs, &out)
+	return out
 }

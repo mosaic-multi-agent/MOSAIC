@@ -29,6 +29,7 @@ type instanceActivity struct {
 	endedAt   time.Time
 	status    string
 	model     domain.ModelID
+	provider  domain.ProviderID
 }
 
 // runActivityState accumulates the run model of one run.
@@ -129,6 +130,7 @@ func (rs *runState) recordInvocationEnd(id domain.AgentInstanceID, end *domain.I
 	ia.endedAt = at
 	ia.status = end.StatusCode
 	ia.model = end.Model
+	ia.provider = end.Provider
 }
 
 // buildActivity converts the accumulated state into the run model. It reads
@@ -183,6 +185,7 @@ func applyInstanceActivity(inv *domain.Invocation, ia *instanceActivity) {
 	inv.EndedAt = ia.endedAt
 	inv.StatusCode = ia.status
 	inv.Model = ia.model
+	inv.Provider = ia.provider
 }
 
 // pairToolCalls pairs starts and ends by call_id. A call pairs only when its

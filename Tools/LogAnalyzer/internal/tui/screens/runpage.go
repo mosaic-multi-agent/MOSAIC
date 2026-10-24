@@ -45,7 +45,7 @@ func renderPage(st Styles, width int, title, label string, visible []string, w W
 	sb.WriteString(clip(st.Border, width, strings.Repeat("─", max(width, 0))))
 	sb.WriteByte('\n')
 	if hint := FormatScrollHint(w, total); hint != "" {
-		help += "  " + hint
+		help = hint + "  " + help // first, so clipping a long help line keeps it
 	}
 	sb.WriteString(clip(st.Help, width, help))
 	return sb.String()
@@ -94,7 +94,8 @@ func (n *viewNav) requested() (ScreenID, bool) { return n.req, n.req != "" }
 
 func (n *viewNav) reset() { n.req = "" }
 
-// viewKeysHelp lists the keys that switch to the per-run views other than self.
+// viewKeysHelp lists the keys that switch to the per-run views other than self,
+// followed by the export keys.
 func viewKeysHelp(self ScreenID) string {
 	entries := []struct {
 		id   ScreenID
@@ -114,6 +115,7 @@ func viewKeysHelp(self ScreenID) string {
 			parts = append(parts, e.key+" "+e.name)
 		}
 	}
+	parts = append(parts, exportKeysHelp)
 	return strings.Join(parts, "  ")
 }
 

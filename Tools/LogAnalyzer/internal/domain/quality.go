@@ -67,6 +67,10 @@ var dataLossKinds = map[FindingKind]bool{
 	FindingUnreadableFile:     true,
 	FindingMissingEventFile:   true,
 	FindingUnrecognisedFolder: true,
+
+	// Digest files skipped at load time.
+	FindingInvalidDigest:            true,
+	FindingUnsupportedDigestVersion: true,
 }
 
 // Incomplete reports whether the data behind the report is known to be partial.

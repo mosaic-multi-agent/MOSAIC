@@ -69,7 +69,7 @@ func (m Model) viewRunView() string {
 	if m.runView == nil {
 		return ""
 	}
-	return m.runView.View(m.width, m.height)
+	return m.withExportStatus(func(h int) string { return m.runView.View(m.width, h) })
 }
 
 // openAcrossRuns shows the across-runs view built from the model's current report.

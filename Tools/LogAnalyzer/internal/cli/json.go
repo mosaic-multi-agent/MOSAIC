@@ -317,6 +317,10 @@ func encodeSource(s domain.Source) jsonSource {
 		kind = "single_run"
 	case domain.SourceUnusable:
 		kind = "unusable"
+	case domain.SourceDigestFile:
+		kind = "digest_file"
+	case domain.SourceDigestDir:
+		kind = "digest_dir"
 	}
 	return jsonSource{Kind: kind, Path: s.Path}
 }

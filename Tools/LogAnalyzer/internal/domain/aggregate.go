@@ -1,6 +1,9 @@
 package domain
 
-import "sort"
+import (
+	"sort"
+	"time"
+)
 
 // InvocationUsage is the pricing unit. Tier selection is per invocation, never
 // per run, so per-invocation records are retained rather than pre-summed.
@@ -10,6 +13,10 @@ type InvocationUsage struct {
 	Effort   string     // usage_record only; "" otherwise
 	Harness  Harness
 	Usage    TokenUsage
+
+	RecordID    string    // usage_record record_id; "" for legacy entries or when not logged
+	At          time.Time // timestamp of the usage_record / turn / invocation_end; zero when unparseable
+	ServiceTier string    // usage_record only; "" otherwise or when absent
 }
 
 // ActorAggregate holds one actor's invocation records within one run.
@@ -47,6 +54,11 @@ type RunAggregate struct {
 	Agents       []ActorAggregate // sorted by instance id
 	// Activity is the run model: invocations, tool calls and compactions.
 	Activity RunActivity
+
+	Facts         RunFacts
+	Sessions      []RunSession   // in feed order of the first event naming each session id
+	Turns         []Turn         // feed order, every stream, user and assistant
+	Notifications []Notification // feed order, every stream
 }
 
 // Totals returns the combined token usage across all actors in the run.

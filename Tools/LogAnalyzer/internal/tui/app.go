@@ -94,6 +94,9 @@ type Model struct {
 	selectOverlay   *overlaySelectOne
 	textOverlay     *overlayText
 
+	// Digest export action state.
+	export exportFlow
+
 	// Status shown on loading/error screen.
 	errMsg string
 
@@ -220,6 +223,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Pricing editor complete.
 	if done, ok := msg.(pricingEditDoneMsg); ok {
 		return m.handlePricingEditDone(done)
+	}
+
+	// Digest export complete.
+	if done, ok := msg.(exportDoneMsg); ok {
+		return m.handleExportDone(done)
+	}
+
+	// Export action keys and the export screen.
+	var exportCmd tea.Cmd
+	var exportHandled bool
+	m, exportCmd, exportHandled = m.exportKeyHook(msg)
+	if exportHandled {
+		return m, exportCmd
 	}
 
 	// Pending question from the Interaction port.
@@ -585,8 +601,11 @@ func (m Model) View() string {
 
 	case screenRuns:
 		if m.runsScreen != nil {
-			return m.runsScreen.View(m.width, m.height)
+			return m.withExportStatus(func(h int) string { return m.runsScreen.View(m.width, h) })
 		}
+
+	case screenExport:
+		return m.viewExport()
 
 	case screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline, screenAcrossRuns:
 		return m.viewRunView()

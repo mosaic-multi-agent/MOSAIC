@@ -52,8 +52,8 @@ type wireEvent struct {
 	AgentInstanceID string           `json:"agent_instance_id"`
 	AgentType       string           `json:"agent_type"`
 	StatusCode      string           `json:"status_code"`
-	Model           string           `json:"model"`
-	Provider        string           `json:"provider"`
+	Model           lenientString    `json:"model"`
+	Provider        lenientString    `json:"provider"`
 	Effort          string           `json:"effort"`
 	Role            string           `json:"role"`
 	TokenUsage      *json.RawMessage `json:"token_usage"`
@@ -67,6 +67,8 @@ type wireEvent struct {
 	Trigger         string           `json:"trigger"`
 	TokensBefore    *int64           `json:"tokens_before"`
 	TokensAfter     *int64           `json:"tokens_after"`
+
+	wireLifecycle
 }
 
 // wireUsage is the JSON wire shape for the token_usage sub-object.
@@ -199,15 +201,11 @@ func buildEvent(wire wireEvent) domain.Event {
 		RunID:         wire.RunID,
 	}
 
+	if applyLifecycle(&ev, wire) {
+		return ev
+	}
+
 	switch domain.EventType(wire.Event) {
-	case domain.EventRunStart:
-		ev.Type = domain.EventRunStart
-	case domain.EventRunEnd:
-		ev.Type = domain.EventRunEnd
-	case domain.EventSessionStart:
-		ev.Type = domain.EventSessionStart
-	case domain.EventSessionEnd:
-		ev.Type = domain.EventSessionEnd
 	case domain.EventInvocationStart:
 		ev.Type = domain.EventInvocationStart
 		ev.InvocationStart = &domain.InvocationStartFields{

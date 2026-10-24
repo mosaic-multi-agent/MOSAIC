@@ -10,7 +10,7 @@ package logread_test
 //   - Absent fields decode as empty / absent, without a finding.
 //   - An unknown status or trigger value is kept verbatim.
 //   - Payload bodies (tool_input, tool_output, error) are not decoded.
-//   - notification and unknown event types keep decoding as EventOther.
+//   - unknown event types keep decoding as EventOther.
 
 import (
 	"strings"
@@ -220,13 +220,12 @@ func TestReader_ToolCallEvents_AtPriorSchemaVersionsRaiseNoFinding(t *testing.T)
 	}
 }
 
-func TestReader_NotificationAndUnknownTypes_StillDecodeAsOther(t *testing.T) {
+func TestReader_UnknownTypes_StillDecodeAsOther(t *testing.T) {
 	events, findings := readTierLines(t,
-		rmLine("notification", "2026-10-01T10:00:01.000Z", `"notification_type":"idle"`),
 		rmLine("future_event_kind", "2026-10-01T10:00:02.000Z", `"x":1`))
 
-	if len(events) != 2 {
-		t.Fatalf("got %d events, want 2", len(events))
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
 	}
 	for i, ev := range events {
 		if ev.Type != domain.EventOther {
@@ -236,8 +235,8 @@ func TestReader_NotificationAndUnknownTypes_StillDecodeAsOther(t *testing.T) {
 			t.Errorf("event %d must carry no run-model block", i)
 		}
 	}
-	if events[0].RawType != "notification" || events[1].RawType != "future_event_kind" {
-		t.Errorf("RawType = %q, %q; want the wire values preserved", events[0].RawType, events[1].RawType)
+	if events[0].RawType != "future_event_kind" {
+		t.Errorf("RawType = %q; want the wire value preserved", events[0].RawType)
 	}
 	if len(findings) != 0 {
 		t.Errorf("unexpected findings: %v", findings)

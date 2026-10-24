@@ -50,11 +50,12 @@ func timeSpan(start, end time.Time) (time.Duration, bool) {
 type Invocation struct {
 	Actor      ActorRef // ActorAgentInstance; Type as resolved for the matching ActorAggregate ("" when unknown)
 	State      InvocationState
-	StatusCode string    // from the last invocation_end, verbatim; "" when absent or Open
-	Model      ModelID   // from the last invocation_end; "" when absent or Open
-	StartedAt  time.Time // first invocation_start timestamp; zero when none or unparseable
-	EndedAt    time.Time // last invocation_end timestamp; zero when Open or unparseable
-	EndEvents  int       // number of invocation_end events observed
+	StatusCode string     // from the last invocation_end, verbatim; "" when absent or Open
+	Model      ModelID    // from the last invocation_end; "" when absent or Open
+	Provider   ProviderID // from the last invocation_end; "" when absent or Open
+	StartedAt  time.Time  // first invocation_start timestamp; zero when none or unparseable
+	EndedAt    time.Time  // last invocation_end timestamp; zero when Open or unparseable
+	EndEvents  int        // number of invocation_end events observed
 	ToolCalls  []ToolCall
 	Usage      []InvocationUsage // identical to the matching ActorAggregate.Invocations; nil when none
 }

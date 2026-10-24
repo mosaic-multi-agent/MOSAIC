@@ -25,6 +25,7 @@ type Options struct {
 //
 //	mosaic-log-analyzer report [--path P] [--run ID] [--format json|text]
 //	mosaic-log-analyzer total  --run ID [--path P]          (stable FR-19 JSON)
+//	mosaic-log-analyzer export --out F.digest.json [--path P] [--run ID] [--force]
 //	mosaic-log-analyzer pricing path                        (prints the config path)
 //
 // Persistent flags:
@@ -199,6 +200,9 @@ func newRootCommandWithExitCode(opts Options, exitCode *int) *cobra.Command {
 	}
 	pricingCmd.AddCommand(pricingPathCmd)
 
-	root.AddCommand(reportCmd, totalCmd, pricingCmd)
+	exportCmd := newExportCommand(opts, exitCode,
+		func() string { return pathFlag }, func() string { return runFlag })
+
+	root.AddCommand(reportCmd, totalCmd, pricingCmd, exportCmd)
 	return root
 }
