@@ -15,24 +15,24 @@
 <!-- generated:model-comparison -->
 ## Model Comparison
 
-| Model | Tests | Pass Rate | Cost |
-|-------|-------|-----------|------|
-| claude-haiku-4-5 | 2600 | 51% | $6.67/100t |
-| claude-opus-5 | 200 | 50% | $47.09/100t |
-| claude-opus-5-5 | 1500 | 92% | [cost?] |
-| claude-sonnet-5 | 1883 | 90% | $10.36/100t |
-| claude-sonnet-5-5 | 2600 | 95% | [cost?] |
-| gpt-5.6-terra | 796 | 81% | [cost?] |
+| Model | Tests | Pass Rate |
+|-------|-------|-----------|
+| claude-haiku-4-5 | 2600 | 51% |
+| claude-opus-5 | 200 | 50% |
+| claude-opus-5-5 | 1500 | 92% |
+| claude-sonnet-5 | 1883 | 90% |
+| claude-sonnet-5-5 | 2600 | 95% |
+| gpt-5.6-terra | 796 | 81% |
 
 <!-- /generated:model-comparison -->
 
 <!-- generated:harness-comparison -->
 ## Harness Comparison
 
-| Harness | Tests | Pass Rate | Cost |
-|---------|-------|-----------|------|
-| claude-code | 8783 | 80% | [cost?] |
-| opencode | 796 | 81% | [cost?] |
+| Harness | Tests | Pass Rate |
+|---------|-------|-----------|
+| claude-code | 8783 | 80% |
+| opencode | 796 | 81% |
 
 <!-- /generated:harness-comparison -->
 
@@ -41,56 +41,56 @@
 
 ### claude-haiku-4-5
 
-| Suite | Harness | Tests | Pass Rate | Cost |
-|-------|---------|-------|-----------|------|
-| execution-groups | claude-code | 300 | 67% | $3.01/100t |
-| hitl-gate | claude-code | 300 | 47% | $2.70/100t |
-| infrastructure-triggers | claude-code | 700 | 34% | $10.93/100t |
-| route-back | claude-code | 200 | 2% | $9.74/100t |
-| status-routing | claude-code | 800 | 67% | $6.37/100t |
-| wildcard-expansion | claude-code | 300 | 67% | $3.14/100t |
+| Suite | Harness | Tests | Pass Rate |
+|-------|---------|-------|-----------|
+| execution-groups | claude-code | 300 | 67% |
+| hitl-gate | claude-code | 300 | 47% |
+| infrastructure-triggers | claude-code | 700 | 34% |
+| route-back | claude-code | 200 | 2% |
+| status-routing | claude-code | 800 | 67% |
+| wildcard-expansion | claude-code | 300 | 67% |
 
 ### claude-opus-5
 
-| Suite | Harness | Tests | Pass Rate | Cost |
-|-------|---------|-------|-----------|------|
-| route-back | claude-code | 200 | 50% | $47.09/100t |
+| Suite | Harness | Tests | Pass Rate |
+|-------|---------|-------|-----------|
+| route-back | claude-code | 200 | 50% |
 
 ### claude-opus-5-5
 
-| Suite | Harness | Tests | Pass Rate | Cost |
-|-------|---------|-------|-----------|------|
-| execution-groups | claude-code | 300 | 100% | [cost?] |
-| hitl-gate | claude-code | 300 | 99% | [cost?] |
-| infrastructure-triggers | claude-code | 700 | 99% | [cost?] |
-| route-back | claude-code | 200 | 46% | $0.37/100t |
+| Suite | Harness | Tests | Pass Rate |
+|-------|---------|-------|-----------|
+| execution-groups | claude-code | 300 | 100% |
+| hitl-gate | claude-code | 300 | 99% |
+| infrastructure-triggers | claude-code | 700 | 99% |
+| route-back | claude-code | 200 | 46% |
 
 ### claude-sonnet-5
 
-| Suite | Harness | Tests | Pass Rate | Cost |
-|-------|---------|-------|-----------|------|
-| execution-groups | claude-code | 283 | 98% | $10.06/100t |
-| hitl-gate | claude-code | 300 | 99% | $7.97/100t |
-| route-back | claude-code | 200 | 34% | $18.91/100t |
-| status-routing | claude-code | 800 | 98% | $10.52/100t |
-| wildcard-expansion | claude-code | 300 | 93% | $6.89/100t |
+| Suite | Harness | Tests | Pass Rate |
+|-------|---------|-------|-----------|
+| execution-groups | claude-code | 283 | 98% |
+| hitl-gate | claude-code | 300 | 99% |
+| route-back | claude-code | 200 | 34% |
+| status-routing | claude-code | 800 | 98% |
+| wildcard-expansion | claude-code | 300 | 93% |
 
 ### claude-sonnet-5-5
 
-| Suite | Harness | Tests | Pass Rate | Cost |
-|-------|---------|-------|-----------|------|
-| execution-groups | claude-code | 300 | 100% | [cost?] |
-| hitl-gate | claude-code | 300 | 95% | [cost?] |
-| infrastructure-triggers | claude-code | 700 | 100% | [cost?] |
-| route-back | claude-code | 200 | 50% | [cost?] |
-| status-routing | claude-code | 800 | 100% | [cost?] |
-| wildcard-expansion | claude-code | 300 | 100% | [cost?] |
+| Suite | Harness | Tests | Pass Rate |
+|-------|---------|-------|-----------|
+| execution-groups | claude-code | 300 | 100% |
+| hitl-gate | claude-code | 300 | 95% |
+| infrastructure-triggers | claude-code | 700 | 100% |
+| route-back | claude-code | 200 | 50% |
+| status-routing | claude-code | 800 | 100% |
+| wildcard-expansion | claude-code | 300 | 100% |
 
 ### gpt-5.6-terra
 
-| Suite | Harness | Tests | Pass Rate | Cost |
-|-------|---------|-------|-----------|------|
-| status-routing | opencode | 796 | 81% | [cost?] |
+| Suite | Harness | Tests | Pass Rate |
+|-------|---------|-------|-----------|
+| status-routing | opencode | 796 | 81% |
 
 <!-- /generated:model-results -->
 

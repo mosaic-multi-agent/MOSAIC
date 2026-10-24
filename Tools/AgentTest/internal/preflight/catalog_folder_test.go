@@ -51,6 +51,7 @@ func TestValidate_CatalogFolder_OverrideWins(t *testing.T) {
 		HarnessID:     "claude-code",
 		CatalogFolder: defaultCatalog,
 		Overrides: preflight.Overrides{
+			SubjectModel:  testSubjectModel,
 			CatalogFolder: &override,
 		},
 	})
@@ -79,6 +80,7 @@ func TestValidate_CatalogFolder_DefaultUsedWhenOverrideNil(t *testing.T) {
 		HarnessID:     "claude-code",
 		CatalogFolder: defaultCatalog,
 		Overrides: preflight.Overrides{
+			SubjectModel:  testSubjectModel,
 			CatalogFolder: nil, // explicitly nil: use the default
 		},
 	})
@@ -105,7 +107,7 @@ func TestValidate_CatalogFolder_EmptyDefaultPreservedWhenNoOverride(t *testing.T
 		FixtureRoot:   filepath.Join(root, "fixtures"),
 		HarnessID:     "claude-code",
 		CatalogFolder: "", // empty default: no catalog override
-		Overrides:     preflight.Overrides{CatalogFolder: nil},
+		Overrides:     preflight.Overrides{SubjectModel: testSubjectModel, CatalogFolder: nil},
 	})
 
 	if plan.CatalogFolder != "" {
@@ -134,6 +136,7 @@ func TestValidate_CatalogFolder_ResolvedOnEarlyReturn_MissingSuite(t *testing.T)
 		HarnessID:     "claude-code",
 		CatalogFolder: defaultCatalog,
 		Overrides: preflight.Overrides{
+			SubjectModel:  testSubjectModel,
 			CatalogFolder: &override,
 		},
 	})
@@ -157,7 +160,7 @@ func TestValidate_CatalogFolder_DefaultOnEarlyReturn_WhenNoOverride(t *testing.T
 		FixtureRoot:   t.TempDir(),
 		HarnessID:     "claude-code",
 		CatalogFolder: defaultCatalog,
-		Overrides:     preflight.Overrides{CatalogFolder: nil},
+		Overrides:     preflight.Overrides{SubjectModel: testSubjectModel, CatalogFolder: nil},
 	})
 
 	if !rpt.HasErrors() {

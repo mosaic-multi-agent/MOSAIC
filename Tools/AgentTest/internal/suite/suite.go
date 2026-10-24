@@ -297,23 +297,25 @@ func (s *Suite) Run(ctx context.Context, p preflight.Plan) (report.Result, error
 	recordResult := func(slot *testSlot, item workItem, final domain.TestResult, attempts []domain.TestResult) {
 		slot.allResults[item.repIdx] = attempts
 		slot.runReports[item.repIdx] = report.RunReport{
-			Key:                 final.Key,
-			Verdict:             final.Verdict,
-			Reasons:             final.Reasons,
-			Assertions:          final.Assertions,
-			Conditions:          final.Conditions,
-			Duration:            final.Duration,
-			Cost:                final.Cost,
-			NegativeApplied:     final.NegativeApplied,
-			RetainedSandboxPath: final.RetainedSandboxPath,
-			SubjectVersion:      final.SubjectVersion,
-			SubjectModel:        final.SubjectModel,
-			StubModel:           final.StubModel,
-			HarnessID:           final.HarnessID,
-			HarnessVersion:      final.HarnessVersion,
-			TerminationReason:   final.TerminationReason,
-			TestVersion:         final.Version,
-			NumericID:           final.NumericID,
+			Key:                   final.Key,
+			Verdict:               final.Verdict,
+			Reasons:               final.Reasons,
+			Assertions:            final.Assertions,
+			Conditions:            final.Conditions,
+			Duration:              final.Duration,
+			Cost:                  final.Cost,
+			NegativeApplied:       final.NegativeApplied,
+			RetainedSandboxPath:   final.RetainedSandboxPath,
+			SubjectVersion:        final.SubjectVersion,
+			SubjectModel:          final.SubjectModel,
+			StubModel:             final.StubModel,
+			HarnessID:             final.HarnessID,
+			HarnessVersion:        final.HarnessVersion,
+			TerminationReason:     final.TerminationReason,
+			TestVersion:           final.Version,
+			NumericID:             final.NumericID,
+			ObservedSubjectModels: final.ObservedSubjectModels,
+			ModelValidity:         final.ModelValidity,
 			Subject: report.SubjectFailure{
 				ExitCode:  final.SubjectResult.ExitCode,
 				Stderr:    final.SubjectResult.Stderr,
@@ -454,10 +456,12 @@ func (s *Suite) Run(ctx context.Context, p preflight.Plan) (report.Result, error
 	result.ToolVersion = s.opts.ToolVersion
 
 	emitSafe(sink, domain.ProgressEvent{
-		Kind:      domain.ProgressSuiteFinished,
-		At:        finished,
-		Counts:    result.Counts,
-		TotalCost: result.TotalCost,
+		Kind:         domain.ProgressSuiteFinished,
+		At:           finished,
+		Counts:       result.Counts,
+		TotalCost:    result.TotalCost,
+		ModelVerdict: result.ModelVerdict,
+		ModelLabel:   result.ModelLabel,
 	})
 
 	return result, nil

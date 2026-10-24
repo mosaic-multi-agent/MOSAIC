@@ -161,6 +161,9 @@ func TestRetention_Never_AssertionFailure_SandboxIsRemoved(t *testing.T) {
 // for the Stage 15 widening of the retain-on-failure failure signal.
 func TestRetention_OnFailure_MixedVerdicts_OnlyFailingAttemptSandboxSurvives(t *testing.T) {
 	h := newHarness(t)
+	// A run is only valid when its observed subject model equals the selection,
+	// so the port reports the model both requests select.
+	h.Deps.ObservedModels = &recordingObservedModels{rec: h.Rec, evidence: domain.ObservedModelEvidence{Models: []string{"model-a"}}}
 
 	// Attempt 1: passes — no assertions declared, so evaluate.Evaluate returns
 	// VerdictPass. Under retain-on-failure this attempt's sandbox must be removed.
@@ -170,7 +173,7 @@ func TestRetention_OnFailure_MixedVerdicts_OnlyFailingAttemptSandboxSurvives(t *
 			TestName:    "mixed-verdict-test",
 			RunNumber: 1,
 		},
-		Test:      newRequest("mixed-verdict-test").Test,
+		Test:      observedRequest("mixed-verdict-test").Test,
 		Settings:  domain.RunSettings{},
 		Retention: domain.RetainOnFailure,
 	}
@@ -189,7 +192,7 @@ func TestRetention_OnFailure_MixedVerdicts_OnlyFailingAttemptSandboxSurvives(t *
 			TestName:    "mixed-verdict-test",
 			RunNumber: 2,
 		},
-		Test:      newRequest("mixed-verdict-test").Test,
+		Test:      observedRequest("mixed-verdict-test").Test,
 		Settings:  domain.RunSettings{},
 		Retention: domain.RetainOnFailure,
 	}

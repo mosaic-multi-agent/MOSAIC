@@ -1,0 +1,2 @@
+{"schema_version":"1.3.0","event":"usage_record","timestamp":"2026-10-30T12:00:02.000Z","harness":"opencode","session_id":"s-lost","agent_instance_id":"stray#1","record_id":"u1","token_usage":{"input_tokens":10,"output_tokens":1}}
+{"schema_version":"1.3.0","event":"usage_record","timestamp":"2026-10-30T12:00:03.000Z","harness":"opencode","session_id":"s-lost","agent_instance_id":"stray#1","record_id":"u2","provider":"p9","token_usage":{"input_tokens":10,"output_tokens":1}}

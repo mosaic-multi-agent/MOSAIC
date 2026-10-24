@@ -1,5 +1,5 @@
 ---
-version: 8.2.1
+version: 8.2.2
 name: orchestrator
 description: Central coordinator that manages multi-agent workflow execution, routing tasks to subagents and maintaining execution state
 role: orchestrator
@@ -661,7 +661,7 @@ Every trigger dispatch is sent with `human_in_the_loop: false` and an empty `out
 
 | Dispatch | `input_artifacts` | `task_description` |
 |---|---|---|
-| `Class = commit`, fired by `ITERATION_END` | The ended iteration's own artifacts (below) | Names the ended iteration by block name and ID, outermost enclosing iteration first: `Stage 2`; `Domain Billing / Stage 2`. When the invocation ended an inner and an enclosing iteration at once, name the innermost |
+| `Class = commit`, fired by `ITERATION_END` | The ended iteration's own artifacts (below) | Names the ended iteration by block name and ID, outermost enclosing iteration first: `Stage 2`; `Domain Billing / Stage 2`. When the invocation ended an inner and an enclosing iteration at once, name the innermost. Also names the run's recorded `commit_branch`, copied verbatim from the frontmatter |
 | `Class = review`, fired by any trigger | `Orchestration-{run_id}/Orchestration.md`, read-only | States only that the agent is dispatched on a trigger, naming the trigger or triggers that matched |
 | Every other trigger dispatch — `Class = checkpoint` on any trigger, and `Class = commit` fired by `INVOCATION_INTERVAL` or `PHASE_END` | Empty list | States only that the agent is dispatched on a trigger, naming the trigger or triggers that matched |
 

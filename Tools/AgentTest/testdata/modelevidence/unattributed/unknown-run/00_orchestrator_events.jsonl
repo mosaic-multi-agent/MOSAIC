@@ -1,0 +1,1 @@
+{"schema_version":"1.3.0","harness":"opencode","event":"usage_record","timestamp":"2026-10-24T12:00:02.000Z","session_id":"s-orphan","run_id":"","record_id":"u1","model":"claude-opus-5-5","provider":"anthropic","token_usage":{"input_tokens":100,"output_tokens":20}}

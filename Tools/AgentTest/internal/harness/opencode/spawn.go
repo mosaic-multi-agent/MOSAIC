@@ -58,6 +58,9 @@ const DefaultSpawnTimeout = 30 * time.Minute
 // the adapter must update this to a documented limitation and mark the scopes
 // InSandbox: false, Isolatable: false, with a non-empty Detail.
 func (a *Adapter) SpawnPlan(ctx context.Context, subject domain.SubjectUnderTest, p domain.Provisioning) (domain.SpawnPlan, error) {
+	if subject.Model == "" {
+		return domain.SpawnPlan{}, fmt.Errorf("%s: %w", "opencode", domain.ErrNoSubjectModel)
+	}
 	spawnReq := commonharness.SpawnRequest{
 		Agent: commonharness.AgentRef{
 			Identifier: subject.Identity,

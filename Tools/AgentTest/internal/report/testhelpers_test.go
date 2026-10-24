@@ -237,6 +237,10 @@ func fixtureFullResult() report.Result {
 			Detail:      "log root missing",
 		},
 		InfrastructureFailures: 1,
+		// None of the fixture's runs carries a model validity: every run is
+		// unverified, so the suite is MODEL_UNVERIFIED with five unverified runs.
+		ModelVerdict:   domain.ModelVerdictUnverified,
+		UnverifiedRuns: 5,
 	}
 }
 
@@ -250,6 +254,8 @@ func fixtureEmptyResult() report.Result {
 		Tests:         nil,
 		Counts:        map[domain.Verdict]int{},
 		TotalCost:     domain.CostReport{Attribution: domain.AttributionAttributed},
+		// No run exists, so the suite is unverified with no unverified runs.
+		ModelVerdict: domain.ModelVerdictUnverified,
 	}
 }
 
@@ -311,5 +317,7 @@ func fixtureAllExcludedResult() report.Result {
 		},
 		TotalCost:              domain.CostReport{Attribution: domain.AttributionAttributed},
 		InfrastructureFailures: 1,
+		ModelVerdict:           domain.ModelVerdictUnverified,
+		UnverifiedRuns:         2,
 	}
 }

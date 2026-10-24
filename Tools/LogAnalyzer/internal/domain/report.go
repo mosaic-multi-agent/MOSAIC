@@ -29,8 +29,10 @@ type ActorReport struct {
 	Models         []ModelID    // distinct, sorted
 	Keys           []PricingKey // distinct (provider, model) pairs of the actor's requests, sorted
 	UnpricedModels []PricingKey // subset of Keys with no pricing entry (strict lookup)
-	Totals         Totals
-	Effort         EffortLevels // effort levels of the actor's effective requests
+	// RequestsWithoutModel counts the actor's token-bearing requests that logged no model.
+	RequestsWithoutModel int
+	Totals               Totals
+	Effort               EffortLevels // effort levels of the actor's effective requests
 }
 
 // RunReport is one run's priced breakdown.

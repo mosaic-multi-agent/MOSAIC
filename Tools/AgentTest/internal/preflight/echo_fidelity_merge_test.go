@@ -107,10 +107,10 @@ const echoMergeRegistry = `{
 func echoFidelityMergeTree(t *testing.T, suiteYAML, definitionYAML string) string {
 	t.Helper()
 	return writeTree(t, map[string]string{
-		"s.suite.yaml":                suiteYAML,
-		"echo-merge-test.test.yaml":   definitionYAML,
-		"echo-merge-test.stubs.json":  echoMergeRegistry,
-		"agents/researcher.md":        "# stub researcher placeholder",
+		"s.suite.yaml":               suiteYAML,
+		"echo-merge-test.test.yaml":  definitionYAML,
+		"echo-merge-test.stubs.json": echoMergeRegistry,
+		"agents/researcher.md":       "# stub researcher placeholder",
 	})
 }
 
@@ -134,6 +134,7 @@ tests:
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	if report.HasErrors() {
@@ -174,6 +175,7 @@ tests:
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	if report.HasErrors() {
@@ -216,6 +218,7 @@ tests:
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	if report.HasErrors() {
@@ -255,6 +258,7 @@ tests:
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	if report.HasErrors() {

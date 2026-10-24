@@ -194,12 +194,31 @@ func encodeTotals(t domain.Totals) jsonTotals {
 
 // jsonActorReport is the per-actor breakdown within a run.
 type jsonActorReport struct {
-	Actor          string       `json:"actor"`
-	AgentType      string       `json:"agent_type,omitempty"`
-	Models         []string     `json:"models"`
-	UnpricedModels []string     `json:"unpriced_models"`
-	Totals         jsonTotals   `json:"totals"`
-	Effort         []jsonEffort `json:"effort"`
+	Actor     string   `json:"actor"`
+	AgentType string   `json:"agent_type,omitempty"`
+	Models    []string `json:"models"`
+	// ModelKeys lists each distinct (provider, model) pair the actor's
+	// requests used; provider is empty when the request logged none.
+	ModelKeys []jsonModelKey `json:"model_keys"`
+	// RequestsWithoutModel counts token-bearing requests that logged no model.
+	RequestsWithoutModel int          `json:"requests_without_model"`
+	UnpricedModels       []string     `json:"unpriced_models"`
+	Totals               jsonTotals   `json:"totals"`
+	Effort               []jsonEffort `json:"effort"`
+}
+
+// jsonModelKey is one provider/model pair as logged.
+type jsonModelKey struct {
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
+}
+
+func encodeModelKeys(keys []domain.PricingKey) []jsonModelKey {
+	out := make([]jsonModelKey, len(keys))
+	for i, k := range keys {
+		out[i] = jsonModelKey{Provider: string(k.Provider), Model: string(k.Model)}
+	}
+	return out
 }
 
 func encodeActorReport(a domain.ActorReport) jsonActorReport {
@@ -209,12 +228,14 @@ func encodeActorReport(a domain.ActorReport) jsonActorReport {
 	}
 	unpriced := encodeUnpricedModels(a.UnpricedModels)
 	return jsonActorReport{
-		Actor:          a.Actor.Label(),
-		AgentType:      a.Actor.Type,
-		Models:         models,
-		UnpricedModels: unpriced,
-		Totals:         encodeTotals(a.Totals),
-		Effort:         encodeEffort(a.Effort),
+		Actor:                a.Actor.Label(),
+		AgentType:            a.Actor.Type,
+		Models:               models,
+		ModelKeys:            encodeModelKeys(a.Keys),
+		RequestsWithoutModel: a.RequestsWithoutModel,
+		UnpricedModels:       unpriced,
+		Totals:               encodeTotals(a.Totals),
+		Effort:               encodeEffort(a.Effort),
 	}
 }
 

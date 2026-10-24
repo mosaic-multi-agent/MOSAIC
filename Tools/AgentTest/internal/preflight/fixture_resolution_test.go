@@ -121,6 +121,7 @@ seed_files:
 		FixtureRoot:     filepath.Join(root, "nonexistent-fixtures"), // not beside the test def
 		ResolverFactory: docRelativeFactory(),
 		HarnessID:       "claude-code",
+		Overrides:       selectedModels(),
 	})
 
 	if report.HasErrors() {
@@ -199,6 +200,7 @@ stub_agents:
 		FixtureRoot:     filepath.Join(root, "nonexistent-fixtures"),
 		ResolverFactory: docRelativeFactory(),
 		HarnessID:       "claude-code",
+		Overrides:       selectedModels(),
 	})
 
 	if report.HasErrors() {
@@ -259,6 +261,7 @@ seed_files:
 				FixtureRoot:     tc.fixtureRoot,
 				ResolverFactory: docRelativeFactory(),
 				HarnessID:       "claude-code",
+				Overrides:       selectedModels(),
 			})
 			if report.HasErrors() {
 				t.Fatalf("FixtureRoot=%q: expected no errors when fixture is beside the "+
@@ -335,6 +338,7 @@ seed_files:
 		FixtureRoot:     filepath.Join(root, "nonexistent-fixtures"),
 		ResolverFactory: multiRootFactory(sharedRoot),
 		HarnessID:       "claude-code",
+		Overrides:       selectedModels(),
 	})
 
 	if report.HasErrors() {
@@ -409,6 +413,7 @@ seed_files:
 		FixtureRoot:     "",
 		ResolverFactory: factory,
 		HarnessID:       "claude-code",
+		Overrides:       selectedModels(),
 	})
 
 	if report.HasErrors() {
@@ -459,6 +464,7 @@ seed_files:
 		FixtureRoot:     filepath.Join(root, "fixtures"),
 		ResolverFactory: nil, // explicit nil — tests backward-compat path
 		HarnessID:       "claude-code",
+		Overrides:       selectedModels(),
 	})
 
 	if report.HasErrors() {

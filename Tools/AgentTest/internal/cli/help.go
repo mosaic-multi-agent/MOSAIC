@@ -59,7 +59,7 @@ var flagSpecs = []FlagSpec{
 	{Name: "--mosaic-root", Placeholder: "<dir>", Summary: "MOSAIC repository root override for the deployment tool", ConsumesValue: true},
 	{Name: "--catalog-folder", Placeholder: "<dir>", Summary: "Catalogue directory override for the deployment tool", ConsumesValue: true},
 	{Name: "--suites", Placeholder: "<path>", Summary: "Suite root or suite file for interactive discovery; pre-scanned by the composition root", ConsumesValue: true},
-	{Name: "--subject-model", Placeholder: "<id>", Summary: "Model the subject runs on; validated against the selected harness's catalog", ConsumesValue: true},
+	{Name: "--subject-model", Placeholder: "<id>", Summary: "Required: model the subject runs on; validated against the selected harness's catalog", ConsumesValue: true},
 	{Name: "--stub-model", Placeholder: "<id>", Summary: "Model every stub runs on; absent means the subject's model", ConsumesValue: true},
 	{Name: "--report-path", Placeholder: "<path>", Summary: "Override the JSON report file location", ConsumesValue: true},
 	{Name: "--no-report", Summary: "Suppress the JSON report file entirely", ConsumesValue: false},

@@ -11,6 +11,11 @@ import "mosaic-agent-test/internal/domain"
 //
 // NeedsRetry(r) is true exactly when ExclusionOf(r) is non-empty.
 func ExclusionOf(r domain.TestResult) domain.ExclusionReason {
+	// A model mismatch is a definitive finding that the run did not use the
+	// selected model; it outranks every other reason and is never retried.
+	if r.ModelValidity == domain.ModelMismatch {
+		return domain.ExclusionModelMismatch
+	}
 	// State integrity takes precedence: a lock reclaim makes all subsequent
 	// verdicts suspect, regardless of other disposal markers.
 	if hasReason(r.Reasons, domain.ReasonStateIntegrity) {
@@ -20,6 +25,12 @@ func ExclusionOf(r domain.TestResult) domain.ExclusionReason {
 	// never have run. Evidence about the tool's environment, not the subject.
 	if r.SubjectResult.Disposition == domain.DispositionSpawnFailed {
 		return domain.ExclusionSpawnFailed
+	}
+	// Missing model evidence: the subject model could not be determined. It
+	// outranks echo mismatch and infrastructure but yields to the two retryable
+	// reasons above, whose retry may produce evidence. Never retried itself.
+	if r.ModelValidity == domain.ModelNoEvidence {
+		return domain.ExclusionModelEvidenceMissing
 	}
 	// Echo mismatch: a stubbed collaborator did not echo its stub faithfully.
 	// Evidence about the tool's environment, not the subject.

@@ -81,6 +81,7 @@ tests:
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	d, found := findDiag(report, "duplicate-numeric-id")
@@ -139,6 +140,7 @@ tests:
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	if hasDiagnosticCode(report, "duplicate-numeric-id") {

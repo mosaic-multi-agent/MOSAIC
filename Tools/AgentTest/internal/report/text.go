@@ -32,6 +32,11 @@ func renderText(w io.Writer, r Result) error {
 }
 
 func writeHeader(w io.Writer, r Result) error {
+	if r.ModelVerdict != domain.ModelVerdictVerified {
+		if _, err := fmt.Fprintln(w, unverifiedVerdictLine(r)); err != nil {
+			return err
+		}
+	}
 	if r.EffectiveRepetitions != nil {
 		if _, err := fmt.Fprintf(w, "Repetitions: %d\n", *r.EffectiveRepetitions); err != nil {
 			return err
@@ -43,6 +48,11 @@ func writeHeader(w io.Writer, r Result) error {
 	}
 	if _, err := fmt.Fprintf(w, "Suite: %s\n", r.SuiteID); err != nil {
 		return err
+	}
+	if r.ModelVerdict == domain.ModelVerdictVerified && r.ModelLabel != "" {
+		if _, err := fmt.Fprintf(w, "Model: %s\n", r.ModelLabel); err != nil {
+			return err
+		}
 	}
 	if r.CatalogFolder != "" {
 		if _, err := fmt.Fprintf(w, "Catalog: %s\n", r.CatalogFolder); err != nil {
@@ -152,10 +162,7 @@ func writeTestLine(w io.Writer, t TestReport) error {
 		if _, err := fmt.Fprintf(w, "  subject version: %s\n", subjectVersionOrUnknown(run.SubjectVersion)); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "  subject model: %s\n", subjectVersionOrUnknown(run.SubjectModel)); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "  stub model: %s\n", subjectVersionOrUnknown(run.StubModel)); err != nil {
+		if err := writeRunModels(w, run); err != nil {
 			return err
 		}
 		if _, err := fmt.Fprintf(w, "  harness: %s\n", subjectVersionOrUnknown(run.HarnessID)); err != nil {
@@ -185,6 +192,11 @@ func writeTestLine(w io.Writer, t TestReport) error {
 }
 
 func writeSummary(w io.Writer, r Result) error {
+	if r.ModelVerdict != domain.ModelVerdictVerified {
+		if _, err := fmt.Fprintln(w, unverifiedVerdictLine(r)); err != nil {
+			return err
+		}
+	}
 	totals := formatTotals(r.Counts)
 	var err error
 	if totals == "" {
@@ -195,10 +207,7 @@ func writeSummary(w io.Writer, r Result) error {
 	if err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "Infrastructure failures: %d\n", r.InfrastructureFailures); err != nil {
-		return err
-	}
-	_, err = fmt.Fprintf(w, "Total cost: $%.2f (%s)\n", r.TotalCost.TotalUSD, r.TotalCost.Attribution)
+	_, err = fmt.Fprintf(w, "Infrastructure failures: %d\n", r.InfrastructureFailures)
 	return err
 }
 
@@ -215,4 +224,20 @@ func formatTotals(counts map[domain.Verdict]int) string {
 		parts = append(parts, fmt.Sprintf("%s=%d", k, counts[domain.Verdict(k)]))
 	}
 	return strings.Join(parts, " ")
+}
+
+// writeRunModels prints the run's model lines: the observed subject model and
+// the selected stub model, for a verified run only. A run that is not verified
+// carries no model label; its selected and observed values appear only in the
+// excluded-run detail.
+func writeRunModels(w io.Writer, run RunReport) error {
+	label := run.ModelLabel()
+	if label == "" {
+		return nil
+	}
+	if _, err := fmt.Fprintf(w, "  observed subject model: %s\n", label); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintf(w, "  selected stub model: %s\n", subjectVersionOrUnknown(run.StubModel))
+	return err
 }

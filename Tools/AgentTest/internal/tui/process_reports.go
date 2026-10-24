@@ -296,7 +296,11 @@ func (m Model) viewStoreResult() string {
 
 		for _, rep := range r.Reports {
 			b.WriteString("\n")
-			if rep.Skipped {
+			if rep.SkipReason == resultstore.SkipUnverifiedModel {
+				b.WriteString(tuicommon.Truncate(
+					fmt.Sprintf("  refused  %s (%s)", rep.SourcePath, rep.Message),
+					width))
+			} else if rep.Skipped {
 				b.WriteString(tuicommon.Truncate(
 					fmt.Sprintf("  skipped  %s (%s: %s)", rep.SourcePath, rep.SkipReason, rep.Message),
 					width))

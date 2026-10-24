@@ -74,6 +74,7 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 		deployInfrastructureSet bool
 		deployDryRun            bool
 		deployAutoConfirm       bool
+		deployStrictModels      bool
 	)
 
 	deployCmd := &cobra.Command{
@@ -111,6 +112,7 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 				Scope:           domain.ScopeProject,
 				DryRun:          deployDryRun,
 				AutoConfirmPlan: deployAutoConfirm,
+				StrictModels:    deployStrictModels,
 			}
 
 			// Only set ConflictDefault when the flag was explicitly provided; an absent
@@ -152,7 +154,7 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 
 			summary, svcErr := svc.DeployNew(ctx, req)
 			out := withRunStackInEffect(out, svc, deployOutput)
-			exitCode = renderOutput(out, errOut, deployOutput, summary, svcErr)
+			exitCode = renderDeployOutput(out, errOut, deployOutput, summary, svcErr)
 			return nil
 		},
 	}
@@ -166,6 +168,7 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 	deployCmd.Flags().StringVar(&deployInfrastructureStr, "infrastructure", "", "Comma-separated infrastructure agent ids; absent = ask interactively, empty = explicitly none")
 	deployCmd.Flags().BoolVar(&deployDryRun, "dry-run", false, "Dry run mode; no files are written")
 	deployCmd.Flags().BoolVar(&deployAutoConfirm, "auto-confirm", false, "Auto-confirm the deployment plan without prompting")
+	deployCmd.Flags().BoolVar(&deployStrictModels, "strict-models", false, "Fail the run when any agent would be deployed without a resolved model")
 
 	// ------------------------------------------------------------------
 	// update subcommand

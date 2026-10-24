@@ -401,11 +401,9 @@ func TestGenerate_PartialReport_FlaggedInOutput(t *testing.T) {
 	}
 }
 
-// TestGenerate_UnresolvedCostAttribution_ShowsWarningMarkerNotDollarZero
-// verifies that a report whose cost attribution is "unknown_bucket" causes the
-// summary to show a warning marker rather than "$0.00" (which would be
-// misleading — the cost is unknown, not zero).
-func TestGenerate_UnresolvedCostAttribution_ShowsWarningMarkerNotDollarZero(t *testing.T) {
+// TestGenerate_NoCostForUnresolvedAttribution verifies that a report whose cost
+// attribution is unresolved still summarises, with no cost value or marker.
+func TestGenerate_NoCostForUnresolvedAttribution(t *testing.T) {
 	fs := newFakeFS()
 	seedReport(fs, "/TestResults", "v1.0.0", "benchmarks", "claude-code",
 		"claude-sonnet-4.6", "20260822T090000", loadFixture(t, "cost_unresolved_report.json"))
@@ -418,18 +416,12 @@ func TestGenerate_UnresolvedCostAttribution_ShowsWarningMarkerNotDollarZero(t *t
 
 	content := readWrittenFile(t, fs, "/TestResults/Orchestrator/v1.0.0/user-summary.md")
 
-	// The cost warning marker "[cost?]" must appear; "$0.00" must not appear
-	// in a cost column for this harness+model combination.
-	if !strings.Contains(content, "[cost?]") {
-		t.Errorf("per-version summary should contain [cost?] warning for unknown_bucket attribution, content:\n%s", content)
-	}
+	assertNoCost(t, "per-version summary", content)
 }
 
-// TestGenerate_UnavailableCostAttribution_ShowsWarningMarkerNotDollarZero
-// verifies that a report whose cost attribution is "unavailable" also causes
-// the summary to show a warning marker rather than "$0.00". The design
-// specifies both "unknown_bucket" and "unavailable" as triggering the warning.
-func TestGenerate_UnavailableCostAttribution_ShowsWarningMarkerNotDollarZero(t *testing.T) {
+// TestGenerate_NoCostForUnavailableAttribution verifies that a report whose cost
+// attribution is unresolved still summarises, with no cost value or marker.
+func TestGenerate_NoCostForUnavailableAttribution(t *testing.T) {
 	fs := newFakeFS()
 	seedReport(fs, "/TestResults", "v1.0.0", "benchmarks", "claude-code",
 		"claude-sonnet-4.6", "20260822T100000", loadFixture(t, "cost_unavailable_report.json"))
@@ -442,9 +434,7 @@ func TestGenerate_UnavailableCostAttribution_ShowsWarningMarkerNotDollarZero(t *
 
 	content := readWrittenFile(t, fs, "/TestResults/Orchestrator/v1.0.0/user-summary.md")
 
-	if !strings.Contains(content, "[cost?]") {
-		t.Errorf("per-version summary should contain [cost?] warning for 'unavailable' attribution, content:\n%s", content)
-	}
+	assertNoCost(t, "per-version summary", content)
 }
 
 // TestGenerate_PassRateAggregated_TwoReports verifies that when two reports
@@ -586,109 +576,6 @@ func TestRenderUserSummary_HarnessAppearsInHarnessComparison(t *testing.T) {
 	}
 }
 
-// TestRenderUserSummary_CostWarning_ShowsMarkerNotZeroDollar verifies that
-// when HarnessModelStats.CostWarning is true, the rendered row shows the cost
-// warning marker instead of "$0.00".
-func TestRenderUserSummary_CostWarning_ShowsMarkerNotZeroDollar(t *testing.T) {
-	vs := resultsummary.VersionSummary{
-		Version:     "v1.0.0",
-		ReportCount: 1,
-		Suites:      []string{"benchmarks"},
-		Models:      []string{"claude-sonnet-4.6"},
-		Harnesses:   []string{"claude-code"},
-		TotalTests:  1,
-		ByModel: map[string]map[string]resultsummary.HarnessModelStats{
-			"claude-sonnet-4.6": {
-				"claude-code": {
-					Harness:     "claude-code",
-					Model:       "claude-sonnet-4.6",
-					TestCount:   1,
-					PassCount:   1,
-					PassRate:    1.0,
-					TotalCost:   0.0,
-					CostWarning: true,
-				},
-			},
-		},
-		BySuite: map[string]map[string]map[string]resultsummary.HarnessModelStats{
-			"benchmarks": {
-				"claude-sonnet-4.6": {
-					"claude-code": {
-						Harness:     "claude-code",
-						Model:       "claude-sonnet-4.6",
-						TestCount:   1,
-						PassCount:   1,
-						PassRate:    1.0,
-						TotalCost:   0.0,
-						CostWarning: true,
-					},
-				},
-			},
-		},
-	}
-
-	output := resultsummary.RenderUserSummary(vs)
-
-	if strings.Contains(output, "$0.00") {
-		t.Error("RenderUserSummary must not show $0.00 for unresolved cost attribution")
-	}
-	if !strings.Contains(output, "[cost?]") {
-		t.Error("RenderUserSummary must show [cost?] warning marker for unresolved cost attribution")
-	}
-}
-
-// TestRenderUserSummary_ZeroCostNoWarning_ShowsDollarZeroNotCostWarning
-// verifies that when HarnessModelStats.CostWarning is false and TotalCost is
-// 0.0, the rendered output shows "$0.00" and does NOT show the "[cost?]"
-// warning marker. This is the complement of the CostWarning=true test above:
-// an implementation that always renders "[cost?]" would fail this test.
-func TestRenderUserSummary_ZeroCostNoWarning_ShowsDollarZeroNotCostWarning(t *testing.T) {
-	vs := resultsummary.VersionSummary{
-		Version:     "v1.0.0",
-		ReportCount: 1,
-		Suites:      []string{"benchmarks"},
-		Models:      []string{"claude-sonnet-4.6"},
-		Harnesses:   []string{"claude-code"},
-		TotalTests:  1,
-		ByModel: map[string]map[string]resultsummary.HarnessModelStats{
-			"claude-sonnet-4.6": {
-				"claude-code": {
-					Harness:     "claude-code",
-					Model:       "claude-sonnet-4.6",
-					TestCount:   1,
-					PassCount:   1,
-					PassRate:    1.0,
-					TotalCost:   0.0,
-					CostWarning: false,
-				},
-			},
-		},
-		BySuite: map[string]map[string]map[string]resultsummary.HarnessModelStats{
-			"benchmarks": {
-				"claude-sonnet-4.6": {
-					"claude-code": {
-						Harness:     "claude-code",
-						Model:       "claude-sonnet-4.6",
-						TestCount:   1,
-						PassCount:   1,
-						PassRate:    1.0,
-						TotalCost:   0.0,
-						CostWarning: false,
-					},
-				},
-			},
-		},
-	}
-
-	output := resultsummary.RenderUserSummary(vs)
-
-	if strings.Contains(output, "[cost?]") {
-		t.Error("RenderUserSummary must not show [cost?] when CostWarning is false")
-	}
-	if !strings.Contains(output, "$0.00") {
-		t.Error("RenderUserSummary must show $0.00 for zero cost when CostWarning is false")
-	}
-}
 
 // TestRenderUserSummary_MultipleModels_AllAppearInModelComparison verifies
 // that when multiple models are present, all appear in the model-comparison

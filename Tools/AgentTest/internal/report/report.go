@@ -80,6 +80,15 @@ type Result struct {
 	// Build at the production call site in suite.go, not by Build itself.
 	// Empty means not recorded (e.g. pre-feature invocation or test double).
 	ToolVersion string
+
+	// ModelVerdict is MODEL_VERIFIED iff at least one run exists and every run
+	// has ModelValidity == ModelVerified; MODEL_UNVERIFIED otherwise.
+	ModelVerdict domain.ModelVerdict
+	// ModelLabel is the runs' common ModelLabel() when MODEL_VERIFIED, "" otherwise.
+	ModelLabel string
+	// UnverifiedRuns counts the runs whose ModelValidity is not verified
+	// (the empty value included); 0 when there are no runs.
+	UnverifiedRuns int
 }
 
 // TestReport is one test's aggregate outcome plus its per-repetition detail.
@@ -118,9 +127,10 @@ type RunReport struct {
 	// than blank, so a reader never mistakes an absent version for a real one.
 	SubjectVersion string
 
-	// SubjectModel and StubModel are the models this repetition actually ran
-	// on, carried from RunEvidence through TestResult. Empty means none was
-	// recorded; both renderings show that as unknown, never as blank.
+	// SubjectModel and StubModel are the models this repetition selected,
+	// carried from RunEvidence through TestResult. They are selections, not
+	// labels: the observed model (ObservedSubjectModels) labels a run. Empty
+	// means none was recorded; the JSON rendering shows that as unknown.
 	SubjectModel string
 	StubModel    string
 
@@ -152,6 +162,14 @@ type RunReport struct {
 	// exercised, sourced from domain.TestResult.NumericID and copied by suite.go.
 	// Zero means the value was not recorded.
 	NumericID int
+
+	// ObservedSubjectModels are the subject model(s) the run's logs show,
+	// carried from domain.TestResult by suite.go. Empty when none.
+	ObservedSubjectModels []string
+
+	// ModelValidity is the run's model verification outcome, carried from
+	// domain.TestResult. Empty means the run was not assessed.
+	ModelValidity domain.ModelValidity
 }
 
 // SubjectFailure is what a subject that exited non-zero told us. Zero-valued
@@ -197,7 +215,12 @@ func Build(suiteID string, started, finished time.Time, tests []TestReport, cata
 		})
 	}
 
+	verdict, label, unverified := modelSummary(tests)
+
 	return Result{
+		ModelVerdict:           verdict,
+		ModelLabel:             label,
+		UnverifiedRuns:         unverified,
 		SchemaVersion:          SchemaVersion,
 		SuiteID:                suiteID,
 		StartedAt:              started,

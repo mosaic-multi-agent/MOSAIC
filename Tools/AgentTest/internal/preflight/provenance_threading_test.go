@@ -85,6 +85,8 @@ func TestValidate_SubjectRenderDefaultBranch_MessageContainsProvenance(t *testin
 		HarnessID:            "claude-code",
 		Deploy:               returningRenderError("harness-unresolvable", ""),
 		MosaicRootProvenance: provenanceDefaultTier,
+		Overrides:            selectedModels(),
+		CatalogFolder:        catalogWith(t, nil),
 	})
 
 	d, ok := findDiagnosticByCode(report, "unrenderable-subject-declaration")
@@ -116,6 +118,8 @@ func TestValidate_SubjectRenderDefaultBranch_MessageContainsOperationContext(t *
 		HarnessID:            "claude-code",
 		Deploy:               returningRenderError("harness-unresolvable", ""),
 		MosaicRootProvenance: provenanceDefaultTier,
+		Overrides:            selectedModels(),
+		CatalogFolder:        catalogWith(t, nil),
 	})
 
 	d, ok := findDiagnosticByCode(report, "unrenderable-subject-declaration")
@@ -151,6 +155,8 @@ func TestValidate_SubjectRenderDefaultBranch_HintNonEmpty(t *testing.T) {
 		HarnessID:            "claude-code",
 		Deploy:               returningRenderError("harness-unresolvable", ""),
 		MosaicRootProvenance: provenanceDefaultTier,
+		Overrides:            selectedModels(),
+		CatalogFolder:        catalogWith(t, nil),
 	})
 
 	d, ok := findDiagnosticByCode(report, "unrenderable-subject-declaration")
@@ -158,7 +164,7 @@ func TestValidate_SubjectRenderDefaultBranch_HintNonEmpty(t *testing.T) {
 		t.Fatalf("expected diagnostic %q, got: %v", "unrenderable-subject-declaration", report.Diagnostics)
 	}
 	if d.Hint == "" {
-		t.Errorf("Hint must not be empty for unrenderable-subject-declaration; "+
+		t.Errorf("Hint must not be empty for unrenderable-subject-declaration; " +
 			"the hint is the primary remediation signal for the author; got empty Hint")
 	}
 }
@@ -180,6 +186,8 @@ func TestValidate_SubjectRenderDefaultBranch_KnownReasonCode_HintReferencesRoot(
 		HarnessID:            "claude-code",
 		Deploy:               returningRenderError("harness-unresolvable", ""),
 		MosaicRootProvenance: provenanceDefaultTier,
+		Overrides:            selectedModels(),
+		CatalogFolder:        catalogWith(t, nil),
 	})
 
 	d, ok := findDiagnosticByCode(report, "unrenderable-subject-declaration")
@@ -207,6 +215,8 @@ func TestValidate_SubjectRenderDefaultBranch_ToolMessageNotSoleContent(t *testin
 		HarnessID:            "claude-code",
 		Deploy:               returningRenderError("harness-unresolvable", ""),
 		MosaicRootProvenance: provenanceDefaultTier,
+		Overrides:            selectedModels(),
+		CatalogFolder:        catalogWith(t, nil),
 	})
 
 	d, ok := findDiagnosticByCode(report, "unrenderable-subject-declaration")
@@ -238,6 +248,8 @@ func TestValidate_SubjectRenderDefaultBranch_FutureReasonCode_ProvenanceInMessag
 		HarnessID:            "claude-code",
 		Deploy:               returningRenderError("some-future-reason-code-v99", ""),
 		MosaicRootProvenance: provenanceFlagTier,
+		Overrides:            selectedModels(),
+		CatalogFolder:        catalogWith(t, nil),
 	})
 
 	d, ok := findDiagnosticByCode(report, "unrenderable-subject-declaration")
@@ -282,6 +294,8 @@ func TestValidate_SubjectRenderDefaultBranch_AllProvenanceTiers(t *testing.T) {
 				HarnessID:            "claude-code",
 				Deploy:               returningRenderError("harness-unresolvable", ""),
 				MosaicRootProvenance: tc.provenance,
+				Overrides:            selectedModels(),
+				CatalogFolder:        catalogWith(t, nil),
 			})
 
 			d, ok := findDiagnosticByCode(report, "unrenderable-subject-declaration")
@@ -332,6 +346,8 @@ func TestValidate_SubjectDeploy_MessageContainsProvenance(t *testing.T) {
 		DeployScratchRoot:    t.TempDir(),
 		Deploy:               returningDeployError("deployment failed: catalogue root not found"),
 		MosaicRootProvenance: provenanceDefaultTier,
+		Overrides:            selectedModels(),
+		CatalogFolder:        catalogWith(t, nil),
 	})
 
 	d, ok := findDiagnosticByCode(report, "undeployable-subject-declaration")
@@ -362,6 +378,8 @@ func TestValidate_SubjectDeploy_MessageContainsOperationContext(t *testing.T) {
 		DeployScratchRoot:    t.TempDir(),
 		Deploy:               returningDeployError("deployment failed: catalogue root not found"),
 		MosaicRootProvenance: provenanceDefaultTier,
+		Overrides:            selectedModels(),
+		CatalogFolder:        catalogWith(t, nil),
 	})
 
 	d, ok := findDiagnosticByCode(report, "undeployable-subject-declaration")
@@ -394,6 +412,8 @@ func TestValidate_SubjectDeploy_HintNonEmpty(t *testing.T) {
 		DeployScratchRoot:    t.TempDir(),
 		Deploy:               returningDeployError("deployment failed: catalogue root not found"),
 		MosaicRootProvenance: provenanceDefaultTier,
+		Overrides:            selectedModels(),
+		CatalogFolder:        catalogWith(t, nil),
 	})
 
 	d, ok := findDiagnosticByCode(report, "undeployable-subject-declaration")
@@ -402,7 +422,7 @@ func TestValidate_SubjectDeploy_HintNonEmpty(t *testing.T) {
 			"undeployable-subject-declaration", report.Diagnostics)
 	}
 	if d.Hint == "" {
-		t.Errorf("Hint must not be empty for undeployable-subject-declaration; "+
+		t.Errorf("Hint must not be empty for undeployable-subject-declaration; " +
 			"the hint guides the author to the remediation action; got empty Hint")
 	}
 }
@@ -425,6 +445,8 @@ func TestValidate_SubjectDeploy_ToolMessageNotSoleContent(t *testing.T) {
 		DeployScratchRoot:    t.TempDir(),
 		Deploy:               returningDeployError(toolMsg),
 		MosaicRootProvenance: provenanceDefaultTier,
+		Overrides:            selectedModels(),
+		CatalogFolder:        catalogWith(t, nil),
 	})
 
 	d, ok := findDiagnosticByCode(report, "undeployable-subject-declaration")
@@ -454,6 +476,8 @@ func TestValidate_SubjectDeploy_FlagTierProvenance(t *testing.T) {
 		DeployScratchRoot:    t.TempDir(),
 		Deploy:               returningDeployError("deployment failed"),
 		MosaicRootProvenance: provenanceFlagTier,
+		Overrides:            selectedModels(),
+		CatalogFolder:        catalogWith(t, nil),
 	})
 
 	d, ok := findDiagnosticByCode(report, "undeployable-subject-declaration")
@@ -530,6 +554,8 @@ func TestValidate_StubRenderLoop_MessageContainsProvenance(t *testing.T) {
 		HarnessID:            "claude-code",
 		Deploy:               returningRenderErrorForStubs("source-not-generic", ""),
 		MosaicRootProvenance: provenanceDefaultTier,
+		Overrides:            selectedModels(),
+		CatalogFolder:        catalogWith(t, nil),
 	})
 
 	d, ok := findDiagnosticByCode(report, "unrenderable-stub-definition")
@@ -561,6 +587,8 @@ func TestValidate_StubRenderLoop_MessageContainsOperationContext(t *testing.T) {
 		HarnessID:            "claude-code",
 		Deploy:               returningRenderErrorForStubs("source-not-generic", ""),
 		MosaicRootProvenance: provenanceDefaultTier,
+		Overrides:            selectedModels(),
+		CatalogFolder:        catalogWith(t, nil),
 	})
 
 	d, ok := findDiagnosticByCode(report, "unrenderable-stub-definition")
@@ -591,6 +619,8 @@ func TestValidate_StubRenderLoop_HintNonEmpty(t *testing.T) {
 		HarnessID:            "claude-code",
 		Deploy:               returningRenderErrorForStubs("source-not-generic", ""),
 		MosaicRootProvenance: provenanceDefaultTier,
+		Overrides:            selectedModels(),
+		CatalogFolder:        catalogWith(t, nil),
 	})
 
 	d, ok := findDiagnosticByCode(report, "unrenderable-stub-definition")
@@ -620,6 +650,8 @@ func TestValidate_StubRenderLoop_ToolMessageNotSoleContent(t *testing.T) {
 		HarnessID:            "claude-code",
 		Deploy:               returningRenderErrorForStubs("source-not-generic", ""),
 		MosaicRootProvenance: provenanceDefaultTier,
+		Overrides:            selectedModels(),
+		CatalogFolder:        catalogWith(t, nil),
 	})
 
 	d, ok := findDiagnosticByCode(report, "unrenderable-stub-definition")
@@ -651,6 +683,8 @@ func TestValidate_StubRenderLoop_FutureReasonCode_ProvenanceInMessage(t *testing
 		HarnessID:            "claude-code",
 		Deploy:               returningRenderErrorForStubs("some-future-reason-v99", ""),
 		MosaicRootProvenance: provenanceEnvTier,
+		Overrides:            selectedModels(),
+		CatalogFolder:        catalogWith(t, nil),
 	})
 
 	d, ok := findDiagnosticByCode(report, "unrenderable-stub-definition")
@@ -687,6 +721,8 @@ func TestValidate_AgentNotInCatalog_UnchangedByProvenanceThreading(t *testing.T)
 		HarnessID:            "claude-code",
 		Deploy:               returningRenderError("agent-not-in-catalog", "orchestrator"),
 		MosaicRootProvenance: provenanceDefaultTier,
+		Overrides:            selectedModels(),
+		CatalogFolder:        catalogWith(t, nil),
 	})
 
 	if !hasDiagnosticCode(report, "unknown-subject-agent") {
@@ -716,6 +752,8 @@ func TestValidate_UnknownWorkflow_UnchangedByProvenanceThreading(t *testing.T) {
 		HarnessID:            "claude-code",
 		Deploy:               returningRenderError("unknown-workflow", "nonexistent-workflow"),
 		MosaicRootProvenance: provenanceDefaultTier,
+		Overrides:            selectedModels(),
+		CatalogFolder:        catalogWith(t, nil),
 	})
 
 	if !hasDiagnosticCode(report, "unknown-workflow") {

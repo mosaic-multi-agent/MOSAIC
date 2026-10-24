@@ -101,6 +101,10 @@ func TestEvaluate_NoAssertionsDeclaredAndNoEvidence_StillPasses(t *testing.T) {
 		},
 		Key:           baseKey(),
 		SubjectResult: domain.SubjectResult{Disposition: domain.DispositionCompleted},
+		// A run is only valid with a verified subject model; this test is about
+		// assertions, so the model is selected and observed consistently.
+		SubjectModel:          selectedModel,
+		ObservedSubjectModels: observedModel(selectedModel),
 	}
 
 	got := evaluate.Evaluate(ev)

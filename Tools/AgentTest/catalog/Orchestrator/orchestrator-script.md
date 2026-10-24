@@ -5,7 +5,7 @@ description: Makes one routing decision per Runner invocation by reading the orc
 role: orchestrator
 model: {model-identifier}
 tools: [file_read, file_edit, file_search, content_search]
-recommended_tier: TEST_SUBJECT
+recommended_tier: TEST-SUBJECT
 tier_rationale: reads a full orchestration artifact, reconstructs run state from its execution log, and makes one unretryable routing decision whose wrong answer sends the run somewhere nobody chose
 required_skills: []
 ---

@@ -162,9 +162,7 @@ func (r *scriptedRunner) Run(ctx context.Context, key domain.RunKey, t preflight
 	if haveScripted {
 		ev = next.evidence
 	} else {
-		ev = domain.RunEvidence{
-			SubjectResult: domain.SubjectResult{Disposition: domain.DispositionCompleted},
-		}
+		ev = passingEvidence()
 	}
 	ev.Key = key
 
@@ -279,31 +277,61 @@ func buildPlan(tests ...preflight.ResolvedTest) preflight.Plan {
 // passingEvidence is evidence that evaluate.Evaluate turns into VerdictPass
 // with no reasons.
 func passingEvidence() domain.RunEvidence {
-	return domain.RunEvidence{
+	return withVerifiedModel(domain.RunEvidence{
 		SubjectResult: domain.SubjectResult{Disposition: domain.DispositionCompleted},
+	})
+}
+
+// scriptedModel is the subject model every helper below selects and observes.
+const scriptedModel = "model-a"
+
+// withVerifiedModel makes ev a run whose observed subject model equals its
+// selection, so the run is valid and judged by its other evidence.
+func withVerifiedModel(ev domain.RunEvidence) domain.RunEvidence {
+	ev.SubjectModel = scriptedModel
+	ev.ObservedSubjectModels = domain.ObservedModelEvidence{Models: []string{scriptedModel}}
+	return ev
+}
+
+// withObservedModel makes ev a run that selected scriptedModel but whose logs
+// show only observed.
+func withObservedModel(ev domain.RunEvidence, observed string) domain.RunEvidence {
+	ev.SubjectModel = scriptedModel
+	ev.ObservedSubjectModels = domain.ObservedModelEvidence{Models: []string{observed}}
+	return ev
+}
+
+// withoutModelEvidence makes ev a run that selected scriptedModel and whose
+// subject model could not be determined.
+func withoutModelEvidence(ev domain.RunEvidence) domain.RunEvidence {
+	ev.SubjectModel = scriptedModel
+	ev.ObservedSubjectModels = domain.ObservedModelEvidence{
+		NoEvidence: domain.NoEvidenceToolFailed,
+		Detail:     "log analyzer exited 3",
 	}
+	return ev
 }
 
 // failingEvidence is evidence that evaluate.Evaluate turns into VerdictFail
 // via a declared final-status assertion that does not hold.
 func failingEvidence() domain.RunEvidence {
 	want := "REJECTED"
-	return domain.RunEvidence{
+	return withVerifiedModel(domain.RunEvidence{
 		Definition: domain.TestDefinition{
 			Assertions: domain.Assertions{FinalStatus: &want},
 		},
 		Orchestration: domain.OrchestrationState{Present: true, LastStatus: "COMPLETED"},
 		SubjectResult: domain.SubjectResult{Disposition: domain.DispositionCompleted},
-	}
+	})
 }
 
 // stateIntegrityEvidence is evidence that evaluate.Evaluate turns into
 // VerdictFail with ReasonStateIntegrity, via a recorded lock-reclaim event.
 func stateIntegrityEvidence() domain.RunEvidence {
-	return domain.RunEvidence{
+	return withVerifiedModel(domain.RunEvidence{
 		Records: []domain.LogRecord{
 			{Kind: domain.RecordRun, Event: domain.RunEventLockReclaimed},
 		},
 		SubjectResult: domain.SubjectResult{Disposition: domain.DispositionCompleted},
-	}
+	})
 }

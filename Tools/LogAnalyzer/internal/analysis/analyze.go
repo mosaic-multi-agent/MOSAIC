@@ -115,9 +115,12 @@ func priceActorAggregate(actor domain.ActorAggregate, table domain.PricingTable)
 	seenModels := make(map[domain.ModelID]bool)
 	seenKeys := make(map[domain.PricingKey]bool)
 	seenUnpriced := make(map[domain.PricingKey]bool)
+	var withoutModel int
 	for _, c := range costs {
 		assumed += c.AssumedTierCacheWrite
-		if !c.Model.IsEmpty() {
+		if c.Model.IsEmpty() {
+			withoutModel++
+		} else {
 			key := domain.PricingKey{Provider: c.Provider, Model: c.Model}
 			seenModels[c.Model] = true
 			seenKeys[key] = true
@@ -132,6 +135,7 @@ func priceActorAggregate(actor domain.ActorAggregate, table domain.PricingTable)
 		Models:         sortedModelIDSet(seenModels),
 		Keys:           domain.SortedPricingKeys(seenKeys),
 		UnpricedModels: domain.SortedPricingKeys(seenUnpriced),
+		RequestsWithoutModel: withoutModel,
 		Totals: domain.Totals{
 			Tokens: tokens,
 			Money:  money,

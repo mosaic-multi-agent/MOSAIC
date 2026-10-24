@@ -44,6 +44,7 @@ tests:
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	if !report.HasErrors() {
@@ -85,6 +86,7 @@ stub_registry: happy-path.stubs.json
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	if !report.HasErrors() {
@@ -114,6 +116,7 @@ func TestValidate_NoHarnessKeyDeclared_ValidatesCleanly_RegardlessOfInputHarness
 				SuitePath:   filepath.Join(root, "s.suite.yaml"),
 				FixtureRoot: filepath.Join(root, "fixtures"),
 				HarnessID:   id,
+				Overrides:   selectedModels(),
 			})
 			if report.HasErrors() {
 				t.Errorf("HarnessID = %q: expected a suite with no harness: key to validate cleanly, got: %v", id, report.Diagnostics)

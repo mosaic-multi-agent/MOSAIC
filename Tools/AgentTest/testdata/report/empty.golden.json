@@ -7,6 +7,9 @@
   "counts": {},
   "total_cost": { "total_usd": 0, "attribution": "attributed", "detail": "" },
   "infrastructure_failures": 0,
+  "model_verdict": "MODEL_UNVERIFIED",
+  "model_label": "",
+  "unverified_runs": 0,
   "catalog_folder": "",
   "errors": []
 }

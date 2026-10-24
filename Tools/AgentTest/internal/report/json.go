@@ -25,6 +25,13 @@ type wireResult struct {
 	TotalCost              wireCost         `json:"total_cost"`
 	InfrastructureFailures int              `json:"infrastructure_failures"`
 
+	// ModelVerdict, ModelLabel and UnverifiedRuns are the suite-level model
+	// verdict. Additive-only. ModelLabel is empty unless the verdict is
+	// MODEL_VERIFIED.
+	ModelVerdict   string `json:"model_verdict"`
+	ModelLabel     string `json:"model_label"`
+	UnverifiedRuns int    `json:"unverified_runs"`
+
 	// CatalogFolder is the agent catalog directory used for this run.
 	// Additive-only: new field, never removed or retyped.
 	CatalogFolder string `json:"catalog_folder"`
@@ -109,6 +116,12 @@ type wireRunReport struct {
 	// on. Always present; the literal "unknown" when no model was recorded.
 	SubjectModel string `json:"subject_model"`
 	StubModel    string `json:"stub_model"`
+
+	// ObservedSubjectModels are the subject model(s) the run's logs show;
+	// always an array. ModelVerification is verified, mismatch, no_evidence
+	// or not_assessed. Additive-only.
+	ObservedSubjectModels []string `json:"observed_subject_models"`
+	ModelVerification     string   `json:"model_verification"`
 
 	// HarnessID names the harness adapter that produced this run. Always
 	// present; the literal "unknown" when no harness identity was recorded.
@@ -201,6 +214,9 @@ func toWireResult(r Result) wireResult {
 		Counts:                 counts,
 		TotalCost:              toWireCost(r.TotalCost),
 		InfrastructureFailures: r.InfrastructureFailures,
+		ModelVerdict:           string(r.ModelVerdict),
+		ModelLabel:             r.ModelLabel,
+		UnverifiedRuns:         r.UnverifiedRuns,
 		CatalogFolder:          r.CatalogFolder,
 		Errors:                 errors,
 		ToolVersion:            r.ToolVersion,
@@ -268,23 +284,25 @@ func toWireRunReport(r RunReport) wireRunReport {
 			TestName:  r.Key.TestName,
 			RunNumber: r.Key.RunNumber,
 		},
-		Verdict:             string(r.Verdict),
-		Reasons:             reasonStrings(r.Reasons),
-		Assertions:          assertionWires(r.Assertions),
-		Conditions:          conditionWires(r.Conditions),
-		DurationMS:          r.Duration.Milliseconds(),
-		Cost:                toWireCost(r.Cost),
-		NegativeApplied:     r.NegativeApplied,
-		RetainedSandboxPath: r.RetainedSandboxPath,
-		Subject:             subject,
-		SubjectVersion:      subjectVersionOrUnknown(r.SubjectVersion),
-		SubjectModel:        subjectVersionOrUnknown(r.SubjectModel),
-		StubModel:           subjectVersionOrUnknown(r.StubModel),
-		HarnessID:           subjectVersionOrUnknown(r.HarnessID),
-		HarnessVersion:      r.HarnessVersion,
-		TerminationReason:   subjectVersionOrUnknown(r.TerminationReason),
-		TestVersion:         r.TestVersion,
-		TestID:              r.NumericID,
+		Verdict:               string(r.Verdict),
+		Reasons:               reasonStrings(r.Reasons),
+		Assertions:            assertionWires(r.Assertions),
+		Conditions:            conditionWires(r.Conditions),
+		DurationMS:            r.Duration.Milliseconds(),
+		Cost:                  toWireCost(r.Cost),
+		NegativeApplied:       r.NegativeApplied,
+		RetainedSandboxPath:   r.RetainedSandboxPath,
+		Subject:               subject,
+		SubjectVersion:        subjectVersionOrUnknown(r.SubjectVersion),
+		SubjectModel:          subjectVersionOrUnknown(r.SubjectModel),
+		StubModel:             subjectVersionOrUnknown(r.StubModel),
+		ObservedSubjectModels: observedModels(r.ObservedSubjectModels),
+		ModelVerification:     modelVerification(r.ModelValidity),
+		HarnessID:             subjectVersionOrUnknown(r.HarnessID),
+		HarnessVersion:        r.HarnessVersion,
+		TerminationReason:     subjectVersionOrUnknown(r.TerminationReason),
+		TestVersion:           r.TestVersion,
+		TestID:                r.NumericID,
 	}
 }
 
@@ -338,4 +356,11 @@ func conditionWires(conditions []domain.RunCondition) []wireCondition {
 		})
 	}
 	return out
+}
+
+// observedModels returns the observed models as a non-nil slice so the wire
+// renders [] rather than null.
+func observedModels(models []string) []string {
+	out := make([]string, 0, len(models))
+	return append(out, models...)
 }

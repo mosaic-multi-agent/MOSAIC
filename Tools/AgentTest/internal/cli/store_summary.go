@@ -64,6 +64,11 @@ func storeCommand(inv parsedInvocation, o Options) int {
 		return ExitFailure
 	}
 
+	for _, rep := range result.Reports {
+		if rep.SkipReason == resultstore.SkipUnverifiedModel {
+			fmt.Fprintf(o.Stdout, "refused %s: %s\n", rep.SourcePath, rep.Message)
+		}
+	}
 	fmt.Fprintln(o.Stdout, result.SummaryLine())
 	return ExitSuccess
 }

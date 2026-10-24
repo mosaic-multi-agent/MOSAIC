@@ -328,4 +328,17 @@ Rating each harness on how its known issue landscape affects MOSAIC's core patte
 
 ---
 
+## 10. Model Precedence: Launch-Time Argument vs Agent Definition
+
+When the launch-time model argument and the agent definition's `model` field disagree, **the launch-time argument wins in both harnesses**. The explicit launch argument is therefore the authoritative setting for the subject; AgentTest passes it on every launch and additionally checks the deployed definitions' model fields before the harness starts.
+
+| Harness | Version | Evidence | Order (first wins) |
+|---------|---------|----------|--------------------|
+| OpenCode | v1.18.18 | Source: `packages/opencode/src/session/prompt.ts` (`input.model ?? agent.model ?? currentModel(session)`); `--model` reaches `input.model` via `packages/opencode/src/cli/cmd/run.ts` | `--model provider/model`, then the agent's `model`, then the session's current model |
+| Claude Code | 2.1.310 | Manual probe 2026-10-24: agent `model: haiku` launched with `claude --agent <name> -p --output-format json --model sonnet` ran sonnet, in the user config home and in AgentTest's relocated credentials-only home | `--model`, then the agent's `model:`, then settings `model`, then the account default |
+
+Claude Code subagents spawned inside a session (AgentTest stubs) do not follow `--model`; they follow the subagent order: per-invocation parameter, the definition's `model`, `CLAUDE_CODE_SUBAGENT_MODEL`, then the main model. That is why every stub definition's model field is checked as well. The transcript `message.model` remains the reliable signal of the model that actually ran (CC-022).
+
+---
+
 *Generated from individual harness issue knowledge bases in this folder. See each harness's `index.md` for per-harness summaries and `active-issues.md` for full issue details.*
