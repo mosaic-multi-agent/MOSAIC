@@ -4,7 +4,7 @@
 ## Overview
 
 - **Version:** 8.2.2
-- **Reports:** 9
+- **Reports:** 10
 - **Suites:** execution-groups, hitl-gate, infrastructure-triggers, route-back, status-routing, wildcard-expansion
 - **Models:** claude-haiku-5-5, claude-sonnet-5-5
 - **Harnesses:** claude-code
@@ -17,6 +17,7 @@
 | Suite | ID | Test | Best Rate | Best Combo | Worst Rate | Worst Combo | Spread |
 |-------|----|------|-----------|------------|------------|-------------|--------|
 | hitl-gate | 57 | hitl-redispatch-unapproved | 94% (100) | claude-sonnet-5-5/claude-code | 87% (100) | claude-haiku-5-5/claude-code | 7% |
+| route-back | 66 | contracts-routeback-quality-gate | 90% (100) | claude-sonnet-5-5/claude-code | 0% (100) | claude-haiku-5-5/claude-code | 90% |
 | status-routing | 70 | blocked-e503-hitl-retry | 100% (100) | claude-sonnet-5-5/claude-code | 1% (100) | claude-haiku-5-5/claude-code | 99% |
 | status-routing | 72 | creator-fix-rereview | 100% (100) | claude-sonnet-5-5/claude-code | 99% (100) | claude-haiku-5-5/claude-code | 1% |
 | status-routing | 73 | findings-route-back | 100% (100) | claude-sonnet-5-5/claude-code | 83% (100) | claude-haiku-5-5/claude-code | 17% |

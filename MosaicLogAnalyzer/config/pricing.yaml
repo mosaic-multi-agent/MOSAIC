@@ -93,3 +93,22 @@ providers:
         cache_write_5m: "2.5"
         cache_write_1h: "4"
         output: "10"
+      claude-haiku-5-5:
+        input: "0.10"
+        cache_read: "0.01"
+        cache_write_5m: "0.125"
+        cache_write_1h: "0.20"
+        output: "0.50"
+        long_context:
+          threshold: 100001
+          input: "0.50"
+          cache_read: "0.05"
+          cache_write_5m: "0.625"
+          cache_write_1h: "1"
+          output: "2.50"
+      claude-fable-5-1:
+        input: "10"
+        cache_read: "0.25"
+        cache_write_5m: "12.50"
+        cache_write_1h: "20"
+        output: "50"

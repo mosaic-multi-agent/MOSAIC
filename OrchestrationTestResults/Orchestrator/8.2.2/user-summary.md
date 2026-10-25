@@ -4,8 +4,8 @@
 ## Overview
 
 - **Version:** 8.2.2
-- **Reports:** 9
-- **Total Tests:** 4500
+- **Reports:** 10
+- **Total Tests:** 4700
 - **Suites:** execution-groups, hitl-gate, infrastructure-triggers, route-back, status-routing, wildcard-expansion
 - **Models:** claude-haiku-5-5, claude-sonnet-5-5
 - **Harnesses:** claude-code
@@ -18,7 +18,7 @@
 | Model | Tests | Pass Rate |
 |-------|-------|-----------|
 | claude-haiku-5-5 | 3100 | 86% |
-| claude-sonnet-5-5 | 1400 | 100% |
+| claude-sonnet-5-5 | 1600 | 93% |
 
 <!-- /generated:model-comparison -->
 
@@ -27,7 +27,7 @@
 
 | Harness | Tests | Pass Rate |
 |---------|-------|-----------|
-| claude-code | 4500 | 90% |
+| claude-code | 4700 | 88% |
 
 <!-- /generated:harness-comparison -->
 
@@ -50,6 +50,7 @@
 | Suite | Harness | Tests | Pass Rate |
 |-------|---------|-------|-----------|
 | hitl-gate | claude-code | 300 | 98% |
+| route-back | claude-code | 200 | 45% |
 | status-routing | claude-code | 800 | 100% |
 | wildcard-expansion | claude-code | 300 | 100% |
 
