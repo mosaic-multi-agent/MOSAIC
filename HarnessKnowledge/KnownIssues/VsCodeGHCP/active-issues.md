@@ -1,46 +1,6 @@
 # VS Code GitHub Copilot — Active Issues
 
-> Last updated: 2026-09-10 (run 3)
-
----
-
-### VC-001: Nested runSubagent calls rejected 3 levels deep even when target agent is allow-listed
-
-| Field | Value |
-|-------|-------|
-| **Classification** | Bug |
-| **Source** | https://github.com/microsoft/vscode/issues/335257 |
-| **Reported** | 2026-09-09 |
-| **Last Activity** | 2026-09-10 |
-| **Confidence** | Unverified |
-| **Orchestration Impact** | HIGH |
-| **Reproduced at MOSAIC** | No |
-| **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 1.136.1+ (reporter states it worked "a week or two ago"; broke around 1.136.1); still open on 1.136.2 |
-| **Latest Platform Version** | 1.137.0 |
-| **Labels** | new release |
-
-**Summary:**
-A coordinator->worker->specialist agent chain (A calls B via `runSubagent`, B calls C via `runSubagent`) works at depth 1 (A->B) but is rejected at depth 2 (B->C) with "Requested agent 'C' is not allowed by the current agent" — even when C is explicitly present in both A's and B's `agents:` allow-list and "Allow Invocations From Subagents" is enabled. Single report, no maintainer comment yet, but the issue is assigned to a maintainer (aeschli) and tagged `new release`, indicating triage has started.
-
-**Impact on Orchestration:**
-MOSAIC's harness-native execution mode relies on the primary agent dispatching subagents through the harness's native agent tool, and several MOSAIC utility agents (including this one) dispatch further subagents of their own type (a form of nesting). If VS Code Copilot's agent host hard-caps allow-listed delegation at 2 levels regardless of allow-list contents, any MOSAIC pattern that needs a subagent to itself delegate to another subagent on this harness would silently fail with a permission-style error rather than a clear "unsupported nesting depth" message — this could be mistaken for a misconfigured allow-list rather than a harness ceiling.
-
-**Evidence:**
-- Single reporter (author_association: NONE), no comments yet as of last check.
-- Concrete, step-by-step reproduction provided (3-agent chain, explicit allow-list contents, toggle of "Allow Invocations From Subagents" ruled out as a factor).
-- Issue has been triaged (assigned to maintainer aeschli, labeled `new release`) but no explicit acknowledgment yet.
-- Meets Unverified inclusion bar: threatens a core MOSAIC delegation pattern (nested subagent dispatch), not on a custom backend, and reproduction steps are concrete rather than vague symptoms.
-
-**Workaround(s):**
-1. None reported yet. Possible mitigation if confirmed: avoid designing MOSAIC subagent chains on this harness that require a subagent to delegate to a further subagent (keep delegation to a single hop from the primary/orchestrator) until this is resolved.
-
-**Notes:**
-Related/nearby issues worth watching (not deep-dived, surfaced via keyword search near this report):
-- #330815 "runSubagent still allows empty agentName and bypasses custom agent allow-list" — opposite failure mode (allow-list bypassed rather than over-enforced) on the same `runSubagent`/allow-list mechanism; suggests the allow-list enforcement path is generally unstable right now.
-- #333369 "`runSubagent` bypasses `disable-model-invocation` when `agentName` is omitted" — another allow-list/invocation-gating edge case on the same code path.
-- #332423 "Agent Host: failed transcript-less subagent blocks subsequent user turns" — different symptom (hung turn) but same Agent Host subagent-dispatch subsystem; see VC-003 below, which may be a duplicate or closely related to this one.
-Needs re-verification once maintainer responds or a fix version is confirmed. **Re-check (2026-09-10, batch 1 of run 3):** No change — still no comments, no maintainer acknowledgment beyond the existing `aeschli` assignment and `new release` label; issue was last touched 2026-09-10T07:27:10Z but that is metadata-only (no new comment text), still 0 comments. Confidence, classification, and impact remain unchanged.
+> Last updated: 2026-10-25 (run 20)
 
 ---
 
@@ -51,13 +11,13 @@ Needs re-verification once maintainer responds or a fix version is confirmed. **
 | **Classification** | Bug |
 | **Source** | https://github.com/microsoft/vscode/issues/331595 |
 | **Reported** | 2026-08-19 |
-| **Last Activity** | 2026-09-02 (issue itself has no new comments since; the dependency chain around it moved through 2026-09-09) |
+| **Last Activity** | 2026-09-09 (issue); no activity since (46 days as of 2026-10-25) |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 1.133.x (reproduced on a dev container / remote agent host, Claude model provider); exact behavior remains in flux, now pending #334146 |
-| **Latest Platform Version** | 1.137.0 |
+| **Latest Platform Version** | 1.143.1 |
 | **Labels** | (none surfaced) |
 
 **Summary:**
@@ -77,6 +37,8 @@ If MOSAIC's interactive/harness-native mode on this harness has a subagent's too
 **Notes:**
 This entry tracks an evolving internal Agent Host restart/state-recovery seam rather than a single fixed symptom. Related PRs/issues to watch: #334146 (successor to #330933, the root restructuring this is downstream of — still open, unmerged, unreviewed by a maintainer as of 2026-09-09), #330746 (self-closed, superseded by #330933/#334146, never landed — correcting the run-1 note that called this "already landed"), #330899 (broader client-tool execution design question that started this whole chain; still open, no maintainer decision), #334132 (adjacent transcript-priming defect found during this investigation, still open/unmerged — correcting the run-1 note that called this "already fixed"). Needs re-verification once #334146 lands or is declined — re-check whether the "stalled turn" framing (rather than "misrouted to parent") is the accurate current-state description. Note for future passes: none of PRs #330933, #330746, #330899, #334132, #334072, or #334146 have any maintainer (non-reporter) comment as of this run — this entire cluster of Agent Host subagent-plumbing fixes is being driven by one contributor (RyanEwen) with no visible Microsoft engineering engagement yet, which should factor into confidence assessment on future passes (a self-closed/superseded PR chain with zero maintainer input is weaker evidence of an accepted fix path than it might first appear). **Re-check (2026-09-10, batch 1 of run 3):** No change. Issue still has exactly 1 comment (the reporter's own 2026-09-02 walk-back, already reflected above); PR #334146 still open, unmerged, `mergeable_state: dirty`, still only a bot CODENOTIFY comment (no maintainer review). Confidence, classification, and impact remain Unverified/Bug/MEDIUM.
 
+**Re-check (2026-10-25, run 20):** NEEDS RE-VERIFICATION. Issue still open (1 comment, reporter's own), assigned to roblourens, no maintainer comment, no linked fix PR, no activity since 2026-09-09. The dependency PR #334146 (admit a client tool call once) was **closed unmerged on 2026-10-03** (closed by author RyanEwen, `mergeable_state: dirty`, never reviewed by a maintainer), so the 'downstream of #334146' framing no longer has a live PR behind it. The reporter's own comment said this issue becomes moot if client tool execution is restructured, and that it should be closed in that case. The only maintainer-side response in the whole cluster is in tracking issue #333174 (2026-09-11, Giuspepe, owner of the Codex harness only, not Claude). Unknown whether current 1.143.x still shows the stalled-turn behavior. Confidence/classification/impact unchanged (Unverified/Bug/MEDIUM).
+
 ---
 
 ### VC-003: Subagent tool call can hang forever with no timeout, leaving its turn (and the parent's) open indefinitely
@@ -86,13 +48,13 @@ This entry tracks an evolving internal Agent Host restart/state-recovery seam ra
 | **Classification** | Bug |
 | **Source** | https://github.com/microsoft/vscode/issues/333931 |
 | **Reported** | 2026-09-02 |
-| **Last Activity** | 2026-09-02 (issue itself; fix PR #334072 was last updated 2026-09-09 with no new comments) |
-| **Confidence** | Confirmed |
+| **Last Activity** | 2026-09-09 (issue); no activity since (46 days as of 2026-10-25) |
+| **Confidence** | Likely |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 1.135.0, reproduced on both patched and fully stock/reverted builds; dev container / remote agent host, Claude provider |
-| **Latest Platform Version** | 1.137.0 |
+| **Latest Platform Version** | 1.143.1 |
 | **Labels** | (none surfaced) |
 
 **Summary:**
@@ -115,6 +77,8 @@ This is a direct, severe hit to MOSAIC's core orchestration pattern: a subagent 
 **Notes:**
 Likely connected to #330899 (client tool admitted to execution off the stream-mapper ready rather than the runtime invocation) and/or #331595 (VC-002, subagent tool call handled on parent chat) — the reporter explicitly flags both as candidate root causes but has not confirmed which. Also see #332073 and the grouping issue #333174 for the "turn never closes" failure class more broadly. Track PR #334072 for the fix; still open/unmerged/unreviewed as of 2026-09-09. Same contributor (RyanEwen) authors this entire cluster (VC-002, VC-003, VC-004, and PRs #330933/#330746/#330899/#334132/#334146) with no confirmed maintainer engagement across any of it yet — re-verify once #334072 merges (or is superseded, as happened to #330933) and re-check whether the fix addresses the root cause (missing reaper/watchdog) or only the specific symptom reproduced here. **Re-check (2026-09-10, batch 1 of run 3):** No change. Issue still has exactly the same 2 comments recorded above (last dated 2026-09-02). PR #334072 still open, unmerged, `mergeable_state: dirty`, no maintainer review or comment beyond assignment. Confidence, classification, and impact remain Confirmed/Bug/HIGH.
 
+**Re-check (2026-10-25, run 20):** NEEDS RE-VERIFICATION; confidence lowered Confirmed -> Likely. Issue still open (2 comments, both the reporter's), assigned to roblourens, no maintainer comment, no activity since 2026-09-09. Fix PR #334072 was **closed unmerged on 2026-10-03** (closed by author RyanEwen, `mergeable_state: dirty`, never reviewed by a maintainer), so the 'linked fix PR' signal that supported Confirmed is gone; what remains is a single contributor's rigorous, scripted 6x reproduction (on stock and patched bundles) on 1.135.0. No evidence either way whether 1.136-1.143 changed the behavior (the contributor stated in #333174 on 2026-09-23 that after the latest stable he still hit 'nothing appears to be happening while agents work' in a Windows+WSL/dev-container setup without his patches, but that is not specific to this tool-call hang). Related VS Code-side fix noted: #339564 (closed 2026-10-05, 'search_code_subagent child turns never complete', insiders-released) is a different subagent-turn-never-completes defect for a built-in subagent, not this one. Workaround unchanged (external wall-clock timeout).
+
 ---
 
 ### VC-004: Forked Skill subagents have no correlation handle from tool call to agent id — invisible to the Agent Host UI
@@ -130,7 +94,7 @@ Likely connected to #330899 (client tool admitted to execution off the stream-ma
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | agent host in dev container, `@anthropic-ai/claude-agent-sdk` 0.3.239 |
-| **Latest Platform Version** | 1.137.0 |
+| **Latest Platform Version** | 1.143.1 |
 | **Labels** | (none surfaced) |
 
 **Summary:**
@@ -156,6 +120,8 @@ Reporter also flagged an unrelated observation from the same logs (not filed sep
 
 **Re-check (2026-09-10, batch 1 of run 3):** #334764 itself: still 0 comments, still no maintainer engagement beyond the `hediet` assignment, no linked fix PR. #334631: one additional third-party comment since last capture — user `rrubberr` (author_association NONE) reports general agent instability/errors since ~1.132.0 with a screenshot, asking if it's the same issue; RyanEwen's reply clarifies their own symptom is distinct (no stop button, agent claims it will report back but never does, animation just stops) — this is a plausible but unconfirmed independent corroboration of the broader "backgrounded subagent goes silently invisible" theme, not a clean duplicate of either specific sub-symptom. Not strong enough to raise confidence above Unverified (still no maintainer confirmation, and the corroboration itself is ambiguous about which exact defect it matches), but worth noting as the cluster's first non-RyanEwen data point. Confidence, classification, and impact remain Unverified/Bug/HIGH.
 
+**Re-check (2026-10-25, run 20):** NEEDS RE-VERIFICATION (no activity on #334764 for 46 days). #334764: still 0 comments, still assigned only to hediet, no linked fix PR, still open. Related #334631 (assigned to justschen, still open, no linked PR, 8 comments, last 2026-09-19): since the last capture only three low-value comments arrived (a 'I'm seeing this issue as well' screenshot from an unrelated user, plus two verbatim quote-copy comments by a separate account); no maintainer response. No confidence change; Unverified/Bug/HIGH. Unknown whether 1.137-1.143 changed forked-Skill subagent surfacing.
+
 ---
 
 ### VC-005: "Agents" window spawns a subagent with the selected custom agent, but the main chat itself ignores the custom agent's tool restrictions
@@ -165,14 +131,14 @@ Reporter also flagged an unrelated observation from the same logs (not filed sep
 | **Classification** | Bug |
 | **Source** | https://github.com/microsoft/vscode/issues/334784 |
 | **Reported** | 2026-09-06 |
-| **Last Activity** | 2026-09-06 |
+| **Last Activity** | 2026-09-14 (stale-bot label only) |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 1.136.1, Linux |
-| **Latest Platform Version** | 1.137.0 |
-| **Labels** | triage-needed, new release |
+| **Latest Platform Version** | 1.143.1 |
+| **Labels** | triage-needed, stale |
 
 **Summary:**
 Reporter states that selecting a custom agent (`.agent.md` chat mode) from the dropdown and sending a message causes Copilot to spawn a subagent using the selected custom agent, but the main/primary chat itself does not adopt the custom agent's instructions or tool restrictions — it remains unrestricted and can execute tools the custom agent's definition should have disallowed. Report is brief (3-step repro, no logs, no screenshots) and has received no comments or maintainer engagement beyond automated triage labeling as of this scan; the exact UI surface involved ("Agents windows" — possibly VS Code's dedicated Agents/background-sessions panel rather than the standard inline chat mode picker) is somewhat ambiguous from the report alone.
@@ -194,6 +160,8 @@ Needs re-verification with a more precise reproduction before confidence can be 
 
 **Re-check (2026-09-10, batch 1 of run 3):** No change. Still 0 comments, no maintainer engagement beyond `triage-needed`/`new release` labels and `zhichli` assignment, still no clarification of which UI surface ("Agents windows") is meant. Not yet 6 weeks stale (4 days since last activity), so no re-verification flag needed yet, but this remains the weakest-evidenced entry in this batch. Confidence, classification, and impact remain Unverified/Bug/MEDIUM.
 
+**Re-check (2026-10-25, run 20):** NEEDS RE-VERIFICATION. No comments at all, no clarification of the 'Agents windows' surface, assigned to zhichli with no response; the `stale` label was auto-applied (last metadata touch 2026-09-14, 41 days ago). Still open and still a thin single-reporter report on 1.136.1 Linux. Weakest-evidenced entry in this batch and a candidate for retirement as not-relevant (ambiguous UI surface that MOSAIC's harness-native mode likely does not use) if it is auto-closed by the stale bot or stays unanswered; left active this pass since closure has not occurred. Confidence/classification/impact unchanged (Unverified/Bug/MEDIUM).
+
 ---
 
 ### VC-008: Terminal auto-approval fails for commands containing a bare `--` token (e.g. `git diff -- <path>`)
@@ -203,13 +171,13 @@ Needs re-verification with a more precise reproduction before confidence can be 
 | **Classification** | Bug |
 | **Source** | https://github.com/microsoft/vscode/issues/321748 |
 | **Reported** | 2026-06-17 |
-| **Last Activity** | 2026-09-07 |
+| **Last Activity** | 2026-10-21 (fix PR #335465) |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 1.123.2 through at least 1.134.0 (confirmed still occurring by a commenter on 1.134.0; fix not yet merged as of 1.137.0) |
-| **Latest Platform Version** | 1.137.0 |
+| **Version(s) Affected** | 1.123.2 through at least 1.134.0 (issue thread); fix PR targets 1.144.0 and is not yet merged as of 1.143.1 |
+| **Latest Platform Version** | 1.143.1 |
 | **Labels** | (none applied; assigned to anthonykim1) |
 
 **Summary:**
@@ -233,6 +201,8 @@ Same underlying parser bug class as #294010 (already fixed there for a different
 
 **Re-check (2026-09-10, batch 2 of run 3):** No change. Issue still open, 6 comments (unchanged since last capture), still no maintainer comment (only the auto-triage bot). PR #335465 still open/unmerged, authored by the same community contributor who diagnosed the root cause (iket0731), not the original reporter. Confidence, classification, and impact remain Confirmed/Bug/HIGH.
 
+**Re-check (2026-10-25, run 20):** Fix PR #335465 is still open but now **milestoned 1.144.0** and the assigned maintainer (anthonykim1) commented on 2026-10-21 'lets try to get this in for next week's release'. The PR is now authored by community member RReverser (not iket0731, whose idea of masking was adopted) and was reworked after review feedback: standalone `--` is now replaced with whitespace rather than `__`, because `tree-sitter-powershell` parses `$val --`/`-- $val` fine but errors on `git diff -- file`. The PR also lists #325635 and #324059 (and iket0731 cites #328110) as the same `--` defect, and commenters note `npm exec -- ...` is equally affected, confirming the general-parser scope. A maintainer reviewer is only now engaging after about 6 weeks of repeated pings. Expect resolution in 1.144.0; move to resolved once the release ships and the PR is merged. No new workaround. Confidence/classification/impact unchanged (Confirmed/Bug/HIGH).
+
 ---
 
 ### VC-009: Agent mode hallucinates unrelated completed task and derails into autonomous unrelated work in long, high-token stateful sessions
@@ -248,7 +218,7 @@ Same underlying parser bug class as #294010 (already fixed there for a different
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 1.135.0-insider and 1.137.0-insider (recurred on a newer build, so not fixed between the two occurrences) |
-| **Latest Platform Version** | 1.137.0 |
+| **Latest Platform Version** | 1.143.1 |
 | **Labels** | (none applied; assigned to roblourens) |
 
 **Summary:**
@@ -273,6 +243,8 @@ Root cause is unclear — the reporter (and issue) cannot distinguish between mo
 
 **Re-check (2026-09-10, batch 2 of run 3):** No change. Still exactly 1 comment (the reporter's own 2026-09-04 second-occurrence report, already reflected above), no maintainer engagement beyond the existing `roblourens` assignment, no linked fix PR. 6 days since last activity — not yet stale enough for a "Needs re-verification" flag on the 6-week threshold, but worth watching given the single-reporter status. Confidence, classification, and impact remain Unverified/Bug/HIGH.
 
+**Re-check (2026-10-25, run 20):** NEEDS RE-VERIFICATION. No change since 2026-09-04 (51 days): still 1 comment (reporter's), still no maintainer response beyond roblourens assignment, no linked PR, still open, no reproductions from other users. Unknown whether it recurs on 1.14x or non-Sol models. Confidence/classification/impact unchanged (Unverified/Bug/HIGH).
+
 ---
 
 ### VC-015: Copilot edit tools report "Updated" success even when the underlying file save fails
@@ -288,7 +260,7 @@ Root cause is unclear — the reporter (and issue) cannot distinguish between mo
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 1.134.0 stable, Windows 11; reporter's repro uses a custom `FileSystemProvider` (virtual scheme, remote backend) but the described root cause is architectural, not scheme-specific |
-| **Latest Platform Version** | 1.137.0 |
+| **Latest Platform Version** | 1.143.1 |
 | **Labels** | (none applied; assigned to roblourens) |
 
 **Summary:**
@@ -312,6 +284,8 @@ Needs re-verification to determine whether this reproduces with VS Code's own bu
 
 **Re-check (2026-09-10, batch 3 of run 3):** No change. Issue still has 0 comments, still assigned only to `roblourens` with no maintainer acknowledgment, still no linked fix PR (`closed_by_pull_requests` empty). 17 days since last activity (2026-08-24) — not yet 6-weeks stale, no re-verification flag needed yet, but this entry's open question (does it reproduce on stock local/remote-SSH/dev-container providers, not just a custom scheme) remains unanswered. Confidence, classification, and impact remain Unverified/Bug/HIGH.
 
+**Re-check (2026-10-25, run 20):** NEEDS RE-VERIFICATION. No change since 2026-08-24 (62 days): 0 comments, assigned to roblourens only, no linked PR, still open. The open question (does it reproduce on stock local/remote/dev-container filesystem providers rather than a custom virtual scheme) is still unanswered. Confidence/classification/impact unchanged (Unverified/Bug/HIGH).
+
 ---
 
 ### VC-010: `runSubagent` skips allow-list/invocation-gating validation entirely when `agentName` is omitted
@@ -327,7 +301,7 @@ Needs re-verification to determine whether this reproduces with VS Code's own bu
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 1.132.x-1.136.0-insider; reporter of #330815 confirmed still present on 1.133.0 |
-| **Latest Platform Version** | 1.137.0 |
+| **Latest Platform Version** | 1.143.1 |
 | **Labels** | (none surfaced; #330815 assigned to aeschli, #333369 assigned to roblourens) |
 
 **Summary:**
@@ -350,6 +324,8 @@ Same underlying code branch (`runSubagentTool.ts` invoke(), the `else` branch ta
 
 **Re-check (2026-09-10, batch 2 of run 3):** No change to either issue. #330815 still 2 comments (last 2026-08-18, the reporter's own 1.133.0 re-confirmation), still no maintainer response beyond the `aeschli` assignment, no linked fix PR. #333369 still 0 comments, still no maintainer response beyond the `roblourens` assignment, no linked fix PR. Neither is yet 6 weeks stale (23 and 11 days since last activity respectively). Confidence, classification, and impact remain Unverified/Bug/HIGH.
 
+**Re-check (2026-10-25, run 20):** NEEDS RE-VERIFICATION for the omitted-`agentName` bypass itself: #330815 (last activity 2026-08-18, 68 days) and #333369 (last activity 2026-08-30, 56 days) both remain open with no maintainer comment and no linked fix PR. Partially related change: PR #337611 (merged 2026-09-24, shipped in 1.140.0; see resolved VC-001) changed *nested* `runSubagent` handling so a nested subagent that omits `agentName` now becomes a copy of the **calling subagent** (its own instructions, allowlist, model, tools, hooks) instead of silently reverting to a copy of the top-level agent; that closes the sub-case where a nested subagent escaped its own allowlist, but the PR states calls made in the top-level request 'fall back to the previous behavior', so the top-level self-clone bypass and the `disable-model-invocation` non-enforcement described here appear untouched. Not yet re-tested on 1.140+. Confidence/classification/impact unchanged (Unverified/Bug/HIGH).
+
 ---
 
 ### VC-011: Background/parallel subagent output and completion signals are silently dropped once the parent's turn ends (recoverable from transcript, lost from live UI and possibly from orchestrator-visible completion)
@@ -359,13 +335,13 @@ Same underlying code branch (`runSubagentTool.ts` invoke(), the `else` branch ta
 | **Classification** | Bug |
 | **Source** | https://github.com/microsoft/vscode/issues/332073 |
 | **Reported** | 2026-08-22 |
-| **Last Activity** | 2026-09-09 |
+| **Last Activity** | 2026-10-13 |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 1.1.3 (reporter's initial build string, likely truncated/typo for a 1.1xx release) through 1.136.1; dev container / remote agent host, Claude provider |
-| **Latest Platform Version** | 1.137.0 |
+| **Version(s) Affected** | 1.136.1 through at least 1.141.0 (independently reproduced by third parties on 1.139.1 stable macOS and 1.141.0); dev container / remote and local agent host, Claude provider |
+| **Latest Platform Version** | 1.143.1 |
 | **Labels** | (none surfaced; assigned to roblourens) |
 
 **Summary:**
@@ -383,12 +359,15 @@ This is a severe, distinct failure mode from VC-003 (hung tool call that never e
 **Workaround(s):**
 1. ★ None from within the harness for the live-signal-drop behavior. If a background/parallel subagent dispatch's completion is not observed within an expected time window on this harness, do not assume failure — first check whether the transcript on disk actually completed (restart the agent host / reopen the session to force a replay) before treating it as a hung/failed dispatch, since VC-003's true-hang symptom and this issue's signal-drop symptom are indistinguishable from the orchestrator's live view alone.
 2. Avoid relying on `AskUserQuestion`-style interactive clarification calls from a subagent while other queue/turn activity may be in flight on this harness, since such calls can be silently auto-denied rather than genuinely surfaced to the user.
-3. For headless/automated MOSAIC runs specifically: since a human "just reopen the session" recovery isn't available, treat any subagent dispatch on this harness whose completion signal doesn't arrive within a wall-clock timeout as unconfirmed rather than failed, and where possible cross-check against the on-disk transcript directly before re-dispatching (re-dispatching a subagent whose work actually completed wastes the work and may produce duplicate side effects).
+3. (Run 20, from third-party reports) To recover a session whose background-subagent output stopped rendering, fully quit VS Code and reopen it; Reload Window does not restart the agent host. The on-disk transcript contains the complete output.
+4. For headless/automated MOSAIC runs specifically: since a human "just reopen the session" recovery isn't available, treat any subagent dispatch on this harness whose completion signal doesn't arrive within a wall-clock timeout as unconfirmed rather than failed, and where possible cross-check against the on-disk transcript directly before re-dispatching (re-dispatching a subagent whose work actually completed wastes the work and may produce duplicate side effects).
 
 **Notes:**
 This issue is one of ~20 individual reports the same contributor (RyanEwen) consolidated under tracking issue #333174 ("the external-harness chat surface has two root causes, not sixteen defects"), which groups this issue and VC-003 (#333931) together as related-but-distinct under "Cause two: provider parity and lifecycle" (Claude agent-host provider not yet at parity with Codex/Copilot providers on steering-message idempotency, turn-promotion, and restore-time interrupted-turn detection). #333174 itself is not tracked as a separate KB entry — it's a meta/index issue, not an independent defect — but is a valuable map for future passes; note its "cause two" table also lists #331595 (VC-002) and #332087 ("responses render only at turn end," own fix PR #332122, not yet investigated — candidate for a future pass) as part of the same underlying provider-parity gap. Cross-referenced from VC-003's Notes. Needs re-verification once #332075, #334127, and the (not-yet-filed-separately) `AgentSideEffects` gate fix all land — re-check whether the window-close case (registry loss) is addressed, since the reporter explicitly notes the in-memory anchor approach in #332075 cannot survive a host restart by construction.
 
 **Re-check (2026-09-10, batch 2 of run 3):** No change. Issue still has exactly the same 4 comments recorded above (last dated 2026-09-04); the 2026-09-09 `updated_at` timestamp is metadata-only (no new comment text). Fix PR #332075 still open, unmerged, no maintainer review. Confidence, classification, and impact remain Confirmed/Bug/HIGH.
+
+**Re-check (2026-10-25, run 20):** Strengthened; still unresolved. Two new independent third-party reproductions (author_association NONE, different users): on 1.139.1 stable (macOS arm64, 2026-09-29) a parent that spawned two background subagents and ended its turn had its entire post-completion output dropped live (the parent verified findings, edited code, ran tests and **committed**, and wrote a report, none of it rendered; the commenter then approved a next step without seeing the report), subagent chips stayed 'Working' for 37+ minutes after finishing, **Reload Window does not recover** because the agent host is a utility process owned by the main process and survives reloads (only a full quit restarts it; VS Code then warns 'A session is in progress' due to the phantom state), and a full quit rebuilds the missing turns from the on-disk transcript (cosmetic: raw `<task-notification>` / `<system-reminder>` XML shown as user messages, subagent tabs lose titles); and on 1.141.0 (2026-10-13) a further trigger: after resume, a task-notification turn's empty `result` settles the user's queued prompt so the real answer arrives with an empty queue and is dropped (`result for sdkUuid=undefined`), and re-sending can repeat it because truncation drops the notification (host passes `resumeSessionAt` without `resumeDropsTurn`). Fix status: original PR #332075 was **closed unmerged**; a replacement by a different author, PR #336753 ('render Claude SDK-initiated reply turns', opens a protocol turn for idle-parent continuations, assigned to roblourens), is open, `mergeable_state: dirty`, last updated 2026-09-21, and a reviewer comment already notes it would not fix the queued-prompt race. Note for MOSAIC: this is a data-visibility hazard with real side effects (commits/edits happened while output was hidden). New workaround: if a background-subagent session appears stuck or its output stops, fully quit VS Code (not Reload Window) and reopen to rebuild from transcript; agent-written artifacts on disk are unaffected. Confidence Confirmed (now backed by multiple independent reproductions rather than only an open PR); classification Bug; impact HIGH.
 
 ---
 
@@ -399,13 +378,13 @@ This issue is one of ~20 individual reports the same contributor (RyanEwen) cons
 | **Classification** | Bug |
 | **Source** | https://github.com/microsoft/vscode/issues/330899 |
 | **Reported** | 2026-08-14 |
-| **Last Activity** | 2026-09-09 |
-| **Confidence** | Confirmed |
+| **Last Activity** | 2026-09-09 (issue); fix PRs closed 2026-10-03 |
+| **Confidence** | Likely |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 1.133.x, dev container / remote agent host, Claude provider with auto-approvals |
-| **Latest Platform Version** | 1.137.0 |
+| **Latest Platform Version** | 1.143.1 |
 | **Labels** | agent-host; assigned to roblourens |
 
 **Summary:**
@@ -430,6 +409,8 @@ This is the same underlying architectural seam VC-002 (#331595) and VC-003 (#333
 
 **Re-check (2026-09-10, batch 2 of run 3):** No change. Issue still has exactly the same 3 comments recorded above (last dated 2026-08-17), still no maintainer engagement beyond the `roblourens` assignment and the `agent-host` label. Consolidating fix PR #334146 still open, unmerged, 1 comment (bot only), no maintainer review. Confidence, classification, and impact remain Confirmed/Bug/HIGH.
 
+**Re-check (2026-10-25, run 20):** NEEDS RE-VERIFICATION; confidence lowered Confirmed -> Likely. Issue #330899 is still open (3 comments, none new; label `agent-host`; assigned roblourens), no maintainer comment, no activity for 46 days. **All of the contributor's fix PRs were closed unmerged on 2026-10-03** (closed by the author, all `mergeable_state: dirty`, never merged): #334146 (consolidating fix), #330684 (schema validation), #330730 (buffer early result), plus #330683 and #330933 earlier. So the 'linked fix PRs with failing tests' evidence that supported Confirmed no longer points to any live fix, and there is no evidence any of the three defects was fixed on main. The root cause is described by the contributor from source review on 1.133.x; unknown whether it still reproduces on 1.143.x. Same applies to VC-002/VC-003: the whole RyanEwen Agent Host cluster (tracking issue #333174) has seen only one maintainer reply (the Codex harness owner, 2026-09-11, Codex-only). Classification/impact unchanged (Bug/HIGH).
+
 ---
 
 ### VC-016: MCP tools silently rejected as "disabled by the user" due to a static tool-availability snapshot racing async server discovery (ask mode)
@@ -439,14 +420,14 @@ This is the same underlying architectural seam VC-002 (#331595) and VC-003 (#333
 | **Classification** | Bug |
 | **Source** | https://github.com/microsoft/vscode/issues/334569 |
 | **Reported** | 2026-09-04 |
-| **Last Activity** | 2026-09-09 |
-| **Confidence** | Likely |
-| **Orchestration Impact** | MEDIUM |
+| **Last Activity** | 2026-09-21 |
+| **Confidence** | Confirmed |
+| **Orchestration Impact** | LOW |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 1.136.1, Copilot Chat 0.64.1; reporter's MCP server had 48 tools (firefox-devtools-mcp v0.10.2) |
-| **Latest Platform Version** | 1.137.0 |
-| **Labels** | new release |
+| **Latest Platform Version** | 1.143.1 |
+| **Labels** | agent-host-mitigated |
 
 **Summary:**
 In Copilot Chat's **ask mode**, when a user (or agent) `@`-references an MCP server (toolset), the set of tools considered "available" for that request is captured as a **static snapshot at request-parse time** (`chatRequestParser.ts`). MCP server tool discovery is asynchronous and registers tools one-by-one; if the snapshot is taken before discovery finishes, only the subset of tools registered so far gets baked in — the rest are permanently rejected for that session with a misleading `"Tool X is currently disabled by the user, and cannot be called"` error, even though the tool cache shows all tools enabled and the server itself has fully registered and would execute the call. The reporter did an exhaustive 48-tool test matrix proving the split is purely timing-based (no correlation with risk level, alphabetical order, or actual user disablement), traced the exact interception line in `toolCalling.tsx`/`askAgentIntent.ts`, and submitted two candidate fix PRs (#334657, preferred — scopes to the referenced server; #334641 — looser, exposes all MCP tools). As of the last comment, a VS Code contributor (anthonykim1) asked for an English translation and reassigned the issue; no maintainer has yet acknowledged the root cause or picked a fix direction, and neither PR is merged.
@@ -469,6 +450,8 @@ Needs re-verification once either #334657 or #334641 merges, and to confirm whet
 
 **Re-check (2026-09-10, batch 3 of run 3):** No material change. Issue now shows 12 comments (all from before this run's cutoff, already reflected above — the reporter's own English translation of the root-cause analysis and the two-PR comparison, plus contributor `anthonykim1`'s translation request and the bot's `connor4312`→`roblourens` reassignment). PR #334657 (recommended fix) still open/unmerged, PR #334641 (alternative) confirmed closed as superseded. No maintainer has acknowledged the root cause or picked a fix direction. Confidence, classification, and impact remain Likely/Bug/MEDIUM.
 
+**Re-check (2026-10-25, run 20):** Maintainer response received, and it is a decline. On 2026-09-21 VS Code maintainer connor4312 (MEMBER) closed the recommended fix PR #334657 (and #334641 stays closed as superseded) saying 'I appreciate the PR and diagnosis! However, this particular code path is going to go away soon to be modernized, so I do not plan to invest in making changes here at this moment.' The issue remains open, now carrying the label `agent-host-mitigated`; no fix will land for the ask-mode static tool-reference snapshot path, which is slated for replacement. Confidence raised Likely -> Confirmed on the strength of the maintainer's acceptance of the diagnosis; impact lowered MEDIUM -> LOW because the defect is explicitly in ask mode's @-reference snapshot (not agent mode, which MOSAIC's harness-native dispatch uses), the code path is being retired, and the multi-window stale-cache variant in the original report is an environmental amplifier. Keep tracked only until the replacement lands; candidate to retire as N/A (not relevant) on the next pass if no evidence emerges that agent mode shares the path. Workaround unchanged.
+
 ---
 
 ### VC-017: MCP client discards the tool result payload (`structuredContent`) when a long-running MCP "task" ends in `failed` status
@@ -478,13 +461,13 @@ Needs re-verification once either #334657 or #334641 merges, and to confirm whet
 | **Classification** | Bug |
 | **Source** | https://github.com/microsoft/vscode/issues/335229 |
 | **Reported** | 2026-09-09 |
-| **Last Activity** | 2026-09-09 |
+| **Last Activity** | 2026-09-14 (metadata only) |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 1.136.2, reproduced with an MCP server (Qt Creator's built-in MCP server) that uses the MCP `tasks` extension (`tasks.requests.tools.call`) for long-running tool calls |
-| **Latest Platform Version** | 1.137.0 |
+| **Latest Platform Version** | 1.143.1 |
 | **Labels** | new release |
 
 **Summary:**
@@ -508,3 +491,353 @@ MCP tools are a first-class extension point MOSAIC agents may rely on for specia
 Scope is narrower than general MCP tool execution — only affects MCP servers using the tasks extension (`CreateTaskResult`/long-running polling pattern) for tool calls, which is a newer, less common MCP feature; simple synchronous MCP tool calls are unaffected. Needs re-verification once a fix PR appears; watch for whether the fix also addresses the parallel defect the reporter flagged in the Copilot extension's own bundled MCP SDK (`requestStream()`), since that could require a separate extension-side fix beyond the VS Code core change.
 
 **Re-check (2026-09-10, batch 3 of run 3):** No change. Issue still has 0 comments, still assigned only to `meganrogge` (auto-triage `new release` label only), no linked fix PR (`closed_by_pull_requests` empty). 1 day since last activity — far from the 6-week staleness threshold. Confidence, classification, and impact remain Unverified/Bug/HIGH.
+
+**Re-check (2026-10-25, run 20):** NEEDS RE-VERIFICATION. Still open, 0 comments, assigned to meganrogge, no linked fix PR, no activity since 2026-09-14 (41 days). No maintainer acknowledgment. Confidence/classification/impact unchanged (Unverified/Bug/HIGH).
+
+
+---
+
+### VC-018: tree-sitter PowerShell grammar cannot parse `./path` at command position (and ~8% of realistic agent commands), so terminal auto-approve never applies and no approve option is offered
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/microsoft/vscode/issues/328110 |
+| **Reported** | 2026-07-29 |
+| **Last Activity** | 2026-09-24 |
+| **Confidence** | Confirmed |
+| **Orchestration Impact** | HIGH |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | Filed against ~1.130; still open on 1.143.1 |
+| **Latest Platform Version** | 1.143.1 |
+| **Labels** | bug, terminal, agent-host |
+
+**Summary:**
+The `tree-sitter-powershell` grammar in `@vscode/tree-sitter-wasm` returns parse errors for about 8% of plausible agent-emitted commands (3 of 36 measured). Two triggers: a bare `--` separator (tracked as VC-008, fix PR #335465 targets 1.144.0) and a `./path` at command position (`./scripts/test.sh`, `./gradlew build`). The `./path` trigger is NOT covered by PR #335465, which masks only `--`. Because the Workbench and the Agent Host both gate auto-approval on an error-free parse, such commands resolve to `noMatch` with `autoApproveRuleResolvable: false`: the user is prompted every time and the confirmation offers no persistent approve action. Filed by a Microsoft contributor who is also the assigned maintainer (anthonykim1). Proposed directions: upstream grammar fix, extend the masking workaround, or a coarser tokenizer for suggestion generation only.
+
+**Impact on Orchestration:**
+Unattended or headless VS Code runs on Windows/PowerShell stall on an approval prompt whenever an agent runs a repo script by relative path (`./gradlew`, `./scripts/test.sh`), which is a very common pattern in build/test dispatches. Explicit `matchCommandLine` rules may help only once #328109 lands.
+
+**Evidence:**
+- Maintainer-authored report with a measured sample (3 of 36 commands errored) and a precise two-trigger analysis; maintainer acknowledges the Agent Host shares the gate ("already shipping in the Agent Host").
+- Two later commenters report hitting it many times per day; 2 upvotes. No fix PR for the `./path` trigger.
+
+**Workaround(s):**
+1. For `./script` invocations, prefer a form that parses (e.g. `bash ./scripts/test.sh` or `sh scripts/test.sh`) with a matching prefix rule. Untested inference, not stated in the thread.
+2. Use a blanket approve mode for unattended runs (loses scoped safety).
+
+**Notes:**
+Same parser family as VC-008; also reported as #325635 (`npm exec -- ...`) and #324059 (`git diff -- ...` under Default Approvals), both `--` variants that PR #335465 lists as fixed. Related fixes referenced by the issue: #328108 (errored-parse gate), #328109 (honour `matchCommandLine` before parsing), #328052. Re-verify after 1.144.0 to see whether `./path` remains.
+
+---
+
+### VC-019: Subagent spawned by a subagent inherits the root agent's tools, not the spawner's or its own declared tools
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/microsoft/vscode/issues/284304 |
+| **Reported** | 2025-12-18 |
+| **Last Activity** | 2026-04-16 |
+| **Confidence** | Confirmed |
+| **Orchestration Impact** | HIGH |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | Reported on late-2025 builds; comment repro on 1.109.5 (Copilot 0.37.9, macOS). No confirmation on current versions |
+| **Latest Platform Version** | 1.143.1 |
+| **Labels** | bug, chat-subagents |
+
+**Summary:**
+Filed by maintainer roblourens (assigned, `bug`). In a chain default agent -> `runSubagent` custom agent -> `runSubagent` again, the third-level subagent runs with the root (default) agent's toolset instead of the second agent's. A commenter reproduced a related form: an orchestrator with `tools: [agent, memory/*]` invoking an `Implementer` agent whose frontmatter declares `edit/editFiles` + `execute/runInTerminal` yields a subagent holding only `agent` + `memory/*`. Another commenter adds that subagents can call any subagent regardless of the `agents:` allow-list. Maintainer's intended fix: run the nested subagent as the named custom agent by default (make subagent name required, hint the spawner to spawn as itself). No fix PR linked.
+
+**Impact on Orchestration:**
+A hub-and-spoke dispatch where a specialist subagent re-delegates, or where a subagent's declared tools differ from the orchestrator's, gets the wrong tool inventory: specialists may lack the tools they need or hold tools they should not have. Restricted-tool isolation cannot be relied upon.
+
+**Evidence:**
+- Maintainer-authored bug with the maintainer's stated resolution plan (acknowledged defect).
+- Two independent user reports in comments (March and April 2026), no maintainer follow-up since.
+- No activity for about 6 months, no fix PR, all versions pre-Agent-Host era: NEEDS RE-VERIFICATION on 1.143.
+
+**Workaround(s):**
+1. Keep delegation to a single hop (orchestrator -> specialist) and give the specialist its tools via its own `.agent.md`; avoid re-delegation from subagents.
+2. Reporter options (all trade-offs): grant the orchestrator the union of tools, or switch agents manually.
+
+**Notes:**
+Overlaps conceptually with VC-001 (nested depth, resolved), VC-005 and VC-010 (agent-scoping enforcement gaps) and TI-001 (subagent tool inventory mismatch). Sibling reports on declared tools not reaching subagents: VC-021, VC-022.
+
+---
+
+### VC-020: Subagents are told to call `tool_search` before using deferred tools although their request omits `tool_search` (subagent can stop instead of calling an available tool)
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/microsoft/vscode/issues/336376 |
+| **Reported** | 2026-09-16 |
+| **Last Activity** | 2026-10-19 (fix PR updated) |
+| **Confidence** | Confirmed |
+| **Orchestration Impact** | HIGH |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 1.137.0 / Copilot Chat 0.65.0 (source also present on main as of 2026-09-16); GPT-5.5-specific reminder surface also affected. Related symptom report #338880 |
+| **Latest Platform Version** | 1.143.1 |
+| **Labels** | (none; assigned to roblourens) |
+
+**Summary:**
+For search-capable Responses-API endpoints, the request builder deliberately disables tool deferral for subagents (ordinary schemas sent eagerly, no `tool_search` tool), but prompt generation only checks endpoint capability. The subagent prompt therefore still says "You MUST use tool_search to load deferred tools BEFORE calling them" and lists "deferred tools", so a subagent can stop with a missing-search-tool explanation instead of calling a tool it already has (notably extension/MCP tools). Fix PR #340701 (community, RemarkIt, assigned to roblourens) gates the guidance on actual presence of the search tool; not merged as of 2026-10-25.
+
+**Impact on Orchestration:**
+Delegated subagents using MCP/extension tools can stall or return "tool unavailable" without doing the work, which looks like a missing-tool or misconfigured-agent problem. The orchestrator receives a failure response for work that was entirely possible.
+
+**Evidence:**
+- Source-level analysis with code references (model-reported diagnostic for the observed failure; not a captured network trace). Fix PR linked; a Microsoft member says it also blocks the upgrade-agent-plugins extension.
+- Independent user report (2026-10-08): "our test agent can no longer run tests if it is deferred by the orchestrator". 3 upvotes.
+- Model-dependent: whether the model stops or attempts the supplied tool anyway varies.
+
+**Workaround(s):**
+1. No official one. Adding tool-search entries to the agent configuration cannot override the `!isSubagent` serialization path (per reporter).
+2. Prefer built-in (non-deferred) tools for subagents, or instruct the subagent to call its listed tools directly (untested inference).
+
+**Notes:**
+Distinct from VC-021 (declared tools missing from subagent inventory) but may overlap: the `search`/`web` groups missing there could be tools classified as deferred. An earlier request to enable tool search for subagents (#317562) was closed not_planned, so subagents stay eager by design; the fix only aligns the prompt.
+
+---
+
+### VC-021: Custom agent run as subagent lacks `search` and `web` tool groups declared in its frontmatter
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/microsoft/vscode/issues/341550 |
+| **Reported** | 2026-10-14 |
+| **Last Activity** | 2026-10-21 (metadata only) |
+| **Confidence** | Unverified |
+| **Orchestration Impact** | HIGH |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 1.141.1, still present on 1.142.0 (Windows) |
+| **Latest Platform Version** | 1.143.1 |
+| **Labels** | (none; assigned to aeschli) |
+
+**Summary:**
+A `web-researcher` custom agent declaring `search` and `web` tools works as a top-level agent, but when an `orchestrator` agent runs it as a subagent, it reports web access unavailable. A tool-availability probe showed only `function.view` and `multi_tool_use.parallel`; no search and no web tools. The reporter's further testing narrowed the missing tools to the `search` and `web` groups; other tools seemed accessible. Single reporter, no maintainer response.
+
+**Impact on Orchestration:**
+Specialist subagents may silently run with a reduced tool set even though their `.agent.md` declares it, so delegated research/search work fails or returns "not available" to the orchestrator.
+
+**Evidence:**
+- Single reporter with concrete steps and a tool inventory table; reproduced across 1.141.1 and 1.142.0. Stock VS Code, no custom backend.
+- Included as Unverified because it hits subagent tool scoping (core MOSAIC pattern) with concrete repro steps. Same direction as VC-019 and VC-022.
+
+**Workaround(s):**
+1. None reported. Possible: have the orchestrator do web/search itself, or run the specialist as the primary agent.
+
+**Notes:**
+Possible link to VC-020 (tool-search deferral applies to subagents; deferred tools unreachable) is a hypothesis only. TI-001 in ToInvestigate.md is the opposite direction (subagent offered tools it cannot use).
+
+---
+
+### VC-022: `todo` (and `askQuestions`) tools are force-disabled for subagents even when listed in the agent's `tools:` frontmatter
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Limitation |
+| **Source** | https://github.com/microsoft/vscode/issues/313520 |
+| **Reported** | 2026-04-30 |
+| **Last Activity** | 2026-07-13 |
+| **Confidence** | Likely |
+| **Orchestration Impact** | MEDIUM |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 1.118.1 reported; unclear on 1.143.1 |
+| **Latest Platform Version** | 1.143.1 |
+| **Labels** | chat-ext-issue (milestone Backlog Candidates; assigned to three maintainers) |
+
+**Summary:**
+The `manage_todo_list` (`#tool:todo`) tool is unconditionally set to disabled for subagents in `runSubagentTool.ts`, overwriting the frontmatter opt-in; subagents then report the tool is not available. A community PR (#313631, 2 lines) would honor the opt-in, but it is still open with no review, and a similar PR (#315858) was closed unmerged. No maintainer comment on the issue; the backlog milestone suggests no near-term fix.
+
+**Impact on Orchestration:**
+Workflows that rely on a shared `todo` list between orchestrator and subagents fail: workers cannot read or mark items. Models may fake progress from context instead of the tool (Opus 4.7 observed). MOSAIC's file-based tracking is unaffected.
+
+**Evidence:**
+- Single reporter with attached agent files; code-level cause cited by the PR author. Maintainer assignment and triage milestone, no explicit confirmation.
+- Needs re-verification: no activity since 2026-07-13 and no confirmation on current versions.
+
+**Workaround(s):**
+1. Track progress in files or in the orchestrator rather than `#tool:todo`; have subagents return results and let the parent update the todo list.
+
+**Notes:**
+Classified Limitation because the disabling is explicit code, probably intentional for subagent isolation; reclassify if a maintainer calls it a bug. Related: VC-021, VC-019.
+
+---
+
+### VC-023: Custom agent's frontmatter `model` fails to resolve when run as a subagent ("model unavailable" / `invalid_model`), while an explicit model override succeeds
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/microsoft/vscode/issues/342290 (also #340844) |
+| **Reported** | 2026-10-10 (#340844); 2026-10-17 (#342290) |
+| **Last Activity** | 2026-10-23 |
+| **Confidence** | Likely |
+| **Orchestration Impact** | MEDIUM |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 1.141.0 (#340844), 1.142.0 (#342290); both Windows; models are BYOK/language-model-provider models (Azure, OpenAI) |
+| **Latest Platform Version** | 1.143.1 |
+| **Labels** | triage-needed (#342290); #340844 assigned to aeschli |
+
+**Summary:**
+When a `.agent.md` sets `model:` to either the model-picker display name ("GPT-6 Sol (openai)") or the canonical ID shown by the `task`/subagent tool ("azure/Azure/gpt-6-luna"), invoking that agent as a subagent without a model override fails: "Model '...' is not available. Available models: ..." (the list even contains the same ID) or an `invalid_model` result from the task runner. Passing the identical model ID as an explicit `model` argument in the subagent call works. Behavior is intermittent (#340844: sometimes works with canonical IDs; only some of the reporter's machines affected) and reportedly began with a recent update. Two independent reporters plus a "same problem" comment; no maintainer comment yet.
+
+**Impact on Orchestration:**
+A subagent dispatch to a custom agent with a pinned model hard-fails, and a "stop on failure" orchestrator halts. Because of the intermittency the failure is hard to predict from the config alone.
+
+**Evidence:**
+- Two separate issues (#340844, #342290) by different authors with consistent symptoms, plus a third commenter; 0 upvotes, no repro from maintainers.
+- All observations involve BYOK/custom-provider models; not confirmed with Copilot-hosted models, so materiality for those is unknown.
+
+**Workaround(s):**
+1. Pass the explicit `model` ID in the subagent call (confirmed by the #342290 reporter), or tell the orchestrator the exact model ID to use.
+2. Remove `model:` from the custom agent's frontmatter so it inherits the caller's model (untested inference).
+
+**Notes:**
+Frontmatter `model` is a direct subagent-dispatch dependency. Re-verify with Copilot-hosted models before relying on pinned per-agent models in VS Code.
+
+---
+
+### VC-024: Agents window / Copilot harness: subagents started in the turn that approves a plan ("Implement plan") get none of the built-in tools
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/microsoft/vscode/issues/343716 |
+| **Reported** | 2026-10-23 |
+| **Last Activity** | 2026-10-23 |
+| **Confidence** | Unverified |
+| **Orchestration Impact** | MEDIUM |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 1.143.0 (regression; 1.142.0 and earlier fine); bundled Copilot runtime 1.0.100-1, `@github/copilot-sdk` 1.0.23-preview.5; BYOK Claude Opus used in the report |
+| **Latest Platform Version** | 1.143.1 |
+| **Labels** | (none; assigned to roblourens) |
+
+**Summary:**
+In the Agents window with the Copilot harness, after Plan mode is approved with "Implement plan", every subagent started in that same turn lacks the runtime's built-in tools (shell, view/create/edit, grep/glob, web_fetch, task, skill). Its system prompt has no `<tools>` section and it sees only client tools contributed by VS Code (browser tools, semantic_search, PR tools). Subagents started in normal turns are fine. The reporter's log counts show the change at runtime 1.0.100-1 (VS Code 1.143.0) versus 1.0.95/1.0.92. The reporter later concluded root cause is in the bundled Copilot runtime (reported at github/copilot-cli#5243) and that VS Code needs to pick up a fixed runtime and SDK bump.
+
+**Impact on Orchestration:**
+Plan-then-implement workflows that delegate to subagents silently degrade: subagents cannot write files or run tests and improvise through whatever tools they have. Narrow trigger (Agents window, plan approval turn), so only marginal for MOSAIC's headless dispatch.
+
+**Evidence:**
+- Single reporter, but with a quantified log comparison across runtime versions, a minimal reproduction (a Probe agent), and a maintainer assignment. No maintainer comment yet; filed 2 days ago.
+- Included Unverified because it concerns subagent tool inventory (core pattern) and ships in the current stable.
+
+**Workaround(s):**
+1. Reporter's implication: delegate in a later normal turn rather than the plan-approval turn (subagents from normal turns get the full tool set); or stay on 1.142.0.
+
+**Notes:**
+Cross-harness: the underlying runtime defect is tracked upstream at github/copilot-cli#5243 (Copilot CLI harness may be affected; not checked here). Related subagent tool-inventory entries: VC-019, VC-020, VC-021, VC-022.
+
+---
+
+### VC-025: Agent Host (Copilot harness) discards custom-agent frontmatter keys such as `include-custom-instructions`, so custom subagents never receive AGENTS.md / repository instructions
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/microsoft/vscode/issues/343696 |
+| **Reported** | 2026-10-23 |
+| **Last Activity** | 2026-10-23 |
+| **Confidence** | Unverified |
+| **Orchestration Impact** | MEDIUM |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 1.143.0 (Windows, Agents window, Copilot harness, `@github/copilot-sdk` 1.0.23-preview.5) |
+| **Latest Platform Version** | 1.143.1 |
+| **Labels** | (none; assigned to aeschli) |
+
+**Summary:**
+In the Copilot harness (Agents window) a custom agent with `include-custom-instructions: true` still runs as a subagent without `AGENTS.md` / `copilot-instructions.md` / `CLAUDE.md`, whereas the built-in `general-purpose` subagent in the same session does receive them and Copilot CLI honors the flag as documented. Per the reporter's reading of the minified host code, the agent host parses agent files itself and forwards only `name`, `description`, `tools`, `skills`, `reasoning-effort`, `infer`/`disable-model-invocation`, `model` and the body; every other key (including `models`, `modelPolicy`, `mcp-servers`, `include-custom-instructions`) is dropped, and the SDK's `CustomAgentConfig` has no field for the flag, so the fix may need an SDK change. Single reporter; no maintainer comment.
+
+**Impact on Orchestration:**
+Specialist subagents defined as custom agents run without the repository's project instructions on this harness path, and some frontmatter that works under Copilot CLI is silently ignored, so agent behavior differs between harnesses. Narrow to the Agents-window Copilot harness.
+
+**Evidence:**
+- Single reporter with a minimal repro (Reviewer agent vs built-in general-purpose) and code-level cause (minified-code analysis, not maintainer-verified). Assigned to aeschli, filed 2 days ago.
+- Included Unverified because it affects custom subagent context delivery with concrete repro on stock VS Code.
+
+**Workaround(s):**
+1. Put the needed repository rules directly in the custom agent body, or have the orchestrator pass them in the dispatch prompt (untested inference).
+
+**Notes:**
+Related frontmatter/tool-scoping entries: VC-021, VC-022, VC-023. Re-check once a fix or SDK update lands.
+
+---
+
+### VC-026: Agent terminal tool hangs forever after a command finishes when the user's shell prompt hooks defeat VS Code shell-integration command-end detection
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Quirk |
+| **Source** | https://github.com/microsoft/vscode/issues/317531 |
+| **Reported** | 2026-05-20 |
+| **Last Activity** | 2026-10-24 |
+| **Confidence** | Likely |
+| **Orchestration Impact** | MEDIUM |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | Reported on 1.120.0 (Linux, bash), "same on latest" in May and June 2026; a commenter still affected 2026-10-24 |
+| **Latest Platform Version** | 1.143.1 |
+| **Labels** | triage-needed, stale (assigned to chrmarti) |
+
+**Summary:**
+In Agent mode the `run_in_terminal` call never returns even though the command has finished in the terminal; pressing Enter in that terminal makes the agent register completion. No maintainer comment. On 2026-10-24 a second user found the cause in their own setup: `starship` was sourced before `bash-preexec`, so `starship_precmd` rewrote PS1 after VS Code's shell integration wrapped it in OSC 633 markers, and the tool never saw a prompt transition. Making `bash-preexec` load first, and skipping starship when `AI_AGENT=github_copilot_vscode_agent`, fixed it. An earlier tip that appending `; exit` helps was also reported, while pressing Enter did not help in that case.
+
+**Impact on Orchestration:**
+A terminal call that never reports completion stalls the agent, and any orchestrator waiting on that subagent, until someone intervenes. The trigger is prompt customization in the user's shell (starship, powerlevel, other precmd frameworks), so a headless dispatch fails only on machines with such a shell setup.
+
+**Evidence:**
+- Two independent reporters over five months; a verified fix on one setup. No maintainer engagement; labeled `stale`, so version relevance needs re-verification.
+- Classified Quirk: environment-dependent, root cause is the interplay between shell-integration markers and user prompt hooks.
+
+**Workaround(s):**
+1. For bash: source `bash-preexec` first in `.bashrc` and skip prompt frameworks (starship etc.) when `AI_AGENT` equals `github_copilot_vscode_agent` (community-confirmed once).
+2. Have agents append `; exit` to commands (one user reports it helps).
+
+**Notes:**
+Unrelated to VC-003 (hang inside a subagent client-tool call). Wrap terminal-heavy dispatches in an external wall-clock timeout, as in VC-003/VC-011 mitigations.
+
+---
+
+### VC-027: Agent Host loses BYOK / Custom Endpoint model context limits (0/0), so context usage is hidden and sessions are silently auto-compacted at about 100K tokens regardless of the configured window
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/microsoft/vscode/issues/336797 |
+| **Reported** | 2026-09-18 |
+| **Last Activity** | 2026-10-16 |
+| **Confidence** | Confirmed |
+| **Orchestration Impact** | MEDIUM |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 1.138.0 (two independent setups, Windows, Copilot runtime 1.0.81); a 2026-10-16 comment indicates limits still arrive at the Agent Host as 0/0 after 1.139.0 |
+| **Latest Platform Version** | 1.143.1 |
+| **Labels** | agent-host (assigned to vritant24) |
+
+**Summary:**
+For BYOK models configured with `vendor: customendpoint` (explicit `maxInputTokens`/`maxOutputTokens`), the normal VS Code model registry keeps the limits, but the Agent Host registers the model with `maxInputTokens: 0` / `maxOutputTokens: 0`. The runtime then budgets the session at a 128K fallback: the context-usage indicator is hidden and automatic compaction triggers at about 80% of 128K (about 102.4K tokens; `session.compaction_start` with `tokenLimit: 128000`), even for 144K/171K/400K/1M-context models. Compaction is silent. A second user confirmed with independent logs and traced the renderer bridge sending only `maxContextWindowTokens`. A collaborator suggested PR #336798 (merged in 1.139.0, "Fix context window display", targeting #332995) may fix it, but the issue remains open and a later comment (2026-10-16) says the limits still arrive as 0/0 upstream of the newer #341913 per-session limit work. No maintainer confirmation of the diagnosis.
+
+**Impact on Orchestration:**
+Long-running orchestration or subagent sessions on large-context BYOK models are compacted far earlier than the configured window, silently, so an agent can lose earlier instructions or state mid-run without any indication. Applies only to BYOK Custom Endpoint models in the Agent Host / Agents window.
+
+**Evidence:**
+- Two independent setups with debug-stream and `events.jsonl` evidence of identical symptoms (`tokenLimit: 128000`, compaction at about 102K); a duplicate (#336980) was closed into this one.
+- Related PR #336798 merged but did not clearly resolve it; NEEDS RE-VERIFICATION on 1.143.1. No Copilot-hosted model is affected as far as reported.
+
+**Workaround(s):**
+1. None official. Avoid depending on a large window with BYOK models in the Agent Host; keep sessions short or use the local (non-Agent-Host) chat, where the reporter's registry retains the limits (though the context bar was also missing there in an A/B test).
+
+**Notes:**
+Related: VC-009 (very long sessions). Re-verify after the per-session `maxPromptTokens` work (#341913) ships.

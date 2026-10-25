@@ -13,6 +13,8 @@ Knowledge about the AI coding harnesses (platforms) that MOSAIC has been deploye
 
 The **Folder Name** column is the canonical identifier used in all subdirectories under `HarnessKnowledge/`. Use these exact names when creating harness-specific folders here.
 
+> **Note on OpenCode versions:** In `KnownIssues/`, the OpenCode folder is `OpenCodeV1` and covers **OpenCode 1.x only**. OpenCode 2.0 is too new and substantially different, so it will be tracked as a separate harness (own folder and ID prefix) rather than mixed into the v1 entries. `SystemPromptCapture/OpenCode` is unaffected.
+
 > **Note on OpenCode:** Previously published as `sst/opencode` and sometimes referenced as `opencode-ai/opencode`. Only `anomalyco/opencode` is current.
 
 ## Directory Layout

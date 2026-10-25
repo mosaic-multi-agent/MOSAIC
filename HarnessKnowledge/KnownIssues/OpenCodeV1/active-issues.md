@@ -1,6 +1,6 @@
 # OpenCode — Active Issues
 
-> Last updated: 2026-09-10 (run 2)
+> Last updated: 2026-10-25 (run 20)
 
 ---
 
@@ -11,13 +11,13 @@
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/44747 |
 | **Reported** | 2026-08-24 |
-| **Last Activity** | 2026-09-07 |
+| **Last Activity** | 2026-10-11 (closed upstream not_planned) |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | v1.18.22 – v1.18.29 (confirmed still present after #35073 was closed) |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Version(s) Affected** | v1.18.22 – v1.18.30 (confirmed still present after #35073 was closed). Needs re-verification on v1.19.x |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none returned in payload) |
 
 **Summary:**
@@ -39,6 +39,8 @@ MOSAIC's hub-and-spoke model dispatches subagents from an orchestrator, and work
 **Notes:**
 Not specific to the "2.0" rewrite track — both reproductions are on stable 1.18.x releases (v1.18.22 and v1.18.29). Given two independent, well-evidenced reproductions spanning two point releases after a supposedly-fixing PR (#35073) landed, this looks like a deeper architectural gap in how nested/child-session events propagate to parent tracking, not a simple regression — treat #35073's "fix" as addressing only a subset (likely depth-1) of the underlying problem. See OC-002 for a related but distinct report about subagent permission/error events not being visible to external integrations monitoring the root session. Also structurally corroborated by #48232 (investigated but not separately tracked — see skip rationale below): a Task-subagent permission ask dropped over the ACP transport, root-caused to the same class of defect (the child/subagent session is absent from whatever session store the interface layer consults, so its permission event is silently discarded rather than forwarded or mapped to its root). Not separately captured as its own KB entry because ACP is a niche editor-integration transport that MOSAIC's two execution modes (harness-native session, headless Runner via CLI/API) do not use — but it is strong independent evidence that "child session not tracked by the surface answering permission asks" is a systemic architectural gap in OpenCode spanning at least the TUI, REST API, and ACP transports, not a one-off bug isolated to any single one of them. Reproduces on `dev` (1.18.30), i.e. the current release, per that report. Additionally worth flagging: a comment on #35073 (2026-07-05, 0 confirmations but a specific and plausible scenario) reports that `--auto` / auto-approve mode set on the parent session does not propagate to subagents at all — a subagent hits the same class of hang even when the whole session is meant to run unattended with auto-approval. If a fix for the general "subagent = non-interactive, fail clean instead of hang" pattern lands upstream, it would need to special-case the `--auto` scenario to auto-approve rather than deny, per that commenter's reasoning — otherwise MOSAIC sessions run with blanket auto-approval could see spurious subagent `DeniedError` failures instead of the current silent hang. Not independently confirmed; flag for re-check if MOSAIC ever relies on `--auto` mode with OpenCode.
 
+**Update (2026-10-25, run 20):** Closed upstream 2026-10-11 as `not_planned` by mass v1 triage ("OpenCode 2.0 is out, closing issues filed against OpenCode 1") - no fix, no linked PR. A third reproduction (2026-09-11, v1.18.30, headless ACP; child-session ask never reaches ACP client) shipped a config workaround: top-level `permission.external_directory: "allow"` plus explicit allow/deny for all permission keys (never `ask`), and instructing models not to pass `workdir` to bash. Needs re-verification on v1.19.x.
+
 ---
 
 ### OC-002: Child-session (subagent) events carry no parent lineage — external integrations can't distinguish a running/retrying subagent from a root session actually blocked
@@ -48,13 +50,13 @@ Not specific to the "2.0" rewrite track — both reproductions are on stable 1.1
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/46685 |
 | **Reported** | 2026-09-01 |
-| **Last Activity** | 2026-09-06 |
+| **Last Activity** | 2026-10-11 (closed upstream not_planned) |
 | **Confidence** | Likely |
 | **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | v1.18.25 |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Version(s) Affected** | v1.18.25 (Needs re-verification on v1.19.x) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none returned in payload) |
 
 **Summary:**
@@ -75,6 +77,8 @@ No confirmed workaround exists for external integrations — the missing lineage
 **Notes:**
 Related/overlapping issues per bot triage and reporter's own analysis: #45549 and #30043 (event-bus parent-lineage design, likely the more canonical tracking issue for the root cause), #44747 = OC-001 (different symptom — permission ask dropped and never delivered at all, vs. here events are delivered but under-specified), #13715 (TUI-only rendering bug, not applicable to headless/API consumers like MOSAIC's Runner). Confidence set to Likely rather than Confirmed: no maintainer acknowledgment, but the reporter's own SSE capture is concrete evidence (not just a symptom description), and a second independent user corroborated the same architectural gap and fix direction. Not confirmed whether specific to the 1.x line vs. 2.0 track — reported against v1.18.25, no indication otherwise. If a future pass investigates #45549 directly, consider consolidating this entry into that one if it proves to be the canonical root-cause tracking issue.
 
+**Update (2026-10-25, run 20):** Closed upstream 2026-10-11 as `not_planned` (mass v1 triage), no fix. Later comments: a contributor (2026-09-28) proposed a narrow additive fix (optional `parentID` on `session.status`), unadopted by maintainers; a Kimaki (Discord client) maintainer noted the same lineage gap on V2 (2.0.19), suggesting it persists in 2.x too (V2 not tracked here). Needs re-verification on v1.19.x.
+
 ---
 
 ### OC-003: Rejecting one of a subagent's multiple pending permission asks cancels the entire subagent instead of just that call
@@ -84,7 +88,7 @@ Related/overlapping issues per bot triage and reporter's own analysis: #45549 an
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/47995 |
 | **Reported** | 2026-09-08 |
-| **Last Activity** | 2026-09-08 |
+| **Last Activity** | 2026-10-11 (closed upstream not_planned) |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
@@ -110,6 +114,8 @@ No confirmed workaround found in the issue thread. A plausible mitigation, not s
 **Notes:**
 Confidence kept at Unverified (single reporter, no comments, no confirmations) but included because it threatens a core MOSAIC pattern — a subagent making several permission-gated tool calls in one dispatch — the report is on stock OpenCode with no custom backend, and it provides concrete, specific reproduction steps plus a screenshot. Recommend re-checking together with OC-004 (#47996) in a future pass; both were filed 2026-09-08 by the same reporter and describe what looks like the same underlying weakness in how permission decisions are attributed to a specific pending ask. Not confirmed whether specific to the "2.0" track — v1.18.20 is on the stable 1.x line.
 
+**Update (2026-10-25, run 20):** Closed upstream 2026-10-11 as `not_planned` (mass v1 triage; sole comment is the boilerplate close message), no fix, no PR, no other activity. Still single-reporter Unverified; Needs re-verification on v1.19.x (latest 1.x: v1.19.4).
+
 ---
 
 ### OC-004: Rejecting a permission ask while multiple parallel subagents have pending asks applies the same rejection/feedback to all of them
@@ -119,7 +125,7 @@ Confidence kept at Unverified (single reporter, no comments, no confirmations) b
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/47996 |
 | **Reported** | 2026-09-08 |
-| **Last Activity** | 2026-09-08 |
+| **Last Activity** | 2026-10-11 (closed upstream not_planned) |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
@@ -144,6 +150,8 @@ No confirmed workaround found in the issue thread. Avoiding concurrent parallel 
 **Notes:**
 Confidence kept at Unverified (single reporter, no comments, no confirmations) but included because it directly threatens MOSAIC's parallel subagent fan-out pattern, is reported on stock OpenCode with no custom backend, and includes concrete, specific reproduction conditions. Strongly suspected to share a root cause with OC-003 (#47995) — both filed the same day by the same reporter, both describe permission decisions not being correctly attributed/scoped to the originating subagent or tool call. Recommend a future pass re-examine both together once either accrues a maintainer response, and consider whether they should be merged into a single KB entry if a root-cause comment clarifies they are one defect. Not confirmed whether specific to the "2.0" track — v1.18.20 is on the stable 1.x line.
 
+**Update (2026-10-25, run 20):** Closed upstream 2026-10-11 as `not_planned` (mass v1 triage; sole comment is the boilerplate close message), no fix, no PR, no other activity. Still single-reporter Unverified; Needs re-verification on v1.19.x (latest 1.x: v1.19.4).
+
 ---
 
 ### OC-005: Foreground subagent (Task tool) failure/cancellation returns no task_id — parent cannot resume, must re-dispatch from scratch and loses all progress
@@ -153,13 +161,13 @@ Confidence kept at Unverified (single reporter, no comments, no confirmations) b
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/39196 |
 | **Reported** | 2026-07-27 |
-| **Last Activity** | 2026-09-06 |
+| **Last Activity** | 2026-10-19 (closed upstream "completed" - fixed in 2.x only) |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | v1.18.7 (`dev`) through at least early September 2026; predecessor issue #13910 closed as "completed" but this issue shows the fix was incomplete |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Version(s) Affected** | v1.18.7 (`dev`) through at least early September 2026; predecessor issue #13910 closed as "completed" but this issue shows the fix was incomplete. Fixed in 2.x only per maintainer; no 1.x fix verified (Needs re-verification on v1.19.x) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none returned in payload) |
 
 **Summary:**
@@ -182,6 +190,8 @@ This is a direct, high-value hit on MOSAIC's hub-and-spoke orchestration: the or
 **Notes:**
 This is a materially different and more severe framing than a simple "missing field" bug — it directly undermines resumability of any foreground subagent dispatch, which is core to how MOSAIC's orchestrator would want to handle transient failures without wasting the subagent's accumulated work. Related: #46461 (tracked separately per the downstream transfer comment) covers a bounded timeout/manual-resume fallback for stuck tasks — worth investigating in a future pass as a complementary mitigation. Both fix PRs referenced here (#40615, #41278) are closed without resolving the issue; re-check in a future pass whether a new fix PR has been opened. Not confirmed whether specific to the "2.0" track — all evidence is against the stable 1.18.x line.
 
+**Update (2026-10-25, run 20):** Issue closed 2026-10-19 (state `completed`) by a maintainer comment: "This is fixed in v2: foreground subagent failure and cancellation messages include the child sessionID, so the parent can use it to resume." No 1.x fix: both fix PRs (#40615, #41278) remain closed unmerged. Per the v1 rule this stays active - the bug is fixed only in 2.x. Needs re-verification on v1.19.x. The 2.x fix does mean the upstream design intent (task id on failure) is acknowledged.
+
 ---
 
 ### OC-006: Subagent hangs indefinitely after a bash tool call completes if it left a live detached descendant process running; primary sessions unaffected
@@ -191,13 +201,13 @@ This is a materially different and more severe framing than a simple "missing fi
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/47546 |
 | **Reported** | 2026-09-05 |
-| **Last Activity** | 2026-09-05 |
+| **Last Activity** | 2026-10-11 (closed upstream not_planned) |
 | **Confidence** | Likely |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | v1.18.29 |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Version(s) Affected** | v1.18.29 (Needs re-verification on v1.19.x) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none returned in payload) |
 
 **Summary:**
@@ -220,6 +230,8 @@ This looks like a genuine subagent-vs-primary code-path divergence (the reporter
 
 **Verification pass (2026-09-10, run 1):** Directly re-read #33028, already listed above as part of this entry's broader cluster. Confirmed genuinely the same symptom family (bash-tool-call-adjacent hang, no timeout, no clean recovery), correctly bucketed here, and it contains valuable additional code-level evidence worth folding in: a deep root-cause comment (2026-07-08) traces the hang to `awaitToolFibers`/`FiberSet.awaitEmpty` in `core/src/session/runner/llm.ts` never timing out when a tool fiber is still running after the provider stream itself succeeds, plus a separate `collectStream` gap in `core/src/process.ts` where `Stream.runFold` over a child's stdout blocks forever if a grandchild process keeps the pipe's write-end open after the immediate child exits — precisely the "detached descendant process" mechanism this entry describes, now with an exact code citation and two proposed fixes (a 30s timeout on `awaitToolFibers`, and a bounded-grace-window read on `collectStream`). This same code-level analysis is also cross-referenced from the new OC-096 entry (general LLM-stream/tool-fiber timeout gap), since it independently corroborates that entry's "no timeout anywhere in the tool/stream lifecycle" theme.
 
+**Update (2026-10-25, run 20):** #47546 closed upstream 2026-10-11 as `not_planned` (mass v1 triage; only other comment is the duplicate-bot), no fix or PR. Single reporter, no new activity since. Needs re-verification on v1.19.x.
+
 ---
 
 ### OC-007: Task tool's model-facing subagent list ignores session-level permission overrides (description mismatch, not an execution bypass)
@@ -229,13 +241,13 @@ This looks like a genuine subagent-vs-primary code-path divergence (the reporter
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/48106 |
 | **Reported** | 2026-09-09 |
-| **Last Activity** | 2026-09-09 |
-| **Confidence** | Confirmed |
+| **Last Activity** | 2026-10-19 (source issue rewritten to V2; v1 fix PR closed unmerged) |
+| **Confidence** | Likely |
 | **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | `dev` @ 830d5eb5354874105cc31599635a80c1662609e8 (pre-1.18.30) |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Version(s) Affected** | `dev` @ 830d5eb5354874105cc31599635a80c1662609e8 (pre-1.18.30); not re-verified on v1.19.x (Needs re-verification) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none returned in payload) |
 
 **Summary:**
@@ -256,6 +268,8 @@ No confirmed workaround found in the issue thread — this is a description-accu
 **Notes:**
 Confidence set to Confirmed despite a single reporter, because the report includes an exact code-level root cause and a linked, open fix PR whose regression tests the reporter states demonstrably reproduce the bug on the unmodified base — this meets the "linked to an open fix PR" Confirmed criterion. Impact kept at MEDIUM rather than HIGH since this is explicitly a description/advertisement mismatch rather than an execution-level permission bypass — it can cause wasted dispatches or missed delegation options, but does not itself let a subagent's tool calls escape enforcement. Related cluster worth revisiting together in a future pass: #35238 (V2 subagent runtime enforcement — check if this is a "2.0" track-specific concern separate from this legacy Task tool description issue), #45078 (session-deny inheritance into child sessions), #39086 (task tool entirely missing under some permission configs), #41100 (predecessor fix attempt, auto-closed unmerged). This specific issue (#48106) is scoped to the legacy Task tool in `packages/opencode`, not the "2.0" rewrite's V2 subagent tool in `packages/core` — #35238 should be checked separately if the 2.0 track becomes relevant to MOSAIC.
 
+**Update (2026-10-25, run 20):** Confidence lowered Confirmed -> Likely because it rested on the open fix PR #48107, which was closed unmerged on 2026-10-09 by the `automated-pr-cleanup` label (no 1.x fix landed). The source issue #48106 is still open but its body was rewritten to describe the same mismatch in **V2** (2.0.32, `packages/core/src/tool/plugin/subagent.ts`) with a new V2 fix PR #56979 (open); the issue states the legacy `packages/opencode` package "has since been removed". So the issue now tracks 2.x, not v1; the v1 `describeTask` mismatch is evidenced only by the original (since-edited) report and was never fixed in 1.x. A 2.0.18 commenter notes runtime filtering works in V2 and that descriptions lack capability info (separate enhancement). Needs re-verification on v1.19.x; low urgency.
+
 ---
 
 ### OC-008: Per-subagent model configuration ignored — all subagents run on the primary session's model
@@ -265,13 +279,13 @@ Confidence set to Confirmed despite a single reporter, because the report includ
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/36289 |
 | **Reported** | 2026-07-10 |
-| **Last Activity** | 2026-09-09 (auto-closed for staleness; not confirmed fixed) |
-| **Confidence** | Confirmed |
+| **Last Activity** | 2026-09-20 (cluster auto-closed for staleness; not confirmed fixed) |
+| **Confidence** | Likely |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | v1.17.15 (reported); auto-closed 2026-09-09 with no fix confirmation, so plausibly still present on v1.18.30 |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Version(s) Affected** | v1.17.15 (reported); auto-closed 2026-09-09 with no fix confirmation, so plausibly still present on v1.19.4 (Needs re-verification) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none returned in payload) |
 
 **Summary:**
@@ -297,6 +311,8 @@ Classified as Bug (not Limitation) since no maintainer indicated this is intenti
 
 Net effect: there are **two distinct, independently-confirmed root causes** feeding the same user-visible symptom (subagent model/variant configuration silently ignored) — (a) `handleSubtask`'s model-then-agent resolution ordering (per #36250/#18615), and (b) `task.ts` never forwarding the parent's `variant` when a subagent inherits the parent's model (per #21632's three-contributor trace). Both remain unresolved as of this capture (open PRs #36281/#18752 unmerged; #21632's PRs closed unmerged). Needs re-verification: OC-008's own source issue (#36289) was auto-closed for staleness on 2026-09-09 with no fix confirmed — recommend a future pass directly test per-subagent model AND variant configuration on the current release (v1.18.30). This is a materially important issue for MOSAIC's cost model on OpenCode if it persists, since it would undermine the "cheaper models for subagents" design principle entirely — and per the variant sub-mechanism, could also silently degrade reasoning quality/effort for subagents expected to inherit a high-effort parent variant.
 
+**Update (2026-10-25, run 20):** Confidence lowered Confirmed -> Likely: the 2026-09-10 upgrade rested on open fix PRs (#36281, #18752), which have since all been closed unmerged (#36251, #36281 closed with #36250; #18752 and #26117 closed with #18615), and no maintainer ever acknowledged the cluster. Evidence remaining: several independent reports (#36289, #36250, #18615 with 7 reactions and SQLite record evidence, #21632 multi-contributor trace). All of #36289 (stale bot 2026-09-09), #36250 (2026-09-11), #18615 (2026-09-20) were closed `not_planned` by the stale bot with no fix; a search of merged PRs found no 1.x fix. Still plausibly present on v1.19.x; Needs re-verification by direct test.
+
 ---
 
 ### OC-021: Compaction produces empty summary for reasoning models — conversation history silently dropped
@@ -306,13 +322,13 @@ Net effect: there are **two distinct, independently-confirmed root causes** feed
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/41571 |
 | **Reported** | 2026-08-10 |
-| **Last Activity** | 2026-09-09 |
+| **Last Activity** | 2026-10-11 (closed upstream not_planned) |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | v1.18.15 - v1.18.21+ (regression introduced in v1.18.15) |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Version(s) Affected** | v1.18.15 - v1.18.30+ (regression introduced in v1.18.15); no fix in v1.19.0-v1.19.4 release notes. Needs re-verification on v1.19.x |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (not retrieved — see issue) |
 
 **Summary:**
@@ -333,22 +349,24 @@ In MOSAIC's long-running/headless sessions via OpenCode, if the primary (or a su
 **Notes:**
 Fix PR #42063 is open, not yet merged as of latest activity (2026-09-09) — re-check on next pass to see if merged/released. Related/duplicate reports: #42363, #42371 (DeepSeek), #44080 (same root cause, proposes `hasNonEmptyTextBody()` guard + stream-layer detection). Not confirmed against stock Anthropic Claude models specifically, but the root cause (compaction request omits system prompt/instructions entirely) is a generic harness defect that would plausibly affect any reasoning-capable model routed through OpencCode's compaction path, including Claude models used with extended thinking — flagging as broadly relevant rather than backend-specific.
 
+**Update (2026-10-25, run 20):** The fix PRs are NOT merged: #42063 was closed unmerged 2026-09-12 (`automated-pr-cleanup`), and a successor #52786 ("reject empty or length-cut compaction summaries") is also closed. Issue #41571 was closed 2026-10-11 as `not_planned` (mass v1 triage), no fix. v1.19.0-v1.19.4 release notes mention nothing on compaction. Confidence kept Confirmed on the strength of multiple independent code-level reproductions (k3-256k, glm-5.3, DeepSeek siblings) rather than the fix PR. A commenter notes V2/Core handles empty text separately, i.e. the guard exists only in 2.x. Workarounds unchanged. Needs re-verification on v1.19.x.
+
 ---
 
 ### OC-022: `compaction.prune` never trims context in single-turn / headless sessions, causing runaway compaction thrash
 
 | Field | Value |
 |-------|-------|
-| **Classification** | Bug |
+| **Classification** | Limitation |
 | **Source** | https://github.com/anomalyco/opencode/issues/47485 |
 | **Reported** | 2026-09-05 |
-| **Last Activity** | 2026-09-06 |
+| **Last Activity** | 2026-10-20 (closed upstream not_planned - maintainer: v1 won't be changed) |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 1.18.4, 1.18.27, 1.18.29, and current dev (not fixed as of latest activity) |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Version(s) Affected** | 1.18.4, 1.18.27, 1.18.29, and dev at filing; maintainer states it will not be changed in 1.x (all of 1.x presumed affected, incl. v1.19.x) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (not retrieved — see issue) |
 
 **Summary:**
@@ -370,6 +388,8 @@ This directly matches MOSAIC's headless, Runner-driven pipeline execution mode �
 **Notes:**
 No maintainer confirmation yet in the thread (only a bot cross-reference to #41578 for the variant sub-issue); assignee `neriousy` has not commented. Confidence set to Confirmed based on two independent, code-level-verified reproductions across different opencode versions and entry points, per the "multiple independent reproductions with evidence" criterion — re-verify if a maintainer disputes the root cause. Directly relevant to MOSAIC's headless Runner pattern; recommend prioritizing re-check on next pass since a local fix already exists and may land soon. Cross-reference: #41578 (compaction variant config ignored — likely duplicate for root cause #3).
 
+**Update (2026-10-25, run 20):** Reclassified Bug -> Limitation. On 2026-10-20 a maintainer (`neriousy`) closed the issue `not_planned` with an explicit statement: the v1 compaction/prune code (`opencode-ai` 1.18.x) "now only gets critical fixes, so it won't be changed there"; v2 has a rewritten compaction system with no `compaction.prune` pass and a summary transcript that omits reasoning. No fix PR was ever linked. For MOSAIC on OpenCode 1.x this is now a permanent constraint: long single-turn headless runs will thrash compaction; adapt by splitting work across multiple user turns/sessions or moving to 2.x (separate harness). Workarounds unchanged.
+
 ---
 
 ### OC-024: MCP tool manifest drops to 0 after context compaction — server stays connected, only a new session recovers tools
@@ -379,13 +399,13 @@ No maintainer confirmation yet in the thread (only a bot cross-reference to #415
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/46190 |
 | **Reported** | 2026-08-29 |
-| **Last Activity** | 2026-08-29 |
+| **Last Activity** | 2026-10-11 (closed upstream not_planned) |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | v1.18.12 |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Version(s) Affected** | v1.18.12 (Needs re-verification on v1.19.x) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (not retrieved — see issue) |
 
 **Summary:**
@@ -410,6 +430,8 @@ Confidence held at Unverified per single-reporter criteria, but included despite
 
 **Verification pass (2026-09-10, run 2 batch 3):** Re-fetched #46190 + its 1 comment (the same #38266 bot cross-reference already investigated in the prior pass). No new activity since 2026-08-29 (12 days — not yet 6+ weeks stale) and still no maintainer response. Confidence (Unverified), Classification (Bug), and Impact (HIGH) unchanged; the "Needs re-verification on current v1.18.30" flag from the original capture still stands since no one has re-tested against a version past v1.18.12.
 
+**Update (2026-10-25, run 20):** #46190 closed upstream 2026-10-11 as `not_planned` (mass v1 triage), no fix or PR, no further reports. Still single-reporter Unverified; Needs re-verification on v1.19.x. Related #38266 not rechecked this pass.
+
 ---
 
 ### OC-023: Auto-compaction is not a barrier — session loop races ahead of the compaction step, swallowing pending user input and dropping the task goal
@@ -419,13 +441,13 @@ Confidence held at Unverified per single-reporter criteria, but included despite
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/41358 |
 | **Reported** | 2026-08-09 |
-| **Last Activity** | 2026-08-31 |
+| **Last Activity** | 2026-10-11 (substantive; issue still OPEN as of 2026-10-24) |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | Windows Desktop (initial report) and Linux CLI 1.18.15 (independent repro); confirmed still open as of 2026-08-31 |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Version(s) Affected** | Windows Desktop (initial report), Linux CLI 1.18.15 (independent repro), 1.18.31 (2026-10-11 report); still open, not re-verified on v1.19.x |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (not retrieved — see issue) |
 
 **Summary:**
@@ -448,6 +470,8 @@ Related open items referenced in the issue: #37551 (feature request: reinject or
 
 **Verification pass (2026-09-10, run 2 batch 3):** Re-fetched issue + all comments. No new activity since 2026-08-31 (last comment still the `ryangamerdev`/reporter exchange confirming PR #45125 was relinked from `Closes` to `Related` to keep this issue open for the unresolved session-loop concurrency/confirmation-barrier gap). PR #45125 merge status still unconfirmed in-thread. Confidence (Confirmed), Classification (Bug), and Impact (HIGH) unchanged. Not yet 6+ weeks stale (10 days since last activity) — no re-verification flag needed this pass.
 
+**Update (2026-10-25, run 20):** Issue is still OPEN (not caught by the Oct v1 mass-close so far), assignee `nexxeln`, 11 comments. PR #45125 (goal/summary-preservation half) was closed unmerged 2026-09-26 (`automated-pr-cleanup`), so neither half has a fix. New evidence: (a) 2026-09-10 commenter - asked agent for review-only, compaction fired mid-reply and the harness's automatic synthetic "continue" message was taken as green light to implement fixes (state-changing action without approval, relevant to unattended runs); (b) 2026-10-11 commenter on 1.18.31 - after auto-compaction the summary identified the wrong in-progress task and the agent resumed an earlier one (so removing the synthetic "continue" would not fix goal loss). The 2026-10-24 comment is promotional noise. Risk of future not_planned close is high; no 1.x release notes (v1.19.0-v1.19.4) mention a fix. Needs re-verification on v1.19.x.
+
 ---
 
 ### OC-025: Manual `/compact` (and the auto-compaction overflow guard) has no context-fit check against the compaction model, causing indefinite hangs or silent no-fire
@@ -463,7 +487,7 @@ Related open items referenced in the issue: #37551 (feature request: reinject or
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | v1.18.25; confirmed still present (in different form) on the `2.0` dev branch as of 2026-08-29 |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (not retrieved — see issue) |
 
 **Summary:**
@@ -487,6 +511,8 @@ Confidence set to Likely based on the independently-filed corroborating report (
 
 **Verification pass (2026-09-10, run 2 batch 3):** Re-fetched #46164 + its 1 comment (bot cross-reference to #42448, not independently re-investigated this pass — flag as a candidate for a future consolidation check). No new activity since 2026-08-29 (12 days — not yet stale), still no maintainer response beyond the bot flag. Confidence (Likely), Classification (Bug), and Impact (HIGH) unchanged. Re-verification against v1.18.30 and the eventual `2.0` stable release still outstanding.
 
+**Verification pass (2026-10-25, run 20):** Issue still open, assignee nexxeln, 1 comment (bot only), no activity since 2026-08-29 (~8 weeks) and no linked fix PR. Not hit by the Oct 2026 v1 mass-close (yet). **Needs re-verification** against v1.19.x (latest v1.19.4); likelihood of a 1.x fix is low given development focus on 2.0.
+
 ---
 
 ### OC-026: Native auto-compaction silently never fires on long sessions (`session_context_epoch` stuck at 0), causing runaway token/credit consumption on GitHub Copilot
@@ -496,13 +522,13 @@ Confidence set to Likely based on the independently-filed corroborating report (
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/45249 |
 | **Reported** | 2026-08-26 |
-| **Last Activity** | 2026-08-26 |
+| **Last Activity** | 2026-10-11 |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 1.18.18 - 1.18.21 (possibly the entire ≥1.18.15 range per reporter) |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (not retrieved — see issue) |
 
 **Summary:**
@@ -525,6 +551,8 @@ Confidence held at Unverified (single reporter, no maintainer confirmation, no i
 
 **Verification pass (2026-09-10, run 2 batch 3):** Re-fetched #45249 + all 3 comments. No new activity since 2026-08-26 (15 days — not yet 6+ weeks stale), still no maintainer response. Confirmed the reporter's own follow-up comment (2026-08-26) explicitly and correctly distinguishes this from bot-flagged #30649 (display/stats-counter artifact only, per a third party's source trace) — the entry's existing "explicitly distinct" characterization holds up under direct re-read, no reclassification needed. Confidence (Unverified), Classification (Bug), and Impact (HIGH) unchanged. Re-verification against v1.18.30 still outstanding.
 
+**Verification pass (2026-10-25, run 20):** Closed upstream `not_planned` on 2026-10-11 by thdxr via the v1 mass-close template ("OpenCode 2.0 is now out... closing issues filed against OpenCode 1"). No fix, no linked PR, no root-cause analysis by maintainers; reporter replied that they had not tried to reproduce on 2.0 and got no answer. Upstream close is NOT a fix — **kept active, Needs re-verification** (status on 1.19.x and 2.x unknown). Last Activity updated. Confidence/Classification/Impact unchanged.
+
 ---
 
 ### OC-027: Context-overflow errors misclassified as generic "Network connection lost" — no compaction, no retry, session dies unrecoverably
@@ -540,7 +568,7 @@ Confidence held at Unverified (single reporter, no maintainer confirmation, no i
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | v1.15.7 through v1.17.10 (multiple independent reproductions across this range); not confirmed fixed on any later version |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (not retrieved — see issue) |
 
 **Summary:**
@@ -563,6 +591,8 @@ Auto-closed by staleness bot, not by an actual fix — kept in active-issues rat
 
 **Verification pass (2026-09-10, run 2 batch 3):** Re-fetched #33376 + all 6 comments. Confirmed GitHub-side state is unchanged: issue remains `closed`/`state_reason: not_planned`, closed 2026-08-25 by the stale-bot ("automatically closed after 60 days of no activity"), with fix PR #33667 still shown as CLOSED (not merged) and no maintainer comment ever posted. All prior evidence (3 independent Windows/DeepSeek reporters plus the original mimo-v2.5-free repro) re-confirmed present in the thread. Correctly kept in `active-issues.md` per this KB's rule that a stale-bot auto-close is not a real resolution. Confidence (Confirmed), Classification (Bug), and Impact (HIGH) unchanged. The "needs re-verification against v1.18.30" flag from the original capture still stands — no one has retested on a current release.
 
+**Verification pass (2026-10-25, run 20):** Re-read #33376 + all 6 comments; state unchanged (closed `not_planned` by stale bot 2026-08-25, fix PR #33667 CLOSED unmerged, no maintainer comment, no activity since). Not part of the Oct v1 mass-close (already closed). No 1.x fix found. Kept active; **Needs re-verification** on v1.19.x. Confidence/Classification/Impact unchanged.
+
 ---
 
 ### OC-028: `compaction.reserved` silently ignored for any model lacking `limit.input` metadata — auto-compaction fires far later than configured, degrading quality/throughput with no error
@@ -572,13 +602,13 @@ Auto-closed by staleness bot, not by an actual fix — kept in active-issues rat
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/38835 |
 | **Reported** | 2026-07-25 |
-| **Last Activity** | 2026-08-22 |
+| **Last Activity** | 2026-10-11 |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | v1.17.14 through v1.18.21 (confirmed still present across this range); a revival of prior issue #13980 (unfixed) |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (not retrieved — see issue) |
 
 **Summary:**
@@ -603,6 +633,8 @@ This directly undermines a user-facing safety knob specifically designed for con
 **Notes:**
 Confirmed confidence based on three independent, code-level-verified, and empirically-measured reproductions plus a revival-of-prior-issue history and an (unmerged) attempted fix PR. Cross-reference: #13980 (original unfixed report), #32656 (sibling bug in branch A), #30805/#31891 (partial prior fix, branch A only), #24683 (same end-user symptom). One reporter also flagged that compaction itself has no fallback if the compaction request is rejected as too large (`ContextOverflowError`, `finish="error"`, no retry) — relevant cross-reference to OC-025's context-fit-check gap in this KB. Recommend re-verifying against v1.18.30 and prioritizing a workaround decision (limit.input override + mandatory restart) if MOSAIC uses OpenCode with built-in or custom models lacking `limit.input`.
 
+**Verification pass (2026-10-25, run 20):** Re-read #38835 + all 5 comments. Closed upstream `not_planned` on 2026-10-11 by thdxr via the v1 mass-close template; fix PR #38843 remains CLOSED unmerged. No fix on 1.x, no maintainer analysis. Upstream close is NOT a fix — **kept active, Needs re-verification** (1.19.x / 2.x status unknown). New data point (comment 2026-09-21, v1.18.31): a reporter using workaround #1 with `output: 32768` and `reserved: 50000` saw compaction fire at ~190-200k (`input - reserved`), i.e. the branch-A 20K cap (#32656) did NOT bite on 1.18.31 — so either #32656 was fixed between 1.18.21 and 1.18.31 or its trigger is narrower than described; workaround caveat #3 may be overly pessimistic on recent 1.18.x. Last Activity updated; Confidence (Confirmed, based on 3 independent reproductions not the fix PR), Classification, Impact unchanged.
+
 ---
 
 ### OC-061: MCP tools connected but not exposed to agent (stale tool-set cache)
@@ -612,13 +644,13 @@ Confirmed confidence based on three independent, code-level-verified, and empiri
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/33027 |
 | **Reported** | 2026-06-19 |
-| **Last Activity** | 2026-09-08 |
+| **Last Activity** | 2026-10-11 |
 | **Confidence** | Likely |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 1.17.8 through 1.18.27 (reproduced across many point releases, plus OpenCode "next"/v2) |
-| **Latest Platform Version** | 1.18.30 |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | none observed (no maintainer triage labels applied) |
 
 **Summary:**
@@ -637,6 +669,7 @@ MOSAIC agents that depend on MCP-provided tools (e.g., specialized retrieval, ti
 1. ★ Start/resume the session from the exact same working directory the MCP server was registered against — Windows users found MCP tool state is scoped per instance/working-directory (@timwkosatec, confirmed on 1.18.1).
 2. If a long-lived session loses tools, start a fresh session in the same process — new sessions pick up the full current tool set (@Lukas-Novak, confirmed on 1.18.27 via `opencode serve`). Affected sessions do not self-recover.
 3. Prefer the Desktop sidecar/HTTP MCP transport over local stdio subprocess servers where possible — one reporter observed the sidecar path registering tools correctly while the CLI stdio path failed on the same server/version (@Start-Gao, 1.18.11).
+4. Bypass native MCP registration: expose the MCP host through an OpenCode custom tool that wraps a stdio MCP client (@wangzhuangwei, 2026-09-11, single user, not independently confirmed).
 
 **Notes:**
 Long-running, high-comment-count issue (11 comments) with no maintainer engagement, but activity is NOT stale (last comment 2026-09-08, 2 days before this capture) — active, unresolved, and apparently worsening cluster rather than one needing re-verification for staleness. Related cluster: #16491, #26357, #40015 (not separately captured here — same root cause per community analysis; revisit if a maintainer response narrows scope to one canonical issue).
@@ -644,6 +677,8 @@ Long-running, high-comment-count issue (11 comments) with no maintainer engageme
 **Verification pass (2026-09-10, run 1):** Re-checked #26357 and #40015 directly rather than trusting the bot-flagged clustering. #40015 ("Desktop caches MCP tools list at startup, never refreshes on reconnect") is strong independent *confirmation* of this entry's own theorized root cause — the reporter measured Desktop showing a permanently-cached 17-of-108-tool subset while the CLI (`opencode run`) correctly fetched the full 108 on every session, an exact empirical match for the "connect-time cached tool-definition snapshot, never invalidated" mechanism already described above; two closed-unmerged fix PRs (#40033, #40062, "reconnect MCP servers when a tool call fails") confirm this was recognized and attempted but not resolved — genuinely the same defect, correctly bucketed. #26357 (Docker MCP gateway connects but tools never reach the LLM on macOS Desktop) is consistent with the same general symptom class but is thin evidence on its own (single reporter, only 2 comments, closed by the 60-day stale bot with no maintainer or independent confirmation, no code-level root cause) — treat as a weak corroborating data point rather than a load-bearing citation. #16491 was investigated separately and found to be a **distinct root cause** (subagent Task-tool sessions are never granted execution permission for MCP tools at all, a permission-scoping gap rather than a stale-cache/registration gap) — see new entry OC-094 for that issue; it should not be read as duplicating this entry.
 
 **Verification pass (2026-09-10, run 2):** Re-fetched issue #33027 and all 11 comments — the most recent (@rcdailey, 2026-09-08) reports the same symptom class on a remote OAuth-authenticated server (Fastmail) rather than a local stdio server, already reflected in this entry's Evidence list. No maintainer comment, no fix PR opened, no merge activity. No change to classification, confidence, impact, or workarounds. Not stale (last activity 2 days before this pass).
+
+**Verification pass (2026-10-25, run 20):** Re-read #33027 + all 14 comments. Closed upstream `not_planned` on 2026-10-11 via the v1 mass-close template (thdxr); no linked PR, no maintainer analysis, none of the related PRs (#37684, #38533, #40013, #40062) merged. Upstream close is NOT a fix — **kept active, Needs re-verification** on v1.19.x. New since last pass: (a) 2026-09-11 reporter still blocked on 1.18.4/1.18.16 and uses an additional workaround: bridge the MCP host through an OpenCode custom tool wrapping a stdio MCP client instead of native MCP registration (added as workaround 4, single-user, not independently confirmed); (b) 2026-09-19 comment is a v2.0.8 inline-config repro (2.x, out of scope, ignored). Confidence (Likely), Classification, Impact unchanged.
 
 ---
 
@@ -654,13 +689,13 @@ Long-running, high-comment-count issue (11 comments) with no maintainer engageme
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/47740 |
 | **Reported** | 2026-09-07 |
-| **Last Activity** | 2026-09-07 |
-| **Confidence** | Confirmed |
+| **Last Activity** | 2026-10-11 |
+| **Confidence** | Likely |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 1.18.29 (likely broader — the truncation is in OpenCode's own MCP result handling, not version-specific behavior) |
-| **Latest Platform Version** | 1.18.30 |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none observed on the issue itself) |
 
 **Summary:**
@@ -682,6 +717,8 @@ Single-reporter issue but promoted to Confirmed on the strength of the linked op
 
 **Verification pass (2026-09-10, run 2):** Re-fetched issue #47740 — no comments (still 0), state unchanged (open). Fix PR #47811 remains open/unmerged. No change to classification, confidence, impact, or workarounds. Not stale (3 days since report/last activity).
 
+**Verification pass (2026-10-25, run 20):** Re-read #47740 + its sole comment. Closed upstream `not_planned` on 2026-10-11 via the v1 mass-close template; the only comment is the template. Fix PR #47811 was CLOSED unmerged (labeled `automated-pr-cleanup`, closed 2026-10-07) and on inspection was a **test-only** PR whose own description says "the production conversion path already preserves this text" — i.e. it never fixed anything and mildly disputes the report. **Confidence lowered Confirmed -> Likely** (the prior Confirmed rested on the open fix PR; remaining evidence is one rigorous side-by-side repro, no maintainer confirmation). Upstream close is NOT a fix — **kept active, Needs re-verification** on v1.19.x (the behavior may be FastMCP-specific or already-fine in code; re-test with an `isError:true` tool before relying on this entry). Last Activity updated.
+
 ---
 
 ### OC-063: MCP tool schemas not sanitized for Anthropic (root-level anyOf/oneOf/allOf 400s); MCP tools bypass the `tool.definition` plugin hook
@@ -691,13 +728,13 @@ Single-reporter issue but promoted to Confirmed on the strength of the linked op
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/46628 |
 | **Reported** | 2026-09-01 |
-| **Last Activity** | 2026-09-07 |
+| **Last Activity** | 2026-10-11 |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | Confirmed present through 1.18.29; fix for first half in unmerged PR #47542 as of 2026-09-07 |
-| **Latest Platform Version** | 1.18.30 |
+| **Version(s) Affected** | Confirmed present through 1.18.29; fix PR #47542 for first half was closed unmerged 2026-10-06 (no 1.x fix known) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none observed) |
 
 **Summary:**
@@ -717,11 +754,14 @@ This is squarely a stock-Anthropic-backend defect (the repro explicitly shows th
 1. ★ For the schema-sanitization half: audit MCP servers for root-level `anyOf`/`oneOf`/`allOf` in tool input schemas before connecting them to an Anthropic-backed OpenCode session; if found, either get the server fixed upstream (one server, `ai-memory`, resolved it server-side in v2.1.0 per the reporter) or run a local MCP proxy that rewrites `tools/list` responses to fold the combinator into the root object schema before OpenCode sees it — reporter's own working mitigation, confirmed effective, cost described as "very little" engineering time, self-disarms once the server is fixed upstream.
 2. For the `tool.definition` hook gap: no workaround exists other than the same MCP proxy approach above — there is no plugin-only fix since MCP tools bypass `ToolRegistry.tools` entirely.
 3. If schema fix PR #47542 lands: note the reporter flagged it currently drops `anyOf`/`oneOf` constraints silently rather than preserving them in the description text, so "exactly one of A or B" semantics may be lost even after the fix — worth re-verifying the merged behavior once released.
+4. Route MCP access through a Code Mode / tool-proxy layer (e.g. Bifrost Code Mode) so the root-level combinator schemas never reach the Anthropic request (@Jelloeater, 2026-09-15, reported working for them; single user).
 
 **Notes:**
 Two related duplicate reports already existed (#35516, #37916) before this one — this appears to be a recurring, well-understood defect class that has gone unfixed across multiple report cycles. Re-check next pass whether PR #47542 has merged, and whether the `tool.definition` hook gap (unaddressed) has been split into its own tracked issue by the maintainers.
 
 **Verification pass (2026-09-10, run 2):** Re-fetched issue #46628 and all 5 comments — matches prior capture exactly, including the reporter's live re-verification that PR #47542 confirms and closes issue #47543 (a narrower sub-issue), not this one, and that #47542 remains unmerged as of the latest comment (2026-09-07). No new activity since. No change to classification, confidence, impact, or workarounds. Not stale (3 days since last activity).
+
+**Verification pass (2026-10-25, run 20):** Re-read #46628 + all 7 comments and PR #47542. Closed upstream `not_planned` on 2026-10-11 via the v1 mass-close template; fix PR #47542 was CLOSED unmerged on 2026-10-06 (`automated-pr-cleanup`). No 1.x fix; upstream close is NOT a fix — **kept active, Needs re-verification** on v1.19.x. Confidence kept at Confirmed because it rests on independent reproductions (original reporter on 1.18.25 + 1.18.29, `Jelloeater`, and prior duplicates #35516/#37916) with a minimal dependency-free repro, not solely on the fix PR. New since last pass: reporter notes `ai-memory` 2.1.0 no longer emits the root-level combinator (server-side fix, their trigger gone) but any other MCP server with the pattern still 400s every Claude session on 1.18.29; 2026-09-15 comment adds a workaround: use a Code Mode / tool-proxy layer for MCP access (e.g. Bifrost Code Mode), stated to affect other harnesses too. Added as workaround 4 (single user, unconfirmed by others). Classification and Impact unchanged.
 
 ---
 
@@ -732,13 +772,13 @@ Two related duplicate reports already existed (#35516, #37916) before this one �
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/47644 |
 | **Reported** | 2026-09-06 |
-| **Last Activity** | 2026-09-06 |
-| **Confidence** | Confirmed |
+| **Last Activity** | 2026-10-20 |
+| **Confidence** | Likely |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | dev @ `05ea5073` (pre-1.18.30); underlying code path is long-standing, not version-pinned to a specific release window |
-| **Latest Platform Version** | 1.18.30 |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none observed) |
 
 **Summary:**
@@ -761,6 +801,8 @@ Single-reporter issue (via an automated reporting account, not a traditional hum
 
 **Verification pass (2026-09-10, run 2):** Re-fetched issue #47644 — still open, zero comments beyond the original report, fix PR #47942 still open/unmerged, no maintainer response. Matches prior capture exactly. No change to classification, confidence, impact, or workarounds. Not stale (4 days since last activity).
 
+**Verification pass (2026-10-25, run 20):** Re-read #47644 + its sole comment and PR #47942. Closed upstream `not_planned` on 2026-10-20 (Tarquinen, v1 mass-close template); fix PR #47942 was CLOSED unmerged on 2026-10-08 (`automated-pr-cleanup`). No 1.x fix; upstream close is NOT a fix — **kept active, Needs re-verification** on v1.19.x. **Confidence lowered Confirmed -> Likely**: the prior Confirmed rested on the open fix PR; the remaining evidence is a single (bot-account) code-level analysis with no maintainer acknowledgment or independent reproduction (though cross-referenced by OC-065/#38266 as the same MCP-health-invisibility family). Last Activity updated.
+
 ---
 
 ### OC-065: Local MCP servers can silently fail or crash mid-session with no error surfaced, and no CLI recovery exists short of a full restart
@@ -770,13 +812,13 @@ Single-reporter issue (via an automated reporting account, not a traditional hum
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/48196 |
 | **Reported** | 2026-09-09 |
-| **Last Activity** | 2026-09-09 |
+| **Last Activity** | 2026-10-11 |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 1.18.26 |
-| **Latest Platform Version** | 1.18.30 |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none observed) |
 
 **Summary:**
@@ -801,6 +843,8 @@ Heavily overlapping with OC-061 and OC-064 — same underlying theme of MCP regi
 
 **Verification pass (2026-09-10, run 2):** Re-fetched issue #48196 and its 1 comment — the github-actions bot duplicate-flag comment (citing #38266, #47644, #36288, #44087, #39987) is the only activity since capture, and its content matches what was already reflected in this entry's Evidence/Notes. Still open, still single-reporter, no maintainer response. Confidence remains Unverified per CaptureGuide (single reporter, no independent confirmation yet — genuinely too fresh at 1 day old for stagnation concerns). No change to classification, confidence, impact, or workarounds. Not stale.
 
+**Verification pass (2026-10-25, run 20):** Re-read #48196 + both comments. Closed upstream `not_planned` on 2026-10-11 (thdxr, v1 mass-close template); no linked PR, no maintainer analysis, still single reporter with no independent confirmation. Upstream close is NOT a fix — **kept active, Needs re-verification** on v1.19.x; still no `opencode mcp restart` known on 1.x. Confidence (Unverified), Classification, Impact unchanged. Last Activity updated.
+
 ---
 
 ### OC-066: Parallel MCP tool calls trigger redundant tool-list re-fetches and event-loop-blocking output processing (CPU saturation, no yieldNow)
@@ -815,8 +859,8 @@ Heavily overlapping with OC-061 and OC-064 — same underlying theme of MCP regi
 | **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | Reported July 2026; GitHub-closed as stale 2026-09-01 with no merged fix — status on 1.18.30 unverified |
-| **Latest Platform Version** | 1.18.30 |
+| **Version(s) Affected** | Reported July 2026; GitHub-closed as stale 2026-09-01 with no merged fix — status on 1.19.x unverified |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none observed) |
 
 **Summary:**
@@ -837,6 +881,8 @@ Needs re-verification: the GitHub `closed`/`not_planned` status reflects stalene
 
 **Verification pass (2026-09-10, run 2):** Re-fetched issue #34867 and both comments — matches prior capture exactly (duplicate cross-reference to #17167, then stale-bot auto-close on 2026-09-01). Fix PR #34868 remains closed-without-merge. No maintainer engagement, no evidence the underlying defect was actually fixed. Still flagged Needs re-verification — closure is by inactivity, not resolution, so this stays active rather than moving to resolved. No change to classification, confidence, or impact.
 
+**Verification pass (2026-10-25, run 20):** Re-read #34867 + both comments: unchanged since 2026-09-01 (closed `not_planned` by stale bot, assignee jlongster never commented, fix PR #34868 still CLOSED unmerged). v1.19.0 release notes (the only 1.19 notes sampled) show no MCP/event-loop fixes. No 1.x fix found; kept active, **Needs re-verification** on v1.19.x. Confidence (Likely), Classification, Impact unchanged.
+
 ---
 
 ### OC-067: MCP tool-call can hang a session indefinitely with no timeout, and `/interrupt` cannot cancel it (deadlock)
@@ -851,8 +897,8 @@ Needs re-verification: the GitHub `closed`/`not_planned` status reflects stalene
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 1.17.13; GitHub-closed as stale 2026-09-02 with no fix landed — status on 1.18.30 unverified |
-| **Latest Platform Version** | 1.18.30 |
+| **Version(s) Affected** | 1.17.13; GitHub-closed as stale 2026-09-02 with no fix landed — status on 1.19.x unverified |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none observed) |
 
 **Summary:**
@@ -875,6 +921,8 @@ Needs re-verification on current 1.18.x: closed via stale-issue bot (`not_planne
 
 **Verification pass (2026-09-10, run 2):** Re-fetched issue #35207 and both comments — matches prior capture exactly (bot duplicate cross-reference to #31235/#13841/#11865/#33028, then stale-bot auto-close on 2026-09-02). No maintainer response, no fix PR, no evidence of resolution. Still flagged Needs re-verification and remains active. #31235/#13841/#11865/#33028 still not directly investigated — carrying forward as a suggested follow-up. No change to classification, confidence, or impact.
 
+**Verification pass (2026-10-25, run 20):** Re-read #35207 + both comments: unchanged since 2026-09-02 (stale-bot `not_planned`, no PR, no maintainer comment; assignee jlongster silent). No 1.x fix found; `/interrupt` + missing per-call MCP timeout presumed still present. Kept active, **Needs re-verification** on v1.19.x. Confidence (Likely), Classification, Impact unchanged.
+
 ---
 
 ### OC-081: Injected prompts without agent/model silently switch the session's agent and model
@@ -884,13 +932,13 @@ Needs re-verification on current 1.18.x: closed via stale-issue bot (`not_planne
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/46111 |
 | **Reported** | 2026-08-29 |
-| **Last Activity** | 2026-09-08 |
+| **Last Activity** | 2026-10-20 |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | dev (current as of report) |
-| **Latest Platform Version** | v1.18.30 |
+| **Version(s) Affected** | dev (current as of report); no 1.x fix verified |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | bug |
 
 **Summary:**
@@ -912,6 +960,8 @@ MOSAIC's subagent-dispatch pattern relies on the orchestrator's session staying 
 **Notes:**
 Cluster of related open issues on the same root cause: #42893 (active tracking issue for the same bug per bot triage), #43179 (primary-agent switches keep previous agent's model in V2), #41221 (manually selected model resets to config default on agent switch). This entry tracks #46111 as the most complete/live write-up; if #42893 is investigated in a future pass, cross-reference here rather than duplicating.
 
+**Update (2026-10-25, run 20):** Closed upstream 2026-10-20 as `completed` by maintainer `neriousy`, but the reason given is V2-only ("V2 keeps agent and model selection separate from prompt submission ... If it comes back on the latest v2, open a new issue"). Fix PR #46106 was closed unmerged, so no 1.x fix is verified. Fixed in 2.x only; 1.x behavior presumed unchanged. Needs re-verification on a current 1.19.x build. The defensive workaround (always pass explicit `agent`/`model` on injected prompts) remains the only 1.x mitigation.
+
 ---
 
 ### OC-082: Custom agent frontmatter `permission` block merges additively with defaults instead of replacing them
@@ -921,13 +971,13 @@ Cluster of related open issues on the same root cause: #42893 (active tracking i
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/47819 |
 | **Reported** | 2026-09-07 |
-| **Last Activity** | 2026-09-07 |
+| **Last Activity** | 2026-10-11 |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | dev@57ef382843 / v1.18.29 |
-| **Latest Platform Version** | v1.18.30 |
+| **Version(s) Affected** | dev@57ef382843 / v1.18.29; no 1.x fix verified |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | none observed |
 
 **Summary:**
@@ -949,6 +999,8 @@ This is a direct hit on MOSAIC's per-agent permission scoping — the architectu
 **Notes:**
 Needs re-verification on a future pass — issue is very new (filed 2026-09-07) with no comments and no linked fix PR yet. If MOSAIC generates or authors OpenCode subagent frontmatter with partial `permission` allowlists, this is directly actionable now: always prepend `"*": deny` in generated permission blocks until the harness behavior changes or is documented.
 
+**Update (2026-10-25, run 20):** Closed upstream 2026-10-11 as `not_planned` by the v1 mass-close ("OpenCode 2.0 is out ... closing issues filed against OpenCode 1"). No 1.x fix: the community fix PR #50429 (implicit catch-all deny for custom agents with a `permission` block, plus docs) was closed unmerged on 2026-10-10. Whether 2.x changed the behavior is not established. Needs re-verification on 1.19.x; the `"*": deny`-first authoring rule stays the mitigation.
+
 ---
 
 ### OC-083: `OPENCODE_CONFIG_DIR` overrides (rather than adds to) the global AGENTS.md path
@@ -958,13 +1010,13 @@ Needs re-verification on a future pass — issue is very new (filed 2026-09-07) 
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/28658 |
 | **Reported** | 2026-05-21 |
-| **Last Activity** | 2026-09-05 |
+| **Last Activity** | 2026-10-13 |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | v1.15.6 through at least v1.18.x (re-reported and re-diagnosed 2026-09-05) |
-| **Latest Platform Version** | v1.18.30 |
+| **Version(s) Affected** | v1.15.6 through at least v1.18.x (re-reported and re-diagnosed 2026-09-05); no 1.x fix verified |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | none observed |
 
 **Summary:**
@@ -986,6 +1038,8 @@ This directly affects MOSAIC's system-prompt/AGENTS.md-style injection, which is
 **Notes:**
 Open since 2026-05-21 (~3.5 months) with only 2 comments and no maintainer acknowledgment comment (an assignee is present but has not commented) — flagging "needs re-verification" is not required since the bug was independently reconfirmed just 5 days before this capture (2026-09-05), but the fix (PR #47468) had not merged as of that date. Re-check on next pass whether #47468 has merged.
 
+**Update (2026-10-25, run 20):** Closed upstream 2026-10-11 as `not_planned` (v1 mass-close). Both fix PRs (#32824, #47468) were closed unmerged, so no 1.x fix. A commenter (2026-10-13) reports the problem is still present on v2 and points to the open 2.0-tagged issue #32825 (pointer only; 2.x tracked separately). Needs re-verification on 1.19.x; workarounds unchanged.
+
 ---
 
 ### OC-084: `permission.ask` plugin hook is documented/typed but never triggered — no programmatic permission interception is possible
@@ -995,13 +1049,13 @@ Open since 2026-05-21 (~3.5 months) with only 2 comments and no maintainer ackno
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/7006 (primary tracking issue; duplicate of #47674, #46809, #47654, #9229) |
 | **Reported** | 2026-01-05 |
-| **Last Activity** | 2026-09-06 |
+| **Last Activity** | 2026-10-01 |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | v1.1.2 through current stable (v1.18.25/1.18.26/1.18.30) — confirmed still broken on every published build, not just dev/beta |
-| **Latest Platform Version** | v1.18.30 |
+| **Version(s) Affected** | v1.1.2 through current stable (v1.18.25/1.18.26/1.18.30/1.18.31) — confirmed still broken on every published 1.x build; maintainer stated 2026-10-01 that 1.x hook still does not fire |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | none observed |
 
 **Summary:**
@@ -1026,6 +1080,8 @@ This is the primary extension point OpenCode exposes for programmatic, non-inter
 **Notes:**
 This is a cluster of at least 5 duplicate GitHub issues (#7006, #47674, #46809, #47654, #9229) all tracking the identical root cause; this entry uses #7006 as the canonical/primary source since it has the longest history and most PR activity. Despite being open 8+ months with strong community pressure (26 upvotes, working fix PRs), no maintainer has merged a fix or publicly committed to a direction (a 2026-07-29 comment explicitly asked maintainers to pick between the narrow hook-restoration PRs and a broader "Gate" design proposal in #34329, with no response as of 2026-09-06). This long-standing lack of maintainer traction despite mergeable fixes is itself a signal worth tracking — re-verify on next pass whether any of #19453/#30509/#42633 merged.
 
+**Update (2026-10-25, run 20):** Closed upstream 2026-10-01 as `completed` by maintainer `neriousy`, who explicitly wrote: "OpenCode v2 replaces this with the `permission.evaluate` plugin hook (#45003) ... This is v2 only. The 1.x `permission.ask` hook still doesn't fire." So this is confirmed by-maintainer as unfixed on 1.x (fixed in 2.x only; 2.x replacement pointer: `permission.evaluate`). All fix PRs closed unmerged (#42633 by stale bot 2026-09-14; #47675, the last live candidate, closed 2026-10-10). Remains a Bug on 1.x with no fix coming; stays active, Needs re-verification only for 1.19.x. Additional workaround detail: workaround 1 (`permission.asked` event listener) is still the only 1.x route. The PR #47675 review also noted the declared hook payload type was the legacy shape while the real payload is v2 `PermissionRequest` (`permission`, `patterns[]`) - relevant if restoring the hook ever ships.
+
 **Verification pass (2026-09-10, run 1):** Directly re-read #46809, #47654, and #9229 rather than trusting the repo's own duplicate-detection bot label. All three are confirmed genuinely the same root cause, not a bot misclassification — each independently and precisely diagnoses the identical dead hook, and together they add valuable new evidence: #9229 (the earliest, Jan 2026) first identified the two-permission-module split (`permission/index.ts`, which calls the hook but is unused, vs. the actively-used `permission/next.ts`, which never does) and is the source of the `event`-hook-with-`permission.asked` workaround already listed above. #46809 (Sep 2026) is a live, first-hand probe test: the reporter's own plugin handler never fired and setting `output.status = "allow"` changed nothing, directly confirming the hook is fully inert rather than merely undocumented; it also flags a secondary detail worth noting for any future fix — the `Permission` payload's `patterns` field carries the literal command string, not the config pattern that matched, so a handler cannot cleanly distinguish which config rule triggered a given ask. #47654 (Sep 2026) pinpoints the exact removal commits and version (`f015154314` then `2fc06c5a17`, first absent in v1.3.0, ~March 2026) and adds a materially important detail not previously captured here: OpenCode's own **bundled `customize-opencode` skill** (`packages/core/src/plugin/skill/customize-opencode.md`) still teaches `permission.ask` as a live hook, meaning OpenCode's own built-in agent-authoring guidance actively leads plugin authors (including an LLM agent following that skill) into writing dead handlers. Recommend folding this skill-teaches-dead-hook detail into any future workaround guidance, since it means the failure mode can be freshly reintroduced by anyone (or any agent) following OpenCode's own documentation.
 
 ---
@@ -1037,13 +1093,13 @@ This is a cluster of at least 5 duplicate GitHub issues (#7006, #47674, #46809, 
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/24335 |
 | **Reported** | 2026-04-25 |
-| **Last Activity** | 2026-09-07 |
+| **Last Activity** | 2026-10-11 |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | v1.14.25 through at least v1.18.14 (repeatedly reconfirmed across ~10 point releases spanning 4+ months) |
-| **Latest Platform Version** | v1.18.30 |
+| **Version(s) Affected** | v1.14.25 through at least v1.18.14 (repeatedly reconfirmed across ~10 point releases spanning 4+ months); no 1.x fix verified |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | none observed |
 
 **Summary:**
@@ -1065,85 +1121,9 @@ Directly undermines MOSAIC's per-agent permission scoping model, which depends o
 **Notes:**
 This is a long-running, apparently still-unresolved regression despite two attempted fixes (#24308, #28699) — the underlying wildcard-vs-specific rule precedence logic in OpenCode's permission evaluator has not reliably matched its documented behavior for over 4 months as of this capture. Given the sub-agent-specific reproduction, this interacts with OC-082 (frontmatter permission additive-merge bug) and OC-084 (permission.ask hook dead) to form a broader picture: OpenCode's non-interactive/programmatic and config-driven permission scoping has multiple independent, long-standing reliability gaps. Recommend re-verification on the next pass against whatever the current release is at that time. See also OC-086, a related but distinct manifestation of the same last-match-wins/specificity flaw affecting plugin-registered agent permissions specifically.
 
+**Update (2026-10-25, run 20):** Closed upstream 2026-10-11 as `not_planned` (v1 mass-close); no 1.x fix, no maintainer root-cause comment. Test-only PR #24361 and fix attempt #28699 both closed unmerged. Whether 2.x fixed the evaluator is not established in the thread. Needs re-verification on 1.19.x; workarounds unchanged.
+
 **Verification pass (2026-09-10, run 1):** Directly re-read #37935, which a prior batch flagged as bot-linked to this issue. Confirmed genuinely the same root cause, not a bot misclassification: #37935 describes the identical `findLast()`/last-match-wins mechanism (a broad `$HOME/*` deny placed after a specific `$HOME/utilities/*` allow silently wins) in both the V1 (`packages/opencode/src/permission/index.ts`) and V2 (`packages/core/src/permission.ts`) evaluators, with its own fix PR (#37936, "use most-specific-pattern-wins instead of last-match-wins") also closed without merging — consistent with this entry's own two failed fix attempts (#24308, #28699). No new evidence beyond what's already captured here; correctly bucketed as a duplicate/same-family report, not a distinct defect. Kept as a cross-reference rather than a separate entry.
-
----
-
-### OC-086: Plugin-registered agent-specific permissions cannot override a root-level default deny
-
-| Field | Value |
-|-------|-------|
-| **Classification** | Bug |
-| **Source** | https://github.com/anomalyco/opencode/issues/47946 |
-| **Reported** | 2026-09-08 |
-| **Last Activity** | 2026-09-08 |
-| **Confidence** | Likely |
-| **Orchestration Impact** | HIGH |
-| **Reproduced at MOSAIC** | No |
-| **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 0.0.0-beta-19242 (2.0 beta line) |
-| **Latest Platform Version** | v1.18.30 |
-| **Labels** | 2.0 |
-
-**Summary:**
-When a plugin registers agent-specific permission rules (e.g., via `context.agent.transform(...)` pushing an `{action, resource, effect: "allow"}` entry), those rules do not reliably override a broader root-level default deny (e.g., `"skill": {"*": "deny"}` in `opencode.jsonc`), because OpenCode's permission evaluator flattens all rules and evaluates with plain last-match-wins ordering rather than any notion of rule specificity or scope (root vs. agent-level). Whether the plugin's agent-specific allow wins depends on plugin/transform registration order relative to root config loading — declaring the identical agent+permission directly in `opencode.jsonc` works reliably (since it is appended after root rules), but the equivalent registered by a plugin does not. Filed by a contributor with a precise repro against a real affected plugin (`opencode-babysit`); the repo's bot immediately flagged it as the same root-cause family as two other open issues (#37935, #39022) plus OC-085's issue (#24335).
-
-**Impact on Orchestration:**
-This directly affects MOSAIC's three-layer agent composition model wherever plugin-based mechanisms (rather than static frontmatter/config) are used to grant a specific subagent narrower or broader permissions than the root default — e.g., a plugin dynamically registering an agent with an allow-listed skill or tool while the workspace root enforces a default-deny posture. Because the override does not reliably apply, a subagent that MOSAIC (or a MOSAIC-adjacent plugin) intends to grant a specific capability to may be silently denied that capability whenever a root-level deny-by-default policy is in effect — the same class of failure as OC-085, but specifically breaking the plugin/dynamic-registration composition path rather than static config.
-
-**Evidence:**
-- Reported by a repo contributor (`stevoland`, `author_association: CONTRIBUTOR`) with an exact, minimal repro (root config + plugin transform code) against a real-world affected plugin
-- Root cause precisely diagnosed (flattened rules + last-match-wins with no specificity/scope awareness) and a concrete comparison provided showing the equivalent static-config declaration works while the plugin-registered one does not
-- Repo bot immediately flagged as duplicate-family with #37935 and #39022 (both describing agent-specific allow losing to broader/inherited deny) and with OC-085's issue #24335 (same last-match-wins root defect)
-- Labeled `2.0`, suggesting the maintainers are tracking it against the upcoming 2.0 line, though no direct maintainer text comment yet
-- Single reporter and only 1 day old at time of this capture — no independent community reproduction yet, capping confidence below Confirmed
-
-**Workaround(s):**
-1. ★ Declare the equivalent agent-specific permission rule directly in static config (`opencode.jsonc`) rather than registering it via a plugin transform — reporter confirms this ordering reliably works since root-config rules are appended before, not after, the plugin's rules in the affected path.
-2. No plugin-side workaround identified in the thread yet; avoid relying on plugin-registered permission overrides when a root-level default deny is configured until this is fixed.
-
-**Notes:**
-Part of the same underlying "last-match-wins without specificity/scope awareness" defect family as OC-085 (#24335) and the bot-linked #37935/#39022 — track all as one systemic gap in OpenCode's permission evaluator. This entry is Unverified-adjacent (single reporter, very recent) but included as Likely given the contributor's precise root-cause diagnosis and the strong existing evidence base from the sibling issues confirming the same evaluator defect independently. Needs re-verification on next pass — check whether #37935 or this issue gained maintainer traction or a merged fix, since a fix to the shared root cause would likely resolve OC-085, OC-086, and #37935 together.
-
-**Verification pass (2026-09-10, run 1):** Directly re-read #39022, which a prior batch bot-flagged alongside this issue. Investigation shows #39022 is **mechanically distinct**, not the same last-match-wins/specificity defect — it describes a plugin-defined agent's manifest `tools: { question: true }` never being translated into any permission rule at all for three specific tools (`question`, `plan_enter`, `plan_exit`), because only the built-in `build`/`plan` agents get an explicit code-level override of the hardcoded `defaults` deny; there is no rule-ordering conflict to resolve for #39022 the way there is for this issue and #37935. Given a real independent root cause and its own MOSAIC-relevant impact, #39022 was captured as its own new entry, OC-097, rather than folded in here.
-
----
-
-### OC-087: `opencode run --auto` auto-approval does not cascade to subagent sessions — subagent permission prompts hang indefinitely
-
-| Field | Value |
-|-------|-------|
-| **Classification** | Bug |
-| **Source** | https://github.com/anomalyco/opencode/issues/41730 |
-| **Reported** | 2026-08-11 |
-| **Last Activity** | 2026-09-09 |
-| **Confidence** | Confirmed |
-| **Orchestration Impact** | HIGH |
-| **Reproduced at MOSAIC** | No |
-| **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | v1.18.14 through at least v1.18.30 (fix still open/in-progress as of 2026-09-09) |
-| **Latest Platform Version** | v1.18.30 |
-| **Labels** | none observed |
-
-**Summary:**
-`opencode run --auto` is documented to auto-approve any permission not explicitly denied, but this auto-approval scope does not propagate to sessions spawned for subagents (e.g., via a Task-style subagent tool). When the main agent runs directly, `--auto` correctly bypasses `ask` rules (e.g., `edit: ask`, `external_directory: ask`); when the same operation is instead delegated to a subagent, the subagent's session hits the same `ask` rule and blocks on a permission prompt that nothing will ever answer in headless mode — the CLI invocation hangs indefinitely with no timeout and no error. An open fix PR (#42310, "cascade auto permissions to subagent sessions") exists and was still being actively scoped/discussed as of 2026-09-09, including an edge case where a reused `task_id` for a previously-seen child session can still hang because no `session.created` event fires for it.
-
-**Impact on Orchestration:**
-This is a direct, severe hit on MOSAIC's headless Runner pipeline, which explicitly depends on non-interactive, automated permission handling with no human available to answer prompts. If any MOSAIC-orchestrated subagent (dispatched via OpenCode's subagent/Task mechanism) performs an operation that falls under an `ask` permission rule, the entire run hangs forever rather than failing fast or auto-approving — there is no error to catch, retry, or route around. This is a fully headless-mode-breaking bug: any workflow that dispatches subagents under `--auto` and has any `ask`-classed permission rule in scope (the documented recommended posture, per OC-085/OC-086's discussion of deny/ask defaults) risks an unrecoverable stuck run.
-
-**Evidence:**
-- Reporter provided two independent, minimal repro cases (subagent file edit under `edit: ask`, subagent external-directory write under default `ask`) each cleanly contrasted against the main-agent case which works correctly
-- Open fix PR #42310 directly targeting this issue, with active scoping discussion as recently as 2026-09-09 (one day before this capture) identifying a remaining edge case (reused `task_id` without a `session.created` event) that the current PR does not yet cover
-- Bot-flagged as related to two other issues describing the identical symptom class: #36868 ("`opencode run --auto` hangs indefinitely when a Task subagent requests permission") and #13715 (broader tracking issue: "permission asks from nested subagent sessions silently hang")
-- Reporter also flagged the documentation itself as misleading for not disclosing this scope limitation
-
-**Workaround(s):**
-1. ★ Set explicit `allow` (not `ask`) for every permission category a subagent might need before running any headless/automated `--auto` workflow that dispatches subagents — avoids the `ask` code path entirely for subagent sessions since there is currently no way to get `--auto`'s implicit allow-unless-denied behavior to apply to them.
-2. Avoid delegating to subagents in headless/`--auto` runs until PR #42310 (or its eventual successor covering the reused-`task_id` edge case) merges and ships in a release.
-3. If a hang is unavoidable, wrap `opencode run --auto` invocations in an external timeout/watchdog (e.g., in the calling orchestrator/Runner) since OpenCode itself provides no internal timeout for an unanswered subagent permission prompt.
-
-**Notes:**
-Fix PR #42310 was still open and being actively narrowed in scope as of 2026-09-09 (one day before this capture) — re-check on next pass whether it merged, and specifically whether the reused-`task_id`/no-`session.created`-event edge case was covered, since a partial fix could leave MOSAIC's Runner still exposed to hangs in that specific case. Cross-reference with OC-084 (`permission.ask` plugin hook dead) and OC-085/OC-086 (wildcard/specificity permission evaluator bugs) — together these represent a broad, current gap in OpenCode's non-interactive permission handling that directly affects any headless multi-agent orchestration, which is core to how MOSAIC operates.
 
 ---
 
@@ -1160,7 +1140,7 @@ Fix PR #42310 was still open and being actively narrowed in scope as of 2026-09-
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | unspecified (recent, reported against current dev/stable as of 2026-09-02) |
-| **Latest Platform Version** | v1.18.30 |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | none observed |
 
 **Summary:**
@@ -1181,41 +1161,7 @@ This is directly analogous to MOSAIC's own system-prompt-injected instruction pa
 **Notes:**
 Needs re-verification and deeper investigation on a future pass — this entry is based on thin, single-reporter evidence with no code-level confirmation, unlike most other entries added in this run. Worth checking directly in a MOSAIC OpenCode deployment: whether built-in or MOSAIC-authored Skills honor injected temp-directory instructions, or fall back to `/tmp`/OS default paths internally. If confirmed via direct testing, this should be escalated from MEDIUM toward HIGH impact, since it would mean skill-internal file operations are not reliably governed by the same instruction-injection layer MOSAIC uses to steer agent behavior elsewhere.
 
----
-
-### OC-089: V2 `subagent` tool does not enforce per-target subagent permissions — an actual runtime execution bypass, distinct from OC-007's legacy Task-tool description mismatch
-
-| Field | Value |
-|-------|-------|
-| **Classification** | Bug |
-| **Source** | https://github.com/anomalyco/opencode/issues/35238 |
-| **Reported** | 2026-07-03 |
-| **Last Activity** | 2026-08-07 |
-| **Confidence** | Confirmed |
-| **Orchestration Impact** | HIGH |
-| **Reproduced at MOSAIC** | No |
-| **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | `2.0` track (`packages/core`); open since 2026-07-03 |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) — note this issue is specific to the "2.0" rewrite (`packages/core`), not the stable 1.18.x line |
-| **Labels** | bug, core, 2.0 |
-
-**Summary:**
-In the OpenCode "2.0" track, the V2 `subagent` tool only enforces coarse whole-tool visibility (an agent can be denied the `subagent` tool entirely) but does not call `PermissionV2.assert` per requested target before spawning a child session, and does not filter the model-facing list of allowed subagent targets. This means an agent configured to only be allowed to invoke a narrow subset of subagents (e.g. only `explore`) can still successfully invoke a different, non-whitelisted subagent if the model names it — this is an actual **execution-level permission bypass**, not merely a description/advertisement mismatch. Filed by a repository collaborator with exact code pointers (`packages/core/src/tool/subagent.ts`, `registry.ts`, `permission.ts`). A fix PR (#41100) was opened and closed without merging; two different contributors have since said they are working on a fix (one citing a partial runtime-assert fix already landed via #35794, but the model-facing filtered list still missing) but as of the last comment (2026-08-07) the issue remains open and unresolved.
-
-**Impact on Orchestration:**
-If MOSAIC ever targets the OpenCode "2.0"/`packages/core` track, this is a direct security/scoping failure at the core of subagent delegation: a per-agent restriction to a narrow, safe subset of subagents (e.g. only allowing an `explore`/read-only subagent) provides no actual runtime guarantee — the primary or an intermediate agent can still cause a broader-privileged subagent to execute if it knows or guesses that subagent's name. This directly undermines MOSAIC's reliance on tool/subagent scoping as a safety boundary, and is materially worse than OC-007 (which only affects what the model is *told* is available, not what it can actually invoke).
-
-**Evidence:**
-- Filed by a COLLABORATOR with exact code-level root cause (three specific files/functions named).
-- Independent user (`martin-braun`, 2026-08-06) confirmed a real-world bypass: denied all `task`/subagent permissions except one specific agent, and a non-whitelisted agent was still successfully invoked and made changes.
-- A fix PR (#41100) was opened and closed without merging (per closed_by_pull_requests linkage) — confirms the defect is real and was worked on, though not yet resolved.
-- Two subsequent contributors (`tlysanhuo`, `686f6c61`) each stated intent to fix it in the comments, with `tlysanhuo` noting that per-target runtime `PermissionV2.assert` enforcement landed separately via #35794, but the model-facing filtered subagent list was removed in a refactor (`761f373`) and still needs restoring — i.e. even after partial fixes, the full picture (list a subset, actually enforce that subset) may still be incomplete.
-
-**Workaround(s):**
-No confirmed workaround in the thread. Given a real reported bypass, treat per-target subagent permission restrictions on the "2.0" track as unenforced until this issue closes — do not rely on narrow subagent allow-lists as a safety boundary on that track.
-
-**Notes:**
-This issue was flagged by a prior verification pass as a possible duplicate/"2.0-track counterpart" of OC-007 (#48106, legacy Task tool). Investigation shows it is **distinct and materially more severe**: OC-007 is explicitly scoped by its own reporter as a description-only mismatch in the legacy `packages/opencode` Task tool ("the underlying enforcement is presumed correct, only what the model is told is wrong"), while this issue (#35238) is in the different "2.0" `packages/core` V2 `subagent` tool and has an independently confirmed **actual execution bypass** — a denied target was actually invoked and performed the action. OC-007's own Notes section already explicitly separates these two issues; this new entry makes that distinction a first-class tracked item rather than leaving #35238 as an unexamined cross-reference. Should MOSAIC ever adopt the "2.0" track, this is a HIGH-priority pre-check item. Last activity is 2026-08-07 (~5 weeks before this capture) with no closure — recommend re-verification on a future pass to see if #41100's successors landed.
+**Update (2026-10-25, run 20):** Re-read #46815: still open (not closed by the v1 mass-close yet), 2 comments (both bots), no maintainer response, no fix PR, no new reports since 2026-09-02 (~7.5 weeks inactive; the 60-day stale bot would close it around 2026-11-01). Needs re-verification (stale, single reporter); confidence stays Unverified.
 
 ---
 
@@ -1226,13 +1172,13 @@ This issue was flagged by a prior verification pass as a possible duplicate/"2.0
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/45078 |
 | **Reported** | 2026-08-25 |
-| **Last Activity** | 2026-08-27 |
+| **Last Activity** | 2026-10-10 |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | v1.18.22 through current `dev` as of 2026-08-27 |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Version(s) Affected** | v1.18.22 through at least v1.18.34 (re-confirmed 2026-10-10); no 1.x fix |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none returned in payload) |
 
 **Summary:**
@@ -1254,6 +1200,8 @@ Both mechanisms are direct hazards for MOSAIC's hub-and-spoke model. Mechanism (
 **Notes:**
 Flagged by a prior verification pass as "session-deny inheritance into child sessions" and compared against OC-007 (Task tool's model-facing subagent list ignoring session permission overrides). Confirmed **distinct** from OC-007 in both mechanisms: OC-007 is about what the *model is told* is available (advertisement only, presumed-correct enforcement); mechanism (1) here is about a *different, real enforcement* defect (stale deny propagation into child sessions), and mechanism (2) is an even more severe *actual enforcement bypass* of a subagent's own permission block based on caller identity — closer in severity to OC-089 (#35238, the "2.0"-track execution bypass) than to OC-007, though on the legacy/stable line rather than "2.0". Recommend a future pass specifically re-investigate mechanism (2) in isolation (it currently has no dedicated GitHub issue of its own — it exists only as a comment on #45078) and consider filing/tracking it separately if it proves to have no maintainer engagement here; also cross-check #33223, which the bot suggests shares the same root-cause function.
 
+**Update (2026-10-25, run 20):** Issue still OPEN (assigned to `rekram1-node`, no maintainer comment); fix PR #45064 closed unmerged. New comment 2026-10-10 (`paoloviviani`) re-confirms on v1.18.34 and reports a **more severe manifestation of mechanism (1)**: if the parent session history ever contained a catch-all `{"*","*",deny}` later superseded by `{"*","*",allow}`, the child inherits only the stale deny, and `Permission.disabled()` (which picks the last rule matching the tool name, ignoring pattern) then hides every tool - the child's first request goes out with no tool definitions (~6.4k vs ~13k input tokens), so it can only answer in text. For a background task this is silent and terminal (child ends after one text step, parent receives just that text). Re-applying rules to the child after creation is racy (child's first step starts within ~100 ms of `session.created`). Not yet 1.19.x-verified; given recent activity, no re-verification flag beyond that. Mechanism (2) still has no dedicated issue or maintainer response. Cross-check done: #33223 (subagent's own rules never copied into child session, v1.17.8, `deriveSubagentSessionPermission`) was closed `not_planned` by the stale bot 2026-10-01 with no fix - a closely related, unresolved variant of mechanism (2); treat as unfixed.
+
 ---
 
 ### OC-091: `task` tool entirely absent from the primary/orchestrator's tool list under certain permission configs — not a description mismatch, delegation is completely unavailable
@@ -1263,13 +1211,13 @@ Flagged by a prior verification pass as "session-deny inheritance into child ses
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/39086 |
 | **Reported** | 2026-07-27 |
-| **Last Activity** | 2026-07-29 |
+| **Last Activity** | 2026-09-27 (stale-bot auto-close, not_planned; no fix) |
 | **Confidence** | Likely |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | OpenCode Desktop, reported against a build around v1.18.x (exact version not stated by reporter) |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none returned in payload) |
 
 **Summary:**
@@ -1289,6 +1237,8 @@ No confirmed workaround found in the thread — the second reporter explicitly n
 **Notes:**
 OC-007's own Notes section already identified this issue as "the complementary 'totally missing' case rather than a partial mismatch" relative to its own description-mismatch defect — this pass confirms that characterization and gives it a dedicated entry, since it represents total, not partial, loss of delegation capability under a specific and plausible permission-configuration pattern (per-target task allow-lists), which is a materially different and more severe risk than OC-007. Confidence set to Likely (two independent reports, same symptom, but no maintainer confirmation). Reported only against OpenCode Desktop with a custom OpenAI-compatible provider — flag for re-check on a native Anthropic-backed CLI/API session, since MOSAIC would not typically use the Desktop installer path, but the underlying permission-config-driven tool-list construction is plausibly provider- and interface-agnostic. **Needs re-verification:** no activity since 2026-07-29 — re-checked 2026-09-10, still no maintainer response, no new comments, issue still open (~6.5 weeks stale). Confidence and details unchanged from prior capture.
 
+**Run 20 (2026-10-25):** Closed upstream 2026-09-27 by the 60-day stale bot as `not_planned`; no maintainer comment, no fix PR, no 1.x fix. A close is not a fix - kept active, **Needs re-verification** against v1.19.4 (no confirmation either way; unknown whether still reproduces).
+
 ---
 
 ### OC-092: Terminating/cancelling a subagent does not kill its spawned child processes — they keep running detached and unsupervised, a resource/safety risk distinct from OC-006's completion-side hang
@@ -1298,13 +1248,13 @@ OC-007's own Notes section already identified this issue as "the complementary '
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/38564 |
 | **Reported** | 2026-07-23 |
-| **Last Activity** | 2026-07-23 |
+| **Last Activity** | 2026-09-22 (stale-bot auto-close, not_planned; no fix) |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | "Latest (via npm)" at time of report (2026-07-23), exact version not stated |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none returned in payload) |
 
 **Summary:**
@@ -1324,6 +1274,8 @@ No confirmed workaround in the thread. As an operational mitigation (not stated 
 **Notes:**
 Confirmed **distinct** from OC-006: OC-006 concerns a bash call that has already finished cleanly leaving a live descendant, which stalls the *subagent's own forward progress* (no next LLM request); this issue concerns the *orchestrator/user's cancellation* of a still-running subagent failing to actually stop spawned work, a resource-safety issue rather than a hang. Both plausibly share an underlying "descendant/child-process bookkeeping" gap in the subagent execution path, as OC-006's own Notes already speculated, but the triggering condition and operational consequence differ enough to warrant separate tracking. Included despite Unverified confidence (single reporter, no confirmations) because it directly threatens MOSAIC's timeout/cancellation-based supervision strategy for subagent dispatches (the very mitigation this KB recommends for the OC-001/003/004/006/067 cluster), is reported on stock OpenCode with no custom backend, and provides a concrete, specific reproduction with a real-world consequence. **Needs re-verification:** re-checked 2026-09-10 — still open, no maintainer comment beyond the automated compliance bot, no independent reproduction, no activity since 2026-07-23 (~7.5 weeks stale). Now assigned to `jlongster` (was unassigned/no assignee noted at prior capture) but no comment from them yet. Confidence remains Unverified; details otherwise unchanged.
 
+**Run 20 (2026-10-25):** Closed upstream 2026-09-22 by the 60-day stale bot as `not_planned`; no maintainer comment, no fix PR, no 1.x fix. A close is not a fix - kept active, **Needs re-verification** against v1.19.4.
+
 ---
 
 ### OC-093: OpenCode Go advertises a 1M-token context for `glm-5.2` but silently routes to backends capped at 262K, so `usable()` is computed against the wrong ceiling and the resulting overflow is misclassified — bricking the session at a fraction of the advertised limit
@@ -1333,13 +1285,13 @@ Confirmed **distinct** from OC-006: OC-006 concerns a bash call that has already
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/36481 |
 | **Reported** | 2026-07-12 |
-| **Last Activity** | 2026-07-12 |
+| **Last Activity** | 2026-09-11 (stale-bot auto-close, not_planned; no fix) |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | v1.17.18 |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none returned in payload) |
 
 **Summary:**
@@ -1359,6 +1311,8 @@ No confirmed workaround found in the thread. The reporter's proposed fixes (cap 
 **Notes:**
 Confirmed **distinct** from #32656 (the other issue in this verification batch) — #32656 is a `usable()`-formula defect (branch A silently caps `reserved` at 20K) that exists independent of any metadata inaccuracy; this issue is a provider-metadata-honesty defect (the advertised ceiling itself is wrong for the actual routed backend) compounded by the same class of overflow-misclassification gap already tracked in this KB as OC-027. Both are real, but they are not the same root cause and neither should be merged into the other. Included despite Unverified confidence (single reporter, no confirmations) because it threatens core context-window management for a first-party, non-custom OpenCode offering (Go), not a user-configured custom backend, and provides concrete, well-sourced reproduction evidence (three independent primary sources for the real backend cap). Cross-reference: #27629 (root cause #2, same as this KB's OC-027 pattern), #33029 (same Go metadata-vs-reality pattern for a different aspect of GLM-5.2 quota), #24561 (umbrella issue for metadata/actual-limit mismatches generally). **Needs re-verification:** re-checked 2026-09-10 — still open, still only the one unrelated comment (stream-timeout tangent), no maintainer response, no fix landed, no activity since 2026-07-12 (~9 weeks stale). Confidence remains Unverified; details otherwise unchanged.
 
+**Run 20 (2026-10-25):** Closed upstream 2026-09-11 by the 60-day stale bot as `not_planned`; no maintainer comment, no fix PR, no 1.x fix (the only other comment is the unrelated stream-timeout tangent). A close is not a fix - kept active, **Needs re-verification** on v1.19.4 (the models.dev metadata / `OVERFLOW_PATTERNS` state is unchecked).
+
 ---
 
 ### OC-094: Subagent (Task-tool) sessions are never granted execution permission for MCP tools — model sees the tools but every call is denied
@@ -1368,13 +1322,13 @@ Confirmed **distinct** from #32656 (the other issue in this verification batch) 
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/16491 |
 | **Reported** | 2026-03-07 |
-| **Last Activity** | 2026-07-14 |
+| **Last Activity** | 2026-09-13 (stale-bot auto-close, not_planned; no fix) |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | v1.2.20 through at least 2026-07-14 (5+ months, no confirmed fix); five closed-unmerged fix PRs across that span |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | none observed |
 
 **Summary:**
@@ -1397,6 +1351,8 @@ This is directly and severely relevant to MOSAIC's subagent delegation model whe
 **Notes:**
 Verified during a 2026-09-10 duplicate-check pass: this issue was flagged by a prior batch as a possible duplicate of the OC-061/OC-064/OC-065 "MCP registration/discovery/health-check" cluster, but investigation shows it is a **distinct root cause** — those entries concern tools never being registered, becoming stale, or failing to report errors; this issue is specifically about the Task-tool subagent session-creation path never granting execution permission for MCP tools that ARE correctly registered and visible. Not a case of the duplicate bot being wrong about clustering per se (the symptom families are adjacent and easy to conflate), but distinct enough, well-evidenced enough (7+ reporters, 5 failed fix PRs, 4+ months), and severe enough for MOSAIC's subagent+MCP delegation pattern to warrant its own tracked entry rather than a footnote. Cross-reference OC-007 (Task tool's model-facing subagent *list* description mismatch) and OC-089/OC-090 (V2/legacy subagent permission enforcement bypasses) as adjacent but mechanically distinct subagent-permission defects — this one is specifically MCP-tool-execution-permission scoped. **Needs re-verification:** re-checked 2026-09-10 — still open, still 9 comments/5 closed-unmerged fix PRs (no new PRs), no maintainer acknowledgment, no activity since 2026-07-14 (~8.5 weeks stale). Confidence and workaround unchanged from prior capture.
 
+**Run 20 (2026-10-25):** Closed upstream 2026-09-13 by the 60-day stale bot as `not_planned` (11 comments, 5 reactions; all 5 linked fix PRs remain closed unmerged; a reporter complained of mass stale-closing). No maintainer comment, no 1.x fix. A close is not a fix - kept active, **Needs re-verification** on v1.19.4. **Workaround caveat:** the config snippet in the 2026-07-14 comment (`agents` / `permissions: [{action, resource, effect}]`) is OpenCode **2.x** config syntax and was derived from the 2.x `packages/core` code; it is NOT a verified 1.x workaround. The 1.x equivalent (per-agent `permission: { "<mcpserver>_*": "allow" }`) is an inference, not confirmed in the thread. Wrapping the MCP server as a native plugin tool (Hyp3rSon1X) is the only 1.x-reported workaround.
+
 ---
 
 ### OC-095: Parallel tool-call turn finalizer races a slow MCP tool's result — turn never completes (`finish: null`), slow tool stuck at `running` forever
@@ -1412,7 +1368,7 @@ Verified during a 2026-09-10 duplicate-check pass: this issue was flagged by a p
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | v1.14.40; no confirmation of status on later releases |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | none observed |
 
 **Summary:**
@@ -1438,47 +1394,6 @@ Verified during a 2026-09-10 duplicate-check pass: this issue was flagged by a p
 
 ---
 
-### OC-096: No timeout/idle-watchdog on any LLM stream (subagent or primary) — a stalled model response hangs the session forever with no recovery
-
-| Field | Value |
-|-------|-------|
-| **Classification** | Bug |
-| **Source** | https://github.com/anomalyco/opencode/issues/13841 (primary tracking issue; same root cause as #11865) |
-| **Reported** | 2026-02-16 |
-| **Last Activity** | 2026-08-20 (via cross-referenced #11865) |
-| **Confidence** | Confirmed |
-| **Orchestration Impact** | HIGH |
-| **Reproduced at MOSAIC** | No |
-| **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | v1.1.2 through at least v1.18.11 (7+ months, multiple point releases, confirmed provider-agnostic) |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
-| **Labels** | none observed |
-
-**Summary:**
-OpenCode has no default timeout, stream-idle watchdog, retry cap, or subagent-level timeout wrapper anywhere in its LLM-call path, so any single stalled model stream — the provider stops sending SSE chunks mid-response, or never sends a first byte — hangs the entire session (subagent or primary) indefinitely with no error, no automatic recovery, and no way for `/interrupt`/`Esc` alone to reliably resolve it cleanly. A rigorous root-cause writeup identified four compounding gaps: (1) the documented 300s default request timeout is never actually applied at config normalization — `options.timeout` is `.optional()` with no `.default()`, so it silently stays `undefined` and the `AbortSignal.timeout()` guard never fires; Bun's own socket timeout is also explicitly disabled (`timeout: false`), so there is no fallback of any kind; (2) there is no separate stream-idle watchdog that resets on each received chunk (distinct from a total-request timeout) to catch a connection that stays open but stops delivering data mid-stream; (3) session-level retry logic (`processor.ts`) has no maximum-attempt cap, so if a `StreamIdleTimeoutError` were introduced it could retry forever rather than eventually surfacing to the user; (4) the Task tool's subagent dispatch has no independent timeout wrapper around the subagent's own prompt loop, so a hung subagent blocks its parent indefinitely. Confirmed provider-agnostic: reproduced with Anthropic Claude Opus 4.6/4.7, OpenAI/Codex 5.2, DeepSeek, GLM, Minimax, and a ChatGPT-Codex-backend no-first-byte Cloudflare stall — not tied to any one vendor or a custom/non-standard backend. Three fix PRs were opened over this issue's life (#13846, #16599, #36650) and all closed without merging; a companion issue for the OpenAI/Codex variant (#11865, 21 comments, 21 reactions, open since 2026-02-03) documents the identical mechanism with independent production-scale evidence.
-
-**Impact on Orchestration:**
-This is the deepest, best-evidenced root cause underlying a whole cluster of hang-type entries already in this KB (OC-001's permission-ask hang, OC-006's post-bash-call stall, OC-067's MCP-call deadlock) — all of them ultimately manifest as "the session stops making progress and nothing brings it back," and this issue shows the harness genuinely has zero timeout/watchdog machinery anywhere in the LLM-stream path to bound any of them. For MOSAIC's headless, Runner-driven pipelines, this means a single transient provider hiccup (a stalled stream, a silent no-first-byte connection, a dropped SSE chunk) can wedge an entire subagent dispatch — or the primary orchestrator itself — indefinitely, with no internal recovery mechanism and no error signal an external supervisor could catch and act on; the only recourse is an external wall-clock watchdog killing and restarting the process, which loses all in-flight session state. Independent production-scale data (one report covering ~2000 sessions/775 sub-sessions over 6 months) shows this is not a rare edge case: 207 sessions hit `MessageAbortedError`, with cases of a coordinating agent waiting 5.7 hours before a mass-abort, discarding two already-completed sibling subagents' results (176K tokens) along with the stuck ones.
-
-**Evidence:**
-- Exact code citations across four compounding gaps (`provider.ts:1063-1101` for the timeout guard and disabled Bun socket timeout, `config.ts:981-995` for the undefaulted schema field, `llm.ts:211` for the missing stream-idle watchdog, `processor.ts:350-378` for the uncapped retry loop, `task.ts:128` for the missing subagent timeout wrapper), independently confirmed and extended by a second contributor (`yehudacohen`) who traced a further gap (env-only providers bypass the schema default entirely) and opened PR #16599.
-- At least 6 independent reproductions across different models/providers/platforms over 6+ months (Anthropic Opus 4.6 on macOS; Anthropic Sonnet 4.6 on Linux/Modal; a mid-stream stall on Opus 4.7 with the process confirmed busy-spinning, not parked; a Codex-backend no-first-byte Cloudflare stall independently isolated and replayed outside OpenCode entirely; OpenAI/Codex 5.2, DeepSeek, GLM, Minimax via the companion #11865 thread).
-- Production-scale quantitative evidence (6-month window, ~2000 sessions, 775 sub-sessions): 207 sessions with `MessageAbortedError`, 4 permanently orphaned sub-sessions with terminated parents, 5 mass-abort events where 3+ sibling subagents were killed together, and one case study where a 5-subagent parallel dispatch waited 5.7 hours before an entire session was aborted, losing 2 already-successful sibling results (176K tokens) alongside the stuck ones.
-- Three fix PRs opened and closed without merging (#13846, #16599, #36650) — confirms the harness team recognized and repeatedly attempted to fix this, without success as of the last confirmed activity.
-- A client-side interim mitigation (`provider.<name>.options.timeout = 300000` set explicitly in config) was confirmed by an independent user to convert an open-ended multi-hour hang into a bounded 5-minute failure — direct evidence the missing-default diagnosis is correct.
-
-**Workaround(s):**
-1. ★ Explicitly set `provider.<name>.options.timeout` (e.g., `300000` for 5 minutes) for every provider in use, rather than relying on the documented-but-unapplied default — confirmed by an independent user to convert an indefinite hang into a bounded, retryable failure. This does not address the separate stream-idle-watchdog gap (a stream that keeps the connection open but stops sending chunks may still not trigger a total-request timeout promptly), so pair with monitoring.
-2. Wrap `opencode run`/headless invocations in an external wall-clock timeout/watchdog process, since OpenCode itself provides no subagent-level or stream-idle timeout — this is the only mitigation for the stream-idle-stall variant (mid-stream silence with an open connection) that the explicit `options.timeout` config does not fully cover.
-3. If using the Task tool heavily for parallel subagent fan-out, be aware a single stuck subagent can, depending on client-side orchestration logic, cause the parent to wait indefinitely or (per the production-scale evidence) trigger a mass-abort that discards already-completed sibling work — consider dispatching subagents with independent per-dispatch external timeouts rather than one shared timeout for the whole fan-out batch.
-
-**Notes:**
-Verified during a 2026-09-10 duplicate-check pass: flagged by a prior batch as part of the broader "OpenCode's interrupt/cancellation mechanism doesn't reliably reach in-flight tool-call or permission-ask state" architectural gap alongside OC-001 and OC-067. Investigation confirms this is best understood as the **general/root form** of that gap — unlike OC-001 (permission-ask-specific hang) and OC-067 (MCP-tool-call-specific hang/deadlock), this issue's root cause (no timeout/watchdog anywhere in the LLM-stream path) is provider- and trigger-agnostic and is the most thoroughly code-level-diagnosed entry in the whole "unrecoverable hang" cluster in this KB. Rather than being a duplicate that should be discarded, it is the strongest single piece of evidence for treating OC-001/OC-006/OC-067 as symptoms of one systemic gap, and is captured here as its own entry specifically because its evidence quality (four named code-level gaps, three closed-unmerged fix PRs, production-scale quantitative data, and confirmed provider-agnosticism) exceeds any of the narrower existing entries. Cross-reference: #11865 (companion OpenAI/Codex-variant report, 21 comments/21 reactions, same root cause, folded into this entry rather than tracked separately) and #33028 (bash-tool-call-adjacent variant, already cross-referenced in OC-006/OC-044, whose own code-level analysis — `awaitToolFibers`/`collectStream` never timing out — independently corroborates the "no timeout anywhere in the tool/stream lifecycle" theme this entry describes). Recommend re-verification on current v1.18.30 to check whether any successor to the three closed-unmerged PRs has since landed.
-
-**Re-verification (2026-09-10, batch 7 of full-KB pass):** Re-fetched issue #13841 and its full comment thread (6 comments) plus the linked #31235 for the parallel-call variant. No change — issue is still `open`, still 6 comments with the most recent (2026-08-06, "please fix!") already reflected in the entry, all three linked fix PRs (#13846, #16599, #36650) remain `CLOSED` (unmerged). No successor PR found. Confidence (Confirmed), Classification (Bug), and Impact (HIGH) all confirmed unchanged. No activity since 2026-08-06 (~5 weeks) — under the 6-week staleness threshold, so no "Needs re-verification" flag added, but worth checking again next pass.
-
----
-
 ### OC-097: Plugin-defined agent manifest `tools: { <toolname>: true }` does not override the hardcoded default-deny for `question`/`plan_enter`/`plan_exit` — tool silently unavailable despite the manifest saying otherwise
 
 | Field | Value |
@@ -1486,13 +1401,13 @@ Verified during a 2026-09-10 duplicate-check pass: flagged by a prior batch as p
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/39022 |
 | **Reported** | 2026-07-27 |
-| **Last Activity** | 2026-07-27 |
+| **Last Activity** | 2026-09-25 (stale-bot auto-close, not_planned; no fix) |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | v1.18.5; reproduces with the experimental Code Mode flag both on and off |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | none observed |
 
 **Summary:**
@@ -1518,6 +1433,8 @@ Verified during a 2026-09-10 duplicate-check pass: this issue was flagged by a p
 
 **Re-verification (2026-09-10, batch 7 of full-KB pass) — NEEDS RE-VERIFICATION:** Re-fetched issue #39022 and its comments directly. Still `open`, still zero comments beyond the original report (assignee `jlongster` set but no engagement recorded), no linked fix PR. Last activity remains 2026-07-27 — now 45 days (6.4 weeks) with no movement, crossing the 6-week staleness threshold. Confidence (Unverified), Classification (Bug), and Impact (MEDIUM) confirmed unchanged, but flagging explicitly per the staleness rule: this is a single-reporter issue with no community or maintainer confirmation and no activity for 6+ weeks — re-verify again on the next full pass and consider downgrading emphasis if it remains untouched.
 
+**Run 20 (2026-10-25):** Closed upstream 2026-09-25 by the 60-day stale bot as `not_planned`; still zero human comments, no fix PR, no 1.x fix. A close is not a fix - kept active, **Needs re-verification** on v1.19.4 (cheap to check with `opencode debug agent <name>`). Config-level workaround unchanged and still valid for 1.x (the issue was filed against v1.18.5).
+
 ---
 
 ### OC-098: Truncation is undocumented, unconfigurable, gives misleading recovery instructions when the suggested tools are disabled, and runs at an inconsistent point relative to the `tool.execute.after` plugin hook
@@ -1533,7 +1450,7 @@ Verified during a 2026-09-10 duplicate-check pass: this issue was flagged by a p
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | v1.2.5 through at least 2026-08-11 (6+ months); auto-closed for staleness 2026-07-03, not resolved |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | none observed |
 
 **Summary:**
@@ -1557,6 +1474,8 @@ Verified during a 2026-09-10 duplicate-check pass: this issue was flagged by a p
 
 **Re-verification (2026-09-10, batch 7 of full-KB pass):** Re-fetched issue #13770 and its full comment thread directly. No change to substance — still `closed`/`not_planned`, still exactly 3 comments (the contributor ping to `rekram1-node`, `stantonk`'s "huge usability problem" confirmation with 9 reactions, and the staleness-bot auto-close). Note: the actual `updated_at` timestamp on the issue is 2026-08-11, but this reflects only metadata/label activity — no new comment exists past `stantonk`'s 2026-03-27 confirmation and the 2026-07-03 bot closure; there was no separately-reproduced 2026-08-11 comment as the prior note speculated. Confidence (Likely), Classification (Bug), and Impact (MEDIUM) all confirmed unchanged. No maintainer technical response ever materialized.
 
+**Run 20 (2026-10-25):** Re-fetched #13770: still closed `not_planned` (stale bot, 2026-07-03), same 3 comments, no fix PR, nothing newer. No 1.x fix known; entry unchanged. **Needs re-verification** on v1.19.4 (reported on v1.2.5; the truncation code may have changed in 6+ releases).
+
 ---
 
 ### OC-041: Write tool fails silently on large files (~1000+ lines)
@@ -1566,13 +1485,13 @@ Verified during a 2026-09-10 duplicate-check pass: this issue was flagged by a p
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/19604 |
 | **Reported** | 2026-03-29 |
-| **Last Activity** | 2026-08-27 |
+| **Last Activity** | 2026-10-01 |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | Reported across a wide range, including 1.17.9, 1.17.11, 1.17.13, 1.18.4; some improvement reported after upgrading to 1.18.x but not eliminated |
-| **Latest Platform Version** | v1.18.30 |
+| **Version(s) Affected** | Reported across a wide range, including 1.17.9, 1.17.11, 1.17.13, 1.18.4; some improvement reported after upgrading to 1.18.x but not eliminated; no 1.x fix |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (not returned in payload; assigned to maintainer kitlangton) |
 
 **Summary:**
@@ -1590,6 +1509,8 @@ MOSAIC subagents and the orchestrator frequently write full files (specs, genera
 **Workaround(s):**
 1. ★ Instruct the agent (via system prompt or explicit user instruction) to write large files in smaller chunks — e.g., create the file with an initial ~300-400 line section via `write`, then append the rest via successive `edit` calls. Confirmed by multiple independent users as reliable, though costly in extra tool calls.
 2. Downgrade/avoid unrelated plugins that intercept tool calls (one user's issue was compounded by the `opencode-tool-search` plugin, though removing it did not fully resolve the core issue).
+
+**Update (2026-10-25, run 20):** Closed upstream 2026-10-01 as `duplicate` of #18108 by maintainer `neriousy`, who gave the root-cause explanation: "Large `write` calls usually fail because the tool call gets cut off at the model's output token limit, and OpenCode doesn't report that clearly or recover from it." Duplicate verified by reading #18108 (truncated tool-call JSON misclassified as invalid tool, `finishReason: length` treated as normal completion, no recovery; 12 reactions): genuinely the same family, and #18108 itself was closed `not_planned` in the 2026-10-11 v1 mass-close; its fix PR #21688 and the related PRs (#26299, #26347 here) were closed unmerged. So no 1.x fix. Reframing: the root cause is output-token-limit truncation (the harness caps output at min(model limit, 32k) and does not detect/recover), not a Write-tool defect per se; latest comment (2026-08-27, Kimi K3 custom provider) shows a silent looping variant. Extra workaround from #18108 thread: a configured `limit.output` is not honoured above the internal 32k cap, so raising it may not help; chunked write+edit remains the reliable path. Needs re-verification on 1.19.x. Candidate for its own entry (not yet tracked): #18108 (truncated tool calls unrecoverable, headless/subagent impact, includes reasoning-channel truncation giving empty "successful" subagent output).
 
 **Notes:**
 If MOSAIC adopts OpenCode as a harness, consider having agent templates default to chunked writes for any file expected to exceed ~500 lines rather than waiting to hit this failure. Related/possibly-duplicate issues mentioned in thread: #11112 ("Preparing write..." → "Tool execution aborted" loop), #11630 (large files with special characters), #16816 (large generated code files), #24529 (edit tool succeeds on disk but reports Failed due to a downstream `output.args.filePath` crash — distinct root cause, same "tool failure doesn't propagate cleanly" theme, fix PR #24537).
@@ -1610,8 +1531,8 @@ If MOSAIC adopts OpenCode as a harness, consider having agent templates default 
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 1.17.8 confirmed at report; independently reconfirmed August 2026 (several releases later) |
-| **Latest Platform Version** | v1.18.30 |
+| **Version(s) Affected** | 1.17.8 confirmed at report; independently reconfirmed August 2026 (several releases later); no 1.x fix |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (not returned; issue closed `state_reason: not_planned`) |
 
 **Summary:**
@@ -1632,6 +1553,8 @@ This is a silent data-loss bug in the harness's most basic write path. MOSAIC su
 **Notes:**
 Closed by maintainers as `not_planned` despite a working fix PR existing and a second independent reproduction after closure — this is a case where "closed" does not mean "resolved" or "not real." Kept in active-issues (not resolved) because of the post-closure reproduction and because the underlying defect (no min-length/destructive-write guard) is still present in the codebase per the August 2026 report. Needs re-verification against current v1.18.30.
 
+**Update (2026-10-25, run 20):** Re-read #33078 and all 3 comments: unchanged since 2026-08-26 (closed `not_planned` 2026-06-22 by `rekram1-node` with a dismissive comment; fix PR #33091 closed unmerged; no new reports or 1.x fix; ~2 months since last activity). No change to classification or confidence; still Needs re-verification on 1.19.x. Defect presumed present.
+
 **Re-verification pass (2026-09-10, run 2 — batch 8):** Re-fetched #33078 and its full comment thread. No new comments since the 2026-08-26 reconfirmation already recorded here; issue remains closed `not_planned`, linked fix PR #33091 remains closed/unmerged. All fields (Confirmed / Bug / HIGH) still accurate — no changes made.
 
 ---
@@ -1649,7 +1572,7 @@ Closed by maintainers as `not_planned` despite a working fix PR existing and a s
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | Reported against "current opencode" mid-2026 (exact version not stated); auto-closed 2026-08-24 for 60 days inactivity, no fix confirmed |
-| **Latest Platform Version** | v1.18.30 |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none observed; closed `state_reason: not_planned` via stale-issue bot, not a maintainer decision) |
 
 **Summary:**
@@ -1674,6 +1597,8 @@ Kept active rather than resolved: this was auto-closed by a 60-day stale-issue b
 
 **Re-verification pass (2026-09-10, run 2 — batch 8):** Re-fetched #33650 and its full comment thread. Only two comments exist: the bot's duplicate-flag to #13770 (2026-06-24) and the 60-day stale-auto-close (2026-08-24), both already reflected in this entry. No maintainer engagement, no third-party reproduction, no fix confirmation. Confidence stays Likely (single reporter, no maintainer acknowledgment, closure was bot-driven not a technical determination) — still capped below Confirmed per CaptureGuide. All fields otherwise accurate — no changes made. Last Activity remains 2026-08-24, within the 6-week freshness window at time of this pass so no "Needs re-verification" flag added yet.
 
+**Run 20 (2026-10-25):** Re-fetched #33650: still closed `not_planned` (stale bot 2026-08-24), same 2 comments, no fix PR, nothing newer. No 1.x fix known. Last activity now 2 months old - **Needs re-verification** on v1.19.4 (a v1.x truncation change could have altered the `read` offset / `background_output` behaviour). Confidence stays Likely.
+
 ---
 
 ### OC-044: Bash tool hangs indefinitely when a command spawns a background/daemon child process with open stdio (recurring root cause across multiple "fixed" issues)
@@ -1683,13 +1608,13 @@ Kept active rather than resolved: this was auto-closed by a 60-day stale-issue b
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/20902 (original diagnosis); https://github.com/anomalyco/opencode/issues/42524 (recurrence, closed same day) |
 | **Reported** | 2026-04-03 (#20902); 2026-08-14 (#42524) |
-| **Last Activity** | 2026-08-31 (both closed same day) |
+| **Last Activity** | 2026-09-24 (last fix PR #44601 closed unmerged; issues closed 2026-08-31 without fix) |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | Reported continuously from "dev" (~April 2026) through v1.18.9 (August 2026); closed Aug 31 2026 with the referenced fix PRs still unmerged |
-| **Latest Platform Version** | v1.18.30 |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none returned; both closed `state_reason: completed` by the same closer) |
 
 **Summary:**
@@ -1714,6 +1639,8 @@ Kept ACTIVE (not resolved) explicitly because of the regression pattern requeste
 
 **Re-verification pass (2026-09-10, run 2 — batch 8):** Re-fetched both #20902 and #42524 including full comment threads directly from GitHub. No new comments beyond what this entry already captures; both issues remain closed (`completed`) with no comment from either reporter or a maintainer confirming the hang is actually gone on a current build. Notably, #20902's linked-PR list is larger than previously recorded: alongside the three still-OPEN PRs already cited (#29831, #42756, #44601), there are **two additional PRs — #20901 and #21942 — that were opened specifically to fix this exact issue and were themselves CLOSED without merging.** That means at least two prior fix attempts already failed to land before the three current open ones, reinforcing that "closed as completed" here reflects triage bookkeeping, not a verified resolution. Confidence, classification, and impact all remain correct as recorded (Confirmed / Bug / HIGH). No new workarounds surfaced. Still needs re-verification against v1.18.30 with an actual backgrounded dev-server repro before this could be considered fixed.
 
+**Run 20 (2026-10-25):** The earlier "three still-OPEN fix PRs" statement is out of date: #29831, #42756 and #44601 (the most complete attempt - settles on `exit`, adds bounded stream drain for `AppProcess.run` and the V1 `ShellTool`; closed 2026-09-24 with label `automated-pr-cleanup`) are now all CLOSED unmerged, as are #20901, #21942 and #29108 - six failed fix attempts, zero merged. #42524 and #20902 remain closed `completed` (2026-08-31, by `Hona`) with no merged fix and no linked release note. v1.18.31 - v1.19.4 release notes (checked) contain no bash/shell/spawn hang fix; v1.19.x is maintenance-only (update-channel and Bun changes). Conclusion: **no 1.x fix; behavior presumed unchanged on v1.19.4**, Confirmed confidence and Bug classification stand. **Needs re-verification** with an actual backgrounded dev-server repro on v1.19.4. Workaround #1 (redirect all stdio to a file and detach) remains the only mitigation. Latest 1.x seen: v1.19.4.
+
 **Verification pass (2026-09-10, run 1):** Also cross-checked #33028 (already independently tracked via OC-006's own cluster reference), which corroborates this entry's mechanism from a different angle: a 2026-07-08 code-level analysis on that issue independently identifies a `collectStream`/child-stdout-pipe-never-closes gap in `core/src/process.ts` — the same "grandchild process keeps a pipe open, tool call/close event never fires" root shape described here — plus a separate `awaitToolFibers` timeout gap. Not folded into this entry directly (OC-006 is the more precise home for that cross-reference, and already carries it), but worth noting the two entries describe adjacent halves of what may be one underlying "no bounded wait anywhere in the tool/process output-collection path" defect in OpenCode's runner.
 
 ---
@@ -1725,13 +1652,13 @@ Kept ACTIVE (not resolved) explicitly because of the regression pattern requeste
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/47024 |
 | **Reported** | 2026-09-03 |
-| **Last Activity** | 2026-09-03 |
+| **Last Activity** | 2026-10-19 (closed `completed` by maintainer; fixed in v2.0.0 only) |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | Not stated by reporter; current `dev`/near-1.18.x branch (issue filed 2026-09-03, close to v1.18.30) |
-| **Latest Platform Version** | v1.18.30 |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none returned; maintainer `neriousy` assigned) |
 
 **Summary:**
@@ -1753,6 +1680,8 @@ Single-reporter issue, but promoted above Unverified on the strength of the prec
 
 **Re-verification pass (2026-09-10, run 2 — batch 8):** Re-fetched #47024 — issue remains OPEN with zero comments (confirmed via `get_comments` returning an empty array); PR #47027 remains OPEN, unmerged. No change in status. All fields (Confirmed / Bug / HIGH) still accurate — no changes made. Recently filed (2026-09-03) so no staleness flag warranted yet.
 
+**Run 20 (2026-10-25):** Closed upstream 2026-10-19 (`completed`) by maintainer `neriousy` with the comment: "In v2.0.0 and later, the runner waits for all concurrent tool executions to settle independently before marking any remaining calls as failed. The old ToolOutputStore encoding stage is also gone... If you still see this on v2, please open a new issue." Fix PR #47027 was CLOSED unmerged (2026-10-03, `automated-pr-cleanup`). So the fix exists only in 2.x (it was a rewrite, not a 1.x patch): **no 1.x fix**. Kept active per rule, **Needs re-verification**. Caveat for the primary: the PR author describes the code as "the V2 runner" (`packages/core/src/session/runner/llm.ts`, `ToolOutputStore`), so this defect may never have existed in the 1.x runner at all (cf. OC-086, moved to resolved as 2.x-only this run); if a 1.x repro cannot be established it should be retired as N/A (2.x-only). Workaround (verify-before-retry) unchanged.
+
 ---
 
 ### OC-046: glob (V2) drops the truncation flag — model can't tell "exactly N results" from "N of many, truncated"
@@ -1762,13 +1691,13 @@ Single-reporter issue, but promoted above Unverified on the strength of the prec
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/45910 |
 | **Reported** | 2026-08-28 |
-| **Last Activity** | 2026-08-28 |
+| **Last Activity** | 2026-10-22 (closed `completed`; fixed in V2 glob only) |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | "latest dev" as of 2026-08-28 |
-| **Latest Platform Version** | v1.18.30 |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none returned; maintainer `neriousy` assigned) |
 
 **Summary:**
@@ -1793,6 +1722,8 @@ Single-reporter, no independent community confirmation yet, but promoted to Conf
 
 **Re-verification pass (2026-09-10, run 2 — batch 8):** Re-fetched #45910 — issue remains OPEN, still only the one bot duplicate-flag comment (to #45186), no maintainer response beyond the `neriousy` assignment, no fix PR opened against #45910 itself (fix activity is on #45186's PR #45194, as already noted). No change in status. All fields (Confirmed / Bug / MEDIUM) still accurate — no changes made.
 
+**Run 20 (2026-10-25):** #45910 closed `completed` 2026-10-22 by maintainer `neriousy`: "Fixed on dev in #38631: the V2 glob tool fetches limit+1 results, sets `truncated` in the metadata, and adds a 'Results are truncated' notice (packages/core/src/tool/plugin/glob.ts)" - i.e. a **V2/2.x-only fix**. The sibling #45186 (1.x `packages/opencode/src/tool/glob.ts` false-positive `files.length === limit` heuristic, plus the same heuristic in `grep.ts`) was closed `completed` 2026-10-19 with "fixed in v2"; its fix PR #45194 was CLOSED unmerged. **No 1.x fix** for either direction. Scope note: the original "no truncation signal" symptom is specific to the V2 glob tool (V1 glob reports truncation, but with the false-positive-at-exactly-limit heuristic), so for a pure 1.x deployment the live residual is the false-positive direction (agent wastes a narrower re-search; low harm). Kept active per rule, **Needs re-verification** on v1.19.4; consider retiring as N/A once confirmed 1.x glob has no under-reporting. Impact arguably LOW on 1.x - not changed (impact is a judgement for the primary).
+
 ---
 
 ### OC-047: grep tool silently returns empty results (no error) when the search path does not exist
@@ -1802,13 +1733,13 @@ Single-reporter, no independent community confirmation yet, but promoted to Conf
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/45293 |
 | **Reported** | 2026-08-26 |
-| **Last Activity** | 2026-08-26 |
+| **Last Activity** | 2026-10-19 (closed `completed`; fixed in v2 only) |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | "dev" as of 2026-08-26 |
-| **Latest Platform Version** | v1.18.30 |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none returned; no assignee listed) |
 
 **Summary:**
@@ -1830,6 +1761,8 @@ No comments beyond the automatic bot/PR linkage; confidence rests on the precise
 
 **Verification pass (2026-09-10, run 2):** Re-fetched issue #45293 — no new comments (still 0), state unchanged (open). Both fix PRs (#45300, #46150) remain open/unmerged; the two earlier closed attempts (#45241, #46237) are still closed. No change to classification, confidence, impact, or workarounds. Not stale (15 days since report/last activity, well under the 6-week threshold), but no new evidence either — carried forward as-is.
 
+**Run 20 (2026-10-25):** Closed `completed` 2026-10-19 by maintainer `neriousy`: "This is fixed in v2: grep now reports 'Search path does not exist' when the requested file or directory is missing... If you still see this on v2, please open a new issue." All five fix PRs (#45241, #45300, #46150, #46237, and #52208 "fix(opencode): report missing grep search path instead of returning empty", which patches the 1.x `packages/opencode/src/tool/grep.ts`) are CLOSED unmerged. Fixed in 2.x only; **no 1.x fix** (1.x grep code, which lacks a missing-path check per PR #52208's diff, is presumed still affected). Kept active, **Needs re-verification** on v1.19.4. Workaround (verify path exists before trusting zero matches) unchanged.
+
 ---
 
 ### OC-048: Plan mode's file-write restriction is a prompt-level instruction, not a tool-execution-layer lock — model can bypass it via bash (and default `ask` permission on bash sometimes never triggers)
@@ -1839,13 +1772,13 @@ No comments beyond the automatic bot/PR linkage; confidence rests on the precise
 | **Classification** | Bug |
 | **Source** | https://github.com/anomalyco/opencode/issues/39491 |
 | **Reported** | 2026-07-29 |
-| **Last Activity** | 2026-09-09 |
+| **Last Activity** | 2026-10-11 (mass-closed not_planned: "OpenCode 2.0 is out"; no fix) |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 1.18.9 (original report); reconfirmed as recently as 2026-09-09 with no version stated, implying it persists on current releases |
-| **Latest Platform Version** | v1.18.30 |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | (none returned; maintainer `nexxeln` assigned) |
 
 **Summary:**
@@ -1869,6 +1802,8 @@ Classified as Bug rather than pure Limitation because the docs specifically clai
 
 **Verification pass (2026-09-10, run 2):** Re-fetched issue #39491 and all 5 comments. The bot-referenced duplicate resolved to **#10741** ("plan mode has no hard system-level guard against file writes, so the model can bypass restrictions via bash commands... not consistently reproducible") — confirming this has been an unaddressed architectural gap since at least early 2026, now spanning two separate report clusters. A fourth independent reporter (@xenos1984, 2026-09-09) confirmed the identical bypass on the current release with no version regression noted, and quoted the exact doc language ("set to ask") that the behavior contradicts — reinforcing Confirmed confidence and that this is not stale. No fix PR opened yet; assignee `nexxeln` has not commented. No change to classification, confidence, impact, or workarounds — entry remains accurate as-is.
 
+**Run 20 (2026-10-25):** #39491 closed `not_planned` 2026-10-11 by `thdxr` with the v1 mass-close template ("OpenCode 2.0 is now out and development is focused on V2, so we're closing issues filed against OpenCode 1"). No fix PR was ever opened (the reporter's "I'll make a pull request soon" never materialized), no maintainer technical comment. Not a fix - kept active; no 1.x fix, behavior presumed unchanged on v1.19.4 (whether 2.x changed plan-mode enforcement is out of scope here). **Needs re-verification** on v1.19.4. Workaround unchanged (explicit `permission.bash: "ask"` in plan agent config; or OS-level read-only sandbox).
+
 ---
 
 ### OC-099: `session.idle` plugin handler is not awaited when `opencode run` exits - work after its first `await` (including SDK calls) is lost
@@ -1884,7 +1819,7 @@ Classified as Bug rather than pure Limitation because the docs specifically clai
 | **Reproduced at MOSAIC** | Yes |
 | **MOSAIC Response** | Mitigated: the mosaic-logger plugin writes `invocation_end` before its first `await` and exports the transcript during the session; the Runner appends a fallback `invocation_end` after the process exits |
 | **Version(s) Affected** | 1.18.18 (unknown for other versions) |
-| **Latest Platform Version** | v1.18.30 (2026-09-09) |
+| **Latest Platform Version** | v1.19.4 (2026-10-22) |
 | **Labels** | `area:plugins`, `area:non-interactive` |
 
 **Summary:**
@@ -1903,3 +1838,5 @@ Handler instrumented with timestamps in `opencode run`: work before the first `a
 
 **Notes:**
 Not probed: other OpenCode versions, interactive TUI exit, other event handlers. Same class of behaviour as CC-082 (async hooks killed on `-p` exit) and, loosely, GC-020.
+
+**Run 20 (2026-10-25) upstream check:** No upstream issue found that covers the un-awaited `session.idle` plugin handler on `opencode run` exit (searched anomalyco/opencode; nothing filed by or for this). Adjacent, not equivalent: bot-listed older v1 reports of `opencode run` losing trailing events when the process exits at idle (#26855 final `step_finish` missing, #31435 events dropped when delivery raced idle, #38661 `run --attach` exiting early), all closed; the same symptom class persists in the 2.x client (#53207, fix PR #53208 open) - 2.x info only, not a v1 entry. Not read in depth; do not treat as confirmation or as a fix. No 1.x release note v1.18.31 - v1.19.4 mentions a change to plugin event awaiting at exit, so the Limitation presumably still holds on v1.19.4 (only reproduced at MOSAIC on 1.18.18). Confidence and MOSAIC fields unchanged.
