@@ -96,8 +96,10 @@ func TestRun_RunIDPreludeInjectionPreservesEverySubjectFieldExceptOpeningMessage
 	if got.InvocationKind != want.InvocationKind {
 		t.Errorf("subject.InvocationKind = %q, want %q", got.InvocationKind, want.InvocationKind)
 	}
-	if got.Model != want.Model {
-		t.Errorf("subject.Model = %q, want %q", got.Model, want.Model)
+	// The spawned subject carries the selected subject model, not the
+	// authored legacy field; the prelude injection must not disturb it.
+	if wantModel := req.Test.Models.Subject; got.Model != wantModel {
+		t.Errorf("subject.Model = %q, want the selected subject model %q", got.Model, wantModel)
 	}
 	if len(got.AllowedTools) != 1 || got.AllowedTools[0] != "dispatch" {
 		t.Errorf("subject.AllowedTools = %v, want %v unchanged", got.AllowedTools, want.AllowedTools)

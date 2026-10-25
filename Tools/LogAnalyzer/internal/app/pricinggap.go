@@ -8,51 +8,49 @@ import (
 	"mosaic-log-analyzer/internal/domain"
 )
 
-// PricingGap describes one model the report could not price.
+// PricingGap describes one (provider, model) the report could not price.
 type PricingGap struct {
+	// Key is the unpriced (provider, model); an empty provider is a record
+	// that logged none (top-level models section).
+	Key domain.PricingKey
+	// Model is Key.Model.
 	Model domain.ModelID
-	// Occurrences is how many actor reports listed this model as unpriced,
+	// Occurrences is how many actor reports listed this key as unpriced,
 	// useful for display ordering.
 	Occurrences int
 }
 
-// PricingGaps lists the unpriced models in a report, in the order they appear
-// in Report.UnpricedModels (sorted by model id). An empty slice is returned
-// when the report has no unpriced models.
+// PricingGaps lists the unpriced keys in a report, in the order they appear
+// in Report.UnpricedModels (by model id, then provider). An empty slice is
+// returned when the report has no unpriced models.
 func PricingGaps(r domain.Report) []PricingGap {
 	if len(r.UnpricedModels) == 0 {
 		return nil
 	}
 
-	// Count how many actor reports list each model as unpriced.
-	occurrences := make(map[domain.ModelID]int)
-	for _, run := range r.Runs {
-		for _, m := range run.Orchestrator.UnpricedModels {
-			occurrences[m]++
-		}
-		for _, agent := range run.Agents {
-			for _, m := range agent.UnpricedModels {
-				occurrences[m]++
-			}
+	// Count how many actor reports list each key as unpriced.
+	occurrences := make(map[domain.PricingKey]int)
+	count := func(actor domain.ActorReport) {
+		for _, k := range actor.UnpricedModels {
+			occurrences[k]++
 		}
 	}
+	countRun := func(run domain.RunReport) {
+		count(run.Orchestrator)
+		for _, agent := range run.Agents {
+			count(agent)
+		}
+	}
+	for _, run := range r.Runs {
+		countRun(run)
+	}
 	if r.Unattributable != nil {
-		for _, m := range r.Unattributable.Orchestrator.UnpricedModels {
-			occurrences[m]++
-		}
-		for _, agent := range r.Unattributable.Agents {
-			for _, m := range agent.UnpricedModels {
-				occurrences[m]++
-			}
-		}
+		countRun(*r.Unattributable)
 	}
 
 	gaps := make([]PricingGap, len(r.UnpricedModels))
-	for i, model := range r.UnpricedModels {
-		gaps[i] = PricingGap{
-			Model:       model,
-			Occurrences: occurrences[model],
-		}
+	for i, key := range r.UnpricedModels {
+		gaps[i] = PricingGap{Key: key, Model: key.Model, Occurrences: occurrences[key]}
 	}
 	return gaps
 }
@@ -110,7 +108,7 @@ func (s *Service) ResolvePricingGaps(ctx context.Context, sess *Session, r domai
 	case PricingActionEnter:
 		anyPersisted := false
 		for _, gap := range gaps {
-			entry, ok, err := s.collectPricingEntry(ctx, gap.Model)
+			entry, ok, err := s.collectPricingEntry(ctx, gap.Key)
 			if err != nil {
 				return r, err
 			}
@@ -123,7 +121,7 @@ func (s *Service) ResolvePricingGaps(ctx context.Context, sess *Session, r domai
 			s.deps.Interaction.Notify(ctx, interaction.Notice{
 				Level:   interaction.NoticeInfo,
 				Title:   "Saved",
-				Message: "Pricing for " + string(gap.Model) + " saved to " + s.deps.Pricing.Path(),
+				Message: "Pricing for " + gap.Key.String() + " saved to " + s.deps.Pricing.Path(),
 			})
 			anyPersisted = true
 		}
@@ -140,61 +138,27 @@ func (s *Service) ResolvePricingGaps(ctx context.Context, sess *Session, r domai
 	}
 }
 
-// collectPricingEntry asks the user for pricing rates for a single model via
-// the Interaction port. Returns (entry, true, nil) when enough rates were
-// supplied to form a valid ModelPricing; returns (zero, false, nil) when the
-// user skipped all rate questions or the resulting entry fails validation.
-func (s *Service) collectPricingEntry(ctx context.Context, model domain.ModelID) (domain.ModelPricing, bool, error) {
-	entry := domain.ModelPricing{Model: model}
+// collectPricingEntry asks the user for pricing rates for a single (provider,
+// model) key via
+// the Interaction port: the five standard rates, then an optional threshold that
+// opens a long-context block with its own five rates. Returns (entry, true, nil)
+// when the answers form a valid ModelPricing; returns (zero, false, nil) when the
+// user skipped all standard rate questions or the resulting entry fails validation.
+func (s *Service) collectPricingEntry(ctx context.Context, key domain.PricingKey) (domain.ModelPricing, bool, error) {
+	entry := domain.ModelPricing{Provider: key.Provider, Model: key.Model}
 
-	type rateField struct {
-		name string
-		set  func(r domain.Rate)
+	answered, err := s.askRateSet(ctx, key, "", &entry.Standard)
+	if err != nil {
+		return domain.ModelPricing{}, false, err
 	}
 
-	fields := []rateField{
-		{RateFieldInput, func(r domain.Rate) { entry.Input = r }},
-		{RateFieldCachedInput, func(r domain.Rate) { entry.CachedInput = r }},
-		{RateFieldCacheWrite, func(r domain.Rate) { entry.CacheWrite = r }},
-		{RateFieldOutputUnderThreshold, func(r domain.Rate) { entry.OutputUnderThreshold = r }},
-		{RateFieldOutputAtThreshold, func(r domain.Rate) { entry.OutputAtThreshold = r }},
-	}
-
-	answeredCount := 0
-	for _, f := range fields {
-		ans, err := s.deps.Interaction.AskText(ctx, interaction.TextQuestion{
-			Question: interaction.Question{
-				ID:      QuestionPricingRate,
-				Subject: string(model) + ":" + f.name,
-				Title:   f.name,
-				Prompt:  "USD per million tokens for " + string(model) + " " + f.name + ":",
-			},
-			Validate: func(v string) error {
-				_, verr := domain.ParseRate(v)
-				return verr
-			},
-		})
-		if err != nil {
-			return domain.ModelPricing{}, false, err
-		}
-		if ans.Status != interaction.Answered {
-			continue
-		}
-		r, err := domain.ParseRate(ans.Text)
-		if err != nil {
-			continue
-		}
-		f.set(r)
-		answeredCount++
-	}
-
-	// Ask for the optional context-length threshold.
+	// Ask for the optional long-context threshold.
 	thAns, err := s.deps.Interaction.AskText(ctx, interaction.TextQuestion{
 		Question: interaction.Question{
 			ID:      QuestionPricingThreshold,
-			Subject: string(model),
-			Title:   "Context length threshold",
-			Prompt:  "Enter context token count for long-context tier (empty = no tier):",
+			Subject: key.String(),
+			Title:   "Long-context threshold",
+			Prompt:  "Enter the token count above which long-context rates apply (empty = no long-context tier):",
 		},
 	})
 	if err != nil {
@@ -203,12 +167,15 @@ func (s *Service) collectPricingEntry(ctx context.Context, model domain.ModelID)
 	if thAns.Status == interaction.Answered && thAns.Text != "" {
 		threshold, parseErr := strconv.ParseInt(thAns.Text, 10, 64)
 		if parseErr == nil && threshold > 0 {
-			entry.ContextLengthThreshold = threshold
-			entry.HasThreshold = true
+			entry.LongContext.Threshold = threshold
+			entry.HasLongContext = true
+			if _, err := s.askRateSet(ctx, key, LongContextFieldPrefix, &entry.LongContext.Rates); err != nil {
+				return domain.ModelPricing{}, false, err
+			}
 		}
 	}
 
-	if answeredCount == 0 {
+	if answered == 0 {
 		return domain.ModelPricing{}, false, nil
 	}
 
@@ -218,6 +185,52 @@ func (s *Service) collectPricingEntry(ctx context.Context, model domain.ModelID)
 	}
 
 	return entry, true, nil
+}
+
+// askRateSet asks the five rate questions of one rate set, storing each answered
+// rate into dst, and returns how many were answered. The prefix is empty for the
+// standard set and LongContextFieldPrefix for the long-context set.
+func (s *Service) askRateSet(ctx context.Context, key domain.PricingKey, prefix string, dst *domain.RateSet) (int, error) {
+	fields := []struct {
+		name string
+		set  *domain.Rate
+	}{
+		{RateFieldInput, &dst.Input},
+		{RateFieldCacheRead, &dst.CacheRead},
+		{RateFieldCacheWrite5m, &dst.CacheWrite5m},
+		{RateFieldCacheWrite1h, &dst.CacheWrite1h},
+		{RateFieldOutput, &dst.Output},
+	}
+
+	answered := 0
+	for _, f := range fields {
+		name := prefix + f.name
+		ans, err := s.deps.Interaction.AskText(ctx, interaction.TextQuestion{
+			Question: interaction.Question{
+				ID:      QuestionPricingRate,
+				Subject: key.String() + ":" + name,
+				Title:   name,
+				Prompt:  "USD per million tokens for " + key.String() + " " + name + ":",
+			},
+			Validate: func(v string) error {
+				_, verr := domain.ParseRate(v)
+				return verr
+			},
+		})
+		if err != nil {
+			return answered, err
+		}
+		if ans.Status != interaction.Answered {
+			continue
+		}
+		r, err := domain.ParseRate(ans.Text)
+		if err != nil {
+			continue
+		}
+		*f.set = r
+		answered++
+	}
+	return answered, nil
 }
 
 // SavePricing persists one entry via the PricingStore and folds it into the

@@ -245,6 +245,11 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
+	if req.StrictModels {
+		if serr := s.strictModelsError(p.Gaps); serr != nil {
+			return domain.RunSummary{}, serr
+		}
+	}
 	for _, g := range p.Gaps {
 		s.deps.Todo.AddGap(g)
 	}

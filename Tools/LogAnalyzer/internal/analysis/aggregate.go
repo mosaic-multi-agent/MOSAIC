@@ -22,6 +22,9 @@ type runState struct {
 	// FindingCrossStreamRecord has already been raised. Subsequent foreign
 	// observations of the same record_id produce no additional finding.
 	crossStreamReported map[string]bool
+	// activity accumulates the run model; nil until the first related event.
+	activity *runActivityState
+	facts    *factsState // digest facts; nil until the first event
 }
 
 // actorState holds mutable state for one actor within a run.
@@ -95,6 +98,7 @@ func NewAggregator() *Aggregator {
 // attributed to an actor produce a Finding rather than being dropped silently.
 func (a *Aggregator) Add(ref domain.StreamRef, ev domain.Event) {
 	rs := a.getOrCreateRunState(ref.Run)
+	a.recordFacts(rs, ref, ev)
 
 	// Handle run-completion markers before any other processing.
 	switch ev.Type {
@@ -106,7 +110,12 @@ func (a *Aggregator) Add(ref domain.StreamRef, ev domain.Event) {
 	// Benign event types carry no attribution-relevant field blocks.
 	// They must be silently discarded with no finding and no totals change.
 	switch ev.Type {
-	case domain.EventOther, domain.EventRunStart, domain.EventSessionStart:
+	case domain.EventOther, domain.EventRunStart, domain.EventSessionStart, domain.EventNotification:
+		return
+	}
+
+	// Tool-call and compaction events feed the run model only.
+	if a.recordToolOrCompaction(rs, ref, ev) {
 		return
 	}
 
@@ -170,9 +179,11 @@ func (a *Aggregator) handleOrchestratorEvent(rs *runState, ref domain.StreamRef,
 			return
 		}
 		rs.orchestrator.invocations = append(rs.orchestrator.invocations, domain.InvocationUsage{
-			Model:   ev.Turn.Model,
-			Harness: ev.Harness,
-			Usage:   ev.Turn.Usage,
+			Model:    ev.Turn.Model,
+			Provider: ev.Turn.Provider,
+			Harness:  ev.Harness,
+			Usage:    ev.Turn.Usage,
+			At:       ev.Timestamp,
 		})
 
 	default:
@@ -255,9 +266,12 @@ func (a *Aggregator) handleUsageRecord(rs *runState, ref domain.StreamRef, ev do
 	}
 
 	entry := domain.InvocationUsage{
-		Model:   rec.Model,
-		Harness: ev.Harness,
-		Usage:   rec.Usage,
+		Model:    rec.Model,
+		Provider: rec.Provider,
+		Effort:   rec.Effort,
+		Harness:  ev.Harness,
+		Usage:    rec.Usage,
+		RecordID: rec.RecordID, At: ev.Timestamp, ServiceTier: rec.ServiceTier,
 	}
 
 	if rec.RecordID == "" {
@@ -336,6 +350,7 @@ func (a *Aggregator) handleInvocationStart(rs *runState, ref domain.StreamRef, e
 		return
 	}
 
+	rs.recordInvocationStart(id, ev.Timestamp)
 	as := a.getOrCreateActorState(rs, id)
 	if ev.InvocationStart.AgentType != "" {
 		as.actor.Type = ev.InvocationStart.AgentType
@@ -367,6 +382,7 @@ func (a *Aggregator) handleInvocationEnd(rs *runState, ref domain.StreamRef, ev 
 		return
 	}
 
+	rs.recordInvocationEnd(id, end, ev.Timestamp)
 	actor := domain.AgentInstance(id)
 
 	// Quality findings do not halt aggregation; the invocation is still recorded.
@@ -393,9 +409,11 @@ func (a *Aggregator) handleInvocationEnd(rs *runState, ref domain.StreamRef, ev 
 	as := a.getOrCreateActorState(rs, id)
 	// Preserve the actor instance set at creation; only add the invocation record.
 	as.invocations = append(as.invocations, domain.InvocationUsage{
-		Model:   end.Model,
-		Harness: ev.Harness,
-		Usage:   end.Usage,
+		Model:    end.Model,
+		Provider: end.Provider,
+		Harness:  ev.Harness,
+		Usage:    end.Usage,
+		At:       ev.Timestamp,
 	})
 }
 
@@ -460,13 +478,16 @@ func buildRunAggregate(rs *runState) domain.RunAggregate {
 		})
 	}
 
-	return domain.RunAggregate{
+	out := domain.RunAggregate{
 		Run:         rs.run,
 		Provisional: rs.provisional,
 		Orchestrator: domain.ActorAggregate{
 			Actor:       rs.orchestrator.actor,
 			Invocations: rs.orchestrator.effective(),
 		},
-		Agents: agents,
+		Agents:   agents,
+		Activity: buildActivity(rs),
 	}
+	applyFacts(rs, &out)
+	return out
 }

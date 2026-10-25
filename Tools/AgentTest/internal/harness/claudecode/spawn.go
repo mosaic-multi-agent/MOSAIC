@@ -31,6 +31,9 @@ const ClaudeCLIExecutable = "claude"
 // reaches an adapter). Timeout is set from this adapter's own backstop
 // constant, DefaultSpawnTimeout; no turn-limit flag is ever added to Args.
 func (a *Adapter) SpawnPlan(ctx context.Context, subject domain.SubjectUnderTest, p domain.Provisioning) (domain.SpawnPlan, error) {
+	if subject.Model == "" {
+		return domain.SpawnPlan{}, fmt.Errorf("%s: %w", "claudecode", domain.ErrNoSubjectModel)
+	}
 	spawnReq := commonharness.SpawnRequest{
 		Agent: commonharness.AgentRef{
 			Identifier:     subject.Identity,
@@ -43,6 +46,10 @@ func (a *Adapter) SpawnPlan(ctx context.Context, subject domain.SubjectUnderTest
 		OutputFormat:       "json",
 		WorkingDir:         p.Sandbox.SubjectDir,
 		SessionPersistence: true,
+		// The launch-time model wins over the definition's model field, so
+		// the run never depends on the harness default. BuildArgs does not
+		// emit --model for this harness.
+		ExtraArgs: []string{"--model", subject.Model},
 	}
 
 	args, stdin, err := commonharness.BuildArgs(spawnReq)

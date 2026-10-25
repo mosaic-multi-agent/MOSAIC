@@ -77,11 +77,12 @@ func TestEvaluate_SubjectModelDoesNotAffectVerdict(t *testing.T) {
 	// Arrange — otherwise-passing evidence with a model set
 	ev := baseEvidence()
 	ev.SubjectModel = "claude-opus-4-5"
+	ev.ObservedSubjectModels = observedModel("claude-opus-4-5") // verified: observed equals selection
 
 	// Act
 	result := evaluate.Evaluate(ev)
 
-	// Assert: verdict must remain PASS; a model present is not a failure
+	// Assert: verdict must remain PASS; a verified model is not a failure
 	if result.Verdict != domain.VerdictPass {
 		t.Errorf("Evaluate with SubjectModel set produced verdict %q, want %q; "+
 			"SubjectModel is informational and must never influence the verdict",

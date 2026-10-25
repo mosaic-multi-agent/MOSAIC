@@ -60,11 +60,9 @@ type SubjectUnderTest struct {
 	// longer accepts either field, so nothing in the normal path populates
 	// these fields from a parsed test definition any more.
 	//
-	// These fields remain on the struct so the runtime precedence chain in
-	// buildTierModelMap degrades gracefully (returning empty strings rather
-	// than a broken invariant) without a flag day on every call site, and so
-	// the transition is complete before any callers that still set them
-	// directly (in tests) are updated.
+	// These fields remain on the struct only until the remaining readers are
+	// retired. They take no part in tier derivation: the runner's tier-model
+	// map comes solely from ModelSelection.TierModels.
 	Model     string
 	StubModel string
 

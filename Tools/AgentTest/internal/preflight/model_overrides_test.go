@@ -1,24 +1,18 @@
 package preflight_test
 
 // Tests that Overrides.SubjectModel and Overrides.StubModel are copied into
-// every ResolvedTest.Models in the plan returned by Validate (Stage 10).
+// every ResolvedTest.Models in the plan returned by Validate.
 //
 // Model selection is run-level: the same selection applies to every test in
 // the plan. Validate is the only place the override travels from the Overrides
 // struct to the per-test ResolvedTest, so these tests pin that path.
 //
-// Coverage (T10.1):
+// Coverage:
 //   - Overrides.SubjectModel reaches every ResolvedTest.Models.Subject.
 //   - Overrides.StubModel reaches every ResolvedTest.Models.Stub.
 //
-// Coverage (T10.2):
-//   - Empty overrides leave ResolvedTest.Models at its zero value, so a run
-//     with no frontend model choice falls through to today's authored-field
-//     behaviour rather than to an empty override that silently replaces it.
-//
-// All assertions are in the TDD RED phase: they compile against the current
-// Validate implementation and fail because Validate does not yet copy
-// SubjectModel/StubModel into ResolvedTest.Models.
+// A run with no subject model selection is rejected; that rule is covered in
+// subject_selection_test.go.
 
 import (
 	"path/filepath"
@@ -115,11 +109,11 @@ const testBRegistry = `{
 func twoTestTree(t *testing.T) string {
 	t.Helper()
 	return writeTree(t, map[string]string{
-		"s.suite.yaml":       twoTestSuite,
-		"test-a.test.yaml":   testADefinition,
-		"test-b.test.yaml":   testBDefinition,
-		"test-a.stubs.json":  testARegistry,
-		"test-b.stubs.json":  testBRegistry,
+		"s.suite.yaml":         twoTestSuite,
+		"test-a.test.yaml":     testADefinition,
+		"test-b.test.yaml":     testBDefinition,
+		"test-a.stubs.json":    testARegistry,
+		"test-b.stubs.json":    testBRegistry,
 		"agents/researcher.md": "# stub researcher placeholder",
 	})
 }
@@ -226,44 +220,6 @@ func TestValidate_BothModelOverrides_ReachEveryResolvedTest(t *testing.T) {
 		if rt.Models.Stub != "runtime-stub-model" {
 			t.Errorf("plan.Tests[%d].Models.Stub = %q, want %q",
 				i, rt.Models.Stub, "runtime-stub-model")
-		}
-	}
-}
-
-// TestValidate_EmptyModelOverrides_LeaveModelsZeroValued asserts that when
-// neither Overrides.SubjectModel nor Overrides.StubModel is set, every
-// ResolvedTest.Models remains zero-valued. A zero-valued ModelSelection means
-// "no run-time choice was made" and the runner falls through to the authored
-// fields — today's behaviour, which must remain intact.
-func TestValidate_EmptyModelOverrides_LeaveModelsZeroValued(t *testing.T) {
-	root := twoTestTree(t)
-
-	plan, report := preflight.Validate(preflight.Input{
-		SuitePath:   filepath.Join(root, "s.suite.yaml"),
-		FixtureRoot: filepath.Join(root, "fixtures"),
-		HarnessID:   "claude-code",
-		// Overrides intentionally has no SubjectModel or StubModel.
-		Overrides: preflight.Overrides{},
-	})
-
-	if report.HasErrors() {
-		t.Fatalf("Validate returned unexpected errors: %v", report.Diagnostics)
-	}
-	if len(plan.Tests) == 0 {
-		t.Fatal("Plan contains no tests; want at least one test from the two-test suite")
-	}
-
-	for i, rt := range plan.Tests {
-		if rt.Models.Subject != "" {
-			t.Errorf("plan.Tests[%d].Models.Subject = %q, want empty string; "+
-				"absent model overrides must not inject a non-empty value into Models.Subject — "+
-				"the runner must see the zero value and fall through to today's authored-field behaviour",
-				i, rt.Models.Subject)
-		}
-		if rt.Models.Stub != "" {
-			t.Errorf("plan.Tests[%d].Models.Stub = %q, want empty string; "+
-				"absent model overrides must not inject a non-empty value into Models.Stub",
-				i, rt.Models.Stub)
 		}
 	}
 }

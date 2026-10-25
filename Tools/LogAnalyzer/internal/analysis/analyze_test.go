@@ -33,30 +33,30 @@ func mustParseRateAnalyze(t *testing.T, s string) domain.Rate {
 	return r
 }
 
-// flatModelPricing returns a ModelPricing with no long-context threshold.
-// Rates: input="3.00", cachedInput="0.30", cacheWrite="3.75", outputUnder="15.00".
+// flatModelPricing returns a ModelPricing with no long-context tier.
+// Rates: input="3.00", cacheRead="0.30", cacheWrite5m="3.75", cacheWrite1h="6.00", output="15.00".
 func flatModelPricing(t *testing.T, model domain.ModelID) domain.ModelPricing {
 	t.Helper()
 	return domain.ModelPricing{
-		Model:                model,
-		Input:                mustParseRateAnalyze(t, "3.00"),
-		CachedInput:          mustParseRateAnalyze(t, "0.30"),
-		CacheWrite:           mustParseRateAnalyze(t, "3.75"),
-		OutputUnderThreshold: mustParseRateAnalyze(t, "15.00"),
-		HasThreshold:         false,
+		Model: model,
+		Standard: domain.RateSet{
+			Input:        mustParseRateAnalyze(t, "3.00"),
+			CacheRead:    mustParseRateAnalyze(t, "0.30"),
+			CacheWrite5m: mustParseRateAnalyze(t, "3.75"),
+			CacheWrite1h: mustParseRateAnalyze(t, "6.00"),
+			Output:       mustParseRateAnalyze(t, "15.00"),
+		},
 	}
 }
 
-// tieredModelPricing returns a ModelPricing with a long-context threshold.
-// Rates: input="3.00", cachedInput="0.30", cacheWrite="3.75",
-//
-//	outputUnder="15.00", outputAt="22.50".
+// tieredModelPricing returns a ModelPricing with a long-context tier. The tier
+// repeats the standard rates except output, which is "22.50".
 func tieredModelPricing(t *testing.T, model domain.ModelID, threshold int64) domain.ModelPricing {
 	t.Helper()
 	p := flatModelPricing(t, model)
-	p.OutputAtThreshold = mustParseRateAnalyze(t, "22.50")
-	p.ContextLengthThreshold = threshold
-	p.HasThreshold = true
+	p.HasLongContext = true
+	p.LongContext = domain.LongContextPricing{Threshold: threshold, Rates: p.Standard}
+	p.LongContext.Rates.Output = mustParseRateAnalyze(t, "22.50")
 	return p
 }
 
@@ -162,7 +162,7 @@ func TestPrice_PricedModel_ReturnsKnownMoney(t *testing.T) {
 }
 
 func TestPrice_PricedModel_OutputUnderThreshold(t *testing.T) {
-	// Context < threshold → output priced at OutputUnderThreshold.
+	// Context < threshold → output priced at the standard output rate.
 	// 1_000_000 output tokens at "15.00"/1M = 15_000_000_000 nanos.
 	model := domain.ModelID("test-model")
 	table := domain.NewPricingTable([]domain.ModelPricing{tieredModelPricing(t, model, 200_000)})
@@ -186,7 +186,7 @@ func TestPrice_PricedModel_OutputUnderThreshold(t *testing.T) {
 }
 
 func TestPrice_PricedModel_OutputAtThreshold(t *testing.T) {
-	// Context >= threshold → output priced at OutputAtThreshold.
+	// Context >= threshold → output priced at the long-context output rate.
 	// 1_000_000 output tokens at "22.50"/1M = 22_500_000_000 nanos.
 	model := domain.ModelID("test-model")
 	table := domain.NewPricingTable([]domain.ModelPricing{tieredModelPricing(t, model, 200_000)})
@@ -281,7 +281,7 @@ func TestPrice_UnpricedModel_AppearsInUnpricedModelsList(t *testing.T) {
 
 	found := false
 	for _, m := range report.UnpricedModels {
-		if m == "unknown-model" {
+		if m.Model == "unknown-model" {
 			found = true
 			break
 		}

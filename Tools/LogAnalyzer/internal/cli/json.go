@@ -38,6 +38,21 @@ func encodeTokenUsage(u domain.TokenUsage) jsonTokenUsage {
 	}
 }
 
+// jsonReportTokenUsage is the token usage block of the report encoding: the
+// total-contract block plus the reasoning part of output. Reasoning is display
+// only; it is null when not provided.
+type jsonReportTokenUsage struct {
+	jsonTokenUsage
+	Reasoning *int64 `json:"reasoning"`
+}
+
+func encodeReportTokenUsage(u domain.TokenUsage) jsonReportTokenUsage {
+	return jsonReportTokenUsage{
+		jsonTokenUsage: encodeTokenUsage(u),
+		Reasoning:      encodeTokenCount(u.Reasoning),
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Money encoding helpers
 // ---------------------------------------------------------------------------
@@ -104,6 +119,10 @@ type jsonRunTotalWire struct {
 // EncodeRunTotal writes the stable basic total-per-run contract to w.
 // The field set is additive-only; no field is ever removed or retyped.
 func EncodeRunTotal(w io.Writer, t app.RunTotal) error {
+	// Listing choice for `total --format json`: unpriced_models is a list of
+	// model-id strings (the AgentTest contract), and a model id that is
+	// unpriced under several providers is listed once. RunTotal already
+	// carries distinct model ids, so they are copied as they are.
 	var unpricedModels []string
 	for _, m := range t.UnpricedModels {
 		unpricedModels = append(unpricedModels, string(m))
@@ -158,24 +177,48 @@ func encodeCategoryMoney(cm domain.CategoryMoney) jsonCategoryMoney {
 
 // jsonTotals pairs tokens and money side by side.
 type jsonTotals struct {
-	Tokens jsonTokenUsage    `json:"tokens"`
-	Money  jsonCategoryMoney `json:"money"`
+	Tokens jsonReportTokenUsage `json:"tokens"`
+	Money  jsonCategoryMoney    `json:"money"`
+	// AssumedTierCacheWrite counts cache-write tokens priced at the assumed 5m
+	// tier; absent when zero.
+	AssumedTierCacheWrite int64 `json:"assumed_tier_cache_write_tokens,omitempty"`
 }
 
 func encodeTotals(t domain.Totals) jsonTotals {
 	return jsonTotals{
-		Tokens: encodeTokenUsage(t.Tokens),
-		Money:  encodeCategoryMoney(t.Money),
+		Tokens:                encodeReportTokenUsage(t.Tokens),
+		Money:                 encodeCategoryMoney(t.Money),
+		AssumedTierCacheWrite: t.AssumedTierCacheWrite,
 	}
 }
 
 // jsonActorReport is the per-actor breakdown within a run.
 type jsonActorReport struct {
-	Actor          string     `json:"actor"`
-	AgentType      string     `json:"agent_type,omitempty"`
-	Models         []string   `json:"models"`
-	UnpricedModels []string   `json:"unpriced_models"`
-	Totals         jsonTotals `json:"totals"`
+	Actor     string   `json:"actor"`
+	AgentType string   `json:"agent_type,omitempty"`
+	Models    []string `json:"models"`
+	// ModelKeys lists each distinct (provider, model) pair the actor's
+	// requests used; provider is empty when the request logged none.
+	ModelKeys []jsonModelKey `json:"model_keys"`
+	// RequestsWithoutModel counts token-bearing requests that logged no model.
+	RequestsWithoutModel int          `json:"requests_without_model"`
+	UnpricedModels       []string     `json:"unpriced_models"`
+	Totals               jsonTotals   `json:"totals"`
+	Effort               []jsonEffort `json:"effort"`
+}
+
+// jsonModelKey is one provider/model pair as logged.
+type jsonModelKey struct {
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
+}
+
+func encodeModelKeys(keys []domain.PricingKey) []jsonModelKey {
+	out := make([]jsonModelKey, len(keys))
+	for i, k := range keys {
+		out[i] = jsonModelKey{Provider: string(k.Provider), Model: string(k.Model)}
+	}
+	return out
 }
 
 func encodeActorReport(a domain.ActorReport) jsonActorReport {
@@ -183,16 +226,16 @@ func encodeActorReport(a domain.ActorReport) jsonActorReport {
 	for i, m := range a.Models {
 		models[i] = string(m)
 	}
-	unpriced := make([]string, len(a.UnpricedModels))
-	for i, m := range a.UnpricedModels {
-		unpriced[i] = string(m)
-	}
+	unpriced := encodeUnpricedModels(a.UnpricedModels)
 	return jsonActorReport{
-		Actor:          a.Actor.Label(),
-		AgentType:      a.Actor.Type,
-		Models:         models,
-		UnpricedModels: unpriced,
-		Totals:         encodeTotals(a.Totals),
+		Actor:                a.Actor.Label(),
+		AgentType:            a.Actor.Type,
+		Models:               models,
+		ModelKeys:            encodeModelKeys(a.Keys),
+		RequestsWithoutModel: a.RequestsWithoutModel,
+		UnpricedModels:       unpriced,
+		Totals:               encodeTotals(a.Totals),
+		Effort:               encodeEffort(a.Effort),
 	}
 }
 
@@ -204,6 +247,12 @@ type jsonRunReport struct {
 	Orchestrator   jsonActorReport   `json:"orchestrator"`
 	Agents         []jsonActorReport `json:"agents"`
 	UnpricedModels []string          `json:"unpriced_models"`
+
+	Overview    jsonOverview         `json:"overview"`
+	ByAgentType []jsonAgentTypeGroup `json:"by_agent_type"`
+	ByStatus    jsonStatusBreakdown  `json:"by_status"`
+	Tools       jsonToolsBreakdown   `json:"tools"`
+	Timeline    jsonTimeline         `json:"timeline"`
 }
 
 func encodeRunReport(r domain.RunReport) jsonRunReport {
@@ -211,10 +260,7 @@ func encodeRunReport(r domain.RunReport) jsonRunReport {
 	for _, a := range r.Agents {
 		agents = append(agents, encodeActorReport(a))
 	}
-	unpriced := make([]string, 0, len(r.UnpricedModels))
-	for _, m := range r.UnpricedModels {
-		unpriced = append(unpriced, string(m))
-	}
+	unpriced := encodeUnpricedModels(r.UnpricedModels)
 	return jsonRunReport{
 		RunID:          r.Run.Label(),
 		Provisional:    r.Provisional,
@@ -222,6 +268,12 @@ func encodeRunReport(r domain.RunReport) jsonRunReport {
 		Orchestrator:   encodeActorReport(r.Orchestrator),
 		Agents:         agents,
 		UnpricedModels: unpriced,
+
+		Overview:    encodeOverview(r.Overview),
+		ByAgentType: encodeAgentTypeGroups(r.ByAgentType),
+		ByStatus:    encodeStatusBreakdown(r.ByStatus),
+		Tools:       encodeToolsBreakdown(r.Tools),
+		Timeline:    encodeTimeline(r.Timeline),
 	}
 }
 
@@ -286,6 +338,10 @@ func encodeSource(s domain.Source) jsonSource {
 		kind = "single_run"
 	case domain.SourceUnusable:
 		kind = "unusable"
+	case domain.SourceDigestFile:
+		kind = "digest_file"
+	case domain.SourceDigestDir:
+		kind = "digest_dir"
 	}
 	return jsonSource{Kind: kind, Path: s.Path}
 }
@@ -299,6 +355,7 @@ type jsonReportWire struct {
 	Runs           []jsonRunReport `json:"runs"`
 	Unattributable *jsonRunReport  `json:"unattributable,omitempty"`
 	UnpricedModels []string        `json:"unpriced_models"`
+	AcrossRuns     jsonAcrossRuns  `json:"across_runs"`
 	Quality        jsonQuality     `json:"quality"`
 }
 
@@ -321,10 +378,7 @@ func EncodeReport(w io.Writer, r domain.Report) error {
 		unattributable = &enc
 	}
 
-	unpriced := make([]string, 0, len(r.UnpricedModels))
-	for _, m := range r.UnpricedModels {
-		unpriced = append(unpriced, string(m))
-	}
+	unpriced := encodeUnpricedModels(r.UnpricedModels)
 
 	wire := jsonReportWire{
 		SchemaVersion:  "1",
@@ -334,6 +388,7 @@ func EncodeReport(w io.Writer, r domain.Report) error {
 		Runs:           runs,
 		Unattributable: unattributable,
 		UnpricedModels: unpriced,
+		AcrossRuns:     encodeAcrossRuns(r.AcrossRuns),
 		Quality:        encodeQuality(r.Quality),
 	}
 	return json.NewEncoder(w).Encode(wire)

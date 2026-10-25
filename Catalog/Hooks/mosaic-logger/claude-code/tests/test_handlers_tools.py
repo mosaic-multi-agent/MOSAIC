@@ -555,7 +555,7 @@ class TestSubagentScopedRouting(unittest.TestCase):
         tools.handle_pre_tool_use(ctx)
         events = self._invocation_events("SubAgent#7")
         event = events[0]
-        self.assertEqual("1.1.0", event.get("schema_version"))
+        self.assertEqual("1.3.0", event.get("schema_version"))
         self.assertEqual("claude-code", event.get("harness"))
 
     def test_orchestrator_events_and_subagent_events_are_independent(self):

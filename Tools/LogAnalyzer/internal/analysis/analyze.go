@@ -36,13 +36,15 @@ func Price(agg domain.Aggregate, table domain.PricingTable, src domain.Source) (
 	runReports := make([]domain.RunReport, 0, len(agg.Runs))
 	allRunMoneys := make([]domain.CategoryMoney, 0, len(agg.Runs))
 	var allRunTokens domain.TokenUsage
-	allUnpricedModels := make(map[domain.ModelID]bool)
+	var allRunsAssumed int64
+	allUnpricedModels := make(map[domain.PricingKey]bool)
 
 	for _, run := range agg.Runs {
 		rr := priceRunAggregate(run, table)
 		runReports = append(runReports, rr)
 		allRunMoneys = append(allRunMoneys, rr.Totals.Money)
 		allRunTokens = allRunTokens.Add(run.Totals())
+		allRunsAssumed += rr.Totals.AssumedTierCacheWrite
 		for _, m := range rr.UnpricedModels {
 			allUnpricedModels[m] = true
 		}
@@ -56,6 +58,8 @@ func Price(agg domain.Aggregate, table domain.PricingTable, src domain.Source) (
 	allRuns := domain.Totals{
 		Tokens: allRunTokens,
 		Money:  allRunsMoney,
+
+		AssumedTierCacheWrite: allRunsAssumed,
 	}
 
 	var unattribReport *domain.RunReport
@@ -72,7 +76,8 @@ func Price(agg domain.Aggregate, table domain.PricingTable, src domain.Source) (
 		AllRuns:        allRuns,
 		Runs:           runReports,
 		Unattributable: unattribReport,
-		UnpricedModels: sortedModelIDSet(allUnpricedModels),
+		UnpricedModels: domain.SortedPricingKeys(allUnpricedModels),
+		AcrossRuns:     buildAcrossRuns(runReports),
 		Quality:        domain.NewQualitySummary(nil),
 		Currency:       domain.Currency,
 	}, nil
@@ -96,21 +101,31 @@ func Analyze(in Input, table domain.PricingTable, src domain.Source, carried []d
 
 // priceActorAggregate converts one actor's aggregate into a priced ActorReport.
 func priceActorAggregate(actor domain.ActorAggregate, table domain.PricingTable) domain.ActorReport {
-	costs := make([]cost.InvocationCost, len(actor.Invocations))
-	for i, inv := range actor.Invocations {
+	// Entries without any token count are missing-usage markers, not requests.
+	usages := withTokens(actor.Invocations)
+	costs := make([]cost.InvocationCost, len(usages))
+	for i, inv := range usages {
 		costs[i] = cost.PriceInvocation(inv, table)
 	}
 
 	money := cost.SumCosts(costs...)
 	tokens := actor.Totals()
 
+	var assumed int64
 	seenModels := make(map[domain.ModelID]bool)
-	seenUnpriced := make(map[domain.ModelID]bool)
+	seenKeys := make(map[domain.PricingKey]bool)
+	seenUnpriced := make(map[domain.PricingKey]bool)
+	var withoutModel int
 	for _, c := range costs {
-		if !c.Model.IsEmpty() {
+		assumed += c.AssumedTierCacheWrite
+		if c.Model.IsEmpty() {
+			withoutModel++
+		} else {
+			key := domain.PricingKey{Provider: c.Provider, Model: c.Model}
 			seenModels[c.Model] = true
+			seenKeys[key] = true
 			if !c.Priced {
-				seenUnpriced[c.Model] = true
+				seenUnpriced[key] = true
 			}
 		}
 	}
@@ -118,11 +133,16 @@ func priceActorAggregate(actor domain.ActorAggregate, table domain.PricingTable)
 	return domain.ActorReport{
 		Actor:          actor.Actor,
 		Models:         sortedModelIDSet(seenModels),
-		UnpricedModels: sortedModelIDSet(seenUnpriced),
+		Keys:           domain.SortedPricingKeys(seenKeys),
+		UnpricedModels: domain.SortedPricingKeys(seenUnpriced),
+		RequestsWithoutModel: withoutModel,
 		Totals: domain.Totals{
 			Tokens: tokens,
 			Money:  money,
+
+			AssumedTierCacheWrite: assumed,
 		},
+		Effort: domain.CountEffort(usages...),
 	}
 }
 
@@ -143,9 +163,13 @@ func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable) domai
 	}
 
 	runMoney := sumCategoryMoneys(allMoneys...)
+	runAssumed := orchReport.Totals.AssumedTierCacheWrite
+	for _, ar := range agentReports {
+		runAssumed += ar.Totals.AssumedTierCacheWrite
+	}
 
 	// Collect run-level unpriced models from all actors.
-	seenUnpriced := make(map[domain.ModelID]bool)
+	seenUnpriced := make(map[domain.PricingKey]bool)
 	for _, m := range orchReport.UnpricedModels {
 		seenUnpriced[m] = true
 	}
@@ -155,17 +179,28 @@ func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable) domai
 		}
 	}
 
-	return domain.RunReport{
+	rr := domain.RunReport{
 		Run:         run.Run,
 		Provisional: run.Provisional,
 		Totals: domain.Totals{
 			Tokens: run.Totals(),
 			Money:  runMoney,
+
+			AssumedTierCacheWrite: runAssumed,
 		},
 		Orchestrator:   orchReport,
 		Agents:         agentReports,
-		UnpricedModels: sortedModelIDSet(seenUnpriced),
+		UnpricedModels: domain.SortedPricingKeys(seenUnpriced),
 	}
+
+	dispatches := buildDispatches(run.Activity.Invocations, table)
+	groups := groupByType(dispatches)
+	rr.Overview = buildOverview(run, rr, dispatches, table)
+	rr.ByAgentType = buildAgentTypeGroups(groups)
+	rr.ByStatus = buildStatusBreakdown(dispatches, groups)
+	rr.Tools = buildToolsBreakdown(run.Activity, groups)
+	rr.Timeline = buildTimeline(run.Activity)
+	return rr
 }
 
 // sumCategoryMoneys folds a slice of CategoryMoney into one, summing per-category

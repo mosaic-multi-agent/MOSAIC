@@ -76,6 +76,25 @@ func (s *PricingScreen) SelectedModel() domain.ModelID {
 	return s.models[s.cursor].Model
 }
 
+// SelectedKey returns the highlighted (provider, model). Only meaningful when
+// Done() is true; the zero key when the list is empty or the cursor is out of
+// range.
+func (s *PricingScreen) SelectedKey() domain.PricingKey {
+	if len(s.models) == 0 || s.cursor < 0 || s.cursor >= len(s.models) {
+		return domain.PricingKey{}
+	}
+	return statusKey(s.models[s.cursor])
+}
+
+// statusKey is the row's (provider, model); rows built without a Key identify
+// their model only.
+func statusKey(m app.ModelPricingStatus) domain.PricingKey {
+	if m.Key.Model == "" {
+		return domain.PricingKey{Model: m.Model}
+	}
+	return m.Key
+}
+
 // Back reports whether the user pressed Esc.
 func (s *PricingScreen) Back() bool { return s.back }
 
@@ -110,8 +129,8 @@ func (s *PricingScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	return s, nil
 }
 
-// View renders the pricing screen. Stub: shows model names; priced/unpriced
-// distinction and full selectable-list rendering are added in I5.1.
+// View renders the pricing screen: one row per (provider, model) with its
+// priced or unpriced state.
 func (s *PricingScreen) View(width, height int) string {
 	s.width = width
 	s.height = height
@@ -141,7 +160,7 @@ func (s *PricingScreen) View(width, height int) string {
 		} else {
 			status = "  " + AbsentMarker + " unpriced"
 		}
-		sb.WriteString(s.styles.Body.Width(width).Render(prefix + string(m.Model) + status))
+		sb.WriteString(s.styles.Body.Width(width).Render(prefix + statusKey(m).String() + status))
 		sb.WriteByte('\n')
 	}
 

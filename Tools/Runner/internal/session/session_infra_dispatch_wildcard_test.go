@@ -14,6 +14,7 @@ import (
 func TestSession_Start_CommitOnIterationEnd_WildcardOverlappingConcreteEntry_SentOnceAtFirstPosition(t *testing.T) {
 	rig := newBlockRig(t, "infra-contents-wildcard-overlap-orch.md", nil,
 		"planner", "researcher", "synthesizer", infraCommitAgent)
+	rig.queueCommitSetup()
 	rig.queueOK("planner", runFileWrite("TopicPlan.md", scheduleDoc("Topic", "Topics", ids("Pricing", "Support"))))
 	rig.writeRunFiles(t, "A-Pricing-Findings.md", "B-Pricing-Findings.md")
 	rig.queueOK("researcher", runFileWrite("notes-Pricing.md", "# notes\n"))
@@ -23,7 +24,7 @@ func TestSession_Start_CommitOnIterationEnd_WildcardOverlappingConcreteEntry_Sen
 	rig.queueOK("synthesizer", runFileWrite("summary-Support.md", "# summary\n"))
 	rig.queueOK(infraCommitAgent)
 
-	got, err := rig.ses.Start(context.Background(), rig.config("wildcard-overlap", domain.ExecutionModeAuto))
+	got, err := rig.ses.Start(context.Background(), rig.commitsConfig("wildcard-overlap", domain.ExecutionModeAuto))
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
 	reqs := rig.requestsOf(infraCommitAgent)

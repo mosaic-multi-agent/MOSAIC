@@ -160,6 +160,9 @@ func Validate(in Input) (Plan, authoring.Report) {
 		plan.CatalogFolder = *in.Overrides.CatalogFolder
 	}
 
+	checkSubjectSelected(&report, in.Overrides)
+	checkCatalogTiers(&report, plan.CatalogFolder, in.Deploy != nil)
+
 	suiteData, err := os.ReadFile(in.SuitePath)
 	if err != nil {
 		report.Add(authoring.Diagnostic{
@@ -867,20 +870,21 @@ func checkDeploymentDeclarations(report *authoring.Report, defPath, defDir strin
 // (unknown-subject-agent, unknown-workflow) are NOT emitted here: they map
 // reason codes that Deploy never produces.
 func checkSubjectDeploy(report *authoring.Report, defPath string, def domain.TestDefinition, in Input) {
-	_, err := in.Deploy.Deploy(context.Background(), domain.DeployRequest{
-		HarnessID:              in.HarnessID,
-		WorkspaceRoot:          in.DeployScratchRoot,
-		Workflows:              def.Subject.Workflows,
-		InfrastructureAgentIDs: def.Subject.InfrastructureAgentIDs,
-		TierModels:             preflightTierModelMap(def.Subject),
-		DryRun:                 true,
-	})
+	if in.Overrides.SubjectModel == "" {
+		// Nothing is deployed for a run that selected no subject model; the
+		// missing selection is reported on its own.
+		return
+	}
+	err := dryRunDeploy(in, def)
 	if err == nil {
 		return
 	}
 
 	if isToolFailure(err) {
 		addDeployToolProblem(report, err)
+		return
+	}
+	if addStrictDeployFailure(report, defPath, err) {
 		return
 	}
 
@@ -903,21 +907,6 @@ func checkSubjectDeploy(report *authoring.Report, defPath string, def domain.Tes
 		Pointer:  "subject",
 		Message:  fmt.Sprintf("subject declaration failed dry-run deploy: %s", err.Error()),
 	})
-}
-
-// preflightTierModelMap builds the two-entry tier-model map for preflight's
-// dry-run Deploy, using the same derivation as the runner's setup Deploy so
-// the preflight dry run validates the exact model selection the real run will
-// use.
-func preflightTierModelMap(subject domain.SubjectUnderTest) map[string]string {
-	stubModel := subject.StubModel
-	if stubModel == "" {
-		stubModel = subject.Model
-	}
-	return map[string]string{
-		domain.TierTestSubject: subject.Model,
-		domain.TierTestStub:    stubModel,
-	}
 }
 
 // checkSubjectRender performs a dry-run render of the subject declaration and

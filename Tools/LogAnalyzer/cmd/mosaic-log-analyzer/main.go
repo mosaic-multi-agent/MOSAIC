@@ -15,6 +15,7 @@ import (
 
 	"mosaic-log-analyzer/internal/app"
 	"mosaic-log-analyzer/internal/cli"
+	"mosaic-log-analyzer/internal/digest"
 	"mosaic-log-analyzer/internal/logread"
 	"mosaic-log-analyzer/internal/logscan"
 	"mosaic-log-analyzer/internal/pricing"
@@ -29,6 +30,7 @@ var valueFlagNames = map[string]bool{
 	"--path":   true,
 	"--run":    true,
 	"--format": true,
+	"--out":    true,
 }
 
 // wantsTUI reports whether the composition root should launch the interactive TUI.
@@ -138,6 +140,7 @@ func main() {
 	reader := logread.NewReader()
 	pricingStore := pricing.NewStore(workDir)
 	clock := &realClock{}
+	digestStore := digest.NewStore()
 
 	if wantsTUI(args, isatty.IsTerminal) {
 		// TUI mode: create the TUI interaction first so it can be shared between
@@ -149,6 +152,8 @@ func main() {
 			Source:      scanner,
 			Reader:      reader,
 			Pricing:     pricingStore,
+			Digests:     digestStore,
+			ToolVersion: ToolVersion,
 			Clock:       clock,
 			Interaction: tuiInteract,
 			WorkDir:     workDir,
@@ -172,6 +177,8 @@ func main() {
 		Source:      scanner,
 		Reader:      reader,
 		Pricing:     pricingStore,
+		Digests:     digestStore,
+		ToolVersion: ToolVersion,
 		Clock:       clock,
 		Interaction: interact,
 		WorkDir:     workDir,

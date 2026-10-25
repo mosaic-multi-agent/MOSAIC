@@ -432,6 +432,11 @@ type DeployRequest struct {
 	// for each conflict (subject to the apply-to-all latch). This mirrors
 	// UpdateRequest.ConflictDefault and is populated by the deploy --conflict CLI flag.
 	ConflictDefault domain.ConflictDecision
+
+	// StrictModels makes an unresolved agent model fatal. When true, DeployNew returns
+	// *UnresolvedModelsError, before review and before any write, when any agent of the run
+	// would be written without a resolved model. When false, behaviour is unchanged.
+	StrictModels bool
 }
 
 // UpdateRequest carries the caller's pre-answers for the update flow.

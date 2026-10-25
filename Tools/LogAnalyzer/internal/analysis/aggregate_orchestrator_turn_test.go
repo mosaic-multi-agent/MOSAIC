@@ -53,11 +53,14 @@ func orchestratorOnlyInput(events ...domain.Event) analysis.Input {
 // pricingForTurnModel prices only pricedTurnModel.
 func pricingForTurnModel() domain.PricingTable {
 	return domain.NewPricingTable([]domain.ModelPricing{{
-		Model:                pricedTurnModel,
-		Input:                domain.Rate(3_000_000_000),
-		CachedInput:          domain.Rate(300_000_000),
-		CacheWrite:           domain.Rate(3_750_000_000),
-		OutputUnderThreshold: domain.Rate(15_000_000_000),
+		Model: pricedTurnModel,
+		Standard: domain.RateSet{
+			Input:        domain.Rate(3_000_000_000),
+			CacheRead:    domain.Rate(300_000_000),
+			CacheWrite5m: domain.Rate(3_750_000_000),
+			CacheWrite1h: domain.Rate(6_000_000_000),
+			Output:       domain.Rate(15_000_000_000),
+		},
 	}})
 }
 

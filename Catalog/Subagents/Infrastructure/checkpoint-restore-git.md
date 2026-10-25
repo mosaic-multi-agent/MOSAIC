@@ -1,6 +1,6 @@
 ---
 id: 37
-version: 2.2.2
+version: 2.2.3
 name: checkpoint-restore-git
 description: Restores the working tree to a previously captured checkpoint and reconciles the branch with work already committed
 role: subagent
@@ -112,7 +112,7 @@ Where a commit-class agent is running, some of the abandoned work may already be
 
 It is a commit-agent commit, never the checkpoint. Select by these rules, in order:
 
-1. **A run commit whose project content matches the target checkpoint**, if one exists — the newest such. Test: `git diff --quiet {commit} {checkpoint} -- . ':!Orchestration-*'`
+1. **A run commit whose project content matches the target checkpoint**, if one exists — the newest such. Test: `git diff --quiet {commit} {checkpoint} -- . ':!Orchestration-*' ':!OrchestrationLogs' ':!RunnerLogs'`. The log folders are excluded because a checkpoint captures them and a run commit never does.
 2. Otherwise, **the newest run commit whose `Mosaic-Seq` is less than the target's**
 3. If there is none — the target predates the run's first commit — **the run's starting commit**, obtained as the first checkpoint's parent, `refs/mosaic/checkpoints/{run_id}/{first}^`
 4. If rule 3 has no answer either — the run began in a repository with no commits, so the first checkpoint is a root commit — **fall through to case 3**. There is no commit to reset to, and case 3 needs none.
@@ -164,7 +164,14 @@ The middle row is the case tests 1 and 2 miss entirely. A push without `-u` sets
 
 **Repository state is checked against the recorded branch, never the current one.** Before taking case 2 or case 3, verify `HEAD` is on `commit_branch`, is not detached, and that no rebase or merge is in progress. Any failure returns `BLOCKED` without touching the tree. Reading the current branch instead would report where `HEAD` *is*, which always looks self-consistent; it cannot report where the run has been *committing*, which is the only thing that matters — and the user having switched branches mid-run is exactly the case a live read cannot see. A revert on the wrong branch undoes work that branch never contained, while the real branch keeps the abandoned commits and silently corrupts its next commit.
 
-**Case 3's revert commit uses the commit-class pathspec**, `git add -A -- . ':!Orchestration-*'`. Without it a rollback drops run folders into the user's permanent history, on the one path where nothing else is auditing what gets committed.
+**Case 3's revert commit stages exactly as a commit-class agent does** — both commands, in this order:
+
+```
+git add -A -- .
+git reset -q -- ':(glob)Orchestration-*/**' ':(glob)OrchestrationLogs/**' ':(glob)RunnerLogs/**'
+```
+
+Without it a rollback drops run folders and logs into the user's permanent history, on the one path where nothing else is auditing what gets committed. A single `git add` with exclusion pathspecs fails when the user's `.gitignore` lists one of these folders, and `reset` leaves a folder the user tracks at its `HEAD` state.
 
 **Case 3's revert commit carries the standard provenance trailers**, `Mosaic-Run-Id` from the invocation and `Mosaic-Seq` from your own `agent_instance_id`, so a commit found later is attributable to its run without the run folder, and so a second rollback can identify the newest run commit unambiguously.
 

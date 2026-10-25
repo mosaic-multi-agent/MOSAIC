@@ -92,16 +92,21 @@ type RunEvidence struct {
 	// value.
 	SubjectVersion string
 
-	// SubjectModel and StubModel are the models this run actually used, taken
+	// SubjectModel and StubModel are the models selected for this run, taken
 	// from the same tier-model map the deployment port was given — not from a
 	// parallel source, and not from the test definition, which no longer
-	// carries one.
+	// carries one. They are the selection, not proof of what ran; see
+	// ObservedSubjectModels.
 	//
 	// Empty means no model was recorded for this run, a legal state the
 	// renderings show as unknown rather than as a blank that reads like a
 	// real value. This mirrors SubjectVersion's treatment exactly.
 	SubjectModel string
 	StubModel    string
+
+	// ObservedSubjectModels is what the run's logs say the subject session
+	// used, queried through the observed-model port after the run.
+	ObservedSubjectModels ObservedModelEvidence
 
 	// HarnessID is the stable identifier of the harness adapter that
 	// actually served this run, taken from adapter.ID() at evidence-building
@@ -163,6 +168,14 @@ type TestResult struct {
 	// report can attribute a regression to a model change.
 	SubjectModel string
 	StubModel    string
+
+	// ObservedSubjectModels is copied from the evidence; empty when none.
+	ObservedSubjectModels []string
+	// ModelValidity is "" only for a result the suite builds after a
+	// Runner.Run error.
+	ModelValidity ModelValidity
+	// ModelValidityDetail is "" when verified or not assessed.
+	ModelValidityDetail string
 
 	// HarnessID is carried through from RunEvidence unchanged, exactly as
 	// SubjectVersion, SubjectModel, and StubModel are. It names the harness

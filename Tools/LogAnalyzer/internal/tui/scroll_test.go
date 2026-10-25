@@ -729,7 +729,7 @@ func TestRunDetailScreen_WithUnpricedModels_ClipsCorrectly(t *testing.T) {
 	// 1 orchestrator + 3 agents, all 2-line rows (no models on any actor).
 	run := buildScrollDetailRun(3)
 	// Attach unpriced models at the run level — adds 2 lines to the fixed footer.
-	run.UnpricedModels = []domain.ModelID{"model-x"}
+	run.UnpricedModels = []domain.PricingKey{{Model: "model-x"}}
 
 	s := screens.NewRunDetailScreen(run, 80, height, plainStyles())
 	view := s.View(80, height)

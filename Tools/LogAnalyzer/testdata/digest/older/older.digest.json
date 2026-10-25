@@ -1,0 +1,15 @@
+{
+  "format": "mosaic-run-digest",
+  "digest_version": "1.0.0",
+  "runs": [
+    {
+      "run_id": "20261019T080000Z-0a1d",
+      "provisional": false,
+      "orchestrator": {
+        "usage": [
+          {"model": "claude-opus-4", "tokens": {"input_tokens": 120, "output_tokens": 40}}
+        ]
+      }
+    }
+  ]
+}

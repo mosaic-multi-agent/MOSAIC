@@ -31,7 +31,7 @@ func NewSourceScreen(width, height int, styles Styles) *SourceScreen {
 	}
 	input := widgets.NewTextInput(
 		"Log source path:",
-		"/path/to/OrchestrationLogs  or  /path/to/run-folder",
+		"/path/to/OrchestrationLogs  or  /path/to/run-folder  or  /path/to/run.digest.json",
 		width,
 		inputStyles,
 	)
@@ -88,8 +88,8 @@ func (s *SourceScreen) View(width, height int) string {
 		titleText = "Log Analyzer v" + s.version + " -- Select Source"
 	}
 	title := s.styles.Title.Width(width).Render(titleText)
-	subtitle := s.styles.Subtitle.Width(width).Render("Enter the path to your logs root or a single run folder.")
-	guidance := s.styles.Muted.Width(width).Render("Accepts: OrchestrationLogs/ directory  or  a single run folder (e.g. 20260101T120000Z-abcd)")
+	subtitle := s.styles.Subtitle.Width(width).Render("Enter the path to your logs root, a single run folder, or a digest.")
+	guidance := s.styles.Muted.Width(width).Render("Accepts: OrchestrationLogs/ directory, a single run folder (e.g. 20260101T120000Z-abcd), a .digest.json file, or a directory containing digests")
 	help := s.styles.Help.Width(width).Render("enter confirm  esc skip  ctrl+c quit")
 
 	return strings.Join([]string{title, subtitle, sep, "", guidance, s.input.View(), "", sep, help}, "\n")

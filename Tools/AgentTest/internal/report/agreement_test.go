@@ -2,7 +2,6 @@ package report_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -12,7 +11,8 @@ import (
 // TestReportsAgree renders both the terminal report and the machine-readable
 // report from the identical result model and asserts they carry the same
 // per-test verdicts, the same verdict counts, the same infrastructure-
-// failure count and the same total cost.
+// failure count. Cost is carried by the machine-readable report only; the
+// terminal report shows none.
 //
 // This is the test that keeps the single-result-model rule honest once
 // someone is tempted to add a field, or a computation, to just one
@@ -69,11 +69,25 @@ func TestReportsAgree(t *testing.T) {
 		t.Errorf("infrastructure failures: terminal report says %d, machine-readable report says %d", textInfra, jsonInfra)
 	}
 
-	// Assert: total cost agrees.
-	jsonCost := decodeJSONTotalCost(t, jsonOut)
-	textCost := parseTextTotalCost(t, text)
-	if fmt.Sprintf("%.2f", jsonCost) != fmt.Sprintf("%.2f", textCost) {
-		t.Errorf("total cost: terminal report says $%.2f, machine-readable report says $%.2f", textCost, jsonCost)
+	// Assert: the terminal report shows no cost, while the machine-readable
+	// report still carries the total cost unchanged.
+	if jsonCost := decodeJSONTotalCost(t, jsonOut); jsonCost <= 0 {
+		t.Errorf("machine-readable report total_cost.total_usd = %v, want the fixture's positive total", jsonCost)
+	}
+	assertNoCostInText(t, text)
+}
+
+// assertNoCostInText fails when the terminal report carries a cost line or a
+// currency amount.
+func assertNoCostInText(t *testing.T, text string) {
+	t.Helper()
+	for _, line := range strings.Split(text, "\n") {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(line)), "total cost") {
+			t.Errorf("terminal report has a cost line: %q", line)
+		}
+	}
+	if strings.Contains(text, "$") {
+		t.Errorf("terminal report contains a currency amount:\n%s", text)
 	}
 }
 
@@ -185,24 +199,5 @@ func parseTextInfrastructureFailures(t *testing.T, text string) int {
 		return n
 	}
 	t.Fatalf("no infrastructure-failures line found in terminal report:\n%s", text)
-	return 0
-}
-
-var costLinePattern = regexp.MustCompile(`^Total cost: \$([0-9.]+)`)
-
-func parseTextTotalCost(t *testing.T, text string) float64 {
-	t.Helper()
-	for _, line := range strings.Split(text, "\n") {
-		m := costLinePattern.FindStringSubmatch(line)
-		if m == nil {
-			continue
-		}
-		v, err := strconv.ParseFloat(m[1], 64)
-		if err != nil {
-			t.Fatalf("parsing total-cost line %q: %v", line, err)
-		}
-		return v
-	}
-	t.Fatalf("no total-cost line found in terminal report:\n%s", text)
 	return 0
 }

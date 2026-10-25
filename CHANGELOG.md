@@ -1,3 +1,31 @@
+# 0.7.2 (2026-10-25)
+
+## Tools
+
+### LogAnalyzer v1.1.0
+#### Changes
+- New ways to look at runs: an overview, a timeline, breakdowns by agent, status and tool use, and a side-by-side comparison of several runs
+- More accurate cost estimates for Claude models
+- Runs can be saved to a small summary file and opened again later, without keeping the original logs
+
+### AgentTest v1.1.0
+#### Changes
+- Several new safeguards to ensure that tests run at selected model.
+- Test results show which model actually ran. Runs where that can't be confirmed are flagged and left out of the pass rate
+- Cost is no longer shown in summaries
+
+### Runner v1.7.1
+#### Bugfixes
+- Fix commits at the end of an iteration failing in some runs
+
+## Catalog
+- **mosaic-logger** hook: logs now also capture reasoning tokens, reasoning effort and the model provider, for Claude Code and OpenCode
+- **orchestrator** (v8.2.2) / **commit-manager-git** (v2.4.0): the commit dispatch at an iteration end names the run's recorded commit branch, so the commit agent can check it instead of always blocking
+- **commit-manager-git** (v2.4.0) / **checkpoint-restore-git** (v2.2.3): commits and rollback reverts also leave out MOSAIC's log folders (`OrchestrationLogs/`, `RunnerLogs/`), and no longer fail when those folders are gitignored
+
+## Known Issues
+- **VS Code GHCP and GHCP CLI logs don't include the new details yet.** LogAnalyzer works for these harnesses, but without the new information from this release. An update is planned within 2-3 days
+
 # 0.7.1 (2026-10-20)
 
 ## Tools

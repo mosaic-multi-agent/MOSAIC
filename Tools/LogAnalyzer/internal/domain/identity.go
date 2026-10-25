@@ -26,6 +26,12 @@ type ModelID string
 // IsEmpty reports whether the model identifier is the empty string.
 func (m ModelID) IsEmpty() bool { return m == "" }
 
+// ProviderID is a models.dev provider identifier as logged ("" = not logged).
+type ProviderID string
+
+// IsEmpty reports whether no provider was logged.
+func (p ProviderID) IsEmpty() bool { return p == "" }
+
 // AgentInstanceID is the "{AgentName}#{Number}" instance identifier.
 type AgentInstanceID string
 
@@ -74,7 +80,7 @@ func IsRunID(s string) bool { return runIDPattern.MatchString(s) }
 type ActorKind uint8
 
 const (
-	ActorOrchestrator  ActorKind = iota
+	ActorOrchestrator ActorKind = iota
 	ActorAgentInstance
 )
 

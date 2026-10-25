@@ -91,6 +91,7 @@ mosaic-deploy deploy [flags]
 | `--output <json>` | string | — | Machine-readable output format |
 | `--dry-run` | bool | false | Plan without writing any files |
 | `--auto-confirm` | bool | false | Skip plan review and proceed automatically |
+| `--strict-models` | bool | false | Fail the run (exit 1) when any agent would be deployed without a resolved model, instead of recording a TODO gap. Applies to real and `--dry-run` runs; the check precedes review and any write |
 
 ### Selections file format
 
@@ -350,11 +351,25 @@ Exit code: `0` when every layer is clean (a missing index counts as clean), `2` 
 | 2 | completed-with-skips | Run completed but some items were skipped; see TODO file |
 | 3 | usage | Invalid arguments or unrecognised subcommand |
 
+With `deploy --strict-models`, an agent left without a resolved model fails the run with exit 1 and the stderr line `error: strict models: N agent(s) have no resolved model: <key> (tier <tier>), ...` (`<none>` when the agent declares no tier). Under `--output json` stdout then holds one failure document instead of a `RunSummary`:
+
+```json
+{
+  "error": true,
+  "reason": "unresolved-models",
+  "message": "strict models: 1 agent(s) have no resolved model: orchestrator (tier TEST_SUBJECT)",
+  "detail": "orchestrator (tier TEST_SUBJECT)",
+  "exitCode": 1
+}
+```
+
+Without the flag the gap goes to the TODO list as before.
+
 ---
 
 ## Machine-readable output (`--output json`)
 
-When `--output json` is set, `mosaic-deploy` writes a single JSON document to stdout containing the full `RunSummary`. The exit code is unchanged. Scripting consumers should read from stdout and parse JSON; diagnostic messages go to stderr.
+When `--output json` is set, `mosaic-deploy` writes a single JSON document to stdout containing the full `RunSummary`. The exit code is unchanged. With `deploy --strict-models` and an unresolved model, a failure document (see Exit codes) replaces the `RunSummary`. Scripting consumers should read from stdout and parse JSON; diagnostic messages go to stderr.
 
 ```sh
 result=$(mosaic-deploy deploy --harness claude-code --workspace /path --auto-confirm --output json)

@@ -17,14 +17,22 @@ type CategoryMoney struct {
 type Totals struct {
 	Tokens TokenUsage
 	Money  CategoryMoney
+	// AssumedTierCacheWrite is the number of cache-write tokens in this figure that
+	// were priced at the 5m rate because their request reported no tier split.
+	// Never counts tokens of unpriced models or tokens with a reported split.
+	AssumedTierCacheWrite int64
 }
 
 // ActorReport is one actor's priced breakdown within a run.
 type ActorReport struct {
 	Actor          ActorRef
-	Models         []ModelID // distinct, sorted
-	UnpricedModels []ModelID // subset of Models with no pricing entry
-	Totals         Totals
+	Models         []ModelID    // distinct, sorted
+	Keys           []PricingKey // distinct (provider, model) pairs of the actor's requests, sorted
+	UnpricedModels []PricingKey // subset of Keys with no pricing entry (strict lookup)
+	// RequestsWithoutModel counts the actor's token-bearing requests that logged no model.
+	RequestsWithoutModel int
+	Totals               Totals
+	Effort               EffortLevels // effort levels of the actor's effective requests
 }
 
 // RunReport is one run's priced breakdown.
@@ -34,7 +42,13 @@ type RunReport struct {
 	Totals         Totals
 	Orchestrator   ActorReport
 	Agents         []ActorReport // sorted by instance id
-	UnpricedModels []ModelID
+	UnpricedModels []PricingKey
+
+	Overview    RunOverview      // V1
+	ByAgentType []AgentTypeGroup // V2 (orchestrator not included)
+	ByStatus    StatusBreakdown  // V3
+	Tools       ToolsBreakdown   // V4
+	Timeline    Timeline         // V5
 }
 
 // Report is the complete analysis output rendered by both frontends.
@@ -43,8 +57,9 @@ type Report struct {
 	// AllRuns totals NAMED runs only. The unattributable bucket is excluded.
 	AllRuns        Totals
 	Runs           []RunReport
-	Unattributable *RunReport // nil when absent; held separately by contract
-	UnpricedModels []ModelID  // distinct, sorted, across the whole report
+	Unattributable *RunReport   // nil when absent; held separately by contract
+	UnpricedModels []PricingKey // distinct, sorted, across the whole report
+	AcrossRuns     AcrossRuns   // V6; named runs only, never the unattributable bucket
 	Quality        QualitySummary
 	// Currency is always domain.Currency; emitted so machine consumers need not assume.
 	Currency string

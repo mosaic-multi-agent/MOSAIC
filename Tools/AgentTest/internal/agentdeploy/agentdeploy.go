@@ -421,6 +421,10 @@ func buildDeployArgs(req domain.DeployRequest, opts Options, selectionsPath stri
 		args = append(args, "--dry-run")
 	}
 
+	// --strict-models makes the tool fail instead of deploying an agent
+	// without a resolved model; the harness default must never stand in.
+	args = append(args, "--strict-models")
+
 	// --output json is always present so the deployer can parse the run summary.
 	args = append(args, "--output", "json")
 
@@ -595,12 +599,7 @@ func (d *deployer) Deploy(ctx context.Context, req domain.DeployRequest) (domain
 	// Non-zero exit: the deploy subcommand emits no structured failure envelope,
 	// so the degrade path is the only path. ToolMessage comes from stderr.
 	// Reason and Detail are empty by design — reserved for a future envelope.
-	return domain.DeployResult{}, &DeployError{
-		Reason:      "",
-		Detail:      "",
-		ToolMessage: string(stderr),
-		ExitCode:    exitCode,
-	}
+	return domain.DeployResult{}, newDeployFailure(stdout, stderr, exitCode)
 }
 
 // execCommandRunner is the real process-execution implementation of

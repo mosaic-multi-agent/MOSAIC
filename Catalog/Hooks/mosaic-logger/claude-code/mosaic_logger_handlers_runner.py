@@ -205,6 +205,9 @@ def handle_subagent_role_session_end(ctx: "core.HookContext") -> None:
     )
 
 
+_TIER_KEYS = frozenset(("cache_creation_5m_tokens", "cache_creation_1h_tokens"))
+
+
 def _session_facts(transcript_path: "str | None"):
     """Model of the last assistant record and token usage summed over every
     assistant record: the session is one invocation, so its usage is the whole
@@ -217,6 +220,10 @@ def _session_facts(transcript_path: "str | None"):
     for usage_block in latest.values():
         for key, value in usage_block.items():
             totals[key] = totals.get(key, 0) + value
+    # A summed split is only valid when every record carried one.
+    if not all(_TIER_KEYS.issubset(block) for block in latest.values()):
+        for key in _TIER_KEYS:
+            totals.pop(key, None)
     return transcript.TurnFacts(facts.model, totals or None)
 
 

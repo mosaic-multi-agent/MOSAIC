@@ -185,16 +185,16 @@ func TestIsRunID_InvalidFormat(t *testing.T) {
 		"",
 		"unknown-run",
 		"not-a-run-id",
-		"20260802T074635Z",         // missing hex suffix
-		"20260802T074635Z-480",     // hex suffix too short (3 chars)
-		"20260802T074635Z-480eg",   // hex suffix too long / invalid char
-		"2026-08-02T074635Z-480e",  // wrong date format (has dashes)
-		"20260802t074635Z-480e",    // lowercase 't'
-		"20260802T074635z-480e",    // lowercase 'z'
-		"abcdefghT074635Z-480e",    // non-digit date
-		"20260802T074635Z-ZZZZ",    // non-hex suffix
-		" 20260802T074635Z-480e",   // leading space
-		"20260802T074635Z-480e ",   // trailing space
+		"20260802T074635Z",           // missing hex suffix
+		"20260802T074635Z-480",       // hex suffix too short (3 chars)
+		"20260802T074635Z-480eg",     // hex suffix too long / invalid char
+		"2026-08-02T074635Z-480e",    // wrong date format (has dashes)
+		"20260802t074635Z-480e",      // lowercase 't'
+		"20260802T074635z-480e",      // lowercase 'z'
+		"abcdefghT074635Z-480e",      // non-digit date
+		"20260802T074635Z-ZZZZ",      // non-hex suffix
+		" 20260802T074635Z-480e",     // leading space
+		"20260802T074635Z-480e ",     // trailing space
 		"20260802T074635Z-480eextra", // extra content
 	}
 	for _, s := range invalid {
@@ -293,27 +293,23 @@ func TestEventType_EventUsageRecord_WireValue(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSchemaVersionCurrent_Value(t *testing.T) {
-	if domain.SchemaVersionCurrent != "1.1.0" {
-		t.Errorf("SchemaVersionCurrent = %q, want %q", domain.SchemaVersionCurrent, "1.1.0")
+	if domain.SchemaVersionCurrent != "1.3.0" {
+		t.Errorf("SchemaVersionCurrent = %q, want %q", domain.SchemaVersionCurrent, "1.3.0")
 	}
 }
 
-func TestSupportedSchemaVersions_ContainsBothVersions(t *testing.T) {
+func TestSupportedSchemaVersions_ContainsAllVersions(t *testing.T) {
 	set := domain.SupportedSchemaVersions()
-	var has110, has100 bool
-	for _, v := range set {
-		if v == "1.1.0" {
-			has110 = true
+	for _, want := range []string{"1.3.0", "1.2.0", "1.1.0", "1.0.0"} {
+		found := false
+		for _, v := range set {
+			if v == want {
+				found = true
+			}
 		}
-		if v == "1.0.0" {
-			has100 = true
+		if !found {
+			t.Errorf("SupportedSchemaVersions() must contain %q (got %v)", want, set)
 		}
-	}
-	if !has110 {
-		t.Error("SupportedSchemaVersions() must contain \"1.1.0\"")
-	}
-	if !has100 {
-		t.Error("SupportedSchemaVersions() must contain \"1.0.0\" (prior version stays supported)")
 	}
 }
 
@@ -322,13 +318,13 @@ func TestSupportedSchemaVersions_NewestFirst(t *testing.T) {
 	if len(set) == 0 {
 		t.Fatal("SupportedSchemaVersions() must not be empty")
 	}
-	if set[0] != "1.1.0" {
-		t.Errorf("SupportedSchemaVersions()[0] = %q, want %q (newest first)", set[0], "1.1.0")
+	if set[0] != "1.3.0" {
+		t.Errorf("SupportedSchemaVersions()[0] = %q, want %q (newest first)", set[0], "1.3.0")
 	}
 }
 
 func TestIsSupportedSchemaVersion_PriorAndCurrent_True(t *testing.T) {
-	for _, v := range []string{"1.0.0", "1.1.0"} {
+	for _, v := range []string{"1.0.0", "1.1.0", "1.2.0", "1.3.0"} {
 		if !domain.IsSupportedSchemaVersion(v) {
 			t.Errorf("IsSupportedSchemaVersion(%q) = false, want true", v)
 		}
@@ -336,7 +332,7 @@ func TestIsSupportedSchemaVersion_PriorAndCurrent_True(t *testing.T) {
 }
 
 func TestIsSupportedSchemaVersion_UnrecognisedVersion_False(t *testing.T) {
-	for _, v := range []string{"2.0.0", "0.9.0", "", "1.1.0-beta"} {
+	for _, v := range []string{"2.0.0", "0.9.0", "", "1.1.0-beta", "1.4.0"} {
 		if domain.IsSupportedSchemaVersion(v) {
 			t.Errorf("IsSupportedSchemaVersion(%q) = true, want false", v)
 		}
@@ -374,5 +370,45 @@ func TestTurnRole_Constants_WireValues(t *testing.T) {
 	}
 	if domain.TurnAssistant != "assistant" {
 		t.Errorf("TurnAssistant = %q, want %q", domain.TurnAssistant, "assistant")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// EventNotification constant and OptionalBool behaviour
+// ---------------------------------------------------------------------------
+
+func TestEventType_EventNotification_WireValue(t *testing.T) {
+	if domain.EventNotification != "notification" {
+		t.Errorf("EventNotification = %q, want %q", domain.EventNotification, "notification")
+	}
+}
+
+func TestOptionalBool_ZeroValue_IsAbsentNotFalse(t *testing.T) {
+	var o domain.OptionalBool
+
+	value, present := o.Value()
+
+	if present || value || o.IsPresent() || o != domain.BoolAbsent {
+		t.Errorf("zero OptionalBool = (%v,%v), want absent", value, present)
+	}
+}
+
+func TestOptionalBool_BoolOf_IsPresent(t *testing.T) {
+	cases := []struct {
+		in   bool
+		want domain.OptionalBool
+	}{{true, domain.BoolTrue}, {false, domain.BoolFalse}}
+	for _, c := range cases {
+		got := domain.BoolOf(c.in)
+		value, present := got.Value()
+		if got != c.want || value != c.in || !present || !got.IsPresent() {
+			t.Errorf("BoolOf(%v) = %v (value %v, present %v), want %v present", c.in, got, value, present, c.want)
+		}
+	}
+}
+
+func TestOptionalBool_FalseAndAbsent_AreDistinct(t *testing.T) {
+	if domain.BoolFalse == domain.BoolAbsent {
+		t.Error("BoolFalse must differ from BoolAbsent")
 	}
 }

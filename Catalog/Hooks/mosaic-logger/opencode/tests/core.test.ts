@@ -40,8 +40,8 @@ import {
 // ---------------------------------------------------------------------------
 
 describe("constants", () => {
-  it("SCHEMA_VERSION is 1.0.0", () => {
-    expect(SCHEMA_VERSION).toBe("1.0.0");
+  it("SCHEMA_VERSION is 1.3.0", () => {
+    expect(SCHEMA_VERSION).toBe("1.3.0");
   });
 
   it("HARNESS is opencode", () => {
@@ -246,7 +246,7 @@ describe("buildEvent", () => {
   describe("common envelope fields", () => {
     it("sets schema_version to SCHEMA_VERSION constant", () => {
       const result = buildEvent("test_event", { timestamp: FIXED_TS }, {});
-      expect(result["schema_version"]).toBe("1.0.0");
+      expect(result["schema_version"]).toBe("1.3.0");
     });
 
     it("sets event to the provided event name", () => {

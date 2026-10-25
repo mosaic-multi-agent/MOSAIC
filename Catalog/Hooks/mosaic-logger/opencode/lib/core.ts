@@ -17,7 +17,7 @@ import * as nodeFsPromises from "node:fs/promises";
 // Constants
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION: string = "1.0.0";
+export const SCHEMA_VERSION: string = "1.3.0";
 export const HARNESS: string = "opencode";
 export const LOGS_DIRNAME: string = "OrchestrationLogs";
 

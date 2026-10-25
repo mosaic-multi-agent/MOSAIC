@@ -11,6 +11,9 @@ type Session struct {
 	aggregate domain.Aggregate
 	table     domain.PricingTable
 	source    domain.Source
+	// exportFindings are the findings an export carries: log-reading findings
+	// attributed to their run folder, plus findings carried inside digests.
+	exportFindings []domain.Finding
 }
 
 // Aggregate exposes the cached pre-pricing aggregate.

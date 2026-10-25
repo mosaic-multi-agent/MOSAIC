@@ -92,15 +92,18 @@ class RecordFacts:
       service_tier  - str | None, first non-empty string among
                       message.usage.service_tier, message.service_tier,
                       message.usage.speed.
+      effort        - str | None, the record's top-level effort field, verbatim;
+                      None when absent or not a non-empty string.
     """
 
     def __init__(self, record_id, record_index,
-                 model=None, token_usage=None, service_tier=None):
+                 model=None, token_usage=None, service_tier=None, effort=None):
         self.record_id = record_id
         self.record_index = record_index
         self.model = model
         self.token_usage = token_usage
         self.service_tier = service_tier
+        self.effort = effort
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +116,50 @@ _USAGE_KEY_MAP = [
     ("cache_read_input_tokens",     "cache_read_tokens"),
     ("cache_creation_input_tokens", "cache_creation_tokens"),
 ]
+
+
+def _is_number(val):
+    """True for a real number (including 0); False for None, bool, other types."""
+    return isinstance(val, (int, float)) and not isinstance(val, bool)
+
+
+def _map_cache_tiers(raw_usage):
+    """Return the cache-write tier fields for a usage object, or {}.
+
+    Both tiers are returned only when message.usage.cache_creation carries
+    numeric ephemeral_5m_input_tokens and ephemeral_1h_input_tokens that sum
+    to cache_creation_input_tokens; otherwise neither (tier unknown).
+    """
+    tiers = raw_usage.get("cache_creation")
+    if not isinstance(tiers, dict):
+        return {}
+    five_min = tiers.get("ephemeral_5m_input_tokens")
+    one_hour = tiers.get("ephemeral_1h_input_tokens")
+    total = raw_usage.get("cache_creation_input_tokens")
+    if not (_is_number(five_min) and _is_number(one_hour) and _is_number(total)):
+        return {}
+    if five_min + one_hour != total:
+        return {}
+    return {"cache_creation_5m_tokens": five_min,
+            "cache_creation_1h_tokens": one_hour}
+
+
+def _map_usage(raw_usage):
+    """Map a transcript usage object to the schema token_usage block.
+
+    Each sub-field is included only when it is a real number (including 0).
+    Returns None when no sub-field resolved.
+    """
+    mapped = {}
+    for src_key, dst_key in _USAGE_KEY_MAP:
+        val = raw_usage.get(src_key)
+        if _is_number(val):
+            mapped[dst_key] = val
+    mapped.update(_map_cache_tiers(raw_usage))
+    details = raw_usage.get("output_tokens_details")
+    if isinstance(details, dict) and _is_number(details.get("thinking_tokens")):
+        mapped["reasoning_tokens"] = details["thinking_tokens"]
+    return mapped or None
 
 
 # ---------------------------------------------------------------------------
@@ -178,14 +225,7 @@ def read_last_assistant_facts(transcript_path):
                     if isinstance(message, dict):
                         raw_usage = message.get("usage")
                         if isinstance(raw_usage, dict):
-                            mapped = {}
-                            for src_key, dst_key in _USAGE_KEY_MAP:
-                                val = raw_usage.get(src_key)
-                                # Keep genuine numbers (including 0), reject None/bool
-                                if isinstance(val, (int, float)) and not isinstance(val, bool):
-                                    mapped[dst_key] = val
-                            if mapped:
-                                token_usage = mapped
+                            token_usage = _map_usage(raw_usage)
 
                     last_facts = TurnFacts(model=model, token_usage=token_usage)
 
@@ -227,14 +267,7 @@ def _resolve_record_token_usage(message):
     if isinstance(message, dict):
         raw_usage = message.get("usage")
         if isinstance(raw_usage, dict):
-            mapped = {}
-            for src_key, dst_key in _USAGE_KEY_MAP:
-                val = raw_usage.get(src_key)
-                # Keep genuine numbers (including 0), reject None/bool
-                if isinstance(val, (int, float)) and not isinstance(val, bool):
-                    mapped[dst_key] = val
-            if mapped:
-                token_usage = mapped
+            token_usage = _map_usage(raw_usage)
     return token_usage
 
 
@@ -259,6 +292,14 @@ def _resolve_record_service_tier(message):
         if isinstance(speed, str) and speed:
             return speed
 
+    return None
+
+
+def _resolve_record_effort(record):
+    """The record's top-level effort, verbatim; None unless a non-empty string."""
+    effort = record.get("effort")
+    if isinstance(effort, str) and effort:
+        return effort
     return None
 
 
@@ -333,6 +374,7 @@ def read_assistant_records(transcript_path):
                         model=model,
                         token_usage=token_usage,
                         service_tier=service_tier,
+                        effort=_resolve_record_effort(record),
                     ))
                     record_index += 1
 

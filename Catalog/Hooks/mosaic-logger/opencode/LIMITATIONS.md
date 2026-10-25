@@ -56,14 +56,22 @@ externally-sourced type shapes described above. A future integrator should run
 the adapter against a real OpenCode process and compare the emitted events
 against the expected schema before treating it as production-ready.
 
-## Unconfirmed `tool.execute.after` output shape
+## Tool call outcomes
 
-The second parameter of the `tool.execute.after` hook is confirmed to be an
-object, but its internal field names are unconfirmed. `deriveToolOutcome` probes
-several plausible field names and omits `status` from `tool_call_end` when the
-payload signals neither success nor failure. This means some `tool_call_end`
-events will lack a `status` field that a consumer might expect. A confirmed
-field name would allow the adapter to populate `status` reliably.
+Verified on OpenCode 1.18.18: `tool.execute.after` does not fire for failed registry
+tools (built-in and MCP). Failures arrive as a `message.part.updated` event with a
+tool part in `state.status: "error"`; the adapter closes the call from that event with
+`tool_call_end` `status: "error"` and the part's error text, on the stream of the
+matching `tool_call_start`. A session abort writes an error part for every open tool
+and is closed the same way. A single-close registry guarantees one `tool_call_end`
+per `call_id` whichever event arrives first.
+
+When the after-hook fires, the call is recorded as `status: "success"` unless the
+payload carries an `error` field or `status: "error"`. A failed `task` (subtask)
+fires the after-hook with an empty or undefined result before its error part; a
+`task` call without a result is therefore left open and closed as an error by the
+error part (or by the dispatch closure). Error parts for calls whose start was never
+seen (tool calls inside subagent sessions, sst/opencode#5894) write nothing.
 
 ## `permission.ask` resolution reporting is unestablished
 
@@ -110,8 +118,7 @@ idle, and the CLI wraps every command in `try ... finally { process.exit() }`.
 Pending plugin promises are dropped, but synchronous code cannot be interrupted.
 If live runs still show a final transcript with an incomplete last message, a
 raw/sidecar mismatch, or a `.tmp_*` file, implement a Runner-side repair that runs
-`opencode export --pure <sessionID>` after the process exits (option 3 in
-`Issue-OpenCode-RunnerTranscriptExport.md`).
+`opencode export --pure <sessionID>` after the process exits.
 
 Known Runner-mode field gaps for this adapter are listed in
 `Development/Designs/MosaicLogFormat.md` section 4.6 and in the header of

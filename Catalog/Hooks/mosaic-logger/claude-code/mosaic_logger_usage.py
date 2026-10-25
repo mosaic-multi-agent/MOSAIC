@@ -7,7 +7,7 @@ usage_record event
 -------------------
 
     {
-      "schema_version": "1.1.0",
+      "schema_version": "1.3.0",
       "event": "usage_record",
       "timestamp": "2026-08-08T06:27:35.412Z",
       "harness": "claude-code",
@@ -19,6 +19,7 @@ usage_record event
       "source": "agent_transcript",
       "model": "claude-opus-4-6",
       "service_tier": "standard",
+      "effort": "medium",
       "token_usage": { }
     }
 
@@ -30,6 +31,7 @@ source          | string  | always                   | 'orchestrator_transcript'
 agent_instance_id | string | invocation streams only | Omitted on the orchestrator stream.
 model           | string  | when resolvable          | The model of this record.
 service_tier    | string  | when present             | Descriptive detail only; drives no pricing decision.
+effort          | string  | when present            | The transcript record's top-level effort, copied verbatim. Never read from agent files, settings or environment.
 token_usage     | object  | when at least one sub-field resolved | See below.
 
 The envelope (schema_version, event, timestamp, harness, session_id, run_id)
@@ -64,11 +66,16 @@ Key                    | Source transcript field
 input_tokens            | message.usage.input_tokens
 output_tokens           | message.usage.output_tokens
 cache_read_tokens       | message.usage.cache_read_input_tokens
-cache_creation_tokens   | message.usage.cache_creation_input_tokens (flattened; the only cache-write representation on the wire)
+cache_creation_tokens   | message.usage.cache_creation_input_tokens (the total)
+cache_creation_5m_tokens | message.usage.cache_creation.ephemeral_5m_input_tokens
+cache_creation_1h_tokens | message.usage.cache_creation.ephemeral_1h_input_tokens
+reasoning_tokens        | message.usage.output_tokens_details.thinking_tokens (already part of output_tokens)
 
-These four keys are exactly the four the adapter maps today, unchanged. Each
-appears only when its source field is a genuine number, including 0. No
-ephemeral cache-write tier fields exist in this block.
+Each key appears only when its source field is a genuine number, including 0.
+The two tier fields are both-or-neither: they are written together only when
+both source tiers are numeric and sum to cache_creation_input_tokens, so they
+sum to cache_creation_tokens. When the tier data is missing, partial,
+non-numeric or inconsistent, neither tier field is written (tier unknown).
 """
 
 import hashlib
@@ -106,7 +113,7 @@ def record_fingerprint(record) -> str:
     """Return a short, stable fingerprint of the record content whose change
     must reach the analyzer.
 
-    Covers exactly model and token_usage — the two analyzer-significant
+    Covers model, token_usage and effort — the analyzer-significant
     fields. record_id, record_index and service_tier are excluded.
     Envelope fields are not inputs to this function.
 
@@ -122,7 +129,9 @@ def record_fingerprint(record) -> str:
         model = record.model or ""
         token_usage = record.token_usage or {}
         # Serialize with sorted keys for order-independence
-        content = json.dumps({"model": model, "token_usage": token_usage},
+        effort = getattr(record, "effort", None) or ""
+        content = json.dumps({"model": model, "token_usage": token_usage,
+                              "effort": effort},
                              sort_keys=True, ensure_ascii=False)
         return hashlib.sha256(content.encode("utf-8")).hexdigest()
     except Exception:
@@ -285,7 +294,7 @@ def emit_usage_records(ctx: "core.HookContext",
 
                 # Decide whether to emit this record.
                 if record_id and fp:
-                    stored_fp = state.get(record_id)
+                    stored_fp = updated_state.get(record_id)
                     if stored_fp == fp:
                         # Unchanged and already emitted — skip.
                         continue
@@ -298,6 +307,7 @@ def emit_usage_records(ctx: "core.HookContext",
                     "source": source,
                     "model": rec.model,
                     "service_tier": rec.service_tier,
+                    "effort": rec.effort,
                     "token_usage": rec.token_usage,
                 }
                 if agent_instance_id is not None:

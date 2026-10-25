@@ -136,7 +136,7 @@ function makeDeps(
     sdkClient,
     adapterVersion: "0.1.0",
     buildEvent: (event, envelope, fields) => ({
-      schema_version: "1.0.0",
+      schema_version: "1.3.0",
       event,
       timestamp: envelope.timestamp ?? new Date().toISOString(),
       harness: "opencode",
@@ -264,7 +264,7 @@ describe("after-hook output forwarded through the real tool.execute.after hook-m
       tool: "bash",
       sessionID: sessionId,
       callID: callId,
-      output: { status: "success" },
+      output: { status: "success", output: "subagent result text" },
     });
     await toolAfterHook(afterInput, afterOutput);
 
@@ -279,7 +279,7 @@ describe("after-hook output forwarded through the real tool.execute.after hook-m
     expect(endEvent!["status"]).toBe("success");
   });
 
-  it("an outcome-ambiguous tool output omits status through the hook-map entry point", async () => {
+  it("an outcome-ambiguous tool output is recorded as success through the hook-map entry point", async () => {
     const hookMap = await buildHookMap();
     const eventHook = hookMap["event"] as
       | ((input: { event: OpenCodeEvent }) => Promise<void>)
@@ -311,8 +311,7 @@ describe("after-hook output forwarded through the real tool.execute.after hook-m
     });
     await toolBeforeHook(beforeInput, beforeOutput);
 
-    // An output payload that signals neither success nor failure — deriveToolOutcome
-    // must omit status rather than asserting an outcome the payload does not support
+    // An output payload with no failure signal is a successful call
     const [afterInput, afterOutput] = toolAfterPayload({
       tool: "bash",
       sessionID: sessionId,
@@ -327,10 +326,8 @@ describe("after-hook output forwarded through the real tool.execute.after hook-m
     );
 
     expect(endEvent).toBeDefined();
-    // Status must be absent — the design's "omit rather than guess" rule.
-    // If the output was dropped, the hardcoded fallback would set status: "success",
-    // which this assertion catches.
-    expect(endEvent!["status"]).toBeUndefined();
+    // No failure signal means the call succeeded; status is never omitted.
+    expect(endEvent!["status"]).toBe("success");
   });
 
   it("call_id is consistent between tool_call_start and tool_call_end through both hook-map entry points", async () => {
@@ -369,7 +366,7 @@ describe("after-hook output forwarded through the real tool.execute.after hook-m
       tool: "bash",
       sessionID: sessionId,
       callID: callId,
-      output: { status: "success" },
+      output: { status: "success", output: "subagent result text" },
     });
     await toolAfterHook(afterInput, afterOutput);
 
@@ -547,7 +544,7 @@ describe("closeDispatchCall wired to handleInvocationEnd — tested via handleIn
     // Simulate the real after-hook arriving first and closing the call
     await toolHandlers.handleToolAfter(
       { tool: "task", sessionID: ORCH_SESSION, callID: DISPATCH_CALL_ID },
-      { status: "success" },
+      { status: "success", output: "subagent result text" },
     );
 
     const afterRealHook = collected.filter(
@@ -717,7 +714,7 @@ describe("full plugin hook sequence: task dispatch → subagent session.idle →
       tool: "task",
       sessionID: orchSessionId,
       callID: dispatchCallId,
-      output: { status: "success" },
+      output: { status: "success", output: "subagent result text" },
     });
     await toolAfterHook(afterInput, afterOutput);
 

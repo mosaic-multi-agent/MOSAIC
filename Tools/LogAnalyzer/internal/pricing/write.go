@@ -15,7 +15,8 @@ import (
 // Put persists one model entry to the pricing YAML file.
 //
 // If the file does not exist it is created, including any missing parent
-// directories. If the file exists the entry is added or the existing entry for
+// directories, and the built-in template documentation is written ahead of the
+// entries. If the file exists the entry is added or the existing entry for
 // that model is replaced; all other entries are preserved.
 //
 // Comment preservation: leading comments in the existing file (lines before the
@@ -30,7 +31,8 @@ func (s *Store) Put(_ context.Context, entry domain.ModelPricing) error {
 		if !os.IsNotExist(readErr) {
 			return fmt.Errorf("read pricing file: %w", readErr)
 		}
-		// File absent: start with an empty models map.
+		// File absent: start with the built-in template and an empty models map.
+		headerComments = pricingTemplate
 		file.Models = make(map[string]modelEntryYAML)
 	} else {
 		// Extract comment lines that precede the first non-comment content so they
@@ -45,8 +47,9 @@ func (s *Store) Put(_ context.Context, entry domain.ModelPricing) error {
 		}
 	}
 
-	// Add or replace the entry.
-	file.Models[string(entry.Model)] = fromDomain(entry)
+	// Add or replace the entry in its provider section, or in top-level models
+	// when it carries no provider.
+	file.set(entry)
 
 	// Marshal the updated models map back to YAML.
 	data, err := yaml.Marshal(&file)
@@ -71,6 +74,27 @@ func (s *Store) Put(_ context.Context, entry domain.ModelPricing) error {
 	}
 
 	return nil
+}
+
+// set adds or replaces the entry at (provider, model); an entry without a
+// provider goes to the top-level models section.
+func (f *pricingFileYAML) set(entry domain.ModelPricing) {
+	if entry.Provider == "" {
+		if f.Models == nil {
+			f.Models = make(map[string]modelEntryYAML)
+		}
+		f.Models[string(entry.Model)] = fromDomain(entry)
+		return
+	}
+	if f.Providers == nil {
+		f.Providers = make(map[string]providerYAML)
+	}
+	section := f.Providers[string(entry.Provider)]
+	if section.Models == nil {
+		section.Models = make(map[string]modelEntryYAML)
+	}
+	section.Models[string(entry.Model)] = fromDomain(entry)
+	f.Providers[string(entry.Provider)] = section
 }
 
 // extractHeaderComments returns the leading comment and blank lines from a YAML

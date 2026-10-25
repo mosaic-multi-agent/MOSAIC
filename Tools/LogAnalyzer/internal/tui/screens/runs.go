@@ -144,6 +144,10 @@ func (s *RunsScreen) View(width, height int) string {
 		varFooterSB.WriteString(s.styles.Warning.Width(width).Render(line))
 		varFooterSB.WriteByte('\n')
 	}
+	if assumed := s.assumedTierTokens(); assumed > 0 {
+		varFooterSB.WriteString(s.styles.Warning.Width(width).Render(AssumedTierNotice(assumed)))
+		varFooterSB.WriteByte('\n')
+	}
 	varFooterStr := varFooterSB.String()
 	varFooterLines := strings.Count(varFooterStr, "\n")
 
@@ -165,7 +169,7 @@ func (s *RunsScreen) View(width, height int) string {
 
 	// --- Scroll hint for the help bar ---
 	hint := FormatScrollHint(w, n)
-	helpText := "↑/↓ navigate  enter open  s source  p pricing  esc quit  ctrl+c quit"
+	helpText := "↑/↓ navigate  enter open  a across runs  e export run  E export all  s source  p pricing  esc quit  ctrl+c quit"
 	if hint != "" {
 		helpText += "  " + hint
 	}
@@ -203,7 +207,7 @@ func (s *RunsScreen) writeRunRow(sb *strings.Builder, idx int, run domain.RunRep
 
 // Help returns the key hints for this screen.
 func (s *RunsScreen) Help() string {
-	return "↑/↓ navigate  enter open  s source  p pricing  esc quit  ctrl+c quit"
+	return "↑/↓ navigate  enter open  a across runs  e export run  E export all  s source  p pricing  esc quit  ctrl+c quit"
 }
 
 // Done reports whether the user selected a run.
@@ -225,4 +229,14 @@ func (s *RunsScreen) SelectedRunID() string {
 func (s *RunsScreen) Reset() {
 	s.done = false
 	s.back = false
+}
+
+// assumedTierTokens sums the assumed-tier cache-write tokens of the named runs
+// and the unattributable bucket.
+func (s *RunsScreen) assumedTierTokens() int64 {
+	total := s.report.AllRuns.AssumedTierCacheWrite
+	if s.report.Unattributable != nil {
+		total += s.report.Unattributable.Totals.AssumedTierCacheWrite
+	}
+	return total
 }

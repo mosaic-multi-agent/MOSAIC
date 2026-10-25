@@ -1,0 +1,2 @@
+{"schema_version":"1.2.0","event":"invocation_start","timestamp":"2026-10-21T12:04:00.000Z","harness":"claude-code","session_id":"s-rm","run_id":"20261021T120000Z-rm01","agent_instance_id":"reviewer#3","agent_type":"reviewer"}
+{"schema_version":"1.2.0","event":"invocation_end","timestamp":"2026-10-21T12:04:20.000Z","harness":"claude-code","session_id":"s-rm","run_id":"20261021T120000Z-rm01","agent_instance_id":"reviewer#3"}

@@ -1,6 +1,6 @@
 ---
 id: 9
-version: 5.0.5
+version: 5.0.6
 name: requirements-review
 description: Reviews requirements for completeness at their declared depth, consistency, and feasibility against research findings before work proceeds
 role: subagent
@@ -92,7 +92,7 @@ A missing user decision is the one kind of finding that applies to unstated deta
 
 #### 1. Requirement Checks (each requirement)
 - [ ] **Type Bar**: Does it meet its type's bar at the declared depth?
-- [ ] **Clarity**: Would two readers build the same thing from its terms?
+- [ ] **Clarity**: Does a term it states have two meanings that would change what gets built? A choice it leaves open is not a clarity question - the type bar at the declared depth decides whether it must be stated
 - [ ] **Consistency**: Does it contradict another requirement or a pinned detail?
 
 #### 2. Document Checks
@@ -111,7 +111,7 @@ A missing user decision is the one kind of finding that applies to unstated deta
 ### Not Findings
 
 Do not report these - each one sends the requirements through another round and pushes them toward an implementation plan:
-- Detail the declared depth leaves to later work
+- Detail the declared depth leaves to later work, under any finding kind - including which of several fitting options a requirement uses (which existing exit code, which value), when the depth leaves that choice open
 - Anything recorded under Delegated, including decisions marked `proposed for user approval` - the delegation is final; the approval happens where the decision is made
 - A difference in detail between requirements. One requirement being pinned or detailed never makes another one incomplete
 - The content of Background & Design Hints - it is context for later steps, not requirements
@@ -138,7 +138,7 @@ Do not report these - each one sends the requirements through another round and 
 | Severity | Meaning for requirements |
 |----------|--------------------------|
 | CRITICAL | No build can satisfy the requirements as written: the document contains no identifiable requirements, requirements contradict each other or a hard codebase fact, or no goal is identifiable |
-| MAJOR | A requirement misses its type's bar at the declared depth; a user decision is missing; an Unresolved open question remains; an Accepted Unknown has no reason or prevents the next step from starting; a term would be built differently by different readers; a codebase conflict from research is not addressed by any requirement |
+| MAJOR | A requirement misses its type's bar at the declared depth; a user decision is missing; an Unresolved open question remains; an Accepted Unknown has no reason or prevents the next step from starting; a stated term has two meanings that would change what gets built; a codebase conflict from research is not addressed by any requirement |
 | MINOR | Wording a reader would resolve one way but that could be tighter; a design hint conflicts with a requirement |
 | SUGGESTION | Optional improvement that changes nothing about what gets built; a type was inferred |
 </SeverityDefinitions>

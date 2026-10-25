@@ -183,7 +183,7 @@ func (i *alwaysSkippingInteraction) Confirm(_ context.Context, _ interaction.Que
 	return interaction.ConfirmAnswer{Status: interaction.SkippedOne}, nil
 }
 
-func (i *alwaysSkippingInteraction) Notify(_ context.Context, _ interaction.Notice)         {}
+func (i *alwaysSkippingInteraction) Notify(_ context.Context, _ interaction.Notice)          {}
 func (i *alwaysSkippingInteraction) Progress(_ context.Context, _ interaction.ProgressEvent) {}
 
 // ---------------------------------------------------------------------------
@@ -310,15 +310,17 @@ func mustParseRate(s string) domain.Rate {
 }
 
 // flatPricing returns a ModelPricing with no long-context threshold.
-// Rates: input="3.00"/M, cachedInput="0.30"/M, cacheWrite="3.75"/M, output="15.00"/M.
+// Rates: input="3.00"/M, cacheRead="0.30"/M, cacheWrite5m="3.75"/M, cacheWrite1h="6.00"/M, output="15.00"/M.
 func flatPricing(model domain.ModelID) domain.ModelPricing {
 	return domain.ModelPricing{
-		Model:                model,
-		Input:                mustParseRate("3.00"),
-		CachedInput:          mustParseRate("0.30"),
-		CacheWrite:           mustParseRate("3.75"),
-		OutputUnderThreshold: mustParseRate("15.00"),
-		HasThreshold:         false,
+		Model: model,
+		Standard: domain.RateSet{
+			Input:        mustParseRate("3.00"),
+			CacheRead:    mustParseRate("0.30"),
+			CacheWrite5m: mustParseRate("3.75"),
+			CacheWrite1h: mustParseRate("6.00"),
+			Output:       mustParseRate("15.00"),
+		},
 	}
 }
 

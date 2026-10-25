@@ -2,7 +2,7 @@
 
 > **Status:** Draft for review
 > **Created:** 2026-07-31
-> **Last Updated:** 2026-10-13
+> **Last Updated:** 2026-10-22
 > **Scope:** Design for the two agents that make checkpointing real — one that preserves restorable state during a run, and one that restores it. Covers what a checkpoint captures, how it is stored in git, how its reference travels back into the orchestration artifact, how a rollback is requested and performed, how it reconciles with work already committed, and how both behave when several runs share a working tree. Committing completed work into the user's own history is a different purpose served by a different class; see `CommitAgent.md`.
 
 ---
@@ -98,10 +98,13 @@ Uncommitted user edits are captured along with everything else. A checkpoint is 
 **Its own run folder is excluded, by the agent, explicitly.** The agent knows its `run_id`, so it excludes exactly `Orchestration-{run_id}/` and nothing else:
 
 ```
-git add -A -- . ':!Orchestration-{run_id}'
+git add -A -- .
+git rm --cached -r -q --ignore-unmatch -- Orchestration-{run_id}
 ```
 
-This is the agent's responsibility, not the repository's. Relying on an ignore rule would be relying on a file MOSAIC does not ship and does not control — the user's `.gitignore` belongs to the user's project, and a guarantee this design depends on cannot rest on whether someone configured it correctly.
+This is the agent's responsibility, not the repository's. Relying on an ignore rule would be relying on a file MOSAIC does not ship and does not control — the user's `.gitignore` belongs to the user's project, and a guarantee this design depends on cannot rest on whether someone configured it correctly. Ignore rules also do not apply to files git already tracks, so an ignored-but-committed run folder would be captured anyway.
+
+**Why two commands, not one exclusion pathspec.** The single-command form `git add -A -- . ':!Orchestration-{run_id}'` fails in exactly the repositories that already ignore run folders: naming an ignored path in a `git add` pathspec — even as an exclusion — makes git print "paths are ignored" and exit 1, although staging itself succeeded. An agent that correctly treats a non-zero exit as failure then reports `BLOCKED` on every checkpoint, and a retry cannot help. Adding everything and then unstaging the run folder never names an ignored path to `git add`, and produces the same tree in every configuration: the `rm --cached` is a no-op where the folder is ignored and untracked, and removes it where it is not ignored or is tracked. `--ignore-unmatch` is what makes the no-op case exit 0. (The commit class met the same failure once its exclusion grew to cover log folders, and now uses the same add-then-unstage shape, with `git reset` in place of `rm --cached`; `CommitAgent.md` §4.4 gives the reason for that difference.)
 
 **The pathspec depends on run folders always being run-scoped.** Every run's orchestration state lives in `Orchestration-{run_id}/` — there is no un-namespaced `Orchestration/` variant. That is what lets both agents identify their own folder exactly (from `run_id`) and every other run's folder by pattern (`Orchestration-*/`), with no configuration and no ambiguity. A bare folder would be matched by neither: it would be captured into every checkpoint and, far worse, overwritten by every restore, silently destroying the audit trail of the rollback being performed. The single convention is a precondition of this design, not a stylistic preference.
 
@@ -122,7 +125,8 @@ No branch is created, updated, or checked out.
 **The commit is built through a temporary index**, so the user's staging area is never disturbed:
 
 ```
-GIT_INDEX_FILE=.git/mosaic-{run_id}.index  git add -A -- . ':!Orchestration-{run_id}'
+GIT_INDEX_FILE=.git/mosaic-{run_id}.index  git add -A -- .
+GIT_INDEX_FILE=.git/mosaic-{run_id}.index  git rm --cached -r -q --ignore-unmatch -- Orchestration-{run_id}
 GIT_INDEX_FILE=.git/mosaic-{run_id}.index  git write-tree
 git commit-tree {tree} -p {parent} -m "{message}"
 git update-ref refs/mosaic/checkpoints/{run_id}/{seq} {commit}
@@ -280,7 +284,7 @@ The comparison is on `Mosaic-Seq`, which both agents stamp for exactly this reas
 
 **The reset target in case 2 is a commit-agent commit, never the checkpoint.** It is selected by three rules, in order:
 
-1. **A run commit whose project content matches the target checkpoint**, if one exists — the newest such commit. Test: `git diff --quiet {commit} {checkpoint} -- . ':!Orchestration-*'`.
+1. **A run commit whose project content matches the target checkpoint**, if one exists — the newest such commit. Test: `git diff --quiet {commit} {checkpoint} -- . ':!Orchestration-*' ':!OrchestrationLogs' ':!RunnerLogs'`. The log folders are excluded because a checkpoint captures them and a run commit never does (`CommitAgent.md` §4.4), so comparing them would rule out every match. `git diff` does not consult ignore rules, so the single-pathspec form is safe here.
 2. Otherwise, **the newest run commit whose `Mosaic-Seq` is less than the target's**.
 3. If there is none — the target predates the run's first commit — **the run's starting commit**, obtained as the first checkpoint's parent, `refs/mosaic/checkpoints/{run_id}/{first}^`. That is available whenever case 2 is, since case 2 already requires checkpointing to be enabled, and it avoids recording a base commit in frontmatter that the repository already holds.
 4. If rule 3 has no answer either — the run began in a repository with no commits at all, so the first checkpoint is a root commit with no parent — **fall through to case 3**: restore the tree and commit the result. There is no commit to reset to, and case 3 needs none. Uncertainty resolving to case 3 is already this table's general rule, and it holds here for the same reason: appending is defined in every repository state, rewinding is not.
@@ -305,7 +309,7 @@ Reading the current branch instead would not substitute for this. It reports whe
 
 The failure this prevents is worse than the commit agent's. An iteration commit on the wrong branch is misplaced work; a revert on the wrong branch undoes work that branch never contained, while the real branch keeps the abandoned commits and silently corrupts its next commit — both halves of the reconciliation land wrong.
 
-**Case 3's revert commit uses the commit agent's pathspec**, `git add -A -- . ':!Orchestration-*'` (`CommitAgent.md` §4.4). Without it a rollback would drop run folders into the user's permanent history — the outcome that section rejects as worse than any tidiness it buys — and it would do so on the one path where nothing else is auditing what gets committed.
+**Case 3's revert commit stages exactly as the commit agent does** — `git add -A -- .`, then `git reset` of every MOSAIC folder (`CommitAgent.md` §4.4). Without it a rollback would drop run folders and logs into the user's permanent history — the outcome that section rejects as worse than any tidiness it buys — and it would do so on the one path where nothing else is auditing what gets committed.
 
 **Case 2 is a bounded exception to "never touches history", and it is defensible only where it applies.** Moving a MOSAIC-owned, unshared branch is the same operation as moving a checkpoint ref: it is our ref, nothing descends from it, and no one else has seen it. The moment either of those stops being true — an upstream exists, or another branch contains the commits — the operation becomes a rewrite of shared history and case 3 applies instead. Uncertainty resolves to case 3, which is always safe.
 
@@ -374,7 +378,7 @@ The orchestrator's warning is a **fixed string, not a finding**. It does not loo
 
 | Guarantee | Enforced by |
 |---|---|
-| The run's own orchestration state stays out of checkpoint commits | `checkpoint-manager-git`, via an explicit pathspec exclusion (§4.2) |
+| The run's own orchestration state stays out of checkpoint commits | `checkpoint-manager-git`, by unstaging its own run folder from the temporary index after staging (§4.2) |
 | No orchestration state is ever overwritten by a restore | `checkpoint-restore-git`, via a hard path refusal (§5.3) |
 
 An earlier draft of this design required the user to add `Orchestration-*/` to `.gitignore`. That was wrong on two counts. MOSAIC does not deploy a `.gitignore` and never will — the user's repository is theirs, and its ignore rules are a project decision that has nothing to do with orchestration. And more fundamentally, a safety guarantee cannot rest on configuration the system neither controls nor can verify: if the rule is missing or mistyped, the failure is silent and the consequence is destroyed orchestration state.

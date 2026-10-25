@@ -269,8 +269,12 @@ func (m Model) viewResults() string {
 		failCount := m.session.Counts[domain.VerdictFail]
 		b.WriteString("\n")
 		b.WriteString(tuicommon.Truncate(
-			fmt.Sprintf("Session counts: %d passed, %d failed | Cost: %.4f USD",
-				passCount, failCount, m.session.TotalCost.TotalUSD), width))
+			fmt.Sprintf("Session counts: %d passed, %d failed",
+				passCount, failCount), width))
+		if line := m.session.ModelStatus(); line != "" {
+			b.WriteString("\n")
+			b.WriteString(tuicommon.Truncate(line, width))
+		}
 		if m.session.Aborted {
 			b.WriteString("\n")
 			b.WriteString(tuicommon.Truncate(
@@ -400,7 +404,12 @@ func (m Model) viewDetail() string {
 		fmt.Sprintf("Verdict: %s", run.Verdict),
 		tuicommon.Wrap("Outcome: "+strings.Join(classNames, ", "), width),
 		fmt.Sprintf("Duration: %s", run.Duration),
-		fmt.Sprintf("Cost: %.2f USD (%s)", run.Cost.TotalUSD, run.Cost.Attribution),
+	}
+
+	// The observed model labels a verified run; a run that is not verified
+	// carries no model label.
+	if label := run.ModelLabel(); label != "" {
+		logicalLines = append(logicalLines, tuicommon.Wrap("Model: "+label, width))
 	}
 
 	// Catalog folder (suite-level, from the terminal result model).

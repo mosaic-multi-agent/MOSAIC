@@ -52,13 +52,23 @@ type wireEvent struct {
 	AgentInstanceID string           `json:"agent_instance_id"`
 	AgentType       string           `json:"agent_type"`
 	StatusCode      string           `json:"status_code"`
-	Model           string           `json:"model"`
+	Model           lenientString    `json:"model"`
+	Provider        lenientString    `json:"provider"`
+	Effort          string           `json:"effort"`
 	Role            string           `json:"role"`
 	TokenUsage      *json.RawMessage `json:"token_usage"`
 	RecordID        string           `json:"record_id"`
 	RecordIndex     *int64           `json:"record_index"`
 	Source          string           `json:"source"`
 	ServiceTier     string           `json:"service_tier"`
+	CallID          string           `json:"call_id"`
+	ToolName        string           `json:"tool_name"`
+	Status          string           `json:"status"`
+	Trigger         string           `json:"trigger"`
+	TokensBefore    *int64           `json:"tokens_before"`
+	TokensAfter     *int64           `json:"tokens_after"`
+
+	wireLifecycle
 }
 
 // wireUsage is the JSON wire shape for the token_usage sub-object.
@@ -68,6 +78,11 @@ type wireUsage struct {
 	Output        *int64 `json:"output_tokens"`
 	CacheRead     *int64 `json:"cache_read_tokens"`
 	CacheCreation *int64 `json:"cache_creation_tokens"`
+
+	CacheCreation5m *int64 `json:"cache_creation_5m_tokens"`
+	CacheCreation1h *int64 `json:"cache_creation_1h_tokens"`
+
+	Reasoning *int64 `json:"reasoning_tokens"`
 }
 
 // Read decodes path line by line, calling visit for each decoded event in
@@ -138,6 +153,10 @@ func (r *Reader) Read(ctx context.Context, path string, visit func(domain.Event)
 			})
 		}
 
+		if tf, bad := tierFinding(wire.TokenUsage, path, lineNum); bad {
+			findings = append(findings, tf)
+		}
+
 		ev := buildEvent(wire)
 		if visitErr := visit(ev); visitErr != nil {
 			return findings, visitErr
@@ -182,15 +201,11 @@ func buildEvent(wire wireEvent) domain.Event {
 		RunID:         wire.RunID,
 	}
 
+	if applyLifecycle(&ev, wire) {
+		return ev
+	}
+
 	switch domain.EventType(wire.Event) {
-	case domain.EventRunStart:
-		ev.Type = domain.EventRunStart
-	case domain.EventRunEnd:
-		ev.Type = domain.EventRunEnd
-	case domain.EventSessionStart:
-		ev.Type = domain.EventSessionStart
-	case domain.EventSessionEnd:
-		ev.Type = domain.EventSessionEnd
 	case domain.EventInvocationStart:
 		ev.Type = domain.EventInvocationStart
 		ev.InvocationStart = &domain.InvocationStartFields{
@@ -203,6 +218,7 @@ func buildEvent(wire wireEvent) domain.Event {
 			AgentInstanceID: domain.AgentInstanceID(wire.AgentInstanceID),
 			StatusCode:      wire.StatusCode,
 			Model:           domain.ModelID(wire.Model),
+			Provider:        domain.ProviderID(wire.Provider),
 		}
 		if wire.TokenUsage != nil {
 			fields.HasUsage = true
@@ -216,7 +232,8 @@ func buildEvent(wire wireEvent) domain.Event {
 		ev.Type = domain.EventTurn
 		fields := &domain.TurnFields{
 			Role:  domain.TurnRole(wire.Role),
-			Model: domain.ModelID(wire.Model),
+			Model:    domain.ModelID(wire.Model),
+			Provider: domain.ProviderID(wire.Provider),
 		}
 		if wire.TokenUsage != nil {
 			fields.HasUsage = true
@@ -234,6 +251,8 @@ func buildEvent(wire wireEvent) domain.Event {
 			Source:          wire.Source,
 			Model:           domain.ModelID(wire.Model),
 			ServiceTier:     wire.ServiceTier,
+			Provider:        domain.ProviderID(wire.Provider),
+			Effort:          wire.Effort,
 		}
 		if wire.RecordIndex != nil {
 			fields.RecordIndex, fields.HasRecordIndex = *wire.RecordIndex, true
@@ -246,6 +265,22 @@ func buildEvent(wire wireEvent) domain.Event {
 			}
 		}
 		ev.UsageRecord = fields
+	case domain.EventToolCallStart:
+		ev.Type = domain.EventToolCallStart
+		ev.ToolCallStart = &domain.ToolCallStartFields{CallID: wire.CallID, ToolName: wire.ToolName}
+	case domain.EventToolCallEnd:
+		ev.Type = domain.EventToolCallEnd
+		ev.ToolCallEnd = &domain.ToolCallEndFields{CallID: wire.CallID, Status: domain.ToolCallStatus(wire.Status)}
+	case domain.EventCompaction:
+		ev.Type = domain.EventCompaction
+		fields := &domain.CompactionFields{Trigger: wire.Trigger}
+		if wire.TokensBefore != nil {
+			fields.TokensBefore = domain.Tokens(*wire.TokensBefore)
+		}
+		if wire.TokensAfter != nil {
+			fields.TokensAfter = domain.Tokens(*wire.TokensAfter)
+		}
+		ev.Compaction = fields
 	default:
 		// Unknown event type — decoded as EventOther with RawType preserved.
 		ev.Type = domain.EventOther
@@ -271,6 +306,10 @@ func decodeUsage(wu wireUsage) domain.TokenUsage {
 	if wu.CacheCreation != nil {
 		u.CacheCreation = domain.Tokens(*wu.CacheCreation)
 	}
+	if wu.Reasoning != nil {
+		u.Reasoning = domain.Tokens(*wu.Reasoning)
+	}
+	decodeTiers(&u, wu)
 	return u
 }
 

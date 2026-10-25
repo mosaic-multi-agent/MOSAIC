@@ -11,6 +11,7 @@
  */
 
 import { currentTimestamp } from "./core.js";
+import { isCallFailed, markCallFailed } from "./failed_calls.js";
 import { extractInstanceId, extractRunId } from "./runstate.js";
 import type {
   HandlerDependencies,
@@ -59,7 +60,7 @@ export function deriveToolOutcome(
   output: ToolAfterOutput | undefined,
 ): ToolOutcome {
   if (output == null || typeof output !== "object") {
-    return {};
+    return { status: "success" };
   }
   const raw = output as Record<string, unknown>;
 
@@ -67,7 +68,6 @@ export function deriveToolOutcome(
     ? raw["error"]
     : undefined;
   const statusField = raw["status"];
-  const successField = raw["success"];
 
   // Explicit error signal from `error` field or `status === "error"`
   if (errorField !== undefined || statusField === "error") {
@@ -77,13 +77,14 @@ export function deriveToolOutcome(
     };
   }
 
-  // Explicit success signal from `status === "success"` or `success === true`
-  if (statusField === "success" || successField === true) {
-    return { status: "success" };
-  }
+  // No error signal: the call succeeded.
+  return { status: "success" };
+}
 
-  // No recognizable outcome signal — omit status entirely
-  return {};
+/** A task result is present when the payload's `output` is a non-empty string. */
+function hasTaskResult(output: ToolAfterOutput | undefined): boolean {
+  const text = (output as Record<string, unknown> | undefined)?.["output"];
+  return typeof text === "string" && text !== "";
 }
 
 // ---------------------------------------------------------------------------
@@ -192,6 +193,16 @@ export function createToolHandlers(deps: HandlerDependencies): {
 
     let callId: string;
 
+    // A task call without a result is a failed subtask: do not close it as
+    // success. Mark it and let the error part or dispatch closure close it.
+    if (toolName === "task" && input.callID !== undefined && !hasTaskResult(output)) {
+      const open = store.peekToolCall(input.callID);
+      if (open && deriveToolOutcome(input, output).status !== "error") {
+        markCallFailed(store, open.callId);
+        return;
+      }
+    }
+
     if (input.callID !== undefined) {
       // Keyed-by-callId path: close exactly once for idempotency.
       // When the call was already closed (real after-hook and synthetic closure
@@ -272,6 +283,8 @@ export function createToolHandlers(deps: HandlerDependencies): {
         { sessionId: parentSessionId, runId, timestamp: ts },
         {
           call_id: entry.callId,
+          // Unmarked dispatch closure carries no status; a failed subtask is an error.
+          status: isCallFailed(store, entry.callId) ? "error" : undefined,
           // No tool_output — synthetic closure has no output payload
         },
       ),

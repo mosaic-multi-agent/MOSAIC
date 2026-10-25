@@ -84,6 +84,8 @@ type Model struct {
 	sourceScreen    *screens.SourceScreen
 	runsScreen      *screens.RunsScreen
 	runDetailScreen *screens.RunDetailScreen
+	runView         screens.RunView // the active per-run view
+	viewRunID       string          // run shown by the per-run views
 	pricingScreen   *screens.PricingScreen
 	noDataScreen    *screens.NoDataScreen
 
@@ -91,6 +93,9 @@ type Model struct {
 	pendingQuestion *Pending
 	selectOverlay   *overlaySelectOne
 	textOverlay     *overlayText
+
+	// Digest export action state.
+	export exportFlow
 
 	// Status shown on loading/error screen.
 	errMsg string
@@ -220,6 +225,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handlePricingEditDone(done)
 	}
 
+	// Digest export complete.
+	if done, ok := msg.(exportDoneMsg); ok {
+		return m.handleExportDone(done)
+	}
+
+	// Export action keys and the export screen.
+	var exportCmd tea.Cmd
+	var exportHandled bool
+	m, exportCmd, exportHandled = m.exportKeyHook(msg)
+	if exportHandled {
+		return m, exportCmd
+	}
+
 	// Pending question from the Interaction port.
 	if p, ok := msg.(Pending); ok {
 		return m.handlePending(p)
@@ -233,8 +251,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateSource(msg)
 	case screenRuns:
 		return m.updateRuns(msg)
-	case screenRunDetail:
-		return m.updateRunDetail(msg)
+	case screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline, screenAcrossRuns:
+		return m.updateRunView(msg)
 	case screenPricing:
 		return m.updatePricing(msg)
 	case screenNoData:
@@ -409,6 +427,11 @@ func (m Model) updateRuns(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.sourceScreen.Init()
 	}
 
+	// Intercept 'a' to open the across-runs view.
+	if key, ok := msg.(tea.KeyMsg); ok && key.String() == screens.KeyAcrossRuns {
+		return m.openAcrossRuns(), nil
+	}
+
 	// Intercept 'p' for pricing navigation.
 	// Guard: require an active session; do nothing if analysis has not yet produced one.
 	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "p" {
@@ -437,26 +460,8 @@ func (m Model) updateRuns(msg tea.Msg) (tea.Model, tea.Cmd) {
 		runID := m.runsScreen.SelectedRunID()
 		m.runsScreen.Reset()
 		if runID != "" {
-			if run, ok := m.report.FindRun(runID); ok {
-				style := stylesFromTheme(m.theme)
-				m.runDetailScreen = screens.NewRunDetailScreen(run, m.width, m.height, style)
-				m.screen = screenRunDetail
-			}
+			m = m.openRunView(runID, screens.ScreenRunDetail)
 		}
-	}
-	return m, cmd
-}
-
-func (m Model) updateRunDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.runDetailScreen == nil {
-		return m, nil
-	}
-	updated, cmd := m.runDetailScreen.Update(msg)
-	m.runDetailScreen = updated.(*screens.RunDetailScreen)
-	if m.runDetailScreen.Back() {
-		m.runDetailScreen.Reset()
-		m.screen = screenRuns
-		return m, nil
 	}
 	return m, cmd
 }
@@ -474,7 +479,7 @@ func (m Model) updatePricing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.pricingScreen.Done() {
-		selected := m.pricingScreen.SelectedModel()
+		selected := m.pricingScreen.SelectedKey()
 		m.pricingScreen.Reset()
 		m.screen = screenLoading
 		return m, m.buildPricingEditCmd(selected)
@@ -488,13 +493,13 @@ func (m Model) updatePricing(msg tea.Msg) (tea.Model, tea.Cmd) {
 // Binding rule: it returns ONLY that message. It must NOT start a second
 // waitForPending goroutine — the single long-lived waiter delivers the
 // editor's rate questions.
-func (m Model) buildPricingEditCmd(model domain.ModelID) tea.Cmd {
+func (m Model) buildPricingEditCmd(key domain.PricingKey) tea.Cmd {
 	svc := m.opts.Service
 	sess := m.session
 	report := m.report
 	ctx := m.ctx
 	return func() tea.Msg {
-		result, err := svc.EditModelPricing(ctx, sess, report, model)
+		result, err := svc.EditModelPricing(ctx, sess, report, key)
 		return pricingEditDoneMsg{result: result, err: err}
 	}
 }
@@ -596,13 +601,14 @@ func (m Model) View() string {
 
 	case screenRuns:
 		if m.runsScreen != nil {
-			return m.runsScreen.View(m.width, m.height)
+			return m.withExportStatus(func(h int) string { return m.runsScreen.View(m.width, h) })
 		}
 
-	case screenRunDetail:
-		if m.runDetailScreen != nil {
-			return m.runDetailScreen.View(m.width, m.height)
-		}
+	case screenExport:
+		return m.viewExport()
+
+	case screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline, screenAcrossRuns:
+		return m.viewRunView()
 
 	case screenPricing:
 		if m.pricingScreen != nil {

@@ -132,6 +132,8 @@ func TestValidate_CataloguePathTest_TriggersOneDeployDryRun(t *testing.T) {
 		HarnessID:         "claude-code",
 		DeployScratchRoot: t.TempDir(),
 		Deploy:            deploy,
+		Overrides:         selectedModels(),
+		CatalogFolder:     catalogWith(t, nil),
 	})
 
 	if len(deploy.deployCalls) != 1 {
@@ -165,6 +167,8 @@ func TestValidate_CataloguePathTest_DeployReceivesCorrectHarnessAndWorkspace(t *
 		HarnessID:         "claude-code",
 		DeployScratchRoot: scratchRoot,
 		Deploy:            deploy,
+		Overrides:         selectedModels(),
+		CatalogFolder:     catalogWith(t, nil),
 	})
 
 	if len(deploy.deployCalls) == 0 {
@@ -192,9 +196,9 @@ func TestValidate_CataloguePathTest_DeployReceivesCorrectHarnessAndWorkspace(t *
 // validation path.
 func TestValidate_StubAgentsPathTest_KeepsRenderLoopNotDeploy(t *testing.T) {
 	root := writeTree(t, map[string]string{
-		"suite.suite.yaml":  validSuiteWithOneTest,
-		"subject.test.yaml": definitionStubAgentsOnly,
-		"subject.stubs.json": registryCatalogueTests,
+		"suite.suite.yaml":            validSuiteWithOneTest,
+		"subject.test.yaml":           definitionStubAgentsOnly,
+		"subject.stubs.json":          registryCatalogueTests,
 		"agents/codebase-research.md": "# stub definition",
 	})
 
@@ -205,6 +209,8 @@ func TestValidate_StubAgentsPathTest_KeepsRenderLoopNotDeploy(t *testing.T) {
 		HarnessID:         "claude-code",
 		DeployScratchRoot: t.TempDir(),
 		Deploy:            deploy,
+		Overrides:         selectedModels(),
+		CatalogFolder:     catalogWith(t, nil),
 	})
 
 	if len(deploy.deployCalls) != 0 {
@@ -235,6 +241,8 @@ func TestValidate_ConflictingProvisioningPaths_ReportsConflictingDiagnostic(t *t
 		HarnessID:         "claude-code",
 		DeployScratchRoot: t.TempDir(),
 		Deploy:            &fakeDeployer{},
+		Overrides:         selectedModels(),
+		CatalogFolder:     catalogWith(t, nil),
 	})
 
 	if !hasDiagnosticCode(report, "conflicting-provisioning-paths") {
@@ -273,6 +281,8 @@ func TestValidate_ConflictingProvisioningPaths_NoDryRunOccurs(t *testing.T) {
 		HarnessID:         "claude-code",
 		DeployScratchRoot: t.TempDir(),
 		Deploy:            deploy,
+		Overrides:         selectedModels(),
+		CatalogFolder:     catalogWith(t, nil),
 	})
 
 	if len(deploy.deployCalls) != 0 {
@@ -306,6 +316,8 @@ func TestValidate_ConflictingProvisioningPaths_DiagnosticNamesConflictingDeclara
 		HarnessID:         "claude-code",
 		DeployScratchRoot: t.TempDir(),
 		Deploy:            &fakeDeployer{},
+		Overrides:         selectedModels(),
+		CatalogFolder:     catalogWith(t, nil),
 	})
 
 	for _, d := range report.Diagnostics {
@@ -353,6 +365,8 @@ func TestValidate_CataloguePathDeployFails_ReportsUndeployableSubjectDeclaration
 		HarnessID:         "claude-code",
 		DeployScratchRoot: t.TempDir(),
 		Deploy:            deploy,
+		Overrides:         selectedModels(),
+		CatalogFolder:     catalogWith(t, nil),
 	})
 
 	if !hasDiagnosticCode(report, "undeployable-subject-declaration") {
@@ -402,6 +416,8 @@ func TestValidate_CataloguePathDeployFails_DiagnosticCarriesToolMessage(t *testi
 		HarnessID:         "claude-code",
 		DeployScratchRoot: t.TempDir(),
 		Deploy:            deploy,
+		Overrides:         selectedModels(),
+		CatalogFolder:     catalogWith(t, nil),
 	})
 
 	for _, d := range report.Diagnostics {
@@ -441,6 +457,8 @@ func TestValidate_CataloguePathDeployToolUnavailable_ReportsEnvironmentUnusable(
 		HarnessID:         "claude-code",
 		DeployScratchRoot: t.TempDir(),
 		Deploy:            deploy,
+		Overrides:         selectedModels(),
+		CatalogFolder:     catalogWith(t, nil),
 	})
 
 	if hasDiagnosticCode(report, "undeployable-subject-declaration") {
@@ -476,6 +494,8 @@ func TestValidate_CataloguePathDeployTimedOut_ReportsEnvironmentUnusable(t *test
 		HarnessID:         "claude-code",
 		DeployScratchRoot: t.TempDir(),
 		Deploy:            deploy,
+		Overrides:         selectedModels(),
+		CatalogFolder:     catalogWith(t, nil),
 	})
 
 	if hasDiagnosticCode(report, "undeployable-subject-declaration") {
@@ -514,6 +534,8 @@ func TestValidate_CataloguePathDeploy_AtMostOneDiagnosticPerSubject(t *testing.T
 		HarnessID:         "claude-code",
 		DeployScratchRoot: t.TempDir(),
 		Deploy:            deploy,
+		Overrides:         selectedModels(),
+		CatalogFolder:     catalogWith(t, nil),
 	})
 
 	subjectDiagCount := 0
@@ -561,6 +583,8 @@ func TestValidate_CataloguePathTierModelMapCarriedToDeploy(t *testing.T) {
 		HarnessID:         "claude-code",
 		DeployScratchRoot: t.TempDir(),
 		Deploy:            deploy,
+		Overrides:         selectedModels(),
+		CatalogFolder:     catalogWith(t, nil),
 	})
 
 	if len(deploy.deployCalls) == 0 {

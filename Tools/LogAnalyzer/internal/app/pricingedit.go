@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"sort"
 
 	"mosaic-common/interaction"
 	"mosaic-log-analyzer/internal/domain"
@@ -11,9 +10,13 @@ import (
 // ModelPricingStatus pairs one model appearing in a report with its current
 // state in the pricing table.
 type ModelPricingStatus struct {
-	// Model is the model id as it appears in the report.
+	// Key is the (provider, model) as it appears in the report; an empty
+	// provider is a record that logged none.
+	Key domain.PricingKey
+	// Model is Key.Model.
 	Model domain.ModelID
-	// Priced reports whether the pricing table has an entry for Model.
+	// Priced reports whether the pricing table has an entry for Key (strict
+	// lookup: a top-level entry does not price a provider record).
 	Priced bool
 	// Pricing holds the current rates. Meaningful only when Priced is true;
 	// it is the zero value otherwise.
@@ -40,7 +43,10 @@ const (
 type PricingEditResult struct {
 	// Outcome classifies the end state.
 	Outcome PricingEditOutcome
-	// Model is the model the user chose. Empty when Outcome is PricingEditCancelled.
+	// Key is the (provider, model) the user chose. Zero when Outcome is
+	// PricingEditCancelled.
+	Key domain.PricingKey
+	// Model is Key.Model. Empty when Outcome is PricingEditCancelled.
 	Model domain.ModelID
 	// Report is the re-priced report when Outcome is PricingEditSaved, and the
 	// caller's original report otherwise. Never a zero Report.
@@ -50,95 +56,68 @@ type PricingEditResult struct {
 	ConfigPath string
 }
 
-// ReportModels returns every distinct model that appears anywhere in the
-// report — named runs (orchestrator and agents) and the unattributable
-// bucket — sorted by model id and de-duplicated.
-//
-// Returns an empty result for an empty report. A nil Unattributable is
-// handled without panic. Priced and unpriced models are both included;
-// this is a superset of Report.UnpricedModels.
-func ReportModels(r domain.Report) []domain.ModelID {
-	seen := make(map[domain.ModelID]struct{})
 
-	collectModels := func(actor domain.ActorReport) {
-		for _, m := range actor.Models {
-			seen[m] = struct{}{}
+// ReportModels returns every distinct (provider, model) that appears anywhere
+// in the report, sorted by model id then provider ("" first). An actor report
+// that carries no Keys contributes its Models as provider-less keys.
+func ReportModels(r domain.Report) []domain.PricingKey {
+	seen := make(map[domain.PricingKey]bool)
+	collect := func(actor domain.ActorReport) {
+		for _, k := range actor.Keys {
+			seen[k] = true
+		}
+		if len(actor.Keys) == 0 {
+			for _, m := range actor.Models {
+				seen[domain.PricingKey{Model: m}] = true
+			}
 		}
 	}
-
-	for _, run := range r.Runs {
-		collectModels(run.Orchestrator)
+	collectRun := func(run domain.RunReport) {
+		collect(run.Orchestrator)
 		for _, agent := range run.Agents {
-			collectModels(agent)
+			collect(agent)
 		}
 	}
-
+	for _, run := range r.Runs {
+		collectRun(run)
+	}
 	if r.Unattributable != nil {
-		collectModels(r.Unattributable.Orchestrator)
-		for _, agent := range r.Unattributable.Agents {
-			collectModels(agent)
-		}
+		collectRun(*r.Unattributable)
 	}
-
-	if len(seen) == 0 {
-		return nil
-	}
-
-	models := make([]domain.ModelID, 0, len(seen))
-	for m := range seen {
-		models = append(models, m)
-	}
-	sort.Slice(models, func(i, j int) bool {
-		return models[i] < models[j]
-	})
-	return models
+	return domain.SortedPricingKeys(seen)
 }
 
-// ModelPricingStates pairs each model in the report with its current state
-// in the supplied pricing table, preserving ReportModels ordering, so a
-// frontend can render the list without re-deriving priced/unpriced status.
+// ModelPricingStates pairs each (provider, model) in the report with its
+// current state in the supplied pricing table, preserving ReportModels ordering,
+// so a frontend can render the list without re-deriving priced/unpriced status.
 func ModelPricingStates(r domain.Report, t domain.PricingTable) []ModelPricingStatus {
-	models := ReportModels(r)
-	if len(models) == 0 {
+	keys := ReportModels(r)
+	if len(keys) == 0 {
 		return nil
 	}
 
-	states := make([]ModelPricingStatus, len(models))
-	for i, m := range models {
-		pricing, ok := t.Lookup(m)
-		if ok {
-			states[i] = ModelPricingStatus{Model: m, Priced: true, Pricing: pricing}
-		} else {
-			states[i] = ModelPricingStatus{Model: m, Priced: false}
+	states := make([]ModelPricingStatus, len(keys))
+	for i, k := range keys {
+		states[i] = ModelPricingStatus{Key: k, Model: k.Model}
+		if pricing, ok := t.LookupFor(k.Provider, k.Model); ok {
+			states[i].Priced = true
+			states[i].Pricing = pricing
 		}
 	}
 	return states
 }
 
-// EditModelPricing sets or overwrites the price of one already-chosen model.
-//
-// Flow: collect the rate answers for model through the Interaction port
-// (reusing the same question vocabulary as the pricing-gap flow), persist a
-// valid entry via the pricing store, and return a report re-priced from the
-// Session. Logs are never re-read.
-//
-// Binding rules:
-//   - An empty model id yields PricingEditCancelled with the report unchanged
-//     and no questions asked.
-//   - A nil sess yields PricingEditCancelled with the report unchanged and no
-//     questions asked.
-//   - When the user skips every rate question, or the collected rates do not
-//     form a valid domain.ModelPricing, NOTHING is persisted and the returned
-//     result carries Outcome == PricingEditNoChange with Report == r unchanged.
-//   - The returned Report preserves r.Quality (the re-price does not recompute
-//     the quality summary).
-//   - Must complete without blocking under a skipping Interaction.
-func (s *Service) EditModelPricing(ctx context.Context, sess *Session, r domain.Report, model domain.ModelID) (PricingEditResult, error) {
-	if model == "" || sess == nil {
+
+// EditModelPricing sets or overwrites the price of one already-chosen
+// (provider, model): the entry is saved under key.Provider, or in the top-level
+// models section when the key has no provider. An empty key.Model or a nil
+// session cancels. The binding rules above apply.
+func (s *Service) EditModelPricing(ctx context.Context, sess *Session, r domain.Report, key domain.PricingKey) (PricingEditResult, error) {
+	if key.Model == "" || sess == nil {
 		return PricingEditResult{Outcome: PricingEditCancelled, Report: r}, nil
 	}
 
-	entry, ok, err := s.collectPricingEntry(ctx, model)
+	entry, ok, err := s.collectPricingEntry(ctx, key)
 	if err != nil {
 		return PricingEditResult{}, err
 	}
@@ -153,7 +132,7 @@ func (s *Service) EditModelPricing(ctx context.Context, sess *Session, r domain.
 	s.deps.Interaction.Notify(ctx, interaction.Notice{
 		Level:   interaction.NoticeInfo,
 		Title:   "Saved",
-		Message: "Pricing for " + string(model) + " saved to " + s.deps.Pricing.Path(),
+		Message: "Pricing for " + key.String() + " saved to " + s.deps.Pricing.Path(),
 	})
 
 	repriced := sess.Reprice()
@@ -161,15 +140,18 @@ func (s *Service) EditModelPricing(ctx context.Context, sess *Session, r domain.
 
 	return PricingEditResult{
 		Outcome:    PricingEditSaved,
-		Model:      model,
+		Key:        key,
+		Model:      key.Model,
 		Report:     repriced,
 		ConfigPath: s.deps.Pricing.Path(),
 	}, nil
 }
 
-// EditPricing is the frontend-agnostic entry point: it asks which model to
-// price through the Interaction port (QuestionPricingModel, a SelectOne over
-// every model returned by ReportModels), then delegates to EditModelPricing.
+// EditPricing is the frontend-agnostic entry point: it asks which (provider,
+// model) to price through the Interaction port (QuestionPricingModel, a
+// SelectOne over every key returned by ReportModels; the option id is the key's
+// printed form, "model [provider]" or the bare model id without provider),
+// then delegates to EditModelPricing.
 //
 // Binding rules:
 //   - A skipped or cancelled selection returns PricingEditCancelled with the
@@ -178,8 +160,8 @@ func (s *Service) EditModelPricing(ctx context.Context, sess *Session, r domain.
 //   - A report with no models asks nothing and returns PricingEditCancelled.
 //   - Must complete without blocking under a skipping Interaction.
 func (s *Service) EditPricing(ctx context.Context, sess *Session, r domain.Report) (PricingEditResult, error) {
-	models := ReportModels(r)
-	if len(models) == 0 {
+	keys := ReportModels(r)
+	if len(keys) == 0 {
 		return PricingEditResult{Outcome: PricingEditCancelled, Report: r}, nil
 	}
 
@@ -191,21 +173,20 @@ func (s *Service) EditPricing(ctx context.Context, sess *Session, r domain.Repor
 		table = domain.EmptyPricingTable()
 	}
 
-	// Build one SelectOne option per model, with a label that distinguishes
-	// priced from unpriced so a user can tell them apart.
-	options := make([]interaction.Option, len(models))
-	for i, m := range models {
-		_, priced := table.Lookup(m)
-		label := string(m)
+	// Build one SelectOne option per key, with a label that distinguishes
+	// priced from unpriced (strict lookup) so a user can tell them apart.
+	options := make([]interaction.Option, len(keys))
+	byID := make(map[string]domain.PricingKey, len(keys))
+	for i, k := range keys {
+		_, priced := table.LookupFor(k.Provider, k.Model)
+		label := k.String()
 		if priced {
 			label += " (priced)"
 		} else {
 			label += " (unpriced)"
 		}
-		options[i] = interaction.Option{
-			ID:    string(m),
-			Label: label,
-		}
+		options[i] = interaction.Option{ID: k.String(), Label: label}
+		byID[k.String()] = k
 	}
 
 	ans, err := s.deps.Interaction.SelectOne(ctx, interaction.ChoiceQuestion{
@@ -224,15 +205,8 @@ func (s *Service) EditPricing(ctx context.Context, sess *Session, r domain.Repor
 		return PricingEditResult{Outcome: PricingEditCancelled, Report: r}, nil
 	}
 
-	// Reject unrecognised option ids — treat them as a cancel.
-	chosen := domain.ModelID(ans.OptionID)
-	valid := false
-	for _, m := range models {
-		if m == chosen {
-			valid = true
-			break
-		}
-	}
+	// Reject unrecognised option ids - treat them as a cancel.
+	chosen, valid := byID[ans.OptionID]
 	if !valid {
 		return PricingEditResult{Outcome: PricingEditCancelled, Report: r}, nil
 	}

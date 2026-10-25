@@ -175,10 +175,10 @@ func TestEncodeText_UnpricedMoneyMarkedDistinctlyFromDollarZero(t *testing.T) {
 						Complete: false,
 					},
 				},
-				UnpricedModels: []domain.ModelID{"unknown-model"},
+				UnpricedModels: []domain.PricingKey{{Model: "unknown-model"}},
 			},
 		},
-		UnpricedModels: []domain.ModelID{"unknown-model"},
+		UnpricedModels: []domain.PricingKey{{Model: "unknown-model"}},
 	}
 
 	var buf bytes.Buffer
@@ -208,10 +208,10 @@ func TestEncodeText_UnpricedMarkerPresent(t *testing.T) {
 						Complete: false,
 					},
 				},
-				UnpricedModels: []domain.ModelID{"model-x"},
+				UnpricedModels: []domain.PricingKey{{Model: "model-x"}},
 			},
 		},
-		UnpricedModels: []domain.ModelID{"model-x"},
+		UnpricedModels: []domain.PricingKey{{Model: "model-x"}},
 	}
 
 	var buf bytes.Buffer

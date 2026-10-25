@@ -45,6 +45,9 @@ func (w *recordingWorkspace) Reap(policy workspace.ReapPolicy) ([]workspace.Reap
 	return w.inner.Reap(policy)
 }
 
+// defaultSubjectModel is the subject selection newRequest carries.
+const defaultSubjectModel = "test-subject-model"
+
 // harness bundles everything one test needs to drive runner.Run: the
 // wired-up Deps, the stub collaborators to script and inspect, and the
 // shared call recorder.
@@ -98,7 +101,9 @@ func newHarness(t *testing.T) *harness {
 	launcher := &stubLauncher{rec: rec}
 	costProvider := &stubCostProvider{rec: rec, report: domain.CostReport{Attribution: domain.AttributionAttributed}}
 	sink := &recordingSink{}
-	deployer := &stubDeployer{}
+	catalogFolder := newTestCatalog(t, defaultCatalogFiles()...)
+	deployer := &stubDeployer{catalogFolder: catalogFolder}
+	adapter.deployedModel = deployer.writtenModel
 
 	return &harness{
 		Deps: runner.Deps{
@@ -111,6 +116,8 @@ func newHarness(t *testing.T) *harness {
 			Clock:      clock,
 			Progress:   sink,
 			Deploy:     deployer,
+
+			CatalogFolder: catalogFolder,
 		},
 		Adapter:       adapter,
 		Launcher:      launcher,
@@ -141,6 +148,9 @@ func newRequest(testID string) runner.Request {
 				},
 			},
 			Registry: domain.StubRegistry{TestID: testID},
+			// A run always carries a subject selection (preflight rejects a
+			// run without one); the stub selection follows it.
+			Models: domain.ModelSelection{Subject: defaultSubjectModel},
 		},
 		Settings: domain.RunSettings{},
 		// RetainNever pins the default policy explicitly, so a test built

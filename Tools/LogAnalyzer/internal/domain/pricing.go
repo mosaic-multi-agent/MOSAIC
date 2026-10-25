@@ -2,86 +2,126 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 )
 
-// ModelPricing is the five-rate entry for one model, plus its optional
-// long-context threshold.
+// RateSet holds the five per-category rates of one tier.
+type RateSet struct {
+	Input        Rate
+	CacheRead    Rate
+	CacheWrite5m Rate
+	CacheWrite1h Rate
+	Output       Rate
+}
+
+// LongContextPricing is the optional single long-context tier.
+type LongContextPricing struct {
+	Threshold int64 // tokens per request (input + cache read + cache write); > 0
+	Rates     RateSet
+}
+
+// ModelPricing is the entry for one model: a standard rate set plus an optional
+// long-context tier.
 type ModelPricing struct {
-	Model                ModelID
-	Input                Rate
-	CachedInput          Rate // cache read
-	CacheWrite           Rate // cache creation
-	OutputUnderThreshold Rate
-	OutputAtThreshold    Rate  // unused when HasThreshold is false
-	// ContextLengthThreshold is the total-context size at or above which the
-	// whole invocation's output is repriced at OutputAtThreshold.
-	ContextLengthThreshold int64
-	HasThreshold           bool // false => the model has no long-context tier
+	Provider       ProviderID // "" = top-level models section
+	Model          ModelID
+	Standard       RateSet
+	LongContext    LongContextPricing // meaningful only when HasLongContext
+	HasLongContext bool
 }
 
 // HasLongContextTier reports whether tier selection applies to this model.
-func (p ModelPricing) HasLongContextTier() bool { return p.HasThreshold }
+func (p ModelPricing) HasLongContextTier() bool { return p.HasLongContext }
 
-// Validate reports why an entry is unusable. An entry with no threshold is valid;
-// an entry missing any of the four always-required rates is not. OutputAtThreshold
-// is required only when HasThreshold is true.
+// Validate reports why an entry is unusable. All five standard rates are
+// required; a long-context block additionally needs a positive threshold and its
+// own five rates. Errors name the model and the offending wire field.
 func (p ModelPricing) Validate() error {
 	if p.Model.IsEmpty() {
 		return errors.New("pricing entry has empty model ID")
 	}
-	if p.Input == 0 {
-		return errors.New("pricing entry for " + string(p.Model) + " has zero Input rate")
+	if field := p.Standard.firstMissing(""); field != "" {
+		return fmt.Errorf("pricing entry for %s has zero %s rate", p.Model, field)
 	}
-	if p.CachedInput == 0 {
-		return errors.New("pricing entry for " + string(p.Model) + " has zero CachedInput rate")
+	if !p.HasLongContext {
+		return nil
 	}
-	if p.CacheWrite == 0 {
-		return errors.New("pricing entry for " + string(p.Model) + " has zero CacheWrite rate")
+	if p.LongContext.Threshold <= 0 {
+		return fmt.Errorf("pricing entry for %s has non-positive long_context.threshold", p.Model)
 	}
-	if p.OutputUnderThreshold == 0 {
-		return errors.New("pricing entry for " + string(p.Model) + " has zero OutputUnderThreshold rate")
-	}
-	if p.HasThreshold && p.OutputAtThreshold == 0 {
-		return errors.New("pricing entry for " + string(p.Model) + " has HasThreshold=true but zero OutputAtThreshold rate")
+	if field := p.LongContext.Rates.firstMissing("long_context."); field != "" {
+		return fmt.Errorf("pricing entry for %s has zero %s rate", p.Model, field)
 	}
 	return nil
 }
 
-// PricingTable is an immutable, model-keyed lookup.
+// firstMissing returns the wire name (with prefix) of the first zero rate, or ""
+// when all five are set.
+func (r RateSet) firstMissing(prefix string) string {
+	fields := []struct {
+		name string
+		rate Rate
+	}{
+		{"input", r.Input},
+		{"cache_read", r.CacheRead},
+		{"cache_write_5m", r.CacheWrite5m},
+		{"cache_write_1h", r.CacheWrite1h},
+		{"output", r.Output},
+	}
+	for _, f := range fields {
+		if f.rate == 0 {
+			return prefix + f.name
+		}
+	}
+	return ""
+}
+
+// PricingTable is an immutable lookup keyed by (provider, model). Lookup is strict:
+// a provider never falls back to the provider-less entries, nor the reverse.
 type PricingTable struct {
-	entries map[ModelID]ModelPricing
+	entries map[PricingKey]ModelPricing
 }
 
 // NewPricingTable builds a PricingTable from a slice of entries.
 func NewPricingTable(entries []ModelPricing) PricingTable {
-	m := make(map[ModelID]ModelPricing, len(entries))
+	m := make(map[PricingKey]ModelPricing, len(entries))
 	for _, e := range entries {
-		m[e.Model] = e
+		m[PricingKey{e.Provider, e.Model}] = e
 	}
 	return PricingTable{entries: m}
 }
 
 // EmptyPricingTable returns a table with no entries.
 func EmptyPricingTable() PricingTable {
-	return PricingTable{entries: make(map[ModelID]ModelPricing)}
+	return PricingTable{entries: make(map[PricingKey]ModelPricing)}
 }
 
-// Lookup resolves a model. found=false is the explicit not-configured outcome and
-// is never represented by a zero-valued ModelPricing.
+// Lookup resolves a model in the provider-less (top-level models) section.
 func (t PricingTable) Lookup(m ModelID) (entry ModelPricing, found bool) {
-	entry, found = t.entries[m]
+	return t.LookupFor("", m)
+}
+
+// LookupFor resolves (provider, model) strictly. found=false is the explicit
+// not-configured outcome and is never represented by a zero-valued ModelPricing.
+func (t PricingTable) LookupFor(p ProviderID, m ModelID) (entry ModelPricing, found bool) {
+	entry, found = t.entries[PricingKey{p, m}]
 	return
 }
 
-// Models returns all model IDs in sorted order.
+// Models returns the distinct model IDs in sorted order.
 func (t PricingTable) Models() []ModelID {
 	if len(t.entries) == 0 {
 		return nil
 	}
+	seen := make(map[ModelID]struct{}, len(t.entries))
 	models := make([]ModelID, 0, len(t.entries))
-	for id := range t.entries {
-		models = append(models, id)
+	for k := range t.entries {
+		if _, dup := seen[k.Model]; dup {
+			continue
+		}
+		seen[k.Model] = struct{}{}
+		models = append(models, k.Model)
 	}
 	sort.Slice(models, func(i, j int) bool {
 		return string(models[i]) < string(models[j])
@@ -95,10 +135,10 @@ func (t PricingTable) Len() int { return len(t.entries) }
 // With returns a copy of the table with the entry added or replaced. The table is
 // never mutated in place, so a re-price cannot race a render.
 func (t PricingTable) With(entry ModelPricing) PricingTable {
-	m := make(map[ModelID]ModelPricing, len(t.entries)+1)
-	for id, e := range t.entries {
-		m[id] = e
+	m := make(map[PricingKey]ModelPricing, len(t.entries)+1)
+	for k, e := range t.entries {
+		m[k] = e
 	}
-	m[entry.Model] = entry
+	m[PricingKey{entry.Provider, entry.Model}] = entry
 	return PricingTable{entries: m}
 }

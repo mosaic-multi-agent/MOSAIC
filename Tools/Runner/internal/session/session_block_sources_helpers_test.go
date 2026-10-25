@@ -160,11 +160,12 @@ func (r *blockRig) queueOKTimes(agent string, n int) {
 	}
 }
 
-// invocationsOf counts the dispatches of agent.
+// invocationsOf counts the dispatches of agent, except the commit setup
+// dispatch of a commits-enabled run.
 func (r *blockRig) invocationsOf(agent string) int {
 	n := 0
 	for _, inv := range r.adapter.Invocations() {
-		if inv.Agent.Identifier == agent {
+		if inv.Agent.Identifier == agent && !isCommitSetup(inv.Request) {
 			n++
 		}
 	}

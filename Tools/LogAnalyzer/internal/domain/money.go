@@ -91,7 +91,7 @@ func ParseRate(s string) (Rate, error) {
 	if err != nil {
 		return 0, fmt.Errorf("invalid rate %q: %w", s, err)
 	}
-	if intPart < 0 {
+	if intPart < 0 || strings.HasPrefix(parts[0], "-") {
 		return 0, fmt.Errorf("invalid rate %q: negative value", s)
 	}
 

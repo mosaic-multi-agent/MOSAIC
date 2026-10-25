@@ -47,6 +47,7 @@ func TestValidate_RegistryTestIDMismatch_DiagnosticMessageNamesDefinitionName(t 
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	d, found := findDiag(report, "test-id-mismatch")
@@ -79,7 +80,8 @@ func TestValidate_FilterByTestIDs_MatchesByDefinitionName(t *testing.T) {
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
 		Overrides: preflight.Overrides{
-			TestIDs: []string{"test-a"},
+			SubjectModel: testSubjectModel,
+			TestIDs:      []string{"test-a"},
 		},
 	})
 
@@ -113,7 +115,8 @@ func TestValidate_FilterByTestIDs_ExcludesNonMatchingByName(t *testing.T) {
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
 		Overrides: preflight.Overrides{
-			TestIDs: []string{"test-b"},
+			SubjectModel: testSubjectModel,
+			TestIDs:      []string{"test-b"},
 		},
 	})
 
@@ -144,7 +147,7 @@ func TestValidate_FilterByTestIDs_EmptyFilter_IncludesAllTests(t *testing.T) {
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
-		Overrides:   preflight.Overrides{}, // TestIDs intentionally nil/empty
+		Overrides:   preflight.Overrides{SubjectModel: testSubjectModel}, // TestIDs intentionally nil/empty
 	})
 
 	if report.HasErrors() {
@@ -170,7 +173,8 @@ func TestValidate_FilterByTestIDs_MultipleMatchingNames_RetainsBoth(t *testing.T
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
 		Overrides: preflight.Overrides{
-			TestIDs: []string{"test-a", "test-b"},
+			SubjectModel: testSubjectModel,
+			TestIDs:      []string{"test-a", "test-b"},
 		},
 	})
 
@@ -210,6 +214,7 @@ func TestValidate_FilterByTestIDs_MatchesByName_NotByNumericID(t *testing.T) {
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
 		Overrides: preflight.Overrides{
+			SubjectModel: testSubjectModel,
 			// "1" is the numeric id of test-a, but it is not its Name.
 			// A Name-based filter must not match it.
 			TestIDs: []string{"1"},
@@ -238,16 +243,17 @@ func TestValidate_CrossRef_RegistryTestIDMatchesDefinitionName_NoMismatchDiagnos
 	// validDefinition has name: happy-path; validRegistry has test_id: "happy-path".
 	// They match, so no test-id-mismatch diagnostic should appear.
 	root := writeTree(t, map[string]string{
-		"s.suite.yaml":         validSuite,
-		"happy-path.test.yaml": validDefinition,
+		"s.suite.yaml":          validSuite,
+		"happy-path.test.yaml":  validDefinition,
 		"happy-path.stubs.json": validRegistry,
-		"agents/researcher.md": "# stub researcher placeholder",
+		"agents/researcher.md":  "# stub researcher placeholder",
 	})
 
 	_, report := preflight.Validate(preflight.Input{
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	if _, found := findDiag(report, "test-id-mismatch"); found {

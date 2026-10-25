@@ -1,0 +1,38 @@
+{
+  "schema_version": "1",
+  "suite_id": "pre-observed-suite",
+  "started_at": "2026-05-02T08:30:00Z",
+  "finished_at": "2026-05-02T08:40:00Z",
+  "tests": [
+    {
+      "test_name": "test-pre-observed",
+      "test_id": 1,
+      "description": "Report shaped like one stored before observed models were recorded",
+      "layer": "orchestrator",
+      "aggregate": {
+        "verdict": "pass",
+        "counted": 1,
+        "passed": 1,
+        "pass_rate": 1.0,
+        "infrastructure_failure": false,
+        "total_cost": { "total_usd": 6.66, "attribution": "attributed" }
+      },
+      "runs": [
+        {
+          "subject_version": "7.4.1",
+          "subject_model": "github-copilot/legacy-model-3",
+          "harness_id": "claude-code",
+          "verdict": "pass",
+          "duration_ms": 4000,
+          "cost": { "total_usd": 6.66, "attribution": "attributed" },
+          "termination_reason": "completed",
+          "conditions": [],
+          "test_version": 1
+        }
+      ]
+    }
+  ],
+  "counts": { "pass": 1 },
+  "total_cost": { "total_usd": 6.66, "attribution": "attributed" },
+  "infrastructure_failures": 0
+}

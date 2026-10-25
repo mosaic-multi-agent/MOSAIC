@@ -101,7 +101,7 @@ function makeDeps(
     sdkClient,
     adapterVersion: "0.1.0",
     buildEvent: (event, envelope, fields) => ({
-      schema_version: "1.0.0",
+      schema_version: "1.3.0",
       event,
       timestamp: envelope.timestamp,
       harness: "opencode",
@@ -503,7 +503,7 @@ describe("safeHandler — defensive error wrapping", () => {
       paths,
       sdkClient: sdk,
       adapterVersion: undefined,
-      buildEvent: () => ({ event: "tool_call_start", schema_version: "1.0.0", timestamp: "t", harness: "opencode" }),
+      buildEvent: () => ({ event: "tool_call_start", schema_version: "1.3.0", timestamp: "t", harness: "opencode" }),
       appendEvent: async () => {
         throw new Error("disk full");
       },
@@ -844,16 +844,16 @@ describe("deriveToolOutcome — tool call outcome derivation", () => {
     expect(outcome.status).toBe("success");
   });
 
-  it("omits status entirely when the payload carries no recognizable outcome signal", () => {
+  it("returns success status when the payload carries no failure signal", () => {
     const [input] = toolAfterPayload({ tool: TOOL_NAME, sessionID: ORCH_SESSION });
     const outcome = deriveToolOutcome(input, { something: "unrecognized payload structure" });
-    expect("status" in outcome).toBe(false);
+    expect(outcome.status).toBe("success");
   });
 
-  it("omits status entirely when the output is undefined", () => {
+  it("returns success status when the output is undefined", () => {
     const [input] = toolAfterPayload({ tool: TOOL_NAME, sessionID: ORCH_SESSION });
     const outcome = deriveToolOutcome(input, undefined);
-    expect("status" in outcome).toBe(false);
+    expect(outcome.status).toBe("success");
   });
 
   it("captures error detail in the error field alongside error status", () => {
@@ -920,7 +920,7 @@ describe("handleToolAfter — status field derived from payload, not hardcoded",
     expect(endEvent!.event.error).toBeTruthy();
   });
 
-  it("omits status when the after-hook output signals neither success nor failure", async () => {
+  it("records success when the after-hook output carries no failure signal", async () => {
     const store = makeStore();
     const paths = makePaths();
     const { sdk } = makeSdkWithTracking();
@@ -947,8 +947,7 @@ describe("handleToolAfter — status field derived from payload, not hardcoded",
 
     const endEvent = collected.find((e) => e.event.event === "tool_call_end");
     expect(endEvent).toBeDefined();
-    // Must not unconditionally claim success when the payload gives no indication
-    expect("status" in endEvent!.event).toBe(false);
+    expect(endEvent!.event.status).toBe("success");
   });
 });
 
@@ -1128,6 +1127,7 @@ describe("real dispatch closure — after-hook on task call", () => {
       tool: "task",
       sessionID: ORCH_SESSION,
       callID: "dispatch-after-real",
+      output: { output: "subagent result text" },
     });
     await handleToolAfter(afterInput, afterOutput);
 
@@ -1159,6 +1159,7 @@ describe("real dispatch closure — after-hook on task call", () => {
       tool: "task",
       sessionID: ORCH_SESSION,
       callID: "dispatch-idem-real",
+      output: { output: "subagent result text" },
     });
     await handleToolAfter(afterInput, afterOutput); // first — should emit
     await handleToolAfter(afterInput, afterOutput); // second — must be a no-op
@@ -1201,6 +1202,7 @@ describe("real dispatch closure — after-hook on task call", () => {
       tool: "task",
       sessionID: ORCH_SESSION,
       callID: "task-call-interleaved",
+      output: { output: "subagent result text" },
     });
     await handleToolAfter(taskAfter, taskAfterOutput);
 
