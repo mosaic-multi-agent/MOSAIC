@@ -30,7 +30,7 @@ func (s *sessionImpl) discardDecisionOnStop(ctx context.Context, dispInstr *doma
 	if !s.deps.StopRequested() {
 		return false, domain.RunOutcome{}
 	}
-	row := dispInstr.RowIndex + 1
+	row := int(domain.WorkflowRowFromIndex(dispInstr.RowIndex))
 	subject := fmt.Sprintf("%s (workflow row %d", dispInstr.Agent, row)
 	if stage != "" {
 		subject += ", stage " + stage

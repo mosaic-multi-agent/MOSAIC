@@ -37,7 +37,12 @@ type runDoneMsg struct {
 }
 
 // runErrorMsg is sent by the session goroutine when Start returns a non-nil error.
-type runErrorMsg struct{ err error }
+type runErrorMsg struct {
+	err error
+	// outcome is the outcome Start returned together with err; nil when none
+	// is available (a recovered panic).
+	outcome *domain.RunOutcome
+}
 
 // stepCompleteMsg is sent by the session's Notify call to inform the progress screen.
 type stepCompleteMsg struct {

@@ -41,7 +41,7 @@ func TestConfigScreen_VersionDrift_NewRun_SkipsVersionDriftStep(t *testing.T) {
 
 // TestConfigScreen_VersionDrift_ResumedRun_MatchingVersions_SkipsVersionDriftStep verifies
 // that when isNewRun=false and the recorded version matches the current version, the
-// version-drift step is skipped and the wizard goes directly to checkpoints.
+// version-drift step is skipped and the wizard goes directly to manual resolution (a resume never asks checkpoints).
 func TestConfigScreen_VersionDrift_ResumedRun_MatchingVersions_SkipsVersionDriftStep(t *testing.T) {
 	// Arrange
 	s := NewConfigScreen(80, 24, screens.Styles{})
@@ -53,15 +53,15 @@ func TestConfigScreen_VersionDrift_ResumedRun_MatchingVersions_SkipsVersionDrift
 	driveConfigScreenPastModeAndHarness(s)
 
 	// Assert
-	if s.step != configStepCheckpoints {
-		t.Errorf("after timeout with matching versions, step=%v, want configStepCheckpoints; "+
+	if s.step != configStepManualResolution {
+		t.Errorf("after timeout with matching versions, step=%v, want configStepManualResolution; "+
 			"version-drift screen must be skipped when versions match", s.step)
 	}
 }
 
 // TestConfigScreen_VersionDrift_ResumedRun_DifferentVersions_AllowingDriftRecordsTrue verifies
 // that on a resumed run with drifted versions the drift prompt is presented, and that
-// choosing "Yes" records AllowVersionDrift=true and continues to checkpoints.
+// choosing "Yes" records AllowVersionDrift=true and continues to manual resolution.
 //
 // Asserting the recorded choice (not merely the step value) is what makes this test
 // discriminating: the step assertion alone is satisfied by unconditional advancement.
@@ -93,14 +93,14 @@ func TestConfigScreen_VersionDrift_ResumedRun_DifferentVersions_AllowingDriftRec
 		t.Errorf("AllowVersionDrift = false after selecting Yes on the drift prompt, want true; "+
 			"the user's consent to run against a drifted workflow must be captured")
 	}
-	if s.step != configStepCheckpoints {
-		t.Errorf("after answering the drift prompt, step=%v, want configStepCheckpoints", s.step)
+	if s.step != configStepManualResolution {
+		t.Errorf("after answering the drift prompt, step=%v, want configStepManualResolution", s.step)
 	}
 }
 
 // TestConfigScreen_VersionDrift_ResumedRun_DifferentVersions_RefusingDriftRecordsFalse verifies
 // that choosing "No" on the drift prompt records AllowVersionDrift=false and still continues
-// to checkpoints (the refusal is enforced later, at run start).
+// to manual resolution (the refusal is enforced later, at run start).
 func TestConfigScreen_VersionDrift_ResumedRun_DifferentVersions_RefusingDriftRecordsFalse(t *testing.T) {
 	// Arrange
 	s := NewConfigScreen(80, 24, screens.Styles{})
@@ -120,8 +120,8 @@ func TestConfigScreen_VersionDrift_ResumedRun_DifferentVersions_RefusingDriftRec
 		t.Errorf("AllowVersionDrift = true after selecting No on the drift prompt, want false; "+
 			"refusing drift must not be recorded as consent")
 	}
-	if s.step != configStepCheckpoints {
-		t.Errorf("after answering the drift prompt, step=%v, want configStepCheckpoints", s.step)
+	if s.step != configStepManualResolution {
+		t.Errorf("after answering the drift prompt, step=%v, want configStepManualResolution", s.step)
 	}
 }
 
@@ -188,8 +188,8 @@ func TestConfigScreen_VersionDrift_EmptyVersions_TreatsAsMatching(t *testing.T) 
 	driveConfigScreenPastModeAndHarness(s)
 
 	// Assert
-	if s.step != configStepCheckpoints {
-		t.Errorf("after timeout with both versions empty, step=%v, want configStepCheckpoints; "+
+	if s.step != configStepManualResolution {
+		t.Errorf("after timeout with both versions empty, step=%v, want configStepManualResolution; "+
 			"empty versions must be treated as matching", s.step)
 	}
 }
@@ -220,8 +220,8 @@ func TestConfigScreen_VersionDrift_RecordedVersionEmpty_TreatsAsMismatch(t *test
 	if !s.Selection().AllowVersionDrift {
 		t.Errorf("AllowVersionDrift = false after selecting Yes, want true")
 	}
-	if s.step != configStepCheckpoints {
-		t.Errorf("after answering the drift prompt, step=%v, want configStepCheckpoints", s.step)
+	if s.step != configStepManualResolution {
+		t.Errorf("after answering the drift prompt, step=%v, want configStepManualResolution", s.step)
 	}
 }
 
@@ -251,7 +251,7 @@ func TestConfigScreen_VersionDrift_CurrentVersionEmpty_TreatsAsMismatch(t *testi
 	if s.Selection().AllowVersionDrift {
 		t.Errorf("AllowVersionDrift = true after selecting No, want false")
 	}
-	if s.step != configStepCheckpoints {
-		t.Errorf("after answering the drift prompt, step=%v, want configStepCheckpoints", s.step)
+	if s.step != configStepManualResolution {
+		t.Errorf("after answering the drift prompt, step=%v, want configStepManualResolution", s.step)
 	}
 }

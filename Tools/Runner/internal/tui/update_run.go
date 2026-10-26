@@ -22,8 +22,10 @@ import (
 
 func (m *rootModel) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.syncPendingRequests()
+	m.syncGuidanceAvailable()
 	cmd := m.progressScreen.Update(msg)
 	m.applyRequestKeyEvents()
+	m.applyGuardKeyEvents()
 
 	// Drain the gate transitions this update produced and record them. Draining
 	// rather than polling is what keeps the log honest: each transition is
@@ -54,6 +56,12 @@ func (m *rootModel) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// follows the arming it records and a resumed run's stop records its
 			// own. Request() itself is idempotent and runs on every update.
 			m.debug.Log(domain.EventTUIStopSignalArmed, "graceful-stop signal armed")
+		}
+	}
+
+	if m.progressScreen.GuidanceViewRequested() {
+		if openCmd := m.openGuidanceFromProgress(); openCmd != nil {
+			return m, openCmd
 		}
 	}
 
@@ -235,6 +243,12 @@ func (m *rootModel) updateDone(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.doneScreen.Done() {
 			return m, tea.Quit
 		}
+		if m.doneScreen.ContinueWithGuardOff() {
+			// Resume from a guard stop with the guard off; only this start carries it.
+			m.doneScreen = nil
+			m.guardOffNextStart = true
+			return m, m.restartAsResume(true)
+		}
 		if m.doneScreen.Continue() {
 			// Resume the run in this process: the restart disarms the prior stop,
 			// rebuilds the session and shows the run history.
@@ -276,6 +290,7 @@ func (m *rootModel) resolveClockTime() time.Time {
 // startSession launches the session in a background goroutine and returns a tea.Cmd
 // that delivers the result as a runDoneMsg or runErrorMsg.
 func (m *rootModel) startSession() tea.Cmd {
+	m.applyGuardForStart()
 	sel := m.selections
 	sess := m.sess
 	ctx := m.ctx
@@ -302,7 +317,7 @@ func (m *rootModel) startSession() tea.Cmd {
 		config.InfraClassSelections = sel.config.InfraClassSelections
 		outcome, err := sess.Start(ctx, config)
 		if err != nil {
-			return runErrorMsg{err: err}
+			return runErrorMsg{err: err, outcome: &outcome}
 		}
 		return runDoneMsg{outcome: outcome}
 	}

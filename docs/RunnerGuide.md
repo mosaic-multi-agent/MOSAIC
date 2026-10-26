@@ -32,6 +32,8 @@ This guide is for **project authors** who want to run multi-agent workflows with
 
 The TUI walks you through: harness selection (which auto-discovers the orchestrator script), workflow selection, mode configuration, and then shows live progress as the run executes.
 
+Progress-screen keys: `s` graceful stop (asks for confirmation), `m` manual dispatch at the next routing decision, `h` HITL for the next agent, `g` switch the loop guard off or on for this session (see [Resuming a Run](#resuming-a-run)), `e` view and edit the standing guidance (auto modes with pre-consultation only; see [Pre-Consultation](#pre-consultation)), `a` artifact view, `ctrl+c` force quit. A failed infrastructure step (checkpoint, commit, review agent) is marked on the progress screen, and the summary at the end of the run, in the TUI and the CLI, lists every infrastructure failure of the run.
+
 ### CLI
 
 ```sh
@@ -78,10 +80,10 @@ All three modes are dramatically cheaper than running the orchestrator agent man
 
 | Flag | Required | Default | Description |
 |------|----------|---------|-------------|
-| `--workflow` | Yes | — | Workflow identifier (must exist in the orchestrator file) |
-| `--task` | Yes | — | Task description for the run |
+| `--workflow` | New run | — | Workflow identifier (must exist in the orchestrator file); not needed with `--run` |
+| `--task` | New run | — | Task description for the run; not needed with `--run` |
 | `--harness` | Yes | `fake` | Harness adapter (`claude-code`, `opencode`, `ghcp-cli`) |
-| `--mode` | Yes | — | Execution mode (`orchestrated`, `auto`, `auto-review`) |
+| `--mode` | New run | — | Execution mode (`orchestrated`, `auto`, `auto-review`); on a resume only for a run that records no Runner settings |
 | `--timeout` | No | `30m` | Per-invocation timeout for the harness adapter |
 | `--pre-consult` | No | `true` | One-shot environment consultation at run start (auto/auto-review only); use `--pre-consult=false` to disable |
 | `--manual-resolution` | No | `false` | When a consultation fails, let the user choose the next dispatch in an interactive dialogue; needs the TUI (see [Manual routing](#manual-routing)) |
@@ -120,7 +122,9 @@ At run start, the Runner creates a snapshot or backup of agent files so it can a
 
 ## Pre-Consultation
 
-A mechanism for **auto** and **auto-review** modes, on by default. At run start, the Runner invokes the orchestrator once to collect environment-level guidance (tool paths, project conventions, harness quirks) that gets appended to every subsequent dispatch. If this call fails, the run stops before any workflow agent runs and the run folder is kept; resuming retries it.
+A mechanism for **auto** and **auto-review** modes, on by default. At run start, the Runner invokes the orchestrator once to collect environment-level guidance (tool paths, project conventions, harness quirks) that gets appended to the dispatches the Runner routes itself (not to dispatches the orchestrator routes, nor to commit setup or infrastructure dispatches). If this call fails, the run stops before any workflow agent runs and the run folder is kept; resuming retries it.
+
+The guidance is saved as plain text in `Orchestration-{run_id}/RunnerGuidance.txt`, with a `[task_description]` and a `[constraints]` section. The Runner shows it for review once the first pre-consultation has finished: choose **Accept** or **Edit** (multi-line fields; Enter adds a line break, ctrl+s saves, Esc cancels). When you resume a run, the saved guidance is reused instead of asking the orchestrator again, and the review offers **Accept**, **Edit** or **Regenerate** (a fresh pre-consultation replaces the file). During a run, press `e` on the progress screen to view and change the guidance; the change applies to every dispatch that starts afterwards. You can also edit the file by hand while the run is stopped; the Runner reads it when the next session starts. Every change is logged. The guidance belongs to one run and is not shared with other runs.
 
 ```sh
 # Disable it
@@ -155,11 +159,13 @@ Every run creates an `Orchestration-{run_id}/` folder in the working directory. 
 ./mosaic-run
 ```
 
+A resume needs no settings flags: the workflow, task, mode, checkpoints, commits, review loop limit and infrastructure selections are read from the run. The TUI asks only what belongs to this session (harness, timeout, and, when they apply, version drift and the commit branch of a pending commit setup); the CLI needs `--run` and `--harness`. A run created by native orchestration records no Runner settings, so its first resume still needs `--mode` (the TUI asks). Before the run continues, the TUI shows and the CLI prints a summary of the recorded settings. A resume that cannot work is refused early, before you are asked anything: the run records no workflow, its workflow is no longer in the orchestrator file, or its recorded infrastructure no longer matches what is deployed.
+
 The Runner reads the existing `Orchestration.md`, determines where the run left off, and continues from there. It finds the row and iteration of the last step from the Execution Log, the same way it does while the run is live, so a resumed run continues where the live run would have. The counters behind the automatic retries and the review loop limit are read from the log too, so they carry over; only the guard against repeated identical orchestrator dispatches starts again from zero.
 
 In the TUI you do not have to leave the program to continue. After a graceful stop, **Continue** on the done screen resumes the run in place; after an orchestrator stop, **Retry** and **Manual dispatch** on the stop screen do the same. All of them resume the existing run (a run whose `Orchestration.md` exists is never restarted as new) and the progress screen shows the history of what already ran, rebuilt from the Execution Log, rather than starting empty.
 
-If the orchestrator keeps requesting a dispatch that the Runner's loop guard blocks (the same agent dispatched four times in a row on one row), the Runner asks the orchestrator again twice and then stops the run with its state saved, so you can continue it after looking at what happened.
+If the orchestrator keeps requesting a dispatch that the Runner's loop guard blocks (the same agent dispatched four times in a row on one row), the Runner asks the orchestrator again twice and then stops the run with its state saved, so you can continue it after looking at what happened. In the TUI the ending screen then offers `g  continue with loop guard off`, which resumes with the guard off for that session only. You can also switch the guard off while a run is in progress by pressing `g` on the progress screen (a red line, `LOOP GUARD OFF for this session`, stays visible until you press `g` again). It lasts for the session only and has no CLI flag. While it is off, same-agent dispatches are not limited, so watch for runaway loops; the other limits (automatic retries, review loop limit) still apply.
 
 When you press stop in the TUI while the orchestrator is deciding, a decision that finishes after the stop request is discarded rather than dispatched. The Runner tells you so, and the decision is made again on resume.
 

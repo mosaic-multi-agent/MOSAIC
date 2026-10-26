@@ -2,7 +2,7 @@
 
 > **Status:** Draft for review
 > **Created:** 2026-07-31
-> **Last Updated:** 2026-10-22
+> **Last Updated:** 2026-10-26
 > **Scope:** Design for the two agents that make checkpointing real — one that preserves restorable state during a run, and one that restores it. Covers what a checkpoint captures, how it is stored in git, how its reference travels back into the orchestration artifact, how a rollback is requested and performed, how it reconciles with work already committed, and how both behave when several runs share a working tree. Committing completed work into the user's own history is a different purpose served by a different class; see `CommitAgent.md`.
 
 ---
@@ -284,7 +284,7 @@ The comparison is on `Mosaic-Seq`, which both agents stamp for exactly this reas
 
 **The reset target in case 2 is a commit-agent commit, never the checkpoint.** It is selected by three rules, in order:
 
-1. **A run commit whose project content matches the target checkpoint**, if one exists — the newest such commit. Test: `git diff --quiet {commit} {checkpoint} -- . ':!Orchestration-*' ':!OrchestrationLogs' ':!RunnerLogs'`. The log folders are excluded because a checkpoint captures them and a run commit never does (`CommitAgent.md` §4.4), so comparing them would rule out every match. `git diff` does not consult ignore rules, so the single-pathspec form is safe here.
+1. **A run commit whose project content matches the target checkpoint**, if one exists — the newest such commit. Test: `git diff --quiet {commit} {checkpoint} -- .` with every path of the MOSAIC exclusion set (`CommitAgent.md` §4.4) added as an `:(exclude,glob)` or `:(exclude,literal)` pathspec. The set is excluded because a checkpoint captures it and a run commit never does, so comparing it would rule out every match. That includes the deployed agent files, which a checkpoint taken during a Runner session holds in their temporarily rewritten form. `git diff` does not consult ignore rules, so the single-pathspec form is safe here.
 2. Otherwise, **the newest run commit whose `Mosaic-Seq` is less than the target's**.
 3. If there is none — the target predates the run's first commit — **the run's starting commit**, obtained as the first checkpoint's parent, `refs/mosaic/checkpoints/{run_id}/{first}^`. That is available whenever case 2 is, since case 2 already requires checkpointing to be enabled, and it avoids recording a base commit in frontmatter that the repository already holds.
 4. If rule 3 has no answer either — the run began in a repository with no commits at all, so the first checkpoint is a root commit with no parent — **fall through to case 3**: restore the tree and commit the result. There is no commit to reset to, and case 3 needs none. Uncertainty resolving to case 3 is already this table's general rule, and it holds here for the same reason: appending is defined in every repository state, rewinding is not.
@@ -309,7 +309,7 @@ Reading the current branch instead would not substitute for this. It reports whe
 
 The failure this prevents is worse than the commit agent's. An iteration commit on the wrong branch is misplaced work; a revert on the wrong branch undoes work that branch never contained, while the real branch keeps the abandoned commits and silently corrupts its next commit — both halves of the reconciliation land wrong.
 
-**Case 3's revert commit stages exactly as the commit agent does** — `git add -A -- .`, then `git reset` of every MOSAIC folder (`CommitAgent.md` §4.4). Without it a rollback would drop run folders and logs into the user's permanent history — the outcome that section rejects as worse than any tidiness it buys — and it would do so on the one path where nothing else is auditing what gets committed.
+**Case 3's revert commit stages exactly as the commit agent does** — `git add -A -- .`, then `git reset` of the MOSAIC exclusion set (`CommitAgent.md` §4.4). Without it a rollback would drop run folders and logs into the user's permanent history — the outcome that section rejects as worse than any tidiness it buys — and it would do so on the one path where nothing else is auditing what gets committed.
 
 **Case 2 is a bounded exception to "never touches history", and it is defensible only where it applies.** Moving a MOSAIC-owned, unshared branch is the same operation as moving a checkpoint ref: it is our ref, nothing descends from it, and no one else has seen it. The moment either of those stops being true — an upstream exists, or another branch contains the commits — the operation becomes a rewrite of shared history and case 3 applies instead. Uncertainty resolves to case 3, which is always safe.
 
@@ -322,6 +322,13 @@ The failure this prevents is worse than the commit agent's. An iteration commit 
 ### 5.3 What it restores
 
 **Project files only.** No path under **any** `Orchestration-*/` folder is ever written, under any circumstances.
+
+**Nor is any other path of the MOSAIC exclusion set** (`CommitAgent.md` §4.4) written or deleted: deployed files, `.mosaic/`, log folders, or an executor's agents-folder working copies. A checkpoint captures them as they were at that moment, and putting them back is never what a rollback of run work means. Restoring them would roll back a redeploy made since the checkpoint. Worse, it would write back the executor's temporary in-run form of the agent files, or an outdated `.agents-backup/` that the executor later restores over the current agents as if it held the originals (`Tools/Runner/docs/Design.md` §6.3). Capture stays unfiltered (§4.2): the restore point still records a tree that really existed, and only what restore puts back is limited.
+
+Three rules make this exact:
+- **Every step that touches the working tree is bound by it,** including case 2's branch move (§5.2). A plain `git reset --hard` there would write the set, so the move must leave those paths as they are.
+- **The manifest read is the working tree's current `.mosaic/manifest.yaml`,** read before the first write, not the checkpoint's copy. The paths to protect are the ones deployed now.
+- **A missing or unreadable manifest** falls back to the fixed part, as for the commit agent. This applies to the rule 1 diff, case 3's staging and the tree restore alike.
 
 The exclusion is deliberately broader here than at capture time (§4.2), because the risks are different:
 

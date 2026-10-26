@@ -188,7 +188,7 @@ func (s *sessionImpl) prepareAutoDispatchRequest(ctx context.Context, rs *runSta
 	if step.Request.TaskDescription == "" {
 		step.Request.TaskDescription = domain.GenericTaskDescription
 	}
-	adv := rs.preConsultAdvice
+	adv, _ := s.deps.Guidance.Current()
 	if adv.TaskDescription != "" {
 		step.Request.TaskDescription += "\n\n" + adv.TaskDescription
 	}
@@ -208,7 +208,7 @@ func (s *sessionImpl) prepareAutoDispatchRequest(ctx context.Context, rs *runSta
 		domain.F("agent", step.Request.AgentInstanceID),
 		domain.F("phase", step.Phase),
 		domain.F("stage", step.Stage),
-		domain.F("row", strconv.Itoa(step.RowIndex)),
+		domain.F("row", strconv.Itoa(int(domain.WorkflowRowFromIndex(step.RowIndex)))),
 	)
 	s.deps.Interact.Notify(ctx, interaction.Notice{
 		Level:   interaction.NoticeInfo,

@@ -241,12 +241,8 @@ func (s *ConfigScreen) Update(msg tea.Msg) tea.Cmd {
 				s.sel.Timeout = 30 * time.Minute
 			}
 			s.timeoutInput.Reset()
-			if s.showsVersionDrift() {
-				s.step = configStepVersionDrift
-			} else {
-				s.step = configStepCheckpoints
-			}
-			s.cursor = 0
+			s.step = s.stepAfterTimeout()
+			s.cursor = s.entryCursor(s.step)
 			return nil
 		}
 		return cmd
@@ -374,8 +370,8 @@ func (s *ConfigScreen) advanceStep() tea.Cmd {
 		return s.timeoutInput.Init() // start cursor blink in text input
 	case configStepVersionDrift:
 		s.sel.AllowVersionDrift = s.cursor == 0
-		s.step = configStepCheckpoints
-		s.cursor = 0
+		s.step = s.stepAfterVersionDrift()
+		s.cursor = s.entryCursor(s.step)
 	case configStepCheckpoints:
 		s.sel.Settings.Checkpoints = s.cursor == 1
 		s.infraClassQueue = s.buildInfraClassQueue()

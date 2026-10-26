@@ -12,6 +12,7 @@ import (
 	"mosaic-run/internal/debuglog"
 	"mosaic-run/internal/deviation"
 	"mosaic-run/internal/domain"
+	"mosaic-run/internal/guidance"
 	"mosaic-run/internal/harness"
 	"mosaic-run/internal/session"
 	"mosaic-run/internal/testcatalog"
@@ -62,6 +63,16 @@ type interactiveWiringInput struct {
 	// Requests is the shared in-run request object, constructed exactly once in
 	// runTUIMode next to StopSignal. Nil is a programming error, not a default.
 	Requests *session.InRunRequests
+
+	// GuardWaiver is the shared anti-loop guard waiver, constructed exactly once
+	// in runTUIMode. The TUI writes it; every session built here reads it. Nil
+	// is a programming error, not a default.
+	GuardWaiver *session.GuardWaiver
+
+	// Guidance is the live standing-guidance holder, constructed exactly once in
+	// runTUIMode. Every session built here publishes its guidance through it. Nil
+	// is a programming error, not a default.
+	Guidance *session.StandingGuidance
 
 	// Debug is the process debug logger, reaching both the session and (from
 	// the stop-observability work) the TUI, so one ordered log holds both
@@ -163,20 +174,23 @@ func buildInteractiveWiring(in interactiveWiringInput) interactiveWiring {
 		routingDeps := buildDeps(rawInvoker, in.ProgramRef, artifact.NewApprovalReader(), in.DispatchLog)
 
 		return session.Deps{
-			Harness:       h,
-			Store:         store,
-			Clock:         in.Clock,
-			Interact:      in.ProgramRef,
-			StepRecords:   in.ProgramRef,
-			Consultations: in.ProgramRef,
-			Debug:        in.Debug,
-			DispatchLog:   in.DispatchLog,
-			Routing:       routingDeps.Routing,
-			Manual:        routingDeps.Manual,
-			PreConsult:    routingDeps.PreConsult,
-			Approvals:     routingDeps.Approvals,
-			Outputs:       artifact.NewOutputWriteDetector(),
-			StopRequested: in.StopSignal.Requested,
+			Harness:        h,
+			Store:          store,
+			Clock:          in.Clock,
+			Interact:       in.ProgramRef,
+			StepRecords:    in.ProgramRef,
+			Consultations:  in.ProgramRef,
+			Debug:          in.Debug,
+			DispatchLog:    in.DispatchLog,
+			Routing:        routingDeps.Routing,
+			Manual:         routingDeps.Manual,
+			PreConsult:     routingDeps.PreConsult,
+			GuidanceStore:  routingDeps.GuidanceStore,
+			Guidance:       in.Guidance,
+			Approvals:      routingDeps.Approvals,
+			Outputs:        artifact.NewOutputWriteDetector(),
+			StopRequested:  in.StopSignal.Requested,
+			AntiLoopWaived: in.GuardWaiver.Waived,
 			TakeManualDispatchRequest: func() bool {
 				return in.Requests.Take(domain.InRunRequestManualDispatch)
 			},
@@ -208,14 +222,15 @@ func buildInteractiveWiring(in interactiveWiringInput) interactiveWiring {
 			ArtifactStoreFactory: func(runFolder string) domain.ArtifactStore {
 				return newLoggedArtifactStore(filepath.Join(runFolder, "Orchestration.md"), in.Debug)
 			},
-			Clock:              in.Clock,
-			OnRunIDResolved:    in.OnRunIDResolved,
-			StopSignal:         in.StopSignal,
-			InRunRequests:      in.Requests,
-			Debug:              in.Debug,
-			ToolVersion:        ToolVersion,
-			TestCatalogLoader:  buildTestCatalogLoader(),
-			TestRunnerFactory:  buildTestRunnerFactory(),
+			Clock:             in.Clock,
+			OnRunIDResolved:   in.OnRunIDResolved,
+			StopSignal:        in.StopSignal,
+			InRunRequests:     in.Requests,
+			GuardWaiver:       in.GuardWaiver,
+			Debug:             in.Debug,
+			ToolVersion:       ToolVersion,
+			TestCatalogLoader: buildTestCatalogLoader(),
+			TestRunnerFactory: buildTestRunnerFactory(),
 		},
 		NewDeps: newDeps,
 	}
@@ -332,8 +347,9 @@ func buildDeps(
 	}
 
 	deps := session.Deps{
-		Routing:   consultant,
-		Approvals: approvals,
+		Routing:       consultant,
+		Approvals:     approvals,
+		GuidanceStore: guidance.NewFileStore(),
 	}
 
 	if interact != nil {

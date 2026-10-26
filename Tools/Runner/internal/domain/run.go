@@ -150,6 +150,24 @@ type RunOutcome struct {
 	// it to offer pre-consultation recovery; exit code and CLI text do not
 	// depend on it.
 	PreConsultationStop bool
+
+	// InfraFailures lists every infrastructure-agent failure recorded in the run's
+	// Execution Log (all sessions), from ListInfraFailures. It is populated on every
+	// outcome returned after the session read (resume) or created (new run) the
+	// artifact, including outcomes returned with a non-nil error. It is nil for
+	// outcomes returned earlier (for example refusals before the artifact read) and
+	// when there are no failures.
+	InfraFailures []InfraFailure
+
+	// AntiLoopStop is true exactly for these two endings:
+	//   - the guard escalation limit was exhausted (Status RunStopped, message
+	//     "anti-loop guard: the consultant kept requesting the dispatch of ...");
+	//   - the guard blocked a HITL re-dispatch with no routing consultant configured
+	//     (Status RunDeviationUnresolved, message
+	//     "anti-loop guard: no routing consultant configured").
+	// It is false for every other outcome. Frontends use it to offer a resume with
+	// the guard off; exit code and CLI text do not depend on it.
+	AntiLoopStop bool
 }
 
 // RunStatus classifies the run's outcome for exit code mapping.

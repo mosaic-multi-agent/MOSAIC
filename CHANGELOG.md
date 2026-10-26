@@ -1,3 +1,18 @@
+# Unreleased
+
+## Tools
+
+### Runner v1.8.0
+#### Changes
+- The loop guard can be switched off for a session with `g` on the progress screen, or when resuming after a guard stop
+- Pre-consultation guidance is saved with the run, can be reviewed and edited (also during a run with `e`), and is reused on resume
+- Resuming asks fewer questions and shows a summary of the recorded settings
+- Infrastructure failures are visible on the progress screen and listed at the end of the run
+#### Bugfixes
+- Requests no longer send `null` instead of an empty artifact list
+- Row numbers are now consistently 1-based in logs and messages
+- Resume no longer asks again for settings the run already recorded
+
 # 0.7.2 (2026-10-25)
 
 ## Tools

@@ -77,6 +77,9 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // screen instead of the normal done/stop screens, because the user may be
 // able to fix it by supplying a working executable path.
 func (m *rootModel) handleRunDone(doneMsg runDoneMsg) (tea.Model, tea.Cmd) {
+	if m.holdWhileEditing(doneMsg) {
+		return m, nil
+	}
 	m.discardRequests(requestDiscardRunEnd)
 	style := stylesFromTheme(m.theme)
 	// Check for a launch-failure cause before any status-based branching.
@@ -128,6 +131,9 @@ func (m *rootModel) handleRunDone(doneMsg runDoneMsg) (tea.Model, tea.Cmd) {
 // screen; all other errors continue to the existing done screen, because a
 // path override cannot fix them.
 func (m *rootModel) handleRunError(errMsg runErrorMsg) (tea.Model, tea.Cmd) {
+	if m.holdWhileEditing(errMsg) {
+		return m, nil
+	}
 	m.discardRequests(requestDiscardRunEnd)
 	style := stylesFromTheme(m.theme)
 	var launchErr *domain.HarnessLaunchError
@@ -144,7 +150,11 @@ func (m *rootModel) handleRunError(errMsg runErrorMsg) (tea.Model, tea.Cmd) {
 	}
 	// Non-launch-failure error: reset the consecutive-failure counter.
 	m.launchFailureAttempt = 0
-	m.doneScreen = runflow.NewDoneScreen(domain.RunOutcome{}, errMsg.err.Error(), m.width, m.height, style)
+	var failed domain.RunOutcome
+	if errMsg.outcome != nil {
+		failed.InfraFailures = errMsg.outcome.InfraFailures
+	}
+	m.doneScreen = runflow.NewDoneScreen(failed, errMsg.err.Error(), m.width, m.height, style)
 	m.screen = screenDone
 	return m, nil
 }
@@ -225,8 +235,12 @@ func (m *rootModel) dispatchScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateSetupConfig(msg)
 	case screenSetupGHCPMode:
 		return m.updateSetupGHCPMode(msg)
+	case screenSetupSummary:
+		return m.updateSetupSummary(msg)
 	case screenProgress:
 		return m.updateProgress(msg)
+	case screenGuidance:
+		return m.updateGuidance(msg)
 	case screenArtifact:
 		return m.updateArtifact(msg)
 	case screenQuestion:
@@ -280,8 +294,14 @@ func (m *rootModel) resizeScreens() {
 	if m.ghcpModeScreen != nil {
 		m.ghcpModeScreen.Resize(m.width, m.height)
 	}
+	if m.summaryScreen != nil {
+		m.summaryScreen.Resize(m.width, m.height)
+	}
 	if m.progressScreen != nil {
 		m.progressScreen.Resize(m.width, m.height)
+	}
+	if m.guidanceScreen != nil {
+		m.guidanceScreen.Resize(m.width, m.height)
 	}
 	if m.artifactScreen != nil {
 		m.artifactScreen.Resize(m.width, m.height)

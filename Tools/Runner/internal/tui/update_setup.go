@@ -2,11 +2,9 @@ package tui
 
 import (
 	"os"
-	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"mosaic-run/internal/artifact"
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/orchfile"
 	"mosaic-run/internal/runselect"
@@ -91,6 +89,11 @@ func (m *rootModel) updateRunSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.onRunIDResolved(m.selections.runID)
 			}
 		}
+		if err := m.artifactRefusal(); err != nil {
+			m.runSelectScreen.Reset()
+			m.showEarlyRefusal(err)
+			return m, nil
+		}
 		// When "new run" is selected, the session factory is called with the minted
 		// run folder (or empty string when no minter is provided, for backward compat).
 		if m.selections.isNewRun && m.sessionFactory != nil {
@@ -128,6 +131,13 @@ func (m *rootModel) updateSetupHarness(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.testCatalogScreen = devtest.NewTestCatalogScreen(m.width, m.height, style)
 			m.screen = screenTestCatalog
 			return m, m.testCatalogScreen.InputInit()
+		}
+
+		// A run chosen before the TUI started has not been through run
+		// selection, so its artifact is checked here at the latest.
+		if err := m.artifactRefusal(); err != nil {
+			m.showEarlyRefusal(err)
+			return m, nil
 		}
 
 		// Auto-discover the orchestrator file from the harness's agents directory.
@@ -185,6 +195,10 @@ func (m *rootModel) updateSetupHarness(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.configScreen.SetDeclaredAgents(infraAgents)
 		}
 		m.workflows = regions
+		if err := m.deploymentRefusal(orchPath, regions); err != nil {
+			m.showEarlyRefusal(err)
+			return m, nil
+		}
 
 		// Tell the config screen the harness is already selected so it skips
 		// the harness step in its own wizard.
@@ -353,7 +367,9 @@ func (m *rootModel) updateSetupConfig(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if m.configScreen.Done() {
 		m.selections.config = m.configScreen.Selection()
-		m.configScreen.Reset()
+		if m.selections.isNewRun {
+			m.configScreen.Reset()
+		}
 
 		// When the selected harness is GHCP CLI, show the permission-mode
 		// selection screen before spawning any process. For all other harnesses,
@@ -364,7 +380,7 @@ func (m *rootModel) updateSetupConfig(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		return m, m.launchSession()
+		return m, m.startOrSummarise()
 	}
 	return m, nil
 }
@@ -396,118 +412,17 @@ func (m *rootModel) updateSetupGHCPMode(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.ghcpModeScreen == nil {
 		// Screen not available; default to blanket and proceed.
 		m.selections.config.GHCPCLIMode = string(runconfig.GHCPCLIModeBlanket)
-		return m, m.launchSession()
+		return m, m.startOrSummarise()
 	}
 	m.ghcpModeScreen.Update(msg)
 	if m.ghcpModeScreen.Back() {
 		m.ghcpModeScreen.Reset()
-		m.screen = screenSetupConfig
-		return m, nil
+		return m, m.backToConfig()
 	}
 	if m.ghcpModeScreen.Done() {
 		m.selections.config.GHCPCLIMode = string(m.ghcpModeScreen.Mode())
 		m.ghcpModeScreen.Reset()
-		return m, m.launchSession()
+		return m, m.startOrSummarise()
 	}
 	return m, nil
-}
-
-// recordedWorkflowVersion returns the workflow version recorded in the run's
-// artifact frontmatter, or the empty version when there is nothing to read: a
-// new run has no prior artifact, and a resumed run whose artifact is missing,
-// unreadable, or unparseable has no recorded version to compare against.
-func (m *rootModel) recordedWorkflowVersion() domain.WorkflowVersion {
-	if m.selections.isNewRun || m.selections.runFolder == "" {
-		return ""
-	}
-	data, err := os.ReadFile(filepath.Join(m.selections.runFolder, "Orchestration.md"))
-	if err != nil {
-		return ""
-	}
-	state, err := artifact.Parse(data)
-	if err != nil {
-		return ""
-	}
-	return state.WorkflowVersion
-}
-
-// selectedWorkflowVersion returns the version declared by the workflow region
-// the user selected, or the empty version when the orchestrator file declares
-// none for it.
-func (m *rootModel) selectedWorkflowVersion() domain.WorkflowVersion {
-	for _, wf := range m.workflows {
-		if wf.Info.ID == m.selections.workflowID {
-			return wf.Info.Version
-		}
-	}
-	return ""
-}
-
-// announceIdentity builds the runselect.Identity used to render the
-// chosen-run announcement (AC2.7) from the currently selected run. For a
-// resumed run it attempts to read the recorded position from the run's
-// artifact; a read or parse failure simply leaves Position nil, which
-// runselect.Announce handles without panicking.
-func (m *rootModel) announceIdentity() runselect.Identity {
-	id := runselect.Identity{
-		RunID:     m.selections.runID,
-		RunFolder: m.selections.runFolder,
-		IsNewRun:  m.selections.isNewRun,
-	}
-	if id.IsNewRun || id.RunFolder == "" {
-		return id
-	}
-	data, err := os.ReadFile(filepath.Join(id.RunFolder, "Orchestration.md"))
-	if err != nil {
-		return id
-	}
-	state, err := artifact.Parse(data)
-	if err != nil {
-		return id
-	}
-	id.Position = &runselect.Position{
-		Phase:       state.CurrentState.Phase,
-		Stage:       state.CurrentState.Stage,
-		LastAgent:   state.CurrentState.LastAgent,
-		LastUpdated: state.LastUpdated,
-	}
-	return id
-}
-
-// needsRunnerAdoption reports whether the resumed run's artifact records no
-// runner settings (a native-created artifact), so the configuration wizard has
-// to ask for them once. A new run, and an artifact that cannot be read or
-// parsed, never needs adoption here; the session refuses the latter.
-func (m *rootModel) needsRunnerAdoption() bool {
-	if m.selections.isNewRun || m.selections.runFolder == "" {
-		return false
-	}
-	data, err := os.ReadFile(filepath.Join(m.selections.runFolder, "Orchestration.md"))
-	if err != nil {
-		return false
-	}
-	state, err := artifact.Parse(data)
-	if err != nil {
-		return false
-	}
-	return state.Mode == domain.ExecutionModeUnset
-}
-
-// commitSetupPending reports whether the resumed run enables commits but
-// records no commit branch, so the wizard must ask for the branch variant
-// explicitly. A new run, and an artifact that cannot be read or parsed, never
-// has a pending setup here; the session refuses the latter.
-func (m *rootModel) commitSetupPending() bool {
-	if m.selections.isNewRun || m.selections.runFolder == "" {
-		return false
-	}
-	data, err := os.ReadFile(filepath.Join(m.selections.runFolder, "Orchestration.md"))
-	if err != nil {
-		return false
-	}
-	state, err := artifact.Parse(data)
-	if err != nil {
-		return false
-	}
-	return state.Commits && state.CommitBranch == ""
 }

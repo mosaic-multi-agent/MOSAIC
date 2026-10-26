@@ -28,7 +28,8 @@ func (r *ProgramRef) StepRecorded(_ context.Context, entry domain.ExecutionLogEn
 // running or appends one when no step is running.
 func (m *rootModel) handleStepRecorded(msg stepRecordedMsg) (tea.Model, tea.Cmd) {
 	if m.progressScreen != nil {
-		m.progressScreen.RecordStep(historyRows([]domain.ExecutionLogEntry{msg.entry})[0])
+		m.progressScreen.RecordStep(historyRowsFor([]domain.ExecutionLogEntry{msg.entry}, m.declaredInfraSet())[0])
+		m.syncGuidanceAvailable()
 	}
 	return m, nil
 }

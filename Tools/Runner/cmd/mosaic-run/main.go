@@ -28,7 +28,7 @@ import (
 	"github.com/mattn/go-isatty"
 )
 
-const ToolVersion = "1.7.0"
+const ToolVersion = "1.8.0"
 
 // wantsTUI reports whether mosaic-run should launch the interactive TUI.
 // The TUI is launched when:
@@ -201,17 +201,18 @@ func runCLIMode(args, cobraArgs []string) int {
 	// The store path matches runIdentity.RunFolder, so session I/O and the COMPLETED
 	// marker write both target the same Orchestration-{run_id}/Orchestration.md file.
 	var sess session.Session = session.New(session.Deps{
-		Harness:     h,
-		Store:       store,
-		Clock:       &realClock{},
-		Interact:    interact,
-		Debug:       logger,
-		DispatchLog: dispLogger,
-		Routing:     routingDeps.Routing,
-		Manual:      routingDeps.Manual,
-		PreConsult:  routingDeps.PreConsult,
-		Approvals:   routingDeps.Approvals,
-		Outputs:     artifact.NewOutputWriteDetector(),
+		Harness:       h,
+		Store:         store,
+		Clock:         &realClock{},
+		Interact:      interact,
+		Debug:         logger,
+		DispatchLog:   dispLogger,
+		Routing:       routingDeps.Routing,
+		Manual:        routingDeps.Manual,
+		PreConsult:    routingDeps.PreConsult,
+		Approvals:     routingDeps.Approvals,
+		Outputs:       artifact.NewOutputWriteDetector(),
+		GuidanceStore: routingDeps.GuidanceStore,
 	})
 
 	// Pass the pre-resolved store and identity so that cli.Run skips its own

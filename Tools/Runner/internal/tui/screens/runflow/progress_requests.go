@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	helpBarText = "s graceful-stop  m manual-dispatch  h hitl-next  a artifact-view  ctrl+c force-quit"
+	helpBarText = "s graceful-stop  m manual-dispatch  h hitl-next  g loop-guard  a artifact-view  ctrl+c force-quit"
 
 	pendingManualDispatchText = "Requested: manual dispatch at the next routing decision (m to cancel)"
 	pendingHITLNextText       = "Requested: HITL for the next agent (h to cancel)"

@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -114,6 +115,11 @@ func newResumeScenario(t *testing.T, recorded domain.RunSettings, rawResponses .
 	orchPath := copyOrchestratorFileForMain(t, dir, "linear-orch.md")
 	writeAgentFileForMain(t, dir, "agent-a")
 	writeAgentFileForMain(t, dir, "agent-b")
+	// A resumed run's folder exists on disk; the real guidance file store
+	// refuses to save into a missing folder.
+	if err := os.MkdirAll(filepath.Join(dir, domain.RunScopedFolder(resumeTestRunID)), 0o755); err != nil {
+		t.Fatalf("setup: create run folder: %v", err)
+	}
 
 	sc := &resumeScenario{
 		harness:  harness.NewMockAdapter(),

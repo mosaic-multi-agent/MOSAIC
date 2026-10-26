@@ -84,6 +84,10 @@ func (s *sessionImpl) dispatchInfraAgent(
 	}
 	*state = newState
 	*seq = infraSeq
+	s.reportInfraStepDone(infraStep, agent.Class)
+	if response.StatusCode != domain.StatusSUCCESS {
+		s.reportInfraFailure(infraStep, agent.Class, matched, infraPolicy(agent), failureReason(response))
+	}
 
 	// Apply on_failure policy for non-SUCCESS outcomes.
 	if response.StatusCode != domain.StatusSUCCESS {

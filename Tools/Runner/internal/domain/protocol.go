@@ -1,5 +1,7 @@
 package domain
 
+import "encoding/json"
+
 // StatusCode is a Communication Protocol v1.12 status code.
 type StatusCode string
 
@@ -38,6 +40,23 @@ type ProtocolRequest struct {
 	Constraints          string   `json:"constraints,omitempty"`
 	IncludeResultSummary bool     `json:"include_result_summary"`
 	HumanInTheLoop       bool     `json:"human_in_the_loop"`
+}
+
+// MarshalJSON emits the request exactly as the default struct encoding does,
+// except that a nil InputArtifacts or OutputArtifacts is written as [] rather
+// than null, as the Communication Protocol requires arrays. The receiver is
+// not modified.
+func (r ProtocolRequest) MarshalJSON() ([]byte, error) {
+	// plain has the same fields and tags but no methods, so Marshal does not recurse.
+	type plain ProtocolRequest
+	p := plain(r)
+	if p.InputArtifacts == nil {
+		p.InputArtifacts = []string{}
+	}
+	if p.OutputArtifacts == nil {
+		p.OutputArtifacts = []string{}
+	}
+	return json.Marshal(p)
 }
 
 // ProtocolResponse is the Communication Protocol v1.12 response from a subagent.

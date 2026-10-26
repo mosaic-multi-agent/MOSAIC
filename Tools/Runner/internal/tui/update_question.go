@@ -14,6 +14,9 @@ import (
 // ---------------------------------------------------------------------------
 
 func (m *rootModel) handleQuestionMsg(qMsg questionMsg) (tea.Model, tea.Cmd) {
+	if qMsg.kind != questionNotice && qMsg.kind != questionProgress && m.holdWhileEditing(qMsg) {
+		return m, nil
+	}
 	switch qMsg.kind {
 	case questionNotice:
 		// Route notices to the progress screen if active.

@@ -8,28 +8,19 @@ import (
 
 	"mosaic-run/internal/agentresolve"
 	"mosaic-run/internal/domain"
+	"mosaic-run/internal/resumecheck"
 )
 
 // hasCheckpointClassAgent reports whether any declared infrastructure agent
 // has Class == "checkpoint".
 func hasCheckpointClassAgent(agents []domain.DeclaredInfraAgent) bool {
-	for _, a := range agents {
-		if a.Class == "checkpoint" {
-			return true
-		}
-	}
-	return false
+	return resumecheck.HasAgentOfClass(agents, "checkpoint")
 }
 
 // hasCommitClassAgent reports whether any declared infrastructure agent
 // has Class == "commit".
 func hasCommitClassAgent(agents []domain.DeclaredInfraAgent) bool {
-	for _, a := range agents {
-		if a.Class == "commit" {
-			return true
-		}
-	}
-	return false
+	return resumecheck.HasAgentOfClass(agents, "commit")
 }
 
 // firstCommitClassAgent returns the first declared infrastructure agent with
@@ -137,6 +128,14 @@ func (s *sessionImpl) runCommitSetup(
 	recorded, err := s.applyAndAnnounce(ctx, state, step)
 	if err != nil {
 		return state, domain.RunOutcome{Status: domain.RunFailed, Message: "commit setup row apply failed: " + err.Error()}, true, err
+	}
+
+	if step.Status != domain.StatusSUCCESS {
+		reason := step.Summary
+		if invokeErr == nil {
+			reason = failureReason(response)
+		}
+		s.reportInfraFailure(step, "commit", nil, "halt", reason)
 	}
 
 	if invokeErr != nil {

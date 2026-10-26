@@ -11,6 +11,7 @@ import (
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/engine"
 	"mosaic-run/internal/orchfile"
+	"mosaic-run/internal/resumecheck"
 	"mosaic-run/internal/seed"
 	"mosaic-run/internal/snapshot"
 	"mosaic-run/internal/snapshot/lockprotocol"
@@ -114,6 +115,7 @@ func (s *sessionImpl) setupInfraAndStages(ctx context.Context, rs *runStartCtx) 
 		return s.refusal(err.Error()), true, nil
 	}
 
+	rs.allInfraAgents = declaredInfraAgents
 	// Step 6b2: apply infrastructure filter.
 	if rs.config.InfrastructureFilter != nil {
 		declaredInfraAgents = s.applyInfraFilter(rs.config.InfrastructureFilter, declaredInfraAgents)
@@ -142,14 +144,14 @@ func (s *sessionImpl) setupInfraAndStages(ctx context.Context, rs *runStartCtx) 
 	// the filtered declared set. This precedes every artifact write and every
 	// dispatch, so a refused override leaves the run untouched.
 	if !rs.config.IsNewRun {
-		if err := validateOverrides(rs.existingState.InfrastructureOverrides, declaredInfraAgents); err != nil {
+		if err := resumecheck.ValidateOverrides(rs.existingState.InfrastructureOverrides, declaredInfraAgents); err != nil {
 			return s.refusal(err.Error()), true, nil
 		}
 	}
 
 	// Step 7: settle checkpoints.
 	if rs.config.Checkpoints && !hasCheckpointClassAgent(declaredInfraAgents) {
-		return s.refusal("checkpoints requested but no checkpoint provider is available"), true, nil
+		return s.refusal(resumecheck.NoCheckpointProviderText), true, nil
 	}
 
 	// Step 7.5a: mode is required.
@@ -160,7 +162,7 @@ func (s *sessionImpl) setupInfraAndStages(ctx context.Context, rs *runStartCtx) 
 	// Step 7.5b: commits validation.
 	if rs.config.Commits {
 		if !hasCommitClassAgent(declaredInfraAgents) {
-			return s.refusal("commits enabled but no commit-class infrastructure agent is declared"), true, nil
+			return s.refusal(resumecheck.NoCommitAgentText), true, nil
 		}
 	}
 
@@ -334,42 +336,6 @@ func (s *sessionImpl) applyOverridesAndPreConsult(ctx context.Context, rs *runSt
 	// Build the stage source descriptor.
 	rs.stageSources = stageSourcesFor(rs.admitted, rs.config.RunFolder)
 
-	// Step 8c: pre-consultation (auto and auto-review modes only, when enabled).
-	if !rs.config.PreConsultation {
-		return domain.RunOutcome{}, false, nil
-	}
-	if rs.config.Mode != domain.ExecutionModeAuto && rs.config.Mode != domain.ExecutionModeAutoReview {
-		return domain.RunOutcome{}, false, nil
-	}
-	if s.deps.PreConsult == nil {
-		// Unreachable after the start-time port check; kept so no path can
-		// dereference a nil port.
-		missing := newPreConsultMissing(rs.config.Mode)
-		return s.startFailed("pre-consultation failed: "+missing.Error(), missing), true, nil
-	}
-	advice, pcErr := s.preConsultOrchestratorAgent(ctx, domain.ConsultationRequest{
-		Context:               domain.ConsultContextPreConsultation,
-		OrchestrationArtifact: filepath.Join(rs.config.RunFolder, "Orchestration.md"),
-	})
-	if pcErr != nil {
-		// The run folder, artifact and any setup row are kept; pre-consultation
-		// writes nothing to the artifact, and a resume retries it.
-		return s.startFailed("pre-consultation failed: "+pcErr.Error(), pcErr), true, nil
-	}
-	if advice.Stop != nil {
-		// Checked before the advice is applied; the artifact stays untouched and
-		// a resume re-runs pre-consultation.
-		s.deps.Debug.Log(domain.EventSessionConsultStop, "consultant stop instruction",
-			domain.F("reason", advice.Stop.Reason),
-			domain.F("context", "pre_consultation"),
-		)
-		return domain.RunOutcome{
-			Status:              domain.RunStoppedByConsultant,
-			Message:             "consultant stop: " + advice.Stop.Reason,
-			StopReason:          advice.Stop.Reason,
-			PreConsultationStop: true,
-		}, true, nil
-	}
-	rs.preConsultAdvice = advice
-	return domain.RunOutcome{}, false, nil
+	// Step 8c: standing guidance (pre-consultation, saved guidance and review).
+	return s.establishGuidance(ctx, rs)
 }

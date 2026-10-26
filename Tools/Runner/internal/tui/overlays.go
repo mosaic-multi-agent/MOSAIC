@@ -8,6 +8,7 @@ import (
 	tuicommon "mosaic-common/tui"
 	"mosaic-common/interaction"
 	"mosaic-common/tui/pastesafe"
+	"mosaic-common/tui/widgets"
 )
 
 // ---------------------------------------------------------------------------
@@ -23,6 +24,10 @@ type inlineSelectOne struct {
 	styles tuicommon.Theme
 	width  int
 	height int
+
+	// detailOffset is the first Detail line shown when the Detail is taller than
+	// the room the overlay has for it.
+	detailOffset int
 }
 
 func newInlineSelectOne(q interaction.ChoiceQuestion, styles tuicommon.Theme, width, height int) *inlineSelectOne {
@@ -64,6 +69,10 @@ func (s *inlineSelectOne) update(msg tea.Msg) bool {
 				s.done = true
 			}
 		}
+	case "pgup":
+		s.scrollDetail(-1)
+	case "pgdown":
+		s.scrollDetail(1)
 	case "esc":
 		s.back = true
 	}
@@ -91,11 +100,17 @@ func (s *inlineSelectOne) view() string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(s.styles.Style(tuicommon.RoleTitle).Width(s.width).Render(s.q.Title))
+	head := s.headView()
+	sb.WriteString(head)
 	sb.WriteByte('\n')
-	if s.q.Prompt != "" {
-		sb.WriteString(s.styles.Style(tuicommon.RoleBody).Width(s.width).Render(s.q.Prompt))
-		sb.WriteByte('\n')
+	help := selectHelpText
+	if s.q.Detail != "" {
+		var shown []string
+		shown, help, _ = s.detailLayout(head)
+		for _, line := range shown {
+			sb.WriteString(s.styles.Style(tuicommon.RoleMuted).Render(line))
+			sb.WriteByte('\n')
+		}
 	}
 	for i, opt := range s.q.Options {
 		prefix := "  "
@@ -121,8 +136,17 @@ func (s *inlineSelectOne) view() string {
 			sb.WriteString(prefix + s.styles.Style(tuicommon.RoleBody).Width(labelWidth).Render("None") + "\n")
 		}
 	}
-	sb.WriteString(s.styles.Style(tuicommon.RoleHelp).Width(s.width).Render("↑/k up  ↓/j down  enter select  esc cancel"))
+	sb.WriteString(s.renderHelp(help))
 	return sb.String()
+}
+
+// headView renders the title and, when set, the prompt, without a trailing line break.
+func (s *inlineSelectOne) headView() string {
+	head := s.styles.Style(tuicommon.RoleTitle).Width(s.width).Render(s.q.Title)
+	if s.q.Prompt != "" {
+		head += "\n" + s.styles.Style(tuicommon.RoleBody).Width(s.width).Render(s.q.Prompt)
+	}
+	return head
 }
 
 // ---------------------------------------------------------------------------
@@ -137,9 +161,15 @@ type inlineText struct {
 	styles tuicommon.Theme
 	width  int
 	height int
+
+	// area replaces field for a question that asks for multi-line entry.
+	area *widgets.TextArea
 }
 
 func newInlineText(q interaction.TextQuestion, styles tuicommon.Theme, width, height int) *inlineText {
+	if q.Multiline {
+		return &inlineText{q: q, area: newMultilineArea(q, styles, width, height), styles: styles, width: width, height: height}
+	}
 	field := pastesafe.NewField(pastesafe.WithPlaceholder(q.Prompt), pastesafe.WithValidate(q.Validate))
 	if q.Default != "" {
 		field.SetValue(q.Default)
@@ -148,19 +178,34 @@ func newInlineText(q interaction.TextQuestion, styles tuicommon.Theme, width, he
 }
 
 func (t *inlineText) init() tea.Cmd {
+	if t.area != nil {
+		return t.area.Init()
+	}
 	return t.field.Init()
 }
 
 func (t *inlineText) update(msg tea.Msg) tea.Cmd {
+	if t.area != nil {
+		return t.area.Update(msg)
+	}
 	return t.field.Update(msg)
 }
 
 // finished reports whether the user confirmed the text or cancelled with Esc.
 func (t *inlineText) finished() bool {
+	if t.area != nil {
+		return t.area.Done() || t.area.Back()
+	}
 	return t.field.Done() || t.field.Back()
 }
 
 func (t *inlineText) answer() interaction.TextAnswer {
+	if t.area != nil {
+		if t.area.Back() {
+			return interaction.TextAnswer{Status: interaction.Cancelled}
+		}
+		return interaction.TextAnswer{Status: interaction.Answered, Text: t.area.Value()}
+	}
 	if t.field.Back() {
 		return interaction.TextAnswer{Status: interaction.Cancelled}
 	}
@@ -168,6 +213,9 @@ func (t *inlineText) answer() interaction.TextAnswer {
 }
 
 func (t *inlineText) view() string {
+	if t.area != nil {
+		return t.multilineView()
+	}
 	var sb strings.Builder
 	sb.WriteString(t.styles.Style(tuicommon.RoleTitle).Width(t.width).Render(t.q.Title))
 	sb.WriteByte('\n')

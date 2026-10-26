@@ -18,6 +18,7 @@ func runSessionAndReport(ctx context.Context, config domain.RunConfig, store dom
 	outcome, err := sess.Start(ctx, config)
 	if err != nil {
 		fmt.Fprintf(errOut, "error: %v\n", err)
+		reportInfraFailures(errOut, outcome.InfraFailures)
 		return ExitFailure
 	}
 
@@ -48,6 +49,7 @@ func runSessionAndReport(ctx context.Context, config domain.RunConfig, store dom
 			fmt.Fprintln(errOut, "The run was kept; resuming it retries the failed step.")
 		}
 	}
+	reportInfraFailures(errOut, outcome.InfraFailures)
 	return exitCode
 }
 

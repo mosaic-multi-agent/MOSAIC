@@ -15,13 +15,14 @@ import (
 //   - 'q', Enter, or Esc -> Done() == true.
 //   - 'c' / 'C' -> Continue() == true, but only when outcome.Status == domain.RunStopped.
 type DoneScreen struct {
-	outcome domain.RunOutcome
-	errMsg  string
-	done    bool
-	cont    bool
-	width   int
-	height  int
-	styles  screens.Styles
+	outcome      domain.RunOutcome
+	errMsg       string
+	done         bool
+	cont         bool
+	contGuardOff bool
+	width        int
+	height       int
+	styles       screens.Styles
 }
 
 // NewDoneScreen creates a done/error summary screen.
@@ -47,6 +48,10 @@ func (s *DoneScreen) Update(msg tea.Msg) tea.Cmd {
 	case "c", "C":
 		if s.outcome.Status == domain.RunStopped {
 			s.cont = true
+		}
+	case "g", "G":
+		if s.outcome.AntiLoopStop {
+			s.contGuardOff = true
 		}
 	}
 	return nil
@@ -102,9 +107,19 @@ func (s *DoneScreen) View() string {
 		}
 	}
 
+	if failures := domain.InfraFailureReportLines(s.outcome.InfraFailures); len(failures) > 0 {
+		lines = append(lines, "")
+		for _, line := range failures {
+			lines = append(lines, s.styles.Error.Width(s.width).Render(line))
+		}
+	}
+
 	helpText := "q/enter/esc  exit"
 	if s.outcome.Status == domain.RunStopped {
 		helpText += "   c  continue"
+	}
+	if s.outcome.AntiLoopStop {
+		helpText += "   " + guardOffHelpText
 	}
 	help := s.styles.Help.Width(s.width).Render(helpText)
 	lines = append(lines, "", help)

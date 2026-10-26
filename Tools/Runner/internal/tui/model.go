@@ -47,8 +47,10 @@ const (
 	screenSetupSeedInput                 // seed-input path entry (new runs only)
 	screenSetupConfig                    // run configuration prompts
 	screenSetupGHCPMode                  // GHCP CLI permission-mode selection (shown only for ghcp-cli harness)
+	screenSetupSummary                   // read-only recorded-settings summary (resume only)
 	screenProgress                       // live execution progress
 	screenArtifact                       // read-only artifact inspection
+	screenGuidance                       // view and edit of the run's standing guidance
 	screenQuestion                       // generic overlay from Interaction port
 	screenStop                           // stop recovery (retry / manual dispatch) — shown on RunStoppedByConsultant
 	screenExecOverride                   // executable-override recovery — shown on harness launch failure
@@ -107,6 +109,7 @@ type rootModel struct {
 	seedInputScreen *runconfig.SeedInputScreen
 	configScreen    *runconfig.ConfigScreen
 	ghcpModeScreen  *runconfig.GHCPCLIModeScreen
+	summaryScreen   *runconfig.SummaryScreen
 
 	// Collected setup selections.
 	selections runSetupSelections
@@ -181,6 +184,25 @@ type rootModel struct {
 	// Options.InRunRequests; the same instance backs every session's take
 	// functions.
 	inRunRequests *session.InRunRequests
+
+	// guardWaiver is the shared anti-loop guard waiver. See Options.GuardWaiver.
+	guardWaiver *session.GuardWaiver
+
+	// guidance is the live standing-guidance holder shared with the session. See
+	// Options.Guidance.
+	guidance *session.StandingGuidance
+
+	// guidanceScreen is the open guidance editor, nil otherwise.
+	guidanceScreen *runflow.GuidanceScreen
+
+	// heldWhileEditing is the session message (a question, or the end of the run)
+	// that arrived while the guidance editor was open. It is handled once the
+	// editor is closed, so it is neither answered by the editor nor lost.
+	heldWhileEditing tea.Msg
+
+	// guardOffNextStart is set by the guard-stop ending screen's resume with the
+	// guard off and consumed by the next session start.
+	guardOffNextStart bool
 
 	// debug records the TUI-side stop-lifecycle entries. It is the same
 	// instance the session logs through, so both halves of the lifecycle land
@@ -296,6 +318,8 @@ func newRootModel(ctx context.Context, sess session.Session, opts Options) *root
 		onRunIDResolved:        opts.OnRunIDResolved,
 		stopSignal:             opts.StopSignal,
 		inRunRequests:          opts.InRunRequests,
+		guardWaiver:            opts.GuardWaiver,
+		guidance:               opts.Guidance,
 		debug:                  opts.Debug,
 		devMode:                opts.DevMode,
 		testCatalogLoader:      opts.TestCatalogLoader,
@@ -303,6 +327,12 @@ func newRootModel(ctx context.Context, sess session.Session, opts Options) *root
 	}
 	if m.stopSignal == nil {
 		m.stopSignal = session.NewStopSignal()
+	}
+	if m.guidance == nil {
+		m.guidance = session.NewStandingGuidance()
+	}
+	if m.guardWaiver == nil {
+		m.guardWaiver = session.NewGuardWaiver()
 	}
 	if m.inRunRequests == nil {
 		m.inRunRequests = session.NewInRunRequests()

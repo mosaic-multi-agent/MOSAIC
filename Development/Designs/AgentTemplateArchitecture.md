@@ -108,6 +108,8 @@ The consequence is that default content bootstraps the region and then ownership
 
 **Principle 3 still holds.** Empty remains the normal state of most project regions. Default content is the exception, used where an agent's instructions reference the region's content and need it to say something coherent on first deploy. A project region whose parent section works fine with it empty should stay empty.
 
+**Changing instructions that rely on a default.** Existing deployments keep the default they were first deployed with, so a change to an agent's instructions or to a default they rely on reaches existing projects with the old default still in place. Such a change must either keep working with the earlier default, or be called out in the release notes so projects update their region.
+
 ### 2.2 Syntax and Nesting
 
 A region is bounded by an opening tag line and a closing tag line.

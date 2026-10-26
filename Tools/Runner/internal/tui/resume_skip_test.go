@@ -82,7 +82,10 @@ func newResumedRunModel(t *testing.T) *rootModel {
 	m := newTestModelWithDiscoverer(func(string, string) (string, error) { return orchPath, nil })
 	m.selections.isNewRun = false
 	m.selections.runID = "20260701T120000Z-a3f9"
-	m.selections.runFolder = filepath.Join(t.TempDir(), "Orchestration-20260701T120000Z-a3f9")
+	m.selections.runFolder = writeFlowArtifact(t, flowArtifact{
+		settings: domain.RunSettings{Mode: domain.ExecutionModeOrchestrated},
+		version:  "0.9",
+	})
 	m.selections.workflowID = domain.WorkflowID(recordedWorkflowID)
 	if m.screen != screenSetupHarness {
 		t.Fatalf("precondition: screen = %v, want screenSetupHarness", m.screen)
@@ -116,7 +119,7 @@ func newNewRunModelAtHarness(t *testing.T) *rootModel {
 func TestRunSelect_ResumingARun_AdoptsItsRecordedWorkflow(t *testing.T) {
 	// Arrange
 	candidates := []runscan.RunCandidate{
-		newTestCandidate("20260701T120000Z-a3f9", "/ws/Orchestration-20260701T120000Z-a3f9"),
+		newTestCandidate(flowRunID, writeFlowArtifact(t, flowArtifact{settings: domain.RunSettings{Mode: domain.ExecutionModeOrchestrated}, version: "0.9"})),
 	}
 	m := newModelWithScan(candidates)
 	if m.screen != screenRunSelect {
@@ -301,7 +304,7 @@ func TestRunSelect_ResumingARun_ReachesConfigurationWithoutAnsweringEitherQuesti
 	// Arrange
 	orchPath := writeOrchestratorFixture(t)
 	candidates := []runscan.RunCandidate{
-		newTestCandidate("20260701T120000Z-a3f9", "/ws/Orchestration-20260701T120000Z-a3f9"),
+		newTestCandidate(flowRunID, writeFlowArtifact(t, flowArtifact{settings: domain.RunSettings{Mode: domain.ExecutionModeOrchestrated}, version: "0.9"})),
 	}
 	m := newModelWithScanAndDiscoverer(candidates, func(string, string) (string, error) {
 		return orchPath, nil
@@ -346,7 +349,15 @@ func TestRunSelect_ResumingARun_ReachesConfigurationWithoutAnsweringEitherQuesti
 func newPreResolvedResumedRunModel(t *testing.T, recordedWorkflow domain.WorkflowID) *rootModel {
 	t.Helper()
 	orchPath := writeOrchestratorFixture(t)
-	const runID = "20260701T120000Z-a3f9"
+	runFolder := writeFlowArtifact(t, flowArtifact{missing: true})
+	if recordedWorkflow != "" {
+		runFolder = writeFlowArtifact(t, flowArtifact{
+			settings: domain.RunSettings{Mode: domain.ExecutionModeOrchestrated},
+			workflow: recordedWorkflow,
+			version:  "0.9",
+		})
+	}
+	const runID = flowRunID
 	sess := &stubNavSession{outcome: domain.RunOutcome{Status: domain.RunCompleted, Message: "ok"}}
 	m := newRootModel(context.Background(), sess, Options{
 		Theme:                  tuicommon.DefaultTheme(),
@@ -354,7 +365,7 @@ func newPreResolvedResumedRunModel(t *testing.T, recordedWorkflow domain.Workflo
 		ScanResult:             nil,
 		ResolvedRunID:          runID,
 		IsNewRun:               false,
-		InitialRunFolder:       filepath.Join(t.TempDir(), "Orchestration-"+runID),
+		InitialRunFolder:       runFolder,
 		RecordedWorkflowID:     recordedWorkflow,
 		OrchestratorDiscoverer: func(string, string) (string, error) { return orchPath, nil },
 	})
@@ -400,13 +411,14 @@ func TestSetupFlow_PreResolvedResumedRun_ReachesConfigurationWithItsRecordedWork
 
 // TestSetupFlow_PreResolvedResumedRun_DoesNotSubstituteAnOfferedWorkflow is the
 // counterpart guard: when the named run's artifact records no workflow, the
-// setup sequence must not quietly supply one.
+// setup sequence must not quietly supply one, and the run is refused before the
+// user is asked any configuration question.
 //
 // The orchestrator fixture offers decoyWorkflowID first, so a sequence that
 // falls back to the selection screen -- or to "whatever is listed first" --
-// resumes the run as a workflow it was never created with. Refusing the run is
-// the correct outcome here, and the session layer owns that refusal; setup's
-// only obligation is not to paper over it.
+// resumes the run as a workflow it was never created with. The refusal is an
+// artifact-only one, so it is shown at the latest when the harness question has
+// been answered, and never after the configuration wizard has run.
 func TestSetupFlow_PreResolvedResumedRun_DoesNotSubstituteAnOfferedWorkflow(t *testing.T) {
 	// Arrange: a run whose artifact records no workflow.
 	m := newPreResolvedResumedRunModel(t, "")
@@ -420,17 +432,14 @@ func TestSetupFlow_PreResolvedResumedRun_DoesNotSubstituteAnOfferedWorkflow(t *t
 			"a substituted workflow resumes the run as something it never was, which is worse "+
 			"than refusing it", m.selections.workflowID)
 	}
-	// Coming to rest on the selection screen leaves workflowID empty at this
-	// instant too, so the assertion above passes on exactly the shape it exists
-	// to forbid: the user then picks decoyWorkflowID off that screen. Setup
-	// carries the empty workflow through to configuration and the session layer
-	// owns the refusal -- an empty recorded workflow is not a question to put
-	// back to the user.
-	if m.screen != screenSetupConfig {
-		t.Errorf("screen = %v, want screenSetupConfig (%v); a resumed run recording no workflow "+
-			"must still be carried past the workflow question -- offering the selection screen "+
-			"here lets the user resume the run under a workflow it never had",
-			m.screen, screenSetupConfig)
+	if m.screen == screenSetupWorkflow || m.screen == screenSetupConfig {
+		t.Errorf("screen = %v for a run recording no workflow, want the refusal (screenDone, %v); "+
+			"offering the selection screen lets the user resume the run under a workflow it never "+
+			"had, and a refusal after the wizard has run wastes the user's answers",
+			m.screen, screenDone)
+	}
+	if m.screen != screenDone {
+		t.Errorf("screen = %v, want screenDone (%v) showing the refusal", m.screen, screenDone)
 	}
 }
 

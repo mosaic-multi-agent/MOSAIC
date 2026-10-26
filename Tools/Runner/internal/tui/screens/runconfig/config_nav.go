@@ -44,9 +44,6 @@ func (s *ConfigScreen) pendingCommitRetry() bool {
 
 // firstStep returns the first prompt this screen shows.
 func (s *ConfigScreen) firstStep() configStep {
-	if s.pendingCommitRetry() {
-		return configStepCommitBranch
-	}
 	switch {
 	case s.showsRunnerSettings():
 		return configStepMode
@@ -62,8 +59,8 @@ func (s *ConfigScreen) firstStep() configStep {
 // screen is shown.
 func (s *ConfigScreen) moveToFirstStep() {
 	s.step = s.firstStep()
-	if s.step == configStepMode || s.step == configStepCommitBranch {
-		s.cursor = -1 // these steps start with no option preselected
+	if s.step == configStepMode {
+		s.cursor = -1 // this step starts with no option preselected
 	} else {
 		s.cursor = 0
 	}
@@ -104,8 +101,11 @@ func (s *ConfigScreen) nextAfterInfraClass() configStep {
 // prevBeforeRunnerSettings returns the step before the runner settings: the
 // end of the commits section.
 func (s *ConfigScreen) prevBeforeRunnerSettings() (configStep, int) {
-	if s.pendingCommitRetry() {
-		return configStepCommitBranch, -1
+	if !s.isNewRun {
+		if s.pendingCommitRetry() {
+			return configStepCommitBranch, -1
+		}
+		return s.stepBeforeResumeSettings(), 0
 	}
 	if s.sel.Settings.Commits {
 		return configStepCommitBranch, 0
@@ -147,7 +147,7 @@ func (s *ConfigScreen) prevStepAndCursor() (configStep, int) {
 		return configStepCheckpoints, 0
 	case configStepCommitBranch:
 		if s.pendingCommitRetry() {
-			return configStepCommitBranch, -1
+			return s.stepBeforeResumeSettings(), 0
 		}
 		return configStepCommits, 0
 	case configStepPreConsult:

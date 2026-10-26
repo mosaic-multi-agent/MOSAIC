@@ -74,7 +74,7 @@ func (s *sessionImpl) consultRoute(
 	if payloadErr != nil {
 		s.deps.Debug.Log(domain.EventSessionConsultFailed, "consultation dispatch defaults unresolvable: "+payloadErr.Error(),
 			domain.F("agent", dispInstr.Agent),
-			domain.F("row", strconv.Itoa(dispInstr.RowIndex)),
+			domain.F("row", strconv.Itoa(int(domain.WorkflowRowFromIndex(dispInstr.RowIndex)))),
 		)
 		return true, domain.RunOutcome{
 			Status:  domain.RunStoppedByConsultant,
@@ -102,7 +102,7 @@ func (s *sessionImpl) consultRoute(
 		s.deps.Debug.Log(domain.EventSessionDeviation, "anti-loop guard triggered; escalating instead of dispatching",
 			domain.F("agent", agentRef.Identifier),
 			domain.F("count", strconv.Itoa(antiLoop.count)),
-			domain.F("row", strconv.Itoa(dispInstr.RowIndex)),
+			domain.F("row", strconv.Itoa(int(domain.WorkflowRowFromIndex(dispInstr.RowIndex)))),
 		)
 		var lastResp domain.ProtocolResponse
 		if *lastResponse != nil {
@@ -114,7 +114,7 @@ func (s *sessionImpl) consultRoute(
 				AgentInstanceID: fmt.Sprintf("%s#guard", agentRef.Identifier),
 				StatusCode:      domain.StatusBLOCKED,
 				StatusMessage: fmt.Sprintf("anti-loop guard: %q dispatched %d consecutive times for row %d; escalating",
-					agentRef.Identifier, antiLoop.count, dispInstr.RowIndex),
+					agentRef.Identifier, antiLoop.count, domain.WorkflowRowFromIndex(dispInstr.RowIndex)),
 				ErrorCode: lastResp.ErrorCode,
 			},
 			CurrentRow:    dispInstr.RowIndex,
@@ -129,7 +129,7 @@ func (s *sessionImpl) consultRoute(
 	s.deps.Debug.Log(domain.EventSessionDispatchStart, "dispatching consultant-routed step",
 		domain.F("agent", agentReq.AgentInstanceID),
 		domain.F("phase", phase),
-		domain.F("row", strconv.Itoa(dispInstr.RowIndex)),
+		domain.F("row", strconv.Itoa(int(domain.WorkflowRowFromIndex(dispInstr.RowIndex)))),
 	)
 	s.deps.Interact.Notify(ctx, interaction.Notice{
 		Level:   interaction.NoticeInfo,

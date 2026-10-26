@@ -127,6 +127,17 @@ type Options struct {
 	// Request()/Reset() calls have no effect on the running session.
 	StopSignal *session.StopSignal
 
+	// GuardWaiver is the shared anti-loop guard waiver. The same instance must be
+	// the one behind session.Deps.AntiLoopWaived of every session the
+	// SessionFactory builds. When nil, rootModel uses session.NewGuardWaiver().
+	GuardWaiver *session.GuardWaiver
+
+	// Guidance is the live standing-guidance holder shared with the session. The
+	// same instance must be the one behind session.Deps.Guidance of every
+	// session the SessionFactory builds. The progress screen offers the guidance
+	// view and edit key only while it reports guidance in effect.
+	Guidance *session.StandingGuidance
+
 	// InRunRequests is the shared in-run request object. The same instance must
 	// back session.Deps.TakeManualDispatchRequest / TakeHITLRequest of every
 	// session the SessionFactory builds. When nil, rootModel uses

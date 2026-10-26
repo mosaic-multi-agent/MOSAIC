@@ -200,6 +200,19 @@ type Deps struct {
 	// is normalised in New to a function that always returns false.
 	TakeHITLRequest func() bool
 
+	// AntiLoopWaived reports whether the user has switched the anti-loop guard off
+	// for this session. The session reads it at every guard check. Optional: nil
+	// means the guard is always on. The CLI never sets it.
+	AntiLoopWaived func() bool
+
+	// GuidanceStore reads and writes the run folder's guidance file. Optional: nil
+	// behaves as a store that never finds a file and whose Save does nothing.
+	GuidanceStore domain.GuidanceStore
+
+	// Guidance is the live standing-guidance holder shared with the frontend.
+	// Optional: nil behaves as a holder private to the session.
+	Guidance *StandingGuidance
+
 	// StepRecords receives every Execution Log entry the session records.
 	// Optional: nil is normalised in New to domain.NopStepRecordObserver{}.
 	StepRecords domain.StepRecordObserver
@@ -250,6 +263,12 @@ func New(deps Deps) Session {
 	}
 	if deps.StopRequested == nil {
 		deps.StopRequested = func() bool { return false }
+	}
+	if deps.GuidanceStore == nil {
+		deps.GuidanceStore = noGuidanceStore{}
+	}
+	if deps.Guidance == nil {
+		deps.Guidance = NewStandingGuidance()
 	}
 	return &sessionImpl{deps: deps}
 }
@@ -349,6 +368,7 @@ func (s *sessionImpl) Start(ctx context.Context, config domain.RunConfig) (outco
 	if outcome, done, err = s.readArtifact(ctx, rs); done {
 		return outcome, err
 	}
+	defer func() { outcome = rs.attachInfraFailures(outcome) }()
 	if outcome, done, err = s.admitAndResolveAgents(ctx, rs); done {
 		return outcome, err
 	}
@@ -378,6 +398,7 @@ func (s *sessionImpl) Start(ctx context.Context, config domain.RunConfig) (outco
 	if outcome, done, err = s.createOrResumeArtifact(ctx, rs); done {
 		return outcome, err
 	}
+	defer s.deps.Guidance.deactivate()
 	if outcome, done, err = s.applyOverridesAndPreConsult(ctx, rs); done {
 		return outcome, err
 	}

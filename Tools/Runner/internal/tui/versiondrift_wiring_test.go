@@ -116,8 +116,11 @@ func TestSetupFlow_ResumedRun_WorkflowVersionUnmatchedByRecord_PromptsForVersion
 		t.Fatalf("after the harness question on a resumed run: screen = %v, want screenSetupConfig", m.screen)
 	}
 
-	// Act
-	driveConfigScreenPastTimeout(m)
+	// Act: a resume asks the harness timeout first, then the drift question.
+	for _, r := range "30m" {
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
 	// Assert
 	if view := m.configScreen.View(); !containsStr(view, versionDriftPrompt) {

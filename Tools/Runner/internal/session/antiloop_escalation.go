@@ -23,7 +23,7 @@ func (s *sessionImpl) guardEscalationExhausted(a *antiLoopState, agentID string,
 		return domain.RunOutcome{}, false
 	}
 	msg := fmt.Sprintf("anti-loop guard: the consultant kept requesting the dispatch of %q at row %d that the anti-loop guard blocked; run stopped, resume to continue",
-		agentID, rowIndex+1)
+		agentID, domain.WorkflowRowFromIndex(rowIndex))
 	s.deps.Debug.Log(domain.EventSessionDeviationUnresolved, msg)
-	return domain.RunOutcome{Status: domain.RunStopped, Message: msg}, true
+	return domain.RunOutcome{Status: domain.RunStopped, Message: msg, AntiLoopStop: true}, true
 }

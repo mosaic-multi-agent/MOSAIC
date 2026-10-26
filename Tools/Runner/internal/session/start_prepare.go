@@ -37,6 +37,9 @@ type runStartCtx struct {
 	identifiers []string
 	// Infrastructure agents (set at step 6b; filtered at step 6b2).
 	declaredInfraAgents []domain.DeclaredInfraAgent
+	// Every infrastructure agent the orchestrator file declares, before the
+	// infrastructure filter; used to list the run's infrastructure failures.
+	allInfraAgents []domain.DeclaredInfraAgent
 	// Schedules, one per block whose Source was read (nil when none was; set on resume at step 6
 	// and on new-run at step 8a2).
 	stages domain.BlockSchedules
@@ -48,8 +51,6 @@ type runStartCtx struct {
 	prevWorkflowStep    *domain.CompletedStep
 	lastOutputArtifacts []string
 	antiLoop            antiLoopState
-	// Pre-consultation result (step 8c).
-	preConsultAdvice domain.PreConsultationAdvice
 	// Seed inputs applied at step 8 (new-run only).
 	seedPlan seed.Plan
 	// Per-block schedule source descriptors for engine error messages.
@@ -120,7 +121,7 @@ func (s *sessionImpl) prepareRouting(ctx context.Context, config domain.RunConfi
 		region: region,
 		table:  table,
 	}
-	rs.antiLoop = antiLoopState{rowIndex: -1}
+	rs.antiLoop = antiLoopState{rowIndex: -1, waiver: s.deps.AntiLoopWaived, log: s.deps.Debug}
 	return rs, domain.RunOutcome{}, false, nil
 }
 
