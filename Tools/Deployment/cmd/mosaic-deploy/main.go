@@ -45,7 +45,7 @@ import (
 	_ "mosaic-deploy/internal/harness/builtin/vscodeghcp"
 )
 
-const ToolVersion = "1.2.0"
+const ToolVersion = "1.2.1"
 
 // wantsTUI reports whether mosaic-deploy should launch the interactive TUI: no subcommand
 // was given, and both stdin and stdout are attached to a real terminal (not a pipe/redirect).

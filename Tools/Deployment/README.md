@@ -328,10 +328,12 @@ Before running the conflict loop, the Update flow scans the active harness's
 deployed-agents directory. A file is recognised as a harness-only agent only when
 **both** detection signals are present:
 
-1. **`transform_version` in frontmatter.** This field is stamped by
-   `Tools/OldAgentsTransform/boundary_transformer.py` on every file it
-   processes. A hand-authored file that was never run through that tool lacks
-   this field and is left completely untouched.
+1. **A MOSAIC version stamp in frontmatter.** Either the current
+   `harness_version` stamp (written by `mosaic-deploy`) or the older
+   `transform_version` stamp (written by
+   `Tools/OldAgentsTransform/boundary_transformer.py`), in the `mosaic_`-prefixed
+   or unprefixed form. A hand-authored file that carries neither is left
+   completely untouched.
 
 2. **A structurally valid set of canonical boundary tags.** The body must
    contain at least one `<Name type="core">` tag whose name is in the MOSAIC
@@ -346,7 +348,8 @@ implication.
 **Prerequisite:** a hand-authored agent file must be run through
 `Tools/OldAgentsTransform/boundary_transformer.py` before `mosaic-deploy update`
 will recognise and maintain it. The transform stamps `transform_version` and
-adds the boundary tag structure that satisfies signal two. Without that step the
+adds the boundary tag structure that satisfies signal two (files deployed by
+`mosaic-deploy` already carry the `harness_version` stamp). Without that step the
 file is invisible to the Update flow.
 
 ### Refresh-scope prompt
@@ -437,7 +440,7 @@ by an Update run.
 ### Eligibility
 
 The source file must satisfy the same two-signal detection rule the Update flow
-uses: `transform_version` in frontmatter and a structurally valid set of
+uses: a `harness_version` or `transform_version` stamp in frontmatter and a structurally valid set of
 canonical boundary tags. An ineligible file is rejected with an error; nothing
 is written.
 

@@ -176,7 +176,7 @@ type Service interface {
 	// harness-only agent file, so that a one-off harness-specific agent becomes reusable
 	// across harnesses through the normal Deploy/Update flow.
 	//
-	// The source file must satisfy the two-signal eligibility rule — `transform_version` in
+	// The source file must satisfy the two-signal eligibility rule — a harness_version or transform_version stamp in
 	// frontmatter AND a structurally valid set of canonical boundary tags. An ineligible file
 	// is rejected with an error wrapping ErrPromoteNotTransformed and nothing is written.
 	//

@@ -50,8 +50,9 @@ var blockingValidationCodes = map[string]bool{
 
 // eligibleHarnessOnly applies the two-signal harness-only detection rule to file bytes.
 //
-// Signal one: parsed frontmatter is present and carries a non-empty `transform_version`
-// scalar — the marker Tools/OldAgentsTransform stamps onto any file it boundary-tags.
+// Signal one: parsed frontmatter is present and carries a non-empty scalar for any key of
+// agentfields.VersionStampKeys() - the current harness version stamp or the legacy
+// transform version stamp.
 //
 // Signal two: the body carries a structurally valid set of canonical MOSAIC boundary
 // tags. Concretely, ALL of:
@@ -80,21 +81,19 @@ func eligibleHarnessOnly(src []byte) EligibilityVerdict {
 		}
 	}
 
-	// Signal one: non-empty transform_version scalar in frontmatter. Both the prefixed
-	// (mosaic_-prefixed) and legacy (unprefixed) names are accepted via agentfields.ReadOrder,
-	// with the prefixed name preferred when both are present.
-	tvField, _ := agentfields.ByDeployedName("transform_version")
-	var transformVersion string
-	for _, key := range agentfields.ReadOrder(tvField) {
-		if v, ok := fm.Get(key); ok && v.Kind == domain.KindScalar && v.Scalar != "" {
-			transformVersion = v.Scalar
-			break
+	// Signal one: a non-empty scalar for any key of agentfields.VersionStampKeys() (the
+	// current harness version stamp or the legacy transform version stamp).
+	transformVersion, stamped := agentfields.ReadVersionStamp(func(key string) string {
+		if v, ok := fm.Get(key); ok && v.Kind == domain.KindScalar {
+			return v.Scalar
 		}
-	}
-	if transformVersion == "" {
+		return ""
+	})
+	if !stamped {
 		return EligibilityVerdict{
 			Eligible: false,
-			Reason:   "frontmatter does not carry a non-empty transform_version scalar",
+			Reason: "frontmatter does not carry a non-empty MOSAIC version stamp scalar (checked: " +
+				strings.Join(agentfields.VersionStampKeys(), ", ") + ")",
 		}
 	}
 

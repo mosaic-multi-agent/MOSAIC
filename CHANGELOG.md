@@ -2,6 +2,10 @@
 
 ## Tools
 
+### Deploy v1.2.1
+#### Bugfixes
+- Agents deployed by recent versions are recognised as MOSAIC agents again. Before, `transform` and `retarget` skipped them as "not agent", `promote` refused them, and `update` silently left them out of the harness-only refresh. No migration is needed: affected workspaces are recognised on the next run
+
 ### Runner v1.8.0
 #### Changes
 - The loop guard can be switched off for a session with `g` on the progress screen, or when resuming after a guard stop
