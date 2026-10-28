@@ -109,12 +109,19 @@ func (s *Service) TotalForRun(ctx context.Context, req Request, runID string) (R
 		return RunTotal{}, OutcomeReport, err
 	}
 
+	// Load analysis settings; an unparseable document is an error like pricing.
+	settings, settingsFindings, err := s.loadSettings(ctx)
+	if err != nil {
+		return RunTotal{}, OutcomeReport, err
+	}
+
 	// Step 3: Enumerate the source.
 	inv, enumFindings := s.deps.Source.Enumerate(src)
 
 	// Collect findings from infrastructure phases.
-	carried := make([]domain.Finding, 0, len(pricingFindings)+len(enumFindings))
+	carried := make([]domain.Finding, 0, len(pricingFindings)+len(settingsFindings)+len(enumFindings))
 	carried = append(carried, pricingFindings...)
+	carried = append(carried, settingsFindings...)
 	carried = append(carried, enumFindings...)
 
 	// Step 4: A structurally valid source with no run data is a named no-data outcome.
@@ -149,7 +156,7 @@ func (s *Service) TotalForRun(ctx context.Context, req Request, runID string) (R
 	carried = append(carried, aggFindings...)
 
 	// Step 8: Price.
-	report, priceFindings := analysis.Price(agg, table, src)
+	report, priceFindings := analysis.Price(agg, table, settings, src)
 	carried = append(carried, priceFindings...)
 	applyUsageIngest(&report, s.probeUsageIngest(inv))
 

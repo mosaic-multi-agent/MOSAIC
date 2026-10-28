@@ -10,6 +10,7 @@ import (
 type Session struct {
 	aggregate domain.Aggregate
 	table     domain.PricingTable
+	settings  domain.AnalysisSettings
 	source    domain.Source
 	// exportFindings are the findings an export carries: log-reading findings
 	// attributed to their run folder, plus findings carried inside digests.
@@ -31,7 +32,10 @@ func (s *Session) Reprice(entries ...domain.ModelPricing) domain.Report {
 	for _, entry := range entries {
 		table = table.With(entry)
 	}
-	report, _ := analysis.Price(s.aggregate, table, s.source)
+	report, _ := analysis.Price(s.aggregate, table, s.settings, s.source)
 	applyUsageIngest(&report, s.usageIngest)
 	return report
 }
+
+// Settings exposes the analysis settings loaded for this session.
+func (s *Session) Settings() domain.AnalysisSettings { return s.settings }

@@ -140,6 +140,11 @@ type jsonDispatch struct {
 	UnpricedModels []string     `json:"unpriced_models"`
 	Totals         jsonTotals   `json:"totals"`
 	Effort         []jsonEffort `json:"effort"`
+
+	PeakContext  *jsonContextFigure `json:"peak_context"`
+	Cache        jsonCache          `json:"cache"`
+	Repeat       bool               `json:"repeat"`
+	LikelyRework bool               `json:"likely_rework"`
 }
 
 func stringOrNull(s string) *string {
@@ -175,6 +180,10 @@ func encodeDispatch(d domain.Dispatch) jsonDispatch {
 		UnpricedModels: encodeUnpricedModels(d.UnpricedModels),
 		Totals:         encodeTotals(d.Totals),
 		Effort:         encodeEffort(d.Effort),
+		PeakContext:    encodeContextFigure(d.PeakContext),
+		Cache:          encodeCache(d.Cache),
+		Repeat:         d.Repeat,
+		LikelyRework:   d.LikelyRework,
 	}
 }
 
@@ -183,6 +192,9 @@ type jsonAgentTypeGroup struct {
 	Figures       jsonGroupFigures `json:"figures"`
 	PerInvocation jsonMoneyStats   `json:"per_invocation"`
 	Dispatches    []jsonDispatch   `json:"dispatches"`
+	PeakContext   jsonPeakContext  `json:"peak_context"`
+	Rework        jsonRework       `json:"rework"`
+	Cache         jsonCache        `json:"cache"`
 }
 
 func encodeAgentTypeGroups(groups []domain.AgentTypeGroup) []jsonAgentTypeGroup {
@@ -202,7 +214,10 @@ func encodeAgentTypeGroups(groups []domain.AgentTypeGroup) []jsonAgentTypeGroup 
 				Average:  encodeMoneyValue(g.PerInvocation.Average),
 				Complete: g.PerInvocation.Complete,
 			},
-			Dispatches: dispatches,
+			Dispatches:  dispatches,
+			PeakContext: encodePeakContext(g.PeakContext),
+			Rework:      encodeRework(g.Rework),
+			Cache:       encodeCache(g.Cache),
 		}
 	}
 	return out

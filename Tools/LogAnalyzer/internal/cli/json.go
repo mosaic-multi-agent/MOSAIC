@@ -215,6 +215,9 @@ type jsonActorReport struct {
 	UnpricedModels       []string     `json:"unpriced_models"`
 	Totals               jsonTotals   `json:"totals"`
 	Effort               []jsonEffort `json:"effort"`
+
+	// Context is set for the orchestrator and agents of a run report only.
+	Context *jsonActorContext `json:"context,omitempty"`
 }
 
 // jsonModelKey is one provider/model pair as logged.
@@ -264,6 +267,11 @@ type jsonRunReport struct {
 	Tools       jsonToolsBreakdown   `json:"tools"`
 	Timeline    jsonTimeline         `json:"timeline"`
 
+	OutcomeSplit jsonOutcomeSplit `json:"outcome_split"`
+	Rework       jsonRework       `json:"rework"`
+	Cache        jsonCache        `json:"cache"`
+	WallTime     jsonWallTime     `json:"wall_time"`
+
 	// Unattributed is the run-level usage of no orchestrator or agent; absent when the run has none.
 	Unattributed *jsonActorReport `json:"unattributed,omitempty"`
 
@@ -281,14 +289,18 @@ type jsonUsageIngest struct {
 func encodeRunReport(r domain.RunReport) jsonRunReport {
 	agents := make([]jsonActorReport, 0, len(r.Agents))
 	for _, a := range r.Agents {
-		agents = append(agents, encodeActorReport(a))
+		enc := encodeActorReport(a)
+		enc.Context = encodeRunActorContext(r.Context, a)
+		agents = append(agents, enc)
 	}
+	orchestrator := encodeActorReport(r.Orchestrator)
+	orchestrator.Context = encodeRunActorContext(r.Context, r.Orchestrator)
 	unpriced := encodeUnpricedModels(r.UnpricedModels)
 	out := jsonRunReport{
 		RunID:          r.Run.Label(),
 		Provisional:    r.Provisional,
 		Totals:         encodeTotals(r.Totals),
-		Orchestrator:   encodeActorReport(r.Orchestrator),
+		Orchestrator:   orchestrator,
 		Agents:         agents,
 		UnpricedModels: unpriced,
 
@@ -297,6 +309,11 @@ func encodeRunReport(r domain.RunReport) jsonRunReport {
 		ByStatus:    encodeStatusBreakdown(r.ByStatus),
 		Tools:       encodeToolsBreakdown(r.Tools),
 		Timeline:    encodeTimeline(r.Timeline),
+
+		OutcomeSplit: encodeOutcomeSplit(r.Overview.Outcomes),
+		Rework:       encodeRework(r.Rework),
+		Cache:        encodeCache(r.Cache),
+		WallTime:     encodeWallTime(r.WallTime),
 	}
 	if r.Unattributed != nil {
 		u := encodeActorReport(*r.Unattributed)

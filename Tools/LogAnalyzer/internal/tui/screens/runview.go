@@ -9,7 +9,15 @@ const (
 	KeyViewStatus     = "4"
 	KeyViewTools      = "5"
 	KeyViewTimeline   = "6"
+	KeyViewContext    = "7"
 	KeyAcrossRuns     = "a" // on the runs list only
+	KeyHelp           = "?" // toggles the help overlay
+	KeySort           = "o" // cycles the sort order of a table view
+	KeyToggleView     = "v" // switches the Overview (visual / figures-only) and the Timeline (Gantt / list)
+	KeyGroup          = "g" // Timeline: dispatch order / grouped by agent type
+	KeyMarkUserTool   = "u" // Tools view: marks the selected tool as user-interaction
+	KeyMarkRun        = "m" // runs list: marks / unmarks the selected run for comparison
+	KeyCompare        = "c" // runs list: opens the comparison of the two marked runs
 )
 
 // RunView is satisfied by RunDetailScreen and every per-run view screen.

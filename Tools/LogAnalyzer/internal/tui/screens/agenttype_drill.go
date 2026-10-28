@@ -1,54 +1,24 @@
 package screens
 
-import (
-	"fmt"
+import "mosaic-log-analyzer/internal/domain"
 
-	"mosaic-log-analyzer/internal/domain"
-)
-
-// viewDrill renders the individual dispatches of the drilled agent type.
+// viewDrill renders the dispatches of the drilled agent type in the table of the
+// Dispatches view, without the orchestrator row.
 func (s *AgentTypesScreen) viewDrill() string {
-	g := s.run.ByAgentType[s.cursor]
-	name := g.AgentType
-	if name == "" {
-		name = UnknownTypeLabel
-	}
-	rows := make([]string, len(g.Dispatches))
-	for i, d := range g.Dispatches {
-		rows[i] = dispatchRow(d)
-	}
-	if len(rows) == 0 {
-		rows = []string{"No dispatches of this type."}
-	}
-	body, w := s.cursorRows(rows, s.drillCursor, &s.drillOffset, 0)
-	label := fmt.Sprintf("%s / %s", runLabel(s.run), name)
-	return renderPage(s.styles, s.width, "Log Analyzer — Dispatches", label, body, w, len(rows), s.Help())
-}
+	g := s.drilledGroup()
+	entries := dispatchEntries([]domain.AgentTypeGroup{g})
+	order := s.drillSort.Active()
+	rows := dispatchTableRows(s.run, false, entries, dispatchOrder(entries, order), s.styles.Theme)
 
-// dispatchRow renders one dispatch: instance, status, total and the labels of
-// any incomplete data.
-func dispatchRow(d domain.Dispatch) string {
-	inv := d.Invocation
-	status := inv.StatusCode
-	switch {
-	case inv.State == domain.InvocationOpen:
-		status = OpenLabel
-	case status == "":
-		status = NoStatusLabel
+	head := []string{s.styles.Subtitle.Render("Dispatches of " + typeLabel(g.AgentType))}
+	if len(rows) == 0 {
+		head = append(head, s.styles.Body.Render("No dispatches of this type."))
 	}
-	row := fmt.Sprintf("%-20s %-12s %s", inv.Actor.Label(), status, formatMoneyTotal(d.Totals.Money))
-	row += "  " + effortSegment(d.Effort)
-	var labels []string
-	if d.MissingUsage {
-		labels = append(labels, MissingUsageLabel)
-	}
-	if len(d.UnpricedModels) > 0 {
-		labels = append(labels, UnpricedMarker+" models")
-	}
-	if a := FormatAssumedTier(d.Totals.AssumedTierCacheWrite); a != "" {
-		labels = append(labels, a)
-	}
-	return appendLabels(row, labels)
+	lines, w := dispatchTableLines(rows, s.drillCursor, &s.drillOffset, order, s.width, bodyBudget(s.height)-len(head)-1, s.styles)
+
+	spec := frameSpec{run: s.run, active: ScreenAgentTypes, keys: s.helpKeys(), screenKeys: s.screenKeys(), escDesc: s.escDesc(),
+		hint: FormatScrollHint(w, len(rows)), sort: s.drillSort.Label()}
+	return s.render(spec, append(head, lines...), s.width, s.height, s.styles)
 }
 
 // effortSegment renders "effort: <levels>", or the absent marker when no level was reported.

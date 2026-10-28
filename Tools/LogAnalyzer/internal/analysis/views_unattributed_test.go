@@ -32,12 +32,12 @@ func viewsUnattributedInput(extra ...domain.Event) analysis.Input {
 
 func viewsUnattributedRun(t *testing.T, extra ...domain.Event) domain.RunReport {
 	t.Helper()
-	report := analysis.Analyze(viewsUnattributedInput(extra...), viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(viewsUnattributedInput(extra...), viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 	return requireRunReport(t, report, testRunID)
 }
 
 func TestPrice_UnattributedUsage_IsIncludedInRunAndAllRunsTotals(t *testing.T) {
-	report := analysis.Analyze(viewsUnattributedInput(), viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(viewsUnattributedInput(), viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	run := requireRunReport(t, report, testRunID)
 
@@ -89,7 +89,7 @@ func TestPrice_UnattributedUsage_PartsSumToTheRunTotal(t *testing.T) {
 func TestPrice_UnattributedUsageWithUnpricedModel_MakesTheRunPartialAndNamesTheModel(t *testing.T) {
 	in := viewsUnattributedInput(usageRecordEvent("", "u-x", "m-unpriced-unattr", viewsUsage(50, 0, 0, 5)))
 
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	run := requireRunReport(t, report, testRunID)
 	if run.Unattributed == nil {
@@ -137,7 +137,7 @@ func TestOverview_UnattributedUsage_SharesCoverTheRunTotal(t *testing.T) {
 func TestOverview_UnattributedUsageOnly_UnattributedShareIsTheWholeRun(t *testing.T) {
 	in := unattrInput(unattrIn(usageRecordEvent("", "u-1", viewsModel, viewsUsage(1000, 0, 0, 100))))
 
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	ov := requireRunReport(t, report, testRunID).Overview
 	assertRatio(t, "unattributed share", ov.UnattributedShare, 1_500_000, 1_500_000)
@@ -162,7 +162,7 @@ func TestByAgentType_UnattributedUsage_IsNoDispatchAndLeavesGroupsUnchanged(t *t
 }
 
 func TestOverview_RunWithoutUnattributedUsage_HasNoUnattributedFigures(t *testing.T) {
-	report := analysis.Analyze(viewsScenarioInput(), viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(viewsScenarioInput(), viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	run := requireRunReport(t, report, testRunID)
 

@@ -187,8 +187,7 @@ func TestExport_RunsHelp_ListsExportKeys(t *testing.T) {
 	}
 }
 
-func TestExport_PerRunViews_HelpListsExportKeys(t *testing.T) {
-	const want = "e export run  E export all"
+func TestExport_PerRunViews_HelpOverlayListsExportKeys(t *testing.T) {
 	m := newExportModel(t, newTestDigestStore(false))
 	run, ok := m.report.FindRun(exportRunA)
 	if !ok {
@@ -205,11 +204,14 @@ func TestExport_PerRunViews_HelpListsExportKeys(t *testing.T) {
 	}
 	for name, v := range views {
 		t.Run(name, func(t *testing.T) {
-			if help := v.Help(); !strings.Contains(help, want) {
-				t.Errorf("Help() = %q, want it to contain %q", help, want)
+			if help := v.Help(); !strings.Contains(help, screens.KeyHelp) {
+				t.Errorf("Help() = %q, want it to hint at %q", help, screens.KeyHelp)
 			}
-			if view := v.View(200, 24); !strings.Contains(view, want) {
-				t.Errorf("rendered help bar does not list the export keys; got:\n%s", view)
+			overlay := helpOverlayText(v, 200, 60)
+			assertListsKey(t, overlay, screens.KeyExportRun)
+			assertListsKey(t, overlay, screens.KeyExportAll)
+			if !strings.Contains(strings.ToLower(overlay), "export") {
+				t.Errorf("the export entries must say what they export\n%s", overlay)
 			}
 		})
 	}

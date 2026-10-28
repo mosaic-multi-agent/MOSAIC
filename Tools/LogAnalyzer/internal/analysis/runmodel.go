@@ -36,7 +36,7 @@ type instanceActivity struct {
 type runActivityState struct {
 	orchestrator instanceActivity
 	instances    map[domain.AgentInstanceID]*instanceActivity
-	compactions  []domain.Compaction // feed order
+	compactions  []compactionFeedEntry // feed order
 }
 
 // activityState returns the run's activity state, creating it on first use.
@@ -101,13 +101,7 @@ func (a *Aggregator) recordToolOrCompaction(rs *runState, ref domain.StreamRef, 
 			callID: ev.ToolCallEnd.CallID, isEnd: true, status: ev.ToolCallEnd.Status, at: ev.Timestamp,
 		})
 	case ev.Compaction != nil:
-		ra.compactions = append(ra.compactions, domain.Compaction{
-			Actor:        actor,
-			At:           ev.Timestamp,
-			Trigger:      ev.Compaction.Trigger,
-			TokensBefore: ev.Compaction.TokensBefore,
-			TokensAfter:  ev.Compaction.TokensAfter,
-		})
+		ra.compactions = append(ra.compactions, newCompactionFeedEntry(ref, actor, ev))
 	}
 	return true
 }
@@ -149,7 +143,7 @@ func buildActivity(rs *runState) domain.RunActivity {
 			ids[id] = true
 		}
 		out.OrchestratorToolCalls = pairToolCalls(ra.orchestrator.tools)
-		out.Compactions = sortedCompactions(ra.compactions)
+		out.Compactions = sortedCompactions(pairCompactionFeed(ra.compactions))
 	}
 
 	sorted := make([]domain.AgentInstanceID, 0, len(ids))

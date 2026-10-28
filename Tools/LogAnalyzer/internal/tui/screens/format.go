@@ -90,6 +90,10 @@ func FormatMoney(v domain.MoneyValue) string {
 	case domain.MoneyUnpriced:
 		return UnpricedMarker
 	case domain.MoneyKnown:
+		if v.Amount < 0 {
+			// StringFixed rounds a negative amount into a malformed figure; format its magnitude.
+			return "-$" + (-v.Amount).StringFixed(2)
+		}
 		return "$" + v.Amount.StringFixed(2)
 	default:
 		return AbsentMarker

@@ -12,9 +12,9 @@ import (
 )
 
 func drilled(run domain.RunReport, h int, keys ...string) (*screens.AgentTypesScreen, string) {
-	s := screens.NewAgentTypesScreen(run, wideW, h, plain())
+	s := screens.NewAgentTypesScreen(run, tableW, h, plain())
 	press(s, keys...)
-	return s, s.View(wideW, h)
+	return s, s.View(tableW, h)
 }
 
 func TestAgentTypesDrill_ShowsTheDispatchesOfTheSelectedType(t *testing.T) {
@@ -59,7 +59,7 @@ func TestAgentTypesDrill_EscReturnsToTypeListThenLeaves(t *testing.T) {
 	if s.Back() {
 		t.Error("first esc must not leave the per-run views")
 	}
-	view := s.View(wideW, tallH)
+	view := s.View(tableW, tallH)
 	assertContains(t, view, "builder", "reviewer")
 	assertNotContains(t, view, "builder#1")
 
@@ -141,7 +141,7 @@ func TestAgentTypesDrill_ShortTerminalScrollsAndShowsHint(t *testing.T) {
 	}
 
 	press(s, repeat("down", 40)...)
-	last := s.View(wideW, shortH)
+	last := s.View(tableW, shortH)
 	assertFits(t, last, shortH)
 	assertContains(t, last, "builder#30")
 	assertNotContains(t, last, "builder#01")

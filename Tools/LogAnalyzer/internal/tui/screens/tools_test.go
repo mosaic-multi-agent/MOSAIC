@@ -1,7 +1,8 @@
 package screens_test
 
 // Behaviour of the tools view: counts, errors, durations, unpaired calls, the
-// absence of any token or money attribution, and scrolling.
+// sections of the run, the orchestrator and each agent type, the absence of any
+// token or money attribution, and scrolling.
 
 import (
 	"regexp"
@@ -13,8 +14,11 @@ import (
 	"mosaic-log-analyzer/internal/tui/screens"
 )
 
-func toolsView(run domain.RunReport, w, h int) string {
-	return screens.NewToolsScreen(run, w, h, plain()).View(w, h)
+// toolsView renders the tools view with colour off and the application's palette.
+func toolsView(t *testing.T, run domain.RunReport, w, h int) string {
+	t.Helper()
+	colourOff(t)
+	return screens.NewToolsScreen(run, w, h, paletteStyles()).View(w, h)
 }
 
 // wantDuration returns the formatted duration and fails when the format helper
@@ -31,7 +35,7 @@ func wantDuration(t *testing.T, d time.Duration) string {
 // hasDuration reports whether the line holds the duration as a whole token, so
 // "4s" is not found inside "44s".
 func hasDuration(line, want string) bool {
-	return regexp.MustCompile(`(^|[^0-9A-Za-z.])` + regexp.QuoteMeta(want) + `($|[^0-9A-Za-z.])`).MatchString(line)
+	return regexp.MustCompile(`(^|[^0-9A-Za-z.])` + regexp.QuoteMeta(want) + `($|[^0-9A-Za-z.])`).MatchString(stripStyling(line))
 }
 
 func TestFormatDuration_AbsentWhenNotOkAndDistinctWhenOk(t *testing.T) {
@@ -45,20 +49,15 @@ func TestFormatDuration_AbsentWhenNotOkAndDistinctWhenOk(t *testing.T) {
 }
 
 func TestTools_ShowsCallsAndErrorsPerTool(t *testing.T) {
-	view := toolsView(toolsRun(), wideW, tallH)
+	view := toolsView(t, toolsRun(), tableW, tallH)
 
 	read := rowFor(t, view, "Read")
-	if !hasToken(read, "11") || !hasToken(read, "3") {
-		t.Errorf("Read row %q must show 11 calls and 3 errors", read)
-	}
-	bash := rowFor(t, view, "Bash")
-	if !hasToken(bash, "6") {
-		t.Errorf("Bash row %q must show 6 calls", bash)
-	}
+	assertFields(t, read, "11", "3")
+	assertFields(t, rowFor(t, view, "Bash"), "6")
 }
 
 func TestTools_ShowsMinMaxAndAverageDurations(t *testing.T) {
-	view := toolsView(toolsRun(), wideW, tallH)
+	view := toolsView(t, toolsRun(), tableW, tallH)
 
 	read := rowFor(t, view, "Read")
 	for _, d := range []time.Duration{ms(1250), ms(7500), 4 * time.Second} {
@@ -75,33 +74,26 @@ func TestTools_ShowsMinMaxAndAverageDurations(t *testing.T) {
 }
 
 func TestTools_UnpairedCallsAreVisibleAndCarryNoDuration(t *testing.T) {
-	view := toolsView(toolsRun(), wideW, tallH)
+	view := toolsView(t, toolsRun(), tableW, tallH)
 
 	unnamed := rowFor(t, view, screens.UnnamedToolLabel)
-	if !strings.Contains(unnamed, screens.UnpairedLabel) || !hasToken(unnamed, "3") || !hasToken(unnamed, "2") {
-		t.Errorf("unnamed row %q must show 3 calls and 2 %q", unnamed, screens.UnpairedLabel)
-	}
-	if !strings.Contains(unnamed, screens.AbsentMarker) {
-		t.Errorf("unnamed row %q has no duration and must show the absent marker", unnamed)
-	}
+	assertContains(t, unnamed, screens.UnpairedLabel, screens.AbsentMarker)
+	assertFields(t, unnamed, "3", "2")
 	bash := rowFor(t, view, "Bash")
-	if !strings.Contains(bash, screens.UnpairedLabel) || !hasToken(bash, "2") {
-		t.Errorf("Bash row %q must show 2 %q calls", bash, screens.UnpairedLabel)
-	}
+	assertContains(t, bash, screens.UnpairedLabel)
+	assertFields(t, bash, "2")
 }
 
 func TestTools_FullyPairedToolIsNotLabelledUnpaired(t *testing.T) {
-	view := toolsView(toolsRun(), wideW, tallH)
+	view := toolsView(t, toolsRun(), tableW, tallH)
 
 	for _, tool := range []string{"Read", "Grep", "Edit"} {
-		if line := rowFor(t, view, tool); strings.Contains(line, screens.UnpairedLabel) {
-			t.Errorf("%s row %q must not carry %q", tool, line, screens.UnpairedLabel)
-		}
+		assertNotContains(t, rowFor(t, view, tool), screens.UnpairedLabel)
 	}
 }
 
 func TestTools_ShowsOrchestratorAndAgentTypeSections(t *testing.T) {
-	view := toolsView(toolsRun(), wideW, tallH)
+	view := toolsView(t, toolsRun(), tableW, tallH)
 
 	orch := strings.Index(strings.ToLower(view), "orchestrator")
 	grep := strings.Index(view, "Grep")
@@ -118,41 +110,41 @@ func TestTools_ShowsOrchestratorAndAgentTypeSections(t *testing.T) {
 	if !(builder < edit && edit < unknown && unknown < write) {
 		t.Errorf("Edit must be listed under builder and Write under the unknown type, in report order\n%s", view)
 	}
-	if line := rowFor(t, view, "Edit"); !hasToken(line, "9") {
-		t.Errorf("Edit row %q must show 9 calls", line)
-	}
-	if line := rowFor(t, view, "Write"); !hasToken(line, "5") || !hasToken(line, "2") {
-		t.Errorf("Write row %q must show 5 calls and 2 errors", line)
-	}
-	if line := rowFor(t, view, "Write"); !strings.Contains(line, screens.UnpairedLabel) {
-		t.Errorf("Write row %q in an agent-type section must carry %q", line, screens.UnpairedLabel)
-	}
+	assertFields(t, rowFor(t, view, "Edit"), "9")
+	write2 := rowFor(t, view, "Write")
+	assertFields(t, write2, "5", "2")
+	assertContains(t, write2, screens.UnpairedLabel)
 }
 
 func TestTools_ShowsNoTokenOrMoneyAttribution(t *testing.T) {
-	view := toolsView(toolsRun(), wideW, tallH)
+	view := toolsView(t, toolsRun(), tableW, tallH)
 
 	assertContains(t, view, "Read")
-	assertNotContains(t, view, "$", screens.UnpricedMarker, "(partial)", screens.AssumedTierLabel)
-	assertNotContains(t, strings.ToLower(view), "cost", "token")
+	// The frame header carries the run's total cost; the body itself shows none.
+	body := strings.Join(overlayLines(view), "\n")
+	assertNotContains(t, body, "$", screens.UnpricedMarker, "(partial)", screens.AssumedTierLabel)
+	assertNotContains(t, strings.ToLower(body), "cost", "token")
 }
 
 func TestTools_ShortTerminalScrollsAndShowsHint(t *testing.T) {
-	s := screens.NewToolsScreen(manyToolsRun(30), wideW, shortH, plain())
+	colourOff(t)
+	s := screens.NewToolsScreen(manyToolsRun(30), wideW, shortH, paletteStyles())
 
+	// Calls sort puts the busiest tool (tool-30) first and the quietest (tool-01) last.
 	first := s.View(wideW, shortH)
-	assertFits(t, first, shortH)
+	assertWithinBounds(t, first, wideW, shortH)
 	if !scrollHintRE.MatchString(first) {
 		t.Errorf("short terminal must show a scroll hint\n%s", first)
 	}
-	assertNotContains(t, first, "tool-30")
+	assertContains(t, first, "tool-30")
+	assertNotContains(t, first, "tool-01")
 
 	var scrolled screens.Screen = s
 	scrolled = press(scrolled, repeat("down", 80)...)
 	last := scrolled.View(wideW, shortH)
-	assertFits(t, last, shortH)
-	assertContains(t, last, "tool-30")
-	assertNotContains(t, last, "tool-01")
+	assertWithinBounds(t, last, wideW, shortH)
+	assertContains(t, last, "tool-01")
+	assertNotContains(t, last, "tool-30")
 
 	back := press(scrolled, repeat("up", 80)...).View(wideW, shortH)
 	if back != first {
@@ -161,7 +153,7 @@ func TestTools_ShortTerminalScrollsAndShowsHint(t *testing.T) {
 }
 
 func TestTools_TallTerminalShowsEverythingWithoutHint(t *testing.T) {
-	view := toolsView(manyToolsRun(30), wideW, 200)
+	view := toolsView(t, manyToolsRun(30), wideW, 200)
 
 	assertContains(t, view, "tool-01", "tool-30")
 	if scrollHintRE.MatchString(view) {
@@ -172,40 +164,37 @@ func TestTools_TallTerminalShowsEverythingWithoutHint(t *testing.T) {
 func TestTools_NarrowTerminalNeverExceedsItsWidth(t *testing.T) {
 	const narrow = 40
 
-	view := toolsView(toolsRun(), narrow, tallH)
+	view := toolsView(t, toolsRun(), narrow, tallH)
 
 	assertContains(t, view, "Read")
-	assertFitsWidth(t, view, narrow)
+	assertWithinBounds(t, view, narrow, tallH)
 }
 
 func TestTools_RunWithoutToolCallsStillRenders(t *testing.T) {
-	view := toolsView(overviewRun(), wideW, tallH)
+	view := toolsView(t, overviewRun(), wideW, tallH)
 
 	if strings.TrimSpace(view) == "" {
 		t.Error("a run without tool calls must still render a page")
 	}
+	assertWithinBounds(t, view, wideW, tallH)
 }
 
 func TestTools_OrchestratorSectionUnpairedToolShowsLabelAndAbsentDuration(t *testing.T) {
 	run := overviewRun()
 	run.Tools.Orchestrator = []domain.ToolFigures{{Tool: "Glob", Calls: 4, Unpaired: 3}}
 
-	line := rowFor(t, toolsView(run, wideW, tallH), "Glob")
+	line := rowFor(t, toolsView(t, run, tableW, tallH), "Glob")
 
-	if !strings.Contains(line, screens.UnpairedLabel) || !strings.Contains(line, screens.AbsentMarker) {
-		t.Errorf("Glob row %q must carry %q and the absent marker", line, screens.UnpairedLabel)
-	}
+	assertContains(t, line, screens.UnpairedLabel, screens.AbsentMarker)
 }
 
 func TestTools_ToolWithErrorsAndNoPairedCallsShowsAbsentDuration(t *testing.T) {
 	run := overviewRun()
 	run.Tools.Run = []domain.ToolFigures{{Tool: "Fetch", Calls: 7, Errors: 7, Unpaired: 7}}
 
-	line := rowFor(t, toolsView(run, wideW, tallH), "Fetch")
+	line := rowFor(t, toolsView(t, run, tableW, tallH), "Fetch")
 
-	if !strings.Contains(line, screens.AbsentMarker) {
-		t.Errorf("Fetch row %q has no paired call and must show the absent marker", line)
-	}
+	assertContains(t, line, screens.AbsentMarker)
 	if zero := screens.FormatDuration(0, true); zero != screens.AbsentMarker && hasDuration(line, zero) {
 		t.Errorf("Fetch row %q must not show a zero duration %q", line, zero)
 	}

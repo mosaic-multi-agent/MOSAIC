@@ -26,7 +26,7 @@ var allowedKeys = map[string][]string{
 	"tool_call":    {"call_id", "tool_name", "status", "started_at", "ended_at", "pairing"},
 	"turn":         {"actor", "role", "at"},
 	"notification": {"actor", "at", "notification_type", "requires_response", "resolution", "notification_id"},
-	"compaction":   {"actor", "at", "trigger", "tokens_before", "tokens_after"},
+	"compaction":   {"actor", "at", "ended_at", "trigger", "tokens_before", "tokens_after", "shape"},
 	"actor":        {"kind", "instance_id", "agent_type"},
 	"finding":      {"kind", "severity", "scope", "run_id", "actor"},
 }

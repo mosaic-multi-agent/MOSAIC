@@ -1,11 +1,11 @@
 package screens
 
 import (
-	"fmt"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	tuicommon "mosaic-common/tui"
 
 	"mosaic-log-analyzer/internal/domain"
 )
@@ -14,22 +14,32 @@ import (
 // correction for clock skew between streams.
 const timeLayout = "15:04:05"
 
-// TimelineScreen is the timeline view (V5): the run's subagent invocations in
-// dispatch order with logged times, durations and parallel overlaps, followed
-// by the compactions with their actor. It shows timestamps only, never money.
+// TimelineScreen is the timeline view (V5). Its default version is a Gantt
+// chart: one lane per invocation under a shared time axis, an orchestrator lane
+// with the compactions, and a detail strip for the lane under the cursor. Its
+// list version is a table of the invocations followed by the compactions. It
+// shows timestamps only, never money lanes.
 type TimelineScreen struct {
 	run    domain.RunReport
-	scroll pageScroller
 	width  int
 	height int
 	styles Styles
 	back   bool
 	nav    viewNav
+	runChrome
+
+	list    bool         // list version instead of the Gantt
+	grouped bool         // Gantt lanes grouped by agent type
+	cursor  int          // selected lane of the Gantt
+	offset  int          // first visible lane of the Gantt
+	scroll  pageScroller // scroll position of the list version
+	sort    SortCycle    // sort of the list version's invocation table
 }
 
 // NewTimelineScreen creates the timeline screen for one run.
 func NewTimelineScreen(run domain.RunReport, width, height int, styles Styles) *TimelineScreen {
-	return &TimelineScreen{run: run, width: width, height: height, styles: styles, nav: viewNav{self: ScreenTimeline}}
+	return &TimelineScreen{run: run, width: width, height: height, styles: styles,
+		nav: viewNav{self: ScreenTimeline}, sort: newTimelineSortCycle()}
 }
 
 // ID implements Screen.
@@ -44,45 +54,85 @@ func (s *TimelineScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	if !ok {
 		return s, nil
 	}
-	switch k := key.String(); k {
+	k := key.String()
+	if s.help.handle(k) {
+		return s, nil
+	}
+	switch k {
 	case "esc", "q":
 		s.back = true
 	case "up", "k", "down", "j":
-		s.scroll.handle(k, len(s.body()), s.height)
+		s.move(k)
+	case KeyToggleView:
+		s.list = !s.list
+		s.scroll = pageScroller{}
+	case KeyGroup:
+		if !s.list {
+			s.grouped = !s.grouped
+			s.cursor, s.offset = 0, 0
+		}
+	case KeySort:
+		if s.list {
+			s.sort = s.sort.Next()
+		}
 	default:
 		s.nav.request(k)
 	}
 	return s, nil
 }
 
+// move moves the Gantt cursor by one lane, or scrolls the list version.
+func (s *TimelineScreen) move(k string) {
+	if s.list {
+		s.scroll.handle(k, len(s.listBody()), s.height)
+		return
+	}
+	delta := 1
+	if k == "up" || k == "k" {
+		delta = -1
+	}
+	s.cursor = clampIndex(s.cursor+delta, len(s.run.Timeline.Entries))
+}
+
 // View implements Screen.
 func (s *TimelineScreen) View(width, height int) string {
 	s.width, s.height = width, height
-	body := s.body()
-	w := s.scroll.window(len(body), height)
-	return renderPage(s.styles, width, "Log Analyzer — Timeline", runLabel(s.run),
-		body[w.Offset:w.End()], w, len(body), s.Help())
+	spec := frameSpec{run: s.run, active: ScreenTimeline, keys: s.helpKeys(), screenKeys: s.screenKeys(),
+		escDesc: "back to the runs list"}
+	var body []string
+	if s.list {
+		all := s.listBody()
+		w := s.scroll.window(len(all), height)
+		spec.hint, spec.sort = FormatScrollHint(w, len(all)), s.sort.Label()
+		body = all[w.Offset:w.End()]
+	} else {
+		body, spec.hint = s.ganttBody(width, height)
+	}
+	return s.render(spec, body, width, height, s.styles)
 }
 
-// body renders every line of the view; the caller scrolls through it.
-func (s *TimelineScreen) body() []string {
-	st, width := s.styles, s.width
-	tl := s.run.Timeline
-	if len(tl.Entries) == 0 && len(tl.Compactions) == 0 {
-		return []string{clip(st.Body, width, "No invocations or compactions in this run.")}
+// helpKeys are the short help keys of the current version.
+func (s *TimelineScreen) helpKeys() []tuicommon.HelpEntry {
+	if s.list {
+		return []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "scroll"}, {Key: KeySort, Desc: "sort"},
+			{Key: KeyToggleView, Desc: "gantt"}, {Key: "esc", Desc: "back"}}
 	}
-	var out []string
-	out = append(out, clip(st.Subtitle, width, "Invocations"))
-	for _, e := range tl.Entries {
-		out = append(out, clip(st.Body, width, "  "+timelineRow(e)))
+	group := "group"
+	if s.grouped {
+		group = "order"
 	}
-	if len(tl.Compactions) > 0 {
-		out = append(out, "", clip(st.Subtitle, width, "Compactions"))
-		for _, c := range tl.Compactions {
-			out = append(out, clip(st.Body, width, "  "+compactionRow(c)))
-		}
+	return []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: KeyGroup, Desc: group},
+		{Key: KeyToggleView, Desc: "list"}, {Key: "esc", Desc: "back"}}
+}
+
+// screenKeys are the overlay entries of the keys this view has of its own.
+func (s *TimelineScreen) screenKeys() []tuicommon.HelpEntry {
+	toggle := tuicommon.HelpEntry{Key: KeyToggleView, Desc: "switch between the Gantt and the list version"}
+	if s.list {
+		return []tuicommon.HelpEntry{{Key: KeySort, Desc: "cycle the sort order of the invocation table"}, toggle}
 	}
-	return out
+	return []tuicommon.HelpEntry{
+		{Key: KeyGroup, Desc: "group the lanes by agent type, or back to dispatch order"}, toggle}
 }
 
 // formatClock renders a logged time, or AbsentMarker when it is unknown.
@@ -93,39 +143,9 @@ func formatClock(t time.Time) string {
 	return t.Format(timeLayout)
 }
 
-// timelineRow renders one invocation: id, type, logged start and end (open when
-// there is no end event), duration and the invocations it ran in parallel with.
-func timelineRow(e domain.TimelineEntry) string {
-	inv := e.Invocation
-	typ := inv.Actor.Type
-	if typ == "" {
-		typ = UnknownTypeLabel
-	}
-	end := formatClock(inv.EndedAt)
-	if inv.State == domain.InvocationOpen {
-		end = OpenLabel
-	}
-	row := fmt.Sprintf("%-10s %-14s %s → %s  %s", inv.Actor.Instance, typ,
-		formatClock(inv.StartedAt), end, FormatDuration(e.Duration, e.HasDuration))
-	if len(e.Overlaps) > 0 {
-		ids := make([]string, len(e.Overlaps))
-		for i, id := range e.Overlaps {
-			ids[i] = string(id)
-		}
-		row += "  parallel with " + strings.Join(ids, ", ")
-	}
-	return row
-}
-
-// compactionRow renders one compaction: time, actor, trigger and token counts.
-func compactionRow(c domain.Compaction) string {
-	return fmt.Sprintf("%s  %s  %s  %s → %s", formatClock(c.At), c.Actor.Label(), c.Trigger,
-		FormatTokens(c.TokensBefore), FormatTokens(c.TokensAfter))
-}
-
 // Help implements Screen.
 func (s *TimelineScreen) Help() string {
-	return "↑/↓ scroll  " + viewKeysHelp(ScreenTimeline) + "  esc back  ctrl+c quit"
+	return shortHelpText("", s.helpKeys())
 }
 
 // Back reports whether the user asked to leave the per-run views.

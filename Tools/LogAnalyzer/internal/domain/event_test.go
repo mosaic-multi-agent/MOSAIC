@@ -22,6 +22,7 @@ package domain_test
 // actual encoding/json unmarshalling is exercised.
 
 import (
+	"fmt"
 	"testing"
 
 	"mosaic-log-analyzer/internal/domain"
@@ -288,54 +289,56 @@ func TestEventType_EventUsageRecord_WireValue(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Schema version set — SchemaVersionCurrent, SupportedSchemaVersions,
-// IsSupportedSchemaVersion
+// Schema version rule — SchemaVersionCurrent, SupportedSchemaMajor,
+// IsSupportedSchemaVersion: any MAJOR.MINOR.PATCH of major 1 is read
 // ---------------------------------------------------------------------------
 
 func TestSchemaVersionCurrent_Value(t *testing.T) {
-	if domain.SchemaVersionCurrent != "1.3.0" {
-		t.Errorf("SchemaVersionCurrent = %q, want %q", domain.SchemaVersionCurrent, "1.3.0")
+	if domain.SchemaVersionCurrent != "1.5.0" {
+		t.Errorf("SchemaVersionCurrent = %q, want %q", domain.SchemaVersionCurrent, "1.5.0")
 	}
 }
 
-func TestSupportedSchemaVersions_ContainsAllVersions(t *testing.T) {
-	set := domain.SupportedSchemaVersions()
-	for _, want := range []string{"1.3.0", "1.2.0", "1.1.0", "1.0.0"} {
-		found := false
-		for _, v := range set {
-			if v == want {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf("SupportedSchemaVersions() must contain %q (got %v)", want, set)
-		}
-	}
-}
-
-func TestSupportedSchemaVersions_NewestFirst(t *testing.T) {
-	set := domain.SupportedSchemaVersions()
-	if len(set) == 0 {
-		t.Fatal("SupportedSchemaVersions() must not be empty")
-	}
-	if set[0] != "1.3.0" {
-		t.Errorf("SupportedSchemaVersions()[0] = %q, want %q (newest first)", set[0], "1.3.0")
-	}
-}
-
-func TestIsSupportedSchemaVersion_PriorAndCurrent_True(t *testing.T) {
-	for _, v := range []string{"1.0.0", "1.1.0", "1.2.0", "1.3.0"} {
+func TestIsSupportedSchemaVersion_AnyMajorOneVersion_True(t *testing.T) {
+	for _, v := range []string{"1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.3.7", "1.4.0", "1.5.0", "1.9.0", "1.10.25"} {
 		if !domain.IsSupportedSchemaVersion(v) {
 			t.Errorf("IsSupportedSchemaVersion(%q) = false, want true", v)
 		}
 	}
 }
 
-func TestIsSupportedSchemaVersion_UnrecognisedVersion_False(t *testing.T) {
-	for _, v := range []string{"2.0.0", "0.9.0", "", "1.1.0-beta", "1.4.0"} {
+func TestIsSupportedSchemaVersion_OtherMajorOrUnparseable_False(t *testing.T) {
+	for _, v := range []string{"2.0.0", "0.9.0", "99.0.0", "", "1.4", "1", "v1.4.0", "1.4.0-rc1", "1.1.0-beta",
+		"abc", "1.x.0", "1.4.0.1", " 1.4.0", "1.4.0 ", "1.-1.0", "-1.0.0",
+		"1..0", "1.4.", ".4.0", "1.+4.0", "+1.4.0"} {
 		if domain.IsSupportedSchemaVersion(v) {
 			t.Errorf("IsSupportedSchemaVersion(%q) = true, want false", v)
 		}
+	}
+}
+
+func TestIsSupportedSchemaVersion_LeadingZerosAndHugeComponents_ReadByDecimalValue(t *testing.T) {
+	for _, v := range []string{"1.04.0", "01.0.0", "001.000.000", "1.99999999999999999999.0", "1.0.99999999999999999999"} {
+		if !domain.IsSupportedSchemaVersion(v) {
+			t.Errorf("IsSupportedSchemaVersion(%q) = false, want true", v)
+		}
+	}
+	for _, v := range []string{"99999999999999999999.0.0", "02.0.0", "1.4.0\n"} {
+		if domain.IsSupportedSchemaVersion(v) {
+			t.Errorf("IsSupportedSchemaVersion(%q) = true, want false", v)
+		}
+	}
+}
+
+func TestIsSupportedSchemaVersion_FollowsSupportedSchemaMajor(t *testing.T) {
+	same := fmt.Sprintf("%d.7.3", domain.SupportedSchemaMajor)
+	other := fmt.Sprintf("%d.0.0", domain.SupportedSchemaMajor+1)
+
+	if !domain.IsSupportedSchemaVersion(same) {
+		t.Errorf("IsSupportedSchemaVersion(%q) = false, want true", same)
+	}
+	if domain.IsSupportedSchemaVersion(other) {
+		t.Errorf("IsSupportedSchemaVersion(%q) = true, want false", other)
 	}
 }
 

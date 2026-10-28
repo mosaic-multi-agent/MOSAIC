@@ -65,6 +65,7 @@ type wireEvent struct {
 	ToolName        string           `json:"tool_name"`
 	Status          string           `json:"status"`
 	Trigger         string           `json:"trigger"`
+	Phase           string           `json:"phase"`
 	TokensBefore    *int64           `json:"tokens_before"`
 	TokensAfter     *int64           `json:"tokens_after"`
 
@@ -149,7 +150,7 @@ func (r *Reader) Read(ctx context.Context, path string, visit func(domain.Event)
 				Kind:     domain.FindingUnknownSchema,
 				Severity: domain.SeverityWarning,
 				Path:     path,
-				Detail:   "schema_version " + wire.SchemaVersion + " is not supported; supported versions: " + strings.Join(domain.SupportedSchemaVersions(), ", "),
+				Detail:   "schema_version " + wire.SchemaVersion + " is not supported; major version 1 (1.x.y) is read",
 			})
 		}
 
@@ -273,7 +274,7 @@ func buildEvent(wire wireEvent) domain.Event {
 		ev.ToolCallEnd = &domain.ToolCallEndFields{CallID: wire.CallID, Status: domain.ToolCallStatus(wire.Status)}
 	case domain.EventCompaction:
 		ev.Type = domain.EventCompaction
-		fields := &domain.CompactionFields{Trigger: wire.Trigger}
+		fields := &domain.CompactionFields{Trigger: wire.Trigger, Phase: compactionPhase(wire.Phase)}
 		if wire.TokensBefore != nil {
 			fields.TokensBefore = domain.Tokens(*wire.TokensBefore)
 		}
@@ -287,6 +288,15 @@ func buildEvent(wire wireEvent) domain.Event {
 	}
 
 	return ev
+}
+
+// compactionPhase maps the wire phase; anything but pre/post is no phase.
+func compactionPhase(p string) domain.CompactionPhase {
+	switch domain.CompactionPhase(p) {
+	case domain.CompactionPhasePre, domain.CompactionPhasePost:
+		return domain.CompactionPhase(p)
+	}
+	return domain.CompactionPhaseNone
 }
 
 // decodeUsage converts the wire usage shape into the domain TokenUsage type.

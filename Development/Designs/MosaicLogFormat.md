@@ -198,6 +198,9 @@ Harnesses vary in whether a human-input prompt is observable as one event or two
 | `trigger` | enum: `"auto"` \| `"manual"` | Optional | What caused the compaction. |
 | `tokens_before` | number | Optional | Context size prior to compaction. |
 | `tokens_after` | number | Optional | Context size after compaction. |
+| `phase` | enum: `"pre"` \| `"post"` | Optional | Which half of one compaction this event reports, for harnesses that expose the start and the end of a compaction as separate hooks. Absent when the harness reports a compaction as a single event. |
+
+One compaction is either one self-contained event without `phase`, or a `"pre"` event followed by a `"post"` event in the same stream, each carrying whichever fields its hook supplies. Consumers count compactions, not events: a `"post"` pairs with the nearest preceding unpaired `"pre"` in the same stream, and an unpaired half still counts as one compaction. A compaction event is written to the stream of the actor whose context was compacted, so a subagent's compaction goes to that invocation's `03_events.jsonl`, never to the orchestrator stream. Only when the adapter cannot tell which actor's context was compacted does it write to the orchestrator stream. Consumers therefore cannot rule out that an orchestrator-stream compaction belongs to a subagent.
 
 **`usage_record`**
 
@@ -409,6 +412,8 @@ MOSAIC's existing versioning convention — `X.Y.Z`, already carried by every ag
 
 Every event carries `schema_version` in its common envelope (§3.3).
 
+**Consumer rule.** A consumer reads every event whose major version it knows, including minor and patch versions newer than any it was written against. It ignores the fields and event types it doesn't know, which is what a Y bump guarantees is safe. It reports an event as unsupported only when the major version is unknown. A consumer never keeps an allow-list of exact versions, because such a list falls behind on every Y bump and turns a compatible stream into false findings.
+
 **Version history:**
 
 | Version | Change |
@@ -418,6 +423,7 @@ Every event carries `schema_version` in its common envelope (§3.3).
 | `1.2.0` | Added the `cache_creation_5m_tokens` and `cache_creation_1h_tokens` sub-fields to `token_usage`. |
 | `1.3.0` | Added the `reasoning_tokens` sub-field to `token_usage`, the `provider` field wherever `model` appears, and the `effort` field on `usage_record`. |
 | `1.4.0` | Added the `otel` value of `usage_record.source`, the unattributed stream `00_unattributed_events.jsonl` (§4.7) and `invocation_start.spawn_call_id`. |
+| `1.5.0` | Added `compaction.phase` and the rule that a compaction is written to the stream of the actor whose context was compacted. |
 
 Adapters emit the highest version whose fields they implement; an adapter that does not produce the 1.2.0 sub-fields keeps emitting its earlier version. A version covers its fields as a set of things the adapter implements, not as fields that must appear on every event: an adapter that implements 1.3.0 but cannot know the provider in a given run still emits 1.3.0 and omits `provider`. The version is per event, so an event type added in a version (for example `usage_record` in 1.1.0) is never written with an earlier version.
 

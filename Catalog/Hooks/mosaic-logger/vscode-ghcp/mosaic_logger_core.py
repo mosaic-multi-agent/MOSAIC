@@ -27,6 +27,7 @@ BASE_SCHEMA_VERSION = "1.0.0"
 EVENT_SCHEMA_VERSIONS = {
     "invocation_start": "1.4.0",   # spawn_call_id
     "usage_record": "1.4.0",
+    "compaction": "1.5.0",         # single-hook harness: no phase
 }
 HARNESS = "vscode-ghcp"          # D1 — the schema harness enum value
 LOGS_DIRNAME = "OrchestrationLogs"

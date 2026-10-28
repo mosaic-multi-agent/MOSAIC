@@ -13,7 +13,7 @@ import (
 )
 
 func typesView(run domain.RunReport, h int) string {
-	return screens.NewAgentTypesScreen(run, wideW, h, plain()).View(wideW, h)
+	return screens.NewAgentTypesScreen(run, tableW, h, plain()).View(tableW, h)
 }
 
 func TestAgentTypes_ShowsFiguresPerType(t *testing.T) {
@@ -161,10 +161,11 @@ func TestAgentTypes_EscAndQAskToLeave(t *testing.T) {
 	}
 }
 
-func TestAgentTypes_HelpListsViewKeysAndBack(t *testing.T) {
-	help := screens.NewAgentTypesScreen(agentTypesRun(), wideW, tallH, plain()).Help()
+func TestAgentTypes_HelpHintsAtTheOverviewListingViewKeysAndBack(t *testing.T) {
+	s := screens.NewAgentTypesScreen(agentTypesRun(), wideW, tallH, plain())
 
-	assertContains(t, help, screens.KeyViewDispatches, screens.KeyViewOverview, "esc")
+	assertContains(t, s.Help(), screens.KeyHelp)
+	assertOverlayListsViewKeys(t, s, screens.KeyViewDispatches, screens.KeyViewOverview)
 }
 
 func TestAgentTypes_RunWithoutSubagentsRendersAndCannotDrillDown(t *testing.T) {
@@ -214,8 +215,9 @@ func TestRunDetail_OwnViewKeyRequestsNothing(t *testing.T) {
 	}
 }
 
-func TestRunDetail_HelpListsViewKeys(t *testing.T) {
-	help := screens.NewRunDetailScreen(overviewRun(), wideW, tallH, plain()).Help()
+func TestRunDetail_HelpHintsAtTheOverviewListingViewKeys(t *testing.T) {
+	s := screens.NewRunDetailScreen(overviewRun(), wideW, tallH, plain())
 
-	assertContains(t, help, screens.KeyViewOverview, screens.KeyViewAgentTypes, "esc")
+	assertContains(t, s.Help(), screens.KeyHelp)
+	assertOverlayListsViewKeys(t, s, screens.KeyViewOverview, screens.KeyViewAgentTypes)
 }

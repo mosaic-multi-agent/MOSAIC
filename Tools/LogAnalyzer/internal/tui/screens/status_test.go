@@ -1,9 +1,11 @@
 package screens_test
 
 // Behaviour of the by-returned-status-code view: groups per run and per agent
-// type, the separate no-status and open groups, labels and scrolling.
+// type, the separate no-status and open groups, labels and scrolling. The table
+// layout, share bars, roles and sorting are in status_table_test.go.
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -12,7 +14,7 @@ import (
 )
 
 func statusView(run domain.RunReport, w, h int) string {
-	return screens.NewStatusScreen(run, w, h, plain()).View(w, h)
+	return screens.NewStatusScreen(run, w, h, paletteStyles()).View(w, h)
 }
 
 func TestStatus_ShowsEachReportedCodeWithCountAndCost(t *testing.T) {
@@ -31,21 +33,10 @@ func TestStatus_ShowsEachReportedCodeWithCountAndCost(t *testing.T) {
 	}
 }
 
-func TestStatus_KeepsGroupOrder(t *testing.T) {
+func TestStatus_RunGroupsAreOrderedByCostWithTheMostExpensiveFirst(t *testing.T) {
 	view := statusView(statusRun(), wideW, tallH)
 
-	order := []string{"$12.34", "$2.50", "$0.77", "$4.56", "$1.11"}
-	last := -1
-	for _, amount := range order {
-		idx := strings.Index(view, amount)
-		if idx < 0 {
-			t.Fatalf("view does not contain %q\n%s", amount, view)
-		}
-		if idx <= last {
-			t.Errorf("group with %s is out of order (reported codes, no status, open)\n%s", amount, view)
-		}
-		last = idx
-	}
+	assertAppearInOrder(t, view, []string{"$12.34", "$4.56", "$2.50", "$1.11", "$0.77"}, true)
 }
 
 func TestStatus_NoStatusAndOpenAreSeparateLabelledGroups(t *testing.T) {
@@ -166,24 +157,23 @@ func TestStatus_CompleteRunHasNoIncompletenessLabels(t *testing.T) {
 	assertNotContains(t, view, "(partial)", screens.UnpricedMarker, screens.AssumedTierLabel, screens.MissingUsageLabel)
 }
 
-func TestStatus_ShortTerminalScrollsAndShowsHint(t *testing.T) {
-	s := screens.NewStatusScreen(manyStatusTypesRun(20), wideW, shortH, plain())
+func TestStatus_ShortTerminalScrollsToEveryTypeAndShowsHint(t *testing.T) {
+	s := screens.NewStatusScreen(manyStatusTypesRun(20), wideW, shortH, paletteStyles())
 
 	first := s.View(wideW, shortH)
 	assertFits(t, first, shortH)
 	if !scrollHintRE.MatchString(first) {
 		t.Errorf("short terminal must show a scroll hint\n%s", first)
 	}
-	assertNotContains(t, first, "type-20")
+	all := scrollThrough(s, wideW, shortH, 300)
+	for i := 1; i <= 20; i++ {
+		if name := fmt.Sprintf("type-%02d", i); !strings.Contains(all, name) {
+			t.Errorf("scrolling never reaches %s", name)
+		}
+	}
+	assertFits(t, s.View(wideW, shortH), shortH)
 
-	var scrolled screens.Screen = s
-	scrolled = press(scrolled, repeat("down", 80)...)
-	last := scrolled.View(wideW, shortH)
-	assertFits(t, last, shortH)
-	assertContains(t, last, "type-20")
-	assertNotContains(t, last, "type-01")
-
-	back := press(scrolled, repeat("up", 80)...).View(wideW, shortH)
+	back := press(s, repeat("up", 300)...).View(wideW, shortH)
 	if back != first {
 		t.Errorf("scrolling back to the top must restore the first view\n%s\nvs\n%s", back, first)
 	}
@@ -199,14 +189,15 @@ func TestStatus_TallTerminalShowsEverythingWithoutHint(t *testing.T) {
 }
 
 func TestStatus_NarrowTerminalNeverExceedsItsWidth(t *testing.T) {
-	const narrow = 40
 	run := statusRun()
 	run.ByStatus.Run[0].Figures.UnpricedModels = []domain.PricingKey{{Model: "a-very-long-unpriced-model-name"}}
 
-	view := statusView(run, narrow, tallH)
+	for _, narrow := range []int{80, 60, 40} {
+		view := statusView(run, narrow, tallH)
 
-	assertContains(t, view, "SUCCESS")
-	assertFitsWidth(t, view, narrow)
+		assertContains(t, view, "SUCCESS")
+		assertFitsWidth(t, view, narrow)
+	}
 }
 
 func TestStatus_RunWithoutStatusDataStillRenders(t *testing.T) {

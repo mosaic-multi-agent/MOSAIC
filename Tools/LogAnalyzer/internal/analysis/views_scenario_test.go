@@ -114,7 +114,7 @@ func viewsScenarioInput() analysis.Input {
 // viewsScenarioRun analyses the scenario and returns its single named run.
 func viewsScenarioRun(t *testing.T, table domain.PricingTable) domain.RunReport {
 	t.Helper()
-	report := analysis.Analyze(viewsScenarioInput(), table, testSource(), nil)
+	report := analysis.Analyze(viewsScenarioInput(), table, domain.DefaultAnalysisSettings(), testSource(), nil)
 	return requireRunReport(t, report, testRunID)
 }
 

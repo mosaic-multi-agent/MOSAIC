@@ -102,7 +102,7 @@ func TestRunViews_UnattributedStream_LeavesStatusToolsAndTimelineViewsUnchanged(
 func TestRunViews_LoneUnattributedStream_HasNoStatusToolOrAgentTypeRows(t *testing.T) {
 	in := analysis.Input{Streams: []analysis.Stream{unattributedUsageStream()}}
 
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	run := requireRunReport(t, report, testRunID)
 	if len(run.ByAgentType) != 0 || len(run.ByStatus.Run) != 0 || len(run.Tools.Run) != 0 {

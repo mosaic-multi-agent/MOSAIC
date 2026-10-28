@@ -12,12 +12,12 @@
 import * as nodePath from "node:path";
 import * as nodeFs from "node:fs";
 import * as nodeFsPromises from "node:fs/promises";
-
+import { DEFAULT_SCHEMA_VERSION, schemaVersionFor } from "./schema_versions.js";
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION: string = "1.3.0";
+export const SCHEMA_VERSION: string = DEFAULT_SCHEMA_VERSION;
 export const HARNESS: string = "opencode";
 export const LOGS_DIRNAME: string = "OrchestrationLogs";
 
@@ -120,7 +120,7 @@ export function buildEvent(
   fields: Record<string, unknown>,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {
-    schema_version: SCHEMA_VERSION,
+    schema_version: schemaVersionFor(event),
     event,
     timestamp: envelope.timestamp,
     harness: HARNESS,

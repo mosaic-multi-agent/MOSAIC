@@ -5,6 +5,7 @@ package screens_test
 
 import (
 	"fmt"
+	"strings"
 
 	"mosaic-log-analyzer/internal/domain"
 )
@@ -58,7 +59,8 @@ func acrossReport() domain.Report {
 			},
 			ByAgentType: []domain.AgentTypeAcrossRuns{
 				{AgentType: "coder", Runs: 3, ProvisionalRuns: 1, Figures: coder,
-					PerRunInvocations: domain.Ratio{Numerator: 47, Denominator: 3}, PerRunMoney: stats(533, false)},
+					PerRunInvocations: domain.Ratio{Numerator: 47, Denominator: 3}, PerRunMoney: stats(533, false),
+					PerRunTokens: domain.Ratio{Numerator: 123456, Denominator: 3}},
 				{AgentType: "tester", Runs: 2, ProvisionalRuns: 1, Figures: tester,
 					PerRunInvocations: domain.Ratio{Numerator: 2, Denominator: 2}, PerRunMoney: stats(120, true)},
 				{AgentType: "", Runs: 1, Figures: unknown,
@@ -86,6 +88,17 @@ func acrossCompleteReport() domain.Report {
 	}
 	return report
 }
+
+// Per-run averages of the fixture's coder type: 47 invocations over 3 runs and
+// 123456 tokens over 3 runs.
+const (
+	coderPerRunInvocations = "15.7"
+	coderPerRunTokens      = "41152"
+)
+
+// withoutThousands removes thousands separators so a count is found whichever
+// way the table groups its digits.
+func withoutThousands(s string) string { return strings.ReplaceAll(stripStyling(s), ",", "") }
 
 // manyAcrossRunsReport has n fully priced runs named run-01 ... and no agent types.
 func manyAcrossRunsReport(n int) domain.Report {

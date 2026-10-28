@@ -26,7 +26,7 @@ func tlBoundaryTimeline(t *testing.T) domain.Timeline {
 		tlInvocation("p#4", "coder", sec(30), sec(40), "SUCCESS"),
 		tlInvocation("q#5", "coder", sec(30), sec(40), "SUCCESS"),
 	}}
-	return requireRunReport(t, analysis.Analyze(in, viewsPricing(t), testSource(), nil), testRunID).Timeline
+	return requireRunReport(t, analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil), testRunID).Timeline
 }
 
 func TestTimeline_ZeroLengthInvocation_HasZeroDurationAndOverlapsOnlyWhenStrictlyInside(t *testing.T) {

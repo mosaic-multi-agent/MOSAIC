@@ -55,8 +55,23 @@ func rfPricedReport(t *testing.T, orch, agent []domain.Event) domain.Report {
 	}}
 	agg, _ := analysis.Aggregate(in)
 	table := domain.NewPricingTable([]domain.ModelPricing{flatModelPricing(t, "model-a")})
-	report, _ := analysis.Price(agg, table, domain.Source{})
+	report, _ := analysis.Price(agg, table, domain.DefaultAnalysisSettings(), domain.Source{})
 	return report
+}
+
+// rfIgnoreTimestampSpan returns a copy of the report without the figures that
+// legitimately depend on run_start, run_end, session and notification
+// timestamps: the timeline axis and the wall-time split.
+func rfIgnoreTimestampSpan(r domain.Report) domain.Report {
+	runs := make([]domain.RunReport, len(r.Runs))
+	copy(runs, r.Runs)
+	for i := range runs {
+		runs[i].Timeline.Axis = domain.TimeInterval{}
+		runs[i].Timeline.HasAxis = false
+		runs[i].WallTime = domain.WallTimeSplit{}
+	}
+	r.Runs = runs
+	return r
 }
 
 func TestPrice_ReportUnchangedByCarriedFacts(t *testing.T) {
@@ -70,6 +85,8 @@ func TestPrice_ReportUnchangedByCarriedFacts(t *testing.T) {
 
 	without := rfPricedReport(t, baseOrch, baseAgent)
 	with := rfPricedReport(t, withOrch, withAgent)
+
+	with, without = rfIgnoreTimestampSpan(with), rfIgnoreTimestampSpan(without)
 
 	if !reflect.DeepEqual(with, without) {
 		t.Errorf("report changed by carried facts:\n with    %+v\n without %+v", with, without)

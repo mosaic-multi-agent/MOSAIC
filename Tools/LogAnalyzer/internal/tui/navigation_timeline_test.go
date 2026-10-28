@@ -31,6 +31,8 @@ func timelineNavRun(id string, cents int64, instance string) domain.RunReport {
 	}
 	run.Timeline = domain.Timeline{
 		Entries: []domain.TimelineEntry{{Invocation: inv, Duration: 30 * time.Second, HasDuration: true}},
+		Axis:    domain.TimeInterval{Start: timelineBase, End: timelineBase.Add(30 * time.Second)},
+		HasAxis: true,
 	}
 	return run
 }
@@ -86,7 +88,7 @@ func TestTimeline_PerDispatchListStillListsOrchestratorAndDispatches(t *testing.
 	m = send(m, screens.KeyViewDispatches)
 
 	assertOn(t, m, screens.ScreenRunDetail)
-	if view := m.View(); !strings.Contains(view, "builder#1") || !strings.Contains(view, "Orchestrator") {
+	if view := m.View(); !strings.Contains(view, "builder#1") || !strings.Contains(strings.ToLower(view), "orchestrator") {
 		t.Errorf("per-dispatch list must list the orchestrator and builder#1\n%s", view)
 	}
 }
@@ -104,7 +106,7 @@ func TestTimeline_BackReturnsToRunsList(t *testing.T) {
 }
 
 func TestTimeline_ShowsTheSelectedRunNotTheFirst(t *testing.T) {
-	report := navViewsReport(timelineNavRun(runA, 300, "worker-a"), timelineNavRun(runB, 700, "worker-b"))
+	report := navViewsReport(timelineNavRun(runA, 700, "worker-a"), timelineNavRun(runB, 300, "worker-b"))
 
 	m := send(onRunsList(report), "down", "enter", screens.KeyViewTimeline)
 
@@ -114,7 +116,7 @@ func TestTimeline_ShowsTheSelectedRunNotTheFirst(t *testing.T) {
 	}
 }
 
-func TestTimeline_ScrollOnAShortTerminal(t *testing.T) {
+func manyStepsRun() domain.RunReport {
 	run := timelineNavRun(runA, 1000, "worker-a")
 	for i := 1; i <= 30; i++ {
 		start := timelineBase.Add(time.Duration(i) * time.Minute)
@@ -128,13 +130,18 @@ func TestTimeline_ScrollOnAShortTerminal(t *testing.T) {
 			Duration: time.Second, HasDuration: true,
 		})
 	}
-	m := onRunDetail(t, navViewsReport(run))
-	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 8})
+	run.Timeline.Axis.End = timelineBase.Add(31 * time.Minute)
+	return run
+}
+
+func TestTimeline_ScrollOnAShortTerminal(t *testing.T) {
+	m := onRunDetail(t, navViewsReport(manyStepsRun()))
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 12})
 	m = send(asModel(updated), screens.KeyViewTimeline)
 
 	view := m.View()
-	if n := strings.Count(view, "\n") + 1; n > 8 {
-		t.Errorf("view has %d lines on an 8-line terminal\n%s", n, view)
+	if n := strings.Count(view, "\n") + 1; n > 12 {
+		t.Errorf("view has %d lines on a 12-line terminal\n%s", n, view)
 	}
 	if strings.Contains(view, "step-30") {
 		t.Errorf("step-30 must be scrolled out of view\n%s", view)
@@ -142,6 +149,49 @@ func TestTimeline_ScrollOnAShortTerminal(t *testing.T) {
 
 	m = send(m, strings.Fields(strings.Repeat("down ", 150))...)
 	if !strings.Contains(m.View(), "step-30") {
-		t.Errorf("scrolling down must reach step-30\n%s", m.View())
+		t.Errorf("moving the cursor down must reach step-30\n%s", m.View())
+	}
+}
+
+func TestTimeline_NeverDrawsPastAnEightLineTerminal(t *testing.T) {
+	m := onRunDetail(t, navViewsReport(manyStepsRun()))
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 8})
+	m = send(asModel(updated), screens.KeyViewTimeline)
+
+	for i := 0; i < 40; i++ {
+		if n := strings.Count(m.View(), "\n") + 1; n > 8 {
+			t.Fatalf("view has %d lines on an 8-line terminal\n%s", n, m.View())
+		}
+		m = send(m, "down", "down")
+	}
+}
+
+func TestTimeline_ListAndGroupKeysStayOnTheTimeline(t *testing.T) {
+	report := navViewsReport(timelineNavRun(runA, 1000, "worker-a"))
+	m := send(onRunDetail(t, report), screens.KeyViewTimeline)
+	gantt := m.View()
+
+	m = send(m, screens.KeyToggleView)
+	assertOn(t, m, screens.ScreenTimeline)
+	list := m.View()
+	if list == gantt || !strings.Contains(list, "worker-a") {
+		t.Errorf("v must show the list version of the timeline, still listing worker-a\n%s", list)
+	}
+
+	m = send(m, screens.KeyToggleView, screens.KeyGroup)
+	assertOn(t, m, screens.ScreenTimeline)
+	if !strings.Contains(m.View(), "worker-a") {
+		t.Errorf("g must keep the timeline lanes\n%s", m.View())
+	}
+}
+
+func TestTimeline_BackFromTheListVersionReturnsToRunsList(t *testing.T) {
+	report := navViewsReport(timelineNavRun(runA, 1000, "worker-a"))
+	for _, back := range []string{"esc", "q"} {
+		m := send(onRunDetail(t, report), screens.KeyViewTimeline, screens.KeyToggleView)
+
+		m = send(m, back)
+
+		assertOn(t, m, screens.ScreenRuns)
 	}
 }

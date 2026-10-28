@@ -12,18 +12,21 @@ import (
 	"mosaic-log-analyzer/internal/tui/screens"
 )
 
-func acrossView(report domain.Report, w, h int) string {
-	return screens.NewAcrossRunsScreen(report, w, h, plain()).View(w, h)
+// acrossView renders the across-runs view with colour off and the application's palette.
+func acrossView(t *testing.T, report domain.Report, w, h int) string {
+	t.Helper()
+	colourOff(t)
+	return screens.NewAcrossRunsScreen(report, w, h, paletteStyles()).View(w, h)
 }
 
 func TestAcrossRuns_IdentifiesItself(t *testing.T) {
-	if got := screens.NewAcrossRunsScreen(acrossReport(), wideW, tallH, plain()).ID(); got != screens.ScreenAcrossRuns {
+	if got := screens.NewAcrossRunsScreen(acrossReport(), wideW, tallH, paletteStyles()).ID(); got != screens.ScreenAcrossRuns {
 		t.Errorf("across-runs screen ID = %q, want %q", got, screens.ScreenAcrossRuns)
 	}
 }
 
 func TestAcrossRuns_ListsEveryRunWithItsTotalOnOneRow(t *testing.T) {
-	view := acrossView(acrossReport(), wideW, tallH)
+	view := acrossView(t, acrossReport(), tableW, tallH)
 
 	for id, total := range map[string]string{acrossRunA: "$10.00", acrossRunB: "$6.00", acrossRunC: "$3.21"} {
 		if row := rowFor(t, view, id); !strings.Contains(row, total) {
@@ -32,18 +35,14 @@ func TestAcrossRuns_ListsEveryRunWithItsTotalOnOneRow(t *testing.T) {
 	}
 }
 
-func TestAcrossRuns_ListsRunsInTheGivenOrder(t *testing.T) {
-	view := acrossView(acrossReport(), wideW, tallH)
+func TestAcrossRuns_ListsTheMostExpensiveRunFirstByDefault(t *testing.T) {
+	view := acrossView(t, acrossReport(), tableW, tallH)
 
-	a, b, c := lineIndex(view, acrossRunA), lineIndex(view, acrossRunB), lineIndex(view, acrossRunC)
-
-	if a < 0 || !(a < b && b < c) {
-		t.Errorf("runs must be listed in report order (rows %d, %d, %d)\n%s", a, b, c, view)
-	}
+	assertAppearInOrder(t, view, []string{acrossRunA, acrossRunB, acrossRunC}, true)
 }
 
 func TestAcrossRuns_ShowsAgentTypeTotalAndPerRunAverageOnItsRow(t *testing.T) {
-	view := acrossView(acrossReport(), wideW, tallH)
+	view := acrossView(t, acrossReport(), tableW, tallH)
 
 	for typ, amounts := range map[string][]string{
 		"coder":  {"$16.00", "$5.33"},
@@ -59,25 +58,19 @@ func TestAcrossRuns_ShowsAgentTypeTotalAndPerRunAverageOnItsRow(t *testing.T) {
 }
 
 func TestAcrossRuns_ShowsTheInvocationCountOnTheAgentTypeRow(t *testing.T) {
-	view := acrossView(acrossReport(), wideW, tallH)
+	view := acrossView(t, acrossReport(), tableW, tallH)
 
-	if row := rowFor(t, view, "coder"); !strings.Contains(row, "47") {
-		t.Errorf("row of type coder = %q, want its invocation count 47", row)
-	}
+	assertFields(t, rowFor(t, view, "coder"), "47")
 }
 
 func TestAcrossRuns_UnknownTypeIsListedWithItsFigures(t *testing.T) {
-	view := acrossView(acrossReport(), wideW, tallH)
+	view := acrossView(t, acrossReport(), tableW, tallH)
 
-	row := rowFor(t, view, screens.UnknownTypeLabel)
-
-	if !strings.Contains(row, "$0.77") {
-		t.Errorf("unknown type row = %q, want its total $0.77", row)
-	}
+	assertContains(t, rowFor(t, view, screens.UnknownTypeLabel), "$0.77")
 }
 
 func TestAcrossRuns_PartialAndProvisionalDataIsLabelled(t *testing.T) {
-	view := acrossView(acrossReport(), wideW, tallH)
+	view := acrossView(t, acrossReport(), tableW, tallH)
 
 	assertContains(t, view,
 		"(partial)",
@@ -87,34 +80,28 @@ func TestAcrossRuns_PartialAndProvisionalDataIsLabelled(t *testing.T) {
 		screens.MissingUsageLabel,
 		"m-unpriced",
 	)
-	if row := rowFor(t, view, "coder"); !strings.Contains(row, screens.MissingUsageLabel) {
-		t.Errorf("row of type coder = %q, want the missing-usage label", row)
-	}
-	if row := rowFor(t, view, acrossRunC); !strings.Contains(row, "(partial)") {
-		t.Errorf("row of the partial run = %q, want a partial marker", row)
-	}
+	assertContains(t, rowFor(t, view, "coder"), screens.MissingUsageLabel)
+	assertContains(t, rowFor(t, view, acrossRunC), "(partial)")
 	for _, id := range []string{acrossRunA, acrossRunB} {
-		if row := rowFor(t, view, id); strings.Contains(row, "(partial)") {
-			t.Errorf("row of the complete run %s = %q, must not be marked partial", id, row)
-		}
+		assertNotContains(t, rowFor(t, view, id), "(partial)")
 	}
-	if row := rowFor(t, view, "tester"); strings.Contains(row, "(partial)") {
-		t.Errorf("row of the fully priced type tester = %q, must not be marked partial", row)
-	}
+	assertNotContains(t, rowFor(t, view, "tester"), "(partial)")
 }
 
 func TestAcrossRuns_CompleteDataShowsNoIncompletenessLabel(t *testing.T) {
-	view := acrossView(acrossCompleteReport(), wideW, tallH)
+	view := acrossView(t, acrossCompleteReport(), tableW, tallH)
 
 	assertContains(t, view, acrossRunA, acrossRunB, "$8.00")
-	assertNotContains(t, view,
-		"(partial)", screens.UnpricedMarker, screens.ProvisionalLabel, screens.AssumedTierLabel, screens.OpenLabel,
-		screens.MissingUsageLabel,
-	)
+	for _, needle := range []string{acrossRunA, acrossRunB, "coder"} {
+		assertNotContains(t, rowFor(t, view, needle),
+			"(partial)", screens.UnpricedMarker, screens.ProvisionalLabel, screens.AssumedTierLabel, screens.OpenLabel,
+			screens.MissingUsageLabel,
+		)
+	}
 }
 
 func TestAcrossRuns_NeverShowsTheUnattributableBucket(t *testing.T) {
-	view := acrossView(acrossReport(), wideW, tallH)
+	view := acrossView(t, acrossReport(), tableW, tallH)
 
 	assertContains(t, view, acrossRunA, acrossRunB, acrossRunC, "coder")
 	assertNotContains(t, view, "$99.99", screens.UnattributableLabel)
@@ -122,7 +109,7 @@ func TestAcrossRuns_NeverShowsTheUnattributableBucket(t *testing.T) {
 
 func TestAcrossRuns_EscAndQAskToLeave(t *testing.T) {
 	for _, k := range []string{"esc", "q"} {
-		s := screens.NewAcrossRunsScreen(acrossReport(), wideW, tallH, plain())
+		s := screens.NewAcrossRunsScreen(acrossReport(), wideW, tallH, paletteStyles())
 		press(s, k)
 
 		if !s.Back() {
@@ -136,7 +123,7 @@ func TestAcrossRuns_EscAndQAskToLeave(t *testing.T) {
 }
 
 func TestAcrossRuns_HelpListsBack(t *testing.T) {
-	help := screens.NewAcrossRunsScreen(acrossReport(), wideW, tallH, plain()).Help()
+	help := screens.NewAcrossRunsScreen(acrossReport(), wideW, tallH, paletteStyles()).Help()
 
 	if !strings.Contains(help, "esc") {
 		t.Errorf("help %q must list esc", help)
@@ -144,22 +131,24 @@ func TestAcrossRuns_HelpListsBack(t *testing.T) {
 }
 
 func TestAcrossRuns_ShortTerminalScrollsAndShowsHint(t *testing.T) {
-	s := screens.NewAcrossRunsScreen(manyAcrossRunsReport(30), wideW, shortH, plain())
+	colourOff(t)
+	s := screens.NewAcrossRunsScreen(manyAcrossRunsReport(30), wideW, shortH, paletteStyles())
 
+	// Cost sort lists the most expensive run (run-30) first and the cheapest (run-01) last.
 	first := s.View(wideW, shortH)
-	assertFits(t, first, shortH)
+	assertWithinBounds(t, first, wideW, shortH)
 	if !scrollHintRE.MatchString(first) {
 		t.Errorf("short terminal must show a scroll hint\n%s", first)
 	}
-	assertContains(t, first, "run-01")
-	assertNotContains(t, first, "run-30")
+	assertContains(t, first, "run-30")
+	assertNotContains(t, first, "run-01")
 
 	var scrolled screens.Screen = s
 	scrolled = press(scrolled, repeat("down", 120)...)
 	last := scrolled.View(wideW, shortH)
-	assertFits(t, last, shortH)
-	assertContains(t, last, "run-30")
-	assertNotContains(t, last, "run-01")
+	assertWithinBounds(t, last, wideW, shortH)
+	assertContains(t, last, "run-01")
+	assertNotContains(t, last, "run-30")
 
 	if back := press(scrolled, repeat("up", 120)...).View(wideW, shortH); back != first {
 		t.Errorf("scrolling back to the top must restore the first view\n%s\nvs\n%s", back, first)
@@ -167,7 +156,7 @@ func TestAcrossRuns_ShortTerminalScrollsAndShowsHint(t *testing.T) {
 }
 
 func TestAcrossRuns_TallTerminalShowsEverythingWithoutHint(t *testing.T) {
-	view := acrossView(manyAcrossRunsReport(30), wideW, 200)
+	view := acrossView(t, manyAcrossRunsReport(30), wideW, 200)
 
 	assertContains(t, view, "run-01", "run-30")
 	if scrollHintRE.MatchString(view) {
@@ -178,16 +167,18 @@ func TestAcrossRuns_TallTerminalShowsEverythingWithoutHint(t *testing.T) {
 func TestAcrossRuns_NarrowTerminalNeverExceedsItsWidth(t *testing.T) {
 	const narrow = 40
 
-	view := acrossView(acrossReport(), narrow, tallH)
+	view := acrossView(t, acrossReport(), narrow, tallH)
 
-	assertContains(t, view, "coder")
-	assertFitsWidth(t, view, narrow)
+	assertNameShown(t, view, "coder", 3)
+	assertWithinBounds(t, view, narrow, tallH)
 }
 
 func TestAcrossRuns_ReportWithoutRunsStillRendersAPage(t *testing.T) {
-	view := acrossView(domain.Report{Currency: domain.Currency}, wideW, tallH)
+	view := acrossView(t, domain.Report{Currency: domain.Currency}, wideW, tallH)
 
 	if strings.TrimSpace(view) == "" {
 		t.Error("a report without runs must still render a page")
 	}
+	assertContains(t, strings.ToLower(view), "no named runs")
+	assertWithinBounds(t, view, wideW, tallH)
 }

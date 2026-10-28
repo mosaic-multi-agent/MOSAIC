@@ -36,6 +36,19 @@ Tokens used after the hand-back are still counted through `usage_record` events.
 `tool_call_end` carries the tool's output in `tool_output`, taken from the
 PostToolUse `tool_response`, without truncation.
 
+## Compaction events (Claude Code)
+
+`PreCompact` and `PostCompact` each write one `compaction` event (log format 1.5.0),
+with `phase` `pre` and `post`. A payload carrying `agent_id` of a mapped subagent
+routes the event to that subagent's stream; otherwise it goes to the orchestrator
+stream. `tokens_before`/`tokens_after` are written only when the payload carries an
+integer value.
+
+Unverified pending a live run: whether Claude Code fires `PreCompact`/`PostCompact`
+for a subagent's own compaction, and whether those payloads carry the subagent's
+`agent_id`. Until verified, a subagent compaction without an identifying payload is
+recorded in the orchestrator stream.
+
 ## Runner mode
 
 The `claude-code`, `ghcp-cli` and `opencode` adapters also log sessions started by

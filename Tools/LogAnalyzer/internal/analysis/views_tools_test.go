@@ -133,7 +133,7 @@ func TestTools_PairedCallWithEndBeforeStart_HasNoDuration(t *testing.T) {
 		rmInvStart("coder#1", "coder", rmAt(1)),
 		rmToolStart("c1", "Read", rmAt(10)), rmToolEnd("c1", domain.ToolCallSuccess, rmAt(5)))
 
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	read := requireTool(t, requireRunReport(t, report, testRunID).Tools.Run, "Read")
 	if read.Calls != 1 || read.Unpaired != 0 || read.Durations.Count != 0 {
@@ -144,7 +144,7 @@ func TestTools_PairedCallWithEndBeforeStart_HasNoDuration(t *testing.T) {
 func TestTools_RunWithoutToolCalls_HasNoToolFigures(t *testing.T) {
 	in := oneAgentStream(testRunRef, "coder#1", rmInvStart("coder#1", "coder", rmAt(1)))
 
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	tools := requireRunReport(t, report, testRunID).Tools
 	if got := requireRunReport(t, report, testRunID).ByAgentType; len(got) != 1 {

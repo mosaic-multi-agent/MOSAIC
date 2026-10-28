@@ -32,15 +32,17 @@ func Aggregate(in Input) (domain.Aggregate, []domain.Finding) {
 // Price converts an aggregate into a priced report using the supplied table.
 // Separate from Aggregate so a report can be re-priced from cached totals after
 // the user supplies missing prices, without re-reading any logs.
-func Price(agg domain.Aggregate, table domain.PricingTable, src domain.Source) (domain.Report, []domain.Finding) {
+func Price(agg domain.Aggregate, table domain.PricingTable, settings domain.AnalysisSettings, src domain.Source) (domain.Report, []domain.Finding) {
 	runReports := make([]domain.RunReport, 0, len(agg.Runs))
 	allRunMoneys := make([]domain.CategoryMoney, 0, len(agg.Runs))
 	var allRunTokens domain.TokenUsage
 	var allRunsAssumed int64
 	allUnpricedModels := make(map[domain.PricingKey]bool)
+	var findings []domain.Finding
 
 	for _, run := range agg.Runs {
-		rr := priceRunAggregate(run, table)
+		rr := priceRunAggregate(run, table, settings)
+		findings = append(findings, compactionFindings(run.Run, rr.Context, run.Activity.Compactions)...)
 		runReports = append(runReports, rr)
 		allRunMoneys = append(allRunMoneys, rr.Totals.Money)
 		allRunTokens = allRunTokens.Add(run.Totals())
@@ -64,7 +66,7 @@ func Price(agg domain.Aggregate, table domain.PricingTable, src domain.Source) (
 
 	var unattribReport *domain.RunReport
 	if agg.Unattributable != nil {
-		rr := priceRunAggregate(*agg.Unattributable, table)
+		rr := priceRunAggregate(*agg.Unattributable, table, settings)
 		unattribReport = &rr
 		for _, m := range rr.UnpricedModels {
 			allUnpricedModels[m] = true
@@ -80,15 +82,15 @@ func Price(agg domain.Aggregate, table domain.PricingTable, src domain.Source) (
 		AcrossRuns:     buildAcrossRuns(runReports),
 		Quality:        domain.NewQualitySummary(nil),
 		Currency:       domain.Currency,
-	}, nil
+	}, findings
 }
 
 // Analyze is the composed entry point: Aggregate then Price, with findings from
 // both phases plus any carried-in findings merged into the report's
 // QualitySummary. Identical inputs always produce an identical report.
-func Analyze(in Input, table domain.PricingTable, src domain.Source, carried []domain.Finding) domain.Report {
+func Analyze(in Input, table domain.PricingTable, settings domain.AnalysisSettings, src domain.Source, carried []domain.Finding) domain.Report {
 	agg, aggFindings := Aggregate(in)
-	report, priceFindings := Price(agg, table, src)
+	report, priceFindings := Price(agg, table, settings, src)
 
 	allFindings := make([]domain.Finding, 0, len(carried)+len(aggFindings)+len(priceFindings))
 	allFindings = append(allFindings, carried...)
@@ -131,10 +133,10 @@ func priceActorAggregate(actor domain.ActorAggregate, table domain.PricingTable)
 	}
 
 	return domain.ActorReport{
-		Actor:          actor.Actor,
-		Models:         sortedModelIDSet(seenModels),
-		Keys:           domain.SortedPricingKeys(seenKeys),
-		UnpricedModels: domain.SortedPricingKeys(seenUnpriced),
+		Actor:                actor.Actor,
+		Models:               sortedModelIDSet(seenModels),
+		Keys:                 domain.SortedPricingKeys(seenKeys),
+		UnpricedModels:       domain.SortedPricingKeys(seenUnpriced),
 		RequestsWithoutModel: withoutModel,
 		Totals: domain.Totals{
 			Tokens: tokens,
@@ -147,7 +149,7 @@ func priceActorAggregate(actor domain.ActorAggregate, table domain.PricingTable)
 }
 
 // priceRunAggregate converts one RunAggregate into a priced RunReport.
-func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable) domain.RunReport {
+func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable, settings domain.AnalysisSettings) domain.RunReport {
 	orchReport := priceActorAggregate(run.Orchestrator, table)
 
 	agentReports := make([]domain.ActorReport, len(run.Agents))
@@ -210,13 +212,25 @@ func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable) domai
 		Unattributed:   unattrReport,
 	}
 
+	rr.Context = buildRunContext(run, table, settings)
 	dispatches := buildDispatches(run.Activity.Invocations, table)
+	for i := range dispatches {
+		if ctx, ok := rr.Context.Find(dispatches[i].Invocation.Actor.Instance); ok {
+			dispatches[i].PeakContext = ctx.Peak
+		}
+	}
+	markRework(dispatches)
+	attachDispatchCache(dispatches, table)
 	groups := groupByType(dispatches)
 	rr.Overview = buildOverview(run, rr, dispatches, table)
-	rr.ByAgentType = buildAgentTypeGroups(groups)
+	rr.ByAgentType = buildAgentTypeGroups(groups, table)
+	rr.Rework = buildReworkFigures(dispatches)
+	rr.Cache = buildRunCache(run, rr.Totals, table)
+	rr.OrchestratorCache = buildOrchestratorCache(run, orchReport.Totals, table)
 	rr.ByStatus = buildStatusBreakdown(dispatches, groups)
-	rr.Tools = buildToolsBreakdown(run.Activity, groups)
-	rr.Timeline = buildTimeline(run.Activity)
+	rr.Tools = buildToolsBreakdown(run, groups)
+	rr.Timeline = buildTimeline(run)
+	rr.WallTime = buildWallTime(run, settings, rr.Timeline.Axis, rr.Timeline.HasAxis)
 	return rr
 }
 

@@ -16,13 +16,14 @@ import (
 )
 
 // acrossNavReport has two runs and carries their across-runs figures: run A
-// totals $3.00 and run B $7.00; the "builder" type averages $5.00 per run.
+// totals $7.00 and run B $3.00 (so run B is the second row of the cost-sorted runs
+// list); the "builder" type averages $5.00 per run.
 func acrossNavReport() domain.Report {
-	report := navViewsReport(navViewsRun(runA, 300), navViewsRun(runB, 700))
+	report := navViewsReport(navViewsRun(runA, 700), navViewsRun(runB, 300))
 	report.AcrossRuns = domain.AcrossRuns{
 		Runs: []domain.RunSummary{
-			{Run: domain.NamedRun(runA), Totals: navCents(300)},
-			{Run: domain.NamedRun(runB), Totals: navCents(700)},
+			{Run: domain.NamedRun(runA), Totals: navCents(700)},
+			{Run: domain.NamedRun(runB), Totals: navCents(300)},
 		},
 		ByAgentType: []domain.AgentTypeAcrossRuns{{
 			AgentType: "builder", Runs: 2,
@@ -38,11 +39,13 @@ func acrossNavReport() domain.Report {
 }
 
 func TestAcrossRuns_RunsListReachesTheViewWithContent(t *testing.T) {
-	m := send(onRunsList(acrossNavReport()), screens.KeyAcrossRuns)
+	updated, _ := onRunsList(acrossNavReport()).Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	m := send(asModel(updated), screens.KeyAcrossRuns)
 
 	assertOn(t, m, screens.ScreenAcrossRuns)
 	view := m.View()
-	for _, want := range []string{runA, runB, "$3.00", "$7.00", "builder", "$5.00"} {
+	// The tables truncate long labels with an ellipsis, so the start of each run id is checked.
+	for _, want := range []string{runA[:12], runB[:12], "$3.00", "$7.00", "builder", "$5.00"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("across-runs view must contain %q\n%s", want, view)
 		}
@@ -109,12 +112,18 @@ func TestAcrossRuns_ScrollOnAShortTerminal(t *testing.T) {
 	if n := strings.Count(view, "\n") + 1; n > 8 {
 		t.Errorf("view has %d lines on an 8-line terminal\n%s", n, view)
 	}
-	if strings.Contains(view, "run-30") {
-		t.Errorf("run-30 must be scrolled out of view\n%s", view)
+	// The runs are cost-sorted, so one end of the list (the cheapest run, run-01,
+	// or the dearest, run-30) is scrolled out of view; scrolling down reaches it.
+	hidden := "run-30"
+	if strings.Contains(view, hidden) {
+		hidden = "run-01"
+	}
+	if strings.Contains(view, hidden) {
+		t.Errorf("one end of the list must be scrolled out of view\n%s", view)
 	}
 
 	m = send(m, strings.Fields(strings.Repeat("down ", 150))...)
-	if !strings.Contains(m.View(), "run-30") {
-		t.Errorf("scrolling down must reach run-30\n%s", m.View())
+	if !strings.Contains(m.View(), hidden) {
+		t.Errorf("scrolling down must reach %s\n%s", hidden, m.View())
 	}
 }

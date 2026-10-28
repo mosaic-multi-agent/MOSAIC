@@ -16,4 +16,10 @@ type Timeline struct {
 	// a zero StartedAt come last, ordered by instance id.
 	Entries     []TimelineEntry
 	Compactions []Compaction // == RunActivity.Compactions
+
+	// Axis is the run's logged span: the earliest and latest non-zero timestamp
+	// of the run's facts, sessions, invocations, tool calls, per-call usage,
+	// turns, notifications and compactions. HasAxis is false when there is none.
+	Axis    TimeInterval
+	HasAxis bool
 }

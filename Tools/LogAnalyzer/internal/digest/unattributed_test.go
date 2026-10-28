@@ -116,10 +116,10 @@ func TestRoundTrip_UnattributedUsageReproducesOverviewShareAndByAgentRow(t *test
 	table := unattributedPricing(t)
 	want := runWithUnattributed()
 	src := domain.Source{Kind: domain.SourceDigestFile, Path: "x"}
-	before, _ := analysis.Price(domain.Aggregate{Runs: []domain.RunAggregate{want}}, table, src)
+	before, _ := analysis.Price(domain.Aggregate{Runs: []domain.RunAggregate{want}}, table, domain.DefaultAnalysisSettings(), src)
 
 	got, _ := roundTrip(t, digestOf(want))
-	after, _ := analysis.Price(got.Aggregate, table, src)
+	after, _ := analysis.Price(got.Aggregate, table, domain.DefaultAnalysisSettings(), src)
 
 	requireAtLeast(t, "priced runs", len(after.Runs), 1)
 	b, a := before.Runs[0], after.Runs[0]
@@ -186,12 +186,12 @@ func TestEncode_RunWithoutUnattributedUsageOmitsTheKey(t *testing.T) {
 }
 
 func TestVersion_AdditiveFieldBumpsTheMinorVersion(t *testing.T) {
-	if digest.Version != "1.1.0" {
-		t.Errorf("digest.Version = %q, want 1.1.0 (additive change of major 1)", digest.Version)
+	if digest.Version != "1.2.0" {
+		t.Errorf("digest.Version = %q, want 1.2.0 (additive change of major 1)", digest.Version)
 	}
 	doc := readJSONObject(t, writeDigest(t, digestOf(runWithUnattributed())))
-	if doc["digest_version"] != "1.1.0" {
-		t.Errorf("written digest_version = %v, want 1.1.0", doc["digest_version"])
+	if doc["digest_version"] != "1.2.0" {
+		t.Errorf("written digest_version = %v, want 1.2.0", doc["digest_version"])
 	}
 }
 

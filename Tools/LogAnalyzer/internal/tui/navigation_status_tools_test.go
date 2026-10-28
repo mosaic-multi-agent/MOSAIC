@@ -100,7 +100,7 @@ func TestStatusTools_PerDispatchListStillListsOrchestratorAndDispatches(t *testi
 
 		assertOn(t, m, screens.ScreenRunDetail)
 		view := m.View()
-		if !strings.Contains(view, "builder#1") || !strings.Contains(view, "Orchestrator") {
+		if !strings.Contains(view, "builder#1") || !strings.Contains(strings.ToLower(view), "orchestrator") {
 			t.Errorf("per-dispatch list must list the orchestrator and builder#1\n%s", view)
 		}
 	}
@@ -121,14 +121,16 @@ func TestStatusTools_BackReturnsToRunsList(t *testing.T) {
 }
 
 func TestStatusTools_ShowTheSelectedRunNotTheFirst(t *testing.T) {
-	report := navViewsReport(statusToolsRun(runA, 300, "ToolA"), statusToolsRun(runB, 700, "ToolB"))
+	report := navViewsReport(statusToolsRun(runA, 700, "ToolA"), statusToolsRun(runB, 300, "ToolB"))
 
 	status := send(onRunsList(report), "down", "enter", screens.KeyViewStatus)
 	tools := send(onRunsList(report), "down", "enter", screens.KeyViewTools)
 
 	assertOn(t, status, screens.ScreenStatus)
-	if view := status.View(); !strings.Contains(view, "$7.00") || strings.Contains(view, "$3.00") {
-		t.Errorf("status view must show the second run ($7.00) and not the first ($3.00)\n%s", view)
+	// The runs list is sorted by cost, most expensive first: the second row is the
+	// cheaper run, runB ($3.00), and the first row is runA ($7.00).
+	if view := status.View(); !strings.Contains(view, "$3.00") || strings.Contains(view, "$7.00") {
+		t.Errorf("status view must show the second row's run ($3.00) and not the first's ($7.00)\n%s", view)
 	}
 	assertOn(t, tools, screens.ScreenTools)
 	if view := tools.View(); !strings.Contains(view, "ToolB") || strings.Contains(view, "ToolA") {
@@ -137,14 +139,14 @@ func TestStatusTools_ShowTheSelectedRunNotTheFirst(t *testing.T) {
 }
 
 func TestStatusTools_ReopeningAfterBackShowsTheSameRunAgain(t *testing.T) {
-	report := navViewsReport(statusToolsRun(runA, 300, "ToolA"), statusToolsRun(runB, 700, "ToolB"))
+	report := navViewsReport(statusToolsRun(runA, 700, "ToolA"), statusToolsRun(runB, 300, "ToolB"))
 
 	m := send(onRunsList(report), "down", "enter", screens.KeyViewStatus, "esc")
 	assertOn(t, m, screens.ScreenRuns)
 	m = send(m, "enter", screens.KeyViewStatus)
 
 	assertOn(t, m, screens.ScreenStatus)
-	if !strings.Contains(m.View(), "$7.00") {
+	if !strings.Contains(m.View(), "$3.00") {
 		t.Errorf("runs cursor must survive the round trip\n%s", m.View())
 	}
 }

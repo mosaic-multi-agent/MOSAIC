@@ -140,6 +140,6 @@ func TestEffort_PreEffortUsageRecords_HaveNoEffort(t *testing.T) {
 
 func effortReport(t *testing.T, in analysis.Input, runID string) domain.RunReport {
 	t.Helper()
-	report := analysis.Analyze(in, domain.EmptyPricingTable(), testSource(), nil)
+	report := analysis.Analyze(in, domain.EmptyPricingTable(), domain.DefaultAnalysisSettings(), testSource(), nil)
 	return requireRunReport(t, report, runID)
 }

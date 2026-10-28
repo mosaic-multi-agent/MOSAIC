@@ -12,7 +12,7 @@ package logread_test
 //     still decode, and exactly one invalid_cache_tier_split warning is raised
 //     for that line. The reader never invents a tier.
 //   - Schema 1.2.0 raises no unknown_schema_version finding; 1.1.0 and 1.0.0
-//     still do not either.
+//     do not either; an unknown major version still does.
 
 import (
 	"context"
@@ -256,8 +256,8 @@ func TestReader_SchemaVersions_OlderVersionsDecodeTotalsWithoutSplit(t *testing.
 	}
 }
 
-func TestReader_SchemaVersions_UnsupportedNewerVersionStillRaisesFinding(t *testing.T) {
-	_, findings := readTierLines(t, tierLine("1.4.0", "turn", `{"input_tokens":1}`))
+func TestReader_SchemaVersions_UnknownMajorVersionStillRaisesFinding(t *testing.T) {
+	_, findings := readTierLines(t, tierLine("2.0.0", "turn", `{"input_tokens":1}`))
 
 	found := false
 	for _, f := range findings {
@@ -266,6 +266,6 @@ func TestReader_SchemaVersions_UnsupportedNewerVersionStillRaisesFinding(t *test
 		}
 	}
 	if !found {
-		t.Errorf("findings = %v, want unknown_schema_version for 1.4.0", findings)
+		t.Errorf("findings = %v, want unknown_schema_version for 2.0.0", findings)
 	}
 }

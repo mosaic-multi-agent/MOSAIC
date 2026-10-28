@@ -15,12 +15,12 @@ import sys
 import tempfile
 
 import mosaic_logger_provider
+import mosaic_logger_schema
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.3.0"
 HARNESS = "claude-code"
 LOGS_DIRNAME = "OrchestrationLogs"
 AGENT_MAP_DIRNAME = ".agent-map"
@@ -124,7 +124,7 @@ def build_event(event: str, ctx: "HookContext", **fields) -> dict:
     pruned recursively; a dict empty after pruning is itself dropped.
     """
     result: dict = {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": mosaic_logger_schema.schema_version_for(event),
         "event": event,
         "timestamp": ctx.timestamp,
         "harness": HARNESS,

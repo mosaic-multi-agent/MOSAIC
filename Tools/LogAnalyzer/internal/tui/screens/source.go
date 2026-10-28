@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	tuicommon "mosaic-common/tui"
 	"mosaic-common/tui/pathutil"
 	"mosaic-common/tui/widgets"
 )
@@ -24,11 +25,7 @@ type SourceScreen struct {
 
 // NewSourceScreen creates the log-source path entry screen.
 func NewSourceScreen(width, height int, styles Styles) *SourceScreen {
-	inputStyles := widgets.TextInputStyles{
-		Label:  styles.Subtitle,
-		Input:  styles.Body,
-		ErrMsg: styles.Error,
-	}
+	inputStyles := textInputStyles(styles)
 	input := widgets.NewTextInput(
 		"Log source path:",
 		"/path/to/OrchestrationLogs  or  /path/to/run-folder  or  /path/to/run.digest.json",
@@ -82,23 +79,30 @@ func (s *SourceScreen) View(width, height int) string {
 	s.height = height
 	s.input.Resize(width)
 
-	sep := s.styles.Border.Width(width).Render(strings.Repeat("─", width))
 	titleText := "Log Analyzer -- Select Source"
 	if s.version != "" {
 		titleText = "Log Analyzer v" + s.version + " -- Select Source"
 	}
-	title := s.styles.Title.Width(width).Render(titleText)
-	subtitle := s.styles.Subtitle.Width(width).Render("Enter the path to your logs root, a single run folder, or a digest.")
-	guidance := s.styles.Muted.Width(width).Render("Accepts: OrchestrationLogs/ directory, a single run folder (e.g. 20260101T120000Z-abcd), a .digest.json file, or a directory containing digests")
-	help := s.styles.Help.Width(width).Render("enter confirm  esc skip  ctrl+c quit")
+	body := []string{s.styles.Subtitle.Render("Enter the path to your logs root, a single run folder, or a digest.")}
+	for _, l := range WrapText(sourceGuidance, width) {
+		body = append(body, s.styles.Muted.Render(l))
+	}
+	body = append(body, strings.Split(s.input.View(), "\n")...)
 
-	return strings.Join([]string{title, subtitle, sep, "", guidance, s.input.View(), "", sep, help}, "\n")
+	// The text input owns every printable key, so the page offers no help overlay.
+	return RenderPage(Page{Title: titleText, Keys: sourceKeys}, body, width, height, s.styles)
+}
+
+// sourceGuidance says what the path entry accepts.
+const sourceGuidance = "Accepts: OrchestrationLogs/ directory, a single run folder (e.g. 20260101T120000Z-abcd), a .digest.json file, or a directory containing digests"
+
+// sourceKeys are the short help keys of the source page.
+var sourceKeys = []tuicommon.HelpEntry{
+	{Key: "enter", Desc: "confirm"}, {Key: "esc", Desc: "skip"}, {Key: "ctrl+c", Desc: "quit"},
 }
 
 // Help returns the key hints string for this screen.
-func (s *SourceScreen) Help() string {
-	return "enter confirm  esc skip  ctrl+c quit"
-}
+func (s *SourceScreen) Help() string { return leadHelp("", sourceKeys) }
 
 // Done reports whether the user confirmed a valid path.
 func (s *SourceScreen) Done() bool { return s.input.Done() }

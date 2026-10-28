@@ -1,10 +1,11 @@
 package screens
 
 import (
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	tuicommon "mosaic-common/tui"
 
 	"mosaic-log-analyzer/internal/domain"
 )
@@ -18,18 +19,24 @@ type AgentTypesScreen struct {
 	styles Styles
 	back   bool
 	nav    viewNav
+	runChrome
 
-	cursor int // selected agent type
-	offset int // first visible type row
+	typeSort SortCycle
+	cursor   int // selected row of the sorted type list
+	offset   int // first visible type row
 
 	drilled     bool
-	drillCursor int // selected dispatch within the drilled type
+	drillSort   SortCycle
+	drillCursor int // selected row of the sorted dispatches of the drilled type
 	drillOffset int // first visible dispatch row
 }
 
 // NewAgentTypesScreen creates the by-agent-type screen for one run.
 func NewAgentTypesScreen(run domain.RunReport, width, height int, styles Styles) *AgentTypesScreen {
-	return &AgentTypesScreen{run: run, width: width, height: height, styles: styles, nav: viewNav{self: ScreenAgentTypes}}
+	return &AgentTypesScreen{
+		run: run, width: width, height: height, styles: styles, nav: viewNav{self: ScreenAgentTypes},
+		typeSort: newTypeSortCycle(), drillSort: newDispatchSortCycle(),
+	}
 }
 
 // ID implements Screen.
@@ -45,6 +52,9 @@ func (s *AgentTypesScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s, nil
 	}
 	k := key.String()
+	if s.help.handle(k) {
+		return s, nil
+	}
 	switch k {
 	case "esc", "q":
 		if s.drilled {
@@ -59,6 +69,13 @@ func (s *AgentTypesScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case "enter":
 		if !s.drilled && len(s.run.ByAgentType) > 0 {
 			s.drilled, s.drillCursor, s.drillOffset = true, 0, 0
+			s.drillSort = newDispatchSortCycle()
+		}
+	case KeySort:
+		if s.drilled {
+			s.drillSort = s.drillSort.Next()
+		} else {
+			s.typeSort = s.typeSort.Next()
 		}
 	default:
 		s.nav.request(k)
@@ -69,20 +86,16 @@ func (s *AgentTypesScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 // moveCursor moves the cursor of the list currently shown, staying in range.
 func (s *AgentTypesScreen) moveCursor(delta int) {
 	if s.drilled {
-		s.drillCursor = clampIndex(s.drillCursor+delta, len(s.run.ByAgentType[s.cursor].Dispatches))
+		s.drillCursor = clampIndex(s.drillCursor+delta, len(s.drilledGroup().Dispatches))
 		return
 	}
 	s.cursor = clampIndex(s.cursor+delta, len(s.run.ByAgentType))
 }
 
-func clampIndex(i, n int) int {
-	if i >= n {
-		i = n - 1
-	}
-	if i < 0 {
-		i = 0
-	}
-	return i
+// drilledGroup is the agent type group under the cursor of the sorted type list.
+func (s *AgentTypesScreen) drilledGroup() domain.AgentTypeGroup {
+	order := typeOrder(s.run.ByAgentType, s.typeSort.Active())
+	return s.run.ByAgentType[order[clampIndex(s.cursor, len(order))]]
 }
 
 // View implements Screen.
@@ -91,83 +104,60 @@ func (s *AgentTypesScreen) View(width, height int) string {
 	if s.drilled {
 		return s.viewDrill()
 	}
-	rows := make([]string, len(s.run.ByAgentType))
-	for i, g := range s.run.ByAgentType {
-		rows[i] = typeRow(g)
-	}
-	if len(rows) == 0 {
-		rows = []string{"No subagent invocations in this run."}
-	}
-	reserved := 0
-	if s.run.Unattributed != nil {
-		reserved = 1 // the unattributed row stays inside the viewport budget
-	}
-	body, w := s.cursorRows(rows, s.cursor, &s.offset, reserved)
-	body = s.withUnattributedRow(body)
-	return renderPage(s.styles, width, "Log Analyzer — By Agent Type", runLabel(s.run),
-		body, w, len(rows), s.Help())
-}
-
-// cursorRows styles the rows visible around the cursor and updates the offset;
-// reserved lines are kept free of the body budget for fixed rows.
-func (s *AgentTypesScreen) cursorRows(rows []string, cursor int, offset *int, reserved int) ([]string, Window) {
-	w := ScrollWindow(*offset, cursor, len(rows), max(bodyBudget(s.height)-reserved, 0))
-	*offset = w.Offset
-	out := make([]string, 0, w.Count)
-	for i := w.Offset; i < w.End(); i++ {
-		if i == cursor {
-			out = append(out, clip(s.styles.Selected, s.width, "> "+rows[i]))
-		} else {
-			out = append(out, clip(s.styles.Body, s.width, "  "+rows[i]))
+	st := s.styles
+	var head []string
+	if len(s.run.ByAgentType) == 0 {
+		head = append(head, st.Body.Render(noTypesLine))
+	} else {
+		for _, l := range strings.Split(tuicommon.Wrap(typeNote, width), "\n") {
+			head = append(head, st.Muted.Render(l))
 		}
 	}
-	return out, w
+	order := s.typeSort.Active()
+	groups := typeOrder(s.run.ByAgentType, order)
+	budget := bodyBudget(height) - len(head) - 1
+	if s.run.Unattributed != nil {
+		budget-- // the unattributed row stays inside the viewport budget
+	}
+	body := head
+	var w Window
+	if len(s.run.ByAgentType) > 0 || s.run.Unattributed != nil {
+		var lines []string
+		lines, w = typeTableLines(s.run, groups, s.cursor, &s.offset, order, width, budget, st)
+		body = append(body, lines...)
+	}
+	spec := frameSpec{run: s.run, active: ScreenAgentTypes, keys: s.helpKeys(), screenKeys: s.screenKeys(), escDesc: s.escDesc(),
+		hint: FormatScrollHint(w, len(groups)), sort: s.typeSort.Label()}
+	return s.render(spec, body, width, height, st)
 }
 
-// typeRow renders one agent type: invocation count, total, average, minimum
-// and maximum, followed by the labels of any incomplete data.
-func typeRow(g domain.AgentTypeGroup) string {
-	name := g.AgentType
-	if name == "" {
-		name = UnknownTypeLabel
+// helpKeys are the short help keys of the list currently shown.
+func (s *AgentTypesScreen) helpKeys() []tuicommon.HelpEntry {
+	if s.drilled {
+		return []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: KeySort, Desc: "sort"}, {Key: "esc", Desc: "types"}}
 	}
-	stats := g.PerInvocation
-	row := fmt.Sprintf("%-20s %4d invocations  total %s  avg %s  min %s  max %s",
-		name, g.Figures.Invocations, formatMoneyTotal(g.Figures.Totals.Money),
-		FormatMoney(stats.Average), FormatMoney(stats.Min), FormatMoney(stats.Max))
-	if stats.Basis > 0 && !stats.Complete {
-		row += " (partial)"
-	}
-	return appendLabels(row, incompleteness(g.Figures.UnpricedModels, g.Figures.Totals.AssumedTierCacheWrite,
-		g.Figures.MissingUsage, g.Figures.Open))
+	return []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: "enter", Desc: "dispatches"},
+		{Key: KeySort, Desc: "sort"}, {Key: "esc", Desc: "back"}}
 }
 
-// withUnattributedRow appends the run-level unattributed usage after the
-// agent-type groups; it is not a dispatch, so it is not selectable.
-func (s *AgentTypesScreen) withUnattributedRow(body []string) []string {
-	u := s.run.Unattributed
-	if u == nil {
-		return body
+// screenKeys are the overlay entries of the keys this view has of its own.
+func (s *AgentTypesScreen) screenKeys() []tuicommon.HelpEntry {
+	if s.drilled {
+		return []tuicommon.HelpEntry{sortKeyEntry}
 	}
-	row := fmt.Sprintf("%-20s total %s", "Unattributed", formatMoneyTotal(u.Totals.Money))
-	return append(body, clip(s.styles.Body, s.width, "  "+row))
+	return []tuicommon.HelpEntry{sortKeyEntry, {Key: "enter", Desc: "list the dispatches of the selected type"}}
 }
 
-// appendLabels adds bracketed incompleteness labels to a row.
-func appendLabels(row string, labels []string) string {
-	if len(labels) == 0 {
-		return row
+// escDesc says what esc does on the list currently shown.
+func (s *AgentTypesScreen) escDesc() string {
+	if s.drilled {
+		return "back to the agent types"
 	}
-	return row + "  [" + strings.Join(labels, "; ") + "]"
+	return "back to the runs list"
 }
 
 // Help implements Screen.
-func (s *AgentTypesScreen) Help() string {
-	if s.drilled {
-		return "↑/↓ select  " + viewKeysHelp(ScreenAgentTypes) + "  esc types  ctrl+c quit"
-	}
-	return "↑/↓ select  enter dispatches  " + viewKeysHelp(ScreenAgentTypes) + "  esc back  ctrl+c quit"
-}
+func (s *AgentTypesScreen) Help() string { return shortHelpText("", s.helpKeys()) }
 
 // Back reports whether the user asked to leave the per-run views.
 func (s *AgentTypesScreen) Back() bool { return s.back }
@@ -187,5 +177,5 @@ func (s *AgentTypesScreen) DrilledType() (agentType string, ok bool) {
 	if !s.drilled {
 		return "", false
 	}
-	return s.run.ByAgentType[s.cursor].AgentType, true
+	return s.drilledGroup().AgentType, true
 }

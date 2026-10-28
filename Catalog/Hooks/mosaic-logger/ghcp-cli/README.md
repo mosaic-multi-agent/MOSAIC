@@ -96,6 +96,16 @@ events that GHCP CLI fires will silently produce no log output. To correct this:
 The script name and event name that follow the interpreter name must be preserved
 exactly. Only the leading interpreter token changes.
 
+## Compaction events
+
+`preCompact` is the only compaction hook, so it writes one self-contained `compaction`
+event (log format 1.5.0) without `phase`. The event goes to a subagent's stream only
+when the payload names it (`agentId`), otherwise to the orchestrator stream. No token
+fields are written; the `preCompact` payload shape carries none.
+
+Unverified pending a live run: whether the GHCP CLI fires `preCompact` for a
+subagent's own compaction, and whether that payload carries `agentId`.
+
 ## Supported events
 
 The adapter registers exactly 14 events:

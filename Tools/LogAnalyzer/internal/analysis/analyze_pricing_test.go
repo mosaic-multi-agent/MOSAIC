@@ -90,7 +90,7 @@ func fullTierPricing(t *testing.T, threshold int64) domain.ModelPricing {
 
 func analyzeTierFixtures(t *testing.T, table domain.PricingTable) domain.Report {
 	t.Helper()
-	return analysis.Analyze(tierFixtureInput(t), table, testSource(), nil)
+	return analysis.Analyze(tierFixtureInput(t), table, domain.DefaultAnalysisSettings(), testSource(), nil)
 }
 
 func requireRunReport(t *testing.T, r domain.Report, id string) domain.RunReport {

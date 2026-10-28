@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -225,6 +224,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handlePricingEditDone(done)
 	}
 
+	if done, ok := msg.(settingsEditDoneMsg); ok {
+		return m.handleSettingsEditDone(done)
+	}
+
 	// Digest export complete.
 	if done, ok := msg.(exportDoneMsg); ok {
 		return m.handleExportDone(done)
@@ -251,7 +254,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateSource(msg)
 	case screenRuns:
 		return m.updateRuns(msg)
-	case screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline, screenAcrossRuns:
+	case screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline, screenContext, screenAcrossRuns, screenCompare:
 		return m.updateRunView(msg)
 	case screenPricing:
 		return m.updatePricing(msg)
@@ -323,7 +326,7 @@ func (m Model) handlePending(p Pending) (tea.Model, tea.Cmd) {
 			)
 		}
 		// Generic text overlay for all other text questions (pricing rates, threshold).
-		m.textOverlay = newOverlayText(p.textQ, m.theme, m.width, m.height)
+		m.textOverlay = newOverlayText(p.textQ, stylesFromTheme(m.theme).Theme)
 		m.screen = screenQuestion
 		return m, tea.Batch(
 			m.textOverlay.init(),
@@ -346,7 +349,7 @@ func (m Model) handlePending(p Pending) (tea.Model, tea.Cmd) {
 			)
 			_ = m.pricingScreen // set for View
 		}
-		m.selectOverlay = newOverlaySelectOne(p.choiceQ, m.theme, m.width, m.height)
+		m.selectOverlay = newOverlaySelectOne(p.choiceQ, stylesFromTheme(m.theme).Theme)
 		m.screen = screenQuestion
 		return m, waitForPending(m.questions, m.interact.done)
 
@@ -417,8 +420,9 @@ func (m Model) updateRuns(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.runsScreen == nil {
 		return m, nil
 	}
-	// Intercept 's' to open the source-path entry screen from the Runs list.
-	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "s" {
+	// The open help overlay takes every key, so none of the list's own keys below applies.
+	if key, ok := msg.(tea.KeyMsg); ok && !m.runsScreen.HelpOpen() && key.String() == "s" {
+		// Intercept 's' to open the source-path entry screen from the Runs list.
 		style := stylesFromTheme(m.theme)
 		m.sourceScreen = screens.NewSourceScreen(m.width, m.height, style)
 		m.sourceScreen.SetVersion(m.opts.Version)
@@ -428,13 +432,13 @@ func (m Model) updateRuns(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Intercept 'a' to open the across-runs view.
-	if key, ok := msg.(tea.KeyMsg); ok && key.String() == screens.KeyAcrossRuns {
+	if key, ok := msg.(tea.KeyMsg); ok && !m.runsScreen.HelpOpen() && key.String() == screens.KeyAcrossRuns {
 		return m.openAcrossRuns(), nil
 	}
 
 	// Intercept 'p' for pricing navigation.
 	// Guard: require an active session; do nothing if analysis has not yet produced one.
-	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "p" {
+	if key, ok := msg.(tea.KeyMsg); ok && !m.runsScreen.HelpOpen() && key.String() == "p" {
 		if m.result == nil || m.result.Session == nil {
 			return m, nil
 		}
@@ -455,6 +459,10 @@ func (m Model) updateRuns(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.runsScreen.Reset()
 		m.interact.Close()
 		return m, tea.Quit
+	}
+	if idA, idB, ok := m.runsScreen.CompareRequested(); ok {
+		m.runsScreen.Reset()
+		return m.openCompare(idA, idB), cmd
 	}
 	if m.runsScreen.Done() {
 		runID := m.runsScreen.SelectedRunID()
@@ -607,7 +615,7 @@ func (m Model) View() string {
 	case screenExport:
 		return m.viewExport()
 
-	case screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline, screenAcrossRuns:
+	case screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline, screenContext, screenAcrossRuns, screenCompare:
 		return m.viewRunView()
 
 	case screenPricing:
@@ -624,12 +632,7 @@ func (m Model) View() string {
 		return m.viewQuestion()
 
 	case screenError:
-		return strings.Join([]string{
-			m.theme.Style(tuicommon.RoleTitle).Render("Log Analyzer — Error"),
-			m.theme.Style(tuicommon.RoleError).Render(m.errMsg),
-			"",
-			m.theme.Style(tuicommon.RoleHelp).Render("Press any key to quit."),
-		}, "\n")
+		return m.viewError()
 	}
 	return ""
 }
@@ -637,31 +640,10 @@ func (m Model) View() string {
 // viewQuestion renders the active overlay (on top of any background screen).
 func (m Model) viewQuestion() string {
 	if m.selectOverlay != nil {
-		return m.selectOverlay.view()
+		return m.selectOverlay.view(m.width, m.height)
 	}
 	if m.textOverlay != nil {
-		return m.textOverlay.view()
+		return m.textOverlay.view(m.width, m.height)
 	}
 	return m.theme.Style(tuicommon.RoleMuted).Render("Waiting for input…")
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-// stylesFromTheme converts a tuicommon.Theme to a screens.Styles.
-func stylesFromTheme(t tuicommon.Theme) screens.Styles {
-	return screens.Styles{
-		Title:    t.Style(tuicommon.RoleTitle),
-		Subtitle: t.Style(tuicommon.RoleSubtitle),
-		Body:     t.Style(tuicommon.RoleBody),
-		Muted:    t.Style(tuicommon.RoleMuted),
-		Selected: t.Style(tuicommon.RoleSelected),
-		Checked:  t.Style(tuicommon.RoleChecked),
-		Success:  t.Style(tuicommon.RoleSuccess),
-		Warning:  t.Style(tuicommon.RoleWarning),
-		Error:    t.Style(tuicommon.RoleError),
-		Help:     t.Style(tuicommon.RoleHelp),
-		Border:   t.Style(tuicommon.RoleBorder),
-	}
 }

@@ -11,11 +11,6 @@ import (
 func buildOverview(run domain.RunAggregate, rr domain.RunReport, dispatches []domain.Dispatch, table domain.PricingTable) domain.RunOverview {
 	subagents := groupFigures(dispatches)
 
-	var cacheHit domain.Ratio
-	if denom, ok := rr.Totals.Tokens.TotalContext().Value(); ok && denom > 0 {
-		cacheHit = domain.Ratio{Numerator: rr.Totals.Tokens.CacheRead.ValueOr(0), Denominator: denom}
-	}
-
 	ov := domain.RunOverview{
 		Totals:            rr.Totals,
 		Orchestrator:      rr.Orchestrator.Totals,
@@ -23,7 +18,8 @@ func buildOverview(run domain.RunAggregate, rr domain.RunReport, dispatches []do
 		OrchestratorShare: share(rr.Orchestrator.Totals.Money.Total, rr.Totals.Money.Total),
 		SubagentShare:     share(subagents.Totals.Money.Total, rr.Totals.Money.Total),
 		ByModel:           buildByModel(run, table),
-		CacheHitRatio:     cacheHit,
+		CacheHitRatio:     cacheHitRatio(rr.Totals.Tokens),
+		Outcomes:          buildOutcomeSplit(dispatches),
 	}
 	if rr.Unattributed != nil {
 		ov.Unattributed = &rr.Unattributed.Totals

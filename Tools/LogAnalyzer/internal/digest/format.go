@@ -8,7 +8,7 @@ import (
 )
 
 // Version is the digest_version this package writes. MAJOR.MINOR.PATCH.
-const Version = "1.1.0"
+const Version = "1.2.0"
 
 // formatName is the value of the top-level "format" key.
 const formatName = "mosaic-run-digest"
@@ -24,6 +24,18 @@ func majorOf(version string) (int, bool) {
 	return major, err == nil
 }
 
+// storesCompactionShape reports whether digests of this version record each
+// compaction's span and shape (1.2.0 and later). Older digests hold one entry
+// per logged event and are paired on load.
+func storesCompactionShape(version string) bool {
+	parts := strings.Split(version, ".")
+	if len(parts) != 3 {
+		return true
+	}
+	minor, err := strconv.Atoi(parts[1])
+	return err != nil || minor >= 2
+}
+
 // Wire values of closed vocabularies.
 const (
 	stateOpen   = "open"
@@ -32,6 +44,11 @@ const (
 	pairingPaired    = "paired"
 	pairingStartOnly = "start_only"
 	pairingEndOnly   = "end_only"
+
+	shapeSingle   = "single"
+	shapePaired   = "paired"
+	shapePreOnly  = "pre_only"
+	shapePostOnly = "post_only"
 
 	severityInfo    = "info"
 	severityWarning = "warning"
@@ -168,6 +185,8 @@ type compactionDoc struct {
 	Trigger      string    `json:"trigger,omitempty"`
 	TokensBefore *int64    `json:"tokens_before,omitempty"`
 	TokensAfter  *int64    `json:"tokens_after,omitempty"`
+	EndedAt      string    `json:"ended_at,omitempty"`
+	Shape        string    `json:"shape,omitempty"`
 }
 
 type actorDoc struct {

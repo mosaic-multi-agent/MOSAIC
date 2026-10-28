@@ -10,8 +10,9 @@ package analysis_test
 //     end >= start; every other entry keeps its logged timestamps and shows no
 //     duration, and nothing is guessed.
 //   - Two invocations overlap when A.start < B.end && B.start < A.end; touching
-//     intervals do not overlap. Entries without a duration have no overlaps.
-//   - Open invocations (no end event) have no end, no duration, no overlaps.
+//     intervals do not overlap. Entries without a usable interval have no overlaps.
+//   - Open invocations (no end event) have no end and no duration, but count as
+//     running to the end of the run's axis for overlaps, as the Gantt bars do.
 //   - Compactions are carried in time order with their actor.
 //
 //	instance  type      start  end   status
@@ -75,7 +76,7 @@ func tlScenarioInput() analysis.Input {
 
 func tlTimeline(t *testing.T) domain.Timeline {
 	t.Helper()
-	report := analysis.Analyze(tlScenarioInput(), viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(tlScenarioInput(), viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 	return requireRunReport(t, report, testRunID).Timeline
 }
 
@@ -147,11 +148,13 @@ func TestTimeline_Durations_AreEndMinusStartForClosedInvocations(t *testing.T) {
 func TestTimeline_ParallelInvocations_ListEachOtherAsOverlaps(t *testing.T) {
 	tl := tlTimeline(t)
 
+	// d#4 is open from 15 and runs to the axis end (70), so it overlaps every
+	// invocation with a usable interval that ends after 15.
 	cases := map[domain.AgentInstanceID][]string{
-		"a#1": {"b#2", "h#8"},
-		"b#2": {"a#1", "c#3"},
-		"c#3": {"b#2"},
-		"h#8": {"a#1"},
+		"a#1": {"b#2", "d#4", "h#8"},
+		"b#2": {"a#1", "c#3", "d#4"},
+		"c#3": {"b#2", "d#4"},
+		"h#8": {"a#1", "d#4"},
 	}
 	for id, want := range cases {
 		if got := tlOverlaps(tlEntry(t, tl, id)); !rmEqualStrings(got, want) {
@@ -176,7 +179,7 @@ func TestTimeline_TouchingIntervals_DoNotOverlap(t *testing.T) {
 	}
 }
 
-func TestTimeline_OpenInvocation_HasNoEndNoDurationAndNoOverlaps(t *testing.T) {
+func TestTimeline_OpenInvocation_HasNoEndNoDurationButOverlapsUpToTheAxisEnd(t *testing.T) {
 	tl := tlTimeline(t)
 
 	e := tlEntry(t, tl, "d#4")
@@ -187,24 +190,32 @@ func TestTimeline_OpenInvocation_HasNoEndNoDurationAndNoOverlaps(t *testing.T) {
 	if !e.Invocation.EndedAt.IsZero() || e.HasDuration || e.Duration != 0 {
 		t.Errorf("open entry has end %v, duration %v (has %v), want none", e.Invocation.EndedAt, e.Duration, e.HasDuration)
 	}
-	if len(e.Overlaps) != 0 {
-		t.Errorf("open entry overlaps = %v, want none: it runs 15..? and must not be given an end", tlOverlaps(e))
+	// It runs from 15 to the axis end (70): every invocation with a usable
+	// interval ending after 15 overlaps it; e#5, f#6 and g#7 have no usable interval.
+	if got, want := tlOverlaps(e), []string{"a#1", "b#2", "c#3", "h#8"}; !rmEqualStrings(got, want) {
+		t.Errorf("open entry overlaps = %v, want %v", got, want)
 	}
 	if !e.Invocation.StartedAt.Equal(rmAt(15)) {
 		t.Errorf("open entry start = %v, want the logged %v", e.Invocation.StartedAt, rmAt(15))
 	}
 }
 
-func TestTimeline_OpenInvocation_IsNotListedAsAnOverlapOfOthers(t *testing.T) {
+func TestTimeline_OpenInvocation_IsListedAsAnOverlapOfInvocationsRunningAfterItsStart(t *testing.T) {
 	tl := tlTimeline(t)
 
-	if len(tl.Entries) == 0 {
-		t.Fatal("timeline has no entries, so no overlap list can be checked")
+	for _, id := range []domain.AgentInstanceID{"a#1", "b#2", "c#3", "h#8"} {
+		listed := false
+		for _, o := range tlOverlaps(tlEntry(t, tl, id)) {
+			listed = listed || o == "d#4"
+		}
+		if !listed {
+			t.Errorf("%s does not list open d#4 although d#4 runs to the axis end", id)
+		}
 	}
-	for _, e := range tl.Entries {
-		for _, id := range e.Overlaps {
-			if id == "d#4" {
-				t.Errorf("%s lists open d#4 as an overlap although d#4 has no end", e.Invocation.Actor.Instance)
+	for _, id := range []domain.AgentInstanceID{"e#5", "f#6", "g#7"} {
+		for _, o := range tlOverlaps(tlEntry(t, tl, id)) {
+			if o == "d#4" {
+				t.Errorf("%s has no usable interval and must not list d#4", id)
 			}
 		}
 	}
@@ -287,7 +298,7 @@ func TestTimeline_Compactions_AreInTimeOrderWithTheirActor(t *testing.T) {
 func TestTimeline_RunWithoutInvocationsOrCompactions_IsEmpty(t *testing.T) {
 	in := rmOrchestratorInput(rmToolStart("o1", "Read", rmAt(1)), rmToolEnd("o1", domain.ToolCallSuccess, rmAt(2)))
 
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	tl := requireRunReport(t, report, testRunID).Timeline
 	if len(tl.Entries) != 0 || len(tl.Compactions) != 0 {
@@ -298,7 +309,7 @@ func TestTimeline_RunWithoutInvocationsOrCompactions_IsEmpty(t *testing.T) {
 func TestTimeline_CompactionsOnly_AreShownWithoutEntries(t *testing.T) {
 	in := rmOrchestratorInput(rmCompaction("auto", domain.Tokens(10), domain.Tokens(5), rmAt(3)))
 
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	tl := requireRunReport(t, report, testRunID).Timeline
 	if len(tl.Entries) != 0 || len(tl.Compactions) != 1 || tl.Compactions[0].Trigger != "auto" {
@@ -307,8 +318,8 @@ func TestTimeline_CompactionsOnly_AreShownWithoutEntries(t *testing.T) {
 }
 
 func TestTimeline_RepricingDoesNotChangeTheTimeline(t *testing.T) {
-	cheap := analysis.Analyze(tlScenarioInput(), viewsPricing(t), testSource(), nil)
-	unpriced := analysis.Analyze(tlScenarioInput(), domain.NewPricingTable(nil), testSource(), nil)
+	cheap := analysis.Analyze(tlScenarioInput(), viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
+	unpriced := analysis.Analyze(tlScenarioInput(), domain.NewPricingTable(nil), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	a := requireRunReport(t, cheap, testRunID).Timeline
 	b := requireRunReport(t, unpriced, testRunID).Timeline

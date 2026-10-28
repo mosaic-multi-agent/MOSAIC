@@ -38,3 +38,8 @@
 ## Known Complexity
 
 No areas currently warrant deeper-tier documentation beyond this overview — see KBProgress.md for the reasoning behind that call.
+
+## Further Reading
+
+- [ReworkAndCache.md](ReworkAndCache.md) - likely-rework rule, outcome split, cache figures (net benefit, unread writes) and run comparison semantics.
+- [SchemaAndCompactions.md](SchemaAndCompactions.md) - major-version schema rule, compaction pairing rules (phased and legacy), digest round trip, and the 1.4.0/1.5.0 field inventory.

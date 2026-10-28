@@ -20,6 +20,7 @@ import (
 	"mosaic-log-analyzer/internal/logscan"
 	"mosaic-log-analyzer/internal/otelusage"
 	"mosaic-log-analyzer/internal/pricing"
+	"mosaic-log-analyzer/internal/settings"
 	"mosaic-log-analyzer/internal/tui"
 )
 
@@ -140,6 +141,7 @@ func main() {
 	scanner := logscan.NewScanner()
 	reader := logread.NewReader()
 	pricingStore := pricing.NewStore(workDir)
+	settingsStore := settings.NewStore(workDir)
 	clock := &realClock{}
 	digestStore := digest.NewStore()
 	usageIngest := otelusage.New()
@@ -154,6 +156,7 @@ func main() {
 			Source:      scanner,
 			Reader:      reader,
 			Pricing:     pricingStore,
+			Settings:    settingsStore,
 			Digests:     digestStore,
 			ToolVersion: ToolVersion,
 			Clock:       clock,
@@ -180,6 +183,7 @@ func main() {
 		Source:      scanner,
 		Reader:      reader,
 		Pricing:     pricingStore,
+		Settings:    settingsStore,
 		Digests:     digestStore,
 		ToolVersion: ToolVersion,
 		Clock:       clock,

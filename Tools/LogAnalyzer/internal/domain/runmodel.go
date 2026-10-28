@@ -69,13 +69,26 @@ func (i Invocation) Duration() (time.Duration, bool) {
 	return timeSpan(i.StartedAt, i.EndedAt)
 }
 
-// Compaction is one context compaction as logged.
+// CompactionShape says how a compaction's halves were logged.
+type CompactionShape uint8
+
+const (
+	CompactionSingle   CompactionShape = iota // one self-contained event (zero value)
+	CompactionPaired                          // pre + post halves (1.5.0 phase or the legacy rule)
+	CompactionPreOnly                         // 1.5.0 "pre" with no matching "post"
+	CompactionPostOnly                        // 1.5.0 "post" with no preceding unpaired "pre"
+)
+
+// Compaction is one context compaction: a self-contained event, or a pre/post
+// pair of events, or an unpaired half.
 type Compaction struct {
 	Actor        ActorRef  // Orchestrator() or the agent instance of the stream
-	At           time.Time // zero when unparseable
-	Trigger      string
+	At           time.Time // first half's timestamp (the only half's when unpaired); zero when unparseable
+	EndedAt      time.Time // post half's timestamp when Shape == CompactionPaired; zero otherwise
+	Trigger      string    // first non-empty of the halves, pre first
 	TokensBefore TokenCount
 	TokensAfter  TokenCount
+	Shape        CompactionShape
 }
 
 // RunActivity is the per-run model built from tool-call, compaction and

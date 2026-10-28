@@ -99,8 +99,8 @@ func TestReader_MixedSchemaVersions_RaiseNoFinding(t *testing.T) {
 	}
 }
 
-func TestReader_UnsupportedNewerVersion_StillRaisesOneFinding(t *testing.T) {
-	_, findings := readTierLines(t, v130Line("1.4.0", "turn", v130Extras("turn", "", "", `{"input_tokens":1}`)))
+func TestReader_UnknownMajorVersion_StillRaisesOneFinding(t *testing.T) {
+	_, findings := readTierLines(t, v130Line("2.0.0", "turn", v130Extras("turn", "", "", `{"input_tokens":1}`)))
 
 	if n := unknownSchemaFindings(findings); n != 1 {
 		t.Errorf("unknown_schema_version findings = %d, want 1", n)
@@ -204,16 +204,19 @@ func TestReader_ReasoningTokens_DoesNotDisturbCacheTierSplit(t *testing.T) {
 	requireTokens(t, "Reasoning", u.Reasoning, 3)
 }
 
-func TestReader_UnsupportedVersionFinding_DetailListsSupportedSet(t *testing.T) {
-	_, findings := readTierLines(t, v130Line("1.4.0", "turn", v130Extras("turn", "", "", `{"input_tokens":1}`)))
+func TestReader_UnsupportedVersionFinding_DetailNamesOffendingVersionAndReadMajor(t *testing.T) {
+	_, findings := readTierLines(t, v130Line("2.0.0", "turn", v130Extras("turn", "", "", `{"input_tokens":1}`)))
 
 	for _, f := range findings {
 		if f.Kind == domain.FindingUnknownSchema {
-			if !strings.Contains(f.Detail, "1.3.0") {
-				t.Errorf("finding detail %q should list supported version 1.3.0", f.Detail)
+			if !strings.Contains(f.Detail, "2.0.0") {
+				t.Errorf("finding detail %q should name the offending version 2.0.0", f.Detail)
+			}
+			if !strings.Contains(f.Detail, "1.x.y") {
+				t.Errorf("finding detail %q should state that major version 1 (1.x.y) is read", f.Detail)
 			}
 			return
 		}
 	}
-	t.Fatal("expected an unknown_schema_version finding for 1.4.0")
+	t.Fatal("expected an unknown_schema_version finding for 2.0.0")
 }

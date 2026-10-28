@@ -57,7 +57,7 @@ func (s *Service) Export(ctx context.Context, req ExportRequest) (ExportResult, 
 		notWritten.Outcome = OutcomeNoData
 		return notWritten, nil
 	}
-	sess := &Session{aggregate: loaded.aggregate, source: src, exportFindings: loaded.exportFindings}
+	sess := &Session{aggregate: loaded.aggregate, source: src, exportFindings: loaded.exportFindings, settings: domain.DefaultAnalysisSettings()}
 	return s.ExportSession(ctx, sess, req)
 }
 

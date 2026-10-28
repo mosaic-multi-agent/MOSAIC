@@ -31,6 +31,7 @@ type Options struct {
 //	mosaic-log-analyzer export --out F.digest.json [--path P] [--run ID] [--force]
 //	mosaic-log-analyzer ingest-otel --run ID [--path P] [otel-file]
 //	mosaic-log-analyzer pricing path                        (prints the config path)
+//	mosaic-log-analyzer settings path                       (prints the analysis settings path)
 //
 // Persistent flags:
 //
@@ -204,12 +205,32 @@ func newRootCommandWithExitCode(opts Options, exitCode *int) *cobra.Command {
 	}
 	pricingCmd.AddCommand(pricingPathCmd)
 
+	settingsCmd := &cobra.Command{
+		Use:           "settings",
+		Short:         "Analysis settings commands",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+	}
+
+	settingsPathCmd := &cobra.Command{
+		Use:           "path",
+		Short:         "Print the analysis settings file path",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			fmt.Fprintln(opts.Stdout, opts.Service.SettingsPath())
+			*exitCode = ExitSuccess
+			return nil
+		},
+	}
+	settingsCmd.AddCommand(settingsPathCmd)
+
 	exportCmd := newExportCommand(opts, exitCode,
 		func() string { return pathFlag }, func() string { return runFlag })
 
 	ingestCmd := newIngestOtelCommand(opts, exitCode,
 		func() string { return pathFlag }, func() string { return runFlag })
 
-	root.AddCommand(reportCmd, totalCmd, pricingCmd, exportCmd, ingestCmd)
+	root.AddCommand(reportCmd, totalCmd, pricingCmd, settingsCmd, exportCmd, ingestCmd)
 	return root
 }

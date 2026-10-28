@@ -51,6 +51,19 @@ Events that are unconfirmed for the VS Code harness (`SessionEnd`, `Notification
 `PostToolUseFailure`, `PostCompact`) are not registered; the adapter silently ignores
 any unrecognised event it receives.
 
+## Compaction events
+
+`PreCompact` is the only registered compaction hook, so it writes one self-contained
+`compaction` event (log format 1.5.0) without `phase`. `tokens_before` is written only
+when the payload carries an integer value; `custom_instructions` is never written. The
+event goes to a subagent's stream when the payload's `agent_id` is in the spawn index,
+or when the payload's `session_id` is mapped to a subagent by the spawn index and is
+not an orchestrator session; otherwise to the orchestrator stream.
+
+Unverified pending a live run: whether VS Code fires `PreCompact` for a subagent's own
+compaction and what identifies the subagent in that payload, and whether `PostCompact`
+exists (it is not registered).
+
 ## Enablement
 
 VS Code hooks are enabled by default. No user-level setting needs to be flipped.

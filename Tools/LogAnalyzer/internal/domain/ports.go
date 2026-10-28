@@ -79,3 +79,19 @@ type UsageIngester interface {
 type IngestStateProbe interface {
 	PendingUsage(runDir string) UsageIngestState
 }
+
+// SettingsStore owns the external YAML analysis settings file.
+// Implementations: settings.Store (production), in-memory fake (tests).
+type SettingsStore interface {
+	// Path returns the settings file location.
+	Path() string
+
+	// Load: absent file -> DefaultAnalysisSettings(), nil findings, nil error;
+	// comments-only file -> defaults; each invalid entry -> one
+	// FindingInvalidSettingsEntry and that entry's default; unparseable document
+	// or unreadable file -> error. Never writes.
+	Load(ctx context.Context) (AnalysisSettings, []Finding, error)
+
+	// AddUserInteractionTool validates and persists name for harness h.
+	AddUserInteractionTool(ctx context.Context, h Harness, name string) error
+}

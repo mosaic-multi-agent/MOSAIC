@@ -24,8 +24,8 @@ func withUnattributed(run domain.RunReport) domain.RunReport {
 	return run
 }
 
-func TestOverview_ShowsUnattributedShareAndAmount(t *testing.T) {
-	view := overviewView(withUnattributed(overviewRun()), tallH)
+func TestOverview_FiguresOnlyShowsUnattributedShareAndAmount(t *testing.T) {
+	view := overviewFiguresView(withUnattributed(overviewRun()), tallH)
 
 	assertContains(t, strings.ToLower(view), "unattributed")
 	line := lineWith(strings.ToLower(view), "unattributed")
@@ -36,18 +36,30 @@ func TestOverview_ShowsUnattributedShareAndAmount(t *testing.T) {
 	}
 }
 
-func TestOverview_UnattributedStaysNextToOrchestratorAndSubagentsWithOwnFigures(t *testing.T) {
+func TestOverview_VisualNamesUnattributedWithAShareInTheCostLegend(t *testing.T) {
+	colourOff(t)
+
 	view := overviewView(withUnattributed(overviewRun()), tallH)
 
-	assertContains(t, view, "40.0%", "60.0%", "$4.00", "$6.00")
-	low := strings.ToLower(view)
-	o, s, u := strings.Index(low, "orchestrator"), strings.Index(low, "subagent"), strings.Index(low, "unattributed")
-	if o < 0 || s < 0 || u < 0 {
-		t.Fatalf("orchestrator, subagents and unattributed must all be shown\n%s", view)
+	assertMatches(t, view, `(?i)unattributed[^%]*\d+%`)
+}
+
+func TestOverview_UnattributedStaysNextToOrchestratorAndSubagentsWithOwnFigures(t *testing.T) {
+	for _, v := range overviewVersions() {
+		t.Run(v.name, func(t *testing.T) {
+			view := v.view(withUnattributed(overviewRun()), tallH)
+
+			low := strings.ToLower(view)
+			o, s, u := strings.Index(low, "orchestrator"), strings.Index(low, "subagent"), strings.Index(low, "unattributed")
+			if o < 0 || s < 0 || u < 0 {
+				t.Fatalf("orchestrator, subagents and unattributed must all be shown\n%s", view)
+			}
+			if u < o || u < s {
+				t.Errorf("unattributed share must follow the orchestrator and subagent shares (got %d, %d, %d)", o, s, u)
+			}
+		})
 	}
-	if u < o || u < s {
-		t.Errorf("unattributed share must follow the orchestrator and subagent shares (got %d, %d, %d)", o, s, u)
-	}
+	assertContains(t, overviewFiguresView(withUnattributed(overviewRun()), tallH), "40.0%", "60.0%", "$4.00", "$6.00")
 }
 
 func TestOverview_RunWithoutUnattributedUsageShowsNoUnattributedLine(t *testing.T) {

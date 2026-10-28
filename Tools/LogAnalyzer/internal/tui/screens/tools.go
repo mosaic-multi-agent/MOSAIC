@@ -1,9 +1,10 @@
 package screens
 
 import (
-	"fmt"
-
 	tea "github.com/charmbracelet/bubbletea"
+
+	tuicommon "mosaic-common/tui"
+	"mosaic-common/tui/kit/table"
 
 	"mosaic-log-analyzer/internal/domain"
 )
@@ -19,11 +20,19 @@ type ToolsScreen struct {
 	styles Styles
 	back   bool
 	nav    viewNav
+	runChrome
+
+	sort   SortCycle
+	cursor int // selected row of the run's sorted table
+
+	mark   markRequest
+	status string // one-line message about the last key, cleared by the next key
 }
 
 // NewToolsScreen creates the tools screen for one run.
 func NewToolsScreen(run domain.RunReport, width, height int, styles Styles) *ToolsScreen {
-	return &ToolsScreen{run: run, width: width, height: height, styles: styles, nav: viewNav{self: ScreenTools}}
+	return &ToolsScreen{run: run, width: width, height: height, styles: styles, nav: viewNav{self: ScreenTools},
+		sort: newToolsSortCycle()}
 }
 
 // ID implements Screen.
@@ -38,10 +47,24 @@ func (s *ToolsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	if !ok {
 		return s, nil
 	}
-	switch k := key.String(); k {
+	k := key.String()
+	s.status = ""
+	if s.help.handle(k) {
+		return s, nil
+	}
+	switch k {
 	case "esc", "q":
 		s.back = true
+	case KeySort:
+		s.sort = s.sort.Next()
+	case KeyMarkUserTool:
+		s.markSelected()
 	case "up", "k", "down", "j":
+		delta := 1
+		if k == "up" || k == "k" {
+			delta = -1
+		}
+		s.cursor = clampIndex(s.cursor+delta, len(s.run.Tools.Run))
 		s.scroll.handle(k, len(s.body()), s.height)
 	default:
 		s.nav.request(k)
@@ -53,59 +76,49 @@ func (s *ToolsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 func (s *ToolsScreen) View(width, height int) string {
 	s.width, s.height = width, height
 	body := s.body()
+	if s.status != "" {
+		height--
+	}
 	w := s.scroll.window(len(body), height)
-	return renderPage(s.styles, width, "Log Analyzer — Tools", runLabel(s.run),
-		body[w.Offset:w.End()], w, len(body), s.Help())
+	spec := frameSpec{run: s.run, active: ScreenTools, keys: toolsKeys, screenKeys: []tuicommon.HelpEntry{sortKeyEntry, markKeyEntry},
+		escDesc: "back to the runs list", hint: FormatScrollHint(w, len(body)), sort: s.sort.Label()}
+	out := s.render(spec, body[w.Offset:w.End()], width, height, s.styles)
+	if s.status != "" {
+		out += "\n" + clip(s.styles.Muted, width, s.status)
+	}
+	return out
 }
 
-// body renders every line of the view; the caller scrolls through it.
+// body renders every line of the view; the caller scrolls through it. The cursor
+// selects a row of the run's table.
 func (s *ToolsScreen) body() []string {
 	st, width := s.styles, s.width
 	tb := s.run.Tools
 	if len(tb.Run) == 0 && len(tb.Orchestrator) == 0 && len(tb.ByAgentType) == 0 {
 		return []string{clip(st.Body, width, "No tool calls in this run.")}
 	}
-	section := func(out []string, title string, tools []domain.ToolFigures) []string {
+	order := s.sort.Active()
+	section := func(out []string, title string, tools []domain.ToolFigures, cursor int) []string {
 		out = append(out, clip(st.Subtitle, width, title))
-		for _, t := range tools {
-			out = append(out, clip(st.Body, width, "  "+toolRow(t)))
+		if len(tools) > 0 {
+			out = append(out, toolsTableLines(tools, order, cursor, width, st)...)
 		}
 		return out
 	}
-	out := section(nil, "Run", tb.Run)
-	out = append(out, "")
-	out = section(out, "Orchestrator", tb.Orchestrator)
+	out := section(nil, "Run", tb.Run, clampIndex(s.cursor, len(tb.Run)))
+	out = section(out, "Orchestrator", tb.Orchestrator, table.NoCursor)
 	for _, t := range tb.ByAgentType {
-		name := t.AgentType
-		if name == "" {
-			name = UnknownTypeLabel
-		}
-		out = append(out, "")
-		out = section(out, name, t.Tools)
+		out = section(out, typeLabel(t.AgentType), t.Tools, table.NoCursor)
 	}
 	return out
 }
 
-// toolRow renders one tool: calls, errors and the average, minimum and maximum
-// duration of its paired calls, with a count of unpaired calls.
-func toolRow(t domain.ToolFigures) string {
-	name := t.Tool
-	if name == "" {
-		name = UnnamedToolLabel
-	}
-	d := t.Durations
-	ok := d.Count > 0
-	row := fmt.Sprintf("%-16s %4d calls  %3d errors  avg %s  min %s  max %s", name, t.Calls, t.Errors,
-		FormatDuration(d.Average, ok), FormatDuration(d.Min, ok), FormatDuration(d.Max, ok))
-	if t.Unpaired > 0 {
-		row += fmt.Sprintf("  %d %s", t.Unpaired, UnpairedLabel)
-	}
-	return row
-}
+// toolsKeys are the short help keys of the view.
+var toolsKeys = []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "scroll"}, {Key: KeySort, Desc: "sort"}, {Key: KeyMarkUserTool, Desc: "mark"}, {Key: "esc", Desc: "back"}}
 
 // Help implements Screen.
 func (s *ToolsScreen) Help() string {
-	return "↑/↓ scroll  " + viewKeysHelp(ScreenTools) + "  esc back  ctrl+c quit"
+	return shortHelpText("", toolsKeys)
 }
 
 // Back reports whether the user asked to leave the per-run views.
@@ -118,4 +131,15 @@ func (s *ToolsScreen) Requested() (ScreenID, bool) { return s.nav.requested() }
 func (s *ToolsScreen) Reset() {
 	s.back = false
 	s.nav.reset()
+}
+
+// SelectedTool returns the tool row under the cursor of the sorted table.
+// The second result is false when the run has no tool calls.
+func (s *ToolsScreen) SelectedTool() (domain.ToolFigures, bool) {
+	tools := s.run.Tools.Run
+	if len(tools) == 0 {
+		return domain.ToolFigures{}, false
+	}
+	order := toolOrder(tools, s.sort.Active())
+	return tools[order[clampIndex(s.cursor, len(order))]], true
 }

@@ -1,7 +1,8 @@
 """Per-event schema_version stamping.
 
 Each event carries the highest schema_version whose fields the adapter implements for it:
-invocation_start (spawn_call_id) and usage_record are 1.4.0, every other event is 1.0.0.
+invocation_start (spawn_call_id) and usage_record are 1.4.0, compaction is 1.5.0,
+every other event is 1.0.0.
 Applies in native mode and in Runner mode.
 """
 
@@ -21,7 +22,7 @@ import mosaic_logger
 import mosaic_logger_core as core
 from tests.runner_mode_support import RunnerModeTestCase
 
-_NEWER = {"invocation_start": "1.4.0", "usage_record": "1.4.0"}
+_NEWER = {"invocation_start": "1.4.0", "usage_record": "1.4.0", "compaction": "1.5.0"}
 _RUN_ID = "20261028T100000Z-b7c4"
 _INSTANCE_ID = "Research#3"
 _SESSION = "ghcp-versions-session"
@@ -52,6 +53,9 @@ class TestSchemaVersionFor(unittest.TestCase):
     def test_usage_record_is_1_4_0(self):
         self.assertEqual("1.4.0", core.schema_version_for("usage_record"))
 
+    def test_compaction_is_1_5_0(self):
+        self.assertEqual("1.5.0", core.schema_version_for("compaction"))
+
     def test_other_events_are_1_0_0(self):
         for name in ("run_start", "run_end", "session_start", "session_end", "turn",
                      "tool_call_start", "tool_call_end", "invocation_end",
@@ -69,6 +73,10 @@ class TestBuildEventStampsPerEventVersion(unittest.TestCase):
     def test_tool_call_start_is_stamped_1_0_0(self):
         event = core.build_event("tool_call_start", _ctx())
         self.assertEqual("1.0.0", event["schema_version"])
+
+    def test_compaction_is_stamped_1_5_0(self):
+        event = core.build_event("compaction", _ctx())
+        self.assertEqual("1.5.0", event["schema_version"])
 
 
 class TestNativeSessionEventVersions(unittest.TestCase):
@@ -89,6 +97,7 @@ class TestNativeSessionEventVersions(unittest.TestCase):
                    toolResult={"textResultForLlm": "ok"})
         self._fire("subagentStop", agentId="agent-v1",
                    response='{"status_code": "SUCCESS", "run_id": "%s"}' % _RUN_ID)
+        self._fire("preCompact", trigger="auto")
         self._fire("sessionEnd", reason="complete")
         self.events = _read_all_events(self.ws)
 
@@ -100,7 +109,8 @@ class TestNativeSessionEventVersions(unittest.TestCase):
     def test_session_exercises_the_versioned_event_types(self):
         names = {e["event"] for e in self.events}
         self.assertTrue({"run_start", "invocation_start", "invocation_end",
-                         "tool_call_start", "tool_call_end", "run_end"} <= names, names)
+                         "tool_call_start", "tool_call_end", "compaction",
+                         "run_end"} <= names, names)
 
     def test_every_emitted_event_carries_the_version_of_its_type(self):
         for event in self.events:

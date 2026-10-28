@@ -1,0 +1,8 @@
+width 4
+|_-=#|
+width 8
+|__--==##|
+width 12
+|__--==##    |
+marker 3 at width 12
+|__-|==##    |

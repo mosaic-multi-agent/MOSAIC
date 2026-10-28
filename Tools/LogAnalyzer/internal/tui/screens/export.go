@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	tuicommon "mosaic-common/tui"
 	"mosaic-common/tui/pathutil"
 	"mosaic-common/tui/widgets"
 
@@ -50,16 +51,13 @@ type ExportScreen struct {
 	confirm bool
 	action  ExportAction
 	path    string
+	pageChrome
 }
 
 // NewExportScreen creates the export screen for one run (runID) or, with an
 // empty runID, for all runs. The path is pre-filled with a default file name.
 func NewExportScreen(runID string, width int, styles Styles) *ExportScreen {
-	input := widgets.NewTextInput("Digest file path:", "path"+domain.DigestFileSuffix, width, widgets.TextInputStyles{
-		Label:  styles.Subtitle,
-		Input:  styles.Body,
-		ErrMsg: styles.Error,
-	})
+	input := widgets.NewTextInput("Digest file path:", "path"+domain.DigestFileSuffix, width, textInputStyles(styles))
 	input.SetValidate(validateDigestPath)
 	if runID == "" {
 		input.SetValue(DefaultAllRunsDigestName)
@@ -89,7 +87,7 @@ func (s *ExportScreen) Init() tea.Cmd { return s.input.Init() }
 // Update implements Screen.
 func (s *ExportScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	if s.confirm {
-		if key, ok := msg.(tea.KeyMsg); ok {
+		if key, ok := msg.(tea.KeyMsg); ok && !s.help.handle(key.String()) {
 			switch key.String() {
 			case "y", "Y":
 				s.action = ExportOverwrite
@@ -113,15 +111,18 @@ func (s *ExportScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 // View implements Screen.
 func (s *ExportScreen) View(width, height int) string {
 	s.input.Resize(width)
-	sep := s.styles.Border.Width(width).Render(strings.Repeat("-", width))
-	title := s.styles.Title.Width(width).Render("Log Analyzer -- Export digest")
-	subtitle := s.styles.Subtitle.Width(width).Render(s.heading())
-	body := s.input.View()
-	if s.confirm {
-		body = s.styles.Warning.Width(width).Render(s.path + " already exists. Overwrite? (y/n)")
+	body := []string{s.styles.Subtitle.Render(s.heading())}
+	page := Page{Title: exportTitle, Keys: exportPathKeys}
+	if !s.confirm {
+		body = append(body, strings.Split(s.input.View(), "\n")...)
+		return RenderPage(page, body, width, height, s.styles)
 	}
-	help := s.styles.Help.Width(width).Render(s.Help())
-	return strings.Join([]string{title, subtitle, sep, "", body, "", sep, help}, "\n")
+	warning := s.styles.Theme.Style(tuicommon.RoleSignalWarning)
+	for _, l := range WrapText(s.path+" already exists. Overwrite? (y/n)", width) {
+		body = append(body, warning.Render(l))
+	}
+	page.Keys, page.Help = exportConfirmKeys, true
+	return s.render(page, exportOverlayGroups(), body, width, height, s.styles)
 }
 
 func (s *ExportScreen) heading() string {
@@ -134,9 +135,9 @@ func (s *ExportScreen) heading() string {
 // Help implements Screen.
 func (s *ExportScreen) Help() string {
 	if s.confirm {
-		return "y overwrite  n cancel  esc cancel  ctrl+c quit"
+		return leadHelp("", exportConfirmKeys)
 	}
-	return "enter export  esc cancel  ctrl+c quit"
+	return leadHelp("", exportPathKeys)
 }
 
 // AskOverwrite switches to the overwrite confirmation for the submitted path.

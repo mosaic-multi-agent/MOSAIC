@@ -129,7 +129,7 @@ func TestByStatus_EmptyGroupsAreOmitted(t *testing.T) {
 		rmInvStart("coder#1", "coder", rmAt(1)),
 		rmInvEnd("coder#1", "SUCCESS", viewsModel, rmAt(2)))
 
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	assertStatusGroups(t, "run", requireRunReport(t, report, testRunID).ByStatus.Run,
 		[]wantGroup{{domain.StatusReported, "SUCCESS", 1}})

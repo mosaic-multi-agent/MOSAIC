@@ -93,6 +93,8 @@ func encodeRun(r domain.RunAggregate) runDoc {
 			Trigger:      c.Trigger,
 			TokensBefore: encodeCount(c.TokensBefore),
 			TokensAfter:  encodeCount(c.TokensAfter),
+			EndedAt:      formatTime(c.EndedAt),
+			Shape:        encodeShape(c.Shape),
 		})
 	}
 	return doc
@@ -227,4 +229,17 @@ func encodeFinding(f domain.Finding) findingDoc {
 		doc.RunID = f.Run.ID
 	}
 	return doc
+}
+
+// encodeShape returns the wire shape of a compaction; single is omitted.
+func encodeShape(s domain.CompactionShape) string {
+	switch s {
+	case domain.CompactionPaired:
+		return shapePaired
+	case domain.CompactionPreOnly:
+		return shapePreOnly
+	case domain.CompactionPostOnly:
+		return shapePostOnly
+	}
+	return ""
 }

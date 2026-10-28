@@ -99,3 +99,75 @@ def _read_entry_file(path) -> "dict | None":
         return data if isinstance(data, dict) else None
     except Exception:
         return None
+
+
+# ---------------------------------------------------------------------------
+# Compaction routing
+# ---------------------------------------------------------------------------
+
+# A compaction belongs to the stream of the actor that was compacted. The subagent
+# is identified only from what the hook payload or the adapter state actually
+# carries: the payload's agent_id (the spawning tool-call ID, looked up in the
+# spawn index), or a payload session_id that the spawn index maps to a subagent
+# and that is not an orchestrator session. A subagent merely running is never
+# enough. Anything else is the orchestrator's own compaction.
+
+_UNKNOWN_RUN = "unknown-run"
+
+
+def _read_entries(paths: "core.LogPaths"):
+    try:
+        files = sorted(paths.subagent_index_dir().glob("*.json"))
+    except Exception:
+        return
+    for entry_file in files:
+        try:
+            data = json.loads(entry_file.read_text("utf-8"))
+        except Exception:
+            continue
+        if isinstance(data, dict) and data.get("agent_instance_id") and data.get("run_id"):
+            yield data
+
+
+def _is_orchestrator_session(paths: "core.LogPaths", run_id: str, session_id: str) -> bool:
+    """True when a session_start for session_id sits in the run's orchestrator stream."""
+    for rid in (run_id, _UNKNOWN_RUN):
+        try:
+            text = paths.orchestrator_events(rid).read_text("utf-8")
+        except Exception:
+            continue
+        for line in text.splitlines():
+            try:
+                event = json.loads(line)
+            except Exception:
+                continue
+            if (isinstance(event, dict) and event.get("event") == "session_start"
+                    and event.get("session_id") == session_id):
+                return True
+    return False
+
+
+def _entry_for_session(ctx: "core.HookContext") -> "dict | None":
+    if not ctx.session_id:
+        return None
+    for entry in _read_entries(ctx.paths):
+        if entry.get("session_id") != ctx.session_id:
+            continue
+        if _is_orchestrator_session(ctx.paths, entry["run_id"], ctx.session_id):
+            return None
+        return entry
+    return None
+
+
+def compaction_destination(ctx: "core.HookContext"):
+    """Return the events file a compaction firing belongs to. Never raises."""
+    try:
+        key = normalize_call_id(ctx.agent_id)
+        entry = get_spawn_entry(ctx.paths, key) if key else None
+        if entry is None:
+            entry = _entry_for_session(ctx)
+        if entry is not None and entry.get("run_id"):
+            return ctx.paths.invocation_events(entry["run_id"], entry["agent_instance_id"])
+    except Exception as exc:
+        core.debug_log("compaction routing failed", exc)
+    return ctx.paths.orchestrator_events(core.effective_run_id(ctx))

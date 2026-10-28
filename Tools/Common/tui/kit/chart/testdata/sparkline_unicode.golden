@@ -1,0 +1,8 @@
+width 4
+|▂▄▆█|
+width 8
+|▁▂▃▄▅▆▇█|
+width 12
+|▁▂▃▄▅▆▇█    |
+marker 3 at width 12
+|▁▂▃┃▅▆▇█    |

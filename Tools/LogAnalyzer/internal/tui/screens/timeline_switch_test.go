@@ -15,12 +15,12 @@ var _ screens.RunView = (*screens.TimelineScreen)(nil)
 
 func timelinePerRunView() perRunView {
 	return perRunView{screens.ScreenTimeline, screens.KeyViewTimeline, func(r domain.RunReport) screens.RunView {
-		return screens.NewTimelineScreen(r, wideW, tallH, plain())
+		return screens.NewTimelineScreen(r, wideW, tallH, paletteStyles())
 	}}
 }
 
 func TestTimelineView_IdentifiesItself(t *testing.T) {
-	if got := screens.NewTimelineScreen(timelineRun(), wideW, tallH, plain()).ID(); got != screens.ScreenTimeline {
+	if got := screens.NewTimelineScreen(timelineRun(), wideW, tallH, paletteStyles()).ID(); got != screens.ScreenTimeline {
 		t.Errorf("timeline screen ID = %q, want %q", got, screens.ScreenTimeline)
 	}
 }
@@ -78,25 +78,21 @@ func TestTimelineView_EscAndQAskToLeave(t *testing.T) {
 	}
 }
 
-func TestTimelineView_HelpListsEveryOtherViewKeyAndBack(t *testing.T) {
-	help := timelinePerRunView().make(timelineRun()).Help()
-
+func TestTimelineView_HelpHintsAtTheOverviewListingEveryOtherViewKeyAndBack(t *testing.T) {
+	s := timelinePerRunView().make(timelineRun())
+	var others []string
 	for _, to := range allPerRunViews() {
-		if !strings.Contains(help, to.key+" ") {
-			t.Errorf("help %q must list key %q for the %s view", help, to.key, to.id)
-		}
+		others = append(others, to.key)
 	}
-	if !strings.Contains(help, "esc") {
-		t.Errorf("help %q must list esc", help)
+
+	if help := s.Help(); !strings.Contains(help, screens.KeyHelp) {
+		t.Errorf("help %q must hint at the ? overlay", help)
 	}
+	assertOverlayListsViewKeys(t, s, others...)
 }
 
-func TestRunViews_HelpListsTheTimelineKey(t *testing.T) {
+func TestRunViews_OverlayListsTheTimelineKey(t *testing.T) {
 	for _, from := range allPerRunViews() {
-		help := from.make(timelineRun()).Help()
-
-		if !strings.Contains(help, screens.KeyViewTimeline+" ") {
-			t.Errorf("%s: help %q must list key %q for the timeline", from.id, help, screens.KeyViewTimeline)
-		}
+		assertOverlayListsViewKeys(t, from.make(timelineRun()), screens.KeyViewTimeline)
 	}
 }

@@ -5,8 +5,8 @@ package screens_test
 // Rules under test:
 //   - One-line summaries read "output: <n> (reasoning: <r>)", with the absent
 //     marker for <r> when no request reported reasoning.
-//   - Per-category rows (overview "Token categories") add a reasoning row
-//     directly under output, indented, with the token figure and no money.
+//   - The figures-only overview shows the reasoning figure with output, with the
+//     token figure and no money.
 //   - Reasoning never changes or adds a money figure.
 //   - A partly reported figure shows the present sum with no extra marker.
 
@@ -88,86 +88,52 @@ func runWithReasoning(reasoning domain.TokenCount) domain.RunReport {
 	return run
 }
 
-// tokenCategoryRows returns the lines of the overview "Token categories"
-// section, up to the next blank line.
-func tokenCategoryRows(t *testing.T, view string) []string {
+// reasoningLineFigure is the text of the figures-only Overview from the word
+// "reasoning" to the end of its line, which holds the reasoning figure.
+func reasoningLineFigure(t *testing.T, view string) string {
 	t.Helper()
-	lines := strings.Split(view, "\n")
-	for i, l := range lines {
-		if strings.Contains(l, "Token categories") {
-			var rows []string
-			for _, r := range lines[i+1:] {
-				if strings.TrimSpace(r) == "" {
-					break
-				}
-				rows = append(rows, r)
-			}
-			return rows
-		}
+	text := textAfterWord(view, "reasoning")
+	if text == "" {
+		t.Fatalf("no line shows reasoning; view:\n%s", view)
 	}
-	t.Fatalf("no Token categories section in view:\n%s", view)
-	return nil
+	return text
 }
 
-func indentOf(s string) int { return len(s) - len(strings.TrimLeft(s, " ")) }
+func TestOverview_PresentReasoning_FigureSitsWithOutputAndCarriesNoMoney(t *testing.T) {
+	view := overviewFiguresView(runWithReasoning(domain.Tokens(40)), tallH)
 
-func TestOverview_PresentReasoning_RowDirectlyUnderOutputIndentedWithoutMoney(t *testing.T) {
-	rows := tokenCategoryRows(t, overviewView(runWithReasoning(domain.Tokens(40)), tallH))
+	figure := reasoningLineFigure(t, view)
 
-	out := -1
-	for i, r := range rows {
-		if strings.HasPrefix(strings.TrimSpace(r), "output") {
-			out = i
-		}
+	assertFields(t, figure, "40")
+	assertNotContains(t, figure, "$", screens.UnpricedMarker, screens.AbsentMarker)
+	at := patternLine(view, `(?i)reasoning`)
+	lines := strings.Split(stripStyling(view), "\n")
+	near := lines[at]
+	if at > 0 {
+		near = lines[at-1] + "\n" + near
 	}
-	if out < 0 || out+1 >= len(rows) {
-		t.Fatalf("output row missing or nothing after it: %q", rows)
+	if !strings.Contains(strings.ToLower(near), strings.ToLower(domain.CategoryOutput.Label())) {
+		t.Errorf("reasoning is part of output and must sit on or directly under the output figure\n%s", near)
 	}
-	reasoning := rows[out+1]
-	if !strings.HasPrefix(strings.TrimSpace(reasoning), "reasoning") || !strings.Contains(reasoning, "40") {
-		t.Errorf("row after output = %q, want a reasoning row showing 40", reasoning)
-	}
-	if indentOf(reasoning) <= indentOf(rows[out]) {
-		t.Errorf("reasoning row %q is not indented under output row %q", reasoning, rows[out])
-	}
-	assertNotContains(t, reasoning, "$", screens.UnpricedMarker, screens.AbsentMarker)
 }
 
-func TestOverview_AbsentReasoning_RowShowsAbsentMarkerWithoutMoney(t *testing.T) {
-	view := overviewView(runWithReasoning(domain.AbsentTokens()), tallH)
+func TestOverview_AbsentReasoning_FigureShowsAbsentMarkerWithoutMoney(t *testing.T) {
+	figure := reasoningLineFigure(t, overviewFiguresView(runWithReasoning(domain.AbsentTokens()), tallH))
 
-	var reasoning string
-	for _, r := range tokenCategoryRows(t, view) {
-		if strings.HasPrefix(strings.TrimSpace(r), "reasoning") {
-			reasoning = r
-		}
-	}
-	if reasoning == "" {
-		t.Fatalf("no reasoning row; view:\n%s", view)
-	}
-	assertContains(t, reasoning, screens.AbsentMarker)
-	assertNotContains(t, reasoning, "$", screens.UnpricedMarker)
+	assertContains(t, figure, screens.AbsentMarker)
+	assertNotContains(t, figure, "$", screens.UnpricedMarker)
 }
 
-func TestOverview_PresentZeroReasoning_RowShowsZeroNotMarker(t *testing.T) {
-	view := overviewView(runWithReasoning(domain.Tokens(0)), tallH)
+func TestOverview_PresentZeroReasoning_FigureShowsZeroNotMarker(t *testing.T) {
+	figure := reasoningLineFigure(t, overviewFiguresView(runWithReasoning(domain.Tokens(0)), tallH))
 
-	var reasoning string
-	for _, r := range tokenCategoryRows(t, view) {
-		if strings.HasPrefix(strings.TrimSpace(r), "reasoning") {
-			reasoning = r
-		}
-	}
-	if reasoning == "" {
-		t.Fatalf("no reasoning row; view:\n%s", view)
-	}
-	assertContains(t, reasoning, "0")
-	assertNotContains(t, reasoning, "$", screens.UnpricedMarker, screens.AbsentMarker)
+	assertFields(t, figure, "0")
+	assertNotContains(t, figure, "$", screens.UnpricedMarker, screens.AbsentMarker)
 }
 
 func TestOverview_Reasoning_LeavesEveryOtherLineIdentical(t *testing.T) {
-	without := overviewView(runWithReasoning(domain.AbsentTokens()), tallH)
-	with := overviewView(runWithReasoning(domain.Tokens(40)), tallH)
+	without := overviewFiguresView(runWithReasoning(domain.AbsentTokens()), tallH)
+	with := overviewFiguresView(runWithReasoning(domain.Tokens(40)), tallH)
 
 	drop := func(view string) string {
 		var kept []string
@@ -184,35 +150,42 @@ func TestOverview_Reasoning_LeavesEveryOtherLineIdentical(t *testing.T) {
 	}
 }
 
-func TestOverview_ReasoningRow_ComesFromTheReasoningCountNotOutput(t *testing.T) {
+func TestOverview_ReasoningFigure_ComesFromTheReasoningCountNotOutput(t *testing.T) {
 	run := runWithReasoning(domain.Tokens(4242))
 	run.Overview.Totals.Tokens.Output = domain.Tokens(9191)
 
-	view := overviewView(run, tallH)
+	figure := reasoningLineFigure(t, overviewFiguresView(run, tallH))
 
-	assertContains(t, lineWith(view, "reasoning"), "4,242")
-	assertNotContains(t, lineWith(view, "reasoning"), "9,191")
+	assertContains(t, figure, "4,242")
+	assertNotContains(t, figure, "9,191")
 }
 
-func TestRunDetail_ShowsReasoningInRunAndActorSummaries(t *testing.T) {
+func TestOverview_VisualNamesReasoningWithOutput(t *testing.T) {
+	view := overviewView(runWithReasoning(domain.Tokens(40)), tallH)
+
+	assertContains(t, strings.ToLower(view), "reasoning")
+}
+
+// The run totals summary of the Dispatches view and the all-runs and
+// unattributable summaries of the runs list stay one-line summaries that show the
+// reasoning part inside the output part. The table rows carry no token summary.
+
+func TestRunDetail_ShowsReasoningInTheRunTotalsSummary(t *testing.T) {
 	run := runWithReasoning(domain.Tokens(40))
-	run.Orchestrator.Totals.Tokens.Reasoning = domain.Tokens(41)
-	run.Agents[0].Totals.Tokens.Reasoning = domain.Tokens(42)
 
-	view := screens.NewRunDetailScreen(run, wideW, tallH, plain()).View(wideW, tallH)
+	view := screens.NewRunDetailScreen(run, tableW, tallH, plain()).View(tableW, tallH)
 
-	assertContains(t, view, "output: 200 (reasoning: 40)", "output: 77 (reasoning: 41)", "output: 88 (reasoning: 42)")
+	assertContains(t, view, "output: 200 (reasoning: 40)")
 }
 
-func TestRunDetail_AbsentReasoning_ShowsMarkerInSummaries(t *testing.T) {
-	view := screens.NewRunDetailScreen(runWithReasoning(domain.AbsentTokens()), wideW, tallH, plain()).View(wideW, tallH)
+func TestRunDetail_AbsentReasoning_ShowsMarkerInTheRunTotalsSummary(t *testing.T) {
+	view := screens.NewRunDetailScreen(runWithReasoning(domain.AbsentTokens()), tableW, tallH, plain()).View(tableW, tallH)
 
-	assertContains(t, view, "output: 200 (reasoning: "+screens.AbsentMarker+")", "output: 77 (reasoning: "+screens.AbsentMarker+")")
+	assertContains(t, view, "output: 200 (reasoning: "+screens.AbsentMarker+")")
 }
 
-func TestRuns_ShowsReasoningInAllRunsRunRowAndUnattributable(t *testing.T) {
+func TestRuns_ShowsReasoningInAllRunsAndUnattributableSummaries(t *testing.T) {
 	run := runWithReasoning(domain.Tokens(40))
-	run.Totals.Tokens.Reasoning = domain.Tokens(41)
 	unattributable := runWithReasoning(domain.Tokens(0))
 	unattributable.Totals.Tokens.Reasoning = domain.Tokens(43)
 	allRuns := run.Totals
@@ -224,7 +197,7 @@ func TestRuns_ShowsReasoningInAllRunsRunRowAndUnattributable(t *testing.T) {
 		Unattributable: &unattributable,
 	}
 
-	view := screens.NewRunsScreen(report, wideW, tallH, plain()).View(wideW, tallH)
+	view := screens.NewRunsScreen(report, tableW, tallH, plain()).View(tableW, tallH)
 
-	assertContains(t, view, "(reasoning: 41)", "(reasoning: 42)", "(reasoning: 43)")
+	assertContains(t, view, "(reasoning: 42)", "(reasoning: 43)")
 }

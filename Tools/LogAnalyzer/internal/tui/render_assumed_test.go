@@ -41,9 +41,13 @@ func runsView(report domain.Report) string {
 	return s.View(assumedViewWidth, assumedViewHeight)
 }
 
+// assumedDetailWidth leaves room for every column of the Dispatches table, so
+// the labels of a row are not cut.
+const assumedDetailWidth = 240
+
 func detailView(run domain.RunReport) string {
-	s := screens.NewRunDetailScreen(run, assumedViewWidth, assumedViewHeight, plainStyles())
-	return s.View(assumedViewWidth, assumedViewHeight)
+	s := screens.NewRunDetailScreen(run, assumedDetailWidth, assumedViewHeight, plainStyles())
+	return s.View(assumedDetailWidth, assumedViewHeight)
 }
 
 func lineContaining(view, needle string) string {
@@ -108,6 +112,7 @@ func TestRunDetailScreen_AffectedActor_IsLabelledAndOthersAreNot(t *testing.T) {
 			{Actor: domain.AgentInstance("Beta#2")},
 		},
 	}
+	run.ByAgentType = scrollDispatchesOf(run.Agents)
 
 	view := detailView(run)
 

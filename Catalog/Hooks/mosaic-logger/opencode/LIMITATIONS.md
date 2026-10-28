@@ -123,3 +123,9 @@ raw/sidecar mismatch, or a `.tmp_*` file, implement a Runner-side repair that ru
 Known Runner-mode field gaps for this adapter are listed in
 `Development/Designs/MosaicLogFormat.md` section 4.6 and in the header of
 `lib/handlers_runner.ts`.
+
+## Compaction events (log format 1.5.0), unverified
+
+The adapter observes compaction only through the experimental `experimental.session.compacting` hook, which fires at the start of a compaction. No separate completion hook is known (the plugin package is not installed here, so its types could not be checked), so each compaction is one self-contained `compaction` event without `phase`. `trigger`, `tokens_before` and `tokens_after` are emitted only when the hook payload carries them as genuine values; none is estimated.
+
+Unverified pending a live run: whether the hook fires for a subagent session own compaction, and which field identifies that session. The event is routed to the subagent invocation stream when the payload `sessionID` is a registered subagent session, otherwise to the orchestrator stream.

@@ -1,6 +1,6 @@
 schema_version: "1"
 id: mosaic-logger
-version: 1.8.0
+version: 1.9.0
 # description is user-facing: the Deploy tool shows it in the hook picker.
 # Keep it short and actionable; maintainer detail belongs in the comments below.
 description: >-
@@ -83,6 +83,8 @@ variants:
         target: mosaic_logger_runner_mode.py
       - source: mosaic_logger_handlers_runner.py
         target: mosaic_logger_handlers_runner.py
+      - source: mosaic_logger_schema.py
+        target: mosaic_logger_schema.py
       - source: ../hook.yaml
         target: hook.yaml
     # Stop and SessionEnd are synchronous so that the Runner, which waits for
@@ -315,6 +317,8 @@ variants:
         target: lib/runner_transcript.ts
       - source: lib/sync_append.ts
         target: lib/sync_append.ts
+      - source: lib/schema_versions.ts
+        target: lib/schema_versions.ts
       - source: ../hook.yaml
         target: hook.yaml
     registration: []

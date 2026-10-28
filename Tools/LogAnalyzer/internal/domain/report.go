@@ -49,6 +49,13 @@ type RunReport struct {
 	ByStatus    StatusBreakdown  // V3
 	Tools       ToolsBreakdown   // V4
 	Timeline    Timeline         // V5
+	Context     RunContext       // per-actor context figures
+	Rework      ReworkFigures    // run-level repeat and likely-rework figures
+	Cache       CacheFigures     // run-level cache figures, orchestrator included
+	// OrchestratorCache is the orchestrator's own cache figures (its usage records
+	// only). Not part of the JSON report.
+	OrchestratorCache CacheFigures
+	WallTime    WallTimeSplit    // wall-time split over the run's logged span
 
 	// Unattributed is the run-level unattributed usage; nil when the run has none.
 	Unattributed *ActorReport

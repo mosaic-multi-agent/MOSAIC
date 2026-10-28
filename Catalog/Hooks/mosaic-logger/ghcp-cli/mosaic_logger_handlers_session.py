@@ -9,6 +9,7 @@ Also exposes emit_run_start and emit_run_end, called by the dispatcher.
 
 import mosaic_logger_core as core
 import mosaic_logger_export as export
+import mosaic_logger_handlers_tools as tools
 import mosaic_logger_transcript as transcript
 
 
@@ -130,13 +131,17 @@ def handle_notification(ctx: "core.HookContext") -> None:
 
 
 def handle_pre_compact(ctx: "core.HookContext") -> None:
-    """Emit compaction with trigger and token counts."""
-    run_id = core.effective_run_id(ctx)
+    """Emit one phase-less compaction with trigger.
+
+    Written to the compacted subagent's stream when the payload names it,
+    otherwise to the orchestrator stream. No token fields: the preCompact
+    payload shape carries none.
+    """
     event = core.build_event(
         "compaction", ctx,
         trigger=ctx.field("trigger"),
     )
-    core.append_event(ctx.paths.orchestrator_events(run_id), event)
+    core.append_event(tools.resolve_destination(ctx), event)
 
 
 def handle_user_prompt_transformed(ctx: "core.HookContext") -> None:

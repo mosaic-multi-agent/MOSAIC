@@ -11,6 +11,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	tuicommon "mosaic-common/tui"
+	"mosaic-common/tui/kit/textwidth"
+
 	"mosaic-log-analyzer/internal/app"
 	"mosaic-log-analyzer/internal/tui/screens"
 )
@@ -27,10 +30,11 @@ type exportDoneMsg struct {
 // exportFlow is the state of the export action.
 type exportFlow struct {
 	screen *screens.ExportScreen
-	origin screenName // screen to return to
-	runID  string     // "" = all runs
-	path   string     // the path being exported to
-	status string     // one-line outcome shown on the origin screen
+	origin screenName          // screen to return to
+	runID  string              // "" = all runs
+	path   string              // the path being exported to
+	status string              // one-line outcome shown on the origin screen
+	role   tuicommon.StyleRole // signal role the status is drawn in
 }
 
 // exportKeyHook handles export-related messages ahead of normal screen
@@ -60,8 +64,11 @@ func (m Model) exportKeyHook(msg tea.Msg) (Model, tea.Cmd, bool) {
 // exportOrigin reports whether the current screen offers the export action.
 func (m Model) exportOrigin() bool {
 	switch m.screen {
-	case screenRuns, screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline:
-		return true
+	case screenRuns:
+		return m.runsScreen == nil || !m.runsScreen.HelpOpen() // the open help overlay takes every key
+	case screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline, screenContext:
+		help, ok := m.runView.(interface{ HelpOpen() bool })
+		return !ok || !help.HelpOpen() // the open help overlay takes every key
 	}
 	return false
 }
@@ -81,7 +88,7 @@ func (m Model) startExport(all bool) Model {
 			}
 		}
 		if runID == "" {
-			m.export.status = "No run selected"
+			m = m.setStatus("No run selected", tuicommon.RoleSignalWarning)
 			return m
 		}
 	}
@@ -102,9 +109,9 @@ func (m Model) updateExport(msg tea.Msg) (Model, tea.Cmd) {
 	_, cmd := sc.Update(msg)
 	switch sc.Action() {
 	case screens.ExportCancel:
-		return m.finishExport("Export cancelled"), nil
+		return m.finishExport("Export cancelled", tuicommon.RoleSignalWarning), nil
 	case screens.ExportDecline:
-		return m.finishExport("Export cancelled; nothing written"), nil
+		return m.finishExport("Export cancelled; nothing written", tuicommon.RoleSignalWarning), nil
 	case screens.ExportSubmit:
 		m.export.path = sc.Path()
 		sc.Reset()
@@ -119,8 +126,8 @@ func (m Model) updateExport(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 // finishExport returns to the screen the export was started from with a status.
-func (m Model) finishExport(status string) Model {
-	m.export.status = status
+func (m Model) finishExport(status string, role tuicommon.StyleRole) Model {
+	m = m.setStatus(status, role)
 	m.export.screen = nil
 	m.screen = m.export.origin
 	return m
@@ -142,7 +149,7 @@ func (m Model) buildExportCmd(overwrite bool) tea.Cmd {
 // handleExportDone reports the outcome of a finished export.
 func (m Model) handleExportDone(done exportDoneMsg) (tea.Model, tea.Cmd) {
 	if done.err != nil {
-		return m.finishExport("Export failed: " + done.err.Error()), nil
+		return m.finishExport("Export failed: "+done.err.Error(), tuicommon.RoleSignalBad), nil
 	}
 	res := done.result
 	switch res.Status {
@@ -151,20 +158,20 @@ func (m Model) handleExportDone(done exportDoneMsg) (tea.Model, tea.Cmd) {
 		if res.UnattributableWritten {
 			msg += " (including the unattributable bucket)"
 		}
-		return m.finishExport(msg), nil
+		return m.finishExport(msg, tuicommon.RoleSignalGood), nil
 	case app.ExportFileExists:
 		if m.export.screen == nil {
-			return m.finishExport("Export failed: file already exists"), nil
+			return m.finishExport("Export failed: file already exists", tuicommon.RoleSignalBad), nil
 		}
 		m.export.screen.AskOverwrite()
 		m.screen = screenExport
 		return m, nil
 	case app.ExportRunNotFound:
-		return m.finishExport("Export failed: run not found"), nil
+		return m.finishExport("Export failed: run not found", tuicommon.RoleSignalBad), nil
 	case app.ExportInvalidPath:
-		return m.finishExport("Export failed: invalid path"), nil
+		return m.finishExport("Export failed: invalid path", tuicommon.RoleSignalBad), nil
 	}
-	return m.finishExport("Export failed: nothing to export"), nil
+	return m.finishExport("Export failed: nothing to export", tuicommon.RoleSignalBad), nil
 }
 
 // viewExport renders the export screen.
@@ -175,12 +182,20 @@ func (m Model) viewExport() string {
 	return m.export.screen.View(m.width, m.height)
 }
 
+// setStatus sets the one-line status shown below the screen, drawn in role.
+func (m Model) setStatus(status string, role tuicommon.StyleRole) Model {
+	m.export.status, m.export.role = status, role
+	return m
+}
+
 // withExportStatus renders a screen with room for the export status line
-// below it, when there is a status to show.
+// below it, when there is a status to show. The status is cut to the width and
+// drawn in its signal role.
 func (m Model) withExportStatus(render func(height int) string) string {
-	if m.export.status == "" {
+	if m.export.status == "" || m.height < 2 {
 		return render(m.height)
 	}
-	status := stylesFromTheme(m.theme).Muted.Render(m.export.status)
+	theme := stylesFromTheme(m.theme).Theme
+	status := theme.Style(m.export.role).Render(textwidth.Truncate(m.export.status, m.width))
 	return strings.Join([]string{render(m.height - 1), status}, "\n")
 }

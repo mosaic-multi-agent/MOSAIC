@@ -1,9 +1,9 @@
 package screens
 
 import (
-	"fmt"
-
 	tea "github.com/charmbracelet/bubbletea"
+
+	tuicommon "mosaic-common/tui"
 
 	"mosaic-log-analyzer/internal/domain"
 )
@@ -19,11 +19,15 @@ type StatusScreen struct {
 	styles Styles
 	back   bool
 	nav    viewNav
+	runChrome
+
+	sort SortCycle
 }
 
 // NewStatusScreen creates the status screen for one run.
 func NewStatusScreen(run domain.RunReport, width, height int, styles Styles) *StatusScreen {
-	return &StatusScreen{run: run, width: width, height: height, styles: styles, nav: viewNav{self: ScreenStatus}}
+	return &StatusScreen{run: run, width: width, height: height, styles: styles, nav: viewNav{self: ScreenStatus},
+		sort: newStatusSortCycle()}
 }
 
 // ID implements Screen.
@@ -38,9 +42,15 @@ func (s *StatusScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	if !ok {
 		return s, nil
 	}
-	switch k := key.String(); k {
+	k := key.String()
+	if s.help.handle(k) {
+		return s, nil
+	}
+	switch k {
 	case "esc", "q":
 		s.back = true
+	case KeySort:
+		s.sort = s.sort.Next()
 	case "up", "k", "down", "j":
 		s.scroll.handle(k, len(s.body()), s.height)
 	default:
@@ -54,8 +64,9 @@ func (s *StatusScreen) View(width, height int) string {
 	s.width, s.height = width, height
 	body := s.body()
 	w := s.scroll.window(len(body), height)
-	return renderPage(s.styles, width, "Log Analyzer — By Status Code", runLabel(s.run),
-		body[w.Offset:w.End()], w, len(body), s.Help())
+	spec := frameSpec{run: s.run, active: ScreenStatus, keys: statusKeys, screenKeys: []tuicommon.HelpEntry{sortKeyEntry}, escDesc: "back to the runs list",
+		hint: FormatScrollHint(w, len(body)), sort: s.sort.Label()}
+	return s.render(spec, body[w.Offset:w.End()], width, height, s.styles)
 }
 
 // body renders every line of the view; the caller scrolls through it.
@@ -65,45 +76,25 @@ func (s *StatusScreen) body() []string {
 	if len(bs.Run) == 0 && len(bs.ByAgentType) == 0 {
 		return []string{clip(st.Body, width, "No subagent invocations in this run.")}
 	}
-	out := []string{clip(st.Subtitle, width, "Run")}
-	for _, g := range bs.Run {
-		out = append(out, clip(st.Body, width, "  "+statusRow(g)))
+	order := s.sort.Active()
+	var out []string
+	if len(bs.Run) > 0 {
+		out = append(out, clip(st.Subtitle, width, "Run"))
+		out = append(out, statusTableLines(bs.Run, order, width, st)...)
 	}
 	for _, t := range bs.ByAgentType {
-		name := t.AgentType
-		if name == "" {
-			name = UnknownTypeLabel
-		}
-		out = append(out, "", clip(st.Subtitle, width, name))
-		for _, g := range t.Groups {
-			out = append(out, clip(st.Body, width, "  "+statusRow(g)))
-		}
+		out = append(out, clip(st.Subtitle, width, typeLabel(t.AgentType)))
+		out = append(out, statusTableLines(t.Groups, order, width, st)...)
 	}
 	return out
 }
 
-// statusRow renders one status group: its name, dispatch count and cost,
-// followed by the labels of any incomplete data.
-func statusRow(g domain.StatusGroup) string {
-	var name string
-	open := g.Figures.Open
-	switch g.Kind {
-	case domain.StatusNone:
-		name = NoStatusLabel
-	case domain.StatusOpen:
-		name = OpenLabel
-		open = 0 // the group name already says open
-	default:
-		name = g.Code
-	}
-	row := fmt.Sprintf("%-16s %4d dispatches  %s", name, g.Figures.Invocations, formatMoneyTotal(g.Figures.Totals.Money))
-	return appendLabels(row, incompleteness(g.Figures.UnpricedModels, g.Figures.Totals.AssumedTierCacheWrite,
-		g.Figures.MissingUsage, open))
-}
+// statusKeys are the short help keys of the view.
+var statusKeys = []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "scroll"}, {Key: KeySort, Desc: "sort"}, {Key: "esc", Desc: "back"}}
 
 // Help implements Screen.
 func (s *StatusScreen) Help() string {
-	return "↑/↓ scroll  " + viewKeysHelp(ScreenStatus) + "  esc back  ctrl+c quit"
+	return shortHelpText("", statusKeys)
 }
 
 // Back reports whether the user asked to leave the per-run views.

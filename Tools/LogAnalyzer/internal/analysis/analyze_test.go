@@ -146,7 +146,7 @@ func TestPrice_PricedModel_ReturnsKnownMoney(t *testing.T) {
 		}),
 	)
 
-	report, _ := analysis.Price(agg, table, testSource())
+	report, _ := analysis.Price(agg, table, domain.DefaultAnalysisSettings(), testSource())
 
 	if len(report.Runs) == 0 {
 		t.Fatal("expected at least one run in the report")
@@ -175,7 +175,7 @@ func TestPrice_PricedModel_OutputUnderThreshold(t *testing.T) {
 		}),
 	)
 
-	report, _ := analysis.Price(agg, table, testSource())
+	report, _ := analysis.Price(agg, table, domain.DefaultAnalysisSettings(), testSource())
 
 	if len(report.Runs) == 0 || len(report.Runs[0].Agents) == 0 {
 		t.Fatal("expected a run and an agent in the report")
@@ -199,7 +199,7 @@ func TestPrice_PricedModel_OutputAtThreshold(t *testing.T) {
 		}),
 	)
 
-	report, _ := analysis.Price(agg, table, testSource())
+	report, _ := analysis.Price(agg, table, domain.DefaultAnalysisSettings(), testSource())
 
 	if len(report.Runs) == 0 || len(report.Runs[0].Agents) == 0 {
 		t.Fatal("expected a run and an agent in the report")
@@ -226,7 +226,7 @@ func TestPrice_UnpricedModel_MoneyIsUnpriced(t *testing.T) {
 		}),
 	)
 
-	report, _ := analysis.Price(agg, table, testSource())
+	report, _ := analysis.Price(agg, table, domain.DefaultAnalysisSettings(), testSource())
 
 	if len(report.Runs) == 0 || len(report.Runs[0].Agents) == 0 {
 		t.Fatal("expected a run and an agent in the report")
@@ -249,7 +249,7 @@ func TestPrice_UnpricedModel_TokensPresent(t *testing.T) {
 		}),
 	)
 
-	report, _ := analysis.Price(agg, table, testSource())
+	report, _ := analysis.Price(agg, table, domain.DefaultAnalysisSettings(), testSource())
 
 	if len(report.Runs) == 0 || len(report.Runs[0].Agents) == 0 {
 		t.Fatal("expected a run and an agent in the report")
@@ -273,7 +273,7 @@ func TestPrice_UnpricedModel_AppearsInUnpricedModelsList(t *testing.T) {
 		testInvocationUsage("unknown-model", domain.TokenUsage{Input: domain.Tokens(100)}),
 	)
 
-	report, _ := analysis.Price(agg, table, testSource())
+	report, _ := analysis.Price(agg, table, domain.DefaultAnalysisSettings(), testSource())
 
 	if !report.HasUnpricedModels() {
 		t.Error("report.HasUnpricedModels() must be true when at least one model lacks pricing")
@@ -301,7 +301,7 @@ func TestPrice_UnpricedModel_CompleteFalse(t *testing.T) {
 		testInvocationUsage("unknown-model", domain.TokenUsage{Input: domain.Tokens(1_000_000)}),
 	)
 
-	report, _ := analysis.Price(agg, table, testSource())
+	report, _ := analysis.Price(agg, table, domain.DefaultAnalysisSettings(), testSource())
 
 	if len(report.Runs) == 0 {
 		t.Fatal("expected at least one run in the report")
@@ -353,7 +353,7 @@ func TestPrice_AllRunsExcludesUnattributable(t *testing.T) {
 		},
 	}
 
-	report, _ := analysis.Price(agg, table, testSource())
+	report, _ := analysis.Price(agg, table, domain.DefaultAnalysisSettings(), testSource())
 
 	// AllRuns must reflect only the named run (namedInput tokens).
 	if v, ok := report.AllRuns.Tokens.Input.Value(); !ok || v != namedInput {
@@ -381,7 +381,7 @@ func TestPrice_ProvisionalRun_FlagPreservedInReport(t *testing.T) {
 		testInvocationUsage(model, domain.TokenUsage{Input: domain.Tokens(100)}),
 	)
 
-	report, _ := analysis.Price(agg, table, testSource())
+	report, _ := analysis.Price(agg, table, domain.DefaultAnalysisSettings(), testSource())
 
 	if len(report.Runs) == 0 {
 		t.Fatal("expected at least one run in the report")
@@ -401,7 +401,7 @@ func TestPrice_NonProvisionalRun_FlagFalseInReport(t *testing.T) {
 		testInvocationUsage(model, domain.TokenUsage{Input: domain.Tokens(100)}),
 	)
 
-	report, _ := analysis.Price(agg, table, testSource())
+	report, _ := analysis.Price(agg, table, domain.DefaultAnalysisSettings(), testSource())
 
 	if len(report.Runs) == 0 {
 		t.Fatal("expected at least one run in the report")
@@ -417,7 +417,7 @@ func TestPrice_NonProvisionalRun_FlagFalseInReport(t *testing.T) {
 
 func TestPrice_CurrencyField_IsUSD(t *testing.T) {
 	// The Report.Currency field must always be domain.Currency ("USD").
-	report, _ := analysis.Price(domain.Aggregate{}, domain.EmptyPricingTable(), testSource())
+	report, _ := analysis.Price(domain.Aggregate{}, domain.EmptyPricingTable(), domain.DefaultAnalysisSettings(), testSource())
 
 	if report.Currency != domain.Currency {
 		t.Errorf("Report.Currency = %q, want %q", report.Currency, domain.Currency)
@@ -442,8 +442,8 @@ func TestPrice_Deterministic(t *testing.T) {
 		}),
 	)
 
-	report1, _ := analysis.Price(agg, table, testSource())
-	report2, _ := analysis.Price(agg, table, testSource())
+	report1, _ := analysis.Price(agg, table, domain.DefaultAnalysisSettings(), testSource())
+	report2, _ := analysis.Price(agg, table, domain.DefaultAnalysisSettings(), testSource())
 
 	// Compare a selection of fields that would differ if non-determinism existed.
 	if len(report1.Runs) != len(report2.Runs) {
@@ -495,7 +495,7 @@ func TestAnalyze_ProducesNonEmptyReport(t *testing.T) {
 		},
 	}
 
-	report := analysis.Analyze(in, table, testSource(), nil)
+	report := analysis.Analyze(in, table, domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	if report.IsEmpty() {
 		t.Error("Analyze must produce a non-empty report when events contain attributable usage")
@@ -517,7 +517,7 @@ func TestAnalyze_PricedRun_MoneyKnown(t *testing.T) {
 		runEndEvent(),
 	)
 
-	report := analysis.Analyze(in, table, testSource(), nil)
+	report := analysis.Analyze(in, table, domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	if len(report.Runs) == 0 {
 		t.Fatal("Analyze produced no runs in the report")
@@ -550,7 +550,7 @@ func TestAnalyze_CarriedFindingsMergedIntoReport(t *testing.T) {
 		invEndEvent(agentID, model, domain.TokenUsage{Input: domain.Tokens(100)}),
 	)
 
-	report := analysis.Analyze(in, table, testSource(), []domain.Finding{carriedFinding})
+	report := analysis.Analyze(in, table, domain.DefaultAnalysisSettings(), testSource(), []domain.Finding{carriedFinding})
 
 	found := hasFindingKind(report.Quality.Findings, domain.FindingUnreadableFile)
 	if !found {
@@ -570,7 +570,7 @@ func TestAnalyze_AggregationFindingsMergedIntoReport(t *testing.T) {
 		invEndEventNoUsage(agentID, model), // raises FindingMissingTokenUsage
 	)
 
-	report := analysis.Analyze(in, table, testSource(), nil)
+	report := analysis.Analyze(in, table, domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	if !hasFindingKind(report.Quality.Findings, domain.FindingMissingTokenUsage) {
 		t.Errorf("FindingMissingTokenUsage from aggregation must appear in report.Quality.Findings; got: %v",
@@ -596,8 +596,8 @@ func TestAnalyze_Deterministic(t *testing.T) {
 		)
 	}
 
-	report1 := analysis.Analyze(buildInput(), table, testSource(), nil)
-	report2 := analysis.Analyze(buildInput(), table, testSource(), nil)
+	report1 := analysis.Analyze(buildInput(), table, domain.DefaultAnalysisSettings(), testSource(), nil)
+	report2 := analysis.Analyze(buildInput(), table, domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	if len(report1.Runs) != len(report2.Runs) {
 		t.Fatalf("run count differs across Analyze calls: %d vs %d",
@@ -653,7 +653,7 @@ func TestAnalyze_UnattributableExcludedFromAllRuns(t *testing.T) {
 		},
 	}
 
-	report := analysis.Analyze(in, table, testSource(), nil)
+	report := analysis.Analyze(in, table, domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	// AllRuns must reflect only the named run (1,000,000 tokens).
 	// If the unattributable bucket (999,999 tokens) were incorrectly included, the total would be 1,999,999.

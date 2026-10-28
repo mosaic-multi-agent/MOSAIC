@@ -1,19 +1,16 @@
 package screens_test
 
-// Behaviour of the run overview screen: figures, incompleteness labels,
-// scrolling and key requests.
+// Behaviour of the run overview screen that holds in both versions (visual and
+// figures-only): figures, incompleteness labels, scrolling and key requests.
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"mosaic-log-analyzer/internal/domain"
 	"mosaic-log-analyzer/internal/tui/screens"
 )
-
-func overviewView(run domain.RunReport, h int) string {
-	return screens.NewOverviewScreen(run, wideW, h, plain()).View(wideW, h)
-}
 
 func lineWith(view, needle string) string {
 	for _, l := range strings.Split(view, "\n") {
@@ -24,21 +21,23 @@ func lineWith(view, needle string) string {
 	return ""
 }
 
-func TestOverview_ShowsRunTotal(t *testing.T) {
-	view := overviewView(overviewRun(), tallH)
-
-	assertContains(t, view, "$10.00")
+func TestOverview_ShowsRunTotalInBothVersions(t *testing.T) {
+	for _, v := range overviewVersions() {
+		t.Run(v.name, func(t *testing.T) {
+			assertContains(t, v.view(overviewRun(), tallH), "$10.00")
+		})
+	}
 }
 
-func TestOverview_ShowsOrchestratorAndSubagentShare(t *testing.T) {
-	view := overviewView(overviewRun(), tallH)
+func TestOverview_FiguresOnlyShowsOrchestratorAndSubagentShareAndAmount(t *testing.T) {
+	view := overviewFiguresView(overviewRun(), tallH)
 
 	assertContains(t, view, "40.0%", "60.0%", "$4.00", "$6.00")
 	assertContains(t, strings.ToLower(view), "orchestrator", "subagent")
 }
 
-func TestOverview_ShowsEveryTokenCategoryWithTokensAndMoney(t *testing.T) {
-	view := overviewView(overviewRun(), tallH)
+func TestOverview_FiguresOnlyShowsEveryTokenCategoryWithTokensAndMoney(t *testing.T) {
+	view := overviewFiguresView(overviewRun(), tallH)
 
 	for _, cat := range domain.BillableCategories() {
 		assertContains(t, view, cat.Label())
@@ -47,17 +46,33 @@ func TestOverview_ShowsEveryTokenCategoryWithTokensAndMoney(t *testing.T) {
 	assertContains(t, view, "$1.11", "$2.22", "$3.33", "$3.34")
 }
 
-func TestOverview_ShowsFiguresPerModel(t *testing.T) {
-	view := overviewView(overviewRun(), tallH)
+func TestOverview_VisualNamesEveryTokenCategory(t *testing.T) {
+	view := strings.ToLower(overviewView(overviewRun(), tallH))
 
-	assertContains(t, view, "model-a", "$6.50", "model-b", "$2.75", screens.UnknownModelLabel, "$0.75")
+	for _, cat := range domain.BillableCategories() {
+		assertContains(t, view, strings.ToLower(cat.Label()))
+	}
 }
 
-func TestOverview_ShowsCacheHitRatio(t *testing.T) {
-	view := overviewView(overviewRun(), tallH)
+func TestOverview_ShowsFiguresPerModelInBothVersions(t *testing.T) {
+	for _, v := range overviewVersions() {
+		t.Run(v.name, func(t *testing.T) {
+			view := v.view(overviewRun(), tallH)
 
-	assertContains(t, view, "66.7%")
-	assertContains(t, strings.ToLower(view), "cache hit")
+			assertContains(t, view, "model-a", "$6.50", "model-b", "$2.75", screens.UnknownModelLabel, "$0.75")
+		})
+	}
+}
+
+func TestOverview_ShowsCacheHitRatioInBothVersions(t *testing.T) {
+	for _, v := range overviewVersions() {
+		t.Run(v.name, func(t *testing.T) {
+			view := v.view(overviewRun(), tallH)
+
+			assertContains(t, view, "66.7%")
+			assertContains(t, strings.ToLower(view), "cache hit")
+		})
+	}
 }
 
 func TestOverview_UndefinedRatiosShowAbsentMarkerNotZeroPercent(t *testing.T) {
@@ -66,13 +81,25 @@ func TestOverview_UndefinedRatiosShowAbsentMarkerNotZeroPercent(t *testing.T) {
 	run.Overview.SubagentShare = domain.Ratio{}
 	run.Overview.CacheHitRatio = domain.Ratio{}
 
-	view := overviewView(run, tallH)
+	for _, v := range overviewVersions() {
+		t.Run(v.name, func(t *testing.T) {
+			view := v.view(run, tallH)
 
-	assertNotContains(t, view, "%")
-	assertContains(t, view, screens.AbsentMarker)
-	line := lineWith(strings.ToLower(view), "cache hit")
-	if !strings.Contains(line, screens.AbsentMarker) {
-		t.Errorf("cache hit line %q must show the absent marker", line)
+			line := firstLineMatching(view, `(?i)cache hit`)
+			if strings.Contains(line, "%") {
+				t.Errorf("cache hit line %q must show no percentage", line)
+			}
+			if window := windowAround(view, `(?i)cache hit`, 1); !strings.Contains(window, screens.AbsentMarker) {
+				t.Errorf("cache hit figure must show the absent marker\n%s", window)
+			}
+		})
+	}
+	figures := overviewFiguresView(run, tallH)
+	for _, pattern := range []string{`(?i)orchestrator`, `(?i)subagent`} {
+		line := firstLineMatching(figures, pattern)
+		if !strings.Contains(line, screens.AbsentMarker) || strings.Contains(line, "%") {
+			t.Errorf("%s line %q must show the absent marker and no percentage", pattern, line)
+		}
 	}
 }
 
@@ -87,19 +114,27 @@ func TestOverview_UnpricedModelMarksFiguresPartial(t *testing.T) {
 		Totals: domain.Totals{Money: domain.CategoryMoney{Total: domain.UnpricedMoney()}},
 	}
 
-	view := overviewView(run, tallH)
+	for _, v := range overviewVersions() {
+		t.Run(v.name, func(t *testing.T) {
+			view := v.view(run, tallH)
 
-	assertContains(t, view, "$5.00 (partial)")
-	if line := lineWith(view, "model-b"); !strings.Contains(line, screens.UnpricedMarker) {
-		t.Errorf("model-b line %q must carry %q", line, screens.UnpricedMarker)
+			assertContains(t, view, "$5.00 (partial)")
+			if line := lineWith(view, "model-b"); !strings.Contains(line, screens.UnpricedMarker) {
+				t.Errorf("model-b line %q must carry %q", line, screens.UnpricedMarker)
+			}
+		})
 	}
 }
 
 func TestOverview_CompleteRunHasNoIncompletenessLabels(t *testing.T) {
-	view := overviewView(overviewRun(), tallH)
+	for _, v := range overviewVersions() {
+		t.Run(v.name, func(t *testing.T) {
+			view := v.view(overviewRun(), tallH)
 
-	assertNotContains(t, view, "(partial)", screens.UnpricedMarker, screens.AssumedTierLabel,
-		screens.MissingUsageLabel, screens.OpenLabel)
+			assertNotContains(t, view, "(partial)", screens.UnpricedMarker, screens.AssumedTierLabel,
+				screens.MissingUsageLabel)
+		})
+	}
 }
 
 func TestOverview_LabelsAssumedTierCacheWrites(t *testing.T) {
@@ -107,53 +142,72 @@ func TestOverview_LabelsAssumedTierCacheWrites(t *testing.T) {
 	run.Overview.Totals.AssumedTierCacheWrite = 12345
 	run.Totals = run.Overview.Totals
 
-	view := overviewView(run, tallH)
+	for _, v := range overviewVersions() {
+		t.Run(v.name, func(t *testing.T) {
+			view := v.view(run, tallH)
 
-	if line := lineWith(view, "12,345"); !strings.Contains(line, screens.AssumedTierLabel) {
-		t.Errorf("assumed-tier count line %q must carry %q", line, screens.AssumedTierLabel)
+			if line := lineWith(view, "12,345"); !strings.Contains(line, screens.AssumedTierLabel) {
+				t.Errorf("assumed-tier count line %q must carry %q", line, screens.AssumedTierLabel)
+			}
+		})
 	}
 }
 
+// The word "open" also names a share of the outcome split, so the open
+// invocations label is recognised by the extra occurrence it adds.
 func TestOverview_LabelsMissingUsageAndOpenInvocations(t *testing.T) {
 	run := overviewRun()
 	run.Overview.Subagents.MissingUsage = 1
 	run.Overview.Subagents.Open = 2
 
-	view := overviewView(run, tallH)
+	for _, v := range overviewVersions() {
+		t.Run(v.name, func(t *testing.T) {
+			view := v.view(run, tallH)
 
-	assertContains(t, view, screens.MissingUsageLabel, screens.OpenLabel)
-}
-
-func TestOverview_ShortTerminalScrollsAndShowsHint(t *testing.T) {
-	run := manyModelsRun(20)
-	s := screens.NewOverviewScreen(run, wideW, shortH, plain())
-
-	first := s.View(wideW, shortH)
-	assertFits(t, first, shortH)
-	if !scrollHintRE.MatchString(first) {
-		t.Errorf("short terminal must show a scroll hint\n%s", first)
-	}
-	assertNotContains(t, first, "model-20")
-
-	var scrolled screens.Screen = s
-	scrolled = press(scrolled, repeat("down", 80)...)
-	last := scrolled.View(wideW, shortH)
-	assertFits(t, last, shortH)
-	assertContains(t, last, "model-20")
-	assertNotContains(t, last, "model-01")
-
-	back := press(scrolled, repeat("up", 80)...).View(wideW, shortH)
-	if back != first {
-		t.Errorf("scrolling back to the top must restore the first view\n%s\nvs\n%s", back, first)
+			assertContains(t, view, screens.MissingUsageLabel)
+			if with, without := countOf(view, screens.OpenLabel), countOf(v.view(overviewRun(), tallH), screens.OpenLabel); with <= without {
+				t.Errorf("open invocations must add a %q label (%d occurrences, %d without)", screens.OpenLabel, with, without)
+			}
+		})
 	}
 }
 
-func TestOverview_TallTerminalShowsEverythingWithoutHint(t *testing.T) {
-	view := overviewView(manyModelsRun(20), 200)
+func TestOverview_ShortTerminalScrollsToEveryModelAndShowsHint(t *testing.T) {
+	for _, v := range overviewVersions() {
+		t.Run(v.name, func(t *testing.T) {
+			s := v.open(manyModelsRun(20), wideW, shortH)
 
-	assertContains(t, view, "model-01", "model-20")
-	if scrollHintRE.MatchString(view) {
-		t.Errorf("no scroll hint expected when everything fits\n%s", view)
+			first := s.View(wideW, shortH)
+			assertFits(t, first, shortH)
+			if !scrollHintRE.MatchString(first) {
+				t.Errorf("short terminal must show a scroll hint\n%s", first)
+			}
+			all := scrollThrough(s, wideW, shortH, 300)
+			for i := 1; i <= 20; i++ {
+				if name := fmt.Sprintf("model-%02d", i); !strings.Contains(all, name) {
+					t.Errorf("scrolling never reaches %s", name)
+				}
+			}
+			assertFits(t, s.View(wideW, shortH), shortH)
+
+			back := press(s, repeat("up", 300)...).View(wideW, shortH)
+			if back != first {
+				t.Errorf("scrolling back to the top must restore the first view\n%s\nvs\n%s", back, first)
+			}
+		})
+	}
+}
+
+func TestOverview_TallTerminalShowsEveryModelWithoutHint(t *testing.T) {
+	for _, v := range overviewVersions() {
+		t.Run(v.name, func(t *testing.T) {
+			view := v.view(manyModelsRun(20), 200)
+
+			assertContains(t, view, "model-01", "model-20")
+			if scrollHintRE.MatchString(view) {
+				t.Errorf("no scroll hint expected when everything fits\n%s", view)
+			}
+		})
 	}
 }
 
@@ -165,17 +219,19 @@ func TestOverview_ViewKeysRequestSiblingViews(t *testing.T) {
 		{screens.KeyViewDispatches, screens.ScreenRunDetail},
 		{screens.KeyViewAgentTypes, screens.ScreenAgentTypes},
 	}
-	for _, c := range cases {
-		s := screens.NewOverviewScreen(overviewRun(), wideW, tallH, plain())
-		press(s, c.key)
+	for _, v := range overviewVersions() {
+		for _, c := range cases {
+			s := v.open(overviewRun(), wideW, tallH).(screens.RunView)
+			press(s, c.key)
 
-		got, ok := s.Requested()
-		if !ok || got != c.want {
-			t.Errorf("key %q: Requested() = (%q, %v), want (%q, true)", c.key, got, ok, c.want)
-		}
-		s.Reset()
-		if _, ok := s.Requested(); ok {
-			t.Errorf("key %q: Reset must clear the request", c.key)
+			got, ok := s.Requested()
+			if !ok || got != c.want {
+				t.Errorf("%s, key %q: Requested() = (%q, %v), want (%q, true)", v.name, c.key, got, ok, c.want)
+			}
+			s.Reset()
+			if _, ok := s.Requested(); ok {
+				t.Errorf("%s, key %q: Reset must clear the request", v.name, c.key)
+			}
 		}
 	}
 }
@@ -204,8 +260,9 @@ func TestOverview_EscAndQAskToLeave(t *testing.T) {
 	}
 }
 
-func TestOverview_HelpListsViewKeysAndBack(t *testing.T) {
-	help := screens.NewOverviewScreen(overviewRun(), wideW, tallH, plain()).Help()
+func TestOverview_HelpHintsAtTheOverviewListingViewKeysAndBack(t *testing.T) {
+	s := screens.NewOverviewScreen(overviewRun(), wideW, tallH, plain())
 
-	assertContains(t, help, screens.KeyViewDispatches, screens.KeyViewAgentTypes, "esc")
+	assertContains(t, s.Help(), screens.KeyHelp)
+	assertOverlayListsViewKeys(t, s, screens.KeyViewDispatches, screens.KeyViewAgentTypes)
 }

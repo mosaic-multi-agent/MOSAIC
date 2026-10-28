@@ -100,6 +100,20 @@ func priceCacheWrite(usage domain.TokenUsage, rates domain.RateSet) (domain.Mone
 	return money, unsplit.ValueOr(0)
 }
 
+// RatesFor returns the rate set that prices the request: the long-context set
+// when the request selects that tier, otherwise the standard set. found is false
+// when the model has no pricing entry.
+func RatesFor(inv domain.InvocationUsage, table domain.PricingTable) (rates domain.RateSet, found bool) {
+	entry, found := table.LookupFor(inv.Provider, inv.Model)
+	if !found {
+		return domain.RateSet{}, false
+	}
+	if tier, _ := SelectTier(inv.Usage, entry); tier == TierLongContext {
+		return entry.LongContext.Rates, true
+	}
+	return entry.Standard, true
+}
+
 // SumCosts folds per-invocation costs into one CategoryMoney, setting Complete
 // false when any contributing invocation was unpriced.
 func SumCosts(costs ...InvocationCost) domain.CategoryMoney {

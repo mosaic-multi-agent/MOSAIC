@@ -1,7 +1,8 @@
 """Per-event schema_version stamping.
 
 Each event carries the highest schema_version whose fields the adapter implements for it:
-invocation_start (spawn_call_id) and usage_record are 1.4.0, every other event is 1.0.0.
+invocation_start (spawn_call_id) and usage_record are 1.4.0, compaction is 1.5.0,
+every other event is 1.0.0.
 """
 
 import os
@@ -14,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vscode_flow as flow
 import mosaic_logger_core as core
 
-_NEWER = {"invocation_start": "1.4.0", "usage_record": "1.4.0"}
+_NEWER = {"invocation_start": "1.4.0", "usage_record": "1.4.0", "compaction": "1.5.0"}
 
 
 def _expected(event_name):
@@ -34,6 +35,9 @@ class TestSchemaVersionFor(unittest.TestCase):
     def test_usage_record_is_1_4_0(self):
         self.assertEqual("1.4.0", core.schema_version_for("usage_record"))
 
+    def test_compaction_is_1_5_0(self):
+        self.assertEqual("1.5.0", core.schema_version_for("compaction"))
+
     def test_other_events_are_1_0_0(self):
         for name in ("run_start", "run_end", "session_start", "session_end", "turn",
                      "tool_call_start", "tool_call_end", "invocation_end",
@@ -52,6 +56,10 @@ class TestBuildEventStampsPerEventVersion(unittest.TestCase):
         event = core.build_event("tool_call_start", _ctx())
         self.assertEqual("1.0.0", event["schema_version"])
 
+    def test_compaction_is_stamped_1_5_0(self):
+        event = core.build_event("compaction", _ctx())
+        self.assertEqual("1.5.0", event["schema_version"])
+
 
 class TestEmittedEventVersions(unittest.TestCase):
 
@@ -61,12 +69,14 @@ class TestEmittedEventVersions(unittest.TestCase):
         for kind in ("session_start", "pre_dispatch", "start", "post_read_empty",
                      "stop", "post_dispatch", "orchestrator_stop"):
             self.ws.send(kind)
+        self.ws.send("session_start", hook_event_name="PreCompact", source="<absent>",
+                     trigger="auto")
         self.events = self.ws.all_events()
 
     def test_session_exercises_the_versioned_event_types(self):
         names = {e["event"] for e in self.events}
         self.assertTrue({"invocation_start", "invocation_end", "tool_call_start",
-                         "tool_call_end"} <= names, names)
+                         "tool_call_end", "compaction"} <= names, names)
 
     def test_every_emitted_event_carries_the_version_of_its_type(self):
         for event in self.events:

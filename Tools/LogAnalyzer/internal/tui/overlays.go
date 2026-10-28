@@ -1,13 +1,11 @@
 package tui
 
 import (
-	"strings"
-
 	tea "github.com/charmbracelet/bubbletea"
 
+	"mosaic-common/interaction"
 	tuicommon "mosaic-common/tui"
 	"mosaic-common/tui/pastesafe"
-	"mosaic-common/interaction"
 )
 
 // ---------------------------------------------------------------------------
@@ -19,15 +17,14 @@ import (
 type overlaySelectOne struct {
 	q      interaction.ChoiceQuestion
 	cursor int
+	offset int // scroll offset of the option list, clamped when drawn
 	done   bool
 	back   bool
 	theme  tuicommon.Theme
-	width  int
-	height int
 }
 
-func newOverlaySelectOne(q interaction.ChoiceQuestion, theme tuicommon.Theme, width, height int) *overlaySelectOne {
-	return &overlaySelectOne{q: q, theme: theme, width: width, height: height}
+func newOverlaySelectOne(q interaction.ChoiceQuestion, theme tuicommon.Theme) *overlaySelectOne {
+	return &overlaySelectOne{q: q, theme: theme}
 }
 
 // totalOptions returns the number of options including the optional skip entry.
@@ -89,51 +86,6 @@ func (o *overlaySelectOne) answer() interaction.ChoiceAnswer {
 	return interaction.ChoiceAnswer{Status: interaction.SkippedOne}
 }
 
-// view renders the select overlay.
-func (o *overlaySelectOne) view() string {
-	var sb strings.Builder
-	sb.WriteString(o.theme.Style(tuicommon.RoleTitle).Width(o.width).Render(o.q.Title))
-	sb.WriteByte('\n')
-	if o.q.Prompt != "" {
-		sb.WriteString(o.theme.Style(tuicommon.RoleBody).Width(o.width).Render(o.q.Prompt))
-		sb.WriteByte('\n')
-	}
-
-	for i, opt := range o.q.Options {
-		cursor := "  "
-		style := o.theme.Style(tuicommon.RoleBody)
-		if i == o.cursor {
-			cursor = "> "
-			style = o.theme.Style(tuicommon.RoleSelected)
-		}
-		if opt.Disabled {
-			style = o.theme.Style(tuicommon.RoleMuted)
-		}
-		line := cursor + opt.Label
-		if opt.Description != "" {
-			line += "  " + opt.Description
-		}
-		sb.WriteString(style.Width(o.width).Render(line))
-		sb.WriteByte('\n')
-	}
-
-	if o.q.AllowSkip {
-		cursor := "  "
-		style := o.theme.Style(tuicommon.RoleBody)
-		if o.isSkipEntry(o.cursor) {
-			cursor = "> "
-			style = o.theme.Style(tuicommon.RoleSelected)
-		}
-		sb.WriteString(style.Width(o.width).Render(cursor + "Skip"))
-		sb.WriteByte('\n')
-	}
-
-	sb.WriteString(o.theme.Style(tuicommon.RoleHelp).Width(o.width).Render(
-		"↑/↓ navigate  enter select  esc cancel  ctrl+c quit",
-	))
-	return sb.String()
-}
-
 // ---------------------------------------------------------------------------
 // overlayText — inline text-input question
 // ---------------------------------------------------------------------------
@@ -142,24 +94,20 @@ func (o *overlaySelectOne) view() string {
 // delegated to the shared paste-safe field, so a pasted line break never
 // submits the answer.
 type overlayText struct {
-	q      interaction.TextQuestion
-	input  *pastesafe.Field
-	theme  tuicommon.Theme
-	width  int
-	height int
+	q     interaction.TextQuestion
+	input *pastesafe.Field
+	theme tuicommon.Theme
 }
 
-func newOverlayText(q interaction.TextQuestion, theme tuicommon.Theme, width, height int) *overlayText {
+func newOverlayText(q interaction.TextQuestion, theme tuicommon.Theme) *overlayText {
 	f := pastesafe.NewField(pastesafe.WithValidate(q.Validate))
 	if q.Default != "" {
 		f.SetValue(q.Default)
 	}
 	return &overlayText{
-		q:      q,
-		input:  f,
-		theme:  theme,
-		width:  width,
-		height: height,
+		q:     q,
+		input: f,
+		theme: theme,
 	}
 }
 
@@ -178,29 +126,4 @@ func (o *overlayText) answer() interaction.TextAnswer {
 		return interaction.TextAnswer{Status: interaction.Cancelled}
 	}
 	return interaction.TextAnswer{Status: interaction.Answered, Text: o.input.Value()}
-}
-
-// view renders the text-input overlay.
-func (o *overlayText) view() string {
-	var sb strings.Builder
-	sb.WriteString(o.theme.Style(tuicommon.RoleTitle).Width(o.width).Render(o.q.Title))
-	sb.WriteByte('\n')
-	if o.q.Prompt != "" {
-		sb.WriteString(o.theme.Style(tuicommon.RoleBody).Width(o.width).Render(o.q.Prompt))
-		sb.WriteByte('\n')
-	}
-	if o.q.Detail != "" {
-		sb.WriteString(o.theme.Style(tuicommon.RoleMuted).Width(o.width).Render(o.q.Detail))
-		sb.WriteByte('\n')
-	}
-	sb.WriteString(o.input.View())
-	sb.WriteByte('\n')
-	if msg := o.input.ErrMsg(); msg != "" {
-		sb.WriteString(o.theme.Style(tuicommon.RoleError).Width(o.width).Render(msg))
-		sb.WriteByte('\n')
-	}
-	sb.WriteString(o.theme.Style(tuicommon.RoleHelp).Width(o.width).Render(
-		"enter confirm  esc cancel  ctrl+c quit",
-	))
-	return sb.String()
 }

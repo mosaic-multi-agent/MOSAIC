@@ -127,6 +127,29 @@ func moneyStats(members []domain.Dispatch) domain.MoneyStats {
 	return stats
 }
 
+// peakContextStats averages and maximises the members' peak context; members
+// without a peak are excluded, never counted as 0.
+func peakContextStats(members []domain.Dispatch) domain.PeakContextStats {
+	var stats domain.PeakContextStats
+	var sum int64
+	for _, d := range members {
+		v, ok := d.PeakContext.Tokens.Value()
+		if !ok {
+			continue
+		}
+		if stats.Basis == 0 || v > stats.Max.Tokens.ValueOr(0) {
+			stats.Max = d.PeakContext
+		}
+		sum += v
+		stats.Basis++
+	}
+	if stats.Basis > 0 {
+		b := int64(stats.Basis)
+		stats.Average = domain.Tokens((sum + b/2) / b)
+	}
+	return stats
+}
+
 // typeGroup is the dispatches of one agent type.
 type typeGroup struct {
 	agentType  string
@@ -159,7 +182,7 @@ func groupByType(dispatches []domain.Dispatch) []typeGroup {
 }
 
 // buildAgentTypeGroups builds the by-agent-type view.
-func buildAgentTypeGroups(groups []typeGroup) []domain.AgentTypeGroup {
+func buildAgentTypeGroups(groups []typeGroup, table domain.PricingTable) []domain.AgentTypeGroup {
 	out := make([]domain.AgentTypeGroup, len(groups))
 	for i, g := range groups {
 		out[i] = domain.AgentTypeGroup{
@@ -167,6 +190,9 @@ func buildAgentTypeGroups(groups []typeGroup) []domain.AgentTypeGroup {
 			Figures:       groupFigures(g.dispatches),
 			PerInvocation: moneyStats(g.dispatches),
 			Dispatches:    g.dispatches,
+			PeakContext:   peakContextStats(g.dispatches),
+			Cache:         buildGroupCache(g, table),
+			Rework:        buildReworkFigures(g.dispatches),
 		}
 	}
 	return out

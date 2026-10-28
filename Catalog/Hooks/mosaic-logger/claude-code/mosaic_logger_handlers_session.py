@@ -1,7 +1,8 @@
 """mosaic_logger_handlers_session.py — Session-scoped event handlers.
 
 Handles: SessionStart, SessionEnd, UserPromptSubmit, Stop, Notification,
-PreCompact, PostCompact. All writes go to 00_orchestrator_events.jsonl.
+PreCompact, PostCompact. Writes go to 00_orchestrator_events.jsonl, except
+compaction events from a mapped subagent, which go to its own stream.
 
 Also exposes emit_run_start and emit_run_end, called by the dispatcher's
 run-identity resolution.
@@ -9,6 +10,7 @@ run-identity resolution.
 
 import mosaic_logger_core as core
 import mosaic_logger_export as export
+import mosaic_logger_runstate as runstate
 import mosaic_logger_transcript as transcript
 import mosaic_logger_usage as usage
 
@@ -153,21 +155,41 @@ def handle_notification(ctx: "core.HookContext") -> None:
     core.append_event(ctx.paths.orchestrator_events(run_id), event)
 
 
+def _token_count(ctx: "core.HookContext", name: str) -> "int | None":
+    """Return a payload token count only when it is a genuine integer."""
+    value = ctx.field(name)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return None
+
+
+def _compaction_destination(ctx: "core.HookContext"):
+    """Route to the compacted subagent's stream when the payload identifies a
+    mapped subagent, otherwise to the orchestrator stream."""
+    run_id = core.effective_run_id(ctx)
+    if ctx.agent_id:
+        mapping = runstate.get_agent_mapping(ctx.paths, run_id, ctx.agent_id)
+        instance_id = mapping.get("agent_instance_id") if mapping else None
+        if instance_id:
+            return ctx.paths.invocation_events(run_id, instance_id)
+    return ctx.paths.orchestrator_events(run_id)
+
+
 def handle_pre_compact(ctx: "core.HookContext") -> None:
-    """Emit partial compaction with trigger and tokens_before.
+    """Emit compaction with phase 'pre', trigger and tokens_before.
 
     Also emits raw usage_record events from the orchestrator transcript:
     PreCompact fires just before compaction may remove records, so capturing
     here minimises the window in which a record is lost before any firing
     observes it.
     """
-    run_id = core.effective_run_id(ctx)
     event = core.build_event(
         "compaction", ctx,
+        phase="pre",
         trigger=ctx.field("trigger"),
-        tokens_before=ctx.field("tokens_before"),
+        tokens_before=_token_count(ctx, "tokens_before"),
     )
-    core.append_event(ctx.paths.orchestrator_events(run_id), event)
+    core.append_event(_compaction_destination(ctx), event)
 
     usage.emit_usage_records(
         ctx, ctx.transcript_path, None, "orchestrator_transcript"
@@ -175,18 +197,18 @@ def handle_pre_compact(ctx: "core.HookContext") -> None:
 
 
 def handle_post_compact(ctx: "core.HookContext") -> None:
-    """Emit partial compaction with tokens_after.
+    """Emit compaction with phase 'post' and tokens_after.
 
     Also emits raw usage_record events from the (post-compaction) orchestrator
     transcript, per the same every-transcript-bearing-firing requirement as
     handle_pre_compact.
     """
-    run_id = core.effective_run_id(ctx)
     event = core.build_event(
         "compaction", ctx,
-        tokens_after=ctx.field("tokens_after"),
+        phase="post",
+        tokens_after=_token_count(ctx, "tokens_after"),
     )
-    core.append_event(ctx.paths.orchestrator_events(run_id), event)
+    core.append_event(_compaction_destination(ctx), event)
 
     usage.emit_usage_records(
         ctx, ctx.transcript_path, None, "orchestrator_transcript"
