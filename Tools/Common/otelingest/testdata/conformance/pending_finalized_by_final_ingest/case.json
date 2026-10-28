@@ -1,0 +1,24 @@
+{
+  "description": "A final ingest moves the pending spans of its scope (all when the scope is empty) to the unattributed stream and reports how many.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "early",
+      "otel": "otel/early.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    },
+    {
+      "name": "final",
+      "otel": "otel/final.jsonl",
+      "logs": null,
+      "final": true,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

@@ -29,17 +29,6 @@
 // tool and represent a deviation from the canonical output. VS Code GHCP recognises both
 // ".md" and ".agent.md" files in .github/agents/; the deployment tool emits ".md".
 //
-// Hook variant reuse: the vscode-ghcp hook variant in hook bundles declares reuses: claude-code.
-// The catalog resolves reuse references before calling HookPlan, so the HookPlanRequest already
-// contains the resolved file list. This module reads from the "vscode-ghcp" variant key without
-// any special reuse logic — reuse is handled upstream by the catalog.
-//
-// User-level editor setting: enabling hooks in VS Code requires setting "chat.hooks.enabled": true
-// in User Settings. This is a user-level VS Code setting that the deployment tool cannot write.
-// The registration step with ID "enable-chat-hooks" always has Performable: false and is always
-// reported as a TODO item, never attempted. This is not special-cased in module code; it is
-// a property of the registration step data provided in the hook bundle variant.
-//
 // Registration: init() calls registry.Register so the module is available whenever this
 // package is imported.
 package vscodeghcp
@@ -285,13 +274,9 @@ func (m *module) Injection(req domain.InjectionRequest) (string, bool) {
 	return "", true
 }
 
-// HookPlan resolves a hook bundle for VS Code GHCP. The vscode-ghcp hook variant reuses
-// the claude-code file set; the catalog resolves this reuse before calling HookPlan by
-// populating the variant's Files from the claude-code variant. This module reads from the
-// "vscode-ghcp" variant key; no reuse logic is required here.
-//
-// The hook target directory is .claude/hooks/ — the same location as Claude Code hooks,
-// allowing a single deployment to serve both platforms.
+// HookPlan resolves a hook bundle for VS Code GHCP. It reads the file set and registration
+// steps from the descriptor's variant key in the bundle; files deploy under the descriptor's
+// hook directory (.github/hooks/), where the bundle's registration runs them.
 func (m *module) HookPlan(req domain.HookPlanRequest) (domain.HookPlan, error) {
 	if !m.desc.Hooks.Supported {
 		return domain.HookPlan{

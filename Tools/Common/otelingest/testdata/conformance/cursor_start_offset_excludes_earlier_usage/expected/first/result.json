@@ -1,0 +1,8 @@
+{
+  "status": "ingested",
+  "records_written": 2,
+  "finalized": 0,
+  "pending": 0,
+  "lines_read": 2,
+  "lines_malformed": 0
+}

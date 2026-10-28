@@ -1,0 +1,15 @@
+{
+  "description": "Verbatim excerpt of a real GHCP CLI native-mode capture: subagent chat spans hang under an invoke_agent whose parent is an execute_tool task span with a toolu_ id; the subagent whose id matches an invocation's spawn_call_id gets its usage, the one that matches none goes to the unattributed stream. Children arrive before their parents.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

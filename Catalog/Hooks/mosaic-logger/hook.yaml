@@ -1,6 +1,6 @@
 schema_version: "1"
 id: mosaic-logger
-version: 1.7.0
+version: 1.8.0
 # description is user-facing: the Deploy tool shows it in the hook picker.
 # Keep it short and actionable; maintainer detail belongs in the comments below.
 description: >-
@@ -8,7 +8,9 @@ description: >-
   transcripts) to OrchestrationLogs/ for review and debugging. Works with
   Claude Code, GitHub Copilot CLI, VS Code Copilot Chat and OpenCode. Needs
   Python 3 (not for OpenCode). Copilot CLI runs hooks only in trusted folders
-  (trustedFolders in ~/.copilot/config.json).
+  (trustedFolders in ~/.copilot/config.json). For Copilot CLI and VS Code
+  Copilot Chat, set COPILOT_OTEL_FILE_EXPORTER_PATH to the Copilot OTel
+  export file so token usage is added to the logs.
 
 # Maintainer notes (formerly in description):
 # - Events captured: Claude Code 12, GHCP CLI 14, VS Code Chat Extension 8,
@@ -338,6 +340,34 @@ variants:
         target: mosaic_logger_handlers_tools.py
       - source: mosaic_logger_artifacts.py
         target: mosaic_logger_artifacts.py
+      - source: mosaic_logger_diagnostics.py
+        target: mosaic_logger_diagnostics.py
+      - source: mosaic_logger_subagent_state.py
+        target: mosaic_logger_subagent_state.py
+      - source: mosaic_logger_session_run.py
+        target: mosaic_logger_session_run.py
+      - source: mosaic_logger_otel_hook.py
+        target: mosaic_logger_otel_hook.py
+      - source: ../copilot-shared/mosaic_logger_otel.py
+        target: mosaic_logger_otel.py
+      - source: ../copilot-shared/mosaic_logger_otel_contract.py
+        target: mosaic_logger_otel_contract.py
+      - source: ../copilot-shared/mosaic_logger_otel_keys.py
+        target: mosaic_logger_otel_keys.py
+      - source: ../copilot-shared/mosaic_logger_otel_lock.py
+        target: mosaic_logger_otel_lock.py
+      - source: ../copilot-shared/mosaic_logger_otel_notices.py
+        target: mosaic_logger_otel_notices.py
+      - source: ../copilot-shared/mosaic_logger_otel_parse.py
+        target: mosaic_logger_otel_parse.py
+      - source: ../copilot-shared/mosaic_logger_otel_place.py
+        target: mosaic_logger_otel_place.py
+      - source: ../copilot-shared/mosaic_logger_otel_scan.py
+        target: mosaic_logger_otel_scan.py
+      - source: ../copilot-shared/mosaic_logger_otel_state.py
+        target: mosaic_logger_otel_state.py
+      - source: ../copilot-shared/mosaic_logger_otel_write.py
+        target: mosaic_logger_otel_write.py
       - source: ../hook.yaml
         target: hook.yaml
     # Registration covers the 8 supported VS Code Chat Extension hook events.
@@ -392,6 +422,30 @@ variants:
         target: mosaic_logger_runner_mode.py
       - source: mosaic_logger_handlers_runner.py
         target: mosaic_logger_handlers_runner.py
+      - source: mosaic_logger_spawn_key.py
+        target: mosaic_logger_spawn_key.py
+      - source: mosaic_logger_otel_hook.py
+        target: mosaic_logger_otel_hook.py
+      - source: ../copilot-shared/mosaic_logger_otel.py
+        target: mosaic_logger_otel.py
+      - source: ../copilot-shared/mosaic_logger_otel_contract.py
+        target: mosaic_logger_otel_contract.py
+      - source: ../copilot-shared/mosaic_logger_otel_keys.py
+        target: mosaic_logger_otel_keys.py
+      - source: ../copilot-shared/mosaic_logger_otel_lock.py
+        target: mosaic_logger_otel_lock.py
+      - source: ../copilot-shared/mosaic_logger_otel_notices.py
+        target: mosaic_logger_otel_notices.py
+      - source: ../copilot-shared/mosaic_logger_otel_parse.py
+        target: mosaic_logger_otel_parse.py
+      - source: ../copilot-shared/mosaic_logger_otel_place.py
+        target: mosaic_logger_otel_place.py
+      - source: ../copilot-shared/mosaic_logger_otel_scan.py
+        target: mosaic_logger_otel_scan.py
+      - source: ../copilot-shared/mosaic_logger_otel_state.py
+        target: mosaic_logger_otel_state.py
+      - source: ../copilot-shared/mosaic_logger_otel_write.py
+        target: mosaic_logger_otel_write.py
       - source: ../hook.yaml
         target: hook.yaml
     # Registration covers all 14 GHCP CLI hook events. subagentStart is

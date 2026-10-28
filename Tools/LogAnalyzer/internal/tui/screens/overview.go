@@ -68,8 +68,12 @@ func (s *OverviewScreen) body() []string {
 		line(fmt.Sprintf("Orchestrator      %s  %s", formatMoneyTotal(ov.Orchestrator.Money), FormatRatio(ov.OrchestratorShare))),
 		line(fmt.Sprintf("Subagents         %s  %s  (%d invocations)",
 			formatMoneyTotal(ov.Subagents.Totals.Money), FormatRatio(ov.SubagentShare), ov.Subagents.Invocations)),
-		line("Cache hit ratio  " + FormatRatio(ov.CacheHitRatio)),
 	}
+	if ov.Unattributed != nil {
+		out = append(out, line(fmt.Sprintf("Unattributed      %s  %s",
+			formatMoneyTotal(ov.Unattributed.Money), FormatRatio(ov.UnattributedShare))))
+	}
+	out = append(out, line("Cache hit ratio  "+FormatRatio(ov.CacheHitRatio)))
 	for _, l := range incompleteness(s.run.UnpricedModels, ov.Totals.AssumedTierCacheWrite,
 		ov.Subagents.MissingUsage, ov.Subagents.Open) {
 		out = append(out, clip(st.Warning, width, "  "+l))

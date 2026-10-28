@@ -114,6 +114,13 @@ type jsonRunTotalWire struct {
 	// UnknownRunResidual is the count of unknown-run records that could
 	// not be attributed after merging. Absent (omitempty) when zero.
 	UnknownRunResidual int `json:"unknown_run_residual,omitempty"`
+
+	// UsageNotFullyIngested is true when usage of the run is pending in its
+	// ingest state or that state is unreadable. Absent otherwise.
+	UsageNotFullyIngested bool `json:"usage_not_fully_ingested,omitempty"`
+
+	// PendingUsageRecords is the number of pending usage spans. Absent when zero.
+	PendingUsageRecords int `json:"pending_usage_records,omitempty"`
 }
 
 // EncodeRunTotal writes the stable basic total-per-run contract to w.
@@ -146,6 +153,9 @@ func EncodeRunTotal(w io.Writer, t app.RunTotal) error {
 		PartialMoney:       partialMoney,
 		UnknownRunMerged:   t.UnknownRunMerged,
 		UnknownRunResidual: t.UnknownRunResidual,
+
+		UsageNotFullyIngested: t.PendingUsageRecords > 0 || t.UsageStateUnreadable,
+		PendingUsageRecords:   t.PendingUsageRecords,
 	}
 	return json.NewEncoder(w).Encode(wire)
 }
@@ -253,6 +263,19 @@ type jsonRunReport struct {
 	ByStatus    jsonStatusBreakdown  `json:"by_status"`
 	Tools       jsonToolsBreakdown   `json:"tools"`
 	Timeline    jsonTimeline         `json:"timeline"`
+
+	// Unattributed is the run-level usage of no orchestrator or agent; absent when the run has none.
+	Unattributed *jsonActorReport `json:"unattributed,omitempty"`
+
+	// UsageIngest is present only when usage of the run is still pending or its
+	// ingest state is unreadable.
+	UsageIngest *jsonUsageIngest `json:"usage_ingest,omitempty"`
+}
+
+// jsonUsageIngest is the wire shape of a run's pending-usage state.
+type jsonUsageIngest struct {
+	PendingRecords  int  `json:"pending_records,omitempty"`
+	StateUnreadable bool `json:"state_unreadable,omitempty"`
 }
 
 func encodeRunReport(r domain.RunReport) jsonRunReport {
@@ -261,7 +284,7 @@ func encodeRunReport(r domain.RunReport) jsonRunReport {
 		agents = append(agents, encodeActorReport(a))
 	}
 	unpriced := encodeUnpricedModels(r.UnpricedModels)
-	return jsonRunReport{
+	out := jsonRunReport{
 		RunID:          r.Run.Label(),
 		Provisional:    r.Provisional,
 		Totals:         encodeTotals(r.Totals),
@@ -275,6 +298,14 @@ func encodeRunReport(r domain.RunReport) jsonRunReport {
 		Tools:       encodeToolsBreakdown(r.Tools),
 		Timeline:    encodeTimeline(r.Timeline),
 	}
+	if r.Unattributed != nil {
+		u := encodeActorReport(*r.Unattributed)
+		out.Unattributed = &u
+	}
+	if st := r.UsageIngest; st != (domain.UsageIngestState{}) {
+		out.UsageIngest = &jsonUsageIngest{PendingRecords: st.PendingRecords, StateUnreadable: st.StateUnreadable}
+	}
+	return out
 }
 
 // jsonFinding is the JSON wire shape for a data-quality finding.

@@ -4,10 +4,17 @@
 
 ### Deploy v1.2.1
 #### Bugfixes
+- The VS Code Copilot Chat hooks are now deployed to `.github/hooks/` and log to the workspace root
 - Agents deployed by recent versions are recognised as MOSAIC agents again. Before, `transform` and `retarget` skipped them as "not agent", `promote` refused them, and `update` silently left them out of the harness-only refresh. No migration is needed: affected workspaces are recognised on the next run
+
+### LogAnalyzer v1.2.0
+#### Changes
+- New `ingest-otel` command recovers Copilot token usage from the OpenTelemetry file into a run's logs
+- Views show usage that is not tied to an agent as unattributed, and flag runs whose usage is not fully ingested
 
 ### Runner v1.8.0
 #### Changes
+- Copilot token usage from the OpenTelemetry file is added to the logs of GHCP CLI runs (set `COPILOT_OTEL_FILE_EXPORTER_PATH`)
 - The loop guard can be switched off for a session with `g` on the progress screen, or when resuming after a guard stop
 - Pre-consultation guidance is saved with the run, can be reviewed and edited (also during a run with `e`), and is reused on resume
 - Resuming asks fewer questions and shows a summary of the recorded settings
@@ -16,6 +23,9 @@
 - Requests no longer send `null` instead of an empty artifact list
 - Row numbers are now consistently 1-based in logs and messages
 - Resume no longer asks again for settings the run already recorded
+
+## Catalog
+- **mosaic-logger** hook (v1.8.0): GHCP CLI and VS Code Copilot Chat now log token usage read from the Copilot OpenTelemetry file; enable it with the user-level environment variable `COPILOT_OTEL_FILE_EXPORTER_PATH` and restart VS Code (see the hook README). Copilot cost needs `github-copilot` entries in `pricing.yaml`. Redeploy to get the new files
 
 # 0.7.2 (2026-10-25)
 

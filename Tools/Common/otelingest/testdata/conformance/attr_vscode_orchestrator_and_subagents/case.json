@@ -1,0 +1,15 @@
+{
+  "description": "VS Code: orchestrator conversation spans go to the orchestrator stream; a subagent's spans carry chat_session_id equal to the spawning tool call id and go to the invocation whose spawn_call_id matches; agent totals and runSubagent tool spans are retained as links only. A transcript usage_record already in a stream is not an OTel record.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

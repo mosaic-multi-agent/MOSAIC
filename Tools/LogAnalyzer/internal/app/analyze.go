@@ -36,6 +36,16 @@ func (s *Service) readAllStreams(ctx context.Context, inv domain.Inventory) ([]a
 				return streams, findings, err
 			}
 		}
+		if run.UnattributedFile != "" {
+			ref := domain.StreamRef{
+				Run:  run.Run,
+				Kind: domain.StreamUnattributed,
+				Path: run.UnattributedFile,
+			}
+			if err := addStream(ref, run.UnattributedFile); err != nil {
+				return streams, findings, err
+			}
+		}
 		for _, agent := range run.Agents {
 			if agent.EventFile != "" {
 				ref := domain.StreamRef{

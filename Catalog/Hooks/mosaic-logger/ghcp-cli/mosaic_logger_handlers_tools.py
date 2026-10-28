@@ -10,6 +10,7 @@ import pathlib
 
 import mosaic_logger_core as core
 import mosaic_logger_runstate as runstate
+import mosaic_logger_spawn_key as spawn_key
 
 
 def capture_run_id_from_tool_args(ctx: "core.HookContext") -> "str | None":
@@ -98,6 +99,12 @@ def handle_pre_tool_use(ctx: "core.HookContext") -> None:
                         extracted_run_id,
                         prompt=prompt,
                     )
+                    if ctx.runner_mode is None:
+                        spawn_id = spawn_key.spawn_call_id_from(ctx)
+                        if spawn_id:
+                            spawn_key.remember_spawn_call(
+                                ctx.paths, core.effective_run_id(ctx),
+                                ctx.session_id, agent_instance_id, spawn_id)
         except Exception:
             pass
 

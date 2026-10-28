@@ -1,0 +1,24 @@
+{
+  "description": "Only complete lines are consumed: a trailing partial line is neither read nor counted and the cursor stays before it; once the harness finishes the line, the next ingest reads it. The state head covers the whole file including the partial tail.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "part1",
+      "otel": "otel/part1.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    },
+    {
+      "name": "part2",
+      "otel": "otel/part2.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

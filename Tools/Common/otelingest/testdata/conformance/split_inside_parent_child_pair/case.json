@@ -1,0 +1,24 @@
+{
+  "description": "Split ingest, parts 1 and 2: the first part ends after an invoke_agent span whose parent execute_tool span is still to come, so a subagent chat span is pending across the boundary. The second part resolves it. The case with the same name plus _full ingests the whole file in one go and must end in the same records and state.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "part1",
+      "otel": "otel/part1.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    },
+    {
+      "name": "part2",
+      "otel": "otel/part2.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

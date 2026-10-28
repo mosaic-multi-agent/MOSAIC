@@ -1,0 +1,16 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 1170,
+    "head_len": 1170,
+    "head_sha256": "6ce664715ec3e0a4f5e8cc74f01ff460c39b175a66f7ea6704308e16c168f204"
+  },
+  "placements": {},
+  "pending": [],
+  "links": {
+    "invoke-root": {
+      "kind": "invoke_agent",
+      "conversation_id": "cli-session-4"
+    }
+  }
+}

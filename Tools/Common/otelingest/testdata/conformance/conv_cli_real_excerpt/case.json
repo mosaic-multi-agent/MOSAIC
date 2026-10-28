@@ -1,0 +1,15 @@
+{
+  "description": "Verbatim excerpt of a real GHCP CLI capture (first orchestrator turn, with metric lines): chat spans of the turn become records on the orchestrator stream, the invoke_agent total and execute_tool / metric lines do not.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

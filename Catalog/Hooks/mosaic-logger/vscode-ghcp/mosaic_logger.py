@@ -12,7 +12,9 @@ Key vscode-ghcp divergences:
   and PostCompact are absent (those events are unconfirmed for VS Code).
 - run_start is emitted on SessionStart; run_end is emitted on Stop.
 - RUN_ID_PROMPT_FIELDS maps UserPromptSubmit to 'prompt' (not 'user_prompt'),
-  and SubagentStart is absent (its run_id comes from the popped pending dispatch).
+  and SubagentStart and SubagentStop are absent (SubagentStart takes its run_id from
+  the popped pending dispatch; SubagentStop carries neither prompt text nor a response,
+  and finds its run through the workspace-level spawn index).
 """
 
 import json
@@ -20,6 +22,8 @@ import sys
 
 import mosaic_logger_core as core
 import mosaic_logger_runstate as runstate
+import mosaic_logger_session_run as session_run
+import mosaic_logger_otel_hook as otel_hook
 import mosaic_logger_handlers_session as _session
 import mosaic_logger_handlers_invocation as _invocation
 import mosaic_logger_handlers_tools as _tools
@@ -40,12 +44,12 @@ for _mod in [_session, _invocation, _tools]:
 # ---------------------------------------------------------------------------
 
 # Events with prompt-bearing fields from which run_id may be extracted.
-# SubagentStart is deliberately absent: it carries no prompt text; its
-# run_id comes from the popped pending dispatch.
+# SubagentStart and SubagentStop are deliberately absent: neither carries prompt
+# text or a response; SubagentStart's run_id comes from the popped pending dispatch
+# and SubagentStop finds its run through the spawn index.
 # UserPromptSubmit maps to 'prompt' — VS Code's field name (not 'user_prompt').
 RUN_ID_PROMPT_FIELDS: dict = {
     "UserPromptSubmit": "prompt",
-    "SubagentStop":     "last_assistant_message",
     "Stop":             "last_assistant_message",
 }
 
@@ -64,21 +68,33 @@ def build_context(payload: dict) -> core.HookContext:
 
 
 def resolve_run_identity(ctx: core.HookContext) -> None:
-    """Set ctx.run_id by extracting from the event-specific prompt field.
+    """Set ctx.run_id from the prompt-bearing field, else from the session cache.
 
-    For events with no prompt-bearing field in RUN_ID_PROMPT_FIELDS
-    (SessionStart, tool events, compaction, SubagentStart, etc.), ctx.run_id
-    remains None. Routing to the appropriate bucket (run_id folder or
-    unknown-run/) is handled by effective_run_id() in the core module.
+    Prompt extraction wins and is written back to the workspace-level session -> run
+    cache; when it establishes or changes the session's run, the session's earlier
+    unknown-run/ lines are moved to that run. Events without a prompt field (tool
+    events, SessionStart, compaction, subagent events) take the cached run of their
+    session; with none cached ctx.run_id stays None and effective_run_id() routes to
+    unknown-run/.
 
     Never raises.
     """
     try:
         field_name = RUN_ID_PROMPT_FIELDS.get(ctx.event)
-        if field_name is None:
-            return
-        prompt = ctx.field(field_name)
-        ctx.run_id = runstate.extract_run_id(prompt)
+        extracted = None
+        if field_name is not None:
+            extracted = runstate.extract_run_id(ctx.field(field_name))
+        cached = session_run.get_session_run_id(ctx.paths, ctx.session_id)
+        if extracted:
+            ctx.run_id = extracted
+            if extracted != cached:
+                session_run.put_session_run_id(ctx.paths, ctx.session_id, extracted,
+                                               created_at=ctx.timestamp)
+            # Always attempted (cheap when nothing is pending) so a failed or timed-out
+            # relocation is retried on the next prompt of the session.
+            session_run.relocate_unknown_run_events(ctx.paths, ctx.session_id, extracted)
+        elif cached:
+            ctx.run_id = cached
     except Exception as exc:
         core.debug_log("resolve_run_identity failed", exc)
 
@@ -89,12 +105,13 @@ def dispatch(raw_input: str) -> None:
     Steps (in fixed order):
       1. Parse raw_input as JSON; abort silently if not a dict.
       2. Build HookContext from the payload.
-      3. resolve_run_identity — extracts run_id from the prompt field when present.
+      3. resolve_run_identity — extracts run_id from the prompt field, else the session cache.
       4. Emit run_start when ctx.event == 'SessionStart' (D5).
       5. Invoke registered handler for ctx.event when registered; unknown events
          are silent no-ops.
       6. Emit run_end when ctx.event == 'Stop' (D5) — this step always runs,
          even when step 5 raised, so a failing Stop handler cannot swallow run_end.
+      7. Record the OTel start offset at SessionStart; ingest usage at Stop and SubagentStop.
 
     Every step is individually wrapped; the entire body is wrapped again.
     Nothing is written to stdout on any path.
@@ -138,6 +155,15 @@ def dispatch(raw_input: str) -> None:
                 _session.emit_run_end(ctx, None)
         except Exception as exc:
             core.debug_log("emit_run_end failed", exc)
+
+        # Step 7: OTel usage ingest -- offset at SessionStart, non-final ingest at stops
+        try:
+            if ctx.event == "SessionStart":
+                otel_hook.record_session_start(ctx)
+            elif ctx.event in ("Stop", "SubagentStop"):
+                otel_hook.ingest_at_stop(ctx)
+        except Exception as exc:
+            core.debug_log("otel ingest step failed", exc)
 
     except Exception as exc:
         core.debug_log("dispatch outer exception", exc)

@@ -6,12 +6,13 @@ log tree, event streams, schema conformance, and invocation pairing.
 
 Key vscode-ghcp behaviors exercised here:
 - Workspace root resolved from payload['cwd'], not from any environment variable (D2)
-- SubagentStart carries agent_name but no agent_id; correlation key is agent_name (D3)
-- Matched invocation_start/invocation_end pair produced despite SubagentStart having no
-  agent_id — the correlation flows through: PreToolUse (pending dispatch) →
-  SubagentStart (pops dispatch, writes agent-map keyed on agent_name) →
-  SubagentStop (resolves agent-map by agent_name, emits invocation_end)
-- Ordinary tool output is nested under tool_result.text_result_for_llm (D4)
+- SubagentStart / SubagentStop carry agent_id = the spawning tool-call ID (`toolu_...`);
+  the correlation key is that ID with any `__vscode-<ms>` suffix stripped (D3)
+- Matched invocation_start/invocation_end pair: PreToolUse for runSubagent (pending
+  dispatch) -> SubagentStart (pops dispatch, writes agent-map keyed on the call ID,
+  spawn_call_id) -> SubagentStop (marks the subagent stopped) -> orchestrator PostToolUse
+  for runSubagent (its tool_response is the subagent response; writes the one invocation_end)
+- Tool output is the top-level tool_response of PostToolUse (D4)
 - Session lifecycle anchors on SessionStart/Stop; no SessionEnd event (D5)
 - run_end and session_end are both emitted on Stop, not on a separate SessionEnd (D5)
 - Every emitted line stamps harness as 'vscode-ghcp' (D1)
@@ -56,9 +57,10 @@ _SESSION_ID = "e2e-vscode-session-001"
 # placing the invocation directory under this run_id bucket.
 _RUN_ID = "20260101T120000Z-abcd"
 
-# The agent_name used in SubagentStart/SubagentStop — the correlation key for
-# this harness (D3). SubagentStart carries ONLY this name, no agent_id.
-_AGENT_NAME = "Research"
+# The spawning tool-call ID: agent_id of SubagentStart/SubagentStop and, with a
+# `__vscode-<ms>` suffix, tool_use_id of the orchestrator's runSubagent tool events.
+_CALL_ID = "toolu_01ResearchCallAbCdEfGhIj"
+_VSCODE_SUFFIX = "__vscode-1793098349279"
 
 # The agent_instance_id extracted from PreToolUse's tool_input.prompt.
 # The invocation directory is named by sanitize_component of this value.
@@ -74,6 +76,13 @@ _CATALOG = frozenset({
 
 # The required envelope fields on every emitted event.
 _REQUIRED_ENVELOPE = ("schema_version", "event", "timestamp", "harness")
+
+_AGENT_TYPE = "Research"
+
+_SUBAGENT_RESPONSE = (
+    f'{{"agent_instance_id": "Research#1", "run_id": "{_RUN_ID}", '
+    '"status_code": "SUCCESS", "status_message": "Research complete."}'
+)
 
 # Tool call id for the ordinary (non-dispatch) tool call.
 _TOOL_CALL_ID = "call-orch-read-001"
@@ -204,16 +213,16 @@ def _full_session_payloads(
     Covers the sequence specified in Stage 4:
       1. SessionStart — source: startup
       2. UserPromptSubmit — prompt embedding run_id (routes user turn to run_id bucket)
-      3. PreToolUse (Agent dispatch) — tool_input.prompt carrying agent_instance_id
+      3. PreToolUse (runSubagent dispatch) — tool_input.prompt carrying agent_instance_id
          and run_id; this populates the pending-dispatch queue under 'unknown-run'
          (no run_id context at PreToolUse time)
-      4. SubagentStart — agent_name only, no agent_id (D3, key test of AC4.3)
+      4. SubagentStart — agent_id (spawning tool-call ID) and agent_type (D3)
          Pops the pending dispatch, recovers run_id, places invocation under run_id bucket
       5. PreToolUse (ordinary) — no agent_id, routes to orchestrator stream (unknown-run)
-      6. PostToolUse (ordinary) — tool_result.text_result_for_llm present (D4)
-      7. SubagentStop — agent_id + agent_name + last_assistant_message with status code
-         and run_id; triggers invocation_end in the run_id bucket
-      8. Stop — stop_reason end_turn, stop_hook_active false (D5)
+      6. PostToolUse (ordinary) — tool_response present (D4)
+      7. SubagentStop — agent_id, agent_type, stop_hook_active only (no response text)
+      8. PostToolUse (runSubagent) — tool_response = subagent response; writes invocation_end
+      9. Stop — stop_reason end_turn, stop_hook_active false (D5)
          session_end and run_end go to unknown-run (no run_id in last_assistant_message)
     """
     tp = str(transcript_path) if transcript_path else None
@@ -249,8 +258,8 @@ def _full_session_payloads(
         #     so pending dispatch is queued under the 'unknown-run' bucket.
         _base(
             "PreToolUse",
-            tool_name="Agent",
-            tool_use_id="call-dispatch-001",
+            tool_name="runSubagent",
+            tool_use_id=_CALL_ID + _VSCODE_SUFFIX,
             tool_input={
                 "prompt": (
                     f"agent_instance_id: {_INSTANCE_ID}\n"
@@ -260,14 +269,10 @@ def _full_session_payloads(
             },
         ),
 
-        # 4 — SubagentStart: carries agent_name ONLY — no agent_id (D3).
+        # 4 — SubagentStart: agent_id is the spawning tool-call ID (D3).
         #     Pops pending dispatch from 'unknown-run' queue, recovers run_id
         #     and agent_instance_id; places invocation directory under run_id bucket.
-        _base(
-            "SubagentStart",
-            agent_name=_AGENT_NAME,
-            # agent_id deliberately absent — this is the D3 divergence
-        ),
+        _base("SubagentStart", agent_id=_CALL_ID, agent_type=_AGENT_TYPE),
 
         # 5 — PreToolUse (ordinary, no agent_id): routes to orchestrator stream.
         #     No run_id at this point → lands in unknown-run orchestrator stream.
@@ -278,29 +283,27 @@ def _full_session_payloads(
             tool_input={"file_path": "/workspace/data.txt"},
         ),
 
-        # 6 — PostToolUse (ordinary): output nested under tool_result.text_result_for_llm (D4).
+        # 6 — PostToolUse (ordinary): output in the top-level tool_response (D4).
         _base(
             "PostToolUse",
             tool_name="Read",
             tool_use_id=_TOOL_CALL_ID,
-            tool_result={"text_result_for_llm": "Research data loaded successfully."},
+            tool_response="Research data loaded successfully.",
         ),
 
-        # 7 — SubagentStop: carries agent_id + agent_name (resolve_agent_key prefers
-        #     agent_name so the correlation key is still "Research") and
-        #     last_assistant_message containing run_id for stop-side bucket lookup.
+        # 7 — SubagentStop: agent_id, agent_type and stop_hook_active only.
+        _base("SubagentStop", agent_id=_CALL_ID, agent_type=_AGENT_TYPE,
+              stop_hook_active=False),
+
+        # 8 — PostToolUse for runSubagent: tool_response is the subagent's response.
         _base(
-            "SubagentStop",
-            agent_id="agt-vscode-001",
-            agent_name=_AGENT_NAME,
-            last_assistant_message=(
-                f'{{"status_code": "SUCCESS", '
-                f'"run_id": "{_RUN_ID}", '
-                '"result": "Research complete."}}'
-            ),
+            "PostToolUse",
+            tool_name="runSubagent",
+            tool_use_id=_CALL_ID + _VSCODE_SUFFIX,
+            tool_response=_SUBAGENT_RESPONSE,
         ),
 
-        # 8 — Stop: emits session_end + run_end (D5). No run_id in last_assistant_message
+        # 9 — Stop: emits session_end + run_end (D5). No run_id in last_assistant_message
         #     here, so session_end/run_end land in the unknown-run orchestrator stream.
         _base(
             "Stop",
@@ -533,16 +536,16 @@ class TestFullSessionLayout(unittest.TestCase):
             "02_output.md must be written by handle_subagent_stop"
         )
 
-    def test_agent_map_entry_exists_for_agent_name(self):
-        """The agent-map entry must exist keyed by agent_name ('Research'), not agent_id."""
-        agent_map_entry = self.paths.agent_map_entry(self.run_id, _AGENT_NAME)
+    def test_agent_map_entry_exists_for_spawning_call_id(self):
+        """The agent-map entry must exist keyed by the spawning tool-call ID (agent_id)."""
+        agent_map_entry = self.paths.agent_map_entry(self.run_id, _CALL_ID)
         self.assertTrue(
             agent_map_entry.exists(),
-            f"Agent-map entry keyed on agent_name {_AGENT_NAME!r} must exist"
+            f"Agent-map entry keyed on tool-call ID {_CALL_ID!r} must exist"
         )
 
     def test_agent_map_entry_is_valid_json(self):
-        entry_path = self.paths.agent_map_entry(self.run_id, _AGENT_NAME)
+        entry_path = self.paths.agent_map_entry(self.run_id, _CALL_ID)
         data = json.loads(entry_path.read_text("utf-8"))
         self.assertIsInstance(data, dict)
         self.assertIn("agent_instance_id", data)
@@ -666,7 +669,9 @@ class TestSchemaConformance(unittest.TestCase):
         with _ReplayHarness(self.tmp_path) as h:
             h.replay(_full_session_payloads(self.tmp_path))
             # Collect all JSONL files across all run buckets.
-            self.all_files = h.all_jsonl_files()
+            # The diagnostics file is not an event stream; it has its own line format.
+            self.all_files = [f for f in h.all_jsonl_files()
+                              if f.name != "mosaic-logger-diagnostics.jsonl"]
             self.all_events: list = []
             for f in self.all_files:
                 self.all_events.extend(h.read_jsonl(f))
@@ -696,12 +701,11 @@ class TestSchemaConformance(unittest.TestCase):
             self.assertIn("schema_version", ev,
                           f"Missing schema_version in event: {ev.get('event')!r}")
 
-    def test_schema_version_is_1_0_0(self):
+    def test_schema_version_is_the_per_event_version(self):
         for ev in self.all_events:
-            self.assertEqual(
-                "1.0.0", ev.get("schema_version"),
-                f"Unexpected schema_version in event {ev.get('event')!r}"
-            )
+            want = "1.4.0" if ev.get("event") == "invocation_start" else "1.0.0"
+            self.assertEqual(want, ev.get("schema_version"),
+                             f"Unexpected schema_version in event {ev.get('event')!r}")
 
     def test_every_event_has_event_field(self):
         for ev in self.all_events:
@@ -766,12 +770,12 @@ class TestSchemaConformance(unittest.TestCase):
 
 class TestInvocationPairing(unittest.TestCase):
     """The invocation stream contains a matched invocation_start/invocation_end pair
-    for the same agent_instance_id, produced despite SubagentStart carrying no agent_id.
+    for the same agent_instance_id.
 
     This directly verifies AC4.3: correlation flows through the pending-dispatch
-    queue (keyed on session_id+run_id) and the agent-map (keyed on agent_name).
-    The run_id is recovered from the pending dispatch entry written by PreToolUse,
-    not from any field at SubagentStart itself.
+    queue (keyed on session_id+run_id) and the agent-map (keyed on the spawning
+    tool-call ID). The run_id is recovered from the pending dispatch entry written
+    by PreToolUse, not from any field at SubagentStart itself.
     """
 
     def setUp(self):
@@ -793,7 +797,8 @@ class TestInvocationPairing(unittest.TestCase):
     def test_invocation_end_is_present(self):
         types = [e["event"] for e in self.inv_events]
         self.assertIn("invocation_end", types,
-                      "invocation_end must be emitted by handle_subagent_stop")
+                      "invocation_end must be emitted when the runSubagent PostToolUse arrives")
+        self.assertEqual(1, types.count("invocation_end"), "exactly one per subagent")
 
     def test_invocation_start_and_end_share_agent_instance_id(self):
         """Both events must carry the same agent_instance_id extracted from PreToolUse."""
@@ -836,36 +841,31 @@ class TestInvocationPairing(unittest.TestCase):
                         "invocation_end must not precede invocation_start")
 
     def test_invocation_end_carries_status_code_success(self):
-        """invocation_end must carry the status_code extracted from last_assistant_message."""
+        """invocation_end must carry the status_code extracted from the tool_response."""
         end_ev = next(
             (e for e in self.inv_events if e["event"] == "invocation_end"), None
         )
         self.assertIsNotNone(end_ev)
         self.assertEqual(
             "SUCCESS", end_ev.get("status_code"),
-            "status_code must be extracted from SubagentStop's last_assistant_message"
+            "status_code must be extracted from the runSubagent tool_response"
+        )
+        self.assertEqual(
+            _SUBAGENT_RESPONSE, end_ev.get("response"),
+            "response must be the runSubagent tool_response verbatim"
         )
 
-    def test_subagent_start_had_no_agent_id_in_payload(self):
-        """Confirm the test exercises D3: the SubagentStart payload has no agent_id.
-
-        The invocation must be correlated purely through agent_name via the
-        pending dispatch and agent-map mechanisms.
-        """
+    def test_subagent_start_carries_spawning_call_id_as_agent_id(self):
+        """Confirm the test exercises D3: the SubagentStart payload has agent_id
+        (the spawning tool-call ID) and no agent_name."""
         subagent_start_payloads = [
             p for p in _full_session_payloads(self.tmp_path)
             if p.get("hook_event_name") == "SubagentStart"
         ]
         self.assertEqual(1, len(subagent_start_payloads),
                          "Expected exactly one SubagentStart in the session")
-        self.assertNotIn(
-            "agent_id", subagent_start_payloads[0],
-            "SubagentStart payload must not carry agent_id (D3 divergence)"
-        )
-        self.assertIn(
-            "agent_name", subagent_start_payloads[0],
-            "SubagentStart payload must carry agent_name as the correlation key"
-        )
+        self.assertEqual(_CALL_ID, subagent_start_payloads[0].get("agent_id"))
+        self.assertNotIn("agent_name", subagent_start_payloads[0])
 
 
 # ---------------------------------------------------------------------------
@@ -922,8 +922,8 @@ class TestVsCodeDivergences(unittest.TestCase):
             "run_end.outcome must always be absent for vscode-ghcp (D5)"
         )
 
-    def test_tool_call_end_output_from_nested_tool_result_field(self):
-        """D4: tool_call_end.tool_output must be read from tool_result.text_result_for_llm."""
+    def test_tool_call_end_output_from_tool_response_field(self):
+        """D4: tool_call_end.tool_output must be read from the top-level tool_response."""
         tool_end = next(
             (e for e in self.all_orch_events
              if e["event"] == "tool_call_end" and e.get("call_id") == _TOOL_CALL_ID),
@@ -935,7 +935,7 @@ class TestVsCodeDivergences(unittest.TestCase):
         )
         self.assertEqual(
             "Research data loaded successfully.", tool_end.get("tool_output"),
-            "tool_output must be populated from tool_result.text_result_for_llm (D4)"
+            "tool_output must be populated from tool_response (D4)"
         )
 
     def test_user_prompt_field_is_prompt_not_user_prompt(self):

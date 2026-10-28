@@ -98,14 +98,20 @@ func (s *AgentTypesScreen) View(width, height int) string {
 	if len(rows) == 0 {
 		rows = []string{"No subagent invocations in this run."}
 	}
-	body, w := s.cursorRows(rows, s.cursor, &s.offset)
+	reserved := 0
+	if s.run.Unattributed != nil {
+		reserved = 1 // the unattributed row stays inside the viewport budget
+	}
+	body, w := s.cursorRows(rows, s.cursor, &s.offset, reserved)
+	body = s.withUnattributedRow(body)
 	return renderPage(s.styles, width, "Log Analyzer — By Agent Type", runLabel(s.run),
 		body, w, len(rows), s.Help())
 }
 
-// cursorRows styles the rows visible around the cursor and updates the offset.
-func (s *AgentTypesScreen) cursorRows(rows []string, cursor int, offset *int) ([]string, Window) {
-	w := ScrollWindow(*offset, cursor, len(rows), bodyBudget(s.height))
+// cursorRows styles the rows visible around the cursor and updates the offset;
+// reserved lines are kept free of the body budget for fixed rows.
+func (s *AgentTypesScreen) cursorRows(rows []string, cursor int, offset *int, reserved int) ([]string, Window) {
+	w := ScrollWindow(*offset, cursor, len(rows), max(bodyBudget(s.height)-reserved, 0))
 	*offset = w.Offset
 	out := make([]string, 0, w.Count)
 	for i := w.Offset; i < w.End(); i++ {
@@ -134,6 +140,17 @@ func typeRow(g domain.AgentTypeGroup) string {
 	}
 	return appendLabels(row, incompleteness(g.Figures.UnpricedModels, g.Figures.Totals.AssumedTierCacheWrite,
 		g.Figures.MissingUsage, g.Figures.Open))
+}
+
+// withUnattributedRow appends the run-level unattributed usage after the
+// agent-type groups; it is not a dispatch, so it is not selectable.
+func (s *AgentTypesScreen) withUnattributedRow(body []string) []string {
+	u := s.run.Unattributed
+	if u == nil {
+		return body
+	}
+	row := fmt.Sprintf("%-20s total %s", "Unattributed", formatMoneyTotal(u.Totals.Money))
+	return append(body, clip(s.styles.Body, s.width, "  "+row))
 }
 
 // appendLabels adds bracketed incompleteness labels to a row.

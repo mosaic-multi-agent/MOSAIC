@@ -16,7 +16,7 @@ func buildOverview(run domain.RunAggregate, rr domain.RunReport, dispatches []do
 		cacheHit = domain.Ratio{Numerator: rr.Totals.Tokens.CacheRead.ValueOr(0), Denominator: denom}
 	}
 
-	return domain.RunOverview{
+	ov := domain.RunOverview{
 		Totals:            rr.Totals,
 		Orchestrator:      rr.Orchestrator.Totals,
 		Subagents:         subagents,
@@ -25,6 +25,11 @@ func buildOverview(run domain.RunAggregate, rr domain.RunReport, dispatches []do
 		ByModel:           buildByModel(run, table),
 		CacheHitRatio:     cacheHit,
 	}
+	if rr.Unattributed != nil {
+		ov.Unattributed = &rr.Unattributed.Totals
+		ov.UnattributedShare = share(rr.Unattributed.Totals.Money.Total, rr.Totals.Money.Total)
+	}
+	return ov
 }
 
 // share is part/whole in nanodollars; undefined unless whole is a positive known amount.
@@ -52,6 +57,9 @@ func buildByModel(run domain.RunAggregate, table domain.PricingTable) []domain.M
 		}
 	}
 	collect(run.Orchestrator)
+	if run.Unattributed != nil {
+		collect(*run.Unattributed)
+	}
 	for _, a := range run.Agents {
 		collect(a)
 	}

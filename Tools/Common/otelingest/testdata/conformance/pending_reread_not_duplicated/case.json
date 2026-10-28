@@ -1,0 +1,42 @@
+{
+  "description": "A pending span that is read again (file shorter than the cursor, then a whole-file read) stays pending exactly once; when its parent arrives it is written once.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "early",
+      "otel": "otel/early.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    },
+    {
+      "name": "shorter",
+      "otel": "otel/shorter.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    },
+    {
+      "name": "whole",
+      "otel": "otel/whole.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": true,
+      "start_offset": null,
+      "scope": []
+    },
+    {
+      "name": "later",
+      "otel": "otel/later.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

@@ -60,6 +60,9 @@ func encodeRun(r domain.RunAggregate) runDoc {
 	for _, s := range r.Sessions {
 		doc.Sessions = append(doc.Sessions, encodeSession(s))
 	}
+	if r.Unattributed != nil {
+		doc.Unattributed = &unattributedDoc{Usage: encodeUsages(r.Unattributed.Invocations)}
+	}
 	for _, a := range r.Agents {
 		doc.Agents = append(doc.Agents, agentDoc{
 			InstanceID: string(a.Actor.Instance),

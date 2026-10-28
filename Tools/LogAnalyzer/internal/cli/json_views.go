@@ -86,6 +86,10 @@ type jsonOverview struct {
 	SubagentShare     jsonRatio          `json:"subagent_share"`
 	ByModel           []jsonModelFigures `json:"by_model"`
 	CacheHitRatio     jsonRatio          `json:"cache_hit_ratio"`
+
+	// Both are absent for a run without unattributed usage.
+	Unattributed      *jsonTotals `json:"unattributed,omitempty"`
+	UnattributedShare *jsonRatio  `json:"unattributed_share,omitempty"`
 }
 
 func encodeOverview(o domain.RunOverview) jsonOverview {
@@ -95,7 +99,7 @@ func encodeOverview(o domain.RunOverview) jsonOverview {
 			Model: string(m.Model), Provider: string(m.Provider), Priced: m.Priced, Requests: m.Requests, Totals: encodeTotals(m.Totals),
 		}
 	}
-	return jsonOverview{
+	ov := jsonOverview{
 		Totals:            encodeTotals(o.Totals),
 		Orchestrator:      encodeTotals(o.Orchestrator),
 		Subagents:         encodeGroupFigures(o.Subagents),
@@ -104,6 +108,11 @@ func encodeOverview(o domain.RunOverview) jsonOverview {
 		ByModel:           models,
 		CacheHitRatio:     encodeRatio(o.CacheHitRatio),
 	}
+	if o.Unattributed != nil {
+		u, share := encodeTotals(*o.Unattributed), encodeRatio(o.UnattributedShare)
+		ov.Unattributed, ov.UnattributedShare = &u, &share
+	}
+	return ov
 }
 
 // jsonMoneyStats marks partial statistics with complete=false.

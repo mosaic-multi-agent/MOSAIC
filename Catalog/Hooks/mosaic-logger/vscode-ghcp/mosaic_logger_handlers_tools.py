@@ -4,9 +4,12 @@ Handles: PreToolUse, PostToolUse. Routes tool events to the orchestrator stream
 or the owning subagent's stream based on agent_id.
 
 Key vscode-ghcp divergences:
-  D4: Tool output is nested snake_case: tool_result.text_result_for_llm
-      (claude-code reads a flat field; ghcp-cli reads nested camelCase).
-      read_tool_output is the single seam isolating this difference.
+  D4: Tool output is the top-level `tool_response` of PostToolUse (a string; an
+      empty string for tools without output). The GHCP CLI shape
+      tool_result.text_result_for_llm is not read. read_tool_output is the single
+      seam isolating this difference.
+  Subagent completion: the orchestrator's PostToolUse for a dispatch tool is the
+      primary writer of the subagent's invocation_end (see the invocation handlers).
   AC2.11: VS Code matchers parse but do not filter — ALL filtering on
       subagent-dispatch tool names happens inside the handler body via
       SUBAGENT_DISPATCH_TOOL_NAMES. The registration fragment declares no matcher.
@@ -17,6 +20,7 @@ High-frequency path: performs no transcript reads and no directory scanning.
 """
 
 import mosaic_logger_core as core
+import mosaic_logger_handlers_invocation as invocation
 import mosaic_logger_runstate as runstate
 
 
@@ -51,24 +55,19 @@ def resolve_call_id(ctx: "core.HookContext") -> str:
     return runstate.fallback_call_id(ctx.field("tool_name"))
 
 
-def read_tool_output(ctx: "core.HookContext") -> "str | None":
-    """Read tool output from the nested tool_result.text_result_for_llm path.
+def read_tool_output(ctx: "core.HookContext"):
+    """Read tool output from the PostToolUse `tool_response` field.
 
-    D4: VS Code uses nested snake_case (tool_result.text_result_for_llm).
-    This function deliberately bypasses ctx.field() (which is flat-only) and
-    applies the same absent/empty-string -> None normalization.
-
-    Returns None when tool_result is absent, not a dict, or when
-    text_result_for_llm is absent or empty. Never raises.
+    Returns the value when it is a non-empty string or a non-empty dict/list;
+    None when it is absent, empty or of any other type. Never raises.
     """
     try:
-        tool_result = ctx.payload.get("tool_result")
-        if not isinstance(tool_result, dict):
-            return None
-        text = tool_result.get("text_result_for_llm")
-        if text is None or text == "":
-            return None
-        return text
+        value = ctx.payload.get("tool_response")
+        if isinstance(value, str):
+            return value or None
+        if isinstance(value, (dict, list)) and value:
+            return value
+        return None
     except Exception:
         return None
 
@@ -117,11 +116,13 @@ def handle_pre_tool_use(ctx: "core.HookContext") -> None:
 
 
 def handle_post_tool_use(ctx: "core.HookContext") -> None:
-    """Emit tool_call_end with status='success'.
+    """Emit tool_call_end with status='success'; for a subagent-dispatch tool, then
+    complete the spawned subagent (one invocation_end, 02_output.md).
 
     Every completed PostToolUse is recorded as success because PostToolUseFailure
-    is unconfirmed for VS Code. tool_output comes from the nested path
-    tool_result.text_result_for_llm via read_tool_output.
+    is unconfirmed for VS Code. tool_output comes from tool_response via
+    read_tool_output. The completion is best-effort and never suppresses the
+    tool_call_end.
 
     Never raises.
     """
@@ -132,6 +133,11 @@ def handle_post_tool_use(ctx: "core.HookContext") -> None:
         tool_output=read_tool_output(ctx),
     )
     core.append_event(resolve_destination(ctx), event)
+
+    if ctx.field("tool_name") in SUBAGENT_DISPATCH_TOOL_NAMES:
+        invocation.complete_from_dispatch_result(
+            ctx, ctx.field("tool_use_id"), ctx.payload.get("tool_response")
+        )
 
 
 # ---------------------------------------------------------------------------

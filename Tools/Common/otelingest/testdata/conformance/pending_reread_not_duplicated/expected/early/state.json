@@ -1,0 +1,40 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 690,
+    "head_len": 690,
+    "head_sha256": "fe02caaa7486d59dc9fc091cb12d2e8a1166a38d99a5397c054aa8d693fdd9e5"
+  },
+  "placements": {},
+  "pending": [
+    {
+      "record": {
+        "record_id": "chat-p1",
+        "record_index": 0,
+        "model": "m-sub",
+        "provider": "github-copilot",
+        "token_usage": {
+          "input_tokens": 100,
+          "output_tokens": 10
+        }
+      },
+      "parent_span_id": "inv-sub",
+      "conversation_id": "cli-session-6"
+    },
+    {
+      "record": {
+        "record_id": "chat-p2",
+        "record_index": 343,
+        "model": "m-sub",
+        "provider": "github-copilot",
+        "token_usage": {
+          "input_tokens": 300,
+          "output_tokens": 30
+        }
+      },
+      "parent_span_id": "inv-missing",
+      "conversation_id": "cli-session-6"
+    }
+  ],
+  "links": {}
+}

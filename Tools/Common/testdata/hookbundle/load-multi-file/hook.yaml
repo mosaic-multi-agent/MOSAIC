@@ -1,0 +1,21 @@
+schema_version: "1"
+id: load-multi-file-bundle
+version: 1.0.0
+description: A bundle directory whose variant lists several files, some from a sibling folder and the bundle manifest itself. Load only parses this manifest; the sources are never opened.
+variants:
+  multi:
+    supported: true
+    files:
+      - source: main.py
+        target: main.py
+      - source: ../shared/zeta.py
+        target: shared_zeta.py
+      - source: ../shared/alpha.py
+        target: shared_alpha.py
+      - source: helper.py
+        target: helper.py
+      - source: ../shared/mid.py
+        target: shared_mid.py
+      - source: ../hook.yaml
+        target: hook.yaml
+    registration: []

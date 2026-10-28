@@ -1,0 +1,9 @@
+[
+  {
+    "kind": "lines_skipped",
+    "counts": {
+      "malformed": 3,
+      "read": 13
+    }
+  }
+]

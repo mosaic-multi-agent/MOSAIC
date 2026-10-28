@@ -21,11 +21,19 @@ import tempfile
 # Constants
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.0.0"
+BASE_SCHEMA_VERSION = "1.0.0"
+# Events that carry fields added after 1.0.0 are stamped with the version that added them.
+# The version depends on the event type only, never on which optional fields are present.
+EVENT_SCHEMA_VERSIONS = {
+    "invocation_start": "1.4.0",   # spawn_call_id
+    "usage_record": "1.4.0",
+}
 HARNESS = "vscode-ghcp"          # D1 — the schema harness enum value
 LOGS_DIRNAME = "OrchestrationLogs"
 AGENT_MAP_DIRNAME = ".agent-map"
 PENDING_DISPATCH_DIRNAME = ".pending-dispatch"
+SUBAGENT_INDEX_DIRNAME = ".subagent-index"
+SESSION_RUN_ID_DIRNAME = ".session-run-id"
 RESERVED_FILENAME_CHARS = '<>:"/\\|?*'
 DEBUG_ENV_VAR = "MOSAIC_LOGGER_DEBUG"
 # NOTE: no WORKSPACE_ENV_VAR — VS Code sets no CLAUDE_PROJECT_DIR equivalent (D2).
@@ -55,8 +63,8 @@ class HookContext:
     Handlers read it; they never mutate it, with the single exception of
     run_id, which the run-identity prelude sets before any handler runs.
 
-    agent_name is a VS Code-specific first-class attribute — it is the
-    primary correlation key for this harness (D3).
+    agent_name is a fallback correlation key; the primary key is agent_id, the
+    spawning tool-call ID.
     """
 
     def __init__(self, payload: dict, workspace_root: pathlib.Path,
@@ -114,6 +122,11 @@ def _prune(value):
     return value, True
 
 
+def schema_version_for(event: str) -> str:
+    """Return the highest schema_version whose fields this adapter implements for ``event``."""
+    return EVENT_SCHEMA_VERSIONS.get(event, BASE_SCHEMA_VERSION)
+
+
 def build_event(event: str, ctx: "HookContext", **fields) -> dict:
     """Build a complete event object: common envelope plus caller-supplied fields.
 
@@ -125,7 +138,7 @@ def build_event(event: str, ctx: "HookContext", **fields) -> dict:
     pruned recursively; a dict empty after pruning is itself dropped.
     """
     result: dict = {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": schema_version_for(event),
         "event": event,
         "timestamp": ctx.timestamp,
         "harness": HARNESS,
@@ -149,6 +162,9 @@ def build_event(event: str, ctx: "HookContext", **fields) -> dict:
 
 def effective_run_id(ctx: "HookContext") -> str:
     """Return ctx.run_id when present, or 'unknown-run' as the fallback bucket.
+
+    ctx.run_id comes from prompt extraction or the session -> run cache (see
+    resolve_run_identity), so a known session's events follow its run.
 
     This is the single decision point for run_id-to-path mapping. Handlers
     call this instead of guarding on ctx.run_id directly. The returned value
@@ -215,17 +231,19 @@ def atomic_replace_text(path: pathlib.Path, text: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def resolve_workspace_root(payload: dict) -> pathlib.Path:
-    """Resolve workspace root: payload cwd first, then process cwd.
+    """Resolve the workspace root: payload cwd first, then process cwd.
 
-    D2: VS Code sets no workspace-root environment variable. This function
-    reads no environment variable — a deliberate divergence from the
-    claude-code adapter. The WORKSPACE_ENV_VAR constant is absent (not
-    present-and-unused) so a copy-paste regression is detectable by grep.
+    The hook registration runs the script from ``<workspace>/.github/hooks``, so a
+    candidate whose last two components are ``.github`` and ``hooks`` (case-insensitive)
+    is mapped to its grandparent, the workspace. Any other candidate is used as is.
+    No environment variable is read.
     """
     cwd = payload.get("cwd") or ""
-    if cwd:
-        return pathlib.Path(cwd)
-    return pathlib.Path.cwd()
+    candidate = pathlib.Path(cwd) if cwd else pathlib.Path.cwd()
+    parts = candidate.parts
+    if len(parts) >= 3 and parts[-1].lower() == "hooks" and parts[-2].lower() == ".github":
+        return candidate.parent.parent
+    return candidate
 
 
 class LogPaths:
@@ -270,6 +288,21 @@ class LogPaths:
 
     def invocation_raw(self, run_id: str, agent_instance_id: str) -> pathlib.Path:
         return self.invocation_dir(run_id, agent_instance_id) / "04_session.raw"
+
+    def subagent_index_dir(self) -> pathlib.Path:
+        """Workspace-level folder of the subagent spawn index (skipped by log readers)."""
+        return self.root / SUBAGENT_INDEX_DIRNAME
+
+    def subagent_index_file(self, key: str, extension: str) -> pathlib.Path:
+        """One of the per-key spawn index files: json, stopped or claimed."""
+        return self.subagent_index_dir() / f"{sanitize_component(key)}.{extension}"
+
+    def session_run_id_dir(self) -> pathlib.Path:
+        """Workspace-level folder of the session -> run cache (skipped by log readers)."""
+        return self.root / SESSION_RUN_ID_DIRNAME
+
+    def session_run_id_entry(self, session_id: str) -> pathlib.Path:
+        return self.session_run_id_dir() / f"{sanitize_component(session_id)}.json"
 
     def pending_dispatch_dir(self, run_id: str) -> pathlib.Path:
         """Directory for pending-dispatch queue files."""

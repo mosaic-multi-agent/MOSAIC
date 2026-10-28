@@ -20,6 +20,7 @@ Key vscode-ghcp divergences (D5):
 
 import mosaic_logger_core as core
 import mosaic_logger_export as export
+import mosaic_logger_handlers_invocation as invocation
 import mosaic_logger_transcript as transcript
 
 
@@ -182,6 +183,10 @@ def handle_stop(ctx: "core.HookContext") -> None:
         )
     except Exception as exc:
         core.debug_log("handle_stop: export failed", exc)
+
+    # Step 4: end subagents of this session that stopped without a completed
+    # spawning PostToolUse (invocation_end without response).
+    invocation.sweep_stopped_subagents(ctx)
 
 
 # ---------------------------------------------------------------------------

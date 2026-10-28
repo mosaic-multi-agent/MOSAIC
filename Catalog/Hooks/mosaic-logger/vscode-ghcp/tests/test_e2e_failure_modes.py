@@ -20,7 +20,7 @@ vscode-ghcp-specific notes:
   - The adapter is invoked as 'py mosaic_logger.py' — the working Python launcher
     on this machine (not 'python' or 'python3')
   - Workspace root comes from payload['cwd'], not from CLAUDE_PROJECT_DIR
-  - SubagentStart uses agent_name (not agent_id) as the correlation key (D3)
+  - SubagentStart/SubagentStop use agent_id (the spawning tool-call ID) as the correlation key (D3)
   - Every PostToolUse records status='success' (no failure event for VS Code)
 """
 
@@ -292,7 +292,7 @@ class TestEmptyStdoutForAllInputTypes(unittest.TestCase):
         self._assert_empty_stdout(
             _payload("PostToolUse", self.tmp_path, session_id="s1",
                      tool_name="Bash",
-                     tool_result={"text_result_for_llm": "output text"}),
+                     tool_response="output text"),
             "PostToolUse"
         )
 
@@ -491,70 +491,18 @@ class TestTranscriptDegradation(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_subagent_stop_with_absent_transcript_omits_model_and_token_usage(self):
-        """SubagentStop with transcript_path pointing to a nonexistent file produces
-        invocation_end with model and token_usage absent (AC4.6)."""
-        session_id = "degrad-inv-absent-001"
-        run_id_str = "20260101T130000Z-ef01"
-        agent_name = "Research"
-        instance_id = "Research#2"
-        cwd = str(self.tmp_path)
-
-        # Full correlation chain: SessionStart → UserPromptSubmit (embeds run_id)
-        # → PreToolUse (pending dispatch) → SubagentStart → SubagentStop.
-        for p in [
-            {
-                "hook_event_name": "SessionStart",
-                "session_id": session_id,
-                "source": "startup",
-                "cwd": cwd,
-            },
-            {
-                "hook_event_name": "UserPromptSubmit",
-                "session_id": session_id,
-                "cwd": cwd,
-                "prompt": f"run_id: {run_id_str} task: test",
-            },
-            {
-                "hook_event_name": "PreToolUse",
-                "session_id": session_id,
-                "cwd": cwd,
-                "tool_name": "Agent",
-                "tool_use_id": "call-degrad-001",
-                "tool_input": {
-                    "prompt": (
-                        f"agent_instance_id: {instance_id}\n"
-                        f"run_id: {run_id_str}\n"
-                        "task: conduct analysis"
-                    )
-                },
-            },
-            {
-                "hook_event_name": "SubagentStart",
-                "session_id": session_id,
-                "cwd": cwd,
-                "agent_name": agent_name,
-            },
-        ]:
+        """A finished subagent whose transcript_path points to a nonexistent file
+        produces invocation_end with model and token_usage absent (AC4.6)."""
+        run_id_str, instance_id = "20260101T130000Z-ef01", "Research#2"
+        for p in _subagent_session_payloads(
+                "degrad-inv-absent-001", run_id_str, instance_id,
+                "toolu_01DegradAbsentAbCdEfGh", str(self.tmp_path)):
             self._dispatch(p)
-
-        # SubagentStop with an unreadable transcript path.
-        self._dispatch({
-            "hook_event_name": "SubagentStop",
-            "session_id": session_id,
-            "cwd": cwd,
-            "agent_id": "agt-degrad-001",
-            "agent_name": agent_name,
-            "transcript_path": "/nonexistent/path/transcript.jsonl",
-            "last_assistant_message": (
-                f'{{"status_code": "SUCCESS", "run_id": "{run_id_str}"}}'
-            ),
-        })
 
         found_run_id = self._find_run_id()
         self.assertIsNotNone(found_run_id)
         paths = core.build_paths(self.tmp_path)
-        inv_events_path = paths.invocation_events(found_run_id, instance_id)
-        inv_events = self._read_events(inv_events_path)
+        inv_events = self._read_events(paths.invocation_events(found_run_id, instance_id))
 
         inv_end = next((e for e in inv_events if e.get("event") == "invocation_end"), None)
         self.assertIsNotNone(inv_end, "invocation_end must be emitted even with missing transcript")
@@ -568,32 +516,11 @@ class TestTranscriptDegradation(unittest.TestCase):
         )
 
     def test_subagent_stop_with_absent_transcript_still_emits_invocation_end(self):
-        """invocation_end must be emitted even when the transcript path is absent."""
-        session_id = "degrad-inv-emitted-001"
-        run_id_str = "20260101T140000Z-ff02"
-        agent_name = "TestWriter"
-        instance_id = "TestWriter#3"
-        cwd = str(self.tmp_path)
-
-        for p in [
-            {"hook_event_name": "SessionStart", "session_id": session_id,
-             "source": "startup", "cwd": cwd},
-            {"hook_event_name": "UserPromptSubmit", "session_id": session_id,
-             "cwd": cwd, "prompt": f"run_id: {run_id_str} write tests"},
-            {"hook_event_name": "PreToolUse", "session_id": session_id,
-             "cwd": cwd, "tool_name": "Agent", "tool_use_id": "call-emitted-001",
-             "tool_input": {
-                 "prompt": f"agent_instance_id: {instance_id}\nrun_id: {run_id_str}"
-             }},
-            {"hook_event_name": "SubagentStart", "session_id": session_id,
-             "cwd": cwd, "agent_name": agent_name},
-            {"hook_event_name": "SubagentStop", "session_id": session_id,
-             "cwd": cwd, "agent_id": "agt-emitted-001", "agent_name": agent_name,
-             "transcript_path": "/no/such/file.jsonl",
-             "last_assistant_message": (
-                 f'{{"status_code": "SUCCESS", "run_id": "{run_id_str}"}}'
-             )},
-        ]:
+        """Exactly one invocation_end must be emitted even when the transcript path is absent."""
+        run_id_str, instance_id = "20260101T140000Z-ff02", "TestWriter#3"
+        for p in _subagent_session_payloads(
+                "degrad-inv-emitted-001", run_id_str, instance_id,
+                "toolu_01DegradEmittedAbCdEf", str(self.tmp_path)):
             self._dispatch(p)
 
         found_run_id = self._find_run_id()
@@ -636,31 +563,10 @@ class TestTranscriptDegradation(unittest.TestCase):
 
     def test_no_null_values_when_transcript_absent_for_subagent_stop(self):
         """No invocation event carries a null value even when transcript is absent."""
-        session_id = "nonull-inv-001"
-        run_id_str = "20260101T150000Z-aa03"
-        agent_name = "Reviewer"
-        instance_id = "Reviewer#4"
-        cwd = str(self.tmp_path)
-
-        for p in [
-            {"hook_event_name": "SessionStart", "session_id": session_id,
-             "source": "startup", "cwd": cwd},
-            {"hook_event_name": "UserPromptSubmit", "session_id": session_id,
-             "cwd": cwd, "prompt": f"run_id: {run_id_str} review"},
-            {"hook_event_name": "PreToolUse", "session_id": session_id,
-             "cwd": cwd, "tool_name": "Agent", "tool_use_id": "call-nonull-001",
-             "tool_input": {
-                 "prompt": f"agent_instance_id: {instance_id}\nrun_id: {run_id_str}"
-             }},
-            {"hook_event_name": "SubagentStart", "session_id": session_id,
-             "cwd": cwd, "agent_name": agent_name},
-            {"hook_event_name": "SubagentStop", "session_id": session_id,
-             "cwd": cwd, "agent_id": "agt-nonull-001", "agent_name": agent_name,
-             "transcript_path": "/no/such/transcript.jsonl",
-             "last_assistant_message": (
-                 f'{{"status_code": "SUCCESS", "run_id": "{run_id_str}"}}'
-             )},
-        ]:
+        run_id_str, instance_id = "20260101T150000Z-aa03", "Reviewer#4"
+        for p in _subagent_session_payloads(
+                "nonull-inv-001", run_id_str, instance_id,
+                "toolu_01NoNullInvAbCdEfGhIj", str(self.tmp_path)):
             self._dispatch(p)
 
         found_run_id = self._find_run_id()
@@ -705,50 +611,17 @@ class TestTranscriptDegradation(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_subagent_stop_with_missing_transcript_exits_0_subprocess(self):
-        """Subprocess-level confirmation: exit 0 when transcript is unreadable."""
+        """Subprocess-level confirmation: every firing of a finished subagent exits 0
+        with empty stdout when the transcript is unreadable."""
         with tempfile.TemporaryDirectory() as tmp:
-            # Establish session and agent mapping first (each in its own subprocess call).
-            session_id = "degrad-proc-001"
-            run_id_str = "20260101T160000Z-bb04"
-            agent_name = "Orchestrator"
-            instance_id = "Orchestrator#5"
-            cwd = tmp
-
-            setup_payloads = [
-                {"hook_event_name": "SessionStart", "session_id": session_id,
-                 "source": "startup", "cwd": cwd},
-                {"hook_event_name": "UserPromptSubmit", "session_id": session_id,
-                 "cwd": cwd, "prompt": f"run_id: {run_id_str}"},
-                {"hook_event_name": "PreToolUse", "session_id": session_id,
-                 "cwd": cwd, "tool_name": "Agent", "tool_use_id": "call-proc-001",
-                 "tool_input": {
-                     "prompt": f"agent_instance_id: {instance_id}\nrun_id: {run_id_str}"
-                 }},
-                {"hook_event_name": "SubagentStart", "session_id": session_id,
-                 "cwd": cwd, "agent_name": agent_name},
-            ]
-            for p in setup_payloads:
+            for p in _subagent_session_payloads(
+                    "degrad-proc-001", "20260101T160000Z-bb04", "Orchestrator#5",
+                    "toolu_01DegradProcAbCdEfGhI", tmp):
                 r = _run_adapter(json.dumps(p).encode())
                 self.assertEqual(0, r.returncode,
-                                 f"Setup step {p['hook_event_name']!r} must exit 0")
-
-            # SubagentStop with unreadable transcript.
-            stop_p = {
-                "hook_event_name": "SubagentStop",
-                "session_id": session_id,
-                "cwd": cwd,
-                "agent_id": "agt-proc-001",
-                "agent_name": agent_name,
-                "transcript_path": "/nonexistent/transcript.jsonl",
-                "last_assistant_message": (
-                    f'{{"status_code": "SUCCESS", "run_id": "{run_id_str}"}}'
-                ),
-            }
-            result = _run_adapter(json.dumps(stop_p).encode())
-            self.assertEqual(0, result.returncode,
-                             "SubagentStop with missing transcript must exit 0")
-            self.assertEqual(b"", result.stdout,
-                             "SubagentStop with missing transcript must produce no stdout")
+                                 f"{p['hook_event_name']!r} with missing transcript must exit 0")
+                self.assertEqual(b"", r.stdout,
+                                 f"{p['hook_event_name']!r} with missing transcript must produce no stdout")
 
     def test_stop_with_missing_transcript_exits_0_subprocess(self):
         """Subprocess-level: Stop with absent transcript_path exits 0."""
@@ -771,6 +644,34 @@ class TestTranscriptDegradation(unittest.TestCase):
             }).encode())
             self.assertEqual(0, r.returncode)
             self.assertEqual(b"", r.stdout)
+
+
+def _subagent_session_payloads(session_id, run_id_str, instance_id, call_id, cwd):
+    """Hook payloads of one finished subagent, shaped like the captured VS Code inputs.
+
+    `call_id` is the spawning tool-call ID (`toolu_...`): SubagentStart/SubagentStop
+    carry it as `agent_id`; the orchestrator's PreToolUse/PostToolUse for runSubagent
+    carry it as `tool_use_id` with a `__vscode-<ms>` suffix. Every transcript path is
+    unreadable.
+    """
+    base = {"session_id": session_id, "cwd": cwd,
+            "transcript_path": "/nonexistent/transcript.jsonl"}
+    tool_use_id = f"{call_id}__vscode-1793098349279"
+    prompt = f"agent_instance_id: {instance_id}\nrun_id: {run_id_str}\ntask: analyse"
+    response = json.dumps({"agent_instance_id": instance_id, "run_id": run_id_str,
+                           "status_code": "SUCCESS", "status_message": "Done."})
+    return [
+        {**base, "hook_event_name": "SessionStart", "source": "startup"},
+        {**base, "hook_event_name": "UserPromptSubmit", "prompt": f"run_id: {run_id_str} go"},
+        {**base, "hook_event_name": "PreToolUse", "tool_name": "runSubagent",
+         "tool_use_id": tool_use_id, "tool_input": {"agentName": "worker", "prompt": prompt}},
+        {**base, "hook_event_name": "SubagentStart", "agent_id": call_id, "agent_type": "worker"},
+        {**base, "hook_event_name": "SubagentStop", "agent_id": call_id,
+         "agent_type": "worker", "stop_hook_active": False},
+        {**base, "hook_event_name": "PostToolUse", "tool_name": "runSubagent",
+         "tool_use_id": tool_use_id, "tool_input": {"agentName": "worker", "prompt": prompt},
+         "tool_response": response},
+    ]
 
 
 # ---------------------------------------------------------------------------

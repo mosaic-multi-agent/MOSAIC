@@ -1,0 +1,15 @@
+{
+  "description": "A span whose only key is a chat_session_id equal to a spawn_call_id is tied to the run and placed on that invocation; the record carries no session_id and takes the harness of the invocation.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

@@ -82,6 +82,7 @@ type ActorKind uint8
 const (
 	ActorOrchestrator ActorKind = iota
 	ActorAgentInstance
+	ActorUnattributed
 )
 
 // ActorRef identifies whose cost a figure belongs to within a run.
@@ -99,10 +100,18 @@ func AgentInstance(id AgentInstanceID) ActorRef {
 	return ActorRef{Kind: ActorAgentInstance, Instance: id}
 }
 
+// Unattributed constructs an ActorRef for usage inside a named run that belongs to
+// neither its orchestrator nor one of its invocations. Label() is "unattributed".
+// Only named runs hold such usage; the unknown-run bucket never carries the stream.
+func Unattributed() ActorRef { return ActorRef{Kind: ActorUnattributed} }
+
 // Label returns a human-readable label for the actor.
 func (a ActorRef) Label() string {
 	if a.Kind == ActorOrchestrator {
 		return "orchestrator"
+	}
+	if a.Kind == ActorUnattributed {
+		return "unattributed"
 	}
 	return string(a.Instance)
 }

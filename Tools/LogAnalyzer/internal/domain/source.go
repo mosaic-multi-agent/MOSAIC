@@ -41,6 +41,7 @@ type RunEntry struct {
 	Run              RunRef
 	Dir              string
 	OrchestratorFile string       // "" when 00_orchestrator_events.jsonl is absent
+	UnattributedFile string       // "" when 00_unattributed_events.jsonl is absent
 	Agents           []AgentEntry // sorted by Dir
 }
 
@@ -64,6 +65,7 @@ type StreamKind uint8
 const (
 	StreamOrchestrator StreamKind = iota
 	StreamAgentInstance
+	StreamUnattributed // run-root 00_unattributed_events.jsonl
 )
 
 // StreamRef is the provenance the reader/app attaches to every event handed to

@@ -1,0 +1,24 @@
+{
+  "description": "The caller supplies the first cursor: usage before the run's first harness session (bytes before start_offset) is never parsed or included. Once a cursor exists, a later start_offset is ignored.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "first",
+      "otel": "otel/first.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": 614,
+      "scope": []
+    },
+    {
+      "name": "second",
+      "otel": "otel/second.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": 0,
+      "scope": []
+    }
+  ]
+}

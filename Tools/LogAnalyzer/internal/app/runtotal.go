@@ -46,6 +46,11 @@ type RunTotal struct {
 	// (after any unknown-run merge). Go-side only: never encoded by
 	// cli.EncodeRunTotal.
 	Activity domain.RunActivity
+
+	// PendingUsageRecords is the number of usage spans still pending in the run's
+	// ingest state; UsageStateUnreadable is true when that state is not readable.
+	PendingUsageRecords  int
+	UsageStateUnreadable bool
 }
 
 // RunTotalFor extracts the basic total for one named run from a report.
@@ -61,13 +66,15 @@ func RunTotalFor(r domain.Report, runID string) (RunTotal, bool) {
 	}
 
 	return RunTotal{
-		RunID:          run.Run.ID,
-		Provisional:    run.Provisional,
-		Tokens:         run.Totals.Tokens,
-		Money:          run.Totals.Money.Total,
-		Complete:       run.Totals.Money.Complete,
-		UnpricedModels: domain.DistinctModelIDs(run.UnpricedModels),
-		PartialAmount:  partial,
+		RunID:                run.Run.ID,
+		Provisional:          run.Provisional,
+		Tokens:               run.Totals.Tokens,
+		Money:                run.Totals.Money.Total,
+		Complete:             run.Totals.Money.Complete,
+		UnpricedModels:       domain.DistinctModelIDs(run.UnpricedModels),
+		PartialAmount:        partial,
+		PendingUsageRecords:  run.UsageIngest.PendingRecords,
+		UsageStateUnreadable: run.UsageIngest.StateUnreadable,
 	}, true
 }
 
@@ -144,6 +151,7 @@ func (s *Service) TotalForRun(ctx context.Context, req Request, runID string) (R
 	// Step 8: Price.
 	report, priceFindings := analysis.Price(agg, table, src)
 	carried = append(carried, priceFindings...)
+	applyUsageIngest(&report, s.probeUsageIngest(inv))
 
 	// Step 9: Attach quality summary.
 	report.Quality = domain.NewQualitySummary(carried)

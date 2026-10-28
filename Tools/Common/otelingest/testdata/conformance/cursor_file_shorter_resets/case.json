@@ -1,0 +1,24 @@
+{
+  "description": "A file shorter than the stored cursor is read afresh from byte 0: lines already placed are not written again (placement is final) and new lines are not skipped.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "long",
+      "otel": "otel/long.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    },
+    {
+      "name": "shorter",
+      "otel": "otel/shorter.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

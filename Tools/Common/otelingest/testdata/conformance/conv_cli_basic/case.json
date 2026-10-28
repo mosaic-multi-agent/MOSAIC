@@ -1,0 +1,15 @@
+{
+  "description": "GHCP CLI wrapper dialect, native orchestrator: cache_write and reasoning.output_tokens generation, legacy cache_creation / reasoning_tokens names, preference when both generations are present, effort verbatim from gen_ai.request.reasoning.level, model fallback, the root invoke_agent total is not a record; content attributes on chat span cli-4 never reach the records.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

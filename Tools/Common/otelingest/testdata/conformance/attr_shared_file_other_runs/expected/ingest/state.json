@@ -1,0 +1,19 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 6206,
+    "head_len": 4096,
+    "head_sha256": "451f3730b1e07fbc30f4b9591fd6307792ff824f2d0391b923d47c16d9a882ee"
+  },
+  "placements": {
+    "chat-mine": "orchestrator"
+  },
+  "pending": [],
+  "links": {
+    "invoke-orch": {
+      "kind": "invoke_agent",
+      "conversation_id": "vsc-session-9",
+      "chat_session_id": "vsc-session-9"
+    }
+  }
+}

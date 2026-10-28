@@ -66,3 +66,16 @@ type PricingStore interface {
 type Clock interface {
 	Now() time.Time
 }
+
+// UsageIngester runs a final recovery ingest of a usage export into one run folder.
+// Implementation: otelusage.Adapter (production), in-memory fake (tests).
+type UsageIngester interface {
+	// IngestRun returns an error only for infrastructure failures (status IngestFailed).
+	IngestRun(ctx context.Context, req UsageIngestRequest) (UsageIngestResult, error)
+}
+
+// IngestStateProbe reads a run folder's ingest state without modifying it.
+// Implementation: otelusage.Adapter (production), in-memory fake (tests).
+type IngestStateProbe interface {
+	PendingUsage(runDir string) UsageIngestState
+}

@@ -1,0 +1,58 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 31804,
+    "head_len": 4096,
+    "head_sha256": "5e8b135b60ed7e4f5cdc74bd40d166d4023bfefff72df440e02b46f272eccd91"
+  },
+  "placements": {
+    "9cd5a0c10843a7b5": "invocation/Implementation#1",
+    "9d4f461eb49ebed3": "invocation/Implementation#1",
+    "7930db4b38e93c1e": "invocation/Implementation#1",
+    "80f924a13ae5f793": "invocation/Implementation#1",
+    "b482c6b359febf66": "invocation/Implementation#1",
+    "cce305e0163a1f17": "invocation/Implementation#1",
+    "8d29b977f2b18040": "invocation/Implementation#1",
+    "9935e930ec2d005c": "invocation/Implementation#1",
+    "a9deb67b40813847": "invocation/Implementation#1",
+    "2e79a96e47285324": "invocation/Implementation#1",
+    "4018c6144cc7af68": "invocation/Implementation#1",
+    "24fa6e88e3760e47": "invocation/Implementation#1",
+    "a55ec75f541d46c3": "unattributed",
+    "cca8f830568937f9": "unattributed",
+    "85eb3aafdcbff5db": "unattributed",
+    "8709ba6767e96b03": "unattributed",
+    "07bcd0c6579b29eb": "unattributed",
+    "997b995db7e851e5": "unattributed",
+    "0043be7bf02c855a": "unattributed",
+    "009a09db7db3d910": "unattributed",
+    "f6f79ce566a05832": "unattributed"
+  },
+  "pending": [],
+  "links": {
+    "05ae354fcb664ffb": {
+      "kind": "invoke_agent",
+      "parent_span_id": "bb2b4ccf72ce2e63",
+      "conversation_id": "eafe873b-14dd-45ca-af18-fa1ef169f12c"
+    },
+    "bb2b4ccf72ce2e63": {
+      "kind": "execute_tool",
+      "parent_span_id": "0b2ef2a8feeee66a",
+      "conversation_id": "eafe873b-14dd-45ca-af18-fa1ef169f12c",
+      "tool_call_id": "toolu_01Y8kBiUv9fcxNSqvq7sX6kG",
+      "tool_name": "task"
+    },
+    "31c12e3b2888e0bf": {
+      "kind": "invoke_agent",
+      "parent_span_id": "7f7a1d25148dae0c",
+      "conversation_id": "eafe873b-14dd-45ca-af18-fa1ef169f12c"
+    },
+    "7f7a1d25148dae0c": {
+      "kind": "execute_tool",
+      "parent_span_id": "0b2ef2a8feeee66a",
+      "conversation_id": "eafe873b-14dd-45ca-af18-fa1ef169f12c",
+      "tool_call_id": "toolu_01EEevD2DFNGYtqZVCJL8dYD",
+      "tool_name": "task"
+    }
+  }
+}

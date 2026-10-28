@@ -3,19 +3,23 @@
 Handles: SubagentStart, SubagentStop. Writes invocation_start, invocation_end,
 boundary turn events, artifact files, and transcript exports for each subagent.
 
-Key vscode-ghcp divergence (D3):
-- Subagent correlation is keyed on agent_name, not agent_id.
-- SubagentStart carries no agent_id in VS Code — the reference adapters'
-  `if not ctx.agent_id: return` guard would suppress every invocation and
-  must NOT be used here.
-- resolve_agent_key is the single seam: both handlers route through it so
-  start and end cannot disagree about which key was used.
-- put_agent_mapping and get_agent_mapping use agent_name as the key.
+Key vscode-ghcp behaviour:
+- Subagent correlation is keyed on the spawning tool-call ID: SubagentStart and
+  SubagentStop carry it as agent_id (the `toolu_...` value, possibly with a
+  `__vscode-<ms>` suffix, which is stripped). agent_name is a fallback key only.
+- SubagentStop carries no response text and no run ID. It only marks the subagent as
+  stopped; the invocation_end is written once, by whichever of the orchestrator's
+  PostToolUse for the spawning tool or the orchestrator's Stop sweep claims it first.
+- resolve_agent_key is the single seam for the key.
 """
 
+import copy
+import json
 import re
 
 import mosaic_logger_core as core
+import mosaic_logger_diagnostics as diagnostics
+import mosaic_logger_subagent_state as subagent_state
 import mosaic_logger_runstate as runstate
 import mosaic_logger_export as export
 import mosaic_logger_transcript as transcript
@@ -76,17 +80,15 @@ def extract_status_code(message: "str | None") -> "str | None":
 def resolve_agent_key(ctx: "core.HookContext") -> "str | None":
     """Return the correlation key for this firing.
 
-    D3: returns agent_name when present (via ctx.field which normalizes empty
-    string to None), falls back to agent_id, and returns None when both are
-    absent. Both SubagentStart and SubagentStop route through this function so
-    start and end cannot disagree about which key was used. A future VS Code
-    build that adds agent_id to SubagentStart needs one edit here to switch
-    precedence.
+    The normalised agent_id (the spawning tool-call ID without any `__vscode-<ms>`
+    suffix); agent_name only when agent_id is absent; None when both are absent.
+    SubagentStart and SubagentStop both route through this function so start and
+    stop cannot disagree about which key was used.
     """
-    agent_name = ctx.field("agent_name")
-    if agent_name is not None:
-        return agent_name
-    return ctx.agent_id  # may be None
+    from_id = subagent_state.normalize_call_id(ctx.agent_id)
+    if from_id is not None:
+        return from_id
+    return ctx.field("agent_name")
 
 
 def resolve_agent_type(ctx: "core.HookContext") -> "str | None":
@@ -109,13 +111,10 @@ def handle_subagent_start(ctx: "core.HookContext") -> None:
     """Handle SubagentStart: persist mapping, emit invocation_start and user turn,
     write 01_input.md, and refresh 00_orchestrator_session.raw.
 
-    D3: there is NO agent_id guard. The reference adapters' `if not ctx.agent_id:
-    return` would suppress every VS Code SubagentStart (which carries no agent_id)
-    and must not be used here. Correlation key is agent_name.
-
-    The agent map entry is persisted BEFORE any event write to minimize the
-    correlation window between SubagentStart and the first PreToolUse that could
-    follow in a concurrent process.
+    The correlation key is the spawning tool-call ID (agent_id); the same value,
+    suffix stripped, is written on invocation_start as spawn_call_id. The agent map
+    entry and the workspace-level spawn index entry are persisted BEFORE any event
+    write to minimize the correlation window for concurrent firings.
 
     Never raises.
     """
@@ -151,6 +150,10 @@ def handle_subagent_start(ctx: "core.HookContext") -> None:
         runstate.put_agent_mapping(
             ctx.paths, run_id, agent_key, agent_instance_id, resolve_agent_type(ctx)
         )
+        subagent_state.put_spawn_entry(
+            ctx.paths, agent_key, run_id, agent_instance_id, ctx.session_id,
+            resolve_agent_type(ctx),
+        )
 
         sink = ctx.paths.invocation_events(run_id, agent_instance_id)
 
@@ -160,6 +163,7 @@ def handle_subagent_start(ctx: "core.HookContext") -> None:
             agent_instance_id=agent_instance_id,
             agent_type=resolve_agent_type(ctx),
             prompt=agent_prompt,
+            spawn_call_id=subagent_state.normalize_call_id(ctx.agent_id),
         )
         core.append_event(sink, event)
 
@@ -185,86 +189,110 @@ def handle_subagent_start(ctx: "core.HookContext") -> None:
         core.debug_log("handle_subagent_start failed", exc)
 
 
-def handle_subagent_stop(ctx: "core.HookContext") -> None:
-    """Handle SubagentStop: emit invocation_end and final assistant turn,
-    write 02_output.md, export agent transcript, and refresh
-    00_orchestrator_session.raw.
+def _report_unmapped(ctx: "core.HookContext", kind: str, message: str,
+                     key: "str | None") -> None:
+    diagnostics.report(
+        ctx.paths.root, kind, message, harness=core.HARNESS,
+        session_id=ctx.session_id, ids=[key] if key else None,
+    )
 
-    D3: resolves the invocation by agent_name; falls back to agent_id only when
-    agent_name is absent. Skips firings whose resolved agent_instance_id starts
-    with 'unmapped_', which indicates no corresponding SubagentStart mapping
-    was found — such firings are quarantined rather than written to any stream.
+
+def response_text(value) -> "str | None":
+    """The text form of a tool_response: a non-empty string verbatim, a non-empty
+    dict/list as JSON text, otherwise None."""
+    if isinstance(value, str):
+        return value or None
+    if isinstance(value, (dict, list)) and value:
+        return json.dumps(value, ensure_ascii=False)
+    return None
+
+
+def complete_invocation(ctx: "core.HookContext", entry: dict,
+                        response: "str | None") -> None:
+    """Write the one invocation_end and 02_output.md of the indexed subagent.
+
+    The caller has already won the completion claim. No model, provider or token
+    usage is written: the payload's transcript belongs to the orchestrator session.
+    Never raises.
+    """
+    try:
+        run_id = entry.get("run_id") or "unknown-run"
+        instance_id = entry["agent_instance_id"]
+        end_ctx = copy.copy(ctx)
+        end_ctx.run_id = None if run_id == "unknown-run" else run_id
+        end_ctx.agent_type = entry.get("agent_type")
+        status_code = extract_status_code(response)
+
+        event = core.build_event(
+            "invocation_end", end_ctx,
+            agent_instance_id=instance_id,
+            status_code=status_code,
+            response=response,
+        )
+        core.append_event(ctx.paths.invocation_events(run_id, instance_id), event)
+
+        output_text = artifacts.render_output(
+            end_ctx, instance_id, response, status_code, None
+        )
+        artifacts.write_artifact(ctx.paths.invocation_output(run_id, instance_id), output_text)
+    except Exception as exc:
+        core.debug_log("complete_invocation failed", exc)
+
+
+def complete_from_dispatch_result(ctx: "core.HookContext", tool_use_id,
+                                  tool_response) -> None:
+    """Complete the subagent spawned by the tool call tool_use_id (PostToolUse path).
+
+    A call ID absent from the spawn index is reported as a diagnostic and writes no
+    invocation event; a lost completion claim writes nothing. Never raises.
+    """
+    try:
+        key = subagent_state.normalize_call_id(tool_use_id)
+        entry = subagent_state.get_spawn_entry(ctx.paths, key) if key else None
+        if entry is None:
+            _report_unmapped(
+                ctx, "unmapped_subagent_completion",
+                "Spawning tool call finished but no started subagent matches its call ID",
+                key,
+            )
+            return
+        if subagent_state.claim_completion(ctx.paths, key):
+            complete_invocation(ctx, entry, response_text(tool_response))
+    except Exception as exc:
+        core.debug_log("complete_from_dispatch_result failed", exc)
+
+
+def sweep_stopped_subagents(ctx: "core.HookContext") -> None:
+    """At the orchestrator's Stop, end every subagent of this session that stopped
+    but never had its spawning PostToolUse completed. Never raises."""
+    try:
+        if not ctx.session_id:
+            return
+        for entry in subagent_state.stopped_unclaimed(ctx.paths, ctx.session_id):
+            if subagent_state.claim_completion(ctx.paths, entry["key"]):
+                complete_invocation(ctx, entry, None)
+    except Exception as exc:
+        core.debug_log("sweep_stopped_subagents failed", exc)
+
+
+def handle_subagent_stop(ctx: "core.HookContext") -> None:
+    """Handle SubagentStop: mark the subagent as stopped.
+
+    VS Code's SubagentStop carries no response text and no run ID, so it writes no
+    event. A firing whose key is absent or not in the spawn index is reported as an
+    unmapped_subagent_stop diagnostic (default-visible) and writes nothing else.
 
     Never raises.
     """
     try:
-        # Step 1: resolve correlation key.
-        agent_key = resolve_agent_key(ctx)
-        if agent_key is None:
-            return
-
-        run_id = core.effective_run_id(ctx)
-
-        # Step 2: resolve agent_instance_id; skip unmapped firings.
-        agent_instance_id = runstate.resolve_invocation_id(
-            ctx.paths, run_id, agent_key
-        )
-        if agent_instance_id.startswith("unmapped_"):
-            return
-
-        sink = ctx.paths.invocation_events(run_id, agent_instance_id)
-
-        # Step 3: read transcript facts once (best-effort; no per-subagent transcript
-        # field is confirmed for VS Code, so ctx.transcript_path is the session path).
-        facts = transcript.read_last_assistant_facts(ctx.transcript_path)
-
-        last_msg = ctx.field("last_assistant_message")
-        status_code = extract_status_code(last_msg)
-
-        # Step 4: emit invocation_end.
-        event = core.build_event(
-            "invocation_end", ctx,
-            agent_instance_id=agent_instance_id,
-            status_code=status_code,
-            response=last_msg,
-            model=facts.model,
-            token_usage=facts.token_usage,
-        )
-        core.append_event(sink, event)
-
-        # Step 5: emit final assistant turn when last_assistant_message is present.
-        if last_msg is not None:
-            turn = core.build_event(
-                "turn", ctx,
-                role="assistant",
-                content=last_msg,
-                model=facts.model,
-                token_usage=facts.token_usage,
+        key = resolve_agent_key(ctx)
+        if key is None or subagent_state.get_spawn_entry(ctx.paths, key) is None:
+            _report_unmapped(
+                ctx, "unmapped_subagent_stop",
+                "SubagentStop did not match any started subagent", key,
             )
-            core.append_event(sink, turn)
-
-        # Step 6: write 02_output.md.
-        output_text = artifacts.render_output(
-            ctx, agent_instance_id, last_msg, status_code, facts
-        )
-        artifacts.write_artifact(
-            ctx.paths.invocation_output(run_id, agent_instance_id), output_text
-        )
-
-        # Step 7: export 04_session.raw (no-op; VS Code has no per-subagent transcript).
-        export.export_transcript(
-            ctx.transcript_path,
-            ctx.paths.invocation_raw(run_id, agent_instance_id),
-            "transcript_path",
-        )
-
-        # Step 8: refresh 00_orchestrator_session.raw.
-        export.export_transcript(
-            ctx.transcript_path,
-            ctx.paths.orchestrator_raw(run_id, ctx.session_id),
-            "transcript_path",
-        )
-
+            return
+        subagent_state.mark_stopped(ctx.paths, key)
     except Exception as exc:
         core.debug_log("handle_subagent_stop failed", exc)
 

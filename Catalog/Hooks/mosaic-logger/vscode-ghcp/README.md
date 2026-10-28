@@ -17,6 +17,8 @@ The adapter is a flat set of 9 Python modules, all deployed to `.github/hooks/`:
 | `mosaic_logger_transcript.py` | Best-effort model/token extraction from the session transcript |
 | `mosaic_logger_export.py` | Byte-for-byte transcript copy and sidecar metadata |
 | `mosaic_logger_artifacts.py` | `01_input.md` / `02_output.md` rendering and writing |
+| `mosaic_logger_diagnostics.py` | Default-visible diagnostics file (`OrchestrationLogs/mosaic-logger-diagnostics.jsonl`) |
+| `mosaic_logger_subagent_state.py` | Subagent spawn index, stopped markers and completion claims |
 | `mosaic_logger_handlers_session.py` | `SessionStart`, `UserPromptSubmit`, `PreCompact`, `Stop` |
 | `mosaic_logger_handlers_invocation.py` | `SubagentStart`, `SubagentStop` |
 | `mosaic_logger_handlers_tools.py` | `PreToolUse`, `PostToolUse` |

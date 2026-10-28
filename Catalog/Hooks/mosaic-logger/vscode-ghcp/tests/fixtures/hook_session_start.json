@@ -1,0 +1,8 @@
+{
+  "timestamp": "2026-10-27T11:00:00.000Z",
+  "hook_event_name": "SessionStart",
+  "session_id": "ece89a93-a783-49b8-80be-08407e3e1ce2",
+  "transcript_path": "/nonexistent/GitHub.copilot-chat/transcripts/ece89a93-a783-49b8-80be-08407e3e1ce2.jsonl",
+  "source": "startup",
+  "cwd": "<workspace>"
+}

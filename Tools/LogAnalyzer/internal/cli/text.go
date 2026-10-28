@@ -102,6 +102,9 @@ func writeTextRun(w io.Writer, run domain.RunReport) {
 		writeTextEffort(w, agent.Effort, "    ")
 		writeTextTotals(w, agent.Totals, "    ")
 	}
+
+	writeTextUnattributed(w, run)
+	writeTextUsageIngest(w, run)
 }
 
 // writeTextTotals writes a compact token + money summary at the given indent level.

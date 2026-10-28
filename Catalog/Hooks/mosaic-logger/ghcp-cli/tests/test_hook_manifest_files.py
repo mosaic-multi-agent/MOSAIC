@@ -1,0 +1,121 @@
+"""The hook manifest ships the OTel ingest files with both Copilot variants.
+
+hook.yaml lists the shared OTel ingest modules (shared source, flat target) and every
+adapter module of the variant folder for vscode-ghcp and ghcp-cli, every listed source
+resolves to a real file, the description block (not comments) mentions COPILOT_OTEL_FILE_EXPORTER_PATH, and the claude-code and opencode variants ship
+no OTel ingest file.
+"""
+
+import glob
+import os
+import re
+import unittest
+
+_HOOK_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_MANIFEST = os.path.join(_HOOK_DIR, "hook.yaml")
+_VARIANT_RE = re.compile(r"^  ([a-z][a-z-]*):\s*$")
+_SOURCE_RE = re.compile(r"^\s+- source:\s*(\S+)\s*$")
+_TARGET_RE = re.compile(r"^\s+target:\s*(\S+)\s*$")
+
+
+def _read_manifest():
+    with open(_MANIFEST, encoding="utf-8") as handle:
+        return handle.read()
+
+
+def _entries_by_variant():
+    """Map each variant to its (source, target) pairs from the manifest."""
+    entries = {}
+    in_variants = False
+    current = None
+    pending_source = None
+    for line in _read_manifest().splitlines():
+        if line.startswith("variants:"):
+            in_variants = True
+            continue
+        if not in_variants:
+            continue
+        variant = _VARIANT_RE.match(line)
+        if variant:
+            current = variant.group(1)
+            entries[current] = []
+            continue
+        source = _SOURCE_RE.match(line)
+        if source and current:
+            pending_source = source.group(1).strip("\"'")
+            continue
+        target = _TARGET_RE.match(line)
+        if target and current and pending_source is not None:
+            entries[current].append((pending_source, target.group(1).strip("\"'")))
+            pending_source = None
+    return entries
+
+
+def _description_text():
+    """The top-level description block scalar only (not comments or other keys)."""
+    lines = _read_manifest().splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith("description:"))
+    block = [lines[start]]
+    for line in lines[start + 1:]:
+        if line.strip() and not line.startswith((" ", "\t")):
+            break
+        block.append(line)
+    return "\n".join(block)
+
+
+def _shared_otel_files():
+    pattern = os.path.join(_HOOK_DIR, "copilot-shared", "mosaic_logger_otel*.py")
+    return sorted(os.path.basename(p) for p in glob.glob(pattern))
+
+
+def _variant_modules(variant):
+    pattern = os.path.join(_HOOK_DIR, variant, "mosaic_logger*.py")
+    return sorted(os.path.basename(p) for p in glob.glob(pattern))
+
+
+class TestCopilotVariantsShipOtelFiles(unittest.TestCase):
+
+    def setUp(self):
+        self.entries = _entries_by_variant()
+
+    def _targets(self, variant):
+        return [target for _, target in self.entries[variant]]
+
+    def test_the_shared_otel_modules_exist_to_be_listed(self):
+        self.assertTrue(_shared_otel_files())
+
+    def test_each_shared_otel_module_is_listed_with_a_shared_source_and_flat_target(self):
+        shared_dir = os.path.normpath(os.path.join(_HOOK_DIR, "copilot-shared"))
+        for variant in ("vscode-ghcp", "ghcp-cli"):
+            for name in _shared_otel_files():
+                matches = [e for e in self.entries[variant] if os.path.basename(e[0]) == name]
+                self.assertEqual(1, len(matches), "%s: %s listed once" % (variant, name))
+                source, target = matches[0]
+                self.assertEqual(name, target, "%s: %s target is flat" % (variant, name))
+                self.assertNotIn("/", target)
+                resolved = os.path.normpath(os.path.join(_HOOK_DIR, variant, source))
+                self.assertEqual(os.path.join(shared_dir, name), resolved, variant)
+                self.assertTrue(os.path.isfile(resolved), "%s: %s" % (variant, source))
+
+    def test_each_copilot_variant_lists_every_adapter_module_in_its_folder(self):
+        for variant in ("vscode-ghcp", "ghcp-cli"):
+            missing = [m for m in _variant_modules(variant) if m not in self._targets(variant)]
+            self.assertEqual([], missing, variant)
+
+    def test_every_listed_variant_source_resolves_to_a_file(self):
+        for variant in ("vscode-ghcp", "ghcp-cli"):
+            for source, _ in self.entries[variant]:
+                path = os.path.normpath(os.path.join(_HOOK_DIR, variant, source))
+                self.assertTrue(os.path.isfile(path), "%s: %s" % (variant, source))
+
+    def test_the_description_mentions_the_otel_file_exporter_variable(self):
+        self.assertIn("COPILOT_OTEL_FILE_EXPORTER_PATH", _description_text())
+
+    def test_claude_code_and_opencode_ship_no_otel_ingest_files(self):
+        for variant in ("claude-code", "opencode"):
+            otel = [s for s, _ in self.entries[variant] if "otel" in os.path.basename(s)]
+            self.assertEqual([], otel, variant)
+
+
+if __name__ == "__main__":
+    unittest.main()

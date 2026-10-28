@@ -1,0 +1,15 @@
+{
+  "description": "VS Code execution_subagent loops are linked by chat_session_id, not by span parents: the loop's chat spans carry the execution_subagent tool call id and arrive before that tool span; the loop belongs to whoever ran the tool (a subagent invocation or the orchestrator).",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

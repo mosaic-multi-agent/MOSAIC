@@ -166,6 +166,25 @@ Checkpoints disabled.
 
 ---
 
+## Token Usage on Copilot Harnesses
+
+GHCP CLI and VS Code Copilot Chat report token usage through Copilot's OpenTelemetry file export, which the MOSAIC logging hook reads. To get usage and cost in `mosaic-log-analyzer` for these harnesses:
+
+1. Set the environment variable `COPILOT_OTEL_FILE_EXPORTER_PATH` to the path of a `.jsonl` file. This one variable enables both Copilot's export and MOSAIC's ingest. Do not use the VS Code user setting for the export instead: the hooks cannot read it.
+2. Set it at user level (Windows user environment variables; macOS/Linux login environment), not in a single shell, and restart VS Code afterwards. VS Code started from the desktop sees only user-level variables.
+3. Content capture is optional and only makes the file larger. MOSAIC never reads content and never modifies the file.
+4. Cost needs `github-copilot` entries that you maintain in `pricing.yaml`; the shipped file has none.
+
+If usage is missing from a run (the variable was unset, the file was missing, a session crashed, or the hooks did not see the variable), recover it:
+
+```sh
+mosaic-log-analyzer ingest-otel <otel-file> --run <run-id>
+```
+
+Without the file argument the command uses `COPILOT_OTEL_FILE_EXPORTER_PATH`. "Usage not fully ingested" in LogAnalyzer means usage of the run is still pending; the recovery ingest resolves it. **Unattributed** usage is usage tied to the run but not to an agent. Details are in the hook README (`Catalog/Hooks/mosaic-logger/README.md`).
+
+---
+
 ## Where to Go from Here
 
 You've deployed, run workflows, and seen the orchestration in action. Here's what to explore next:

@@ -8,7 +8,7 @@ import (
 )
 
 // Version is the digest_version this package writes. MAJOR.MINOR.PATCH.
-const Version = "1.0.0"
+const Version = "1.1.0"
 
 // formatName is the value of the top-level "format" key.
 const formatName = "mosaic-run-digest"
@@ -71,6 +71,7 @@ type runDoc struct {
 	Sessions             []sessionDoc      `json:"sessions,omitempty"`
 	Orchestrator         orchestratorDoc   `json:"orchestrator"`
 	Agents               []agentDoc        `json:"agents,omitempty"`
+	Unattributed         *unattributedDoc  `json:"unattributed,omitempty"`
 	Invocations          []invocationDoc   `json:"invocations,omitempty"`
 	Turns                []turnDoc         `json:"turns,omitempty"`
 	Notifications        []notificationDoc `json:"notifications,omitempty"`
@@ -90,6 +91,11 @@ type sessionDoc struct {
 type orchestratorDoc struct {
 	Usage     []usageDoc    `json:"usage,omitempty"`
 	ToolCalls []toolCallDoc `json:"tool_calls,omitempty"`
+}
+
+// unattributedDoc is the run-level usage no actor could be assigned to.
+type unattributedDoc struct {
+	Usage []usageDoc `json:"usage,omitempty"`
 }
 
 type agentDoc struct {

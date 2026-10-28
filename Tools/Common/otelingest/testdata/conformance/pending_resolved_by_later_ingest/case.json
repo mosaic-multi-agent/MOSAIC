@@ -1,0 +1,24 @@
+{
+  "description": "A subagent chat span exported before the spans that attribute it is held as pending; the next ingest sees its invoke_agent and the execute_tool task span and places it on the matching invocation.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "early",
+      "otel": "otel/early.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    },
+    {
+      "name": "later",
+      "otel": "otel/later.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

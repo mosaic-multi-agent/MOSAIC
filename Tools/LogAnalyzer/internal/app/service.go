@@ -16,8 +16,10 @@ type Deps struct {
 	Digests     domain.DigestStore // nil = no digest support (Analyze is logs-only)
 	Clock       domain.Clock
 	Interaction domain.Interaction
-	WorkDir     string // used for default-location probing
-	ToolVersion string // LogAnalyzer version recorded in exported digests
+	WorkDir     string                  // used for default-location probing
+	ToolVersion string                  // LogAnalyzer version recorded in exported digests
+	Ingester    domain.UsageIngester    // nil = ingest-otel off
+	IngestProbe domain.IngestStateProbe // nil = pending usage is never reported
 }
 
 // Service is the single use-case layer both frontends drive.
@@ -114,6 +116,8 @@ func (s *Service) Analyze(ctx context.Context, req Request) (Result, error) {
 	agg := loaded.aggregate
 
 	report, priceFindings := analysis.Price(agg, table, src)
+	usageIngest := s.probeUsageIngest(loaded.inventory)
+	applyUsageIngest(&report, usageIngest)
 	carried = append(carried, priceFindings...)
 
 	// Attach the complete quality summary, merging findings from every phase.
@@ -124,6 +128,7 @@ func (s *Service) Analyze(ctx context.Context, req Request) (Result, error) {
 		table:          table,
 		source:         src,
 		exportFindings: loaded.exportFindings,
+		usageIngest:    usageIngest,
 	}
 
 	result := Result{

@@ -18,7 +18,13 @@ import tempfile
 # Constants
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.0.0"
+BASE_SCHEMA_VERSION = "1.0.0"
+# Events that carry fields added after 1.0.0 are stamped with the version that added them.
+# The version depends on the event type only, never on which optional fields are present.
+EVENT_SCHEMA_VERSIONS = {
+    "invocation_start": "1.4.0",   # spawn_call_id
+    "usage_record": "1.4.0",
+}
 HARNESS = "ghcp-cli"
 LOGS_DIRNAME = "OrchestrationLogs"
 AGENT_MAP_DIRNAME = ".agent-map"
@@ -115,6 +121,11 @@ def _prune(value):
     return value, True
 
 
+def schema_version_for(event: str) -> str:
+    """Return the highest schema_version whose fields this adapter implements for ``event``."""
+    return EVENT_SCHEMA_VERSIONS.get(event, BASE_SCHEMA_VERSION)
+
+
 def build_event(event: str, ctx: "HookContext", **fields) -> dict:
     """Build a complete event object: common envelope plus caller-supplied fields.
 
@@ -125,7 +136,7 @@ def build_event(event: str, ctx: "HookContext", **fields) -> dict:
     is DROPPED. False and 0 are genuine values and are KEPT.
     """
     result: dict = {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": schema_version_for(event),
         "event": event,
         "timestamp": ctx.timestamp,
         "harness": HARNESS,
@@ -202,15 +213,19 @@ def atomic_replace_text(path: pathlib.Path, text: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def resolve_workspace_root(payload: dict) -> pathlib.Path:
-    """Resolve workspace root: payload cwd > process cwd().
+    """Resolve the workspace root: payload cwd first, then process cwd.
 
-    GHCP CLI provides cwd on every payload as a first-class field.
-    No harness-specific environment variable is used as primary signal.
+    The hook registration runs the script from ``<workspace>/.github/hooks``, so a
+    candidate whose last two components are ``.github`` and ``hooks`` (case-insensitive)
+    is mapped to its grandparent, the workspace. Any other candidate is used as is.
+    No environment variable is read.
     """
     cwd = payload.get("cwd") or ""
-    if cwd:
-        return pathlib.Path(cwd)
-    return pathlib.Path.cwd()
+    candidate = pathlib.Path(cwd) if cwd else pathlib.Path.cwd()
+    parts = candidate.parts
+    if len(parts) >= 3 and parts[-1].lower() == "hooks" and parts[-2].lower() == ".github":
+        return candidate.parent.parent
+    return candidate
 
 
 class LogPaths:

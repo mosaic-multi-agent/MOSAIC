@@ -1,0 +1,15 @@
+{
+  "description": "A state with a version this implementation does not know is neither read nor written: no record is written, the state file stays byte-for-byte as it was, and the ingest reports unknown_state with the raw version text.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

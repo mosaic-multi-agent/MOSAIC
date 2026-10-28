@@ -1,0 +1,15 @@
+schema_version: "1"
+id: sibling-bundle
+version: 1.0.0
+description: Fixture bundle whose variant lists a source from a sibling folder of the variant directory.
+placeholder: false
+
+variants:
+  test-harness:
+    supported: true
+    files:
+      - source: main.sh
+        target: main.sh
+      - source: ../shared/x.py
+        target: shared_x.py
+    registration: []

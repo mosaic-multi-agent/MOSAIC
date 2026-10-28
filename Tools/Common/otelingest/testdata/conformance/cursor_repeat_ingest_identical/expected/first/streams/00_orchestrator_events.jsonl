@@ -1,0 +1,2 @@
+{"schema_version":"1.4.0","event":"usage_record","harness":"ghcp-cli","session_id":"cli-session-6","run_id":"20261028T000000Z-0000","record_id":"a","record_index":0,"source":"otel","model":"m","provider":"github-copilot","token_usage":{"input_tokens":10,"output_tokens":1}}
+{"schema_version":"1.4.0","event":"usage_record","harness":"ghcp-cli","session_id":"cli-session-6","run_id":"20261028T000000Z-0000","record_id":"b","record_index":306,"source":"otel","model":"m","provider":"github-copilot","token_usage":{"input_tokens":10,"output_tokens":1}}

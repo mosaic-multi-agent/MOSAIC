@@ -34,6 +34,13 @@ func convertRun(rd runDoc, ref domain.RunRef) (domain.RunAggregate, error) {
 	}
 	run.Activity.OrchestratorToolCalls = calls
 
+	if rd.Unattributed != nil {
+		run.Unattributed = &domain.ActorAggregate{
+			Actor:       domain.Unattributed(),
+			Invocations: decodeUsages(rd.Unattributed.Usage),
+		}
+	}
+
 	agents := make(map[string]domain.ActorAggregate, len(rd.Agents))
 	for _, a := range rd.Agents {
 		agg := domain.ActorAggregate{

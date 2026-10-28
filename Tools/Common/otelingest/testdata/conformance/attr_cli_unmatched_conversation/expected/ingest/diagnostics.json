@@ -1,0 +1,11 @@
+[
+  {
+    "kind": "conversation_not_tied",
+    "counts": {
+      "usage_spans": 2
+    },
+    "ids": [
+      "cli-session-5"
+    ]
+  }
+]

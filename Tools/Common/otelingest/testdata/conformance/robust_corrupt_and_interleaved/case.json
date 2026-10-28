@@ -1,0 +1,15 @@
+{
+  "description": "Corrupt lines in a shared export are skipped. Lines without the marker \"gen_ai.operation.name\" are consumed and counted in read only, even when they hold the text `usage` or are invalid JSON: plain text, an empty line, the tail half of an interleaved span, and a truncated note containing `usage`. Lines with the marker that are not a JSON object count as malformed: a truncated span, two writers interleaved on one line, and a JSON array. A metric line and a non-agent execute_tool span are consumed without effect; all valid chat spans still produce records (record_index counts bytes, with a multi-byte character earlier in the file); one lines_skipped diagnostic carries malformed=3 and read=13 (all complete lines); a trailing partial line is not consumed.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

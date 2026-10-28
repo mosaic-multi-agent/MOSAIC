@@ -46,22 +46,17 @@ package vscodeghcp_test
 //   Project-scope path resolution:
 //   - Project-scoped agent path is ".github/agents/<key>.md"
 //   - Project-scoped skill path is ".github/skills/<key>/SKILL.md" (key subdirectory)
-//   - Hook artifact paths resolve relative to .claude/hooks/ (reuses Claude Code convention)
+//   - Hook artifact paths resolve relative to .github/hooks/, the directory the bundle's
+//     hook registration runs its script from
 //   - Any non-project scope returns domain.ErrUnsupportedScope (via the shared contracttest universal invariant)
 //
-//   Hook variant reuse:
-//   - The vscode-ghcp hook variant declares reuses: claude-code in hook.yaml.
-//   - The catalog resolves this before calling HookPlan: the HookPlanRequest carries
-//     the vscode-ghcp variant's Files already populated from the claude-code variant.
-//   - HookPlan.Files matches the claude-code file set (no duplicated files on disk).
-//   - HookPlan.Registration contains the vscode-ghcp variant's own registration steps.
-//
-//   Always-TODO registration step (user-level editor setting):
-//   - The vscode-ghcp variant declares an "enable-chat-hooks" registration step with
-//     performable: false and an empty target_path. The deployment tool cannot write
-//     user-level VS Code settings; the step is always a TODO item.
-//   - HookPlan.Registration contains this step with Performable: false.
-//   - The step is present with a non-empty Instruction so the TODO checklist can render it.
+//   Hook plan:
+//   - The vscode-ghcp hook variant lists its own files in hook.yaml; the catalog hands them
+//     to HookPlan in the HookPlanRequest.
+//   - HookPlan.TargetDir is ".github/hooks" and HookPlan.Files carries the variant's files
+//     unchanged, without duplicates.
+//   - HookPlan.Registration carries the variant's registration steps unchanged, including
+//     steps that are not performable by the tool.
 //
 //   Harness-level injection content and injections_version:
 //   - HarnessConstraints is filled with the file-reading behavioral constraint text followed
@@ -950,8 +945,7 @@ func TestTargetPath_VSCodeGHCP_SkillProjectScope(t *testing.T) {
 }
 
 // TestTargetPath_VSCodeGHCP_HookProjectScope verifies that hooks are deployed to
-// ".claude/hooks/<filename>". VS Code GHCP reuses the Claude Code hook file set; deploying
-// hooks to the same .claude/hooks/ location makes them available to both platforms.
+// ".github/hooks/<filename>", the directory the bundle's hook registration runs its script from.
 func TestTargetPath_VSCodeGHCP_HookProjectScope(t *testing.T) {
 	mod := newModule(t)
 	path, err := mod.TargetPath(domain.TargetPathRequest{
@@ -964,7 +958,7 @@ func TestTargetPath_VSCodeGHCP_HookProjectScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TargetPath: %v", err)
 	}
-	want := ".claude/hooks/subagent-logger.ps1"
+	want := ".github/hooks/subagent-logger.ps1"
 	if path != want {
 		t.Errorf("TargetPath = %q, want %q", path, want)
 	}
@@ -975,15 +969,12 @@ func TestTargetPath_VSCodeGHCP_HookProjectScope(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestHookPlan_VSCodeGHCP_ReusesClaudeCodeFiles verifies that the VS Code GHCP hook plan
-// returns the claude-code variant's files (resolved by the catalog before the call) without
-// duplicating them. The vscode-ghcp hook.yaml variant declares reuses: claude-code; the
-// catalog resolves this and provides the actual file list in the HookPlanRequest.
+// returns the variant's files, as given by the catalog in the HookPlanRequest, without
+// duplicating them, and places them in the .github/hooks directory.
 func TestHookPlan_VSCodeGHCP_ReusesClaudeCodeFiles(t *testing.T) {
 	mod := newModule(t)
 
-	// Simulate the catalog's pre-resolved bundle: the vscode-ghcp variant already has the
-	// claude-code file list (after reuse resolution). No claude-code variant is present because
-	// the catalog replaces reuses references with the concrete file list.
+	// Simulate the catalog's bundle: the vscode-ghcp variant carries its own file list.
 	bundle := domain.HookBundle{
 		Key:     "subagent-logger",
 		Version: "1.0.0",
@@ -991,7 +982,6 @@ func TestHookPlan_VSCodeGHCP_ReusesClaudeCodeFiles(t *testing.T) {
 			"vscode-ghcp": {
 				HarnessID: "vscode-ghcp",
 				Supported: true,
-				// Files already resolved from claude-code via reuses (catalog responsibility).
 				Files: []domain.HookFile{
 					{SourcePath: "/repo/Hooks/subagent-logger/claude-code/subagent-logger.ps1", TargetName: "subagent-logger.ps1"},
 					{SourcePath: "/repo/Hooks/subagent-logger/claude-code/config.json", TargetName: "subagent-logger.json"},
@@ -1027,17 +1017,21 @@ func TestHookPlan_VSCodeGHCP_ReusesClaudeCodeFiles(t *testing.T) {
 		t.Fatalf("HookPlan.Supported = false, want true; VS Code GHCP declares hook support")
 	}
 	if len(plan.Files) != 2 {
-		t.Errorf("HookPlan.Files count = %d, want 2 (resolved from claude-code reuse)", len(plan.Files))
+		t.Errorf("HookPlan.Files count = %d, want 2", len(plan.Files))
 	}
 
-	// Verify that no file appears more than once (no duplicated reuse).
+	if plan.TargetDir != ".github/hooks" {
+		t.Errorf("HookPlan.TargetDir = %q, want %q (the directory the registration runs the script from)", plan.TargetDir, ".github/hooks")
+	}
+
+	// Verify that no file appears more than once.
 	seenTargets := make(map[string]int)
 	for _, f := range plan.Files {
 		seenTargets[f.TargetName]++
 	}
 	for name, count := range seenTargets {
 		if count > 1 {
-			t.Errorf("HookPlan.Files contains %q %d times; reuse must not duplicate files", name, count)
+			t.Errorf("HookPlan.Files contains %q %d times; files must not be duplicated", name, count)
 		}
 	}
 }
@@ -1063,7 +1057,7 @@ func TestHookPlan_VSCodeGHCP_Supported(t *testing.T) {
 		t.Fatalf("HookPlan: %v", err)
 	}
 	if !plan.Supported {
-		t.Error("HookPlan.Supported = false; VS Code GHCP supports hooks via claude-code file reuse")
+		t.Error("HookPlan.Supported = false; VS Code GHCP supports hooks")
 	}
 }
 
@@ -1072,8 +1066,8 @@ func TestHookPlan_VSCodeGHCP_Supported(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestHookPlan_VSCodeGHCP_AlwaysTODORegistrationStep verifies that the enable-chat-hooks
-// registration step is present with Performable: false. The deployment tool cannot write
-// user-level VS Code settings ("chat.hooks.enabled": true); this step is always a TODO item.
+// registration step is passed through unchanged with Performable: false, so a step the
+// deployment tool cannot perform still reaches the TODO checklist.
 func TestHookPlan_VSCodeGHCP_AlwaysTODORegistrationStep(t *testing.T) {
 	mod := newModule(t)
 
@@ -1127,9 +1121,8 @@ func TestHookPlan_VSCodeGHCP_AlwaysTODORegistrationStep(t *testing.T) {
 }
 
 // TestHookPlan_VSCodeGHCP_EnableChatHooksNeverAttempted verifies that the enable-chat-hooks
-// step is reported as an unperformable action (Performable: false) rather than attempted.
-// This is the behavioural contract: the deployment tool reports the requirement and never
-// writes to user-level VS Code settings (AC13.5).
+// step stays an unperformable action (Performable: false) rather than being attempted: the
+// deployment tool reports such a requirement and never writes user-level VS Code settings.
 func TestHookPlan_VSCodeGHCP_EnableChatHooksNeverAttempted(t *testing.T) {
 	mod := newModule(t)
 
@@ -1569,7 +1562,7 @@ func TestContract_VSCodeGHCP(t *testing.T) {
 			{
 				Name:     "hook_project_linux",
 				Request:  domain.TargetPathRequest{Kind: domain.ArtifactHook, Key: "subagent-logger", FileName: "subagent-logger.ps1", Scope: domain.ScopeProject, GOOS: "linux"},
-				Expected: ".claude/hooks/subagent-logger.ps1",
+				Expected: ".github/hooks/subagent-logger.ps1",
 			},
 			{
 				Name:    "unsupported_kind_returns_sentinel",
@@ -1603,7 +1596,7 @@ func TestContract_VSCodeGHCP(t *testing.T) {
 					Scope: domain.ScopeProject,
 				},
 				Supported: true,
-				TargetDir: ".claude/hooks",
+				TargetDir: ".github/hooks",
 				FileNames: []string{"subagent-logger.ps1", "subagent-logger.json"},
 				StepIDs:   []string{"settings-fragment", "enable-chat-hooks"},
 			},

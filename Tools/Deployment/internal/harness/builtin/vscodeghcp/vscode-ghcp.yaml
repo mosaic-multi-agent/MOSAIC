@@ -102,7 +102,7 @@ paths:
     project: ".github/skills"
   hooks:
     supported: true
-    project: ".claude/hooks"
+    project: ".github/hooks"
 
 extensions:
   agent: ".md"

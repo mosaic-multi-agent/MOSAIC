@@ -1,0 +1,1 @@
+{"type":"span","traceId":"0123456789abcdef0123456789abcdef","spanId":"chat-sub-1","parentSpanId":"inv-sub","name":"chat","kind":2,"attributes":{"gen_ai.operation.name":"chat","gen_ai.conversation.id":"cli-session-6","gen_ai.response.model":"m-sub","gen_ai.usage.input_tokens":100,"gen_ai.usage.output_tokens":10},"status":{"code":0},"events":[]}

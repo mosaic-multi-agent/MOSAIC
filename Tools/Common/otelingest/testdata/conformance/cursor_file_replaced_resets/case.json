@@ -1,0 +1,24 @@
+{
+  "description": "A different file at the same path, longer than the stored cursor, is detected by the head fingerprint and read afresh from byte 0: none of its lines is skipped.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "original",
+      "otel": "otel/original.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    },
+    {
+      "name": "replaced",
+      "otel": "otel/replaced.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

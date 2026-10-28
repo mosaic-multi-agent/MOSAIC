@@ -155,6 +155,12 @@ func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable) domai
 		agentReports[i] = priceActorAggregate(agent, table)
 	}
 
+	var unattrReport *domain.ActorReport
+	if run.Unattributed != nil {
+		r := priceActorAggregate(*run.Unattributed, table)
+		unattrReport = &r
+	}
+
 	// Collect all per-actor CategoryMoneys to compute the run-level sum.
 	allMoneys := make([]domain.CategoryMoney, 0, 1+len(agentReports))
 	allMoneys = append(allMoneys, orchReport.Totals.Money)
@@ -162,8 +168,12 @@ func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable) domai
 		allMoneys = append(allMoneys, ar.Totals.Money)
 	}
 
-	runMoney := sumCategoryMoneys(allMoneys...)
 	runAssumed := orchReport.Totals.AssumedTierCacheWrite
+	if unattrReport != nil {
+		allMoneys = append(allMoneys, unattrReport.Totals.Money)
+		runAssumed += unattrReport.Totals.AssumedTierCacheWrite
+	}
+	runMoney := sumCategoryMoneys(allMoneys...)
 	for _, ar := range agentReports {
 		runAssumed += ar.Totals.AssumedTierCacheWrite
 	}
@@ -175,6 +185,12 @@ func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable) domai
 	}
 	for _, ar := range agentReports {
 		for _, m := range ar.UnpricedModels {
+			seenUnpriced[m] = true
+		}
+	}
+
+	if unattrReport != nil {
+		for _, m := range unattrReport.UnpricedModels {
 			seenUnpriced[m] = true
 		}
 	}
@@ -191,6 +207,7 @@ func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable) domai
 		Orchestrator:   orchReport,
 		Agents:         agentReports,
 		UnpricedModels: domain.SortedPricingKeys(seenUnpriced),
+		Unattributed:   unattrReport,
 	}
 
 	dispatches := buildDispatches(run.Activity.Invocations, table)

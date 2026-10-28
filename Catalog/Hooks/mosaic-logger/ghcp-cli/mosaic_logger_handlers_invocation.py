@@ -8,6 +8,7 @@ import re
 
 import mosaic_logger_core as core
 import mosaic_logger_runstate as runstate
+import mosaic_logger_spawn_key as spawn_key
 import mosaic_logger_export as export
 import mosaic_logger_transcript as transcript
 import mosaic_logger_artifacts as artifacts
@@ -71,8 +72,9 @@ def handle_subagent_start(ctx: "core.HookContext") -> None:
         return
 
     # 1. Pop pending dispatch (before path resolution)
+    dispatch_path_run_id = core.effective_run_id(ctx)
     dispatch = runstate.pop_pending_dispatch(
-        ctx.paths, core.effective_run_id(ctx), ctx.session_id
+        ctx.paths, dispatch_path_run_id, ctx.session_id
     )
 
     # 2. Optionally set ctx.run_id from the dispatch's run_id when not yet set
@@ -103,12 +105,15 @@ def handle_subagent_start(ctx: "core.HookContext") -> None:
 
     sink = ctx.paths.invocation_events(run_id, agent_instance_id)
 
-    # 7. Emit invocation_start
+    # 7. Emit invocation_start (spawn_call_id only when a payload supplied one)
+    spawn_call_id = spawn_key.spawn_call_id_from(ctx) or spawn_key.take_spawn_call(
+        ctx.paths, dispatch_path_run_id, ctx.session_id, agent_instance_id)
     event = core.build_event(
         "invocation_start", ctx,
         agent_instance_id=agent_instance_id,
         agent_type=agent_type,
         prompt=agent_prompt,
+        spawn_call_id=spawn_call_id,
     )
     core.append_event(sink, event)
 

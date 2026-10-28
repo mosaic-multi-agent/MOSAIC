@@ -1,0 +1,15 @@
+{
+  "description": "Spans of one pass may arrive in any order: here parents before their children. The subagent chats resolve through invoke_agent to the execute_tool task span and the matching invocation, the orchestrator chat through the root invoke_agent; the placement is the same either way.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+{"schema_version":"1.4.0","event":"usage_record","harness":"vscode-ghcp","session_id":"vsc-session-7","run_id":"20261028T000000Z-0000","record_id":"chat-sub-A","record_index":2289,"source":"otel","agent_instance_id":"Implementation#1","model":"model-sub","provider":"github-copilot","token_usage":{"input_tokens":40,"output_tokens":4}}

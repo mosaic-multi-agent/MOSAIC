@@ -78,6 +78,53 @@ See `ghcp-cli/README.md`.
 `opencode run` does not await the plugin's `session.idle` handler at exit. See
 `opencode/LIMITATIONS.md`.
 
+## Copilot token usage (GHCP CLI and VS Code Copilot Chat)
+
+Both Copilot harnesses report token usage through the harness's OpenTelemetry file
+export, not through hook payloads. The `ghcp-cli` and `vscode-ghcp` hooks read that
+file and add the usage to the run's logs as `usage_record` events.
+
+### Enable it
+
+Set one environment variable, for both harnesses, to a file path of your choice:
+
+```
+COPILOT_OTEL_FILE_EXPORTER_PATH=<absolute path of a .jsonl file>
+```
+
+- Setting only this variable switches on the harness's file export **and** MOSAIC's
+  ingest. Do not use the VS Code user setting for the export instead: the hooks cannot
+  read it, so MOSAIC would not ingest the file.
+- Set it at user level (Windows: user environment variables; macOS/Linux: your login
+  environment), not in one shell. Restart VS Code afterwards: VS Code started from the
+  desktop sees only user-level variables.
+- Content capture (prompt and response text in the file) is optional and only makes
+  the file larger. MOSAIC never reads content and never modifies the OTel file.
+- Copilot usage is priced from `github-copilot` entries you maintain in
+  `pricing.yaml`; the shipped file has no priced entry, so without one costs stay
+  unpriced.
+
+### Recover missing usage
+
+Usage can be missing when the variable was unset, the file is missing, a session
+crashed, or a run's hooks did not see the variable. Recover the run with:
+
+```
+mosaic-log-analyzer ingest-otel [otel-file] --run <run-id>
+```
+
+The file is the argument, or the value of `COPILOT_OTEL_FILE_EXPORTER_PATH` when
+omitted. It ingests the whole file as a final ingest. "Usage not fully ingested" in
+LogAnalyzer means usage spans of the run are still pending (not yet tied to an actor,
+or the ingest was cut short); a recovery ingest resolves them. In LogAnalyzer's views,
+unattributed usage is usage tied to the run but not to an agent.
+
+### Locations
+
+The VS Code Copilot Chat hooks are deployed to `.github/hooks/` (the same place as
+GHCP CLI) and log to the workspace root's `OrchestrationLogs/`. Existing deployments
+keep their old file set until redeployed.
+
 ## Interpreter requirement
 
 The `claude-code` variant requires **`python3`** to be available in the environment
@@ -125,3 +172,31 @@ can read its own version at runtime (the `run_start.adapter_version` field). Inc
 change to the version field changes the hash, which must then be updated in the file,
 which changes the hash again. `content_hash` is left unset; the deployment tool skips
 hash validation when the field is absent.
+
+## Maintainer: Copilot OTel ingest cost
+
+Measured with `copilot-shared/tools/measure_ingest.py <otel-file>` (not deployed, not a
+test). It runs the shared ingest module in scratch run folders: a first ingest from the
+mid-file offset without a time limit, ten incremental ingests of 20 appended lines each
+(a typical boundary), a whole-file ingest under the default 5 s budget and under a 50 ms
+budget, and the start-up plus import of the module in a fresh interpreter. The scratch
+folders have no run keys, so spans stay pending: reading, parsing and state saving are
+measured, writing records to stream files is not.
+
+Machine: AMD64 Family 25 Model 97 (Ryzen-class), Windows 11, Python 3.14.6, warm file cache,
+2026-10-28. Samples from the 27.10 captures.
+
+| Scenario | VS Code, 50.5 MB, content capture on (3199 lines) | GHCP CLI, 2.6 MB (2019 lines) |
+|---|---|---|
+| First ingest from mid-file offset | 150 ms | 8.9 ms |
+| Incremental, 20 new lines (median / max) | 3.2 ms / 4.9 ms | 1.4 ms / 1.7 ms |
+| Whole file, default budget | 322 ms | 18 ms |
+| Whole file, 50 ms budget | 51 ms, cut off after 273 lines, `budget_exhausted` | 18 ms, not cut off |
+| Interpreter start + module import | 57 ms | 57 ms |
+
+A typical boundary ingest costs a few milliseconds on top of the interpreter start-up,
+which dominates; the GHCP CLI runs every hook synchronously (copilot-cli#3063), so that
+start-up is what it pays per event. A first ingest of a large content-capture file stays
+under the 5 s default budget by a wide margin on this machine, and the time-budget
+cut-off stops at a line boundary and leaves the rest for the next ingest. Figures depend
+on machine speed; re-run the script to compare.

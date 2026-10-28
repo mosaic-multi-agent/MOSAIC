@@ -14,6 +14,8 @@ type Session struct {
 	// exportFindings are the findings an export carries: log-reading findings
 	// attributed to their run folder, plus findings carried inside digests.
 	exportFindings []domain.Finding
+	// usageIngest is each run's pending-usage state by run id, probed once.
+	usageIngest map[string]domain.UsageIngestState
 }
 
 // Aggregate exposes the cached pre-pricing aggregate.
@@ -30,5 +32,6 @@ func (s *Session) Reprice(entries ...domain.ModelPricing) domain.Report {
 		table = table.With(entry)
 	}
 	report, _ := analysis.Price(s.aggregate, table, s.source)
+	applyUsageIngest(&report, s.usageIngest)
 	return report
 }

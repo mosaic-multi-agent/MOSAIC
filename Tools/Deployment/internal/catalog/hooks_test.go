@@ -31,6 +31,14 @@ package catalog_test
 // silently dropping or duplicating a file without hardcoding how many files any one
 // variant happens to have today.
 //
+// TestHook_Variant_GhcpCli_Files_TargetNames (an exact list of the live ghcp-cli target
+// names) was later removed because that variant's inventory grows with the bundle (it now
+// also deploys shared modules from a sibling folder). The loader behaviour it guarded is
+// asserted on tool-local fixtures by TestHook_Variant_Files_TargetNames_MatchDeclaredSetExactly
+// and TestHook_Variant_Files_SiblingFolderSource_LoadedUnderTargetName. Whether the real
+// bundle ships every module its adapter imports is bundle content, covered by the hook's
+// own Python suites.
+//
 // This stage's explicit item list scoped T7.5 to only these two assertions. The bundle id
 // ("mosaic-logger"), its harness variant keys ("claude-code", "opencode", "vscode-ghcp",
 // "ghcp-cli"), and the exact TargetName literals elsewhere in this file remain
@@ -378,42 +386,6 @@ func TestHook_Variant_VscodeGhcp_CarriesOwnFiles(t *testing.T) {
 		t.Errorf("vscode-ghcp variant has no hook.yaml in its Files list; "+
 			"the variant must carry its own deployment manifest, not inherit another variant's files; "+
 			"got files: %v", names)
-	}
-}
-
-// TestHook_Variant_GhcpCli_Files_TargetNames verifies the exact target file names for
-// the ghcp-cli variant: the 9 Python adapter modules plus the self-deployed hook.yaml.
-func TestHook_Variant_GhcpCli_Files_TargetNames(t *testing.T) {
-	cat := loadRealCatalog(t)
-	h, _ := cat.Hook("mosaic-logger")
-
-	v, ok := h.Variants["ghcp-cli"]
-	if !ok {
-		t.Fatal("mosaic-logger Variants[\"ghcp-cli\"]: not found")
-	}
-
-	wantTargets := map[string]bool{
-		"mosaic_logger.py":                     true,
-		"mosaic_logger_core.py":                true,
-		"mosaic_logger_runstate.py":            true,
-		"mosaic_logger_export.py":              true,
-		"mosaic_logger_transcript.py":          true,
-		"mosaic_logger_handlers_session.py":    true,
-		"mosaic_logger_handlers_invocation.py": true,
-		"mosaic_logger_handlers_tools.py":      true,
-		"mosaic_logger_artifacts.py":           true,
-		"mosaic_logger_runner_mode.py":         true,
-		"mosaic_logger_handlers_runner.py":     true,
-		"hook.yaml":                            true,
-	}
-	for _, f := range v.Files {
-		if !wantTargets[f.TargetName] {
-			t.Errorf("ghcp-cli variant has unexpected target file %q", f.TargetName)
-		}
-		delete(wantTargets, f.TargetName)
-	}
-	for remaining := range wantTargets {
-		t.Errorf("ghcp-cli variant is missing expected target file %q", remaining)
 	}
 }
 

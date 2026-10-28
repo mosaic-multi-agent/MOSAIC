@@ -1,0 +1,30 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 3079,
+    "head_len": 3079,
+    "head_sha256": "dc10d42df31093d43dfde2e1ef2c31704e75b9c2ae05a5a0f4b4e172bc5490e1"
+  },
+  "placements": {
+    "chat-sub-Z": "unattributed",
+    "chat-sub-A": "invocation/Implementation#1"
+  },
+  "pending": [],
+  "links": {
+    "inv-sub-Z": {
+      "kind": "invoke_agent",
+      "parent_span_id": "tool-run-Z",
+      "conversation_id": "vsc-session-7",
+      "chat_session_id": "toolu_Z",
+      "parent_chat_session_id": "vsc-session-7"
+    },
+    "tool-run-Z": {
+      "kind": "execute_tool",
+      "parent_span_id": "invoke-orch",
+      "conversation_id": "vsc-session-7",
+      "chat_session_id": "vsc-session-7",
+      "tool_call_id": "toolu_Z",
+      "tool_name": "runSubagent"
+    }
+  }
+}

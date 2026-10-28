@@ -2,12 +2,13 @@
 
 Key differences from claude-code and ghcp-cli variants:
 - The correlation key parameter is named 'agent_key' (not 'agent_id').  In this
-  adapter, handlers pass ctx.agent_name (VS Code's primary correlation key) as
-  the agent_key argument, but the functions accept any arbitrary string key.
+  adapter, handlers pass the spawning tool-call ID (VS Code's SubagentStart /
+  SubagentStop `agent_id` with any `__vscode-<ms>` suffix stripped, the `toolu_...`
+  value) as the agent_key argument, but the functions accept any arbitrary string key.
 - The on-disk JSON file stores the field as "agent_key" (not "agent_id"), making
   the divergence self-documenting on disk.
 - resolve_invocation_id falls back to f"unmapped_{agent_key}", which will contain
-  the agent_name string rather than an opaque harness ID.
+  the tool-call ID string.
 
 Covers: put_agent_mapping persistence and return value, get_agent_mapping
 reading and absent-file resilience, resolve_invocation_id mapping return and
@@ -28,7 +29,7 @@ import mosaic_logger_runstate as runstate
 
 
 _RUN_ID = "20260101T120000Z-d7e3"
-_AGENT_KEY = "TestWriter"                        # agent_name string in vscode-ghcp
+_AGENT_KEY = "toolu_01AbCdEfGhIjKlMnOpQrStUv"    # spawning tool-call ID in vscode-ghcp
 _AGENT_INSTANCE_ID = "contracts-designer#12"
 _AGENT_TYPE = "ContractsDesigner"
 
@@ -36,7 +37,7 @@ _AGENT_TYPE = "ContractsDesigner"
 class TestPutAgentMapping(unittest.TestCase):
     """put_agent_mapping persists agent_key -> agent_instance_id mapping.
     The agent_key parameter accepts any arbitrary string (in this adapter, the
-    agent_name string from VS Code's SubagentStart payload)."""
+    spawning tool-call ID from VS Code's SubagentStart payload)."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -82,11 +83,11 @@ class TestPutAgentMapping(unittest.TestCase):
     def test_stored_agent_key_value_matches_input(self):
         """The stored agent_key field must contain the exact key passed in."""
         runstate.put_agent_mapping(
-            self.paths, _RUN_ID, "MySpecificAgentName", _AGENT_INSTANCE_ID, None
+            self.paths, _RUN_ID, "toolu_01SpecificCallIdXyz", _AGENT_INSTANCE_ID, None
         )
-        entry_path = self.paths.agent_map_entry(_RUN_ID, "MySpecificAgentName")
+        entry_path = self.paths.agent_map_entry(_RUN_ID, "toolu_01SpecificCallIdXyz")
         data = json.loads(entry_path.read_text(encoding="utf-8"))
-        self.assertEqual("MySpecificAgentName", data["agent_key"])
+        self.assertEqual("toolu_01SpecificCallIdXyz", data["agent_key"])
 
     def test_stored_mapping_has_agent_type_when_provided(self):
         runstate.put_agent_mapping(
@@ -105,21 +106,21 @@ class TestPutAgentMapping(unittest.TestCase):
         self.assertTrue(map_dir.exists())
 
     def test_different_agent_keys_produce_separate_files(self):
-        """Different agent_name strings produce different map files."""
+        """Different tool-call IDs produce different map files."""
         runstate.put_agent_mapping(
-            self.paths, _RUN_ID, "AgentNameAlpha", "AgentA#1", None
+            self.paths, _RUN_ID, "toolu_01AlphaCallId", "AgentA#1", None
         )
         runstate.put_agent_mapping(
-            self.paths, _RUN_ID, "AgentNameBeta", "AgentB#2", None
+            self.paths, _RUN_ID, "toolu_01BetaCallId", "AgentB#2", None
         )
-        path_a = self.paths.agent_map_entry(_RUN_ID, "AgentNameAlpha")
-        path_b = self.paths.agent_map_entry(_RUN_ID, "AgentNameBeta")
+        path_a = self.paths.agent_map_entry(_RUN_ID, "toolu_01AlphaCallId")
+        path_b = self.paths.agent_map_entry(_RUN_ID, "toolu_01BetaCallId")
         self.assertNotEqual(path_a, path_b)
         self.assertTrue(path_a.exists())
         self.assertTrue(path_b.exists())
 
     def test_overwrite_updates_existing_mapping(self):
-        """A second SubagentStart with the same agent_name overwrites the first."""
+        """A second SubagentStart with the same tool-call ID overwrites the first."""
         runstate.put_agent_mapping(
             self.paths, _RUN_ID, _AGENT_KEY, "first-agent#1", None
         )
@@ -131,7 +132,7 @@ class TestPutAgentMapping(unittest.TestCase):
         self.assertEqual("second-agent#2", data["agent_instance_id"])
 
     def test_arbitrary_string_key_with_spaces_in_name(self):
-        """An agent_name that contains spaces is accepted as a valid key."""
+        """A key that contains spaces is accepted as a valid key."""
         key_with_spaces = "My Agent Name"
         result = runstate.put_agent_mapping(
             self.paths, _RUN_ID, key_with_spaces, _AGENT_INSTANCE_ID, None
@@ -196,7 +197,7 @@ class TestGetAgentMapping(unittest.TestCase):
         self.assertEqual("PlannerTddSoft", result.get("agent_type"))
 
     def test_returns_none_for_absent_agent_key(self):
-        result = runstate.get_agent_mapping(self.paths, _RUN_ID, "NonexistentAgentName")
+        result = runstate.get_agent_mapping(self.paths, _RUN_ID, "toolu_01NonexistentCallId")
         self.assertIsNone(result)
 
     def test_returns_none_when_no_entries_exist(self):
@@ -236,8 +237,7 @@ class TestGetAgentMapping(unittest.TestCase):
 
 class TestResolveInvocationId(unittest.TestCase):
     """resolve_invocation_id returns the mapped agent_instance_id or
-    'unmapped_{agent_key}' — the fallback includes the agent_name string, not
-    an opaque harness ID."""
+    'unmapped_{agent_key}' — the fallback includes the tool-call ID string."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -256,20 +256,20 @@ class TestResolveInvocationId(unittest.TestCase):
     def test_returns_unmapped_prefix_when_no_mapping_exists(self):
         """Without a mapping, returns 'unmapped_{agent_key}'."""
         result = runstate.resolve_invocation_id(
-            self.paths, _RUN_ID, "UnmappedAgentName"
+            self.paths, _RUN_ID, "toolu_01UnmappedCallId"
         )
-        self.assertEqual("unmapped_UnmappedAgentName", result)
+        self.assertEqual("unmapped_toolu_01UnmappedCallId", result)
 
     def test_fallback_starts_with_unmapped_prefix(self):
-        result = runstate.resolve_invocation_id(self.paths, _RUN_ID, "SomeAgentName")
+        result = runstate.resolve_invocation_id(self.paths, _RUN_ID, "toolu_01SomeCallId")
         self.assertTrue(result.startswith("unmapped_"))
 
     def test_fallback_includes_agent_key(self):
-        """The fallback quarantine string includes the agent_name for traceability."""
-        result = runstate.resolve_invocation_id(self.paths, _RUN_ID, "MySpecificAgentName")
-        self.assertIn("MySpecificAgentName", result)
+        """The fallback quarantine string includes the key for traceability."""
+        result = runstate.resolve_invocation_id(self.paths, _RUN_ID, "toolu_01SpecificCallIdXyz")
+        self.assertIn("toolu_01SpecificCallIdXyz", result)
 
-    def test_fallback_contains_agent_name_not_agent_id_literal(self):
+    def test_fallback_contains_actual_key_not_agent_id_literal(self):
         """The fallback must not end in 'unmapped_agent_id' — it uses the actual key."""
         result = runstate.resolve_invocation_id(self.paths, _RUN_ID, "SomeName")
         self.assertNotEqual("unmapped_agent_id", result)

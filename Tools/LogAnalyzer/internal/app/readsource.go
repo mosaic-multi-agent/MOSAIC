@@ -10,6 +10,7 @@ import (
 // loadedSource is a resolved source read and aggregated, before pricing.
 type loadedSource struct {
 	noData    bool             // usable source with nothing in it
+	inventory domain.Inventory // the log runs found, for per-run folder lookups
 	aggregate domain.Aggregate // logs merged with digest runs
 	// findings holds every finding from enumerating, reading, aggregating and
 	// loading digests, for the log report's quality summary.
@@ -48,6 +49,7 @@ func (s *Service) readSource(ctx context.Context, src domain.Source, digestFiles
 	}
 
 	return loadedSource{
+		inventory:      inv,
 		aggregate:      agg,
 		findings:       append(logFindings[:len(logFindings):len(logFindings)], digestFindings...),
 		exportFindings: exportableFindings(inv, logFindings, digestCarried),

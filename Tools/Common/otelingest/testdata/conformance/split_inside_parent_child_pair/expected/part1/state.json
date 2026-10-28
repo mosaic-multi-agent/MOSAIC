@@ -1,0 +1,34 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 930,
+    "head_len": 930,
+    "head_sha256": "ff402a2d4a21ba8537dd4c137e39a44d8997d70a12f3faeeea387711bcbd9df5"
+  },
+  "placements": {
+    "chat-orch": "orchestrator"
+  },
+  "pending": [
+    {
+      "record": {
+        "record_id": "chat-sub-1",
+        "record_index": 319,
+        "model": "m-sub",
+        "provider": "github-copilot",
+        "token_usage": {
+          "input_tokens": 100,
+          "output_tokens": 10
+        }
+      },
+      "parent_span_id": "inv-sub",
+      "conversation_id": "cli-session-6"
+    }
+  ],
+  "links": {
+    "inv-sub": {
+      "kind": "invoke_agent",
+      "parent_span_id": "tool-task",
+      "conversation_id": "cli-session-6"
+    }
+  }
+}

@@ -25,6 +25,8 @@ type runState struct {
 	// activity accumulates the run model; nil until the first related event.
 	activity *runActivityState
 	facts    *factsState // digest facts; nil until the first event
+	// unattributed holds the run-level usage of the unattributed stream; nil if none.
+	unattributed *actorState
 }
 
 // actorState holds mutable state for one actor within a run.
@@ -98,6 +100,10 @@ func NewAggregator() *Aggregator {
 // attributed to an actor produce a Finding rather than being dropped silently.
 func (a *Aggregator) Add(ref domain.StreamRef, ev domain.Event) {
 	rs := a.getOrCreateRunState(ref.Run)
+	if ref.Kind == domain.StreamUnattributed {
+		a.addUnattributed(rs, ref, ev)
+		return
+	}
 	a.recordFacts(rs, ref, ev)
 
 	// Handle run-completion markers before any other processing.
@@ -488,6 +494,7 @@ func buildRunAggregate(rs *runState) domain.RunAggregate {
 		Agents:   agents,
 		Activity: buildActivity(rs),
 	}
+	out.Unattributed = unattributedAggregate(rs)
 	applyFacts(rs, &out)
 	return out
 }

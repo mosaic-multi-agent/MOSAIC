@@ -1,0 +1,27 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 1574,
+    "head_len": 1574,
+    "head_sha256": "659e621c1f6eacee517a6bd067a8f87475dec5ad8bfc650f2a2f9be3fb228898"
+  },
+  "placements": {
+    "chat-orch": "orchestrator",
+    "chat-sub-1": "invocation/Implementation#1",
+    "chat-sub-2": "invocation/Implementation#1"
+  },
+  "pending": [],
+  "links": {
+    "inv-sub": {
+      "kind": "invoke_agent",
+      "parent_span_id": "tool-task",
+      "conversation_id": "cli-session-6"
+    },
+    "tool-task": {
+      "kind": "execute_tool",
+      "conversation_id": "cli-session-6",
+      "tool_call_id": "toolu_A",
+      "tool_name": "task"
+    }
+  }
+}

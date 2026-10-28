@@ -59,6 +59,10 @@ type RunAggregate struct {
 	Sessions      []RunSession   // in feed order of the first event naming each session id
 	Turns         []Turn         // feed order, every stream, user and assistant
 	Notifications []Notification // feed order, every stream
+
+	// Unattributed holds the run-level usage_records of 00_unattributed_events.jsonl;
+	// nil when the run has none.
+	Unattributed *ActorAggregate
 }
 
 // Totals returns the combined token usage across all actors in the run.
@@ -66,6 +70,9 @@ func (r RunAggregate) Totals() TokenUsage {
 	result := r.Orchestrator.Totals()
 	for _, agent := range r.Agents {
 		result = result.Add(agent.Totals())
+	}
+	if r.Unattributed != nil {
+		result = result.Add(r.Unattributed.Totals())
 	}
 	return result
 }
@@ -78,6 +85,11 @@ func (r RunAggregate) Models() []ModelID {
 	}
 	for _, agent := range r.Agents {
 		for _, id := range agent.Models() {
+			seen[id] = true
+		}
+	}
+	if r.Unattributed != nil {
+		for _, id := range r.Unattributed.Models() {
 			seen[id] = true
 		}
 	}

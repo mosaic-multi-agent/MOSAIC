@@ -20,7 +20,7 @@ func (s *AgentTypesScreen) viewDrill() string {
 	if len(rows) == 0 {
 		rows = []string{"No dispatches of this type."}
 	}
-	body, w := s.cursorRows(rows, s.drillCursor, &s.drillOffset)
+	body, w := s.cursorRows(rows, s.drillCursor, &s.drillOffset, 0)
 	label := fmt.Sprintf("%s / %s", runLabel(s.run), name)
 	return renderPage(s.styles, s.width, "Log Analyzer — Dispatches", label, body, w, len(rows), s.Help())
 }

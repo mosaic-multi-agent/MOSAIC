@@ -18,11 +18,12 @@ import (
 	"mosaic-log-analyzer/internal/digest"
 	"mosaic-log-analyzer/internal/logread"
 	"mosaic-log-analyzer/internal/logscan"
+	"mosaic-log-analyzer/internal/otelusage"
 	"mosaic-log-analyzer/internal/pricing"
 	"mosaic-log-analyzer/internal/tui"
 )
 
-const ToolVersion = "1.0.2"
+const ToolVersion = "1.2.0"
 
 // valueFlagNames are the flags that consume a following token in space-separated
 // form (--flag value). Boolean flags like --tui are NOT in this set.
@@ -141,6 +142,7 @@ func main() {
 	pricingStore := pricing.NewStore(workDir)
 	clock := &realClock{}
 	digestStore := digest.NewStore()
+	usageIngest := otelusage.New()
 
 	if wantsTUI(args, isatty.IsTerminal) {
 		// TUI mode: create the TUI interaction first so it can be shared between
@@ -157,6 +159,7 @@ func main() {
 			Clock:       clock,
 			Interaction: tuiInteract,
 			WorkDir:     workDir,
+			IngestProbe: usageIngest,
 		})
 
 		os.Exit(tui.Run(tui.Options{
@@ -182,6 +185,8 @@ func main() {
 		Clock:       clock,
 		Interaction: interact,
 		WorkDir:     workDir,
+		Ingester:    usageIngest,
+		IngestProbe: usageIngest,
 	})
 
 	os.Exit(cli.Execute(cli.Options{
@@ -189,5 +194,6 @@ func main() {
 		Stdout:  os.Stdout,
 		Stderr:  os.Stderr,
 		Version: ToolVersion,
+		Getenv:  os.Getenv,
 	}, args))
 }

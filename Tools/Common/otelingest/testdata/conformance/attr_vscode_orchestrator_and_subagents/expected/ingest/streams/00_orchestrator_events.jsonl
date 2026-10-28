@@ -1,0 +1,1 @@
+{"schema_version":"1.4.0","event":"usage_record","harness":"vscode-ghcp","session_id":"vsc-session-5","run_id":"20261028T000000Z-0000","record_id":"chat-orch","record_index":4698,"source":"otel","model":"model-orch","provider":"github-copilot","token_usage":{"input_tokens":300,"output_tokens":30}}

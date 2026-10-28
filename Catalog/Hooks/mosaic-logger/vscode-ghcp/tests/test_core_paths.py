@@ -7,8 +7,8 @@ Key differences from the claude-code and ghcp-cli variants:
   event comes from payload["hook_event_name"], NOT a separate constructor arg.
 - Payload fields are snake_case (session_id, agent_id, cwd, transcript_path,
   agent_type) matching VS Code's payload format.
-- HookContext adds a first-class 'agent_name' attribute for VS Code's
-  correlation key (absent in both reference adapters).
+- HookContext adds a first-class 'agent_name' attribute, the correlation fallback
+  when agent_id (the spawning tool-call ID) is absent (absent in both reference adapters).
 - resolve_workspace_root: payload["cwd"] first, then Path.cwd() — NO workspace-
   root environment variable is consulted.  The WORKSPACE_ENV_VAR constant must
   be absent entirely so a copy-paste regression is detectable by grep.
@@ -143,7 +143,7 @@ class TestHookContextConstruction(unittest.TestCase):
         self.assertEqual("vscode-agent-001", ctx.agent_id)
 
     def test_agent_id_absent_when_not_in_payload(self):
-        """VS Code's SubagentStart has no agent_id — must be None without payload key."""
+        """agent_id must be None when the payload has no agent_id key."""
         ctx = self._make_ctx(payload={})
         self.assertIsNone(ctx.agent_id)
 
@@ -152,7 +152,7 @@ class TestHookContextConstruction(unittest.TestCase):
         self.assertIsNone(ctx.agent_id)
 
     def test_agent_name_mapped_from_snake_case_agent_name(self):
-        """agent_name is VS Code's primary correlation key — must be a first-class attr."""
+        """agent_name is the correlation fallback key — must be a first-class attr."""
         ctx = self._make_ctx(payload={"agent_name": "TestWriter"})
         self.assertEqual("TestWriter", ctx.agent_name)
 

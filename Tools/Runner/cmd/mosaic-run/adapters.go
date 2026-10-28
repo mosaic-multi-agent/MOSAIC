@@ -104,7 +104,7 @@ func buildAdapter(runFolder, harnessStr, execPathStr, ghcpMode string, timeout t
 		if mode != commonharness.GHCPCLIModeBlanket && mode != commonharness.GHCPCLIModePartialAllowlist {
 			mode = commonharness.GHCPCLIModeBlanket
 		}
-		return ghcpcli.NewGHCPCLIAdapterWithMode(exe, timeout, logger, mode, runOpts...)
+		return withGHCPCLIUsageIngest(ghcpcli.NewGHCPCLIAdapterWithMode(exe, timeout, logger, mode, runOpts...), runFolder, logger)
 	default: // "fake" or unknown
 		return harness.NewMockAdapter()
 	}

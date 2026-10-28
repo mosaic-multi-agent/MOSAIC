@@ -17,6 +17,9 @@ type Options struct {
 	Stdout  io.Writer
 	Stderr  io.Writer
 	Version string
+
+	// Getenv reads LogAnalyzer's own environment (the ingest-otel file fallback); nil = empty.
+	Getenv func(string) string
 }
 
 // NewRootCommand builds the cobra command tree.
@@ -26,6 +29,7 @@ type Options struct {
 //	mosaic-log-analyzer report [--path P] [--run ID] [--format json|text]
 //	mosaic-log-analyzer total  --run ID [--path P]          (stable FR-19 JSON)
 //	mosaic-log-analyzer export --out F.digest.json [--path P] [--run ID] [--force]
+//	mosaic-log-analyzer ingest-otel --run ID [--path P] [otel-file]
 //	mosaic-log-analyzer pricing path                        (prints the config path)
 //
 // Persistent flags:
@@ -203,6 +207,9 @@ func newRootCommandWithExitCode(opts Options, exitCode *int) *cobra.Command {
 	exportCmd := newExportCommand(opts, exitCode,
 		func() string { return pathFlag }, func() string { return runFlag })
 
-	root.AddCommand(reportCmd, totalCmd, pricingCmd, exportCmd)
+	ingestCmd := newIngestOtelCommand(opts, exitCode,
+		func() string { return pathFlag }, func() string { return runFlag })
+
+	root.AddCommand(reportCmd, totalCmd, pricingCmd, exportCmd, ingestCmd)
 	return root
 }

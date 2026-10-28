@@ -212,10 +212,11 @@ func buildInteractiveWiring(in interactiveWiringInput) interactiveWiring {
 			DevMode:            in.DevMode,
 			SessionFactory: func(runFolder string, isNewRun bool, orchFile string, cfg runconfig.ConfigSelection) session.Session {
 				sessionRunFolder := resolveSessionRunFolder(runFolder, in)
-				sess := withGHCPTrustPreflight(session.New(newDeps(sessionRunFolder, isNewRun, orchFile, cfg)),
+				deps := newDeps(sessionRunFolder, isNewRun, orchFile, cfg)
+				sess := withGHCPTrustPreflight(session.New(deps),
 					sessionRunFolder, cfg.Harness, in.ProgramRef, true, in.Debug)
 				return newRunLifecycleSession(sess,
-					runLogConfig{RunFolder: sessionRunFolder, HarnessID: cfg.Harness, Debug: in.Debug, Clock: in.Clock})
+					newRunLogConfig(deps.Harness, sessionRunFolder, cfg.Harness, in.Debug, in.Clock))
 			},
 			MintRunIdentity:        in.Minter,
 			OrchestratorDiscoverer: harness.DiscoverOrchestrator,

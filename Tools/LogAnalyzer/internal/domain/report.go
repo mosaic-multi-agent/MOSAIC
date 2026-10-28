@@ -49,6 +49,13 @@ type RunReport struct {
 	ByStatus    StatusBreakdown  // V3
 	Tools       ToolsBreakdown   // V4
 	Timeline    Timeline         // V5
+
+	// Unattributed is the run-level unattributed usage; nil when the run has none.
+	Unattributed *ActorReport
+
+	// UsageIngest says whether usage of this run is still pending in its ingest
+	// state; the zero value means there is nothing to report.
+	UsageIngest UsageIngestState
 }
 
 // Report is the complete analysis output rendered by both frontends.

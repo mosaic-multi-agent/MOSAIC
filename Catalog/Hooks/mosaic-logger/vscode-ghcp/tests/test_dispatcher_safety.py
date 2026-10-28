@@ -8,8 +8,8 @@ Key vscode-ghcp dispatcher properties:
   - emit_run_start is called for SessionStart (outside the handler registry)
   - emit_run_end is called for Stop (outside the registry), always, even when
     the Stop handler raised
-  - RUN_ID_PROMPT_FIELDS maps UserPromptSubmit->prompt, SubagentStop->
-    last_assistant_message, Stop->last_assistant_message; SubagentStart absent
+  - RUN_ID_PROMPT_FIELDS maps UserPromptSubmit->prompt, Stop->
+    last_assistant_message; SubagentStart and SubagentStop absent (no prompt text)
   - The process exits 0 and writes zero bytes to stdout for every input
 
 Covers:
@@ -339,12 +339,9 @@ class TestRunIdPromptFields(unittest.TestCase):
             "'user_prompt' is the claude-code field; VS Code uses 'prompt'"
         )
 
-    def test_subagent_stop_maps_to_last_assistant_message(self):
-        self.assertIn("SubagentStop", mosaic_logger.RUN_ID_PROMPT_FIELDS)
-        self.assertEqual(
-            "last_assistant_message",
-            mosaic_logger.RUN_ID_PROMPT_FIELDS["SubagentStop"]
-        )
+    def test_subagent_stop_is_absent(self):
+        """VS Code SubagentStop has no last_assistant_message to read a run ID from."""
+        self.assertNotIn("SubagentStop", mosaic_logger.RUN_ID_PROMPT_FIELDS)
 
     def test_stop_maps_to_last_assistant_message(self):
         self.assertIn("Stop", mosaic_logger.RUN_ID_PROMPT_FIELDS)

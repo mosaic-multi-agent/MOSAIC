@@ -1,26 +1,22 @@
-"""Tests for the SubagentStart and SubagentStop handlers (vscode-ghcp variant).
+"""Tests for the SubagentStart handler and the correlation seam (vscode-ghcp variant).
 
-Key vscode-ghcp divergences from the claude-code reference:
-  D3: Subagent correlation is keyed on agent_name, not agent_id
-  D3: SubagentStart carries no agent_id — the reference's `if not ctx.agent_id: return`
-      guard would suppress every VS Code invocation and must NOT be used
-  D3: resolve_agent_key returns agent_name when present, falls back to agent_id
-  D3: Agent map entry is written (and lookup is performed) using agent_name as the key
-  D3: SubagentStop resolves the invocation via agent_name; falls back to agent_id only
-      when agent_name is absent
+Key vscode-ghcp behaviours:
+  D3: Subagent correlation is keyed on the spawning tool-call ID: SubagentStart /
+      SubagentStop `agent_id` (`toolu_...`) with any `__vscode-<ms>` suffix stripped;
+      `agent_name` is a fallback only when `agent_id` is absent
+  D3: SubagentStart must still be processed when `agent_id` is absent (fallback key)
   D3: resolve_agent_type returns agent_type when present, falls back to agent_name
-      (the schema defines agent_type as the bare agent name; VS Code's agent_name
-       carries exactly that value)
+  The invocation_end is written by the orchestrator's PostToolUse for the spawning
+  tool (or the Stop sweep), not by SubagentStop; those paths are covered by the
+  subagent completion tests.
 
 Covers:
-  resolve_agent_key: returns agent_name, falls back to agent_id, None when both absent
+  resolve_agent_key: normalised agent_id first, agent_name fallback, None when both absent
   resolve_agent_type: returns agent_type, falls back to agent_name
   extract_status_code: last valid code wins; invalid strings ignored
-  SubagentStart: no agent_id guard; pops pending dispatch; agent_name keyed mapping
-    written BEFORE event emission; invocation_start + user turn to invocation stream
-  SubagentStop: resolves via agent_name; skips unmapped firings; invocation_end
-    + assistant turn; last_assistant_message omits optional fields when absent
-  Round trip: start writes mapping, stop reads via same key, same invocation stream
+  SubagentStart: pops pending dispatch; keyed mapping written BEFORE event emission;
+    invocation_start + user turn to invocation stream
+  Round trip: start writes mapping under the tool-call ID key
 """
 
 import json
@@ -108,11 +104,11 @@ def _pre_populate_pending_dispatch(tmp_path, run_id, session_id,
 # ---------------------------------------------------------------------------
 
 class TestResolveAgentKey(unittest.TestCase):
-    """resolve_agent_key returns agent_name when present, falls back to agent_id,
-    and returns None when both are absent.
+    """resolve_agent_key returns the normalised agent_id when present, falls back to
+    agent_name, and returns None when both are absent.
 
-    This is the D3 seam: both SubagentStart and SubagentStop route through it,
-    so start and end cannot disagree about which key was used.
+    This is the D3 seam: SubagentStart and SubagentStop both route through it,
+    so start and stop cannot disagree about which key was used.
     """
 
     def setUp(self):
@@ -121,34 +117,34 @@ class TestResolveAgentKey(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_returns_agent_name_when_present(self):
+    def test_returns_agent_id_when_present(self):
+        ctx = _make_start_ctx(self.tmp.name, agent_id="toolu_01AbCdEfGhIjKlMn")
+        self.assertEqual("toolu_01AbCdEfGhIjKlMn", invocation.resolve_agent_key(ctx))
+
+    def test_agent_id_takes_precedence_over_agent_name(self):
+        """agent_id (the spawning tool-call ID) wins over agent_name."""
+        ctx = _make_start_ctx(self.tmp.name, agent_name="TestWriter",
+                              agent_id="toolu_01AbCdEfGhIjKlMn")
+        self.assertEqual("toolu_01AbCdEfGhIjKlMn", invocation.resolve_agent_key(ctx))
+
+    def test_strips_vscode_suffix_from_agent_id(self):
+        ctx = _make_stop_ctx(self.tmp.name,
+                             agent_id="toolu_01AbCdEfGhIjKlMn__vscode-1793098349279")
+        self.assertEqual("toolu_01AbCdEfGhIjKlMn", invocation.resolve_agent_key(ctx))
+
+    def test_falls_back_to_agent_name_when_agent_id_absent(self):
         ctx = _make_start_ctx(self.tmp.name, agent_name="TestWriter")
-        result = invocation.resolve_agent_key(ctx)
-        self.assertEqual("TestWriter", result)
-
-    def test_returns_agent_name_over_agent_id_when_both_present(self):
-        """agent_name takes precedence over agent_id (D3 design decision)."""
-        ctx = _make_start_ctx(self.tmp.name, agent_name="TestWriter", agent_id="opaque-id-001")
-        result = invocation.resolve_agent_key(ctx)
-        self.assertEqual("TestWriter", result)
-
-    def test_falls_back_to_agent_id_when_agent_name_absent(self):
-        """SubagentStop may carry agent_id without agent_name; fall back to agent_id."""
-        ctx = _make_stop_ctx(self.tmp.name, agent_id="harness-agent-001")
-        result = invocation.resolve_agent_key(ctx)
-        self.assertEqual("harness-agent-001", result)
+        self.assertEqual("TestWriter", invocation.resolve_agent_key(ctx))
 
     def test_returns_none_when_both_absent(self):
-        """A firing with neither name nor id cannot be correlated at all."""
+        """A firing with neither id nor name cannot be correlated at all."""
         ctx = _make_start_ctx(self.tmp.name)  # no agent_name, no agent_id
-        result = invocation.resolve_agent_key(ctx)
-        self.assertIsNone(result)
+        self.assertIsNone(invocation.resolve_agent_key(ctx))
 
-    def test_empty_agent_name_normalizes_to_none_and_falls_back_to_agent_id(self):
-        """Empty string agent_name normalizes to None via ctx.field(); agent_id is used."""
-        ctx = _make_stop_ctx(self.tmp.name, agent_name="", agent_id="fallback-id")
-        result = invocation.resolve_agent_key(ctx)
-        self.assertEqual("fallback-id", result)
+    def test_empty_agent_id_normalizes_to_none_and_falls_back_to_agent_name(self):
+        """Empty string agent_id normalizes to None via ctx.field(); agent_name is used."""
+        ctx = _make_stop_ctx(self.tmp.name, agent_id="", agent_name="fallback-name")
+        self.assertEqual("fallback-name", invocation.resolve_agent_key(ctx))
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +171,7 @@ class TestResolveAgentType(unittest.TestCase):
         self.assertEqual("Researcher", result)
 
     def test_falls_back_to_agent_name_when_agent_type_absent(self):
-        """SubagentStart has no agent_type field; agent_name is the fallback."""
+        """When agent_type is absent, agent_name is the fallback."""
         ctx = _make_start_ctx(self.tmp.name, agent_name="TestWriter")
         result = invocation.resolve_agent_type(ctx)
         self.assertEqual("TestWriter", result)
@@ -238,15 +234,14 @@ class TestExtractStatusCode(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# SubagentStart: no agent_id guard, agent_name keyed mapping
+# SubagentStart: no agent_id guard, keyed mapping
 # ---------------------------------------------------------------------------
 
 class TestHandleSubagentStart(unittest.TestCase):
-    """handle_subagent_start processes every firing regardless of agent_id presence.
+    """handle_subagent_start processes every firing that carries a correlation key.
 
-    The reference adapter's `if not ctx.agent_id: return` guard would suppress
-    every VS Code SubagentStart (which carries no agent_id) and must not be used.
-    Correlation is keyed on agent_name.
+    The key is the normalised agent_id (the spawning tool-call ID); agent_name is
+    the fallback when agent_id is absent. The tests below use the fallback key.
     """
 
     def setUp(self):
@@ -264,7 +259,7 @@ class TestHandleSubagentStart(unittest.TestCase):
                 if d.is_dir() and not d.name.startswith(".")]
 
     def test_processes_event_with_no_agent_id_present(self):
-        """SubagentStart without agent_id must create invocation directory."""
+        """SubagentStart without agent_id (fallback key) must create invocation directory."""
         ctx = _make_start_ctx(self.tmp.name, agent_name="TestWriter")
         invocation.handle_subagent_start(ctx)
         dirs = self._invocation_dirs()
@@ -279,8 +274,8 @@ class TestHandleSubagentStart(unittest.TestCase):
         self.assertEqual(0, len(dirs),
                          "No directory should be created when agent correlation key is absent")
 
-    def test_agent_map_entry_keyed_on_agent_name(self):
-        """The agent map entry must be written under agent_name, not agent_id."""
+    def test_agent_map_entry_keyed_on_agent_name_fallback(self):
+        """Without agent_id the agent map entry is written under agent_name."""
         ctx = _make_start_ctx(self.tmp.name, agent_name="TestWriter",
                               agent_type="TestWriter")
         prompt = '{"agent_instance_id": "TestWriter#1"}'
@@ -288,10 +283,10 @@ class TestHandleSubagentStart(unittest.TestCase):
             self.tmp.name, _RUN_ID, _SESSION_ID, "TestWriter#1", _RUN_ID, prompt=prompt
         )
         invocation.handle_subagent_start(ctx)
-        # Mapping must be readable by agent_name key
+        # Mapping must be readable by the fallback key
         mapping = runstate.get_agent_mapping(self.paths, _RUN_ID, "TestWriter")
         self.assertIsNotNone(mapping,
-                             "Agent map entry must be readable via agent_name as the key")
+                             "Agent map entry must be readable via the fallback agent_name key")
 
     def test_agent_map_entry_written_before_event_emission(self):
         """Mapping is persisted before any event write to minimize correlation window."""
@@ -408,242 +403,14 @@ class TestHandleSubagentStart(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# SubagentStop: resolves via agent_name, skips unmapped firings
-# ---------------------------------------------------------------------------
-
-class TestHandleSubagentStop(unittest.TestCase):
-    """handle_subagent_stop resolves the invocation via agent_name.
-
-    Skips firings whose resolved agent_instance_id starts with 'unmapped_'.
-    Falls back to agent_id only when agent_name is absent.
-    """
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.paths = core.build_paths(pathlib.Path(self.tmp.name))
-
-    def tearDown(self):
-        self.tmp.cleanup()
-
-    def test_resolves_invocation_via_agent_name(self):
-        """SubagentStop must resolve the invocation using agent_name as the key."""
-        _register_mapping(self.tmp.name, _RUN_ID, "TestWriter", "TestWriter#1", "TestWriter")
-        ctx = _make_stop_ctx(
-            self.tmp.name,
-            agent_name="TestWriter",
-            agent_type="TestWriter",
-            last_assistant_message='{"status_code": "SUCCESS"}',
-        )
-        invocation.handle_subagent_stop(ctx)
-        event_path = self.paths.invocation_events(_RUN_ID, "TestWriter#1")
-        self.assertTrue(event_path.exists(),
-                        "invocation_end must land in the agent_name-keyed invocation directory")
-
-    def test_falls_back_to_agent_id_when_agent_name_absent(self):
-        """When agent_name is absent, agent_id is used as the fallback key."""
-        _register_mapping(self.tmp.name, _RUN_ID, "harness-id-001", "Fallback#1")
-        ctx = _make_stop_ctx(
-            self.tmp.name,
-            agent_id="harness-id-001",
-            last_assistant_message='{"status_code": "BLOCKED"}',
-        )
-        invocation.handle_subagent_stop(ctx)
-        event_path = self.paths.invocation_events(_RUN_ID, "Fallback#1")
-        self.assertTrue(event_path.exists(),
-                        "When agent_name is absent, agent_id fallback must resolve the invocation")
-
-    def test_skips_unmapped_firings(self):
-        """A firing whose agent_name has no mapping must be skipped entirely."""
-        ctx = _make_stop_ctx(
-            self.tmp.name,
-            agent_name="UnmappedAgent",
-            last_assistant_message="Response text.",
-        )
-        invocation.handle_subagent_stop(ctx)
-        # The unmapped_ directory must not have events written to the orchestrator
-        orc_path = self.paths.orchestrator_events(_RUN_ID)
-        self.assertFalse(
-            orc_path.exists(),
-            "An unmapped SubagentStop must not write to the orchestrator stream"
-        )
-
-    def test_returns_early_when_both_agent_name_and_agent_id_absent(self):
-        ctx = _make_stop_ctx(self.tmp.name, last_assistant_message="Response.")
-        invocation.handle_subagent_stop(ctx)
-        run_root = self.paths.run_root(_RUN_ID)
-        self.assertFalse(run_root.exists(),
-                         "No files should be created when agent correlation key is absent")
-
-    def test_emits_invocation_end_event(self):
-        _register_mapping(self.tmp.name, _RUN_ID, "Reviewer", "Reviewer#1", "Reviewer")
-        ctx = _make_stop_ctx(
-            self.tmp.name,
-            agent_name="Reviewer",
-            agent_type="Reviewer",
-            last_assistant_message="Final response.",
-        )
-        invocation.handle_subagent_stop(ctx)
-        event_path = self.paths.invocation_events(_RUN_ID, "Reviewer#1")
-        events = _read_jsonl(event_path)
-        self.assertIn("invocation_end", [e["event"] for e in events])
-
-    def test_invocation_end_has_agent_instance_id(self):
-        _register_mapping(self.tmp.name, _RUN_ID, "Reviewer", "Reviewer#2", "Reviewer")
-        ctx = _make_stop_ctx(
-            self.tmp.name,
-            agent_name="Reviewer",
-            agent_type="Reviewer",
-            last_assistant_message='{"status_code": "SUCCESS"}',
-        )
-        invocation.handle_subagent_stop(ctx)
-        event_path = self.paths.invocation_events(_RUN_ID, "Reviewer#2")
-        events = _read_jsonl(event_path)
-        end_evt = next(e for e in events if e["event"] == "invocation_end")
-        self.assertEqual("Reviewer#2", end_evt["agent_instance_id"])
-
-    def test_invocation_end_has_status_code_from_last_assistant_message(self):
-        _register_mapping(self.tmp.name, _RUN_ID, "Reviewer", "Reviewer#3")
-        ctx = _make_stop_ctx(
-            self.tmp.name,
-            agent_name="Reviewer",
-            last_assistant_message='{"status_code": "BLOCKED", "error_code": "E101"}',
-        )
-        invocation.handle_subagent_stop(ctx)
-        event_path = self.paths.invocation_events(_RUN_ID, "Reviewer#3")
-        events = _read_jsonl(event_path)
-        end_evt = next(e for e in events if e["event"] == "invocation_end")
-        self.assertEqual("BLOCKED", end_evt.get("status_code"))
-
-    def test_invocation_end_status_code_absent_when_no_structured_block(self):
-        _register_mapping(self.tmp.name, _RUN_ID, "Reviewer", "Reviewer#4")
-        ctx = _make_stop_ctx(
-            self.tmp.name,
-            agent_name="Reviewer",
-            last_assistant_message="Task is done with great results.",
-        )
-        invocation.handle_subagent_stop(ctx)
-        event_path = self.paths.invocation_events(_RUN_ID, "Reviewer#4")
-        events = _read_jsonl(event_path)
-        end_evt = next(e for e in events if e["event"] == "invocation_end")
-        self.assertNotIn("status_code", end_evt)
-
-    def test_invocation_end_has_full_response(self):
-        """response field must be the full untruncated last_assistant_message."""
-        big_response = '{"status_code": "SUCCESS"}\n' + "y" * 50_000
-        _register_mapping(self.tmp.name, _RUN_ID, "Reviewer", "Reviewer#5")
-        ctx = _make_stop_ctx(
-            self.tmp.name,
-            agent_name="Reviewer",
-            last_assistant_message=big_response,
-        )
-        invocation.handle_subagent_stop(ctx)
-        event_path = self.paths.invocation_events(_RUN_ID, "Reviewer#5")
-        events = _read_jsonl(event_path)
-        end_evt = next(e for e in events if e["event"] == "invocation_end")
-        self.assertEqual(big_response, end_evt.get("response"))
-
-    def test_assistant_turn_written_when_last_assistant_message_present(self):
-        _register_mapping(self.tmp.name, _RUN_ID, "Reviewer", "Reviewer#6")
-        ctx = _make_stop_ctx(
-            self.tmp.name,
-            agent_name="Reviewer",
-            last_assistant_message="Final answer.",
-        )
-        invocation.handle_subagent_stop(ctx)
-        event_path = self.paths.invocation_events(_RUN_ID, "Reviewer#6")
-        events = _read_jsonl(event_path)
-        turns = [e for e in events if e["event"] == "turn"]
-        self.assertGreater(len(turns), 0)
-        self.assertEqual("assistant", turns[0]["role"])
-
-    def test_response_field_absent_when_last_assistant_message_absent(self):
-        """When last_assistant_message is absent, response must not be fabricated."""
-        _register_mapping(self.tmp.name, _RUN_ID, "Reviewer", "Reviewer#7")
-        ctx = _make_stop_ctx(
-            self.tmp.name,
-            agent_name="Reviewer",
-        )
-        invocation.handle_subagent_stop(ctx)
-        event_path = self.paths.invocation_events(_RUN_ID, "Reviewer#7")
-        if event_path.exists():
-            events = _read_jsonl(event_path)
-            end_events = [e for e in events if e["event"] == "invocation_end"]
-            for end_evt in end_events:
-                self.assertNotIn("response", end_evt,
-                                 "response must be absent when last_assistant_message is absent")
-
-    def test_model_from_transcript_included_in_invocation_end(self):
-        transcript_path = _write_transcript_file(self.tmp.name, [
-            {"type": "assistant", "message": {
-                "model": "claude-opus-4-5",
-                "usage": {"input_tokens": 100},
-            }},
-        ])
-        _register_mapping(self.tmp.name, _RUN_ID, "Reviewer", "Reviewer#8")
-        ctx = _make_stop_ctx(
-            self.tmp.name,
-            agent_name="Reviewer",
-            last_assistant_message='{"status_code": "SUCCESS"}',
-            transcript_path=transcript_path,
-        )
-        invocation.handle_subagent_stop(ctx)
-        event_path = self.paths.invocation_events(_RUN_ID, "Reviewer#8")
-        events = _read_jsonl(event_path)
-        end_evt = next(e for e in events if e["event"] == "invocation_end")
-        self.assertEqual("claude-opus-4-5", end_evt.get("model"))
-
-    def test_model_absent_when_transcript_unreadable(self):
-        _register_mapping(self.tmp.name, _RUN_ID, "Reviewer", "Reviewer#9")
-        ctx = _make_stop_ctx(
-            self.tmp.name,
-            agent_name="Reviewer",
-            last_assistant_message='{"status_code": "SUCCESS"}',
-            transcript_path="/nonexistent/transcript.jsonl",
-        )
-        invocation.handle_subagent_stop(ctx)
-        event_path = self.paths.invocation_events(_RUN_ID, "Reviewer#9")
-        events = _read_jsonl(event_path)
-        end_evt = next(e for e in events if e["event"] == "invocation_end")
-        self.assertNotIn("model", end_evt)
-
-    def test_no_null_values_in_invocation_end(self):
-        _register_mapping(self.tmp.name, _RUN_ID, "Reviewer", "Reviewer#10")
-        ctx = _make_stop_ctx(
-            self.tmp.name,
-            agent_name="Reviewer",
-            last_assistant_message='{"status_code": "SUCCESS"}',
-        )
-        invocation.handle_subagent_stop(ctx)
-        event_path = self.paths.invocation_events(_RUN_ID, "Reviewer#10")
-        events = _read_jsonl(event_path)
-        end_evt = next(e for e in events if e["event"] == "invocation_end")
-        for key, value in end_evt.items():
-            with self.subTest(key=key):
-                self.assertIsNotNone(value)
-
-    def test_handler_does_not_raise(self):
-        _register_mapping(self.tmp.name, _RUN_ID, "Reviewer", "Reviewer#11")
-        ctx = _make_stop_ctx(
-            self.tmp.name,
-            agent_name="Reviewer",
-            last_assistant_message="Done.",
-        )
-        try:
-            invocation.handle_subagent_stop(ctx)
-        except Exception as exc:
-            self.fail(f"handle_subagent_stop raised unexpectedly: {exc}")
-
-
-# ---------------------------------------------------------------------------
-# Round-trip: SubagentStart writes mapping, SubagentStop reads via same key
+# Round-trip: SubagentStart writes the mapping under the tool-call ID key
 # ---------------------------------------------------------------------------
 
 class TestSubagentCorrelationRoundTrip(unittest.TestCase):
-    """SubagentStart writes the agent-name-keyed mapping; SubagentStop resolves
-    the same invocation stream.
+    """SubagentStart writes the tool-call-ID-keyed mapping that later firings resolve.
 
-    This tests the cross-process handoff contract: the two handlers run in
-    separate processes but must agree on which invocation directory to use.
+    The handlers run in separate processes but must agree on the key; the mapping
+    on disk is the handoff.
     """
 
     def setUp(self):
@@ -653,50 +420,20 @@ class TestSubagentCorrelationRoundTrip(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_start_and_stop_use_same_invocation_stream(self):
-        """invocation_start (from Start) and invocation_end (from Stop) must land
-        in the same 03_events.jsonl file."""
-        agent_name = "RoundTripAgent"
-        prompt = '{"agent_instance_id": "RoundTripAgent#1"}'
-
-        # --- SubagentStart ---
-        _pre_populate_pending_dispatch(
-            self.tmp.name, _RUN_ID, _SESSION_ID, "RoundTripAgent#1", _RUN_ID, prompt=prompt
-        )
-        start_ctx = _make_start_ctx(self.tmp.name, agent_name=agent_name)
-        invocation.handle_subagent_start(start_ctx)
-
-        # --- SubagentStop ---
-        stop_ctx = _make_stop_ctx(
-            self.tmp.name,
-            agent_name=agent_name,
-            last_assistant_message='{"status_code": "SUCCESS"}',
-        )
-        invocation.handle_subagent_stop(stop_ctx)
-
-        event_path = self.paths.invocation_events(_RUN_ID, "RoundTripAgent#1")
-        self.assertTrue(event_path.exists(),
-                        "The shared invocation events file must exist after both handlers run")
-        events = _read_jsonl(event_path)
-        event_types = [e["event"] for e in events]
-        self.assertIn("invocation_start", event_types)
-        self.assertIn("invocation_end", event_types)
-
-    def test_start_writes_agent_name_keyed_mapping_readable_by_stop(self):
-        """The mapping written by SubagentStart must be readable via agent_name by SubagentStop."""
-        agent_name = "MappingTestAgent"
+    def test_start_writes_tool_call_id_keyed_mapping(self):
+        """The mapping written by SubagentStart must be readable via the normalised agent_id."""
+        call_id = "toolu_01MappingTestAbCdEfGh"
         prompt = '{"agent_instance_id": "MappingTestAgent#1"}'
 
         _pre_populate_pending_dispatch(
             self.tmp.name, _RUN_ID, _SESSION_ID, "MappingTestAgent#1", _RUN_ID, prompt=prompt
         )
-        start_ctx = _make_start_ctx(self.tmp.name, agent_name=agent_name)
+        start_ctx = _make_start_ctx(self.tmp.name, agent_id=call_id + "__vscode-1793098349279")
         invocation.handle_subagent_start(start_ctx)
 
-        # Verify the mapping is keyed on agent_name
-        mapping = runstate.get_agent_mapping(self.paths, _RUN_ID, agent_name)
+        mapping = runstate.get_agent_mapping(self.paths, _RUN_ID, call_id)
         self.assertIsNotNone(mapping,
-                             "Mapping written by SubagentStart must be readable via agent_name")
+                             "Mapping written by SubagentStart must be readable via the tool-call ID")
         self.assertEqual("MappingTestAgent#1", mapping.get("agent_instance_id"))
 
 

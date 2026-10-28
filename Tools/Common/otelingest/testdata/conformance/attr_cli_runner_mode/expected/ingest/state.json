@@ -1,0 +1,34 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 5569,
+    "head_len": 4096,
+    "head_sha256": "aa4dbb195e7240f2811556044230dd3e6e6e02b1ac5b03e4d938482022306983"
+  },
+  "placements": {
+    "chat-cli-proc-1-1": "invocation/Implementation#1",
+    "chat-cli-proc-1-2": "invocation/Implementation#1",
+    "chat-cli-proc-2-1": "invocation/Review#1",
+    "chat-cli-orch-process-1": "orchestrator",
+    "chat-cli-proc-shared-1": "unattributed"
+  },
+  "pending": [],
+  "links": {
+    "root-cli-proc-1": {
+      "kind": "invoke_agent",
+      "conversation_id": "cli-proc-1"
+    },
+    "root-cli-proc-2": {
+      "kind": "invoke_agent",
+      "conversation_id": "cli-proc-2"
+    },
+    "root-cli-orch-process": {
+      "kind": "invoke_agent",
+      "conversation_id": "cli-orch-process"
+    },
+    "root-cli-proc-shared": {
+      "kind": "invoke_agent",
+      "conversation_id": "cli-proc-shared"
+    }
+  }
+}

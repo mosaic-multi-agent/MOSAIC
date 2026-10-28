@@ -15,6 +15,10 @@ const LogsDirName = "OrchestrationLogs"
 // OrchestratorEventFile is the orchestrator stream's file name within a run folder.
 const OrchestratorEventFile = "00_orchestrator_events.jsonl"
 
+// UnattributedEventFile is the run-level stream of usage_records that belong to
+// neither the orchestrator nor an invocation, in the run folder root.
+const UnattributedEventFile = "00_unattributed_events.jsonl"
+
 // AgentEventFile is the event stream file name within an agent-instance folder.
 const AgentEventFile = "03_events.jsonl"
 
@@ -93,7 +97,7 @@ func (s *Scanner) Classify(path string) domain.Source {
 func hasRunFolderStructure(dir string, entries []os.DirEntry) bool {
 	for _, e := range entries {
 		if !e.IsDir() {
-			if e.Name() == OrchestratorEventFile {
+			if e.Name() == OrchestratorEventFile || e.Name() == UnattributedEventFile {
 				return true
 			}
 			continue
@@ -232,6 +236,10 @@ func enumerateRunDir(run domain.RunRef, dir string) (domain.RunEntry, []domain.F
 			// Check for the orchestrator event file.
 			if e.Name() == OrchestratorEventFile {
 				entry.OrchestratorFile = filepath.Join(dir, e.Name())
+			}
+			// The unknown-run bucket never holds a run-level usage stream.
+			if e.Name() == UnattributedEventFile && !run.IsUnattributable() {
+				entry.UnattributedFile = filepath.Join(dir, e.Name())
 			}
 			// Other plain files are silently ignored.
 			continue

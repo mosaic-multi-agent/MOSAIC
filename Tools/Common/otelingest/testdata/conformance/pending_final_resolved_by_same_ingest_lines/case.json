@@ -1,0 +1,24 @@
+{
+  "description": "A final ingest applies the placement rules to the lines it reads before it finalises anything: a pending span whose parent arrives in the same ingest goes to its invocation, and only the pending span whose parent is still missing goes to the unattributed stream.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "early",
+      "otel": "otel/early.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    },
+    {
+      "name": "final",
+      "otel": "otel/final.jsonl",
+      "logs": null,
+      "final": true,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}
