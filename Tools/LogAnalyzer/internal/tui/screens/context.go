@@ -116,7 +116,7 @@ func (s *ContextScreen) View(width, height int) string {
 	st := s.styles
 	rc := s.run.Context
 	order := s.sort.Active()
-	rows := contextTableRows(rc, contextOrder(rc.Invocations, order), st.Theme)
+	rows := contextTableRows(st.Currency, rc, contextOrder(rc.Invocations, order), st.Theme)
 
 	notes := contextNotes(width)
 	budget := bodyBudget(height)
@@ -142,10 +142,10 @@ func (s *ContextScreen) View(width, height int) string {
 // helpKeys are the short help keys of the list currently shown.
 func (s *ContextScreen) helpKeys() []tuicommon.HelpEntry {
 	if s.drilled {
-		return []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: KeySort, Desc: "sort"}, {Key: "esc", Desc: "actors"}}
+		return []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: KeySort, Desc: "sort"}, exportKeyEntry, {Key: "esc", Desc: "actors"}}
 	}
 	return []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: "enter", Desc: "calls"},
-		{Key: KeySort, Desc: "sort"}, {Key: "esc", Desc: "back"}}
+		{Key: KeySort, Desc: "sort"}, exportKeyEntry, {Key: "esc", Desc: "back"}}
 }
 
 // screenKeys are the overlay entries of the keys this view has of its own.

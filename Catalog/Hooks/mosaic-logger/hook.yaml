@@ -61,6 +61,8 @@ variants:
         target: mosaic_logger.py
       - source: mosaic_logger_core.py
         target: mosaic_logger_core.py
+      - source: mosaic_logger_locked_append.py
+        target: mosaic_logger_locked_append.py
       - source: mosaic_logger_provider.py
         target: mosaic_logger_provider.py
       - source: mosaic_logger_runstate.py
@@ -281,6 +283,8 @@ variants:
         target: mosaic-logger.ts
       - source: lib/core.ts
         target: lib/core.ts
+      - source: lib/locked_append.ts
+        target: lib/locked_append.ts
       - source: lib/runstate.ts
         target: lib/runstate.ts
       - source: lib/correlation.ts
@@ -368,8 +372,14 @@ variants:
         target: mosaic_logger_otel_place.py
       - source: ../copilot-shared/mosaic_logger_otel_scan.py
         target: mosaic_logger_otel_scan.py
+      - source: ../copilot-shared/mosaic_logger_otel_toolend.py
+        target: mosaic_logger_otel_toolend.py
+      - source: ../copilot-shared/mosaic_logger_otel_toolevents.py
+        target: mosaic_logger_otel_toolevents.py
       - source: ../copilot-shared/mosaic_logger_otel_state.py
         target: mosaic_logger_otel_state.py
+      - source: ../copilot-shared/mosaic_logger_locked_append.py
+        target: mosaic_logger_locked_append.py
       - source: ../copilot-shared/mosaic_logger_otel_write.py
         target: mosaic_logger_otel_write.py
       - source: ../hook.yaml
@@ -446,8 +456,14 @@ variants:
         target: mosaic_logger_otel_place.py
       - source: ../copilot-shared/mosaic_logger_otel_scan.py
         target: mosaic_logger_otel_scan.py
+      - source: ../copilot-shared/mosaic_logger_otel_toolend.py
+        target: mosaic_logger_otel_toolend.py
+      - source: ../copilot-shared/mosaic_logger_otel_toolevents.py
+        target: mosaic_logger_otel_toolevents.py
       - source: ../copilot-shared/mosaic_logger_otel_state.py
         target: mosaic_logger_otel_state.py
+      - source: ../copilot-shared/mosaic_logger_locked_append.py
+        target: mosaic_logger_locked_append.py
       - source: ../copilot-shared/mosaic_logger_otel_write.py
         target: mosaic_logger_otel_write.py
       - source: ../hook.yaml

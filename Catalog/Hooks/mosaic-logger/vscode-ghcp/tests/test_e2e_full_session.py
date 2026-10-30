@@ -703,7 +703,8 @@ class TestSchemaConformance(unittest.TestCase):
 
     def test_schema_version_is_the_per_event_version(self):
         for ev in self.all_events:
-            want = "1.4.0" if ev.get("event") == "invocation_start" else "1.0.0"
+            want = {"invocation_start": "1.4.0",
+                    "tool_call_end": "1.6.0"}.get(ev.get("event"), "1.0.0")
             self.assertEqual(want, ev.get("schema_version"),
                              f"Unexpected schema_version in event {ev.get('event')!r}")
 

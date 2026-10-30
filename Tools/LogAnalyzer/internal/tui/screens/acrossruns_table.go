@@ -98,16 +98,16 @@ func acrossTypeOrder(types []domain.AgentTypeAcrossRuns, o SortOrder) []int {
 
 // acrossRunCells builds the cells of one run row; whole is the known cost of all
 // runs the bar is measured against.
-func acrossRunCells(r domain.RunSummary, whole int64, theme tuicommon.Theme) []table.Cell {
+func acrossRunCells(cur domain.CurrencyCode, r domain.RunSummary, whole int64, theme tuicommon.Theme) []table.Cell {
 	var labels []string
 	if r.Provisional {
 		labels = append(labels, ProvisionalLabel)
 	}
-	labels = append(labels, incompleteness(r.UnpricedModels, r.Totals.AssumedTierCacheWrite, r.Subagents.MissingUsage, r.Subagents.Open)...)
+	labels = append(labels, incompleteness(r.UnpricedModels, r.Totals.AssumedTierCacheWrite, r.Totals.AssumedTiers, r.Subagents.MissingUsage, r.Subagents.Open)...)
 	part, _ := moneyNanos(r.Totals.Money.Total)
 	cells := make([]table.Cell, arCount)
 	cells[arRun] = table.Cell{Text: r.Run.Label(), Role: tuicommon.RoleSubtitle}
-	cells[arCost] = moneyTotalCell(r.Totals.Money)
+	cells[arCost] = moneyTotalCell(cur, r.Totals.Money)
 	cells[arShare] = barCell(part, whole, tuicommon.RoleDataCost, theme)
 	cells[arSubagents] = table.Cell{Text: formatGrouped(int64(r.Subagents.Invocations))}
 	cells[arFlags] = warningCell(badgeLabels(labels))
@@ -116,13 +116,13 @@ func acrossRunCells(r domain.RunSummary, whole int64, theme tuicommon.Theme) []t
 
 // acrossTypeCells builds the cells of one agent type row; whole is the known cost
 // of all types the bar is measured against.
-func acrossTypeCells(g domain.AgentTypeAcrossRuns, whole int64, theme tuicommon.Theme) []table.Cell {
+func acrossTypeCells(cur domain.CurrencyCode, g domain.AgentTypeAcrossRuns, whole int64, theme tuicommon.Theme) []table.Cell {
 	f := g.Figures
-	labels := incompleteness(f.UnpricedModels, f.Totals.AssumedTierCacheWrite, f.MissingUsage, f.Open)
+	labels := incompleteness(f.UnpricedModels, f.Totals.AssumedTierCacheWrite, f.Totals.AssumedTiers, f.MissingUsage, f.Open)
 	if g.ProvisionalRuns > 0 {
 		labels = append(labels, fmt.Sprintf("%d of %d runs %s", g.ProvisionalRuns, g.Runs, ProvisionalLabel))
 	}
-	avg := FormatMoney(g.PerRunMoney.Average)
+	avg := FormatMoney(cur, g.PerRunMoney.Average)
 	if g.PerRunMoney.Basis > 0 && !g.PerRunMoney.Complete && f.Totals.Money.Complete {
 		avg += " (partial)"
 	}
@@ -131,7 +131,7 @@ func acrossTypeCells(g domain.AgentTypeAcrossRuns, whole int64, theme tuicommon.
 	cells[atType] = table.Cell{Text: typeLabel(g.AgentType), Role: tuicommon.RoleDataActor}
 	cells[atInvocations] = table.Cell{Text: formatGrouped(int64(f.Invocations))}
 	cells[atRuns] = table.Cell{Text: formatGrouped(int64(g.Runs))}
-	cells[atTotal] = moneyTotalCell(f.Totals.Money)
+	cells[atTotal] = moneyTotalCell(cur, f.Totals.Money)
 	cells[atShare] = barCell(part, whole, tuicommon.RoleDataCost, theme)
 	cells[atAverage] = table.Cell{Text: avg, Role: MoneyRole(g.PerRunMoney.Average, g.PerRunMoney.Complete)}
 	cells[atPerRunInvocations] = table.Cell{Text: formatPerRun(g.PerRunInvocations, 1)}
@@ -149,7 +149,7 @@ func acrossRunLines(runs []domain.RunSummary, o SortOrder, width int, st Styles)
 	}
 	var rows [][]table.Cell
 	for _, i := range acrossRunOrder(runs, o) {
-		rows = append(rows, acrossRunCells(runs[i], whole, st.Theme))
+		rows = append(rows, acrossRunCells(st.Currency, runs[i], whole, st.Theme))
 	}
 	t := table.Table{
 		Columns: acrossRunColumns(), Rows: rows, Cursor: table.NoCursor,
@@ -167,7 +167,7 @@ func acrossTypeLines(types []domain.AgentTypeAcrossRuns, o SortOrder, width int,
 	}
 	var rows [][]table.Cell
 	for _, i := range acrossTypeOrder(types, o) {
-		rows = append(rows, acrossTypeCells(types[i], whole, st.Theme))
+		rows = append(rows, acrossTypeCells(st.Currency, types[i], whole, st.Theme))
 	}
 	t := table.Table{
 		Columns: acrossTypeColumns(), Rows: rows, Cursor: table.NoCursor,

@@ -1,0 +1,15 @@
+{
+  "description": "VS Code: a failed create_file span tied to a subagent's session, whose tool_call_start was logged in the orchestrator stream, gets its end written to the orchestrator stream (the stream that holds the start), not to the subagent's stream. The end keeps the start's call_id with its __vscode suffix, carries status error, the span's status message, the span's gen_ai.tool.name, the span endTime as timestamp, the start's harness and session_id and schema version 1.6.0. Content attributes of the span are not copied.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

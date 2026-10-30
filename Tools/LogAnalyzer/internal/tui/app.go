@@ -283,12 +283,13 @@ func (m Model) handleAnalysisDone(done analysisDoneMsg) (tea.Model, tea.Cmd) {
 	switch done.result.Outcome {
 	case app.OutcomeReport:
 		m.report = done.result.Report
-		style := stylesFromTheme(m.theme)
+		style := m.screenStyles()
 		m.runsScreen = screens.NewRunsScreen(m.report, m.width, m.height, style)
 		m.screen = screenRuns
+		m = m.withGapSavedStatus(done.result)
 
 	case app.OutcomeNoData:
-		style := stylesFromTheme(m.theme)
+		style := m.screenStyles()
 		m.noDataScreen = screens.NewNoDataScreen(done.result.Source, m.width, m.height, style)
 		m.screen = screenNoData
 		m.exitCode = 2
@@ -316,7 +317,7 @@ func (m Model) handlePending(p Pending) (tea.Model, tea.Cmd) {
 	case pendingAskText:
 		if p.id == app.QuestionLogSourcePath {
 			// Surface the source screen for the log-source path question.
-			style := stylesFromTheme(m.theme)
+			style := m.screenStyles()
 			m.sourceScreen = screens.NewSourceScreen(m.width, m.height, style)
 			m.sourceScreen.SetVersion(m.opts.Version)
 			m.screen = screenSource
@@ -337,7 +338,7 @@ func (m Model) handlePending(p Pending) (tea.Model, tea.Cmd) {
 		if p.id == app.QuestionPricingAction && m.result != nil {
 			// Show pricing context screen first, then overlay on top.
 			// TODO I5.6: verify background renders sensibly with reworked screen.
-			style := stylesFromTheme(m.theme)
+			style := m.screenStyles()
 			var modelStates []app.ModelPricingStatus
 			if m.session != nil {
 				modelStates = app.ModelPricingStates(m.report, m.session.Table())
@@ -423,7 +424,7 @@ func (m Model) updateRuns(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// The open help overlay takes every key, so none of the list's own keys below applies.
 	if key, ok := msg.(tea.KeyMsg); ok && !m.runsScreen.HelpOpen() && key.String() == "s" {
 		// Intercept 's' to open the source-path entry screen from the Runs list.
-		style := stylesFromTheme(m.theme)
+		style := m.screenStyles()
 		m.sourceScreen = screens.NewSourceScreen(m.width, m.height, style)
 		m.sourceScreen.SetVersion(m.opts.Version)
 		m.sourceFromRuns = true
@@ -442,7 +443,7 @@ func (m Model) updateRuns(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.result == nil || m.result.Session == nil {
 			return m, nil
 		}
-		style := stylesFromTheme(m.theme)
+		style := m.screenStyles()
 		modelStates := app.ModelPricingStates(m.report, m.result.Session.Table())
 		m.pricingScreen = screens.NewPricingScreen(
 			modelStates,
@@ -531,11 +532,28 @@ func (m Model) handlePricingEditDone(done pricingEditDoneMsg) (tea.Model, tea.Cm
 	}
 
 	if result.Outcome == app.PricingEditSaved && m.pricingScreen != nil {
-		m.pricingScreen.SetStatus("Price written to " + result.ConfigPath)
+		m.pricingScreen.SetStatus("Price written to " + result.ConfigPath +
+			" (rates in " + string(m.writtenFileCurrency(result)) + ")")
 	}
 
 	m.screen = screenRuns
 	return m, nil
+}
+
+// writtenFileCurrency is the currency of the pricing file a save wrote: the
+// currency that file states, else the effective currency of the report.
+func (m Model) writtenFileCurrency(result app.PricingEditResult) domain.CurrencyCode {
+	if m.opts.Service != nil {
+		paths := m.opts.Service.PricingPaths()
+		file := paths.Project
+		if result.ConfigLevel == domain.LevelGlobal {
+			file = paths.Global
+		}
+		if file.Currency != "" {
+			return file.Currency
+		}
+	}
+	return screens.CurrencyOrDefault(result.Report.Currency)
 }
 
 func (m Model) updateNoData(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -598,6 +616,7 @@ func (m Model) updateError(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the current screen to a string.
 func (m Model) View() string {
+	m.syncConfigHelp()
 	switch m.screen {
 	case screenLoading:
 		return m.theme.Style(tuicommon.RoleMuted).Render("Analyzing logs…")

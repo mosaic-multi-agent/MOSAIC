@@ -12,6 +12,7 @@
 import * as nodePath from "node:path";
 import * as nodeFs from "node:fs";
 import * as nodeFsPromises from "node:fs/promises";
+import { lockedAppend } from "./locked_append.js";
 import { DEFAULT_SCHEMA_VERSION, schemaVersionFor } from "./schema_versions.js";
 // ---------------------------------------------------------------------------
 // Constants
@@ -298,10 +299,7 @@ export async function appendEvent(
   event: Record<string, unknown>,
 ): Promise<void> {
   try {
-    const dir = nodePath.dirname(filePath);
-    await nodeFsPromises.mkdir(dir, { recursive: true });
-    const line = JSON.stringify(event) + "\n";
-    await nodeFsPromises.appendFile(filePath, line, "utf-8");
+    await lockedAppend(filePath, JSON.stringify(event) + "\n", debugLog);
   } catch (err) {
     debugLog(`appendEvent failed for ${filePath}`, err);
   }

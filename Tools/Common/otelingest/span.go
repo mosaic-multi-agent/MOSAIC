@@ -3,6 +3,7 @@ package otelingest
 import (
 	"bytes"
 	"encoding/json"
+	"time"
 )
 
 // usageMarker is the attribute name every span that can carry usage contains. A line without it is skipped
@@ -36,12 +37,13 @@ type link struct {
 	ToolName            string `json:"tool_name,omitempty"`
 }
 
-// parsedLine is the effect of one OTel line: at most one of link and call is set.
+// parsedLine is the effect of one OTel line: at most one of link and call is set; tool may accompany a link.
 type parsedLine struct {
 	malformed bool
 	linkID    string
 	link      *link
 	call      *call
+	tool      *failedTool
 }
 
 // parseLine parses one complete line that contains the usage marker.
@@ -81,6 +83,7 @@ func parseLine(line []byte, offset int64) parsedLine {
 	case "chat":
 		if c := convertChat(attrs, dialect); c != nil {
 			c.RecordID, c.RecordIndex, c.Dialect = spanID, offset, dialect
+			c.Timestamp = startTimestamp(obj["startTime"])
 			c.ParentSpanID, c.ConversationID = l.ParentSpanID, l.ConversationID
 			c.ChatSessionID, c.ParentChatSessionID = l.ChatSessionID, l.ParentChatSessionID
 			return parsedLine{call: c}
@@ -90,11 +93,13 @@ func parseLine(line []byte, offset int64) parsedLine {
 		return parsedLine{linkID: spanID, link: &l}
 	case kindExecuteTool:
 		name := stringValue(attrs["gen_ai.tool.name"])
+		tool := failedToolOf(obj, attrs, dialect)
 		if spawnToolNames[name] {
 			l.Kind, l.ToolName = kindExecuteTool, name
 			l.ToolCallID = stringValue(attrs["gen_ai.tool.call.id"])
-			return parsedLine{linkID: spanID, link: &l}
+			return parsedLine{linkID: spanID, link: &l, tool: tool}
 		}
+		return parsedLine{tool: tool}
 	}
 	return parsedLine{}
 }
@@ -116,4 +121,18 @@ func intValue(v any) *int64 {
 		return nil
 	}
 	return &i
+}
+
+// startTimestamp formats a span's startTime ([seconds, nanoseconds], two integers) as a UTC timestamp truncated to
+// milliseconds. Any other shape gives "": the caller then uses the ingest moment.
+func startTimestamp(v any) string {
+	arr, ok := v.([]any)
+	if !ok || len(arr) != 2 {
+		return ""
+	}
+	sec, nsec := intValue(arr[0]), intValue(arr[1])
+	if sec == nil || nsec == nil {
+		return ""
+	}
+	return time.Unix(*sec, *nsec).UTC().Format(timestampLayout)
 }

@@ -68,6 +68,8 @@ type wireEvent struct {
 	Phase           string           `json:"phase"`
 	TokensBefore    *int64           `json:"tokens_before"`
 	TokensAfter     *int64           `json:"tokens_after"`
+	CallKind        string           `json:"call_kind"`
+	CallLabel       string           `json:"call_label"`
 
 	wireLifecycle
 }
@@ -254,6 +256,8 @@ func buildEvent(wire wireEvent) domain.Event {
 			ServiceTier:     wire.ServiceTier,
 			Provider:        domain.ProviderID(wire.Provider),
 			Effort:          wire.Effort,
+			CallKind:        callKind(wire.CallKind),
+			CallLabel:       wire.CallLabel,
 		}
 		if wire.RecordIndex != nil {
 			fields.RecordIndex, fields.HasRecordIndex = *wire.RecordIndex, true
@@ -271,7 +275,7 @@ func buildEvent(wire wireEvent) domain.Event {
 		ev.ToolCallStart = &domain.ToolCallStartFields{CallID: wire.CallID, ToolName: wire.ToolName}
 	case domain.EventToolCallEnd:
 		ev.Type = domain.EventToolCallEnd
-		ev.ToolCallEnd = &domain.ToolCallEndFields{CallID: wire.CallID, Status: domain.ToolCallStatus(wire.Status)}
+		ev.ToolCallEnd = &domain.ToolCallEndFields{CallID: wire.CallID, Status: domain.ToolCallStatus(wire.Status), ToolName: wire.ToolName}
 	case domain.EventCompaction:
 		ev.Type = domain.EventCompaction
 		fields := &domain.CompactionFields{Trigger: wire.Trigger, Phase: compactionPhase(wire.Phase)}
@@ -321,6 +325,16 @@ func decodeUsage(wu wireUsage) domain.TokenUsage {
 	}
 	decodeTiers(&u, wu)
 	return u
+}
+
+// callKind maps the wire call_kind to a CallKind; an absent or unknown
+// value reads as a main-loop call.
+func callKind(s string) domain.CallKind {
+	switch k := domain.CallKind(s); k {
+	case domain.CallCompaction, domain.CallAuxiliary:
+		return k
+	}
+	return domain.CallMain
 }
 
 // parseTimestamp parses a timestamp string in RFC3339 or RFC3339Nano format.

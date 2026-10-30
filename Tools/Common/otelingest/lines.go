@@ -55,7 +55,7 @@ func scanFile(path string, start int64) (scanned, error) {
 			out.malformed++
 			continue
 		}
-		if p.link != nil || p.call != nil {
+		if p.link != nil || p.call != nil || p.tool != nil {
 			out.lines = append(out.lines, p)
 		}
 	}

@@ -15,7 +15,8 @@ import (
 )
 
 func addTool(s *settings.Store, h domain.Harness, name string) error {
-	return s.AddUserInteractionTool(context.Background(), h, name)
+	_, err := s.AddUserInteractionTool(context.Background(), domain.LevelProject, h, name)
+	return err
 }
 
 func TestAdd_EmptyHarness_ErrorWrapsInvalidHarnessAndWritesNothing(t *testing.T) {
@@ -169,7 +170,7 @@ func TestAdd_Persists_AcrossStoreInstances(t *testing.T) {
 		t.Fatalf("AddUserInteractionTool: %v", err)
 	}
 
-	got, _ := mustLoad(t, settings.NewStore(root))
+	got, _ := mustLoad(t, settings.NewStore(t.TempDir(), root))
 
 	if !got.IsUserInteractionTool(domain.HarnessOpenCode, "my_question") ||
 		!got.IsUserInteractionTool(domain.HarnessOpenCode, "question") {

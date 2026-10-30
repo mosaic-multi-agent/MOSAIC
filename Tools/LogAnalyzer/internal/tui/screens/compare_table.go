@@ -147,7 +147,7 @@ func compareOrder(rows []domain.ComparisonRow, o SortOrder) []int {
 
 // compareCells builds the cells of one row: an agent type's, or the totals row
 // when label is set.
-func compareCells(r domain.ComparisonRow, label string) []table.Cell {
+func compareCells(cur domain.CurrencyCode, r domain.ComparisonRow, label string) []table.Cell {
 	cells := make([]table.Cell, cmCount)
 	cells[cmType] = table.Cell{Text: typeLabel(r.AgentType), Role: tuicommon.RoleDataActor}
 	if label != "" {
@@ -161,7 +161,7 @@ func compareCells(r domain.ComparisonRow, label string) []table.Cell {
 	}
 	setQuantityCells(cells, cmInvA, r.Invocations, tuicommon.StyleRole(""), false)
 	setQuantityCells(cells, cmTokensA, r.Tokens, tuicommon.RoleDataTokens, false)
-	setMoneyCells(cells, r.Cost)
+	setMoneyCells(cur, cells, r.Cost)
 	setQuantityCells(cells, cmPeakA, r.AvgPeakContext, tuicommon.RoleDataTokens, true)
 	return cells
 }
@@ -178,10 +178,10 @@ func setQuantityCells(cells []table.Cell, first int, q domain.ComparedQuantity, 
 }
 
 // setMoneyCells fills the cost cells: both runs' costs, the change and its percent.
-func setMoneyCells(cells []table.Cell, m domain.ComparedMoney) {
-	cells[cmCostA] = moneyCell(m.A, m.Complete)
-	cells[cmCostB] = moneyCell(m.B, m.Complete)
-	cells[cmCostChange] = table.Cell{Text: formatSignedMoney(m.Delta), Role: ChangeRole(m.Direction)}
+func setMoneyCells(cur domain.CurrencyCode, cells []table.Cell, m domain.ComparedMoney) {
+	cells[cmCostA] = moneyCell(cur, m.A, m.Complete)
+	cells[cmCostB] = moneyCell(cur, m.B, m.Complete)
+	cells[cmCostChange] = table.Cell{Text: formatSignedMoney(cur, m.Delta), Role: ChangeRole(m.Direction)}
 	cells[cmCostPercent] = percentCell(m.Percent, m.HasPercent, m.Direction)
 }
 
@@ -222,10 +222,10 @@ func formatSignedCount(n int64) string {
 	return formatGrouped(n)
 }
 
-// formatSignedMoney renders a change in money with its sign; no change is "$0.00"
+// formatSignedMoney renders a change in money with its sign; no change is a zero amount
 // and a change that cannot be known is absent.
-func formatSignedMoney(v domain.MoneyValue) string {
-	text := FormatMoney(v)
+func formatSignedMoney(cur domain.CurrencyCode, v domain.MoneyValue) string {
+	text := FormatMoney(cur, v)
 	if n, ok := moneyNanos(v); ok && n > 0 {
 		return "+" + text
 	}
@@ -237,9 +237,9 @@ func formatSignedMoney(v domain.MoneyValue) string {
 func compareTableLines(cmp domain.RunComparison, order []int, w Window, o SortOrder, width int, st Styles) []string {
 	var rows [][]table.Cell
 	for _, i := range order[w.Offset:w.End()] {
-		rows = append(rows, compareCells(cmp.Rows[i], ""))
+		rows = append(rows, compareCells(st.Currency, cmp.Rows[i], ""))
 	}
-	rows = append(rows, compareCells(cmp.Totals, totalsLabel))
+	rows = append(rows, compareCells(st.Currency, cmp.Totals, totalsLabel))
 	t := table.Table{Columns: compareColumns(), Rows: rows, Cursor: table.NoCursor,
 		SortColumn: compareSortColumn(o.Key), SortDesc: o.Desc}
 	return renderTableLines(t, width, len(rows), st)

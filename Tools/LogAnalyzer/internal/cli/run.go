@@ -186,19 +186,22 @@ func newRootCommandWithExitCode(opts Options, exitCode *int) *cobra.Command {
 	// pricing subcommand group
 	// ------------------------------------------------------------------
 	pricingCmd := &cobra.Command{
-		Use:           "pricing",
-		Short:         "Pricing configuration commands",
+		Use:   "pricing",
+		Short: "Pricing configuration commands",
+		Long: "Pricing configuration commands.\n\n" +
+			"No command changes prices. Enter prices in the TUI (it asks whether to save for all projects or this project)\n" +
+			"or edit the pricing files directly; run \"pricing path\" to see where they are.",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 	}
 
 	pricingPathCmd := &cobra.Command{
 		Use:           "path",
-		Short:         "Print the pricing config file path",
+		Short:         "Print the global and project pricing config file paths",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			fmt.Fprintln(opts.Stdout, opts.Service.PricingPath())
+			printConfigPaths(opts.Stdout, opts.Service.PricingPaths())
 			*exitCode = ExitSuccess
 			return nil
 		},
@@ -206,19 +209,22 @@ func newRootCommandWithExitCode(opts Options, exitCode *int) *cobra.Command {
 	pricingCmd.AddCommand(pricingPathCmd)
 
 	settingsCmd := &cobra.Command{
-		Use:           "settings",
-		Short:         "Analysis settings commands",
+		Use:   "settings",
+		Short: "Analysis settings commands",
+		Long: "Analysis settings commands.\n\n" +
+			"No command marks tools. Mark a tool in the TUI (it asks whether to save for all projects or this project)\n" +
+			"or edit the settings files directly; run \"settings path\" to see where they are.",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 	}
 
 	settingsPathCmd := &cobra.Command{
 		Use:           "path",
-		Short:         "Print the analysis settings file path",
+		Short:         "Print the global and project analysis settings file paths",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			fmt.Fprintln(opts.Stdout, opts.Service.SettingsPath())
+			printConfigPaths(opts.Stdout, opts.Service.SettingsPaths())
 			*exitCode = ExitSuccess
 			return nil
 		},

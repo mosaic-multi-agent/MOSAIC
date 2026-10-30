@@ -10,6 +10,9 @@ type pendingRecord struct {
 	Provider    string      `json:"provider"`
 	Effort      string      `json:"effort,omitempty"`
 	TokenUsage  *tokenUsage `json:"token_usage"`
+	Timestamp   string      `json:"timestamp,omitempty"`
+	CallLabel   string      `json:"call_label,omitempty"`
+	CallKind    string      `json:"call_kind,omitempty"`
 }
 
 // pendingSpan is the stored shape of a call waiting for the span it needs for attribution.
@@ -27,6 +30,7 @@ func (c *call) MarshalJSON() ([]byte, error) {
 		Record: pendingRecord{
 			RecordID: c.RecordID, RecordIndex: c.RecordIndex, Model: c.Model,
 			Provider: providerName, Effort: c.Effort, TokenUsage: c.TokenUsage,
+			Timestamp: c.Timestamp, CallLabel: c.CallLabel, CallKind: c.CallKind,
 		},
 		ParentSpanID:        c.ParentSpanID,
 		ConversationID:      c.ConversationID,
@@ -45,6 +49,7 @@ func (c *call) UnmarshalJSON(data []byte) error {
 	*c = call{
 		RecordID: p.Record.RecordID, RecordIndex: p.Record.RecordIndex, Model: p.Record.Model,
 		Effort: p.Record.Effort, TokenUsage: p.Record.TokenUsage,
+		Timestamp: p.Record.Timestamp, CallLabel: p.Record.CallLabel, CallKind: p.Record.CallKind,
 		ParentSpanID: p.ParentSpanID, ConversationID: p.ConversationID,
 		ChatSessionID: p.ChatSessionID, ParentChatSessionID: p.ParentChatSessionID,
 		Dialect: dialectCLI,

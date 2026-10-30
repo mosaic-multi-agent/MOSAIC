@@ -125,8 +125,8 @@ func TestAgentTypesDrill_LabelsAssumedTierCacheWrites(t *testing.T) {
 
 	_, view := drilled(run, tallH, "enter")
 
-	if line := lineWith(view, "999"); !strings.Contains(line, screens.AssumedTierLabel) {
-		t.Errorf("assumed-tier count line %q must carry %q", line, screens.AssumedTierLabel)
+	if line := lineWith(view, "999"); !strings.Contains(line, screens.AssumedTierLabel(nil)) {
+		t.Errorf("assumed-tier count line %q must carry %q", line, screens.AssumedTierLabel(nil))
 	}
 }
 

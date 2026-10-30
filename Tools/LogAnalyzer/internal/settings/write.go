@@ -12,14 +12,14 @@ import (
 	"mosaic-log-analyzer/internal/domain"
 )
 
-// AddUserInteractionTool validates and persists name for harness h.
+// addToolAt validates and persists name for harness h in the file at path.
 //
 // An absent file is created, including missing parent directories, with the
 // commented template ahead of the entry. For an existing file the harness list
 // gets name appended (an already-present name is a no-op); a harness without a
 // list gets its default list plus name. Other keys, unknown keys and the leading
 // comment block are preserved. An unparseable file is left unchanged.
-func (s *Store) AddUserInteractionTool(_ context.Context, h domain.Harness, name string) error {
+func (s *Store) addToolAt(path string, h domain.Harness, name string) error {
 	if h == "" {
 		return fmt.Errorf("%w: harness is empty", domain.ErrInvalidHarness)
 	}
@@ -29,7 +29,7 @@ func (s *Store) AddUserInteractionTool(_ context.Context, h domain.Harness, name
 
 	var doc yaml.MapSlice
 	header := settingsTemplate
-	raw, err := os.ReadFile(s.path)
+	raw, err := os.ReadFile(path)
 	switch {
 	case err == nil:
 		header = extractHeaderComments(string(raw))
@@ -44,11 +44,11 @@ func (s *Store) AddUserInteractionTool(_ context.Context, h domain.Harness, name
 	if !changed {
 		return nil
 	}
-	return s.writeDocument(header, doc)
+	return writeDocument(path, header, doc)
 }
 
 // writeDocument writes the preserved header followed by the marshaled document.
-func (s *Store) writeDocument(header string, doc yaml.MapSlice) error {
+func writeDocument(path, header string, doc yaml.MapSlice) error {
 	data, err := yaml.Marshal(doc)
 	if err != nil {
 		return fmt.Errorf("marshal settings: %w", err)
@@ -56,10 +56,10 @@ func (s *Store) writeDocument(header string, doc yaml.MapSlice) error {
 	var buf bytes.Buffer
 	buf.WriteString(header)
 	buf.Write(data)
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create settings config directory: %w", err)
 	}
-	if err := os.WriteFile(s.path, buf.Bytes(), 0o644); err != nil {
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
 		return fmt.Errorf("write settings file: %w", err)
 	}
 	return nil
@@ -135,4 +135,32 @@ func extractHeaderComments(content string) string {
 		}
 	}
 	return sb.String()
+}
+
+// AddUserInteractionTool validates and persists name for harness h in the file of
+// level and returns the file written.
+func (s *Store) AddUserInteractionTool(_ context.Context, level domain.ConfigLevel, h domain.Harness, name string) (domain.ConfigFile, error) {
+	path, err := s.targetPath(level)
+	if err != nil {
+		return domain.ConfigFile{}, err
+	}
+	if err := s.addToolAt(path, h, name); err != nil {
+		return domain.ConfigFile{}, err
+	}
+	return domain.ConfigFile{Level: level, Path: path, Exists: fileExists(path)}, nil
+}
+
+// targetPath resolves the file a save at level writes.
+func (s *Store) targetPath(level domain.ConfigLevel) (string, error) {
+	switch level {
+	case domain.LevelProject:
+		return s.path, nil
+	case domain.LevelGlobal:
+		if p := s.globalPath(); p != "" {
+			return p, nil
+		}
+		return "", fmt.Errorf("%w: global settings file: user config folder not found", domain.ErrConfigLevelUnavailable)
+	default:
+		return "", fmt.Errorf("%w: %s", domain.ErrInvalidConfigLevel, level)
+	}
 }

@@ -11,7 +11,7 @@ import (
 const defaultDropPercent = 30
 
 // detectedMarks finds the sharp context drops between consecutive calls of an
-// actor. Calls without a context are skipped; a pair involving a partial call,
+// actor. Only main calls count; calls without a context are skipped; a pair involving a partial call,
 // or starting at a zero context, is never a detection.
 func detectedMarks(calls []domain.ContextCall, dropPercent int) []domain.CompactionMark {
 	if dropPercent < 1 {
@@ -20,7 +20,7 @@ func detectedMarks(calls []domain.ContextCall, dropPercent int) []domain.Compact
 	var marks []domain.CompactionMark
 	prev := -1
 	for i, c := range calls {
-		if !c.Context.IsPresent() {
+		if c.Kind != domain.CallMain || !c.Context.IsPresent() {
 			continue
 		}
 		if prev >= 0 {

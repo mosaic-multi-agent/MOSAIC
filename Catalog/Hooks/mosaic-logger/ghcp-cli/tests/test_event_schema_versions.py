@@ -2,7 +2,7 @@
 
 Each event carries the highest schema_version whose fields the adapter implements for it:
 invocation_start (spawn_call_id) and usage_record are 1.4.0, compaction is 1.5.0,
-every other event is 1.0.0.
+tool_call_end is 1.6.0, every other event is 1.0.0.
 Applies in native mode and in Runner mode.
 """
 
@@ -22,7 +22,8 @@ import mosaic_logger
 import mosaic_logger_core as core
 from tests.runner_mode_support import RunnerModeTestCase
 
-_NEWER = {"invocation_start": "1.4.0", "usage_record": "1.4.0", "compaction": "1.5.0"}
+_NEWER = {"invocation_start": "1.4.0", "usage_record": "1.4.0", "compaction": "1.5.0",
+          "tool_call_end": "1.6.0"}
 _RUN_ID = "20261028T100000Z-b7c4"
 _INSTANCE_ID = "Research#3"
 _SESSION = "ghcp-versions-session"
@@ -56,9 +57,12 @@ class TestSchemaVersionFor(unittest.TestCase):
     def test_compaction_is_1_5_0(self):
         self.assertEqual("1.5.0", core.schema_version_for("compaction"))
 
+    def test_tool_call_end_is_1_6_0(self):
+        self.assertEqual("1.6.0", core.schema_version_for("tool_call_end"))
+
     def test_other_events_are_1_0_0(self):
         for name in ("run_start", "run_end", "session_start", "session_end", "turn",
-                     "tool_call_start", "tool_call_end", "invocation_end",
+                     "tool_call_start", "invocation_end",
                      "context_compaction"):
             with self.subTest(event=name):
                 self.assertEqual("1.0.0", core.schema_version_for(name))
@@ -73,6 +77,10 @@ class TestBuildEventStampsPerEventVersion(unittest.TestCase):
     def test_tool_call_start_is_stamped_1_0_0(self):
         event = core.build_event("tool_call_start", _ctx())
         self.assertEqual("1.0.0", event["schema_version"])
+
+    def test_tool_call_end_is_stamped_1_6_0(self):
+        event = core.build_event("tool_call_end", _ctx())
+        self.assertEqual("1.6.0", event["schema_version"])
 
     def test_compaction_is_stamped_1_5_0(self):
         event = core.build_event("compaction", _ctx())

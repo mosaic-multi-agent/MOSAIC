@@ -132,6 +132,20 @@ LogAnalyzer means usage spans of the run are still pending (not yet tied to an a
 or the ingest was cut short); a recovery ingest resolves them. In LogAnalyzer's views,
 unattributed usage is usage tied to the run but not to an agent.
 
+### Compactions and failed tool calls
+
+The export also records the API requests a harness makes to compact a context, and
+tool executions. The ingest uses both:
+
+- **VS Code compactions** are recognised from the OTel compaction calls (written as
+  `usage_record` events with `call_kind` `compaction`), not from a hook. LogAnalyzer
+  shows a context drop with compaction calls around it as a harness compaction (OTel).
+- **Failed tool calls** are completed from OTel when the export is enabled. Some harnesses
+  fire no post-tool hook for a failed tool, so a `tool_call_start` would
+  otherwise stay open; the ingest writes the missing `tool_call_end` with
+  `status: "error"` and the error message. A `tool_call_end` a hook already wrote is
+  never replaced.
+
 ### Locations
 
 The VS Code Copilot Chat hooks are deployed to `.github/hooks/` (the same place as

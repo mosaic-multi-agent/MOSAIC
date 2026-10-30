@@ -10,7 +10,7 @@ import (
 // writeTextUnattributed writes the run-level unattributed usage: its share of
 // the run total from the overview, then its own row with figures. A run
 // without unattributed usage writes nothing.
-func writeTextUnattributed(w io.Writer, run domain.RunReport) {
+func writeTextUnattributed(w io.Writer, cur domain.CurrencyCode, run domain.RunReport) {
 	if run.Unattributed == nil {
 		return
 	}
@@ -20,5 +20,5 @@ func writeTextUnattributed(w io.Writer, run domain.RunReport) {
 	}
 	fmt.Fprintf(w, "  Unattributed:\n")
 	writeTextEffort(w, run.Unattributed.Effort, "    ")
-	writeTextTotals(w, run.Unattributed.Totals, "    ")
+	writeTextTotals(w, cur, run.Unattributed.Totals, "    ")
 }

@@ -46,6 +46,7 @@ export function createToolPartHandlers(deps: HandlerDependencies): {
       if (!entry) return;
 
       const errorText = part.state.error;
+      const toolName = typeof part.tool === "string" && part.tool !== "" ? part.tool : undefined;
       const ts = currentTimestamp();
       const sessionId = entry.sessionId;
       await appendEvent(
@@ -55,6 +56,7 @@ export function createToolPartHandlers(deps: HandlerDependencies): {
           { sessionId, runId: store.getRunId(sessionId), timestamp: ts },
           {
             call_id: entry.callId,
+            tool_name: toolName,
             status: "error",
             error: typeof errorText === "string" && errorText !== "" ? errorText : undefined,
           },

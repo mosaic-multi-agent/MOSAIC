@@ -117,5 +117,45 @@ class TestCopilotVariantsShipOtelFiles(unittest.TestCase):
             self.assertEqual([], otel, variant)
 
 
+class TestLockedAppendModuleIsShipped(unittest.TestCase):
+    """The locked append module is shared source, flat target for both Copilot variants; the
+    claude-code variant ships its own copy; opencode (TypeScript) ships none; and it is not
+    named for OTel, so the claude-code variant still ships no OTel-named file."""
+
+    _NAME = "mosaic_logger_locked_append.py"
+
+    def setUp(self):
+        self.entries = _entries_by_variant()
+
+    def test_the_shared_module_exists(self):
+        self.assertTrue(os.path.isfile(os.path.join(_HOOK_DIR, "copilot-shared", self._NAME)))
+
+    def test_each_copilot_variant_lists_it_with_a_shared_source_and_flat_target(self):
+        shared = os.path.normpath(os.path.join(_HOOK_DIR, "copilot-shared", self._NAME))
+        for variant in ("vscode-ghcp", "ghcp-cli"):
+            matches = [e for e in self.entries[variant] if os.path.basename(e[0]) == self._NAME]
+            self.assertEqual(1, len(matches), variant)
+            source, target = matches[0]
+            self.assertEqual(self._NAME, target, variant)
+            self.assertEqual(shared, os.path.normpath(os.path.join(_HOOK_DIR, variant, source)), variant)
+
+    def test_claude_code_lists_its_own_copy_with_a_local_source(self):
+        matches = [e for e in self.entries["claude-code"] if e[1] == self._NAME]
+        self.assertEqual(1, len(matches))
+        resolved = os.path.normpath(os.path.join(_HOOK_DIR, "claude-code", matches[0][0]))
+        self.assertEqual(os.path.join(_HOOK_DIR, "claude-code", self._NAME), resolved)
+        self.assertTrue(os.path.isfile(resolved))
+
+    def test_opencode_does_not_ship_the_python_module(self):
+        shipped = [e for e in self.entries["opencode"] if self._NAME in (e[0], e[1])]
+        self.assertEqual([], shipped)
+
+    def test_no_otel_named_file_is_shipped_to_claude_code_or_opencode(self):
+        for variant in ("claude-code", "opencode"):
+            otel = [e for e in self.entries[variant] if "otel" in os.path.basename(e[0]).lower()
+                    or "otel" in e[1].lower()]
+            self.assertEqual([], otel, variant)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -164,6 +164,9 @@ func encodeUsages(usages []domain.InvocationUsage) []usageDoc {
 			Effort:      u.Effort,
 			ServiceTier: u.ServiceTier,
 			Harness:     string(u.Harness),
+			CallKind:    encodeCallKind(u.Kind),
+			CallLabel:   u.Label,
+			SessionID:   u.SessionID,
 			Tokens:      encodeTokens(u.Usage),
 		})
 	}
@@ -240,6 +243,14 @@ func encodeShape(s domain.CompactionShape) string {
 		return shapePreOnly
 	case domain.CompactionPostOnly:
 		return shapePostOnly
+	}
+	return ""
+}
+
+// encodeCallKind returns "" for a main call, which a digest stores as no kind.
+func encodeCallKind(k domain.CallKind) string {
+	if k == domain.CallCompaction || k == domain.CallAuxiliary {
+		return string(k)
 	}
 	return ""
 }

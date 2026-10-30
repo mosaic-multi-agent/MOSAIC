@@ -4,7 +4,6 @@ import (
 	"sort"
 	"time"
 
-	"mosaic-log-analyzer/internal/analysis/cost"
 	"mosaic-log-analyzer/internal/domain"
 )
 
@@ -56,10 +55,10 @@ type actorInput struct {
 }
 
 func buildActorContext(in actorInput, table domain.PricingTable, settings domain.AnalysisSettings) domain.ActorContext {
-	out := domain.ActorContext{Actor: in.actor, Calls: contextCalls(in.usage, table)}
+	out := domain.ActorContext{Actor: in.actor, Calls: contextCalls(in.usage, table, settings)}
 	for _, c := range out.Calls {
 		fig := callFigure(c)
-		if !fig.Tokens.IsPresent() {
+		if c.Kind != domain.CallMain || !fig.Tokens.IsPresent() {
 			continue
 		}
 		if !out.First.Tokens.IsPresent() {
@@ -74,9 +73,11 @@ func buildActorContext(in actorInput, table domain.PricingTable, settings domain
 		harness := actorHarness(in.usage, in.runHarness)
 		applyFirstWrite(&out, in.tools, harness, settings)
 	}
+	out.Rewrites = detectRewrites(in.usage, table, settings)
 	out.Compactions = loggedMarks(out.Calls, in.actor, in.compactions)
 	out.Compactions = append(out.Compactions, detectedMarks(out.Calls, settings.CompactionDropPercent)...)
 	orderMarks(out.Compactions)
+	applyCompactionCalls(&out)
 	return out
 }
 
@@ -90,23 +91,26 @@ func callFigure(c domain.ContextCall) domain.ContextFigure {
 
 // contextCalls lists the per-call records in time order; a call without a
 // parseable time follows the timed calls.
-func contextCalls(usage []domain.InvocationUsage, table domain.PricingTable) []domain.ContextCall {
+func contextCalls(usage []domain.InvocationUsage, table domain.PricingTable, settings domain.AnalysisSettings) []domain.ContextCall {
 	var calls []domain.ContextCall
 	for _, u := range usage {
 		if u.RecordID == "" || u.Usage.IsEmpty() {
 			continue
 		}
-		priced := cost.PriceInvocation(u, table)
+		priced := priceUsage(u, table, settings)
 		calls = append(calls, domain.ContextCall{
-			At:       u.At,
-			RecordID: u.RecordID,
-			Model:    u.Model,
-			Provider: u.Provider,
-			Harness:  u.Harness,
-			Usage:    u.Usage,
-			Context:  u.Usage.TotalContext(),
-			Partial:  !u.Usage.Input.IsPresent() || !u.Usage.CacheRead.IsPresent() || !u.Usage.CacheCreation.IsPresent(),
-			Cost:     priced.Money.Total,
+			At:        u.At,
+			RecordID:  u.RecordID,
+			Model:     u.Model,
+			Provider:  u.Provider,
+			Harness:   u.Harness,
+			Usage:     u.Usage,
+			Context:   u.Usage.TotalContext(),
+			Partial:   !u.Usage.Input.IsPresent() || !u.Usage.CacheRead.IsPresent() || !u.Usage.CacheCreation.IsPresent(),
+			Cost:      priced.Money.Total,
+			Kind:      callKindOrMain(u.Kind),
+			Label:     u.Label,
+			SessionID: u.SessionID,
 		})
 	}
 	sort.SliceStable(calls, func(i, j int) bool {
@@ -148,7 +152,7 @@ func applyFirstWrite(out *domain.ActorContext, tools []domain.ToolCall, harness 
 	}
 	source := -1
 	for i, c := range out.Calls {
-		if !c.At.IsZero() && !c.At.After(start) && c.Context.IsPresent() {
+		if c.Kind == domain.CallMain && !c.At.IsZero() && !c.At.After(start) && c.Context.IsPresent() {
 			source = i
 		}
 	}

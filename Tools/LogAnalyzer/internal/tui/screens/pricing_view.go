@@ -6,6 +6,7 @@ import (
 	"mosaic-common/tui/kit/table"
 
 	"mosaic-log-analyzer/internal/app"
+	"mosaic-log-analyzer/internal/domain"
 )
 
 // pricingTitle is the title of the pricing page.
@@ -38,6 +39,7 @@ func pricingColumns() []table.Column {
 	return []table.Column{
 		{Title: "model", Flex: true, MinWidth: 12},
 		{Title: "status"},
+		{Title: "source"},
 	}
 }
 
@@ -45,9 +47,18 @@ func pricingColumns() []table.Column {
 func pricingCells(m app.ModelPricingStatus) []table.Cell {
 	name := table.Cell{Text: statusKey(m).String()}
 	if m.Priced {
-		return []table.Cell{name, {Text: "(priced)"}}
+		return []table.Cell{name, {Text: "(priced)"}, {Text: pricingSource(m.Pricing.Source)}}
 	}
 	warn := tuicommon.RoleSignalWarning
 	name.Role = warn
-	return []table.Cell{name, {Text: AbsentMarker + " unpriced", Role: warn}}
+	return []table.Cell{name, {Text: AbsentMarker + " unpriced", Role: warn}, {}}
+}
+
+// pricingSource names the file level a price was loaded from; blank for a price
+// that comes from no file.
+func pricingSource(level domain.ConfigLevel) string {
+	if level == domain.LevelGlobal || level == domain.LevelProject {
+		return level.String()
+	}
+	return ""
 }

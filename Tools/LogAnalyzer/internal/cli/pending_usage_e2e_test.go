@@ -65,7 +65,7 @@ func pendingE2ERun(t *testing.T, args ...string) (code int, stdout, stderr strin
 	probe := otelusage.New()
 	svc := app.New(app.Deps{
 		Source: logscan.NewScanner(), Reader: logread.NewReader(),
-		Pricing: pricing.NewStore(pricedRoot(t)), Clock: newFakeClock(),
+		Pricing: pricing.NewStore(t.TempDir(), pricedRoot(t)), Clock: newFakeClock(),
 		Interaction: cli.NewInteraction(&bytes.Buffer{}, cli.Answers{}),
 		WorkDir:     t.TempDir(), IngestProbe: probe, Ingester: probe,
 	})

@@ -34,6 +34,11 @@ const (
 	// sorted key order, each Label carrying that key and its current
 	// priced/unpriced state. Skipped/cancelled => no edit, report unchanged.
 	QuestionPricingModel interaction.QuestionID = "pricing-model"
+
+	// QuestionConfigLevel asks which configuration level a price entry or tool
+	// mark is saved to. Shape: SelectOne over option ids "global" (All projects)
+	// and "project" (This project). Skipped/cancelled => nothing is saved.
+	QuestionConfigLevel interaction.QuestionID = "config-level"
 )
 
 // Option identifiers for QuestionPricingAction.

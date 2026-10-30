@@ -17,6 +17,10 @@ type InvocationUsage struct {
 	RecordID    string    // usage_record record_id; "" for legacy entries or when not logged
 	At          time.Time // timestamp of the usage_record / turn / invocation_end; zero when unparseable
 	ServiceTier string    // usage_record only; "" otherwise or when absent
+
+	Kind      CallKind // CallMain for every non-usage_record source
+	Label     string
+	SessionID string // envelope session_id; "" when absent
 }
 
 // ActorAggregate holds one actor's invocation records within one run.

@@ -75,9 +75,19 @@ type ToolCallStartFields struct {
 // ToolCallEndFields holds the fields from a tool_call_end event. The
 // tool_output and error payloads are deliberately not decoded.
 type ToolCallEndFields struct {
-	CallID string
-	Status ToolCallStatus
+	CallID   string
+	Status   ToolCallStatus
+	ToolName string // "" when absent (schema 1.6.0)
 }
+
+// CallKind says what a usage_record call was for (schema 1.6.0).
+type CallKind string
+
+const (
+	CallMain       CallKind = "main"
+	CallCompaction CallKind = "compaction"
+	CallAuxiliary  CallKind = "auxiliary"
+)
 
 // CompactionPhase is the phase of a compaction event (schema 1.5.0).
 type CompactionPhase string
@@ -129,7 +139,9 @@ type UsageRecordFields struct {
 	Provider        ProviderID // "" when absent
 	Effort          string     // verbatim; "" when absent
 	Usage           TokenUsage
-	HasUsage        bool // false when the token_usage key was absent entirely
+	HasUsage        bool     // false when the token_usage key was absent entirely
+	CallKind        CallKind // CallMain when absent or unknown
+	CallLabel       string   // verbatim; "" when absent
 }
 
 // TurnRole is the role (user or assistant) of a turn event.

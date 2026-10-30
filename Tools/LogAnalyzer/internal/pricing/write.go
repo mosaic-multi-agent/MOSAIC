@@ -12,7 +12,7 @@ import (
 	"mosaic-log-analyzer/internal/domain"
 )
 
-// Put persists one model entry to the pricing YAML file.
+// putAt persists one model entry to the pricing YAML file at path.
 //
 // If the file does not exist it is created, including any missing parent
 // directories, and the built-in template documentation is written ahead of the
@@ -22,11 +22,11 @@ import (
 // Comment preservation: leading comments in the existing file (lines before the
 // first non-comment, non-blank content) are written back to the head of the file
 // so user annotations and the shipped file's documentation survive a round-trip.
-func (s *Store) Put(_ context.Context, entry domain.ModelPricing) error {
+func (s *Store) putAt(path string, entry domain.ModelPricing) error {
 	var file pricingFileYAML
 	var headerComments string
 
-	raw, readErr := os.ReadFile(s.path)
+	raw, readErr := os.ReadFile(path)
 	if readErr != nil {
 		if !os.IsNotExist(readErr) {
 			return fmt.Errorf("read pricing file: %w", readErr)
@@ -65,11 +65,11 @@ func (s *Store) Put(_ context.Context, entry domain.ModelPricing) error {
 	buf.Write(data)
 
 	// Ensure the parent directory exists before writing.
-	if mkdirErr := os.MkdirAll(filepath.Dir(s.path), 0o755); mkdirErr != nil {
+	if mkdirErr := os.MkdirAll(filepath.Dir(path), 0o755); mkdirErr != nil {
 		return fmt.Errorf("create pricing config directory: %w", mkdirErr)
 	}
 
-	if writeErr := os.WriteFile(s.path, buf.Bytes(), 0o644); writeErr != nil {
+	if writeErr := os.WriteFile(path, buf.Bytes(), 0o644); writeErr != nil {
 		return fmt.Errorf("write pricing file: %w", writeErr)
 	}
 
@@ -112,4 +112,31 @@ func extractHeaderComments(content string) string {
 		}
 	}
 	return sb.String()
+}
+
+// Put persists one model entry to the file of level and returns the file written.
+func (s *Store) Put(_ context.Context, level domain.ConfigLevel, entry domain.ModelPricing) (domain.ConfigFile, error) {
+	path, err := s.targetPath(level)
+	if err != nil {
+		return domain.ConfigFile{}, err
+	}
+	if err := s.putAt(path, entry); err != nil {
+		return domain.ConfigFile{}, err
+	}
+	return domain.ConfigFile{Level: level, Path: path, Exists: true}, nil
+}
+
+// targetPath resolves the file a save at level writes.
+func (s *Store) targetPath(level domain.ConfigLevel) (string, error) {
+	switch level {
+	case domain.LevelProject:
+		return s.path, nil
+	case domain.LevelGlobal:
+		if p := s.globalPath(); p != "" {
+			return p, nil
+		}
+		return "", fmt.Errorf("%w: global pricing file: user config folder not found", domain.ErrConfigLevelUnavailable)
+	default:
+		return "", fmt.Errorf("%w: %s", domain.ErrInvalidConfigLevel, level)
+	}
 }

@@ -102,7 +102,7 @@ func TestPriceInvocation_PresentZeroCacheWrite_IsKnownZeroAndNotAssumed(t *testi
 }
 
 func TestPriceInvocation_UnpricedModelWithTotalOnlyCacheWrite_CountsNothingAsAssumed(t *testing.T) {
-	ic := cost.PriceInvocation(inv("unknown-model", domain.TokenUsage{
+	ic := priceAtDefaultTier(inv("unknown-model", domain.TokenUsage{
 		CacheCreation: domain.Tokens(150_000),
 	}), testTable(longContextPricing(t, 200_000)))
 
@@ -135,7 +135,7 @@ func TestPriceInvocation_HarnessDoesNotChangeCacheWritePricing(t *testing.T) {
 	for _, harness := range []domain.Harness{
 		domain.HarnessClaudeCode, domain.HarnessOpenCode, domain.HarnessVSCodeGHCP, domain.HarnessGHCPCLI,
 	} {
-		ic := cost.PriceInvocation(domain.InvocationUsage{
+		ic := priceAtDefaultTier(domain.InvocationUsage{
 			Model: requestTestModel, Harness: harness, Usage: usage,
 		}, table)
 
@@ -146,12 +146,12 @@ func TestPriceInvocation_HarnessDoesNotChangeCacheWritePricing(t *testing.T) {
 
 func TestPriceInvocation_MixedRequests_AssumedCountIsPerRequest(t *testing.T) {
 	table := testTable(longContextPricing(t, 200_000))
-	split := cost.PriceInvocation(inv(requestTestModel, domain.TokenUsage{
+	split := priceAtDefaultTier(inv(requestTestModel, domain.TokenUsage{
 		CacheCreation:   domain.Tokens(150_000),
 		CacheCreation5m: domain.Tokens(100_000),
 		CacheCreation1h: domain.Tokens(50_000),
 	}), table)
-	totalOnly := cost.PriceInvocation(inv(requestTestModel, domain.TokenUsage{
+	totalOnly := priceAtDefaultTier(inv(requestTestModel, domain.TokenUsage{
 		CacheCreation: domain.Tokens(40_000),
 	}), table)
 

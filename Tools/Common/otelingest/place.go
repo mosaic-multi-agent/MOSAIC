@@ -1,11 +1,17 @@
 package otelingest
 
-import "mosaic-common/otelingest/diag"
+import (
+	"errors"
+
+	"mosaic-common/logappend"
+	"mosaic-common/otelingest/diag"
+)
 
 // placeCalls places every call it can, in file order, and keeps the rest pending. A call whose record_id was
 // already placed is not written again. A final ingest sends pending calls of its scope to the unattributed stream.
 func placeCalls(req Request, st *ingestState, r *resolver, w *writer, calls []*call, res *Result) error {
 	untiedCalls := 0
+	timedOut := 0
 	pending := []*call{}
 	for _, c := range calls {
 		if _, done := st.Placements[c.RecordID]; done {
@@ -27,7 +33,12 @@ func placeCalls(req Request, st *ingestState, r *resolver, w *writer, calls []*c
 			continue
 		}
 		if err := w.write(c, dest); err != nil {
-			return err
+			if !errors.Is(err, logappend.ErrLockTimeout) {
+				return err
+			}
+			timedOut++
+			pending = append(pending, c)
+			continue
 		}
 		st.Placements[c.RecordID] = dest
 		res.RecordsWritten++
@@ -38,6 +49,13 @@ func placeCalls(req Request, st *ingestState, r *resolver, w *writer, calls []*c
 	st.Pending = pending
 	res.Pending = len(pending)
 	res.Diagnostics = append(res.Diagnostics, placementDiagnostics(r.keys, untiedCalls, res.Finalized)...)
+	if timedOut > 0 {
+		res.Diagnostics = append(res.Diagnostics, diag.Diagnostic{
+			Kind:    diag.KindAppendTimedOut,
+			Message: "lines were not written because the append lock wait limit was reached; a later ingest writes them",
+			Counts:  map[string]int{"lines": timedOut},
+		})
+	}
 	return nil
 }
 

@@ -32,8 +32,8 @@ func TestDispatches_RunTotalsLineStaysAsTextAboveTheTable(t *testing.T) {
 
 	view := dispatchesView(run, tableW, tallH)
 
-	assertContains(t, view, "Run totals", screens.FormatTotalsLine(run.Totals))
-	totals := lineNumber(t, view, screens.FormatTotalsLine(run.Totals))
+	assertContains(t, view, "Run totals", screens.FormatTotalsLine(domain.CurrencyUSD, run.Totals))
+	totals := lineNumber(t, view, screens.FormatTotalsLine(domain.CurrencyUSD, run.Totals))
 	if lineNumber(t, view, "Run totals") > totals || totals > lineNumber(t, view, "orchestrator") {
 		t.Errorf("the run totals heading and line must come before the table rows\n%s", view)
 	}
@@ -44,7 +44,7 @@ func TestDispatches_TableRowsCarryNoTotalsSummaryLine(t *testing.T) {
 
 	view := dispatchesView(dispatchRun(), tableW, tallH)
 
-	assertNotContains(t, view, screens.FormatTotalsLine(dispatchD1().Totals), screens.FormatTotalsLine(dispatchD2().Totals))
+	assertNotContains(t, view, screens.FormatTotalsLine(domain.CurrencyUSD, dispatchD1().Totals), screens.FormatTotalsLine(domain.CurrencyUSD, dispatchD2().Totals))
 	if n := countOf(view, "input:"); n != 1 {
 		t.Errorf("only the run totals line shows token categories as text, got %d lines\n%s", n, view)
 	}
@@ -58,9 +58,9 @@ func TestDispatches_NoticeLinesStayAsTextAfterTheRunTotals(t *testing.T) {
 
 	view := dispatchesView(run, tableW, tallH)
 
-	assertContains(t, view, "Unpriced models: model-x", screens.AssumedTierNotice(7_777))
-	totals := lineNumber(t, view, screens.FormatTotalsLine(run.Totals))
-	if lineNumber(t, view, "Unpriced models: model-x") < totals || lineNumber(t, view, screens.AssumedTierNotice(7_777)) < totals {
+	assertContains(t, view, "Unpriced models: model-x", screens.AssumedTierNotice(7_777, nil))
+	totals := lineNumber(t, view, screens.FormatTotalsLine(domain.CurrencyUSD, run.Totals))
+	if lineNumber(t, view, "Unpriced models: model-x") < totals || lineNumber(t, view, screens.AssumedTierNotice(7_777, nil)) < totals {
 		t.Errorf("the notices follow the run totals line\n%s", view)
 	}
 }
@@ -128,12 +128,12 @@ func TestDispatches_OrchestratorFlagsNameUnpricedModelsThenTheAssumedTier(t *tes
 
 	view := dispatchesView(run, tableW, tallH)
 
-	row := rowFor(t, view, "orchestrator")
-	assertContains(t, row, "unpriced models", screens.FormatAssumedTier(555))
-	if strings.Index(row, "unpriced models") > strings.Index(row, screens.FormatAssumedTier(555)) {
+	row := rowForName(t, view, "orchestrator", 6)
+	assertContains(t, row, "unpriced models", screens.FormatAssumedTier(555, nil))
+	if strings.Index(row, "unpriced models") > strings.Index(row, screens.FormatAssumedTier(555, nil)) {
 		t.Errorf("unpriced models come before the assumed tier label: %q", row)
 	}
-	assertNotContains(t, rowFor(t, dispatchesView(dispatchRun(), tableW, tallH), "orchestrator"), "unpriced models", screens.AssumedTierLabel)
+	assertNotContains(t, rowFor(t, dispatchesView(dispatchRun(), tableW, tallH), "orchestrator"), "unpriced models", screens.AssumedTierLabel(nil))
 }
 
 func TestDispatches_FlagsAreJoinedInTheirFixedOrder(t *testing.T) {
@@ -145,7 +145,7 @@ func TestDispatches_FlagsAreJoinedInTheirFixedOrder(t *testing.T) {
 
 	row := rowFor(t, dispatchesView(run, tableW, tallH), "builder#4")
 
-	want := screens.MissingUsageLabel + "; unpriced models; " + screens.FormatAssumedTier(4_321)
+	want := screens.MissingUsageLabel + "; unpriced models; " + screens.FormatAssumedTier(4_321, nil)
 	assertContains(t, row, want)
 	assertNotContains(t, rowFor(t, dispatchesView(run, tableW, tallH), "builder#1"), "unpriced models", screens.MissingUsageLabel)
 }

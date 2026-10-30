@@ -15,7 +15,7 @@ import (
 func TestNewStore_PathIsResolvedFromMosaicRoot(t *testing.T) {
 	root := t.TempDir()
 
-	got := settings.NewStore(root).Path()
+	got := settings.NewStore(t.TempDir(), root).Path()
 
 	want := filepath.Join(root, "MosaicLogAnalyzer", "config", "analysis.yaml")
 	if got != want {

@@ -64,18 +64,28 @@ func ingestInto(req Request, st *ingestState, size int64, now time.Time) (Result
 	}
 	keys := readRunKeys(req.RunDir)
 	var calls []*call
+	var failed []*failedTool
 	calls = append(calls, st.Pending...)
 	for _, p := range sc.lines {
+		if p.tool != nil {
+			failed = append(failed, p.tool)
+		}
 		if p.link != nil && keys.tied(p.link.ConversationID, p.link.ChatSessionID, p.link.ParentChatSessionID) {
 			st.Links[p.linkID] = p.link
 		}
 		if p.call != nil && !hasCall(calls, p.call.RecordID) {
+			if p.call.Timestamp == "" {
+				p.call.Timestamp = now.UTC().Format(timestampLayout)
+			}
 			calls = append(calls, p.call)
 		}
 	}
 	res := Result{Status: StatusIngested, LinesRead: sc.read, LinesMalformed: sc.malformed}
 	w := &writer{runDir: req.RunDir, runID: filepath.Base(req.RunDir), now: now, keys: keys}
 	if err := placeCalls(req, st, newResolver(keys, st.Links), w, calls, &res); err != nil {
+		return Result{}, err
+	}
+	if err := writeToolEnds(req.RunDir, w.runID, now, failed, &res); err != nil {
 		return Result{}, err
 	}
 	end := max(sc.end, start)

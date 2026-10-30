@@ -49,7 +49,10 @@ The adapter registers exactly 8 events:
 
 Events that are unconfirmed for the VS Code harness (`SessionEnd`, `Notification`,
 `PostToolUseFailure`, `PostCompact`) are not registered; the adapter silently ignores
-any unrecognised event it receives.
+any unrecognised event it receives. Compactions are recognised from the OTel
+compaction calls, not from a hook, and failed tool calls (no `PostToolUseFailure`
+hook) are completed from OTel when the export is enabled; see "Copilot token usage"
+in the parent `README.md`.
 
 ## Compaction events
 

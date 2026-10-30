@@ -2,7 +2,7 @@
 
 > **Status:** Draft for review
 > **Created:** 2026-07-27
-> **Last Updated:** 2026-10-28
+> **Last Updated:** 2026-10-29
 > **Scope:** The canonical log event schema, the on-disk artifact layout, run identity, and the merge utility's contract. 
 
 ---
@@ -65,7 +65,7 @@ These twelve event types are the complete set in schema version 1. A human promp
 |---|---|---|---|
 | `schema_version` | string | Required | See §6. |
 | `event` | enum (§3.1) | Required | Discriminator field. |
-| `timestamp` | string (ISO 8601) | Required | Time the adapter captured/emitted the event. |
+| `timestamp` | string (ISO 8601) | Required | Time the adapter captured/emitted the event. **Exception:** on a `usage_record` with `source: "otel"` it is the start time of the API call, taken from the span (§4.7). |
 | `harness` | enum: `"claude-code"` \| `"opencode"` \| `"vscode-ghcp"` \| `"ghcp-cli"` | Required | Which harness adapter emitted this entry. |
 | `session_id` | string | Optional | Harness-native session identifier, normalized to this single field name regardless of the harness's native casing. |
 | `run_id` | string | Optional | Identifier of the orchestration run, when determinable. Primary correlation key for the merge utility — see §4. |
@@ -171,6 +171,7 @@ No `call_index` field — see §3.5.
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `call_id` | string | Required | Correlation key back to `tool_call_start`. |
+| `tool_name` | string | Optional | The tool's name as the harness reports it, the same value as on the matching `tool_call_start`. It is a safeguard for an end whose start is missing (a failed or timed-out pre-tool hook, or a start written under another run). A consumer uses it only when it finds no matching start. |
 | `status` | enum: `"success"` \| `"error"` | Optional | Outcome of the call. Tool failures are reported here, never as a separate error event. |
 | `error` | string | Optional | Error detail when `status` is `"error"`. |
 | `tool_output` | object \| string | Optional | Result returned by the tool, not truncated. On Claude Code it is sourced from the PostToolUse payload's `tool_response`. Capture policy: §5. |
@@ -214,6 +215,8 @@ One compaction is either one self-contained event without `phase`, or a `"pre"` 
 | `provider` | string | Optional | The provider that served this record, when known. Consumers price a record by provider and model together. |
 | `effort` | string | Optional | The reasoning effort in effect for this API call, as the harness reports it, copied verbatim in the harness's own vocabulary (Claude Code: `low`, `medium`, `high`, `xhigh`, `max`). It is the effective value, not the configured one: Claude Code records the level it actually ran, which differs from the configured level when the model doesn't support it. Omitted when the harness doesn't report it for the record, for example when the model doesn't support effort. Adapters never derive it from agent files or configuration. |
 | `service_tier` | string | Optional | Descriptive detail only; drives no pricing decision. |
+| `call_kind` | enum: `"main"` \| `"compaction"` \| `"auxiliary"` | Optional | What the API call was for. `main`: a step of the actor's own conversation. `compaction`: a request that summarises the actor's context to compact it; whether its result was applied is not stated. `auxiliary`: a harness helper call made inside the actor's session (title generation, a background todo list, and similar). Absent means `main`; producers whose source cannot tell the kinds apart omit it. Consumers count every kind for usage and cost, and use only `main` calls for context-size figures. |
+| `call_label` | string | Optional | The harness's own name for the kind of call, copied verbatim (for example `panel/editAgent`, `summarizeConversationHistory`, `backgroundTodoAgent`). Descriptive only; `call_kind` is the field consumers act on. |
 | `token_usage` | object | Optional | Present when at least one sub-field is resolvable. Sub-fields `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens`, `cache_creation_5m_tokens`, `cache_creation_1h_tokens`, `reasoning_tokens`, each independently optional and present only when its source value is a genuine number, including 0. Cache-write tier, reasoning and provider rules as for `invocation_end` (§3.4). |
 
 **Supersede rule (normative).** A producer may observe the same `record_id` more than once as its values settle. When the same `record_id` appears more than once within a stream, the later observation is authoritative and supersedes all earlier ones. A consumer totals the final observed value for each `record_id`, never the first.
@@ -241,7 +244,16 @@ This doesn't require cross-file assembly — pairing needs only the one file bot
 
 Invocation events are scoped per invocation, not written to a shared run-wide file at runtime — this keeps the orchestration runtime safe under parallel subagent execution (the orchestrator can spawn several subagents within a single inference response, and their hook processes can fire near-simultaneously; no log file may be written by more than one in-flight invocation). `run_id` is the primary correlation key the merge utility uses to reassemble a run from its scattered per-invocation files.
 
-The orchestrator's own events are the deliberate exception to per-invocation scoping, not a contradiction of it. There is exactly one orchestrator per run — no concurrent-writer risk exists for its own turns, tool calls, or the run/session lifecycle events, because nothing else is writing on its behalf at the same time the way multiple parallel subagents write to their own separate invocation files. That's why the orchestrator's `turn`/`tool_call_*`/`notification`/`compaction` events, alongside `run_start`/`run_end`/`session_start`/`session_end`, share one small run-root file (`00_orchestrator_events.jsonl`, §4.3) instead of each needing invocation-style isolation.
+The orchestrator's own events are the deliberate exception to per-invocation scoping, not a contradiction of it. There is exactly one orchestrator per run, so its `turn`/`tool_call_*`/`notification`/`compaction` events, alongside `run_start`/`run_end`/`session_start`/`session_end`, share one small run-root file (`00_orchestrator_events.jsonl`, §4.3) instead of each needing invocation-style isolation.
+
+**Any stream can have more than one writer at a time.** Scoping keeps parallel invocations apart where the harness allows it, but it can't guarantee a single writer per file:
+- On some harnesses, hook payloads don't identify the subagent behind a tool call, so the adapter writes subagent tool events to the orchestrator stream (VS Code).
+- The OTel ingest writes into other actors' streams (§4.7).
+- Parallel hook processes can therefore append to the same file at the same moment.
+
+**Normative rule:** every producer appends each event as one whole line while holding an exclusive lock on the target file. The lock is released after the write, and a concurrent writer waits for it. An append-mode write alone is not enough: on Windows it moves to the end of the file and then writes, so two writers can overwrite each other.
+
+**Lock mechanism (all producers).** The lock is a sidecar lock file in the same directory as the target: `.<target file name>.lock` (for `00_orchestrator_events.jsonl`, `.00_orchestrator_events.jsonl.lock`). A writer takes the lock by creating that file with exclusive-create semantics (fails if it exists: `O_CREAT | O_EXCL` in Python, `os.OpenFile` with `O_EXCL` in Go, the `wx` flag in Node), then appends the whole line to the target in append mode, closes the target, and deletes the lock file. No byte-range or advisory OS lock is used, so readers of the target are never blocked or failed by it. A writer that finds the lock file retries about every 20 ms for up to 2 seconds (the wait limit), measured on a monotonic clock. A producer never holds two append locks at once, and writes made inside a block that already holds the lock are plain appends that do not take it again. A lock file whose modification time is more than 10 seconds old is the leftover of a dead writer: the waiting writer deletes it and tries to create it again. A writer that does not get the lock within the wait limit drops the event, writes a debug message where the producer has a debug sink, and returns without raising or blocking the harness. A lock file that was not created by the writer is never deleted except as stale. The target's parent directory is created before the lock file.
 
 That makes `run_id` load-bearing for storage, not just for correlation: artifacts from different runs must never collide on disk. `agent_instance_id` values (`Research#1`, `RequirementsRefinement#2`, …) are scoped to a single run's own sequence and reset to `#1` at the start of every new run. That sequence isn't adapter-invented state — it's the orchestrator's own per-type dispatch numbering, already part of the existing communication protocol and already present in the dispatch content the adapter observes, not something the logging system mints or tracks. So a flat, unscoped directory would let a second run's invocation folders silently collide with or overwrite a first run's, with no warning and no recovery. Every invocation folder and the orchestrator transcript therefore live under a per-run root directory.
 
@@ -294,7 +306,7 @@ OrchestrationLogs/
 Two run-root files carry the orchestrator's own record, distinct in purpose:
 
 - **`00_orchestrator_session.raw`** (+ `.meta.json` sidecar) is the raw transcript export — the verification path, per §4.5's raw-export policy. It's refreshed on subagent lifecycle events so it stays current, which is the one deliberate exception to "no file written by more than one in-flight invocation": concurrent hook processes from parallel subagent spawns may refresh it near-simultaneously. Writes are an **atomic replace**: write to a temp file, then rename over the target. Under contention this can only lose a refresh, which the next subagent event restores, and can never leave a torn or half-written file. **Inside `unknown-run/` this file's name is session-scoped** (see §4.3) so two unrelated sessions can never overwrite each other's transcript. In a real run folder the name is always the fixed `00_orchestrator_session.raw`.
-- **`00_orchestrator_events.jsonl`** is the canonical, typed event stream for everything scoped to the orchestrator rather than to any one invocation: `run_start`/`run_end`, `session_start`/`session_end`, and the orchestrator's own `turn`/`tool_call_start`/`tool_call_end`/`notification`/`compaction` events (§3.5, §4.1). Unlike the transcript above, this file is append-only, matching the discipline of the per-invocation `03_events.jsonl` files — there's no equivalent overwrite risk here since the orchestrator is the file's sole writer.
+- **`00_orchestrator_events.jsonl`** is the canonical, typed event stream for everything scoped to the orchestrator rather than to any one invocation: `run_start`/`run_end`, `session_start`/`session_end`, and the orchestrator's own `turn`/`tool_call_start`/`tool_call_end`/`notification`/`compaction` events (§3.5, §4.1). Unlike the transcript above, this file is append-only, matching the discipline of the per-invocation `03_events.jsonl` files. It can have several writers at once (§4.1), so every append is made under the exclusive lock §4.1 requires.
 
 ### 4.5 Human-readable and verification artifacts
 
@@ -370,25 +382,31 @@ Some harnesses carry no usage in their transcripts but export it through OpenTel
 **Rules for producers (normative).**
 
 - **Read-only.** The OTel file belongs to the user and the harness. The ingest never truncates, rotates, moves or deletes it.
-- **No content.** Content attributes (prompts, responses, tool payloads) are never read into MOSAIC logs. Only usage, model, provider, effort and the attribution keys are used.
-- **One record per API call.** Only spans that represent a single API call become records. Spans that total their children (agent spans, for example) are never recorded, because counting both would double-count.
+- **No content.** Content attributes (prompts, responses, tool payloads) are never read into MOSAIC logs. Only usage, model, provider, effort, the call kind and label, tool names, tool-call status and the attribution keys are used. **One exception:** the error message of a failed tool call may be copied into `tool_call_end.error` (see "Failed tool calls" below). It is a short diagnostic, not a payload, and hooks write the same field on other harnesses.
+- **One record per API call.** Only spans that represent a single API call become records. Spans that total their children (agent spans, for example) are never recorded, because counting both would double-count. A compaction request or a harness helper call made inside an actor's session is still one API call. It is recorded, and `call_kind` says what it was.
+- **Call kind.** When the span names the purpose of the call, the ingest sets `call_label` to that name verbatim and maps it to `call_kind`. The mapping from harness labels to kinds is adapter design. An unknown label maps to nothing: `call_kind` is omitted, which consumers read as `main`, and `call_label` still carries the name.
+- **Failed tool calls.** Some harnesses fire no post-tool hook when a tool call fails, so the hooks write a `tool_call_start` with no `tool_call_end`. The export also records tool executions. When it records a failed one whose `call_id` has a `tool_call_start` in the run's logs and no `tool_call_end`, the ingest writes the end:
+  - It goes into the stream that holds the start.
+  - It carries `status: "error"`, `error` from the export's error message, and `tool_name`.
+  - Its `timestamp` is the end time of the tool execution.
+  - A `tool_call_end` already written by a hook is never duplicated or replaced.
 - **Record identity.** `record_id` is the span ID; `record_index` is the byte offset of the span's line. Re-ingesting the same line writes the same record again, which the supersede rule (§3.4) makes harmless.
 - **Hard keys only.** A span is placed on an actor's stream only when a harness-native identifier ties it to that actor: a conversation or session ID, the tool-call ID that spawned a subagent, a subagent's own session ID, or the span parent chain leading to one of these. Spans are never placed by time window or by guess (§2, "Fields degrade, never fabricate").
 - **Unattributed stream.** A span that a hard key ties to the run but not to an actor goes to `00_unattributed_events.jsonl` in the run root. That file holds only `usage_record` events, with no `agent_instance_id`. It is never folded into the orchestrator stream, so a consumer that doesn't know the file under-counts the run total but never misattributes. A span with no hard key to any run is not ingested; the ingest writes nothing to `unknown-run/`.
 - **Pending spans.** Spans are written when they end, so a child span can arrive before the parent that ties it to an actor. Such a span is kept as pending in the ingest state and placed by a later ingest. Because placement is final, a pending span goes to the unattributed stream only in a **final ingest**: one that runs after the harness process has exited and its export has been flushed, or one a user requests after the run. An ingest during the run never does this, because the parent may simply not be flushed yet. A consumer that finds pending spans left in the ingest state reports them as not yet ingested.
 - **Placement is final.** Once a `record_id` has been written to a stream, later ingests write it only to that same stream, even if they could now place it elsewhere. This keeps the single-stream invariant (§3.4) across incremental ingests.
-- **Envelope.** `timestamp` is the ingest time, as for every event (§3.3). `session_id` is the harness session the span belongs to; `harness` is the adapter that ran the ingest.
+- **Envelope.** `timestamp` is the start time of the API call, taken from the span. This is the one exception to §3.3. The ingest runs in batches, minutes after the calls, so the ingest time would give every call in a batch the same time. Records are therefore not in time order within the file, and consumers order them by `timestamp`. `session_id` is the harness session the span belongs to; `harness` is the adapter that ran the ingest.
 
 **Ingest state.** The ingest keeps its state in the dot-prefixed `.otel-ingest/` directory of the run (consumers skip dot-prefixed entries): a byte-offset cursor per OTel file, the pending spans, the `record_id` to stream placements, and a lock. More than one implementation may ingest the same run (hooks during the run, a standalone tool later), so the state format carries its own version and is a contract between them. An ingest that finds a state version it doesn't know reads and writes nothing for that run and reports it. Every key the ingest needs comes from the MOSAIC log events (envelope `session_id`, `invocation_start.spawn_call_id`), never from adapter state, so any implementation can ingest a run from its log folder and the OTel file alone.
 
 - **Incremental.** Each ingest reads only complete lines after the cursor and moves the cursor past them. A file shorter than the cursor, or a different file at the same path, resets the cursor to 0.
 - **Starting point.** The first cursor for a run is the file's size when the run's first harness session started, so a shared file that has grown over many sessions is not read from the beginning. A manual recovery ingest may read the whole file; hard-key filtering keeps other runs' spans out.
 - **One ingest at a time per run.** The lock serialises ingests. An ingest that finds the lock held skips its turn and leaves the work to the next ingest point. There is no background process.
-- **Writes into other actors' streams.** An ingest run from one actor's hook appends records to other actors' streams, which those actors' own hooks may be writing at the same moment. This is a deliberate exception to §4.1's single-writer rule, like the transcript refresh in §4.4. It is bounded by the lock (only one ingest writes at a time) and by writing each record as one whole-line append.
+- **Writes into other actors' streams.** An ingest run from one actor's hook appends records to other actors' streams, which those actors' own hooks may be writing at the same moment. The ingest lock ensures only one ingest writes at a time. Each record is appended under the per-file lock §4.1 requires, the same lock the hooks take, so an ingest and a hook never overwrite each other's lines.
 - **Write frequency.** The state is written once per ingest, and ingests happen at a few lifecycle boundaries, never per turn or per tool call (§2, high-frequency state).
 - **Malformed lines** are skipped, never fatal: several harness windows may append to the same file without locking.
 
-**Coverage.** Usage the harness exports but no hook can tie to a run (background calls such as title generation) stays out of the logs. When the user has not enabled the export, the harness logs no usage, and consumers report it as not provided.
+**Coverage.** Usage the harness exports but no hook can tie to a run stays out of the logs: helper calls with no conversation ID, such as some title-generation calls. Helper calls that do carry an actor's conversation ID are recorded on that actor's stream, with `call_kind: "auxiliary"`. When the user has not enabled the export, the harness logs no usage, and consumers report it as not provided.
 
 ## 5. Tool Payload Capture Policy
 
@@ -424,6 +442,7 @@ Every event carries `schema_version` in its common envelope (§3.3).
 | `1.3.0` | Added the `reasoning_tokens` sub-field to `token_usage`, the `provider` field wherever `model` appears, and the `effort` field on `usage_record`. |
 | `1.4.0` | Added the `otel` value of `usage_record.source`, the unattributed stream `00_unattributed_events.jsonl` (§4.7) and `invocation_start.spawn_call_id`. |
 | `1.5.0` | Added `compaction.phase` and the rule that a compaction is written to the stream of the actor whose context was compacted. |
+| `1.6.0` | Added `usage_record.call_kind` and `call_label`, and `tool_call_end.tool_name`. An OTel `usage_record` is timestamped with the API call's start (§3.3, §4.7). The OTel ingest writes the missing `tool_call_end` of a failed tool call, with the error message (§4.7). Every append is made under an exclusive per-file lock (§4.1). |
 
 Adapters emit the highest version whose fields they implement; an adapter that does not produce the 1.2.0 sub-fields keeps emitting its earlier version. A version covers its fields as a set of things the adapter implements, not as fields that must appear on every event: an adapter that implements 1.3.0 but cannot know the provider in a given run still emits 1.3.0 and omits `provider`. The version is per event, so an event type added in a version (for example `usage_record` in 1.1.0) is never written with an earlier version.
 
@@ -455,7 +474,7 @@ No `cost_usd` field exists anywhere in the schema. No error/exception event type
 
 - **Format stability:** the JSONL machine format remains strictly one-JSON-object-per-line at all times, even though lines may be large. Human-readable artifacts and raw transcripts are separate, non-parseable-as-JSONL files.
 - **Resilience:** consumers and the rest of the system must function correctly with missing, partial, or malformed log data.
-- **Concurrency:** log writing is safe under parallel subagent execution, including the case where the orchestrator spawns several subagents within a single inference response and their hook processes fire near-simultaneously. No log file may end up interleaved, torn, or half-written.
+- **Concurrency:** log writing is safe under parallel subagent execution, including the case where the orchestrator spawns several subagents within a single inference response and their hook processes fire near-simultaneously. No log file may end up interleaved, torn, or half-written. Appends are made under an exclusive per-file lock (§4.1), on Windows and Linux alike.
 - **Volume:** full-content capture (turns and tool calls) means substantial log volume. Consumers must stream rather than fully buffer, and must tolerate multi-kilobyte individual lines.
 - **Maintainability:** transcript capture must not depend on parsing harness-internal formats, so a harness version change cannot silently break or corrupt log output.
 - **Compatibility:** hook scripts run on both Windows and Linux.

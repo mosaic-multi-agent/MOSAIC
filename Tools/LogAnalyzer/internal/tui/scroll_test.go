@@ -299,7 +299,7 @@ func TestRunDetailScreen_ScrollDown_RevealsLaterRows(t *testing.T) {
 	if !strings.Contains(view, "Agent#40") {
 		t.Errorf("Agent#40 should be visible after scrolling to the end:\n%s", view)
 	}
-	if strings.Contains(view, "orchestrator") || strings.Contains(view, "Agent#1 ") {
+	if strings.Contains(view, "orchestra") || strings.Contains(view, "Agent#1 ") {
 		t.Errorf("the first rows should have scrolled off:\n%s", view)
 	}
 	assertNoMoreLinesThan(t, view, height)
@@ -313,7 +313,7 @@ func TestRunDetailScreen_ScrollUp_ReturnsToTheFirstRows(t *testing.T) {
 	pressDetail(s, "k", 60)
 	view := s.View(80, height)
 
-	if !strings.Contains(view, "orchestrator") || strings.Contains(view, "Agent#40") {
+	if !strings.Contains(view, "orchestra") || strings.Contains(view, "Agent#40") {
 		t.Errorf("scrolling back to the top should show the orchestrator and not the last agent:\n%s", view)
 	}
 }
@@ -396,7 +396,7 @@ func TestRunDetailScreen_WithUnpricedModels_KeepsTheNoticeAndTheChrome(t *testin
 	s := screens.NewRunDetailScreen(run, 80, height, plainStyles())
 	view := s.View(80, height)
 
-	for _, want := range []string{run.Run.Label(), "? help", "model-x", "orchestrator"} {
+	for _, want := range []string{run.Run.Label(), "? help", "model-x", "orchestra"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("view lacks %q:\n%s", want, view)
 		}

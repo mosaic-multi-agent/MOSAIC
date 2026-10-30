@@ -25,7 +25,8 @@ func isStreamFile(rel string) bool {
 	return false
 }
 
-// readOTelRecords returns the usage_record lines with source "otel" of a JSONL stream as data without timestamp.
+// readOTelRecords returns, in file order, the usage_record lines with source "otel" and every tool_call_end line of a
+// JSONL stream as data, timestamp included.
 func readOTelRecords(t *testing.T, path string) []any {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -41,8 +42,7 @@ func readOTelRecords(t *testing.T, path string) []any {
 		if err := json.Unmarshal(line, &obj); err != nil {
 			t.Fatalf("%s: a stream line is not a whole JSON object: %v", path, err)
 		}
-		if obj["event"] == "usage_record" && obj["source"] == "otel" {
-			delete(obj, "timestamp")
+		if (obj["event"] == "usage_record" && obj["source"] == "otel") || obj["event"] == "tool_call_end" {
 			recs = append(recs, obj)
 		}
 	}
@@ -104,7 +104,7 @@ func assertStreams(t *testing.T, w *caseWorkspace, step string) {
 	t.Helper()
 	want := collectStreams(t, filepath.Join(w.caseDir, "expected", step, "streams"), func(string) bool { return true })
 	got := collectStreams(t, w.runDir, isStreamFile)
-	assertJSONEqual(t, "ingested usage_record streams", toData(t, want), toData(t, got))
+	assertJSONEqual(t, "ingested usage_record and tool_call_end streams", toData(t, want), toData(t, got))
 }
 
 func assertState(t *testing.T, w *caseWorkspace, step string) {
@@ -137,6 +137,7 @@ func assertResult(t *testing.T, w *caseWorkspace, step string, res otelingest.Re
 	got := map[string]any{
 		"status": string(res.Status), "records_written": res.RecordsWritten, "finalized": res.Finalized,
 		"pending": res.Pending, "lines_read": res.LinesRead, "lines_malformed": res.LinesMalformed,
+		"tool_ends_written": res.ToolEndsWritten,
 	}
 	assertJSONEqual(t, "result", want, toData(t, got))
 }

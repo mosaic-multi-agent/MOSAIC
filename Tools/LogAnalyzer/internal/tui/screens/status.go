@@ -90,7 +90,7 @@ func (s *StatusScreen) body() []string {
 }
 
 // statusKeys are the short help keys of the view.
-var statusKeys = []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "scroll"}, {Key: KeySort, Desc: "sort"}, {Key: "esc", Desc: "back"}}
+var statusKeys = []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "scroll"}, {Key: KeySort, Desc: "sort"}, exportKeyEntry, {Key: "esc", Desc: "back"}}
 
 // Help implements Screen.
 func (s *StatusScreen) Help() string {

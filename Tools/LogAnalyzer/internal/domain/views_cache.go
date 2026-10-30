@@ -10,4 +10,5 @@ type CacheFigures struct {
 	UnreadWriteTokens TokenCount // CacheCreation on the last per-call record of each invocation in scope
 	UnreadWriteCost   MoneyValue
 	Complete          bool // false when any contributing call's model was unpriced
+	Rewrites          RewriteFigures
 }

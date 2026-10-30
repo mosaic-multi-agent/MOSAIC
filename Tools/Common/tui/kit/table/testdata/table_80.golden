@@ -1,4 +1,4 @@
-  Name             Type      Size  Count
-  alpha-entry      general   1200     12
-> beta             coder       35      7
-  gamma-long-name  reviewer   410    103
+  Name           Type      Size  Count  Notes
+  alpha-entry    general   1200     12  first draft accepted
+> beta           coder       35      7  retry after schema check failed twice ok
+  gamma-long...  reviewer   410    103

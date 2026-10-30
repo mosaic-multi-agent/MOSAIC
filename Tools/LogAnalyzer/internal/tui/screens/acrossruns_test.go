@@ -75,7 +75,7 @@ func TestAcrossRuns_PartialAndProvisionalDataIsLabelled(t *testing.T) {
 	assertContains(t, view,
 		"(partial)",
 		screens.ProvisionalLabel,
-		screens.AssumedTierLabel,
+		screens.AssumedTierLabel(nil),
 		screens.OpenLabel,
 		screens.MissingUsageLabel,
 		"m-unpriced",
@@ -94,7 +94,7 @@ func TestAcrossRuns_CompleteDataShowsNoIncompletenessLabel(t *testing.T) {
 	assertContains(t, view, acrossRunA, acrossRunB, "$8.00")
 	for _, needle := range []string{acrossRunA, acrossRunB, "coder"} {
 		assertNotContains(t, rowFor(t, view, needle),
-			"(partial)", screens.UnpricedMarker, screens.ProvisionalLabel, screens.AssumedTierLabel, screens.OpenLabel,
+			"(partial)", screens.UnpricedMarker, screens.ProvisionalLabel, screens.AssumedTierLabel(nil), screens.OpenLabel,
 			screens.MissingUsageLabel,
 		)
 	}

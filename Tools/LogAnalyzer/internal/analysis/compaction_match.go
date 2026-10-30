@@ -15,9 +15,17 @@ const compactionNearWindow = 2 * time.Minute
 // dropRef is one detected drop of an actor, with the calls' times it lies between.
 type dropRef struct {
 	actor   domain.ActorRef
-	mark    domain.CompactionMark
+	mark    *domain.CompactionMark
 	t0, t1  time.Time
 	matched bool
+}
+
+// match records that a logged compaction explains the drop; a matched drop is
+// shown with the logged compaction, never as a harness compaction.
+func (d *dropRef) match() {
+	d.matched = true
+	d.mark.MatchedLogged = true
+	d.mark.Harness = false
 }
 
 // loggedRef is a checked logged compaction with its time span.
@@ -44,7 +52,7 @@ func compactionFindings(run domain.RunRef, rc domain.RunContext, compactions []d
 		var left []loggedRef
 		for _, l := range checkedCompactions(a, compactions) {
 			if d := earliestNear(drops[i], l); d != nil {
-				d.matched = true
+				d.match()
 			} else {
 				left = append(left, l)
 			}
@@ -59,7 +67,7 @@ func compactionFindings(run domain.RunRef, rc domain.RunContext, compactions []d
 	}
 	for _, l := range orchLeft {
 		if d := earliestNear(subagentDrops(drops[1:]), l); d != nil {
-			d.matched = true
+			d.match()
 			findings = append(findings, domain.Finding{
 				Kind: domain.FindingCompactionMismatch, Severity: domain.SeverityWarning,
 				Run: run, Actor: d.actor,
@@ -72,7 +80,7 @@ func compactionFindings(run domain.RunRef, rc domain.RunContext, compactions []d
 	}
 	for _, ds := range drops {
 		for _, d := range ds {
-			if !d.matched {
+			if !d.matched && !d.mark.Harness {
 				findings = append(findings, noLoggedFinding(run, d))
 			}
 		}
@@ -83,7 +91,8 @@ func compactionFindings(run domain.RunRef, rc domain.RunContext, compactions []d
 // dropsOf lists the actor's detected drops that can be placed in time.
 func dropsOf(a domain.ActorContext) []*dropRef {
 	var out []*dropRef
-	for _, m := range a.Compactions {
+	for i := range a.Compactions {
+		m := &a.Compactions[i]
 		if m.Kind != domain.CompactionDetected {
 			continue
 		}

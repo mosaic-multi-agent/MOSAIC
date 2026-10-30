@@ -21,6 +21,9 @@ type Totals struct {
 	// were priced at the 5m rate because their request reported no tier split.
 	// Never counts tokens of unpriced models or tokens with a reported split.
 	AssumedTierCacheWrite int64
+	// AssumedTiers lists the distinct tiers behind AssumedTierCacheWrite, in
+	// CacheWriteTiers() order; only tiers with assumed tokens.
+	AssumedTiers []CacheWriteTier
 }
 
 // ActorReport is one actor's priced breakdown within a run.
@@ -75,8 +78,10 @@ type Report struct {
 	UnpricedModels []PricingKey // distinct, sorted, across the whole report
 	AcrossRuns     AcrossRuns   // V6; named runs only, never the unattributable bucket
 	Quality        QualitySummary
-	// Currency is always domain.Currency; emitted so machine consumers need not assume.
-	Currency string
+	// UnpricedReasons lists, sorted by key, the unpriced models excluded by a currency mismatch.
+	UnpricedReasons []UnpricedReason
+	// Currency is the effective currency of the pricing table behind the report.
+	Currency CurrencyCode
 }
 
 // IsEmpty reports whether the report contains no named runs and no unattributable bucket.

@@ -83,10 +83,10 @@ func TestGanttDetail_StripShowsCostParallelWithAndPeakAndFinalContextWithBandNam
 		parallel, notParallel     []string
 		peak, final, peakBand, fb string
 	}{
-		{0, "$3.17", nil, []string{"alpha#2", "beta#3", "rev#4"}, tokens(120_000), tokens(60_000), "optimal", "below optimal"},
-		{1, "$2.28", []string{"beta#3", "rev#4"}, []string{"solo#1"}, tokens(300_000), tokens(90_000), "above optimal", "below optimal"},
+		{0, "$3.17", nil, []string{"alpha#2", "beta#3", "rev#4"}, tokens(120_000), tokens(60_000), "optimal", "optimal"},
+		{1, "$2.28", []string{"beta#3", "rev#4"}, []string{"solo#1"}, tokens(300_000), tokens(90_000), "above optimal", "optimal"},
 		{2, "$1.39", []string{"alpha#2", "rev#4"}, []string{"solo#1"}, tokens(380_000), tokens(210_000), "degraded", "optimal"},
-		{3, "$0.54", []string{"alpha#2", "beta#3"}, []string{"solo#1"}, tokens(40_000), tokens(40_000), "below optimal", "below optimal"},
+		{3, "$0.54", []string{"alpha#2", "beta#3"}, []string{"solo#1"}, tokens(40_000), tokens(40_000), "optimal", "optimal"},
 	}
 	for _, c := range cases {
 		s := openTimeline(t, timelineRun(), wideW, tallH)
@@ -95,6 +95,7 @@ func TestGanttDetail_StripShowsCostParallelWithAndPeakAndFinalContextWithBandNam
 		line := stripLine(t, s.View(wideW, tallH), c.cost)
 
 		assertContains(t, line, c.peak, c.final, c.peakBand, c.fb)
+		assertNotContains(t, line, "below optimal")
 		assertContains(t, line, c.parallel...)
 		assertNotContains(t, line, c.notParallel...)
 	}
@@ -120,10 +121,10 @@ func TestGanttDetail_BandNamesAreDrawnInTheBandRoles(t *testing.T) {
 
 	assertContains(t, raw, rolePrefix(tuicommon.RoleSignalBad), rolePrefix(tuicommon.RoleSignalGood))
 
-	press(s, "up") // alpha#2: peak above optimal, final below optimal
+	press(s, "up") // alpha#2: peak above optimal, final optimal
 	raw = rawLineWith(t, s.View(wideW, tallH), "$2.28")
-	assertContains(t, raw, rolePrefix(tuicommon.RoleSignalWarning))
-	assertNotContains(t, raw, rolePrefix(tuicommon.RoleSignalBad), rolePrefix(tuicommon.RoleSignalGood))
+	assertContains(t, raw, rolePrefix(tuicommon.RoleSignalWarning), rolePrefix(tuicommon.RoleSignalGood))
+	assertNotContains(t, raw, rolePrefix(tuicommon.RoleSignalBad))
 }
 
 func TestGanttDetail_StripIsThreeFixedLinesForEveryCursorPosition(t *testing.T) {

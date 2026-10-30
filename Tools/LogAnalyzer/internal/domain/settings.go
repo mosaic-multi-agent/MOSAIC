@@ -18,6 +18,18 @@ type AnalysisSettings struct {
 	// CompactionDropPercent: a drop of at least this percentage between two
 	// consecutive calls is a detected compaction. 1..99; default 30.
 	CompactionDropPercent int
+	// CacheWriteTiers holds the explicitly configured default cache-write tier per
+	// harness; a harness without an entry uses DefaultCacheWriteTier.
+	CacheWriteTiers map[Harness]CacheWriteTier
+}
+
+// CacheWriteTierFor returns the tier that prices h's cache writes without a
+// reported split: the configured tier, else DefaultCacheWriteTier.
+func (s AnalysisSettings) CacheWriteTierFor(h Harness) CacheWriteTier {
+	if t, ok := s.CacheWriteTiers[h]; ok {
+		return t
+	}
+	return DefaultCacheWriteTier
 }
 
 // DefaultCompactionDropPercent is the built-in detected-compaction threshold.

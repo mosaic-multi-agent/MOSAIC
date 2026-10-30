@@ -28,12 +28,16 @@ type fakeSettingsStore struct {
 
 func (s *fakeSettingsStore) Path() string { return s.filePath }
 
+func (s *fakeSettingsStore) Paths() domain.ConfigPaths {
+	return domain.ConfigPaths{Project: domain.ConfigFile{Level: domain.LevelProject, Path: s.filePath}}
+}
+
 func (s *fakeSettingsStore) Load(_ context.Context) (domain.AnalysisSettings, []domain.Finding, error) {
 	return s.settings, s.findings, s.loadErr
 }
 
-func (s *fakeSettingsStore) AddUserInteractionTool(_ context.Context, _ domain.Harness, _ string) error {
-	return nil
+func (s *fakeSettingsStore) AddUserInteractionTool(_ context.Context, level domain.ConfigLevel, _ domain.Harness, _ string) (domain.ConfigFile, error) {
+	return domain.ConfigFile{Level: level, Path: s.filePath, Exists: true}, nil
 }
 
 // newSettingsTestService builds a service over a one-run source that has one
@@ -77,16 +81,16 @@ func analyzeSettingsTest(t *testing.T, settings domain.SettingsStore) (app.Resul
 func TestSettingsPath_ReturnsInjectedStorePath(t *testing.T) {
 	svc := newSettingsTestService(&fakeSettingsStore{filePath: "/root/MosaicLogAnalyzer/config/analysis.yaml"})
 
-	if got := svc.SettingsPath(); got != "/root/MosaicLogAnalyzer/config/analysis.yaml" {
-		t.Errorf("SettingsPath() = %q, want the store's path", got)
+	if got := svc.SettingsPaths().Project.Path; got != "/root/MosaicLogAnalyzer/config/analysis.yaml" {
+		t.Errorf("SettingsPaths().Project.Path = %q, want the store's path", got)
 	}
 }
 
 func TestSettingsPath_NilStore_IsEmpty(t *testing.T) {
 	svc := newSettingsTestService(nil)
 
-	if got := svc.SettingsPath(); got != "" {
-		t.Errorf("SettingsPath() = %q, want empty without a settings store", got)
+	if got := svc.SettingsPaths(); got != (domain.ConfigPaths{}) {
+		t.Errorf("SettingsPaths() = %+v, want zero without a settings store", got)
 	}
 }
 

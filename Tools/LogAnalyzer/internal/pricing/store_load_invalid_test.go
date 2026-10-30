@@ -33,7 +33,7 @@ func loadWith(t *testing.T, badEntry string) (domain.PricingTable, []domain.Find
 	t.Helper()
 	root, path := makeRootWithConfigDir(t)
 	writePricingYAML(t, path, "models:\n"+badEntry+validSiblingYAML)
-	table, findings, err := pricing.NewStore(root).Load(context.Background())
+	table, findings, err := pricing.NewStore(t.TempDir(), root).Load(context.Background())
 	if err != nil {
 		t.Fatalf("Load must not fail for a per-entry problem: %v", err)
 	}
@@ -210,14 +210,14 @@ func TestStore_Load_OldFormatEntry_DoesNotPreventOtherEntriesLoading(t *testing.
     output: "15.00"
 `)
 
-	table, findings, err := pricing.NewStore(root).Load(context.Background())
+	table, findings, err := pricing.NewStore(t.TempDir(), root).Load(context.Background())
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	if _, found := table.Lookup("old-model"); found {
 		t.Error("old-format model must stay unpriced")
 	}
-	if got, found := table.Lookup("test-model-a"); !found || got != newMinimalEntry(t, "test-model-a") {
+	if got, found := table.Lookup("test-model-a"); !found || got != asProject(newMinimalEntry(t, "test-model-a")) {
 		t.Errorf("new-format entry must load intact; found=%v got=%+v", found, got)
 	}
 	if _, ok := findingFor(findings, "old-model"); !ok {

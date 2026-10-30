@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"mosaic-common/interaction"
@@ -51,16 +52,30 @@ type PricingStore interface {
 	// exactly which file to edit or which file was written.
 	Path() string
 
+	// Paths reports the global and project files without creating anything.
+	Paths() ConfigPaths
+
 	// Load reads the table. An absent file yields an empty table and a nil error.
 	// A comments-only file yields an empty table. Individually invalid entries are
 	// skipped and reported as Findings while the remaining entries still load.
 	// An error is returned only when the document itself cannot be parsed.
 	Load(ctx context.Context) (PricingTable, []Finding, error)
 
-	// Put persists one model entry, creating the file and its parent directory if
-	// absent, and never discarding existing entries or (where practical) comments.
-	Put(ctx context.Context, entry ModelPricing) error
+	// Put persists one model entry to the file of level (LevelGlobal or
+	// LevelProject), creating the file and its parent directory if absent, and
+	// never discarding existing entries or (where practical) comments. It returns
+	// the file written. A level other than the two file levels yields
+	// ErrInvalidConfigLevel; an unavailable global level ErrConfigLevelUnavailable.
+	Put(ctx context.Context, level ConfigLevel, entry ModelPricing) (ConfigFile, error)
 }
+
+// ErrInvalidConfigLevel is returned (wrapped) when a save names LevelBuiltIn or an
+// unknown level.
+var ErrInvalidConfigLevel = errors.New("invalid configuration level")
+
+// ErrConfigLevelUnavailable is returned (wrapped) when a save names the global
+// level but the global folder cannot be resolved.
+var ErrConfigLevelUnavailable = errors.New("configuration level unavailable")
 
 // Clock provides the current time. Injected so output is deterministic in tests.
 type Clock interface {
@@ -83,8 +98,11 @@ type IngestStateProbe interface {
 // SettingsStore owns the external YAML analysis settings file.
 // Implementations: settings.Store (production), in-memory fake (tests).
 type SettingsStore interface {
-	// Path returns the settings file location.
+	// Path returns the project settings file location (the file saves write).
 	Path() string
+
+	// Paths reports the global and project files without creating anything.
+	Paths() ConfigPaths
 
 	// Load: absent file -> DefaultAnalysisSettings(), nil findings, nil error;
 	// comments-only file -> defaults; each invalid entry -> one
@@ -92,6 +110,7 @@ type SettingsStore interface {
 	// or unreadable file -> error. Never writes.
 	Load(ctx context.Context) (AnalysisSettings, []Finding, error)
 
-	// AddUserInteractionTool validates and persists name for harness h.
-	AddUserInteractionTool(ctx context.Context, h Harness, name string) error
+	// AddUserInteractionTool validates and persists name for harness h in the file
+	// of level (same level rules as PricingStore.Put) and returns the file written.
+	AddUserInteractionTool(ctx context.Context, level ConfigLevel, h Harness, name string) (ConfigFile, error)
 }

@@ -83,7 +83,7 @@ func TestRenderFrame_CostBadgeRoleFollowsTheMoneyMapping(t *testing.T) {
 			header := rawHeader(t, run, screens.RunQuality{})
 
 			role := screens.MoneyRole(c.total.Total, c.total.Complete)
-			assertContains(t, header, styledBadge(screens.FormatTotal(c.total), role))
+			assertContains(t, header, styledBadge(screens.FormatTotal(domain.CurrencyUSD, c.total), role))
 		})
 	}
 }
@@ -127,7 +127,7 @@ func TestPerRunViews_DrawTheHeaderBadgesInTheirRoles(t *testing.T) {
 			header := strings.SplitN(s.View(200, 40), "\n", 2)[0]
 
 			m := fv.run.Totals.Money
-			assertContains(t, header, styledBadge(screens.FormatTotal(m), screens.MoneyRole(m.Total, m.Complete)))
+			assertContains(t, header, styledBadge(screens.FormatTotal(domain.CurrencyUSD, m), screens.MoneyRole(m.Total, m.Complete)))
 			assertContains(t, header, styledBadge("2 findings", bad))
 		})
 	}

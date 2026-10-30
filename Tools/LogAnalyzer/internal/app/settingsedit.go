@@ -12,9 +12,11 @@ import (
 // SettingsEditResult is what MarkUserInteractionTool returns.
 type SettingsEditResult struct {
 	Report     domain.Report // recomputed; Quality copied from the input report
-	ConfigPath string
-	Tool       string
-	Harnesses  []domain.Harness // harnesses the tool was saved under, sorted
+	ConfigPath string        // the settings file written
+	// ConfigLevel is the level of that file.
+	ConfigLevel domain.ConfigLevel
+	Tool        string
+	Harnesses   []domain.Harness // harnesses the tool was saved under, sorted
 }
 
 // ErrSettingsUnavailable: Deps.Settings is nil.
@@ -42,18 +44,27 @@ func (s *Service) MarkUserInteractionTool(ctx context.Context, sess *Session, r 
 		}
 		updated = next
 	}
+	level, ok, err := s.askConfigLevel(ctx, s.deps.Settings.Paths())
+	if err != nil {
+		return SettingsEditResult{}, err
+	}
+	if !ok {
+		return SettingsEditResult{Report: r, Tool: tool}, nil
+	}
+	var file domain.ConfigFile
 	for _, h := range sorted {
-		if err := s.deps.Settings.AddUserInteractionTool(ctx, h, tool); err != nil {
+		if file, err = s.deps.Settings.AddUserInteractionTool(ctx, level, h, tool); err != nil {
 			return SettingsEditResult{}, err
 		}
 	}
 	report := sess.Reanalyze(updated)
 	report.Quality = r.Quality
 	return SettingsEditResult{
-		Report:     report,
-		ConfigPath: s.deps.Settings.Path(),
-		Tool:       tool,
-		Harnesses:  sorted,
+		Report:      report,
+		ConfigPath:  file.Path,
+		ConfigLevel: level,
+		Tool:        tool,
+		Harnesses:   sorted,
 	}, nil
 }
 

@@ -175,13 +175,7 @@ GHCP CLI and VS Code Copilot Chat report token usage through Copilot's OpenTelem
 3. Content capture is optional and only makes the file larger. MOSAIC never reads content and never modifies the file.
 4. Cost needs `github-copilot` entries that you maintain in `pricing.yaml`; the shipped file has none.
 
-If usage is missing from a run (the variable was unset, the file was missing, a session crashed, or the hooks did not see the variable), recover it:
-
-```sh
-mosaic-log-analyzer ingest-otel <otel-file> --run <run-id>
-```
-
-Without the file argument the command uses `COPILOT_OTEL_FILE_EXPORTER_PATH`. "Usage not fully ingested" in LogAnalyzer means usage of the run is still pending; the recovery ingest resolves it. **Unattributed** usage is usage tied to the run but not to an agent. Details are in the hook README (`Catalog/Hooks/mosaic-logger/README.md`).
+If usage is missing from a run (the variable was unset, the file was missing, a session crashed, or the hooks did not see the variable), recover it with `mosaic-log-analyzer ingest-otel <otel-file> --run <run-id>`. The [LogAnalyzer Guide](LogAnalyzerGuide.md#token-usage-recovery-ingest-otel) explains the recovery, the views, the pricing and settings files, and the `currency` key. Hook-side details are in the hook README (`Catalog/Hooks/mosaic-logger/README.md`).
 
 ---
 
@@ -194,6 +188,7 @@ You've deployed, run workflows, and seen the orchestration in action. Here's wha
 | Understand deployment operations in depth | [Deployment Guide](DeploymentGuide.md) |
 | Learn run configuration, checkpoints, parallel runs | [Orchestration Guide](OrchestrationGuide.md) |
 | Automate workflows with the Runner | [Runner Guide](RunnerGuide.md) |
+| Read token, cost, context and compaction views; configure pricing | [LogAnalyzer Guide](LogAnalyzerGuide.md) |
 | Customize agents for your codebase | [Agent Customization Guide](AgentCustomizationGuide.md) |
 | Browse available workflows | `Catalog/Workflows/Index.md` |
 | Create your own subagents or workflows | Open your harness in the MOSAIC repository root (not your project workspace) and use `subagent-creator` to design agents or `workflow-creator` to author workflows — they ship there ready to use. Then deploy the result with `mosaic-deploy` |

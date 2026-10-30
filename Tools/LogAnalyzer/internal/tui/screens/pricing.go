@@ -144,7 +144,8 @@ func (s *PricingScreen) View(width, height int) string {
 	s.height = height
 	st := s.styles
 
-	head := []string{st.Subtitle.Render(fmt.Sprintf("%d model(s) in report", len(s.models)))}
+	head := []string{st.Subtitle.Render(fmt.Sprintf("%d model(s) in report", len(s.models))) +
+		st.Body.Render("  currency "+string(CurrencyOrDefault(st.Currency)))}
 	var tail []string
 	if s.configPath != "" {
 		tail = append(tail, st.Muted.Render("Config file: "+s.configPath))

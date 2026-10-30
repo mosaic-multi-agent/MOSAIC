@@ -66,9 +66,9 @@ func (s *OverviewScreen) summaryLines() []string {
 	if s.figuresOnly {
 		out = figureTable(summaryColumns(), s.summaryRows(), width, st)
 	} else {
-		out = []string{clip(st.Body, width, "Total  "+formatMoneyTotal(ov.Totals.Money))}
+		out = []string{clip(st.Body, width, "Total  "+formatMoneyTotal(s.styles.Currency, ov.Totals.Money))}
 	}
-	for _, l := range incompleteness(s.run.UnpricedModels, ov.Totals.AssumedTierCacheWrite,
+	for _, l := range incompleteness(s.run.UnpricedModels, ov.Totals.AssumedTierCacheWrite, ov.Totals.AssumedTiers,
 		ov.Subagents.MissingUsage, ov.Subagents.Open) {
 		out = append(out, clip(st.Warning, width, "  "+l))
 	}
@@ -88,13 +88,13 @@ func (s *OverviewScreen) summaryRows() [][]table.Cell {
 	ov := s.run.Overview
 	actor := func(name string) table.Cell { return table.Cell{Text: name, Role: tuicommon.RoleDataActor} }
 	rows := [][]table.Cell{
-		{actor("Total"), moneyTotalCell(ov.Totals.Money)},
-		{actor("Orchestrator"), moneyTotalCell(ov.Orchestrator.Money), ratioCell(ov.OrchestratorShare)},
-		{actor("Subagents"), moneyTotalCell(ov.Subagents.Totals.Money), ratioCell(ov.SubagentShare),
+		{actor("Total"), moneyTotalCell(s.styles.Currency, ov.Totals.Money)},
+		{actor("Orchestrator"), moneyTotalCell(s.styles.Currency, ov.Orchestrator.Money), ratioCell(ov.OrchestratorShare)},
+		{actor("Subagents"), moneyTotalCell(s.styles.Currency, ov.Subagents.Totals.Money), ratioCell(ov.SubagentShare),
 			{Text: "(" + countLabel(ov.Subagents.Invocations, "invocation") + ")"}},
 	}
 	if ov.Unattributed != nil {
-		rows = append(rows, []table.Cell{actor("Unattributed"), moneyTotalCell(ov.Unattributed.Money),
+		rows = append(rows, []table.Cell{actor("Unattributed"), moneyTotalCell(s.styles.Currency, ov.Unattributed.Money),
 			ratioCell(ov.UnattributedShare)})
 	}
 	return rows
@@ -105,13 +105,13 @@ func (s *OverviewScreen) summaryRows() [][]table.Cell {
 func (s *OverviewScreen) costShareLines() []string {
 	ov := s.run.Overview
 	segs := []chart.Segment{
-		{Label: "orchestrator " + FormatMoney(ov.Orchestrator.Money.Total),
+		{Label: "orchestrator " + FormatMoney(s.styles.Currency, ov.Orchestrator.Money.Total),
 			Value: moneyValue(ov.Orchestrator.Money.Total), Role: tuicommon.RoleDataLead},
-		{Label: "subagents " + FormatMoney(ov.Subagents.Totals.Money.Total),
+		{Label: "subagents " + FormatMoney(s.styles.Currency, ov.Subagents.Totals.Money.Total),
 			Value: moneyValue(ov.Subagents.Totals.Money.Total), Role: tuicommon.RoleDataActor},
 	}
 	if u := ov.Unattributed; u != nil {
-		segs = append(segs, chart.Segment{Label: "unattributed " + FormatMoney(u.Money.Total),
+		segs = append(segs, chart.Segment{Label: "unattributed " + FormatMoney(s.styles.Currency, u.Money.Total),
 			Value: moneyValue(u.Money.Total), Role: tuicommon.RoleSignalWarning})
 	}
 	return append([]string{heading(s.styles, s.width, "Cost share")}, stackedLines(segs, s.width, s.styles)...)
@@ -131,7 +131,7 @@ func (s *OverviewScreen) tokenLines() []string {
 	for _, cat := range domain.BillableCategories() {
 		count, _ := ov.Totals.Tokens.Get(cat)
 		segs = append(segs, chart.Segment{
-			Label: cat.Label() + " " + FormatTokens(count) + " " + FormatMoney(categoryMoney(ov.Totals.Money, cat)),
+			Label: cat.Label() + " " + FormatTokens(count) + " " + FormatMoney(s.styles.Currency, categoryMoney(ov.Totals.Money, cat)),
 			Value: float64(count.ValueOr(0)), Role: tuicommon.RoleDataTokens})
 	}
 	out = append(out, stackedLines(segs, width, st)...)
@@ -161,7 +161,7 @@ func (s *OverviewScreen) tokenRows() [][]table.Cell {
 			share = ratioCell(domain.Ratio{Numerator: count.ValueOr(0), Denominator: total.ValueOr(0)})
 		}
 		rows = append(rows, []table.Cell{{Text: cat.Label()}, tokensCell(count),
-			{Text: FormatMoney(money), Role: MoneyRole(money, true)}, share})
+			{Text: FormatMoney(s.styles.Currency, money), Role: MoneyRole(money, true)}, share})
 		if cat == domain.CategoryOutput {
 			rows = append(rows, []table.Cell{{Text: "  " + domain.CategoryReasoning.Label() + " (part of output)"},
 				tokensCell(ov.Totals.Tokens.Reasoning)})

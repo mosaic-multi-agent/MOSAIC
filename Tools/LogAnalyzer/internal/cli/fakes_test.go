@@ -95,6 +95,8 @@ type fakePricingStore struct {
 	table    domain.PricingTable
 	filePath string
 	loadErr  error
+	// puts counts calls to Put: any call is a write of a pricing file.
+	puts int
 }
 
 func newFakePricingStore() *fakePricingStore {
@@ -106,13 +108,18 @@ func newFakePricingStore() *fakePricingStore {
 
 func (s *fakePricingStore) Path() string { return s.filePath }
 
+func (s *fakePricingStore) Paths() domain.ConfigPaths {
+	return domain.ConfigPaths{Project: domain.ConfigFile{Level: domain.LevelProject, Path: s.filePath}}
+}
+
 func (s *fakePricingStore) Load(_ context.Context) (domain.PricingTable, []domain.Finding, error) {
 	return s.table, nil, s.loadErr
 }
 
-func (s *fakePricingStore) Put(_ context.Context, entry domain.ModelPricing) error {
+func (s *fakePricingStore) Put(_ context.Context, level domain.ConfigLevel, entry domain.ModelPricing) (domain.ConfigFile, error) {
+	s.puts++
 	s.table = s.table.With(entry)
-	return nil
+	return domain.ConfigFile{Level: level, Path: s.filePath, Exists: true}, nil
 }
 
 // ---------------------------------------------------------------------------

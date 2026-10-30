@@ -108,9 +108,9 @@ func TestAgentTypesTable_IncompletenessFlagsStayOnTheRowOfTheirTypeAndAreNotRunO
 	view := typesFiguresView(run, tableW, tallH)
 
 	builder := rowFor(t, view, "builder")
-	assertContains(t, builder, screens.UnpricedMarker, screens.AssumedTierLabel, screens.MissingUsageLabel, screens.OpenLabel)
+	assertContains(t, builder, screens.UnpricedMarker, screens.AssumedTierLabel(nil), screens.MissingUsageLabel, screens.OpenLabel)
 	assertNotContains(t, builder, "; ")
-	assertNotContains(t, rowFor(t, view, "reviewer"), screens.UnpricedMarker, screens.AssumedTierLabel,
+	assertNotContains(t, rowFor(t, view, "reviewer"), screens.UnpricedMarker, screens.AssumedTierLabel(nil),
 		screens.MissingUsageLabel, screens.OpenLabel)
 }
 

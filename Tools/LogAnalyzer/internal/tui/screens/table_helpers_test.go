@@ -182,3 +182,21 @@ func walkSorts(t *testing.T, s screens.Screen, width, height int, ascending map[
 	}
 	return seen
 }
+
+// rowForName returns the line holding name, shown intact or as a prefix of at
+// least minPrefix characters followed by an ellipsis; a flex name column may
+// have been shrunk to fit the width.
+func rowForName(t *testing.T, view, name string, minPrefix int) string {
+	t.Helper()
+	if line := lineWith(view, name); line != "" {
+		return line
+	}
+	runes := []rune(name)
+	for k := len(runes) - 1; k >= minPrefix; k-- {
+		if line := lineWith(view, string(runes[:k])+"…"); line != "" {
+			return line
+		}
+	}
+	t.Fatalf("no line shows %q intact or ellipsis-truncated (at least %d characters)\n%s", name, minPrefix, view)
+	return ""
+}

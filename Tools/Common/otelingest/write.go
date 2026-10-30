@@ -2,16 +2,19 @@ package otelingest
 
 import (
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"mosaic-common/logappend"
 )
 
 const (
 	// recordSchemaVersion is the highest MOSAIC log schema version whose fields this package implements.
-	recordSchemaVersion = "1.4.0"
+	recordSchemaVersion = "1.6.0"
 	unattributedStream  = "00_unattributed_events.jsonl"
+	// timestampLayout is the envelope timestamp format: UTC, milliseconds.
+	timestampLayout = "2006-01-02T15:04:05.000Z"
 )
 
 // usageRecord is the usage_record event written for one call.
@@ -30,6 +33,8 @@ type usageRecord struct {
 	Provider        string      `json:"provider"`
 	Effort          string      `json:"effort,omitempty"`
 	TokenUsage      *tokenUsage `json:"token_usage,omitempty"`
+	CallLabel       string      `json:"call_label,omitempty"`
+	CallKind        string      `json:"call_kind,omitempty"`
 }
 
 // writer appends records to the streams of one run.
@@ -46,7 +51,7 @@ func (w *writer) write(c *call, dest string) error {
 	rec := usageRecord{
 		SchemaVersion: recordSchemaVersion,
 		Event:         "usage_record",
-		Timestamp:     w.now.UTC().Format("2006-01-02T15:04:05.000Z"),
+		Timestamp:     c.Timestamp,
 		Harness:       w.harness(c, session),
 		SessionID:     session,
 		RunID:         w.runID,
@@ -57,6 +62,8 @@ func (w *writer) write(c *call, dest string) error {
 		Provider:      providerName,
 		Effort:        c.Effort,
 		TokenUsage:    c.TokenUsage,
+		CallLabel:     c.CallLabel,
+		CallKind:      c.CallKind,
 	}
 	path := filepath.Join(w.runDir, unattributedStream)
 	switch {
@@ -87,18 +94,8 @@ func (w *writer) harness(c *call, session string) string {
 	return w.keys.firstHarness
 }
 
-// appendLine appends one whole line with a single write.
+// appendLine appends one whole line under the append lock of the log format. A lock timeout
+// is returned as logappend.ErrLockTimeout, with nothing written.
 func appendLine(path string, line []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
-	}
-	if _, err := f.Write(line); err != nil {
-		f.Close()
-		return err
-	}
-	return f.Close()
+	return logappend.Append(path, line)
 }

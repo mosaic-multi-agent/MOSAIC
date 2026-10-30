@@ -76,7 +76,7 @@ func TestTools_ShowsMinMaxAndAverageDurations(t *testing.T) {
 func TestTools_UnpairedCallsAreVisibleAndCarryNoDuration(t *testing.T) {
 	view := toolsView(t, toolsRun(), tableW, tallH)
 
-	unnamed := rowFor(t, view, screens.UnnamedToolLabel)
+	unnamed := rowFor(t, view, screens.StartMissingLabel)
 	assertContains(t, unnamed, screens.UnpairedLabel, screens.AbsentMarker)
 	assertFields(t, unnamed, "3", "2")
 	bash := rowFor(t, view, "Bash")
@@ -122,7 +122,7 @@ func TestTools_ShowsNoTokenOrMoneyAttribution(t *testing.T) {
 	assertContains(t, view, "Read")
 	// The frame header carries the run's total cost; the body itself shows none.
 	body := strings.Join(overlayLines(view), "\n")
-	assertNotContains(t, body, "$", screens.UnpricedMarker, "(partial)", screens.AssumedTierLabel)
+	assertNotContains(t, body, "$", screens.UnpricedMarker, "(partial)", screens.AssumedTierLabel(nil))
 	assertNotContains(t, strings.ToLower(body), "cost", "token")
 }
 

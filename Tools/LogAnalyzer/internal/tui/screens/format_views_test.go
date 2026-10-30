@@ -28,9 +28,9 @@ func TestFormatRatio(t *testing.T) {
 }
 
 func TestFormatAssumedTier(t *testing.T) {
-	if got := screens.FormatAssumedTier(0); got != "" {
+	if got := screens.FormatAssumedTier(0, nil); got != "" {
 		t.Errorf("FormatAssumedTier(0) = %q, want empty", got)
 	}
-	got := screens.FormatAssumedTier(12345)
-	assertContains(t, got, screens.AssumedTierLabel, "12,345")
+	got := screens.FormatAssumedTier(12345, nil)
+	assertContains(t, got, screens.AssumedTierLabel(nil), "12,345")
 }

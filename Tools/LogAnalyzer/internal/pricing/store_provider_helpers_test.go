@@ -22,7 +22,7 @@ type tableAndFindings struct {
 // nanodollars (the input rate in USD per million tokens times 1e9). A request
 // of 1M input tokens is above any long-context threshold used in these tests.
 func probeInputNanos(table domain.PricingTable, provider domain.ProviderID, model domain.ModelID) (priced bool, nanos int64) {
-	ic := cost.PriceInvocation(domain.InvocationUsage{
+	ic := priceAtDefaultTier(domain.InvocationUsage{
 		Model:    model,
 		Provider: provider,
 		Usage:    domain.TokenUsage{Input: domain.Tokens(1_000_000)},
@@ -56,7 +56,7 @@ func loadFrom(t *testing.T, content string) (tableAndFindings, error) {
 	t.Helper()
 	root, path := makeRootWithConfigDir(t)
 	writePricingYAML(t, path, content)
-	table, findings, err := pricing.NewStore(root).Load(context.Background())
+	table, findings, err := pricing.NewStore(t.TempDir(), root).Load(context.Background())
 	return tableAndFindings{table: table, findings: findings}, err
 }
 
@@ -72,7 +72,7 @@ func withInput(t *testing.T, provider domain.ProviderID, model domain.ModelID, i
 // putAndReload puts the entry and loads the file again.
 func putAndReload(t *testing.T, store *pricing.Store, entry domain.ModelPricing) tableAndFindings {
 	t.Helper()
-	if err := store.Put(context.Background(), entry); err != nil {
+	if _, err := store.Put(context.Background(), domain.LevelProject, entry); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 	table, findings, err := store.Load(context.Background())
@@ -117,3 +117,8 @@ providers:
         cache_write_1h: "18.00"
         output: "45.00"
 `
+
+// priceAtDefaultTier prices inv with the built-in default cache-write tier.
+func priceAtDefaultTier(inv domain.InvocationUsage, table domain.PricingTable) cost.InvocationCost {
+	return cost.PriceInvocation(inv, table, domain.DefaultCacheWriteTier)
+}

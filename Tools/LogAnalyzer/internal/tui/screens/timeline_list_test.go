@@ -228,7 +228,7 @@ func TestTimelineList_ShowsNoMoneyOrPricingMarkers(t *testing.T) {
 
 	assertContains(t, view, "alpha#2")
 	body := strings.Join(overlayLines(view), "\n")
-	assertNotContains(t, body, "$", screens.UnpricedMarker, "(partial)", screens.AssumedTierLabel)
+	assertNotContains(t, body, "$", screens.UnpricedMarker, "(partial)", screens.AssumedTierLabel(nil))
 }
 
 func TestTimelineList_RunWithoutInvocationsStillRenders(t *testing.T) {

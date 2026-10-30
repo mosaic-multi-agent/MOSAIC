@@ -37,6 +37,7 @@ func Price(agg domain.Aggregate, table domain.PricingTable, settings domain.Anal
 	allRunMoneys := make([]domain.CategoryMoney, 0, len(agg.Runs))
 	var allRunTokens domain.TokenUsage
 	var allRunsAssumed int64
+	var allRunsTiers [][]domain.CacheWriteTier
 	allUnpricedModels := make(map[domain.PricingKey]bool)
 	var findings []domain.Finding
 
@@ -47,6 +48,7 @@ func Price(agg domain.Aggregate, table domain.PricingTable, settings domain.Anal
 		allRunMoneys = append(allRunMoneys, rr.Totals.Money)
 		allRunTokens = allRunTokens.Add(run.Totals())
 		allRunsAssumed += rr.Totals.AssumedTierCacheWrite
+		allRunsTiers = append(allRunsTiers, rr.Totals.AssumedTiers)
 		for _, m := range rr.UnpricedModels {
 			allUnpricedModels[m] = true
 		}
@@ -62,6 +64,7 @@ func Price(agg domain.Aggregate, table domain.PricingTable, settings domain.Anal
 		Money:  allRunsMoney,
 
 		AssumedTierCacheWrite: allRunsAssumed,
+		AssumedTiers:          domain.MergeCacheWriteTiers(allRunsTiers...),
 	}
 
 	var unattribReport *domain.RunReport
@@ -73,15 +76,17 @@ func Price(agg domain.Aggregate, table domain.PricingTable, settings domain.Anal
 		}
 	}
 
+	unpriced := domain.SortedPricingKeys(allUnpricedModels)
 	return domain.Report{
-		Source:         src,
-		AllRuns:        allRuns,
-		Runs:           runReports,
-		Unattributable: unattribReport,
-		UnpricedModels: domain.SortedPricingKeys(allUnpricedModels),
-		AcrossRuns:     buildAcrossRuns(runReports),
-		Quality:        domain.NewQualitySummary(nil),
-		Currency:       domain.Currency,
+		Source:          src,
+		AllRuns:         allRuns,
+		Runs:            runReports,
+		Unattributable:  unattribReport,
+		UnpricedModels:  unpriced,
+		UnpricedReasons: unpricedReasons(unpriced, table),
+		AcrossRuns:      buildAcrossRuns(runReports),
+		Quality:         domain.NewQualitySummary(nil),
+		Currency:        table.Currency(),
 	}, findings
 }
 
@@ -102,12 +107,12 @@ func Analyze(in Input, table domain.PricingTable, settings domain.AnalysisSettin
 }
 
 // priceActorAggregate converts one actor's aggregate into a priced ActorReport.
-func priceActorAggregate(actor domain.ActorAggregate, table domain.PricingTable) domain.ActorReport {
+func priceActorAggregate(actor domain.ActorAggregate, table domain.PricingTable, settings domain.AnalysisSettings) domain.ActorReport {
 	// Entries without any token count are missing-usage markers, not requests.
 	usages := withTokens(actor.Invocations)
 	costs := make([]cost.InvocationCost, len(usages))
 	for i, inv := range usages {
-		costs[i] = cost.PriceInvocation(inv, table)
+		costs[i] = priceUsage(inv, table, settings)
 	}
 
 	money := cost.SumCosts(costs...)
@@ -143,6 +148,7 @@ func priceActorAggregate(actor domain.ActorAggregate, table domain.PricingTable)
 			Money:  money,
 
 			AssumedTierCacheWrite: assumed,
+			AssumedTiers:          assumedTiersOf(costs),
 		},
 		Effort: domain.CountEffort(usages...),
 	}
@@ -150,16 +156,16 @@ func priceActorAggregate(actor domain.ActorAggregate, table domain.PricingTable)
 
 // priceRunAggregate converts one RunAggregate into a priced RunReport.
 func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable, settings domain.AnalysisSettings) domain.RunReport {
-	orchReport := priceActorAggregate(run.Orchestrator, table)
+	orchReport := priceActorAggregate(run.Orchestrator, table, settings)
 
 	agentReports := make([]domain.ActorReport, len(run.Agents))
 	for i, agent := range run.Agents {
-		agentReports[i] = priceActorAggregate(agent, table)
+		agentReports[i] = priceActorAggregate(agent, table, settings)
 	}
 
 	var unattrReport *domain.ActorReport
 	if run.Unattributed != nil {
-		r := priceActorAggregate(*run.Unattributed, table)
+		r := priceActorAggregate(*run.Unattributed, table, settings)
 		unattrReport = &r
 	}
 
@@ -171,13 +177,16 @@ func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable, setti
 	}
 
 	runAssumed := orchReport.Totals.AssumedTierCacheWrite
+	runTiers := [][]domain.CacheWriteTier{orchReport.Totals.AssumedTiers}
 	if unattrReport != nil {
 		allMoneys = append(allMoneys, unattrReport.Totals.Money)
 		runAssumed += unattrReport.Totals.AssumedTierCacheWrite
+		runTiers = append(runTiers, unattrReport.Totals.AssumedTiers)
 	}
 	runMoney := sumCategoryMoneys(allMoneys...)
 	for _, ar := range agentReports {
 		runAssumed += ar.Totals.AssumedTierCacheWrite
+		runTiers = append(runTiers, ar.Totals.AssumedTiers)
 	}
 
 	// Collect run-level unpriced models from all actors.
@@ -205,6 +214,7 @@ func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable, setti
 			Money:  runMoney,
 
 			AssumedTierCacheWrite: runAssumed,
+			AssumedTiers:          domain.MergeCacheWriteTiers(runTiers...),
 		},
 		Orchestrator:   orchReport,
 		Agents:         agentReports,
@@ -213,20 +223,20 @@ func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable, setti
 	}
 
 	rr.Context = buildRunContext(run, table, settings)
-	dispatches := buildDispatches(run.Activity.Invocations, table)
+	dispatches := buildDispatches(run.Activity.Invocations, table, settings)
 	for i := range dispatches {
 		if ctx, ok := rr.Context.Find(dispatches[i].Invocation.Actor.Instance); ok {
 			dispatches[i].PeakContext = ctx.Peak
 		}
 	}
 	markRework(dispatches)
-	attachDispatchCache(dispatches, table)
+	attachDispatchCache(dispatches, table, settings)
 	groups := groupByType(dispatches)
-	rr.Overview = buildOverview(run, rr, dispatches, table)
-	rr.ByAgentType = buildAgentTypeGroups(groups, table)
+	rr.Overview = buildOverview(run, rr, dispatches, table, settings)
+	rr.ByAgentType = buildAgentTypeGroups(groups, table, settings)
 	rr.Rework = buildReworkFigures(dispatches)
-	rr.Cache = buildRunCache(run, rr.Totals, table)
-	rr.OrchestratorCache = buildOrchestratorCache(run, orchReport.Totals, table)
+	rr.Cache = buildRunCache(run, rr.Totals, table, settings)
+	rr.OrchestratorCache = buildOrchestratorCache(run, orchReport.Totals, table, settings)
 	rr.ByStatus = buildStatusBreakdown(dispatches, groups)
 	rr.Tools = buildToolsBreakdown(run, groups)
 	rr.Timeline = buildTimeline(run)

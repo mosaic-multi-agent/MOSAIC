@@ -10,6 +10,7 @@ export const DEFAULT_SCHEMA_VERSION: string = "1.3.0";
 /** Events whose shape follows a newer log format version than the default. */
 export const EVENT_SCHEMA_VERSIONS: Readonly<Record<string, string>> = {
   compaction: "1.5.0",
+  tool_call_end: "1.6.0",
 };
 
 /** Schema version stamped on the named event. */

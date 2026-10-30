@@ -41,3 +41,11 @@ func withPaletteRoles(t tuicommon.Theme) tuicommon.Theme {
 	}
 	return tuicommon.Theme{Styles: styles}
 }
+
+// screenStyles is the screen styles of the model's theme, with the effective
+// currency of its report so every screen shows money in it.
+func (m Model) screenStyles() screens.Styles {
+	st := stylesFromTheme(m.theme)
+	st.Currency = m.report.Currency
+	return st
+}

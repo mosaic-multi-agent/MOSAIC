@@ -70,7 +70,7 @@ func RenderFrame(f Frame, body []string, width, height int, st Styles) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-	header := frameHeader(f, width, st.Theme)
+	header := frameHeader(f, width, st)
 	tabs := frameTabBar(f, width, st.Theme)
 	help := st.Help.Render(frameHelpLine(f, width))
 	if height < FrameChromeLines {
@@ -127,20 +127,20 @@ type headerBadge struct {
 }
 
 // frameHeader renders the run label followed by the summary badges that fit.
-func frameHeader(f Frame, width int, theme tuicommon.Theme) string {
-	return badgeHeader(f.Run.Run.Label(), headerBadges(f), width, theme)
+func frameHeader(f Frame, width int, st Styles) string {
+	return badgeHeader(f.Run.Run.Label(), headerBadges(f, st.Currency), width, st.Theme)
 }
 
 // headerBadges lists the header badges in display order: the in-progress marker,
 // total cost, run duration, invocation count and, when present, the findings and
 // the active sort of a table view.
-func headerBadges(f Frame) []headerBadge {
+func headerBadges(f Frame, cur domain.CurrencyCode) []headerBadge {
 	var out []headerBadge
 	if f.Run.Provisional {
 		out = append(out, headerBadge{ProvisionalLabel, tuicommon.RoleSignalWarning})
 	}
 	money := f.Run.Totals.Money
-	out = append(out, headerBadge{FormatTotal(money), MoneyRole(money.Total, money.Complete)})
+	out = append(out, headerBadge{FormatTotal(cur, money), MoneyRole(money.Total, money.Complete)})
 
 	tl := f.Run.Timeline
 	durationRole := tuicommon.RoleDataTime
@@ -177,38 +177,11 @@ const helpHintText = KeyHelp + " help"
 
 // shortHelpText joins a scroll hint, a screen's own keys and the help hint.
 func shortHelpText(hint string, keys []tuicommon.HelpEntry) string {
-	return joinHelp(leadHelp(hint, keys), helpHintText)
+	return fitFooter(footerEntries(hint, keys), true, 1<<30)
 }
 
-func leadHelp(hint string, keys []tuicommon.HelpEntry) string {
-	var parts []string
-	if hint != "" {
-		parts = append(parts, hint)
-	}
-	for _, k := range keys {
-		parts = append(parts, k.Key+" "+k.Desc)
-	}
-	return strings.Join(parts, "  ")
-}
-
-func joinHelp(lead, hint string) string {
-	if lead == "" {
-		return hint
-	}
-	return lead + "  " + hint
-}
-
-// frameHelpLine fits the short help into width; when it is too long the keys
-// are cut and the help hint stays.
+// frameHelpLine fits the short help into width, dropping whole entries by
+// priority; the help hint stays.
 func frameHelpLine(f Frame, width int) string {
-	lead := leadHelp(f.Hint, f.Keys)
-	line := joinHelp(lead, helpHintText)
-	if textwidth.Of(line) <= width {
-		return line
-	}
-	room := width - textwidth.Of(helpHintText) - 2
-	if room <= 0 {
-		return textwidth.Truncate(helpHintText, width)
-	}
-	return textwidth.Truncate(lead, room) + "  " + helpHintText
+	return fitFooter(footerEntries(f.Hint, f.Keys), true, width)
 }

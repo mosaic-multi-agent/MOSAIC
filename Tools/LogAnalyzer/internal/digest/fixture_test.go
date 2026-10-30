@@ -44,15 +44,15 @@ func perRecordUsage() []domain.InvocationUsage {
 	return []domain.InvocationUsage{
 		{
 			Model: "claude-opus-4", Provider: "anthropic", Effort: "high", Harness: domain.HarnessClaudeCode,
-			Usage: fullTokens(), RecordID: "rec-1", At: at(10), ServiceTier: "standard",
+			Usage: fullTokens(), Kind: domain.CallMain, RecordID: "rec-1", At: at(10), ServiceTier: "standard",
 		},
 		{
 			Model: "claude-opus-4", Harness: domain.HarnessClaudeCode,
-			Usage:    domain.TokenUsage{Input: domain.Tokens(7), Output: domain.Tokens(3), Reasoning: domain.Tokens(0)},
-			RecordID: "rec-2", At: at(11),
+			Usage: domain.TokenUsage{Input: domain.Tokens(7), Output: domain.Tokens(3), Reasoning: domain.Tokens(0)},
+			Kind:  domain.CallMain, RecordID: "rec-2", At: at(11),
 		},
-		{Model: "gpt-x", Provider: "openai", Harness: "x-unknown", Usage: zeroTokens(), RecordID: "rec-3", At: at(12)},
-		{Harness: domain.HarnessOpenCode, RecordID: "rec-4", At: at(13)}, // missing-usage marker
+		{Model: "gpt-x", Provider: "openai", Harness: "x-unknown", Usage: zeroTokens(), Kind: domain.CallMain, RecordID: "rec-3", At: at(12)},
+		{Harness: domain.HarnessOpenCode, Kind: domain.CallMain, RecordID: "rec-4", At: at(13)}, // missing-usage marker
 	}
 }
 
@@ -60,10 +60,10 @@ func perRecordUsage() []domain.InvocationUsage {
 func legacyUsage() []domain.InvocationUsage {
 	return []domain.InvocationUsage{
 		{
-			Model: "claude-sonnet-4", Harness: domain.HarnessClaudeCode, At: at(20),
+			Model: "claude-sonnet-4", Harness: domain.HarnessClaudeCode, Kind: domain.CallMain, At: at(20),
 			Usage: domain.TokenUsage{Input: domain.Tokens(11), CacheRead: domain.Tokens(0), Output: domain.Tokens(5)},
 		},
-		{Model: "claude-sonnet-4", Harness: domain.HarnessClaudeCode}, // legacy, no tokens, no time
+		{Model: "claude-sonnet-4", Harness: domain.HarnessClaudeCode, Kind: domain.CallMain}, // legacy, no tokens, no time
 	}
 }
 

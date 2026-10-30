@@ -106,7 +106,7 @@ class TestSchemaStamp(CompactionCase):
 
     def test_build_event_keeps_other_events_at_1_3_0(self):
         for name in ("session_start", "run_start", "turn", "tool_call_start",
-                     "tool_call_end", "notification", "usage_record",
+                     "notification", "usage_record",
                      "invocation_start", "invocation_end"):
             with self.subTest(event=name):
                 event = core.build_event(name, self._ctx("SessionStart"))

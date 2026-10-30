@@ -43,7 +43,7 @@ func TestPerRunViews_ShowHeaderTabBarAndShortHelp(t *testing.T) {
 			}
 			help := lines[len(lines)-1]
 			assertContains(t, help, "? help")
-			assertNotContains(t, strings.ToLower(help), "export")
+			assertContains(t, help, "e export")
 		})
 	}
 }

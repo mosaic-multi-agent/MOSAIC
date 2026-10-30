@@ -54,10 +54,10 @@ func TestFormatTokens_AbsentVsPresentZero(t *testing.T) {
 // TestFormatMoney_NoDataVsKnownZeroVsUnpriced verifies the three MoneyValue
 // states render distinctly and correctly.
 func TestFormatMoney_NoDataVsKnownZeroVsUnpriced(t *testing.T) {
-	noData := FormatMoney(domain.NoMoneyData())
-	unpriced := FormatMoney(domain.UnpricedMoney())
-	knownZero := FormatMoney(domain.KnownMoney(domain.Money(0)))
-	knownOne := FormatMoney(domain.KnownMoney(domain.Money(1_000_000_000))) // $1.00
+	noData := FormatMoney(domain.CurrencyUSD, domain.NoMoneyData())
+	unpriced := FormatMoney(domain.CurrencyUSD, domain.UnpricedMoney())
+	knownZero := FormatMoney(domain.CurrencyUSD, domain.KnownMoney(domain.Money(0)))
+	knownOne := FormatMoney(domain.CurrencyUSD, domain.KnownMoney(domain.Money(1_000_000_000))) // $1.00
 
 	// No-data must not equal "$0.00".
 	if noData == "$0.00" {
@@ -109,8 +109,8 @@ func TestFormatTotal_PartialIndicator(t *testing.T) {
 		Complete: false,
 	}
 
-	completeStr := FormatTotal(complete)
-	partialStr := FormatTotal(partial)
+	completeStr := FormatTotal(domain.CurrencyUSD, complete)
+	partialStr := FormatTotal(domain.CurrencyUSD, partial)
 
 	if completeStr == partialStr {
 		t.Errorf("complete %q == partial %q — must be distinguishable", completeStr, partialStr)
@@ -615,7 +615,7 @@ func TestFormatTotalsLine_UsesFullWordCategoryLabels(t *testing.T) {
 			Complete: true,
 		},
 	}
-	line := screens.FormatTotalsLine(totals)
+	line := screens.FormatTotalsLine(domain.CurrencyUSD, totals)
 
 	// All four full-word labels (with colon separator) must appear.
 	for _, want := range []string{"input:", "cache read:", "cache write:", "output:"} {
@@ -637,7 +637,7 @@ func TestFormatTotalsLine_DoesNotUseAbbreviatedLabels(t *testing.T) {
 		},
 		Money: domain.CategoryMoney{Total: domain.NoMoneyData()},
 	}
-	line := screens.FormatTotalsLine(totals)
+	line := screens.FormatTotalsLine(domain.CurrencyUSD, totals)
 
 	for _, old := range []string{"in:", "cr:", "cw:", "out:"} {
 		if strings.Contains(line, old) {
@@ -658,7 +658,7 @@ func TestFormatTotalsLine_AbsentCategoryRendersAbsentMarker(t *testing.T) {
 		},
 		Money: domain.CategoryMoney{Total: domain.NoMoneyData()},
 	}
-	line := screens.FormatTotalsLine(totals)
+	line := screens.FormatTotalsLine(domain.CurrencyUSD, totals)
 
 	if !strings.Contains(line, screens.AbsentMarker) {
 		t.Errorf("FormatTotalsLine did not render AbsentMarker %q for absent categories; got %q",
@@ -681,7 +681,7 @@ func TestFormatTotalsLine_PresentZeroRendersAsZero(t *testing.T) {
 		},
 		Money: domain.CategoryMoney{Total: domain.UnpricedMoney()},
 	}
-	line := screens.FormatTotalsLine(totals)
+	line := screens.FormatTotalsLine(domain.CurrencyUSD, totals)
 
 	if !strings.Contains(line, "0") {
 		t.Errorf("FormatTotalsLine did not render '0' for present-zero categories; got %q", line)
@@ -700,7 +700,7 @@ func TestFormatTotalsLine_IsSingleLine(t *testing.T) {
 		Tokens: domain.TokenUsage{Input: domain.Tokens(1)},
 		Money:  domain.CategoryMoney{Total: domain.NoMoneyData()},
 	}
-	line := screens.FormatTotalsLine(totals)
+	line := screens.FormatTotalsLine(domain.CurrencyUSD, totals)
 
 	if strings.Contains(line, "\n") {
 		t.Errorf("FormatTotalsLine returned a multi-line string; got %q", line)
@@ -714,7 +714,7 @@ func TestFormatTotalsLine_UnpricedMoneyPreserved(t *testing.T) {
 		Tokens: domain.TokenUsage{Input: domain.Tokens(1)},
 		Money:  domain.CategoryMoney{Total: domain.UnpricedMoney()},
 	}
-	line := screens.FormatTotalsLine(totals)
+	line := screens.FormatTotalsLine(domain.CurrencyUSD, totals)
 
 	if !strings.Contains(line, screens.UnpricedMarker) {
 		t.Errorf("FormatTotalsLine with UnpricedMoney does not contain UnpricedMarker %q; got %q",
@@ -732,7 +732,7 @@ func TestFormatTotalsLine_PartialMoneyPreserved(t *testing.T) {
 			Complete: false,
 		},
 	}
-	line := screens.FormatTotalsLine(totals)
+	line := screens.FormatTotalsLine(domain.CurrencyUSD, totals)
 
 	if !strings.Contains(line, "partial") {
 		t.Errorf("FormatTotalsLine with incomplete money does not contain 'partial'; got %q", line)

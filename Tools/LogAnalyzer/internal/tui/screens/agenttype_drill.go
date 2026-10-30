@@ -8,7 +8,7 @@ func (s *AgentTypesScreen) viewDrill() string {
 	g := s.drilledGroup()
 	entries := dispatchEntries([]domain.AgentTypeGroup{g})
 	order := s.drillSort.Active()
-	rows := dispatchTableRows(s.run, false, entries, dispatchOrder(entries, order), s.styles.Theme)
+	rows := dispatchTableRows(s.styles.Currency, s.run, false, entries, dispatchOrder(entries, order), s.styles.Theme)
 
 	head := []string{s.styles.Subtitle.Render("Dispatches of " + typeLabel(g.AgentType))}
 	if len(rows) == 0 {

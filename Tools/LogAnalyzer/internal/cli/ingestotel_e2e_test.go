@@ -141,7 +141,7 @@ func (e *ingestE2E) service(t *testing.T) *app.Service {
 	adapter := otelusage.New()
 	return app.New(app.Deps{
 		Source: logscan.NewScanner(), Reader: logread.NewReader(),
-		Pricing: pricing.NewStore(t.TempDir()), Clock: newFakeClock(),
+		Pricing: pricing.NewStore(t.TempDir(), t.TempDir()), Clock: newFakeClock(),
 		Interaction: cli.NewInteraction(&bytes.Buffer{}, cli.Answers{}),
 		WorkDir:     t.TempDir(), Ingester: adapter, IngestProbe: adapter,
 	})

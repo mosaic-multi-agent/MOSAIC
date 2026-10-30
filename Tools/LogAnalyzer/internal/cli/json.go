@@ -145,7 +145,7 @@ func EncodeRunTotal(w io.Writer, t app.RunTotal) error {
 		SchemaVersion:      "1",
 		RunID:              t.RunID,
 		Provisional:        t.Provisional,
-		Currency:           domain.Currency,
+		Currency:           string(jsonCurrency(t.Currency)),
 		Tokens:             encodeTokenUsage(t.Tokens),
 		Money:              encodeMoneyValue(t.Money),
 		Complete:           t.Complete,
@@ -189,16 +189,20 @@ func encodeCategoryMoney(cm domain.CategoryMoney) jsonCategoryMoney {
 type jsonTotals struct {
 	Tokens jsonReportTokenUsage `json:"tokens"`
 	Money  jsonCategoryMoney    `json:"money"`
-	// AssumedTierCacheWrite counts cache-write tokens priced at the assumed 5m
+	// AssumedTierCacheWrite counts cache-write tokens priced at the assumed
 	// tier; absent when zero.
 	AssumedTierCacheWrite int64 `json:"assumed_tier_cache_write_tokens,omitempty"`
+	// AssumedCacheWriteTiers names the tiers behind that count, in log-format
+	// order; absent when no tier was assumed.
+	AssumedCacheWriteTiers []string `json:"assumed_cache_write_tiers,omitempty"`
 }
 
 func encodeTotals(t domain.Totals) jsonTotals {
 	return jsonTotals{
-		Tokens:                encodeReportTokenUsage(t.Tokens),
-		Money:                 encodeCategoryMoney(t.Money),
-		AssumedTierCacheWrite: t.AssumedTierCacheWrite,
+		Tokens:                 encodeReportTokenUsage(t.Tokens),
+		Money:                  encodeCategoryMoney(t.Money),
+		AssumedTierCacheWrite:  t.AssumedTierCacheWrite,
+		AssumedCacheWriteTiers: tierNames(t.AssumedTiers),
 	}
 }
 
@@ -396,15 +400,16 @@ func encodeSource(s domain.Source) jsonSource {
 
 // jsonReportWire is the full report JSON wire shape.
 type jsonReportWire struct {
-	SchemaVersion  string          `json:"schema_version"`
-	Currency       string          `json:"currency"`
-	Source         jsonSource      `json:"source"`
-	AllRuns        jsonTotals      `json:"all_runs"`
-	Runs           []jsonRunReport `json:"runs"`
-	Unattributable *jsonRunReport  `json:"unattributable,omitempty"`
-	UnpricedModels []string        `json:"unpriced_models"`
-	AcrossRuns     jsonAcrossRuns  `json:"across_runs"`
-	Quality        jsonQuality     `json:"quality"`
+	SchemaVersion   string               `json:"schema_version"`
+	Currency        string               `json:"currency"`
+	Source          jsonSource           `json:"source"`
+	AllRuns         jsonTotals           `json:"all_runs"`
+	Runs            []jsonRunReport      `json:"runs"`
+	Unattributable  *jsonRunReport       `json:"unattributable,omitempty"`
+	UnpricedModels  []string             `json:"unpriced_models"`
+	AcrossRuns      jsonAcrossRuns       `json:"across_runs"`
+	Quality         jsonQuality          `json:"quality"`
+	UnpricedReasons []jsonUnpricedReason `json:"unpriced_reasons,omitempty"`
 }
 
 // EncodeReport writes the full report JSON to w, preserving absent-vs-zero
@@ -429,15 +434,25 @@ func EncodeReport(w io.Writer, r domain.Report) error {
 	unpriced := encodeUnpricedModels(r.UnpricedModels)
 
 	wire := jsonReportWire{
-		SchemaVersion:  "1",
-		Currency:       r.Currency,
-		Source:         encodeSource(r.Source),
-		AllRuns:        encodeTotals(r.AllRuns),
-		Runs:           runs,
-		Unattributable: unattributable,
-		UnpricedModels: unpriced,
-		AcrossRuns:     encodeAcrossRuns(r.AcrossRuns),
-		Quality:        encodeQuality(r.Quality),
+		SchemaVersion:   "1",
+		Currency:        string(jsonCurrency(r.Currency)),
+		Source:          encodeSource(r.Source),
+		AllRuns:         encodeTotals(r.AllRuns),
+		Runs:            runs,
+		Unattributable:  unattributable,
+		UnpricedModels:  unpriced,
+		AcrossRuns:      encodeAcrossRuns(r.AcrossRuns),
+		Quality:         encodeQuality(r.Quality),
+		UnpricedReasons: encodeUnpricedReasons(r.UnpricedReasons),
 	}
 	return json.NewEncoder(w).Encode(wire)
+}
+
+// tierNames renders cache-write tiers as their log-format names.
+func tierNames(tiers []domain.CacheWriteTier) []string {
+	var out []string
+	for _, t := range tiers {
+		out = append(out, string(t))
+	}
+	return out
 }

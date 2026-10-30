@@ -31,7 +31,7 @@ func (s *TimelineScreen) detailStrip(e domain.TimelineEntry) []string {
 	d, hasDispatch := s.dispatchOf(inv.Actor.Instance)
 	cost := mutedCell(AbsentMarker)
 	if hasDispatch {
-		cost = moneyTotalCell(d.Totals.Money)
+		cost = moneyTotalCell(s.styles.Currency, d.Totals.Money)
 	}
 	ctx, hasContext := s.run.Context.Find(inv.Actor.Instance)
 	peak, final := domain.ContextFigure{}, domain.ContextFigure{}

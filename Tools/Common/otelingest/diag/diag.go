@@ -12,6 +12,7 @@ const (
 	KindConversationNotTied Kind = "conversation_not_tied" // Counts: usage_spans; IDs: run session IDs
 	KindPendingFinalized    Kind = "pending_finalized"     // Counts: records; final ingests only, when > 0
 	KindBudgetExhausted     Kind = "budget_exhausted"      // Python only; Counts: remaining_bytes
+	KindAppendTimedOut      Kind = "append_timed_out"      // Counts: lines (lines not written because the append lock timed out)
 	KindInternalError       Kind = "internal_error"
 )
 

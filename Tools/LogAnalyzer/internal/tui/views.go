@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"mosaic-log-analyzer/internal/app"
+	"mosaic-log-analyzer/internal/domain"
 	"mosaic-log-analyzer/internal/tui/screens"
 )
 
@@ -26,7 +27,7 @@ func (m Model) openRunView(runID string, id screens.ScreenID) Model {
 	if !ok {
 		return m
 	}
-	style := stylesFromTheme(m.theme)
+	style := m.screenStyles()
 	switch id {
 	case screens.ScreenOverview:
 		m.runView = screens.NewOverviewScreen(run, m.width, m.height, style)
@@ -46,6 +47,9 @@ func (m Model) openRunView(runID string, id screens.ScreenID) Model {
 	}
 	if q, ok := m.runView.(interface{ SetRunQuality(screens.RunQuality) }); ok {
 		q.SetRunQuality(screens.RunQualityOf(m.report.Quality, run.Run))
+	}
+	if r, ok := m.runView.(interface{ SetUnpricedReasons([]domain.UnpricedReason) }); ok {
+		r.SetUnpricedReasons(m.report.UnpricedReasons)
 	}
 	m.viewRunID = runID
 	m.screen = screenName(id)
@@ -85,7 +89,7 @@ func (m Model) viewRunView() string {
 
 // openAcrossRuns shows the across-runs view built from the model's current report.
 func (m Model) openAcrossRuns() Model {
-	m.runView = screens.NewAcrossRunsScreen(m.report, m.width, m.height, stylesFromTheme(m.theme))
+	m.runView = screens.NewAcrossRunsScreen(m.report, m.width, m.height, m.screenStyles())
 	m.screen = screenAcrossRuns
 	return m
 }
@@ -97,7 +101,7 @@ func (m Model) openCompare(idA, idB string) Model {
 	if !ok {
 		return m
 	}
-	m.runView = screens.NewCompareScreen(cmp, m.width, m.height, stylesFromTheme(m.theme))
+	m.runView = screens.NewCompareScreen(cmp, m.width, m.height, m.screenStyles())
 	m.screen = screenCompare
 	return m
 }

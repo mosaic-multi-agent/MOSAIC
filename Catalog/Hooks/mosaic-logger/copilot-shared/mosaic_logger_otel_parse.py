@@ -4,10 +4,12 @@ This module mirrors Tools/Common/otelingest/ (span.go, convert.go and the call s
 Standard library only; deployed flat next to the adapter modules.
 """
 
+import datetime
 import json
+import re
 from collections import namedtuple
 
-from mosaic_logger_otel_contract import PROVIDER_NAME
+from mosaic_logger_otel_contract import PROVIDER_NAME, format_time
 
 USAGE_MARKER = b'"gen_ai.operation.name"'
 DIALECT_CLI = "cli"
@@ -15,14 +17,15 @@ DIALECT_VSCODE = "vscode"
 KIND_INVOKE_AGENT = "invoke_agent"
 KIND_EXECUTE_TOOL = "execute_tool"
 SPAWN_TOOL_NAMES = {"task", "runSubagent", "execution_subagent"}
-INT64_MIN = -(2 ** 63)
+STATUS_CODE_ERROR = 2
+INT64_MIN =-(2 ** 63)
 INT64_MAX = 2 ** 63 - 1
 TOKEN_FIELDS = ("input_tokens", "output_tokens", "cache_read_tokens", "cache_creation_tokens",
                 "reasoning_tokens")
 
 _NOT_AN_INTEGER = object()
 
-ParsedLine = namedtuple("ParsedLine", "malformed link_id link call")
+ParsedLine = namedtuple("ParsedLine", "malformed link_id link call tool", defaults=(None,))
 _NOTHING = ParsedLine(False, "", None, None)
 _MALFORMED = ParsedLine(True, "", None, None)
 
@@ -41,6 +44,9 @@ class Call:
         self.parent_chat_session_id = ""
         self.model = ""
         self.effort = ""
+        self.timestamp = ""
+        self.call_label = ""
+        self.call_kind = ""
 
     def to_pending(self):
         """The pending-span shape stored in the state."""
@@ -51,6 +57,9 @@ class Call:
         if self.effort:
             record["effort"] = self.effort
         record["token_usage"] = self.token_usage
+        for key in ("timestamp", "call_label", "call_kind"):
+            if getattr(self, key):
+                record[key] = getattr(self, key)
         out = {"record": record}
         for key in ("parent_span_id", "conversation_id", "chat_session_id", "parent_chat_session_id"):
             if getattr(self, key):
@@ -107,6 +116,9 @@ def call_from_pending(data):
                 DIALECT_VSCODE if chat_session else DIALECT_CLI, usage)
     call.model = optional_string(record, "model")
     call.effort = optional_string(record, "effort")
+    call.timestamp = optional_string(record, "timestamp")
+    call.call_label = optional_string(record, "call_label")
+    call.call_kind = optional_string(record, "call_kind")
     call.parent_span_id = optional_string(data, "parent_span_id")
     call.conversation_id = optional_string(data, "conversation_id")
     call.chat_session_id = chat_session
@@ -184,6 +196,7 @@ def parse_line(line, offset):
         if call is None:
             return _NOTHING
         call.record_id, call.record_index = span_id, offset
+        call.timestamp = start_timestamp(obj.get("startTime"))
         (call.parent_span_id, call.conversation_id, call.chat_session_id,
          call.parent_chat_session_id) = fields
         return ParsedLine(False, "", None, call)
@@ -191,11 +204,39 @@ def parse_line(line, offset):
         return ParsedLine(False, span_id, make_link(KIND_INVOKE_AGENT, fields), None)
     if operation == KIND_EXECUTE_TOOL:
         name = string_value(attrs.get("gen_ai.tool.name"))
+        tool = failed_tool_of(obj, attrs, dialect)
         if name in SPAWN_TOOL_NAMES:
             link = make_link(KIND_EXECUTE_TOOL, fields,
                              string_value(attrs.get("gen_ai.tool.call.id")), name)
-            return ParsedLine(False, span_id, link, None)
+            return ParsedLine(False, span_id, link, None, tool)
+        return ParsedLine(False, "", None, None, tool)
     return _NOTHING
+
+
+class FailedTool:
+    """A failed execute_tool span with a call id: the facts the end of its tool call is written from."""
+
+    def __init__(self, dialect, call_id, tool_name, message, end_time):
+        self.dialect = dialect
+        self.call_id = call_id
+        self.tool_name = tool_name
+        self.message = message
+        self.end_time = end_time  # formatted span end time; "" when the span has no usable endTime
+
+
+def failed_tool_of(obj, attrs, dialect):
+    """The failed tool call a span describes, or None when the span did not fail or has no call
+    id. Content attributes (arguments, results) are never read."""
+    status = obj.get("status")
+    if not isinstance(status, dict):
+        status = {}
+    if int_value(status.get("code")) != STATUS_CODE_ERROR:
+        return None
+    call_id = string_value(attrs.get("gen_ai.tool.call.id"))
+    if call_id == "":
+        return None
+    return FailedTool(dialect, call_id, string_value(attrs.get("gen_ai.tool.name")),
+                      string_value(status.get("message")), start_timestamp(obj.get("endTime")))
 
 
 def convert_chat(attrs, dialect):
@@ -210,7 +251,48 @@ def convert_chat(attrs, dialect):
         call.effort = string_value(attrs.get("gen_ai.request.reasoning.level"))
     else:
         call.effort = vscode_effort(string_value(attrs.get("copilot_chat.request.options")))
+        call.call_label = string_value(attrs.get("gen_ai.agent.name"))
+        call.call_kind = call_kind_of(call.call_label)
     return call
+
+
+_RETRY_PREFIX = re.compile(r"^retry-[A-Za-z]+-")
+_MAIN_LABELS = ("panel/editAgent", "tool/runSubagent")
+_AUXILIARY_LABELS = ("backgroundTodoAgent", "title", "progressMessages")
+
+
+def call_kind_of(label):
+    """Map a VS Code chat span's purpose name to a call kind ("" when unknown). Leading
+    retry-<letters>- prefixes are ignored; the comparison is case-sensitive."""
+    name = label
+    while True:
+        stripped = _RETRY_PREFIX.sub("", name, count=1)
+        if stripped == name:
+            break
+        name = stripped
+    if name in _MAIN_LABELS or name.startswith("tool/runSubagent-"):
+        return "main"
+    if name.startswith("summarizeConversationHistory"):
+        return "compaction"
+    if name in _AUXILIARY_LABELS or name.startswith("copilotLanguageModelWrapper/"):
+        return "auxiliary"
+    return ""
+
+
+def start_timestamp(value):
+    """A span's startTime ([seconds, nanoseconds], two integers) as a UTC timestamp truncated to
+    milliseconds; "" for any other shape (the caller then uses the ingest moment)."""
+    if not isinstance(value, list) or len(value) != 2:
+        return ""
+    seconds, nanos = int_value(value[0]), int_value(value[1])
+    if seconds is None or nanos is None:
+        return ""
+    try:
+        epoch = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+        moment = epoch + datetime.timedelta(seconds=seconds, microseconds=nanos // 1000)
+    except OverflowError:
+        return ""
+    return format_time(moment)
 
 
 def _first_int(attrs, *keys):

@@ -115,14 +115,14 @@ func (s *TimelineScreen) View(width, height int) string {
 func (s *TimelineScreen) helpKeys() []tuicommon.HelpEntry {
 	if s.list {
 		return []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "scroll"}, {Key: KeySort, Desc: "sort"},
-			{Key: KeyToggleView, Desc: "gantt"}, {Key: "esc", Desc: "back"}}
+			{Key: KeyToggleView, Desc: "gantt"}, exportKeyEntry, {Key: "esc", Desc: "back"}}
 	}
 	group := "group"
 	if s.grouped {
 		group = "order"
 	}
 	return []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: KeyGroup, Desc: group},
-		{Key: KeyToggleView, Desc: "list"}, {Key: "esc", Desc: "back"}}
+		{Key: KeyToggleView, Desc: "list"}, exportKeyEntry, {Key: "esc", Desc: "back"}}
 }
 
 // screenKeys are the overlay entries of the keys this view has of its own.

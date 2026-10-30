@@ -53,5 +53,5 @@ def scan_file(path, start, out_of_time):
             parsed = parse_line(line, offset)
             if parsed.malformed:
                 out.malformed += 1
-            elif parsed.link is not None or parsed.call is not None:
+            elif parsed.link is not None or parsed.call is not None or parsed.tool is not None:
                 out.lines.append(parsed)

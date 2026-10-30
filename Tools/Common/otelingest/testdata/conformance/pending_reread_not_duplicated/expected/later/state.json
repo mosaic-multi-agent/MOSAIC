@@ -18,7 +18,8 @@
         "token_usage": {
           "input_tokens": 300,
           "output_tokens": 30
-        }
+        },
+        "timestamp": "2026-10-28T09:00:00.000Z"
       },
       "parent_span_id": "inv-missing",
       "conversation_id": "cli-session-6"

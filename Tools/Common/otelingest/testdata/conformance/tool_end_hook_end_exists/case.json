@@ -1,0 +1,15 @@
+{
+  "description": "A call that already has a hook-written tool_call_end in the stream that holds its start gets no second end; the hook end is neither replaced nor duplicated.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

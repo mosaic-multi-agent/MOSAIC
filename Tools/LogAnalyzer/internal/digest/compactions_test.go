@@ -225,8 +225,8 @@ func TestRead_OlderDigest_UnattributableBucketIsPairedToo(t *testing.T) {
 }
 
 func TestRead_CurrentVersionDigestWrittenByThisPackage_KeepsTheCountOfTheSourceRun(t *testing.T) {
-	if digest.Version != "1.2.0" {
-		t.Fatalf("digest.Version = %q, want 1.2.0", digest.Version)
+	if digest.Version != "1.4.0" {
+		t.Fatalf("digest.Version = %q, want 1.4.0", digest.Version)
 	}
 	want := compactionRun(
 		// Two stored singles that rule R1 would pair if the digest were treated as legacy.

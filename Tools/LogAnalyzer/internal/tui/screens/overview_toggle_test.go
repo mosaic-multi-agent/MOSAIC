@@ -151,7 +151,7 @@ func TestOverview_WithColourOffEveryMarkerRemainsAsTextInBothVersions(t *testing
 				t.Errorf("colour off must leave no escape sequences: %q", view)
 			}
 			assertContains(t, view, screens.ProvisionalLabel, screens.UnpricedMarker, "(partial)",
-				screens.AssumedTierLabel, screens.MissingUsageLabel, screens.OpenLabel, screens.AbsentMarker)
+				screens.AssumedTierLabel(nil), screens.MissingUsageLabel, screens.OpenLabel, screens.AbsentMarker)
 			assertNotContains(t, view, "$0.00")
 		})
 	}

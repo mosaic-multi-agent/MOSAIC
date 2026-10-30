@@ -74,9 +74,9 @@ func modelOrder(models []domain.ModelFigures, o SortOrder) []int {
 
 // modelCells builds the cells of one model row; runCost is the run total the
 // cost bar is measured against.
-func modelCells(m domain.ModelFigures, runCost domain.MoneyValue, theme tuicommon.Theme) []table.Cell {
+func modelCells(cur domain.CurrencyCode, m domain.ModelFigures, runCost domain.MoneyValue, theme tuicommon.Theme) []table.Cell {
 	total := m.Totals.Money.Total
-	cost := table.Cell{Text: FormatMoney(total), Role: MoneyRole(total, true)}
+	cost := table.Cell{Text: FormatMoney(cur, total), Role: MoneyRole(total, true)}
 	if !m.Priced && total.State != domain.MoneyUnpriced {
 		cost.Text += " " + UnpricedMarker
 		cost.Role = tuicommon.RoleSignalWarning
@@ -98,7 +98,7 @@ func (s *OverviewScreen) modelLines() []string {
 	cols := modelColumns()
 	var rows [][]table.Cell
 	for _, i := range modelOrder(ov.ByModel, o) {
-		rows = append(rows, modelCells(ov.ByModel[i], ov.Totals.Money.Total, st.Theme))
+		rows = append(rows, modelCells(st.Currency, ov.ByModel[i], ov.Totals.Money.Total, st.Theme))
 	}
 	if s.figuresOnly {
 		cols = cols[:mcShare]

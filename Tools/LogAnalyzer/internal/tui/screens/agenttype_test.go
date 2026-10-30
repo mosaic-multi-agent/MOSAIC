@@ -41,7 +41,7 @@ func TestAgentTypes_ListsTypesInGivenOrderWithUnknownTypeLabelled(t *testing.T) 
 func TestAgentTypes_CompleteRunHasNoIncompletenessLabels(t *testing.T) {
 	view := typesView(agentTypesRun(), tallH)
 
-	assertNotContains(t, view, "(partial)", screens.UnpricedMarker, screens.AssumedTierLabel,
+	assertNotContains(t, view, "(partial)", screens.UnpricedMarker, screens.AssumedTierLabel(nil),
 		screens.MissingUsageLabel, screens.OpenLabel)
 }
 
@@ -73,8 +73,8 @@ func TestAgentTypes_LabelsAssumedTierCacheWrites(t *testing.T) {
 
 	view := typesView(run, tallH)
 
-	if line := lineWith(view, "4,321"); !strings.Contains(line, screens.AssumedTierLabel) {
-		t.Errorf("assumed-tier count line %q must carry %q", line, screens.AssumedTierLabel)
+	if line := lineWith(view, "4,321"); !strings.Contains(line, screens.AssumedTierLabel(nil)) {
+		t.Errorf("assumed-tier count line %q must carry %q", line, screens.AssumedTierLabel(nil))
 	}
 }
 

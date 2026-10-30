@@ -23,6 +23,7 @@ const (
 	tcAvgPeak
 	tcMaxPeak
 	tcHit
+	tcRewrites
 	tcWrite
 	tcWriteCost
 	tcRepeats
@@ -47,11 +48,12 @@ func typeColumns() []table.Column {
 	cols[tcAverage] = table.Column{Title: "average", Align: right, Priority: 1}
 	cols[tcMin] = table.Column{Title: "min", Align: right, Priority: 3}
 	cols[tcMax] = table.Column{Title: "max", Align: right, Priority: 3}
-	cols[tcShare] = shareBarColumn(2)
+	cols[tcShare] = shareBarColumn(5)
 	cols[tcFlags] = table.Column{Title: "flags", Priority: 1}
 	cols[tcAvgPeak] = table.Column{Title: "avg peak", Align: right, Priority: 2}
 	cols[tcMaxPeak] = table.Column{Title: "max peak", Align: right, Priority: 2}
 	cols[tcHit] = table.Column{Title: "cache hit", Align: right, Priority: 4}
+	cols[tcRewrites] = table.Column{Title: "rewrites", Align: right, Priority: 4}
 	cols[tcWrite] = table.Column{Title: "cache write", Align: right, Priority: 4}
 	cols[tcWriteCost] = table.Column{Title: "write cost", Align: right, Priority: 4}
 	cols[tcRepeats] = table.Column{Title: "repeats", Align: right, Priority: 3}
@@ -102,35 +104,36 @@ func typeOrder(groups []domain.AgentTypeGroup, o SortOrder) []int {
 
 // typeCells builds the cells of one agent type row; runCost is the run total the
 // share bar is measured against.
-func typeCells(g domain.AgentTypeGroup, runCost domain.MoneyValue, theme tuicommon.Theme) []table.Cell {
+func typeCells(cur domain.CurrencyCode, g domain.AgentTypeGroup, runCost domain.MoneyValue, theme tuicommon.Theme) []table.Cell {
 	f := g.Figures
 	cells := make([]table.Cell, tcCount)
 	cells[tcType] = table.Cell{Text: typeLabel(g.AgentType), Role: tuicommon.RoleDataActor}
 	cells[tcInvocations] = table.Cell{Text: formatGrouped(int64(f.Invocations))}
-	cells[tcTotal] = moneyTotalCell(f.Totals.Money)
+	cells[tcTotal] = moneyTotalCell(cur, f.Totals.Money)
 	stats := g.PerInvocation
-	cells[tcAverage] = statCell(stats, stats.Average)
-	cells[tcMin] = statCell(stats, stats.Min)
-	cells[tcMax] = statCell(stats, stats.Max)
+	cells[tcAverage] = statCell(cur, stats, stats.Average)
+	cells[tcMin] = statCell(cur, stats, stats.Min)
+	cells[tcMax] = statCell(cur, stats, stats.Max)
 	cells[tcShare] = shareBarCell(f.Totals.Money.Total, runCost, theme)
-	cells[tcFlags] = warningCell(badgeLabels(incompleteness(f.UnpricedModels, f.Totals.AssumedTierCacheWrite, f.MissingUsage, f.Open)))
+	cells[tcFlags] = warningCell(badgeLabels(incompleteness(f.UnpricedModels, f.Totals.AssumedTierCacheWrite, f.Totals.AssumedTiers, f.MissingUsage, f.Open)))
 	// The average peak is derived from several runs of figures and cannot carry a partial marker.
 	cells[tcAvgPeak] = contextCell(domain.ContextFigure{Tokens: g.PeakContext.Average, Band: domain.BandOf(g.PeakContext.Average.ValueOr(0))})
 	cells[tcMaxPeak] = contextCell(g.PeakContext.Max)
 	cells[tcHit] = ratioCell(g.Cache.HitRatio)
+	cells[tcRewrites] = rewriteCountCell(g.Cache.Rewrites.Count())
 	cells[tcWrite] = tokensCell(g.Cache.WriteTokens)
-	cells[tcWriteCost] = moneyCell(g.Cache.WriteCost, g.Cache.Complete)
+	cells[tcWriteCost] = moneyCell(cur, g.Cache.WriteCost, g.Cache.Complete)
 	cells[tcRepeats] = table.Cell{Text: formatGrouped(int64(g.Rework.Repeats.Invocations))}
-	cells[tcRepeatSpend] = moneyTotalCell(g.Rework.Repeats.Totals.Money)
+	cells[tcRepeatSpend] = moneyTotalCell(cur, g.Rework.Repeats.Totals.Money)
 	cells[tcRework] = table.Cell{Text: formatGrouped(int64(g.Rework.LikelyRework.Invocations))}
-	cells[tcReworkCost] = moneyTotalCell(g.Rework.LikelyRework.Totals.Money)
+	cells[tcReworkCost] = moneyTotalCell(cur, g.Rework.LikelyRework.Totals.Money)
 	return cells
 }
 
 // statCell is a per-invocation statistic; it is marked partial when the statistics
 // do not cover every member.
-func statCell(stats domain.MoneyStats, v domain.MoneyValue) table.Cell {
-	c := table.Cell{Text: FormatMoney(v), Role: MoneyRole(v, stats.Complete)}
+func statCell(cur domain.CurrencyCode, stats domain.MoneyStats, v domain.MoneyValue) table.Cell {
+	c := table.Cell{Text: FormatMoney(cur, v), Role: MoneyRole(v, stats.Complete)}
 	if stats.Basis > 0 && !stats.Complete {
 		c.Text += " (partial)"
 	}
@@ -139,10 +142,10 @@ func statCell(stats domain.MoneyStats, v domain.MoneyValue) table.Cell {
 
 // unattributedCells is the row of the run's unattributed usage: its own cost and
 // share, and nothing for the figures that only agent types have.
-func unattributedCells(u domain.ActorReport, runCost domain.MoneyValue, theme tuicommon.Theme) []table.Cell {
+func unattributedCells(cur domain.CurrencyCode, u domain.ActorReport, runCost domain.MoneyValue, theme tuicommon.Theme) []table.Cell {
 	cells := make([]table.Cell, tcCount)
 	cells[tcType] = table.Cell{Text: UnattributedRowLabel, Role: tuicommon.RoleSignalWarning}
-	cells[tcTotal] = moneyTotalCell(u.Totals.Money)
+	cells[tcTotal] = moneyTotalCell(cur, u.Totals.Money)
 	cells[tcShare] = shareBarCell(u.Totals.Money.Total, runCost, theme)
 	return cells
 }
@@ -156,10 +159,10 @@ func typeTableLines(run domain.RunReport, order []int, cursor int, offset *int, 
 	*offset = w.Offset
 	var rows [][]table.Cell
 	for _, i := range order[w.Offset:w.End()] {
-		rows = append(rows, typeCells(run.ByAgentType[i], run.Totals.Money.Total, st.Theme))
+		rows = append(rows, typeCells(st.Currency, run.ByAgentType[i], run.Totals.Money.Total, st.Theme))
 	}
 	if u := run.Unattributed; u != nil {
-		rows = append(rows, unattributedCells(*u, run.Totals.Money.Total, st.Theme))
+		rows = append(rows, unattributedCells(st.Currency, *u, run.Totals.Money.Total, st.Theme))
 	}
 	rowCursor := cursor - w.Offset
 	if len(order) == 0 {

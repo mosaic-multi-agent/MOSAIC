@@ -24,13 +24,13 @@ func mutedCell(text string) table.Cell {
 
 // moneyTotalCell is a cost total: a partial known total is marked, an unpriced
 // or absent one never shows an amount.
-func moneyTotalCell(c domain.CategoryMoney) table.Cell {
-	return table.Cell{Text: formatMoneyTotal(c), Role: MoneyRole(c.Total, c.Complete)}
+func moneyTotalCell(cur domain.CurrencyCode, c domain.CategoryMoney) table.Cell {
+	return table.Cell{Text: formatMoneyTotal(cur, c), Role: MoneyRole(c.Total, c.Complete)}
 }
 
 // moneyCell is a money figure; a known figure of an incomplete scope is marked partial.
-func moneyCell(v domain.MoneyValue, complete bool) table.Cell {
-	text := FormatMoney(v)
+func moneyCell(cur domain.CurrencyCode, v domain.MoneyValue, complete bool) table.Cell {
+	text := FormatMoney(cur, v)
 	if v.State == domain.MoneyKnown && !complete {
 		text += " (partial)"
 	}

@@ -16,7 +16,8 @@
         "token_usage": {
           "input_tokens": 100,
           "output_tokens": 10
-        }
+        },
+        "timestamp": "2026-10-28T09:00:00.000Z"
       },
       "parent_span_id": "inv-sub",
       "conversation_id": "cli-session-6"

@@ -20,7 +20,7 @@ var allowedKeys = map[string][]string{
 	"agent":        {"instance_id", "agent_type", "usage"},
 	"invocation": {"instance_id", "agent_type", "state", "status_code", "model", "provider", "started_at",
 		"ended_at", "end_events", "tool_calls"},
-	"usage": {"record_id", "at", "model", "provider", "effort", "service_tier", "harness", "tokens"},
+	"usage": {"record_id", "at", "model", "provider", "effort", "service_tier", "harness", "session_id", "tokens"},
 	"tokens": {"input_tokens", "cache_read_tokens", "cache_creation_tokens", "cache_creation_5m_tokens",
 		"cache_creation_1h_tokens", "output_tokens", "reasoning_tokens"},
 	"tool_call":    {"call_id", "tool_name", "status", "started_at", "ended_at", "pairing"},

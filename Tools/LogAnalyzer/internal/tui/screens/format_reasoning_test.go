@@ -28,25 +28,25 @@ func usageWithReasoning(output int64, reasoning domain.TokenCount) domain.TokenU
 }
 
 func TestFormatTotalsLine_PresentReasoning_ShownInsideOutputPart(t *testing.T) {
-	line := screens.FormatTotalsLine(domain.Totals{Tokens: usageWithReasoning(200, domain.Tokens(40))})
+	line := screens.FormatTotalsLine(domain.CurrencyUSD, domain.Totals{Tokens: usageWithReasoning(200, domain.Tokens(40))})
 
 	assertContains(t, line, "output: 200 (reasoning: 40)")
 }
 
 func TestFormatTotalsLine_AbsentReasoning_ShowsAbsentMarker(t *testing.T) {
-	line := screens.FormatTotalsLine(domain.Totals{Tokens: usageWithReasoning(200, domain.AbsentTokens())})
+	line := screens.FormatTotalsLine(domain.CurrencyUSD, domain.Totals{Tokens: usageWithReasoning(200, domain.AbsentTokens())})
 
 	assertContains(t, line, "output: 200 (reasoning: "+screens.AbsentMarker+")")
 }
 
 func TestFormatTotalsLine_PresentZeroReasoning_ShowsZeroNotMarker(t *testing.T) {
-	line := screens.FormatTotalsLine(domain.Totals{Tokens: usageWithReasoning(200, domain.Tokens(0))})
+	line := screens.FormatTotalsLine(domain.CurrencyUSD, domain.Totals{Tokens: usageWithReasoning(200, domain.Tokens(0))})
 
 	assertContains(t, line, "output: 200 (reasoning: 0)")
 }
 
 func TestFormatTotalsLine_GroupsReasoningDigits(t *testing.T) {
-	line := screens.FormatTotalsLine(domain.Totals{Tokens: usageWithReasoning(2_000_000, domain.Tokens(1_234_567))})
+	line := screens.FormatTotalsLine(domain.CurrencyUSD, domain.Totals{Tokens: usageWithReasoning(2_000_000, domain.Tokens(1_234_567))})
 
 	assertContains(t, line, "output: 2,000,000 (reasoning: 1,234,567)")
 }
@@ -57,7 +57,7 @@ func TestFormatTotalsLine_PartlyReportedReasoning_ShowsPresentSumWithoutMarker(t
 		domain.TokenUsage{Output: domain.Tokens(50)},
 	)
 
-	line := screens.FormatTotalsLine(domain.Totals{Tokens: partial})
+	line := screens.FormatTotalsLine(domain.CurrencyUSD, domain.Totals{Tokens: partial})
 
 	// Other categories are unreported in this fixture and legitimately show the
 	// marker, so only the reasoning part is checked for it.
@@ -67,8 +67,8 @@ func TestFormatTotalsLine_PartlyReportedReasoning_ShowsPresentSumWithoutMarker(t
 
 func TestFormatTotalsLine_ReasoningAddsNoMoneyPart(t *testing.T) {
 	money := domain.CategoryMoney{Total: known(1000), Complete: true}
-	with := screens.FormatTotalsLine(domain.Totals{Tokens: usageWithReasoning(200, domain.Tokens(40)), Money: money})
-	without := screens.FormatTotalsLine(domain.Totals{Tokens: usageWithReasoning(200, domain.AbsentTokens()), Money: money})
+	with := screens.FormatTotalsLine(domain.CurrencyUSD, domain.Totals{Tokens: usageWithReasoning(200, domain.Tokens(40)), Money: money})
+	without := screens.FormatTotalsLine(domain.CurrencyUSD, domain.Totals{Tokens: usageWithReasoning(200, domain.AbsentTokens()), Money: money})
 
 	assertContains(t, with, "(reasoning: 40)")
 	if strings.Count(with, "$") != strings.Count(without, "$") || !strings.HasSuffix(with, "$10.00") {

@@ -26,10 +26,11 @@ func parseDocument(data []byte) (yaml.MapSlice, error) {
 	return doc, nil
 }
 
-// fromDocument maps the generic document to settings, applying defaults for every
-// absent or invalid entry and returning one finding per invalid entry.
-func fromDocument(doc yaml.MapSlice, path string) (domain.AnalysisSettings, []domain.Finding) {
-	settings := domain.DefaultAnalysisSettings()
+// applyDocument layers the generic document onto settings: each setting the
+// document sets replaces the current value (a harness list replaces that
+// harness's list), every absent or invalid entry leaves it unchanged, and one
+// finding is returned per invalid entry.
+func applyDocument(settings *domain.AnalysisSettings, doc yaml.MapSlice, path string) []domain.Finding {
 	var findings []domain.Finding
 	invalid := func(format string, args ...any) {
 		findings = append(findings, domain.Finding{
@@ -47,13 +48,15 @@ func fromDocument(doc yaml.MapSlice, path string) (domain.AnalysisSettings, []do
 			applyHarnessLists(settings.WriteTools, key, item.Value, invalid)
 		case keyUserInteractionTools:
 			applyHarnessLists(settings.UserInteractionTools, key, item.Value, invalid)
+		case keyDefaultCacheWriteTier:
+			applyCacheWriteTiers(settings, item.Value, invalid)
 		case keyDetectedCompaction:
-			applyDetectedCompaction(&settings, item.Value, invalid)
+			applyDetectedCompaction(settings, item.Value, invalid)
 		default:
 			invalid("unknown settings key %q ignored", key)
 		}
 	}
-	return settings, findings
+	return findings
 }
 
 // applyHarnessLists replaces the default list of each harness the section names.

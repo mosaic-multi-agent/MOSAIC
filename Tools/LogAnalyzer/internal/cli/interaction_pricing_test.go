@@ -57,6 +57,7 @@ func analyzeWithAnswers(t *testing.T, answers cli.Answers) (app.Result, *fakePri
 func standardCLIAnswers() cli.Answers {
 	return cli.Answers{
 		string(app.QuestionPricingAction):           app.PricingActionEnter,
+		string(app.QuestionConfigLevel):             "project",
 		pricingAnswerKey(app.RateFieldInput):        "4.00",
 		pricingAnswerKey(app.RateFieldCacheRead):    "0.40",
 		pricingAnswerKey(app.RateFieldCacheWrite5m): "5.00",

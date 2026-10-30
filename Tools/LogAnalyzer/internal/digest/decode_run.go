@@ -257,6 +257,9 @@ func decodeUsages(docs []usageDoc) []domain.InvocationUsage {
 			RecordID:    u.RecordID,
 			At:          parseTime(u.At),
 			ServiceTier: u.ServiceTier,
+			Kind:        decodeCallKind(u.CallKind),
+			Label:       u.CallLabel,
+			SessionID:   u.SessionID,
 		}
 		if t := u.Tokens; t != nil {
 			entry.Usage = domain.TokenUsage{
@@ -286,4 +289,13 @@ func decodeBool(p *bool) domain.OptionalBool {
 		return domain.BoolAbsent
 	}
 	return domain.BoolOf(*p)
+}
+
+// decodeCallKind reads a stored call kind; absent or unknown reads as main.
+func decodeCallKind(s string) domain.CallKind {
+	switch k := domain.CallKind(s); k {
+	case domain.CallCompaction, domain.CallAuxiliary:
+		return k
+	}
+	return domain.CallMain
 }

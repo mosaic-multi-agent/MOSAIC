@@ -109,7 +109,6 @@ func TestTokensRole_AbsentIsMutedPresentZeroIsStillTokens(t *testing.T) {
 
 func TestBandRole_MapsEveryContextBand(t *testing.T) {
 	cases := map[domain.ContextBand]tuicommon.StyleRole{
-		domain.BandBelowOptimal: warning,
 		domain.BandOptimal:      good,
 		domain.BandAboveOptimal: warning,
 		domain.BandDegraded:     bad,
@@ -184,6 +183,6 @@ func TestMarkers_RemainAsTextInTheViewsWithColourOff(t *testing.T) {
 	view := screens.NewOverviewScreen(run, 140, 60, paletteStyles()).View(140, 60)
 
 	assertContains(t, view, screens.ProvisionalLabel, screens.UnpricedMarker, "(partial)",
-		screens.AssumedTierLabel, screens.MissingUsageLabel, screens.OpenLabel, screens.AbsentMarker)
+		screens.AssumedTierLabel(nil), screens.MissingUsageLabel, screens.OpenLabel, screens.AbsentMarker)
 	assertNotContains(t, view, "$0.00")
 }

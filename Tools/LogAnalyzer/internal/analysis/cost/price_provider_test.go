@@ -36,7 +36,7 @@ func entryWithInput(t *testing.T, provider domain.ProviderID, model domain.Model
 
 // oneMillionInput prices one request of 1M input tokens for (provider, model).
 func oneMillionInput(provider domain.ProviderID, model domain.ModelID, table domain.PricingTable) cost.InvocationCost {
-	return cost.PriceInvocation(domain.InvocationUsage{
+	return priceAtDefaultTier(domain.InvocationUsage{
 		Model:    model,
 		Provider: provider,
 		Harness:  domain.HarnessClaudeCode,
@@ -141,7 +141,7 @@ func TestPriceInvocation_UnderProvider_LongContextTierSelectedAtThreshold(t *tes
 	entry.Provider = providerCopilot
 	table := testTable(entry)
 
-	ic := cost.PriceInvocation(domain.InvocationUsage{
+	ic := priceAtDefaultTier(domain.InvocationUsage{
 		Model:    "tier-model",
 		Provider: providerCopilot,
 		Usage: domain.TokenUsage{
@@ -164,7 +164,7 @@ func TestPriceInvocation_UnderProvider_BelowThresholdUsesStandardRates(t *testin
 	entry.Provider = providerCopilot
 	table := testTable(entry)
 
-	ic := cost.PriceInvocation(domain.InvocationUsage{
+	ic := priceAtDefaultTier(domain.InvocationUsage{
 		Model:    "tier-model",
 		Provider: providerCopilot,
 		Usage: domain.TokenUsage{
@@ -187,7 +187,7 @@ func TestPriceInvocation_UnderProvider_UnsplitCacheWritePricedAt5mRate(t *testin
 	entry.Provider = providerAnthropic
 	table := testTable(entry)
 
-	ic := cost.PriceInvocation(domain.InvocationUsage{
+	ic := priceAtDefaultTier(domain.InvocationUsage{
 		Model:    "cache-model",
 		Provider: providerAnthropic,
 		Usage:    domain.TokenUsage{CacheCreation: domain.Tokens(1_000_000)},

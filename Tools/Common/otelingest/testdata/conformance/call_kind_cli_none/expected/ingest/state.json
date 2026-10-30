@@ -1,0 +1,20 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 2229,
+    "head_len": 2229,
+    "head_sha256": "03b6a42eb0811ff24b6a902d280620452a54b247d28904e4a3ca8dd431d7ad69"
+  },
+  "placements": {
+    "cli-a": "orchestrator",
+    "cli-b": "orchestrator",
+    "cli-c": "orchestrator"
+  },
+  "pending": [],
+  "links": {
+    "invoke-root": {
+      "kind": "invoke_agent",
+      "conversation_id": "cli-session-9"
+    }
+  }
+}

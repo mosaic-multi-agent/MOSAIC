@@ -1,0 +1,33 @@
+{
+  "description": "The end is written once. Ingesting the unchanged file again (cursor at the end) and a whole-file recovery ingest that reads the span again both write nothing more.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "first",
+      "otel": "otel/first.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    },
+    {
+      "name": "repeat",
+      "otel": "otel/repeat.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    },
+    {
+      "name": "whole",
+      "otel": "otel/whole.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": true,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

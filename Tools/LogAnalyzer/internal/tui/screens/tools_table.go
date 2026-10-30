@@ -64,10 +64,11 @@ func toolsSortColumn(key SortKey) int {
 	return table.NoSort
 }
 
-// toolName is the label of a tool, or the label of a tool whose name was not logged.
+// toolName is the label of a tool, or "(start missing)" for calls that have
+// neither a start nor a logged name.
 func toolName(t domain.ToolFigures) string {
 	if t.Tool == "" {
-		return UnnamedToolLabel
+		return StartMissingLabel
 	}
 	return t.Tool
 }

@@ -199,3 +199,10 @@ const validSiblingYAML = `  valid-model:
     cache_write_1h: "2.00"
     output: "5.00"
 `
+
+// asProject returns e marked as loaded from the project level, as the store
+// reports every entry it reads from the project file.
+func asProject(e domain.ModelPricing) domain.ModelPricing {
+	e.Source = domain.LevelProject
+	return e
+}

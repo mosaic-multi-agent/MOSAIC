@@ -176,7 +176,7 @@ func TestExport_WriteError_IsShownAndUiSurvives(t *testing.T) {
 }
 
 func TestExport_RunsHelp_ListsExportKeys(t *testing.T) {
-	want := "a across runs  e export run  E export all  s source  p pricing  esc quit  ctrl+c quit"
+	want := "a across runs  e export run  E export all  s source  p pricing  esc quit"
 	m := newExportModel(t, newTestDigestStore(false))
 
 	if help := m.runsScreen.Help(); !strings.Contains(help, want) {

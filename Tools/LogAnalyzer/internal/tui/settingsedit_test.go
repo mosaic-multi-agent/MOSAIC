@@ -46,20 +46,46 @@ type tuiSettingsAdd struct {
 type tuiFakeSettingsStore struct {
 	adds []tuiSettingsAdd
 	err  error
+	// levels lists the level of every save; the Exists fields say which files
+	// exist; globalUnavailable makes the global level unusable.
+	levels            []domain.ConfigLevel
+	globalExists      bool
+	projectExists     bool
+	globalUnavailable bool
 }
 
+// markGlobalSettingsPath is the global settings file of tuiFakeSettingsStore.
+const markGlobalSettingsPath = "/test/global/analysis.yaml"
+
 func (f *tuiFakeSettingsStore) Path() string { return markSettingsPath }
+
+func (f *tuiFakeSettingsStore) Paths() domain.ConfigPaths {
+	global := domain.ConfigFile{Level: domain.LevelGlobal, Path: markGlobalSettingsPath, Exists: f.globalExists}
+	if f.globalUnavailable {
+		global = domain.ConfigFile{Level: domain.LevelGlobal, Unavailable: "user config folder not found"}
+	}
+	return domain.ConfigPaths{
+		Global:  global,
+		Project: domain.ConfigFile{Level: domain.LevelProject, Path: markSettingsPath, Exists: f.projectExists},
+	}
+}
 
 func (f *tuiFakeSettingsStore) Load(_ context.Context) (domain.AnalysisSettings, []domain.Finding, error) {
 	return domain.DefaultAnalysisSettings(), nil, nil
 }
 
-func (f *tuiFakeSettingsStore) AddUserInteractionTool(_ context.Context, h domain.Harness, name string) error {
+func (f *tuiFakeSettingsStore) AddUserInteractionTool(_ context.Context, level domain.ConfigLevel, h domain.Harness, name string) (domain.ConfigFile, error) {
 	if f.err != nil {
-		return f.err
+		return domain.ConfigFile{}, f.err
 	}
 	f.adds = append(f.adds, tuiSettingsAdd{h, name})
-	return nil
+	f.levels = append(f.levels, level)
+	file := f.Paths().Project
+	if level == domain.LevelGlobal {
+		file = f.Paths().Global
+	}
+	file.Exists = true
+	return file, nil
 }
 
 func markToolCall(id, name string, sec int) domain.ToolCall {
@@ -123,30 +149,8 @@ func markUnnamedToolRun() domain.RunAggregate {
 
 func newMarkModelFor(t *testing.T, store *tuiFakeSettingsStore, run domain.RunAggregate) Model {
 	t.Helper()
-	digests := &tuiFakeDigestStore{digest: domain.Digest{
-		Header:    domain.DigestHeader{Version: "1.0.0"},
-		Aggregate: domain.Aggregate{Runs: []domain.RunAggregate{run}},
-	}}
-	svc := app.New(app.Deps{
-		Source:      &tuiFakeLogSource{},
-		Reader:      &tuiFakeEventReader{},
-		Pricing:     &tuiFakePricingStore{path: "/test/pricing.yaml"},
-		Digests:     digests,
-		Settings:    store,
-		Clock:       &tuiFakeClock{},
-		Interaction: &tuiFakeInteraction{},
-		ToolVersion: "test",
-	})
-	res, err := svc.Analyze(context.Background(), app.Request{ExplicitPath: exportSource})
-	if err != nil || res.Outcome != app.OutcomeReport || res.Session == nil {
-		t.Fatalf("setup: Analyze outcome=%v err=%v", res.Outcome, err)
-	}
-	m := newNavModel()
-	m.ctx = context.Background()
-	m.width = 200
-	m.opts.Service = svc
-	updated, _ := m.Update(analysisDoneMsg{result: res})
-	m = send(asModel(updated), "enter", screens.KeyViewTools)
+	m := newConfigModel(t, &tuiFakePricingStore{path: "/test/pricing.yaml"}, store, &tuiFakeInteraction{}, run)
+	m = send(m, "enter", screens.KeyViewTools)
 	assertOn(t, m, screens.ScreenTools)
 	return m
 }

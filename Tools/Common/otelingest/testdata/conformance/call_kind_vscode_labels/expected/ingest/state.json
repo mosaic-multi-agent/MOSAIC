@@ -1,0 +1,37 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 14999,
+    "head_len": 4096,
+    "head_sha256": "d41a79478112a5a71dc76ac396267a33ee468edf8b313909d776e9dfa3d534e2"
+  },
+  "placements": {
+    "lab-1": "orchestrator",
+    "lab-2": "orchestrator",
+    "lab-3": "orchestrator",
+    "lab-4": "orchestrator",
+    "lab-5": "orchestrator",
+    "lab-6": "orchestrator",
+    "lab-7": "orchestrator",
+    "lab-8": "orchestrator",
+    "lab-9": "orchestrator",
+    "lab-10": "orchestrator",
+    "lab-11": "orchestrator",
+    "lab-12": "orchestrator",
+    "lab-13": "orchestrator",
+    "lab-14": "orchestrator",
+    "lab-15": "orchestrator",
+    "lab-16": "orchestrator",
+    "lab-17": "orchestrator",
+    "lab-18": "orchestrator",
+    "lab-19": "orchestrator"
+  },
+  "pending": [],
+  "links": {
+    "invoke-orch": {
+      "kind": "invoke_agent",
+      "conversation_id": "vsc-session-8",
+      "chat_session_id": "vsc-session-8"
+    }
+  }
+}

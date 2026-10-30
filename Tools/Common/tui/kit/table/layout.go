@@ -1,6 +1,8 @@
 package table
 
 import (
+	"strconv"
+
 	"mosaic-common/tui"
 	"mosaic-common/tui/kit/textwidth"
 )
@@ -70,14 +72,60 @@ func totalWidth(widths []int, visible []int) int {
 	return total
 }
 
-// chooseColumns drops columns until the natural width fits: the highest priority number
-// first, the rightmost among equals; priority 0 is never dropped.
-func chooseColumns(cols []Column, widths []int, width int) []int {
-	visible := make([]int, len(cols))
+// markerText is the header marker announcing how many columns are hidden.
+func markerText(hidden int) string {
+	arrow := ">"
+	if tui.CurrentRenderMode().Glyphs != tui.GlyphASCII {
+		arrow = "›"
+	}
+	return "+" + strconv.Itoa(hidden) + " " + arrow
+}
+
+// markerWidth is the room the marker takes at the end of the header, gap included.
+func markerWidth(hidden int) int {
+	if hidden == 0 {
+		return 0
+	}
+	return gapWidth + textwidth.Of(markerText(hidden))
+}
+
+// minWidths is how narrow each column can get: flex columns down to MinWidth, others not at all.
+func minWidths(cols []Column, widths []int) []int {
+	mins := make([]int, len(cols))
+	for i, c := range cols {
+		mins[i] = widths[i]
+		if c.Flex && c.Width <= 0 {
+			mins[i] = min(widths[i], max(c.MinWidth, 1))
+		}
+	}
+	return mins
+}
+
+// Layout returns the indexes of the columns Render shows at width, in column order, and
+// the number of hidden columns. Flex columns shrink before any column is dropped; columns
+// then drop by priority (highest number first, rightmost among equals, priority 0 never).
+func Layout(t Table, width int) (visible []int, hidden int) {
+	visible, hidden, _ = layoutWidths(t, width)
+	return visible, hidden
+}
+
+// layoutWidths is Layout plus the final column widths, shrunk to fit beside the marker.
+func layoutWidths(t Table, width int) (visible []int, hidden int, widths []int) {
+	widths = naturalWidths(t)
+	visible, hidden = chooseColumns(t.Columns, minWidths(t.Columns, widths), width)
+	shrinkFlex(t.Columns, widths, visible, width-markerWidth(hidden))
+	return visible, hidden, widths
+}
+
+// chooseColumns drops columns until the line fits at the given (minimum) widths beside the
+// hidden-column marker: highest priority number first, rightmost among equals; priority 0 is
+// never dropped.
+func chooseColumns(cols []Column, widths []int, width int) (visible []int, hidden int) {
+	visible = make([]int, len(cols))
 	for i := range cols {
 		visible[i] = i
 	}
-	for totalWidth(widths, visible) > width {
+	for totalWidth(widths, visible)+markerWidth(hidden) > width {
 		drop := -1
 		for n, i := range visible {
 			if cols[i].Priority > 0 && (drop < 0 || cols[i].Priority >= cols[visible[drop]].Priority) {
@@ -88,8 +136,9 @@ func chooseColumns(cols []Column, widths []int, width int) []int {
 			break
 		}
 		visible = append(visible[:drop:drop], visible[drop+1:]...)
+		hidden++
 	}
-	return visible
+	return visible, hidden
 }
 
 // shrinkFlex narrows flex columns, down to their MinWidth, until the line fits width.

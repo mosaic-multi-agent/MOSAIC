@@ -40,7 +40,7 @@ func TestAgentTypesDrillTable_HasNoOrchestratorRowAndNoRunTotalsSummary(t *testi
 	_, view := drillTable(tableW, tallH, "enter")
 
 	assertNotContains(t, view, "orchestrator")
-	assertNotContains(t, view, screens.FormatTotalsLine(dispatchD1().Totals))
+	assertNotContains(t, view, screens.FormatTotalsLine(domain.CurrencyUSD, dispatchD1().Totals))
 }
 
 func TestAgentTypesDrillTable_ShareBarGrowsWithTheDispatchsShareOfRunCost(t *testing.T) {

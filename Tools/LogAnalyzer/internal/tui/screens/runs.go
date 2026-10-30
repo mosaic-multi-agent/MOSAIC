@@ -22,7 +22,7 @@ var runsKeys = []tuicommon.HelpEntry{
 	{Key: "↑/↓", Desc: "navigate"}, {Key: "enter", Desc: "open"}, {Key: KeySort, Desc: "sort"},
 	{Key: KeyMarkRun, Desc: "mark run"}, {Key: KeyCompare, Desc: "compare marked"},
 	{Key: KeyAcrossRuns, Desc: "across runs"}, {Key: KeyExportRun, Desc: "export run"}, {Key: KeyExportAll, Desc: "export all"},
-	{Key: "s", Desc: "source"}, {Key: "p", Desc: "pricing"}, {Key: "esc", Desc: "quit"}, {Key: "ctrl+c", Desc: "quit"},
+	{Key: "s", Desc: "source"}, {Key: "p", Desc: "pricing"}, quitKeyEntry,
 }
 
 // runsOverlayGroups are the keys listed by the help overlay of the runs list.
@@ -197,7 +197,7 @@ func runsSortColumn(key SortKey) int {
 }
 
 // runCells builds the cells of one run row.
-func runCells(r domain.RunReport, marker string) []table.Cell {
+func runCells(cur domain.CurrencyCode, r domain.RunReport, marker string) []table.Cell {
 	dur := durationCell(runDuration(r), r.Timeline.HasAxis)
 	var markers []string
 	if r.Provisional {
@@ -206,13 +206,13 @@ func runCells(r domain.RunReport, marker string) []table.Cell {
 	if len(r.UnpricedModels) > 0 {
 		markers = append(markers, UnpricedMarker+" models")
 	}
-	if a := FormatAssumedTier(r.Totals.AssumedTierCacheWrite); a != "" {
+	if a := FormatAssumedTier(r.Totals.AssumedTierCacheWrite, r.Totals.AssumedTiers); a != "" {
 		markers = append(markers, a)
 	}
 	return []table.Cell{
 		rcMark:        markCell(marker),
 		rcRun:         {Text: r.Run.Label(), Role: tuicommon.RoleSubtitle},
-		rcCost:        moneyTotalCell(r.Totals.Money),
+		rcCost:        moneyTotalCell(cur, r.Totals.Money),
 		rcInvocations: {Text: formatGrouped(int64(r.Overview.Subagents.Invocations))},
 		rcDuration:    dur,
 		rcMarkers:     warningCell(strings.Join(markers, "; ")),
@@ -227,7 +227,7 @@ func (s *RunsScreen) View(width, height int) string {
 	st := s.styles
 	n := len(s.report.Runs)
 
-	head := []string{st.Subtitle.Render("All runs") + st.Body.Render("  "+FormatTotalsLine(s.report.AllRuns))}
+	head := []string{st.Subtitle.Render("All runs") + st.Body.Render("  "+FormatTotalsLine(st.Currency, s.report.AllRuns))}
 	tail := s.tailLines()
 
 	var body []string
@@ -240,7 +240,7 @@ func (s *RunsScreen) View(width, height int) string {
 		rows := make([][]table.Cell, n)
 		for i, idx := range sorted {
 			run := s.report.Runs[idx]
-			rows[i] = runCells(run, s.marks.markerOf(run.Run.ID))
+			rows[i] = runCells(st.Currency, run, s.marks.markerOf(run.Run.ID))
 		}
 		budget := PageBodyHeight(height) - len(head) - len(tail) - 1
 		w = ScrollWindow(s.offset, s.cursor, n, budget)
@@ -277,14 +277,15 @@ func (s *RunsScreen) tailLines() []string {
 		lines = append(lines, st.Warning.Render(s.marks.status))
 	}
 	if u := s.report.Unattributable; u != nil {
-		lines = append(lines, st.Warning.Render(UnattributableLabel)+st.Body.Render("  "+FormatTotalsLine(u.Totals)))
+		lines = append(lines, st.Warning.Render(UnattributableLabel)+st.Body.Render("  "+FormatTotalsLine(st.Currency, u.Totals)))
 	}
 	if len(s.report.UnpricedModels) > 0 {
 		lines = append(lines, st.Warning.Render(fmt.Sprintf(
 			"Some models have no pricing (%d model(s) unpriced). Press 'p' to enter prices.", len(s.report.UnpricedModels))))
+		lines = append(lines, unpricedReasonLines(st, s.width, s.report.UnpricedModels, s.report.UnpricedReasons)...)
 	}
 	if assumed := s.assumedTierTokens(); assumed > 0 {
-		lines = append(lines, st.Warning.Render(AssumedTierNotice(assumed)))
+		lines = append(lines, st.Warning.Render(AssumedTierNotice(assumed, s.assumedTiers())))
 	}
 	return lines
 }
@@ -323,4 +324,13 @@ func (s *RunsScreen) assumedTierTokens() int64 {
 		total += s.report.Unattributable.Totals.AssumedTierCacheWrite
 	}
 	return total
+}
+
+// assumedTiers merges the assumed tiers of the named runs and the unattributable
+// bucket.
+func (s *RunsScreen) assumedTiers() []domain.CacheWriteTier {
+	if s.report.Unattributable == nil {
+		return s.report.AllRuns.AssumedTiers
+	}
+	return domain.MergeCacheWriteTiers(s.report.AllRuns.AssumedTiers, s.report.Unattributable.Totals.AssumedTiers)
 }

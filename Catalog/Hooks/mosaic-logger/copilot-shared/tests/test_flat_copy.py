@@ -9,7 +9,9 @@ import sys
 
 from otel_ingest_helpers import SHARED_DIR, chat_line, make_run, write_otel
 
-MODULE_FILES = sorted(SHARED_DIR.glob("mosaic_logger_otel*.py"))
+LOCKED_APPEND = SHARED_DIR / "mosaic_logger_locked_append.py"
+# The ingest writes through the locked append, so the module is copied flat with the OTel files.
+MODULE_FILES = sorted(SHARED_DIR.glob("mosaic_logger_otel*.py")) + [LOCKED_APPEND]
 
 FLAT_SCRIPT = r"""
 import json, sys, datetime
@@ -38,6 +40,12 @@ def imported_modules(path):
 
 def test_public_entry_module_exists():
     assert (SHARED_DIR / "mosaic_logger_otel.py") in MODULE_FILES
+    assert LOCKED_APPEND in MODULE_FILES
+
+
+def test_locked_append_module_exists_and_is_not_named_for_otel():
+    assert LOCKED_APPEND.is_file()
+    assert "otel" not in LOCKED_APPEND.name
 
 
 def test_modules_import_only_standard_library_or_each_other_flat():

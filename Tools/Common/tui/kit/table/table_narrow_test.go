@@ -43,10 +43,11 @@ func TestRender_DropsColumnsByDescendingPriorityRightmostFirst(t *testing.T) {
 	}{
 		{48, []string{"Alpha", "Beta", "Gamma", "Delta"}},
 		{47, []string{"Alpha", "Beta", "Gamma"}},
-		{36, []string{"Alpha", "Beta", "Gamma"}},
-		{35, []string{"Alpha", "Beta"}},
-		{24, []string{"Alpha", "Beta"}},
-		{23, []string{"Alpha"}},
+		{42, []string{"Alpha", "Beta", "Gamma"}},
+		{41, []string{"Alpha", "Beta"}},
+		{30, []string{"Alpha", "Beta"}},
+		{29, []string{"Alpha"}},
+		{18, []string{"Alpha"}},
 	}
 	for _, tc := range cases {
 		lines := render(priorityTable(), tc.width, 10)
@@ -63,7 +64,7 @@ func TestRender_RowsKeepIdenticalColumnPositions(t *testing.T) {
 	tb := priorityTable()
 	tb.Rows = append(tb.Rows, cells("aaaa", "bbbbbbbbbb", "cc", "dddddd"))
 
-	lines := render(tb, 36, 10)
+	lines := render(tb, 42, 10)
 
 	if len(lines) != 4 {
 		t.Fatalf("got %d lines, want header plus 3 rows: %q", len(lines), lines)

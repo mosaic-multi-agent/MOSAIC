@@ -134,8 +134,8 @@ func TestStatus_LabelsAssumedTierCacheWrites(t *testing.T) {
 
 	line := rowFor(t, statusView(run, wideW, tallH), "$2.50")
 
-	if !strings.Contains(line, screens.AssumedTierLabel) || !strings.Contains(line, "12,345") {
-		t.Errorf("row %q must carry %q and the grouped count", line, screens.AssumedTierLabel)
+	if !strings.Contains(line, screens.AssumedTierLabel(nil)) || !strings.Contains(line, "12,345") {
+		t.Errorf("row %q must carry %q and the grouped count", line, screens.AssumedTierLabel(nil))
 	}
 }
 
@@ -154,7 +154,7 @@ func TestStatus_CompleteRunHasNoIncompletenessLabels(t *testing.T) {
 	view := statusView(statusRun(), wideW, tallH)
 
 	assertContains(t, view, "SUCCESS", "$12.34")
-	assertNotContains(t, view, "(partial)", screens.UnpricedMarker, screens.AssumedTierLabel, screens.MissingUsageLabel)
+	assertNotContains(t, view, "(partial)", screens.UnpricedMarker, screens.AssumedTierLabel(nil), screens.MissingUsageLabel)
 }
 
 func TestStatus_ShortTerminalScrollsToEveryTypeAndShowsHint(t *testing.T) {

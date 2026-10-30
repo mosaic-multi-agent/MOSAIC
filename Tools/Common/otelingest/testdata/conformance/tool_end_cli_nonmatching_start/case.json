@@ -1,0 +1,15 @@
+{
+  "description": "GHCP CLI: a start whose call_id only matches after removing a __vscode suffix does not match a CLI span; the CLI rule is verbatim equality, so nothing is written.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

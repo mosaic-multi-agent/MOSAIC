@@ -131,7 +131,7 @@ func TestOverview_CompleteRunHasNoIncompletenessLabels(t *testing.T) {
 		t.Run(v.name, func(t *testing.T) {
 			view := v.view(overviewRun(), tallH)
 
-			assertNotContains(t, view, "(partial)", screens.UnpricedMarker, screens.AssumedTierLabel,
+			assertNotContains(t, view, "(partial)", screens.UnpricedMarker, screens.AssumedTierLabel(nil),
 				screens.MissingUsageLabel)
 		})
 	}
@@ -146,8 +146,8 @@ func TestOverview_LabelsAssumedTierCacheWrites(t *testing.T) {
 		t.Run(v.name, func(t *testing.T) {
 			view := v.view(run, tallH)
 
-			if line := lineWith(view, "12,345"); !strings.Contains(line, screens.AssumedTierLabel) {
-				t.Errorf("assumed-tier count line %q must carry %q", line, screens.AssumedTierLabel)
+			if line := lineWith(view, "12,345"); !strings.Contains(line, screens.AssumedTierLabel(nil)) {
+				t.Errorf("assumed-tier count line %q must carry %q", line, screens.AssumedTierLabel(nil))
 			}
 		})
 	}

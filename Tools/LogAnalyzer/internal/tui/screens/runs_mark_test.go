@@ -223,7 +223,7 @@ func TestRunsMark_MarkerIsVisibleAtEightyColumns(t *testing.T) {
 	press(s, screens.KeyMarkRun, "down", screens.KeyMarkRun)
 
 	view := stripStyling(s.View(80, 30))
-	if !markerA.MatchString(rowFor(t, view, runIDOne)) || !markerB.MatchString(rowFor(t, view, runIDFour)) {
+	if !markerA.MatchString(rowForName(t, view, runIDOne, 15)) || !markerB.MatchString(rowForName(t, view, runIDFour, 15)) {
 		t.Errorf("A and B must stay visible on an 80-column terminal\n%s", view)
 	}
 	assertWithinBounds(t, view, 80, 30)

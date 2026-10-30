@@ -40,13 +40,14 @@ func encodeRework(r domain.ReworkFigures) jsonRework {
 }
 
 type jsonCache struct {
-	HitRatio          jsonRatio      `json:"hit_ratio"`
-	WriteTokens       *int64         `json:"write_tokens"`
-	WriteCost         jsonMoneyValue `json:"write_cost"`
-	NetBenefit        jsonMoneyValue `json:"net_benefit"`
-	UnreadWriteTokens *int64         `json:"unread_write_tokens"`
-	UnreadWriteCost   jsonMoneyValue `json:"unread_write_cost"`
-	Complete          bool           `json:"complete"`
+	HitRatio          jsonRatio          `json:"hit_ratio"`
+	WriteTokens       *int64             `json:"write_tokens"`
+	WriteCost         jsonMoneyValue     `json:"write_cost"`
+	NetBenefit        jsonMoneyValue     `json:"net_benefit"`
+	UnreadWriteTokens *int64             `json:"unread_write_tokens"`
+	UnreadWriteCost   jsonMoneyValue     `json:"unread_write_cost"`
+	Complete          bool               `json:"complete"`
+	Rewrites          jsonRewriteFigures `json:"rewrites"`
 }
 
 func encodeCache(c domain.CacheFigures) jsonCache {
@@ -58,6 +59,7 @@ func encodeCache(c domain.CacheFigures) jsonCache {
 		UnreadWriteTokens: encodeTokenCount(c.UnreadWriteTokens),
 		UnreadWriteCost:   encodeMoneyValue(c.UnreadWriteCost),
 		Complete:          c.Complete,
+		Rewrites:          encodeRewriteFigures(c.Rewrites),
 	}
 }
 

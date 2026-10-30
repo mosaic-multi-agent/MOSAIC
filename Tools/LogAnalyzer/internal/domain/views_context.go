@@ -6,8 +6,7 @@ import "time"
 type ContextBand uint8
 
 const (
-	BandBelowOptimal ContextBand = iota // [0, 100000)
-	BandOptimal                         // [100000, 250000)
+	BandOptimal      ContextBand = iota // [0, 250000)
 	BandAboveOptimal                    // [250000, 350000)
 	BandDegraded                        // [350000, inf)
 )
@@ -19,14 +18,11 @@ func BandOf(tokens int64) ContextBand {
 		return BandDegraded
 	case tokens >= bandAboveOptimalFrom:
 		return BandAboveOptimal
-	case tokens >= bandOptimalFrom:
-		return BandOptimal
 	}
-	return BandBelowOptimal
+	return BandOptimal
 }
 
 const (
-	bandOptimalFrom      int64 = 100_000
 	bandAboveOptimalFrom int64 = 250_000
 	bandDegradedFrom     int64 = 350_000
 )
@@ -41,7 +37,7 @@ func (b ContextBand) Label() string {
 	case BandDegraded:
 		return "degraded"
 	}
-	return "below optimal"
+	return "optimal"
 }
 
 // Key returns the band name as a machine key.
@@ -54,7 +50,7 @@ func (b ContextBand) Key() string {
 	case BandDegraded:
 		return "degraded"
 	}
-	return "below_optimal"
+	return "optimal"
 }
 
 // ContextBandRange is one band with its token range; To == 0 means open-ended.
@@ -63,11 +59,10 @@ type ContextBandRange struct {
 	From, To int64
 }
 
-// ContextBandRanges returns the four band ranges in order.
+// ContextBandRanges returns the three band ranges in order.
 func ContextBandRanges() []ContextBandRange {
 	return []ContextBandRange{
-		{Band: BandBelowOptimal, From: 0, To: bandOptimalFrom},
-		{Band: BandOptimal, From: bandOptimalFrom, To: bandAboveOptimalFrom},
+		{Band: BandOptimal, From: 0, To: bandAboveOptimalFrom},
 		{Band: BandAboveOptimal, From: bandAboveOptimalFrom, To: bandDegradedFrom},
 		{Band: BandDegraded, From: bandDegradedFrom, To: 0},
 	}
@@ -92,6 +87,14 @@ type ContextCall struct {
 	Partial    bool       // any of Input, CacheRead, CacheCreation absent
 	Cost       MoneyValue // this call's priced total
 	FirstWrite bool       // the call whose context is ActorContext.FirstWrite
+
+	Kind      CallKind
+	Label     string
+	SessionID string
+
+	// Unapplied marks a compaction call (Kind == CallCompaction) that no later
+	// compaction of the actor followed: an unapplied attempt.
+	Unapplied bool
 }
 
 // CompactionKind says whether a mark was logged or detected.
@@ -110,6 +113,21 @@ type CompactionMark struct {
 	After  int       // index into Calls of the first call after; -1 none
 	// Detected only:
 	BeforeTokens, AfterTokens int64
+
+	// Detected only. A detected mark that is neither MatchedLogged nor Harness
+	// is a detected-only drop.
+	MatchedLogged bool       // matched one-to-one to a logged compaction
+	Harness       bool       // harness compaction (OTel): unmatched, with compaction calls
+	CallCount     int        // compaction calls attributed to this mark
+	CallCost      MoneyValue // summed cost of those calls
+}
+
+// CompactionCallFigures are an actor's compaction-call totals.
+type CompactionCallFigures struct {
+	Count          int        // every compaction call of the actor
+	Cost           MoneyValue // their summed cost (part of the actor's spend)
+	UnappliedCount int        // compaction calls not followed by a compaction
+	UnappliedCost  MoneyValue // their summed cost
 }
 
 // ActorContext holds one actor's context figures and per-call rows.
@@ -122,6 +140,10 @@ type ActorContext struct {
 	FirstWrite   ContextFigure // heuristic; always absent for the orchestrator
 	FirstWriteAt time.Time     // start of the first write-class tool call; zero when none
 	Compactions  []CompactionMark
+
+	CompactionCalls CompactionCallFigures
+
+	Rewrites []ContextRewrite // cold context rewrites in time order
 }
 
 // LoggedCount is the number of logged compaction marks.
@@ -164,4 +186,27 @@ type PeakContextStats struct {
 	Basis   int           // members with a present Peak
 	Average TokenCount    // sum of present peaks / Basis, rounded half-up; absent when Basis == 0
 	Max     ContextFigure // absent when Basis == 0
+}
+
+// HarnessCount is the number of harness compactions (OTel): detected drops that
+// compaction calls of the actor preceded and no logged compaction explains.
+func (a ActorContext) HarnessCount() int {
+	n := 0
+	for _, m := range a.Compactions {
+		if m.Kind == CompactionDetected && m.Harness && !m.MatchedLogged {
+			n++
+		}
+	}
+	return n
+}
+
+// DetectedOnlyCount is the number of detected drops with no other evidence.
+func (a ActorContext) DetectedOnlyCount() int {
+	n := 0
+	for _, m := range a.Compactions {
+		if m.Kind == CompactionDetected && !m.Harness && !m.MatchedLogged {
+			n++
+		}
+	}
+	return n
 }

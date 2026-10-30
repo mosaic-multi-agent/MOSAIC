@@ -140,8 +140,10 @@ func main() {
 	// where concrete implementations are instantiated.
 	scanner := logscan.NewScanner()
 	reader := logread.NewReader()
-	pricingStore := pricing.NewStore(workDir)
-	settingsStore := settings.NewStore(workDir)
+	globalDir := globalConfigDir()
+	pricingStore := pricing.NewStore(globalDir, workDir)
+	settingsStore := settings.NewStore(globalDir, workDir)
+	ensureGlobalFiles(pricingStore, settingsStore)
 	clock := &realClock{}
 	digestStore := digest.NewStore()
 	usageIngest := otelusage.New()

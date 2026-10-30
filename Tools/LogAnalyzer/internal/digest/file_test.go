@@ -103,7 +103,7 @@ func TestWrite_HeaderCarriesVersionToolVersionAndWrittenAtAsGiven(t *testing.T) 
 	if doc["format"] != "mosaic-run-digest" {
 		t.Errorf("format = %v", doc["format"])
 	}
-	if doc["digest_version"] != digest.Version || digest.Version != "1.2.0" {
+	if doc["digest_version"] != digest.Version || digest.Version != "1.4.0" {
 		t.Errorf("digest_version = %v, package Version = %q", doc["digest_version"], digest.Version)
 	}
 	if doc["tool_version"] != "3.2.1" {

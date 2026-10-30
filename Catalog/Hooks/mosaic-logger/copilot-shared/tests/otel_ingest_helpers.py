@@ -60,15 +60,16 @@ def read_json(path):
     return json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
 
 
-def read_otel_records(path):
-    """usage_record lines with source 'otel' of a JSONL stream, timestamp removed."""
+def read_otel_records(path, keep_timestamp=False):
+    """usage_record lines with source 'otel' of a JSONL stream; timestamp removed unless keep_timestamp."""
     records = []
     for line in pathlib.Path(path).read_bytes().split(b"\n"):
         if not line.strip():
             continue
         obj = json.loads(line)
         if obj.get("event") == "usage_record" and obj.get("source") == "otel":
-            obj.pop("timestamp", None)
+            if not keep_timestamp:
+                obj.pop("timestamp", None)
             records.append(obj)
     return records
 

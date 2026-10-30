@@ -164,6 +164,7 @@ def handle_post_tool_use(ctx: "core.HookContext") -> None:
         "tool_call_end", ctx,
         call_id=resolve_call_id(ctx),
         status="success",
+        tool_name=ctx.field("tool_name"),
         tool_output=_output_text(ctx),
     )
     core.append_event(resolve_destination(ctx), event)
@@ -180,6 +181,7 @@ def handle_post_tool_use_failure(ctx: "core.HookContext") -> None:
         "tool_call_end", ctx,
         call_id=resolve_call_id(ctx),
         status="error",
+        tool_name=ctx.field("tool_name"),
         tool_output=tool_output,
         error=error,
     )

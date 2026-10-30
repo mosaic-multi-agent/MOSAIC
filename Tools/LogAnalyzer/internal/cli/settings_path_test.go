@@ -22,14 +22,18 @@ type fakeSettingsStore struct {
 
 func (s *fakeSettingsStore) Path() string { return s.filePath }
 
+func (s *fakeSettingsStore) Paths() domain.ConfigPaths {
+	return domain.ConfigPaths{Project: domain.ConfigFile{Level: domain.LevelProject, Path: s.filePath}}
+}
+
 func (s *fakeSettingsStore) Load(_ context.Context) (domain.AnalysisSettings, []domain.Finding, error) {
 	s.loads++
 	return domain.DefaultAnalysisSettings(), nil, nil
 }
 
-func (s *fakeSettingsStore) AddUserInteractionTool(_ context.Context, _ domain.Harness, _ string) error {
+func (s *fakeSettingsStore) AddUserInteractionTool(_ context.Context, level domain.ConfigLevel, _ domain.Harness, _ string) (domain.ConfigFile, error) {
 	s.adds++
-	return nil
+	return domain.ConfigFile{Level: level, Path: s.filePath, Exists: true}, nil
 }
 
 func TestExecute_SettingsPathSubcommand_PrintsSettingsFilePath(t *testing.T) {

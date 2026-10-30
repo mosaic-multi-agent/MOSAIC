@@ -36,20 +36,49 @@ type recordingSettingsStore struct {
 	filePath string
 	adds     []settingsAdd
 	failFor  map[domain.Harness]error
+	// levels lists the level of every save; globalPath is the global file
+	// ("" = fakeGlobalSettingsPath); globalUnavailable makes that level unusable.
+	levels            []domain.ConfigLevel
+	globalPath        string
+	globalUnavailable bool
 }
 
 func (s *recordingSettingsStore) Path() string { return s.filePath }
+
+// fakeGlobalSettingsPath is the global settings file of recordingSettingsStore.
+const fakeGlobalSettingsPath = "/test/global/analysis.yaml"
+
+func (s *recordingSettingsStore) Paths() domain.ConfigPaths {
+	global := domain.ConfigFile{Level: domain.LevelGlobal, Path: fakeGlobalSettingsPath}
+	if s.globalPath != "" {
+		global.Path = s.globalPath
+	}
+	if s.globalUnavailable {
+		global = domain.ConfigFile{Level: domain.LevelGlobal, Unavailable: "user config folder not found"}
+	}
+	return domain.ConfigPaths{
+		Global:  global,
+		Project: domain.ConfigFile{Level: domain.LevelProject, Path: s.filePath},
+	}
+}
 
 func (s *recordingSettingsStore) Load(_ context.Context) (domain.AnalysisSettings, []domain.Finding, error) {
 	return domain.DefaultAnalysisSettings(), nil, nil
 }
 
-func (s *recordingSettingsStore) AddUserInteractionTool(_ context.Context, h domain.Harness, name string) error {
+func (s *recordingSettingsStore) AddUserInteractionTool(_ context.Context, level domain.ConfigLevel, h domain.Harness, name string) (domain.ConfigFile, error) {
 	if err := s.failFor[h]; err != nil {
-		return err
+		return domain.ConfigFile{}, err
 	}
 	s.adds = append(s.adds, settingsAdd{h, name})
-	return nil
+	s.levels = append(s.levels, level)
+	paths := s.Paths()
+	file := paths.Project
+	if level == domain.LevelGlobal {
+		file = paths.Global
+	}
+	file.Exists = true
+	return file, nil
 }
 
 // markRun is a digest run whose agent made a call of an unconfigured tool
@@ -65,6 +94,7 @@ type markEnv struct {
 	env   *digestEnv
 	svc   *app.Service
 	store *recordingSettingsStore
+	ia    *scriptedInteraction
 	res   app.Result
 }
 
@@ -78,7 +108,8 @@ func newMarkEnv(t *testing.T, withStore bool) markEnv {
 // newMarkEnvFor is newMarkEnv for a given digest run.
 func newMarkEnvFor(t *testing.T, withStore bool, run domain.RunAggregate) markEnv {
 	t.Helper()
-	e := newDigestEnv()
+	ia := &scriptedInteraction{}
+	e := newDigestEnv().withInteraction(ia)
 	e.digestFile(dgFilePath, dgDigest(dgT1, run))
 	store := &recordingSettingsStore{filePath: "/root/MosaicLogAnalyzer/config/analysis.yaml"}
 	deps := app.Deps{
@@ -93,7 +124,7 @@ func newMarkEnvFor(t *testing.T, withStore bool, run domain.RunAggregate) markEn
 	if err != nil || res.Session == nil {
 		t.Fatalf("setup: Analyze err=%v session nil=%v", err, res.Session == nil)
 	}
-	return markEnv{env: e, svc: svc, store: store, res: res}
+	return markEnv{env: e, svc: svc, store: store, res: res, ia: ia}
 }
 
 func (m markEnv) mark(tool string, harnesses ...domain.Harness) (app.SettingsEditResult, error) {

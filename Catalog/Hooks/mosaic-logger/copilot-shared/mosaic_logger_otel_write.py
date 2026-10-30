@@ -7,6 +7,7 @@ Standard library only; deployed flat next to the adapter modules.
 import json
 import os
 
+from mosaic_logger_locked_append import locked_append
 from mosaic_logger_otel_contract import PROVIDER_NAME, RECORD_SCHEMA_VERSION, format_time
 from mosaic_logger_otel_keys import INVOCATION_STREAM, ORCHESTRATOR_STREAM
 from mosaic_logger_otel_place import DEST_INVOCATION, DEST_ORCHESTRATOR
@@ -15,16 +16,12 @@ UNATTRIBUTED_STREAM = "00_unattributed_events.jsonl"
 
 
 def append_line(path, line):
-    """Append one whole line with a single write."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    flags = os.O_APPEND | os.O_CREAT | os.O_WRONLY | getattr(os, "O_BINARY", 0)
-    fd = os.open(path, flags, 0o644)
-    try:
-        written = os.write(fd, line)
-        if written != len(line):
-            raise OSError("short write to " + path)
-    finally:
-        os.close(fd)
+    """Append one whole line under the stream's exclusive lock.
+
+    Returns True when written and False when the lock was not obtained in time (the line is
+    dropped). An I/O error raises OSError.
+    """
+    return locked_append(path, line, raise_os_errors=True)
 
 
 class Writer:
@@ -33,7 +30,7 @@ class Writer:
     def __init__(self, run_dir, now, keys):
         self.run_dir = run_dir
         self.run_id = os.path.basename(os.path.normpath(run_dir))
-        self.timestamp = format_time(now)
+        self.fallback_timestamp = format_time(now)
         self.keys = keys
 
     def write(self, call, dest):
@@ -42,7 +39,7 @@ class Writer:
         record = {
             "schema_version": RECORD_SCHEMA_VERSION,
             "event": "usage_record",
-            "timestamp": self.timestamp,
+            "timestamp": getattr(call, "timestamp", "") or self.fallback_timestamp,
             "harness": self._harness(call, session),
         }
         if session:
@@ -65,8 +62,11 @@ class Writer:
             record["effort"] = call.effort
         if call.token_usage is not None:
             record["token_usage"] = call.token_usage
+        for key in ("call_label", "call_kind"):
+            if getattr(call, key, ""):
+                record[key] = getattr(call, key)
         line = json.dumps(record, separators=(",", ":")).encode("ascii") + b"\n"
-        append_line(path, line)
+        return append_line(path, line)
 
     def _harness(self, call, session):
         """The envelope harness of the session the call is tied through, else of the invocation

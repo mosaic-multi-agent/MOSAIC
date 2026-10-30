@@ -19,13 +19,17 @@ const (
 	xcInstance = iota
 	xcType
 	xcModel
+	xcRewrites
 	xcCalls
 	xcFirst
 	xcFirstWrite
 	xcPeak
 	xcFinal
 	xcLogged
+	xcHarness
 	xcDetected
+	xcUnapplied
+	xcCompactionCost
 	xcSpark
 	xcCount
 )
@@ -39,16 +43,20 @@ func contextColumns() []table.Column {
 	right := table.AlignRight
 	cols := make([]table.Column, xcCount)
 	cols[xcInstance] = table.Column{Title: "instance", Flex: true, MinWidth: 10}
-	cols[xcType] = table.Column{Title: "type", Priority: 3, Flex: true, MinWidth: 8}
-	cols[xcModel] = table.Column{Title: "model", Priority: 5, Flex: true, MinWidth: 8}
-	cols[xcCalls] = table.Column{Title: "calls", Align: right, Priority: 2}
-	cols[xcFirst] = table.Column{Title: "first", Align: right, Priority: 4}
-	cols[xcFirstWrite] = table.Column{Title: "first write*", Align: right, Priority: 4}
-	cols[xcPeak] = table.Column{Title: "peak", Align: right}
-	cols[xcFinal] = table.Column{Title: "final", Align: right, Priority: 1}
-	cols[xcLogged] = table.Column{Title: "logged", Align: right, Priority: 5}
-	cols[xcDetected] = table.Column{Title: "detected", Align: right, Priority: 5}
-	cols[xcSpark] = table.Column{Title: "context", Priority: 6, Width: sparkWidth}
+	cols[xcType] = table.Column{Title: "type", Priority: 1, Flex: true, MinWidth: 8}
+	cols[xcModel] = table.Column{Title: "model", Priority: 1, Flex: true, MinWidth: 8}
+	cols[xcRewrites] = table.Column{Title: "rewrites", Align: right, Priority: 6}
+	cols[xcCalls] = table.Column{Title: "calls", Align: right, Priority: 4}
+	cols[xcFirst] = table.Column{Title: "first", Align: right, Priority: 5}
+	cols[xcFirstWrite] = table.Column{Title: "first write*", Align: right, Priority: 5}
+	cols[xcPeak] = table.Column{Title: "peak", Align: right, Priority: 2}
+	cols[xcFinal] = table.Column{Title: "final", Align: right, Priority: 3}
+	cols[xcLogged] = table.Column{Title: "logged", Align: right, Priority: 6}
+	cols[xcHarness] = table.Column{Title: "harness", Align: right, Priority: 6}
+	cols[xcDetected] = table.Column{Title: "det. only", Align: right, Priority: 6}
+	cols[xcUnapplied] = table.Column{Title: "unapplied", Align: right, Priority: 6}
+	cols[xcCompactionCost] = table.Column{Title: "compaction cost", Align: right, Priority: 6}
+	cols[xcSpark] = table.Column{Title: "context", Priority: 7, Width: sparkWidth}
 	return cols
 }
 
@@ -91,12 +99,18 @@ func contextOrder(actors []domain.ActorContext, o SortOrder) []int {
 		})
 }
 
-// modelsOf lists the distinct models of the calls in order of first use.
+// isMainCall reports whether a call belongs to the main loop; a call without a
+// kind is one.
+func isMainCall(c domain.ContextCall) bool {
+	return c.Kind == "" || c.Kind == domain.CallMain
+}
+
+// modelsOf lists the distinct models of the main calls in order of first use.
 func modelsOf(calls []domain.ContextCall) []string {
 	var out []string
 	seen := map[domain.ModelID]bool{}
 	for _, c := range calls {
-		if c.Model != "" && !seen[c.Model] {
+		if isMainCall(c) && c.Model != "" && !seen[c.Model] {
 			seen[c.Model] = true
 			out = append(out, string(c.Model))
 		}
@@ -107,18 +121,22 @@ func modelsOf(calls []domain.ContextCall) []string {
 // contextSparkCell draws the context of every call as a sparkline coloured per
 // point by band, the first write call drawn with the marker.
 func contextSparkCell(a domain.ActorContext, theme tuicommon.Theme) table.Cell {
-	values := make([]float64, len(a.Calls))
-	roles := make([]tuicommon.StyleRole, len(a.Calls))
+	var values []float64
+	var roles []tuicommon.StyleRole
 	marker := -1
-	for i, c := range a.Calls {
-		v, ok := c.Context.Value()
-		values[i] = float64(v)
-		roles[i] = tuicommon.RoleSignalMuted
-		if ok {
-			roles[i] = BandRole(domain.BandOf(v))
+	for _, c := range a.Calls {
+		if !isMainCall(c) {
+			continue
 		}
+		v, ok := c.Context.Value()
+		role := tuicommon.RoleSignalMuted
+		if ok {
+			role = BandRole(domain.BandOf(v))
+		}
+		values = append(values, float64(v))
+		roles = append(roles, role)
 		if c.FirstWrite && marker < 0 {
-			marker = i
+			marker = len(values) - 1
 		}
 	}
 	return table.Cell{Fill: func(width int) string {
@@ -130,9 +148,10 @@ func contextSparkCell(a domain.ActorContext, theme tuicommon.Theme) table.Cell {
 func countCell(n int) table.Cell { return table.Cell{Text: strconv.Itoa(n)} }
 
 // contextCells builds the cells of one actor's row.
-func contextCells(a domain.ActorContext, label string, labelRole tuicommon.StyleRole, theme tuicommon.Theme) []table.Cell {
+func contextCells(cur domain.CurrencyCode, a domain.ActorContext, label string, labelRole tuicommon.StyleRole, theme tuicommon.Theme) []table.Cell {
 	cells := make([]table.Cell, xcCount)
 	cells[xcInstance] = table.Cell{Text: label, Role: labelRole}
+	cells[xcType] = mutedCell(AbsentMarker)
 	if label != orchestratorRowLabel {
 		cells[xcType] = table.Cell{Text: typeLabel(a.Actor.Type)}
 	}
@@ -141,12 +160,16 @@ func contextCells(a domain.ActorContext, label string, labelRole tuicommon.Style
 		cells[xcModel] = table.Cell{Text: strings.Join(models, ",")}
 	}
 	cells[xcCalls] = countCell(len(a.Calls))
+	cells[xcRewrites] = rewriteCountCell(len(a.Rewrites))
 	cells[xcFirst] = contextCell(a.First)
 	cells[xcFirstWrite] = contextCell(a.FirstWrite)
 	cells[xcPeak] = contextCell(a.Peak)
 	cells[xcFinal] = contextCell(a.Final)
 	cells[xcLogged] = countCell(a.LoggedCount())
-	cells[xcDetected] = countCell(a.DetectedCount())
+	cells[xcHarness] = countCell(a.HarnessCount())
+	cells[xcDetected] = countCell(a.DetectedOnlyCount())
+	cells[xcUnapplied] = countCell(a.CompactionCalls.UnappliedCount)
+	cells[xcCompactionCost] = moneyCell(cur, a.CompactionCalls.Cost, true)
 	cells[xcSpark] = contextSparkCell(a, theme)
 	return cells
 }
@@ -156,11 +179,11 @@ const orchestratorRowLabel = "orchestrator"
 
 // contextTableRows builds the rows: the orchestrator leads, then the invocations
 // in the order given.
-func contextTableRows(rc domain.RunContext, order []int, theme tuicommon.Theme) [][]table.Cell {
-	rows := [][]table.Cell{contextCells(rc.Orchestrator, orchestratorRowLabel, tuicommon.RoleDataLead, theme)}
+func contextTableRows(cur domain.CurrencyCode, rc domain.RunContext, order []int, theme tuicommon.Theme) [][]table.Cell {
+	rows := [][]table.Cell{contextCells(cur, rc.Orchestrator, orchestratorRowLabel, tuicommon.RoleDataLead, theme)}
 	for _, i := range order {
 		a := rc.Invocations[i]
-		rows = append(rows, contextCells(a, a.Actor.Label(), tuicommon.RoleDataActor, theme))
+		rows = append(rows, contextCells(cur, a, a.Actor.Label(), tuicommon.RoleDataActor, theme))
 	}
 	return rows
 }

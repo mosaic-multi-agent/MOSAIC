@@ -14,32 +14,43 @@ const ConfigRelPath = "MosaicLogAnalyzer/config/analysis.yaml"
 
 // Store owns the external YAML settings file.
 type Store struct {
-	path string
+	globalDir string // "" = global level unavailable
+	path      string // project file
 }
 
-// NewStore returns a store rooted at the given MOSAIC runtime root.
-func NewStore(mosaicRoot string) *Store {
-	return &Store{path: filepath.Join(mosaicRoot, ConfigRelPath)}
+// NewStore returns a store with the given global folder ("" = global level
+// unavailable) and project root (the folder LogAnalyzer is started from).
+func NewStore(globalDir, projectRoot string) *Store {
+	return &Store{globalDir: globalDir, path: filepath.Join(projectRoot, ConfigRelPath)}
 }
 
 // Path returns the settings file location.
 func (s *Store) Path() string { return s.path }
 
-// Load reads the settings file. A missing file yields the built-in defaults with
-// no finding and is never created. Invalid entries yield findings and their
-// defaults; an unreadable file or an unparseable document is an error.
+// Load reads the global then the project settings file and layers them over the
+// built-in defaults: per setting, and per harness for the tool lists. A missing
+// file at either level contributes nothing and is never created. Invalid entries
+// yield findings (carrying their file's path) and leave the lower level's value;
+// an unreadable file or an unparseable document is an error naming the file.
 func (s *Store) Load(_ context.Context) (domain.AnalysisSettings, []domain.Finding, error) {
-	data, err := os.ReadFile(s.path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return domain.DefaultAnalysisSettings(), nil, nil
+	merged := domain.DefaultAnalysisSettings()
+	var findings []domain.Finding
+	for _, path := range []string{s.globalPath(), s.path} {
+		if path == "" {
+			continue
 		}
-		return domain.AnalysisSettings{}, nil, fmt.Errorf("read settings file: %w", err)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return domain.AnalysisSettings{}, nil, fmt.Errorf("read settings file %s: %w", path, err)
+		}
+		doc, err := parseDocument(data)
+		if err != nil {
+			return domain.AnalysisSettings{}, nil, fmt.Errorf("parse settings file %s: %w", path, err)
+		}
+		findings = append(findings, applyDocument(&merged, doc, path)...)
 	}
-	doc, err := parseDocument(data)
-	if err != nil {
-		return domain.AnalysisSettings{}, nil, fmt.Errorf("parse settings file: %w", err)
-	}
-	loaded, findings := fromDocument(doc, s.path)
-	return loaded, findings, nil
+	return merged, findings, nil
 }

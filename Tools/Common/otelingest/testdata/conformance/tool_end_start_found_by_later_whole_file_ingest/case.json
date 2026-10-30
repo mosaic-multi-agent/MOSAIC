@@ -1,0 +1,33 @@
+{
+  "description": "A failed span whose start is not in the logs is not kept: a cursor ingest after the start appears still writes nothing, and a whole-file ingest then matches the span and writes the end once.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "no_start",
+      "otel": "otel/no_start.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    },
+    {
+      "name": "start_logged_cursor",
+      "otel": "otel/start_logged_cursor.jsonl",
+      "logs": "logs-start_logged_cursor",
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    },
+    {
+      "name": "whole",
+      "otel": "otel/whole.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": true,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

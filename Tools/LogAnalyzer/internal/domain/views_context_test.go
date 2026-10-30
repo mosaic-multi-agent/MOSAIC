@@ -4,6 +4,7 @@ package domain_test
 // the band ranges.
 
 import (
+	"strings"
 	"testing"
 
 	"mosaic-log-analyzer/internal/domain"
@@ -14,8 +15,8 @@ func TestBandOf_BoundariesMapToTheStatedBands(t *testing.T) {
 		tokens int64
 		want   domain.ContextBand
 	}{
-		{0, domain.BandBelowOptimal},
-		{99_999, domain.BandBelowOptimal},
+		{0, domain.BandOptimal},
+		{99_999, domain.BandOptimal},
 		{100_000, domain.BandOptimal},
 		{249_999, domain.BandOptimal},
 		{250_000, domain.BandAboveOptimal},
@@ -35,7 +36,6 @@ func TestContextBand_NamesAreAvailableAsText(t *testing.T) {
 		band       domain.ContextBand
 		label, key string
 	}{
-		{domain.BandBelowOptimal, "below optimal", "below_optimal"},
 		{domain.BandOptimal, "optimal", "optimal"},
 		{domain.BandAboveOptimal, "above optimal", "above_optimal"},
 		{domain.BandDegraded, "degraded", "degraded"},
@@ -50,12 +50,11 @@ func TestContextBand_NamesAreAvailableAsText(t *testing.T) {
 	}
 }
 
-func TestContextBandRanges_ListTheFourBandsInOrderWithAnOpenEnd(t *testing.T) {
+func TestContextBandRanges_ListTheThreeBandsInOrderWithAnOpenEnd(t *testing.T) {
 	got := domain.ContextBandRanges()
 
 	want := []domain.ContextBandRange{
-		{Band: domain.BandBelowOptimal, From: 0, To: 100_000},
-		{Band: domain.BandOptimal, From: 100_000, To: 250_000},
+		{Band: domain.BandOptimal, From: 0, To: 250_000},
 		{Band: domain.BandAboveOptimal, From: 250_000, To: 350_000},
 		{Band: domain.BandDegraded, From: 350_000, To: 0},
 	}
@@ -97,5 +96,20 @@ func TestActorContext_Counts_SplitLoggedFromDetectedMarks(t *testing.T) {
 
 	if a.LoggedCount() != 1 || a.DetectedCount() != 2 {
 		t.Errorf("logged = %d, detected = %d; want 1 and 2", a.LoggedCount(), a.DetectedCount())
+	}
+}
+
+func TestBandOf_SizesUnder250000AreNamedOptimalAndNoSizeIsNamedBelowOptimal(t *testing.T) {
+	for _, tokens := range []int64{0, 1, 99_999, 100_000, 249_999, 250_000, 349_999, 350_000, 2_000_000} {
+		b := domain.BandOf(tokens)
+		if strings.Contains(b.Label(), "below") || strings.Contains(b.Key(), "below") {
+			t.Errorf("BandOf(%d) is named %q / %q, want no below-optimal name", tokens, b.Label(), b.Key())
+		}
+	}
+	if b := domain.BandOf(0); b.Label() != "optimal" || b.Key() != "optimal" {
+		t.Errorf("BandOf(0) = %q / %q, want optimal / optimal", b.Label(), b.Key())
+	}
+	if b := domain.BandOf(249_999); b.Label() != "optimal" || b.Key() != "optimal" {
+		t.Errorf("BandOf(249999) = %q / %q, want optimal / optimal", b.Label(), b.Key())
 	}
 }

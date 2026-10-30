@@ -23,6 +23,7 @@ const (
 	dcDuration
 	dcPeak
 	dcHit
+	dcRewrites
 	dcWrite
 	dcWriteCost
 	dcNet
@@ -41,11 +42,12 @@ func dispatchColumns() []table.Column {
 	cols[dcType] = table.Column{Title: "type", Priority: 1, Flex: true, MinWidth: 8}
 	cols[dcStatus] = table.Column{Title: "status"}
 	cols[dcCost] = table.Column{Title: "cost", Align: right}
-	cols[dcShare] = shareBarColumn(2)
+	cols[dcShare] = shareBarColumn(6)
 	cols[dcTokens] = table.Column{Title: "tokens", Align: right, Priority: 3}
 	cols[dcDuration] = table.Column{Title: "duration", Align: right, Priority: 3}
 	cols[dcPeak] = table.Column{Title: "peak ctx", Align: right, Priority: 2}
 	cols[dcHit] = table.Column{Title: "cache hit", Align: right, Priority: 3}
+	cols[dcRewrites] = table.Column{Title: "rewrites", Align: right, Priority: 3}
 	cols[dcWrite] = table.Column{Title: "cache write", Align: right, Priority: 4}
 	cols[dcWriteCost] = table.Column{Title: "write cost", Align: right, Priority: 4}
 	cols[dcNet] = table.Column{Title: "net cache", Align: right, Priority: 5}
@@ -138,20 +140,20 @@ func statusText(inv domain.Invocation) string {
 
 // dispatchCells builds the cells of one dispatch row; runCost is the run total
 // the share bar is measured against.
-func dispatchCells(e dispatchEntry, runCost domain.MoneyValue, theme tuicommon.Theme) []table.Cell {
+func dispatchCells(cur domain.CurrencyCode, e dispatchEntry, runCost domain.MoneyValue, theme tuicommon.Theme) []table.Cell {
 	d := e.d
 	inv := d.Invocation
 	cells := make([]table.Cell, dcCount)
 	cells[dcInstance] = table.Cell{Text: inv.Actor.Label(), Role: tuicommon.RoleDataActor}
 	cells[dcType] = table.Cell{Text: e.typeName}
 	cells[dcStatus] = table.Cell{Text: "[" + statusText(inv) + "]", Role: StatusRole(inv)}
-	cells[dcCost] = moneyTotalCell(d.Totals.Money)
+	cells[dcCost] = moneyTotalCell(cur, d.Totals.Money)
 	cells[dcShare] = shareBarCell(d.Totals.Money.Total, runCost, theme)
 	cells[dcTokens] = tokensCell(tokenSum(d.Totals.Tokens))
 	dur, ok := inv.Duration()
 	cells[dcDuration] = durationCell(dur, ok)
 	cells[dcPeak] = contextCell(d.PeakContext)
-	setCacheCells(cells, d.Cache)
+	setCacheCells(cur, cells, d.Cache)
 	cells[dcEffort] = table.Cell{Text: effortSegment(d.Effort)}
 	cells[dcFlags] = warningCell(strings.Join(dispatchFlags(d), "; "))
 	return cells
@@ -166,7 +168,7 @@ func dispatchFlags(d domain.Dispatch) []string {
 	if len(d.UnpricedModels) > 0 {
 		flags = append(flags, UnpricedMarker+" models")
 	}
-	if a := FormatAssumedTier(d.Totals.AssumedTierCacheWrite); a != "" {
+	if a := FormatAssumedTier(d.Totals.AssumedTierCacheWrite, d.Totals.AssumedTiers); a != "" {
 		flags = append(flags, a)
 	}
 	return flags
@@ -174,22 +176,22 @@ func dispatchFlags(d domain.Dispatch) []string {
 
 // orchestratorCells builds the orchestrator's row: its own cost, tokens, effort,
 // peak context and cache figures; it has no type, status or duration.
-func orchestratorCells(run domain.RunReport, theme tuicommon.Theme) []table.Cell {
+func orchestratorCells(cur domain.CurrencyCode, run domain.RunReport, theme tuicommon.Theme) []table.Cell {
 	o := run.Orchestrator
 	cells := make([]table.Cell, dcCount)
 	cells[dcInstance] = table.Cell{Text: o.Actor.Label(), Role: tuicommon.RoleDataLead}
-	cells[dcCost] = moneyTotalCell(o.Totals.Money)
+	cells[dcCost] = moneyTotalCell(cur, o.Totals.Money)
 	cells[dcShare] = shareBarCell(o.Totals.Money.Total, run.Totals.Money.Total, theme)
 	cells[dcTokens] = tokensCell(tokenSum(o.Totals.Tokens))
 	cells[dcDuration] = durationCell(0, false)
 	cells[dcPeak] = contextCell(run.Context.Orchestrator.Peak)
-	setCacheCells(cells, run.OrchestratorCache)
+	setCacheCells(cur, cells, run.OrchestratorCache)
 	cells[dcEffort] = table.Cell{Text: effortSegment(o.Effort)}
 	var flags []string
 	if len(o.UnpricedModels) > 0 {
 		flags = append(flags, UnpricedMarker+" models")
 	}
-	if a := FormatAssumedTier(o.Totals.AssumedTierCacheWrite); a != "" {
+	if a := FormatAssumedTier(o.Totals.AssumedTierCacheWrite, o.Totals.AssumedTiers); a != "" {
 		flags = append(flags, a)
 	}
 	cells[dcFlags] = warningCell(strings.Join(flags, "; "))
@@ -197,31 +199,32 @@ func orchestratorCells(run domain.RunReport, theme tuicommon.Theme) []table.Cell
 }
 
 // setCacheCells fills the cache columns from the figures of one scope.
-func setCacheCells(cells []table.Cell, c domain.CacheFigures) {
+func setCacheCells(cur domain.CurrencyCode, cells []table.Cell, c domain.CacheFigures) {
 	cells[dcHit] = ratioCell(c.HitRatio)
+	cells[dcRewrites] = rewriteCountCell(c.Rewrites.Count())
 	cells[dcWrite] = tokensCell(c.WriteTokens)
-	cells[dcWriteCost] = moneyCell(c.WriteCost, c.Complete)
-	cells[dcNet] = netBenefitCell(c)
-	cells[dcUnread] = unreadCell(c)
+	cells[dcWriteCost] = moneyCell(cur, c.WriteCost, c.Complete)
+	cells[dcNet] = netBenefitCell(cur, c)
+	cells[dcUnread] = unreadCell(cur, c)
 }
 
 // netBenefitCell is the net cache benefit: the absent marker when it is not
 // priced, and a leading minus in the bad role when the cache cost more than it saved.
-func netBenefitCell(c domain.CacheFigures) table.Cell {
+func netBenefitCell(cur domain.CurrencyCode, c domain.CacheFigures) table.Cell {
 	v := c.NetBenefit
 	if v.State != domain.MoneyKnown {
 		return mutedCell(AbsentMarker)
 	}
 	if v.Amount < 0 {
-		return table.Cell{Text: "-" + FormatMoney(domain.KnownMoney(-v.Amount)), Role: tuicommon.RoleSignalBad}
+		return table.Cell{Text: "-" + FormatMoney(cur, domain.KnownMoney(-v.Amount)), Role: tuicommon.RoleSignalBad}
 	}
-	return moneyCell(v, c.Complete)
+	return moneyCell(cur, v, c.Complete)
 }
 
 // unreadCell is the tokens and cost of the cache writes of the last call that were
 // never read back; each part shows the absent marker when it has no figure.
-func unreadCell(c domain.CacheFigures) table.Cell {
-	cost := moneyCell(c.UnreadWriteCost, c.Complete)
+func unreadCell(cur domain.CurrencyCode, c domain.CacheFigures) table.Cell {
+	cost := moneyCell(cur, c.UnreadWriteCost, c.Complete)
 	return table.Cell{
 		Text: FormatTokens(c.UnreadWriteTokens) + " " + cost.Text,
 		Role: TokensRole(c.UnreadWriteTokens),
@@ -230,13 +233,13 @@ func unreadCell(c domain.CacheFigures) table.Cell {
 
 // dispatchTableRows builds the rows in the order given; the orchestrator row, when
 // asked for, leads and is not part of the order.
-func dispatchTableRows(run domain.RunReport, withOrchestrator bool, entries []dispatchEntry, order []int, theme tuicommon.Theme) [][]table.Cell {
+func dispatchTableRows(cur domain.CurrencyCode, run domain.RunReport, withOrchestrator bool, entries []dispatchEntry, order []int, theme tuicommon.Theme) [][]table.Cell {
 	var rows [][]table.Cell
 	if withOrchestrator {
-		rows = append(rows, orchestratorCells(run, theme))
+		rows = append(rows, orchestratorCells(cur, run, theme))
 	}
 	for _, i := range order {
-		rows = append(rows, dispatchCells(entries[i], run.Totals.Money.Total, theme))
+		rows = append(rows, dispatchCells(cur, entries[i], run.Totals.Money.Total, theme))
 	}
 	return rows
 }

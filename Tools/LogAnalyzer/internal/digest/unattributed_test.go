@@ -41,18 +41,18 @@ func runWithUnattributed() domain.RunAggregate {
 	return domain.RunAggregate{
 		Run: domain.NamedRun(runA),
 		Orchestrator: domain.ActorAggregate{Actor: domain.Orchestrator(), Invocations: []domain.InvocationUsage{
-			{Model: unattributedModel, RecordID: "o-1", At: at(1), Usage: domain.TokenUsage{Input: domain.Tokens(1000), Output: domain.Tokens(200)}},
+			{Model: unattributedModel, Kind: domain.CallMain, RecordID: "o-1", At: at(1), Usage: domain.TokenUsage{Input: domain.Tokens(1000), Output: domain.Tokens(200)}},
 		}},
 		Agents: []domain.ActorAggregate{{
 			Actor: domain.ActorRef{Kind: domain.ActorAgentInstance, Instance: "coder#1", Type: "coder"},
 			Invocations: []domain.InvocationUsage{
-				{Model: unattributedModel, RecordID: "a-1", At: at(2), Usage: domain.TokenUsage{Input: domain.Tokens(2000), Output: domain.Tokens(100)}},
+				{Model: unattributedModel, Kind: domain.CallMain, RecordID: "a-1", At: at(2), Usage: domain.TokenUsage{Input: domain.Tokens(2000), Output: domain.Tokens(100)}},
 			},
 		}},
 		Unattributed: &domain.ActorAggregate{Actor: domain.Unattributed(), Invocations: []domain.InvocationUsage{
-			{Model: unattributedModel, Provider: "github-copilot", Harness: domain.HarnessVSCodeGHCP, RecordID: "u-1", At: at(3),
+			{Model: unattributedModel, Provider: "github-copilot", Harness: domain.HarnessVSCodeGHCP, Kind: domain.CallMain, RecordID: "u-1", At: at(3),
 				Usage: domain.TokenUsage{Input: domain.Tokens(1000), CacheRead: domain.Tokens(0), Output: domain.Tokens(100)}},
-			{Model: "m-other", RecordID: "u-2", At: at(4), Usage: domain.TokenUsage{Output: domain.Tokens(7), Reasoning: domain.Tokens(3)}},
+			{Model: "m-other", Kind: domain.CallMain, RecordID: "u-2", At: at(4), Usage: domain.TokenUsage{Output: domain.Tokens(7), Reasoning: domain.Tokens(3)}},
 		}},
 	}
 }
@@ -186,12 +186,12 @@ func TestEncode_RunWithoutUnattributedUsageOmitsTheKey(t *testing.T) {
 }
 
 func TestVersion_AdditiveFieldBumpsTheMinorVersion(t *testing.T) {
-	if digest.Version != "1.2.0" {
-		t.Errorf("digest.Version = %q, want 1.2.0 (additive change of major 1)", digest.Version)
+	if digest.Version != "1.4.0" {
+		t.Errorf("digest.Version = %q, want 1.4.0 (additive change of major 1)", digest.Version)
 	}
 	doc := readJSONObject(t, writeDigest(t, digestOf(runWithUnattributed())))
-	if doc["digest_version"] != "1.2.0" {
-		t.Errorf("written digest_version = %v, want 1.2.0", doc["digest_version"])
+	if doc["digest_version"] != "1.4.0" {
+		t.Errorf("written digest_version = %v, want 1.4.0", doc["digest_version"])
 	}
 }
 

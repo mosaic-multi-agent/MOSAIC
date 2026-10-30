@@ -95,7 +95,7 @@ func TestEncodeReport_OrchestratorContext_CarriesFirstPeakFinalWithBands(t *test
 	if ctx["calls"] != float64(3) {
 		t.Errorf("context.calls = %v, want 3", ctx["calls"])
 	}
-	jcAssertFig(t, "context", ctx, "first", 50_000, "below_optimal", false)
+	jcAssertFig(t, "context", ctx, "first", 50_000, "optimal", false)
 	jcAssertFig(t, "context", ctx, "peak", 360_000, "degraded", true)
 	jcAssertFig(t, "context", ctx, "final", 120_000, "optimal", false)
 }
@@ -156,8 +156,8 @@ func TestEncodeReport_AgentContext_IsMatchedByInstanceAndFirstWriteIsLabelledHeu
 	}
 	jcAssertFig(t, "agent context", ctx, "peak", 260_000, "above_optimal", false)
 	fw := objectAt(t, ctx, "first_write")
-	if fw["tokens"] != float64(10_000) || fw["band"] != "below_optimal" || fw["heuristic"] != true {
-		t.Errorf("agent context.first_write = %v, want 10000 tokens, below_optimal, heuristic true", fw)
+	if fw["tokens"] != float64(10_000) || fw["band"] != "optimal" || fw["heuristic"] != true {
+		t.Errorf("agent context.first_write = %v, want 10000 tokens, optimal, heuristic true", fw)
 	}
 	if counts := objectAt(t, ctx, "compactions"); counts["logged"] != float64(0) || counts["detected"] != float64(0) {
 		t.Errorf("agent context.compactions = %v, want 0 logged and 0 detected", counts)

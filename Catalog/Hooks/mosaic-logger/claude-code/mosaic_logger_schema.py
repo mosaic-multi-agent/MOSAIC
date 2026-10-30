@@ -8,6 +8,7 @@ BASE_SCHEMA_VERSION = "1.3.0"
 
 EVENT_SCHEMA_VERSIONS = {
     "compaction": "1.5.0",
+    "tool_call_end": "1.6.0",
 }
 
 

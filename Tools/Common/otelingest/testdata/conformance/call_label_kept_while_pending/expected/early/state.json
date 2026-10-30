@@ -1,0 +1,31 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 821,
+    "head_len": 821,
+    "head_sha256": "afbf5fd4dbbdfc776e14a520fe26eeed16df131529d715e4a8b94e3ce1c238fc"
+  },
+  "placements": {},
+  "pending": [
+    {
+      "record": {
+        "record_id": "chat-vp-1",
+        "record_index": 0,
+        "model": "model-orch",
+        "provider": "github-copilot",
+        "token_usage": {
+          "input_tokens": 100,
+          "output_tokens": 10
+        },
+        "timestamp": "2026-10-27T11:02:12.500Z",
+        "call_label": "summarizeConversationHistory",
+        "call_kind": "compaction"
+      },
+      "parent_span_id": "invoke-vp",
+      "conversation_id": "vsc-session-9",
+      "chat_session_id": "toolu_Q",
+      "parent_chat_session_id": "vsc-session-9"
+    }
+  ],
+  "links": {}
+}

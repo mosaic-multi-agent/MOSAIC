@@ -93,7 +93,7 @@ func (s *OverviewScreen) body() []string {
 // helpKeys are the short help keys of the view.
 func (s *OverviewScreen) helpKeys() []tuicommon.HelpEntry {
 	return []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "scroll"}, {Key: KeySort, Desc: "sort"},
-		{Key: KeyToggleView, Desc: s.toggleDesc()}, {Key: "esc", Desc: "back"}}
+		{Key: KeyToggleView, Desc: s.toggleDesc()}, exportKeyEntry, {Key: "esc", Desc: "back"}}
 }
 
 // screenKeys are the overlay entries of the keys this view has of its own.

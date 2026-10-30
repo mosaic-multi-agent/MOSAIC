@@ -104,7 +104,7 @@ func barCell(part, whole int64, role tuicommon.StyleRole, theme tuicommon.Theme)
 }
 
 // statusCells builds the cells of one status group row.
-func statusCells(g domain.StatusGroup, dispatches, cost int64, theme tuicommon.Theme) []table.Cell {
+func statusCells(cur domain.CurrencyCode, g domain.StatusGroup, dispatches, cost int64, theme tuicommon.Theme) []table.Cell {
 	f := g.Figures
 	open := f.Open
 	if g.Kind == domain.StatusOpen {
@@ -115,9 +115,9 @@ func statusCells(g domain.StatusGroup, dispatches, cost int64, theme tuicommon.T
 	cells[scName] = table.Cell{Text: statusName(g), Role: StatusGroupRole(g)}
 	cells[scDispatches] = table.Cell{Text: formatGrouped(int64(f.Invocations))}
 	cells[scDispatchShare] = barCell(int64(f.Invocations), dispatches, tuicommon.RoleDataActor, theme)
-	cells[scCost] = moneyTotalCell(f.Totals.Money)
+	cells[scCost] = moneyTotalCell(cur, f.Totals.Money)
 	cells[scCostShare] = barCell(part, cost, tuicommon.RoleDataCost, theme)
-	cells[scFlags] = warningCell(badgeLabels(incompleteness(f.UnpricedModels, f.Totals.AssumedTierCacheWrite, f.MissingUsage, open)))
+	cells[scFlags] = warningCell(badgeLabels(incompleteness(f.UnpricedModels, f.Totals.AssumedTierCacheWrite, f.Totals.AssumedTiers, f.MissingUsage, open)))
 	return cells
 }
 
@@ -126,7 +126,7 @@ func statusTableLines(groups []domain.StatusGroup, o SortOrder, width int, st St
 	dispatches, cost := statusTotals(groups)
 	var rows [][]table.Cell
 	for _, i := range statusGroupOrder(groups, o) {
-		rows = append(rows, statusCells(groups[i], dispatches, cost, st.Theme))
+		rows = append(rows, statusCells(st.Currency, groups[i], dispatches, cost, st.Theme))
 	}
 	t := table.Table{
 		Columns: statusColumns(), Rows: rows, Cursor: table.NoCursor, SortColumn: statusSortColumn(o.Key), SortDesc: o.Desc,

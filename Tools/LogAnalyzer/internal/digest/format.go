@@ -8,7 +8,7 @@ import (
 )
 
 // Version is the digest_version this package writes. MAJOR.MINOR.PATCH.
-const Version = "1.2.0"
+const Version = "1.4.0"
 
 // formatName is the value of the top-level "format" key.
 const formatName = "mosaic-run-digest"
@@ -142,6 +142,9 @@ type usageDoc struct {
 	Effort      string     `json:"effort,omitempty"`
 	ServiceTier string     `json:"service_tier,omitempty"`
 	Harness     string     `json:"harness,omitempty"`
+	CallKind    string     `json:"call_kind,omitempty"` // non-main calls only
+	CallLabel   string     `json:"call_label,omitempty"`
+	SessionID   string     `json:"session_id,omitempty"`
 	Tokens      *tokensDoc `json:"tokens,omitempty"`
 }
 

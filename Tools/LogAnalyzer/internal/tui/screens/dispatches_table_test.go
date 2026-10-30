@@ -23,9 +23,9 @@ func TestDispatches_EveryDispatchAndTheOrchestratorHaveARow(t *testing.T) {
 	view := dispatchesView(dispatchRun(), 140, tallH)
 
 	for _, id := range append(dispatchIDs(), "orchestrator") {
-		rowFor(t, view, id)
+		rowForName(t, view, id, 6)
 	}
-	assertContains(t, rowFor(t, view, "orchestrator"), "$4.00")
+	assertContains(t, rowForName(t, view, "orchestrator", 6), "$4.00")
 	assertContains(t, rowFor(t, view, "builder#1"), "$3.17")
 	assertContains(t, rowFor(t, view, "reviewer#1"), "$1.39")
 }
@@ -97,10 +97,10 @@ func TestDispatches_CostsAreAlignedWhateverTheNameLength(t *testing.T) {
 func TestDispatches_ShareBarGrowsWithTheDispatchsShareOfRunCost(t *testing.T) {
 	colourOff(t)
 
-	view := dispatchesView(dispatchRun(), 140, tallH)
+	view := dispatchesView(dispatchRun(), 220, tallH)
 
-	orch := barWeight(rowFor(t, view, "orchestrator"))
-	d1, d2 := barWeight(rowFor(t, view, "builder#1")), barWeight(rowFor(t, view, longInstance))
+	orch := barWeight(rowForName(t, view, "orchestrator", 6))
+	d1, d2 := barWeight(rowFor(t, view, "builder#1")), barWeight(rowForName(t, view, longInstance, 6))
 	d3, d4 := barWeight(rowFor(t, view, "reviewer#1")), barWeight(rowFor(t, view, "builder#2"))
 	if !(orch > d1 && d1 > d2 && d2 > d3 && d3 > d4 && d4 > 0) {
 		t.Errorf("share bars must follow the cost shares ($4.00, $3.17, $2.28, $1.39, $0.54 of $10.80): got %d %d %d %d %d\n%s",
@@ -128,7 +128,7 @@ func TestDispatches_StatusBadgeNamesTheOutcomeOfEveryDispatch(t *testing.T) {
 		{"builder#1", "SUCCESS"}, {longInstance, "BLOCKED"}, {"reviewer#1", "PARTIALLY_DONE"},
 		{"builder#2", "SUCCESS"}, {"builder#3", screens.NoStatusLabel}, {"builder#4", screens.OpenLabel},
 	} {
-		assertContains(t, rowFor(t, view, c.id), c.status)
+		assertContains(t, rowForName(t, view, c.id, 6), c.status)
 	}
 	assertNotContains(t, rowFor(t, view, "builder#1"), screens.OpenLabel, screens.NoStatusLabel)
 }
@@ -163,7 +163,7 @@ func TestDispatches_PeakContextShowsTheFigureAndIsDrawnInItsBandRole(t *testing.
 		{longInstance, "380,000", domain.BandDegraded},
 		{"reviewer#1", "260,000", domain.BandAboveOptimal},
 		{"builder#2", "150,000", domain.BandOptimal},
-		{"builder#3", "40,000", domain.BandBelowOptimal},
+		{"builder#3", "40,000", domain.BandOptimal},
 	} {
 		raw := rawLineWith(t, view, c.id)
 		assertDrawnInRole(t, raw, c.tokens, screens.BandRole(c.band))
@@ -174,7 +174,7 @@ func TestDispatches_AbsentPeakContextShowsTheMarkerNotZero(t *testing.T) {
 	colourOff(t)
 	absent := dispatchesView(dispatchRun(), 140, tallH)
 	zero := dispatchesView(withDispatch(dispatchRun(), "builder#4", func(d *domain.Dispatch) {
-		d.PeakContext = domain.ContextFigure{Tokens: domain.Tokens(0), Band: domain.BandBelowOptimal}
+		d.PeakContext = domain.ContextFigure{Tokens: domain.Tokens(0), Band: domain.BandOptimal}
 	}), 140, tallH)
 
 	absentRow, zeroRow := rowFor(t, absent, "builder#4"), rowFor(t, zero, "builder#4")
@@ -188,7 +188,7 @@ func TestDispatches_AbsentPeakContextShowsTheMarkerNotZero(t *testing.T) {
 func TestDispatches_OrchestratorRowShowsItsOwnPeakContext(t *testing.T) {
 	colourOff(t)
 
-	row := rowFor(t, dispatchesView(dispatchRun(), 140, tallH), "orchestrator")
+	row := rowForName(t, dispatchesView(dispatchRun(), 140, tallH), "orchestrator", 6)
 
 	assertContains(t, row, "210,000")
 }
@@ -232,10 +232,10 @@ func TestDispatches_IncompletenessLabelsStayOnTheRowOfTheirDispatch(t *testing.T
 	view := dispatchesView(run, tableW, tallH)
 
 	affected := rowFor(t, view, "builder#1")
-	assertContains(t, affected, screens.AssumedTierLabel, "4,321")
+	assertContains(t, affected, screens.AssumedTierLabel(nil), "4,321")
 	assertContains(t, rowFor(t, view, "builder#4"), screens.MissingUsageLabel, screens.UnpricedMarker)
-	assertNotContains(t, rowFor(t, view, "reviewer#1"), screens.AssumedTierLabel, screens.MissingUsageLabel)
-	assertNotContains(t, rowFor(t, view, longInstance), screens.AssumedTierLabel, screens.MissingUsageLabel)
+	assertNotContains(t, rowFor(t, view, "reviewer#1"), screens.AssumedTierLabel(nil), screens.MissingUsageLabel)
+	assertNotContains(t, rowForName(t, view, longInstance, 6), screens.AssumedTierLabel(nil), screens.MissingUsageLabel)
 }
 
 func TestDispatches_RunWithoutSubagentsStillListsTheOrchestrator(t *testing.T) {

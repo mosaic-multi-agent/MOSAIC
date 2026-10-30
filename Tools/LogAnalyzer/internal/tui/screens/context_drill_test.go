@@ -67,8 +67,8 @@ func TestContextDrill_NamesTheBandOfPeakAndFinalAsText(t *testing.T) {
 	if lineWithAll(view, "peak", "above optimal") == "" {
 		t.Errorf("the peak (300,000) must be named with its band, above optimal\n%s", view)
 	}
-	if lineWithAll(view, "final", "below optimal") == "" {
-		t.Errorf("the final context (80,000) must be named with its band, below optimal\n%s", view)
+	if lineWithAll(view, "final", "optimal") == "" || strings.Contains(view, "below optimal") {
+		t.Errorf("the final context (80,000) must be named with its band, optimal\n%s", view)
 	}
 }
 
@@ -118,10 +118,10 @@ func TestContextDrill_StaysWithinNarrowAndShortTerminals(t *testing.T) {
 	}
 }
 
-func TestContextDrill_NamesTheBelowOptimalBand(t *testing.T) {
+func TestContextDrill_NamesTheLowestBandOptimalNeverBelowOptimal(t *testing.T) {
 	view := strings.ToLower(stripStyling(ctxDrillView(t, "tester#1")))
 
-	if lineWithAll(view, "peak", "below optimal") == "" {
-		t.Errorf("the peak of tester#1 (95,000) must be named below optimal\n%s", view)
+	if lineWithAll(view, "peak", "optimal") == "" || strings.Contains(view, "below optimal") {
+		t.Errorf("the peak of tester#1 (95,000) must be named optimal and no figure below optimal\n%s", view)
 	}
 }

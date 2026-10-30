@@ -60,8 +60,17 @@ func copyDir(t *testing.T, src, dst string) {
 
 func runBinary(t *testing.T, bin string, args ...string) (code int, stdout, stderr string) {
 	t.Helper()
+	return runBinaryIn(t, bin, "", t.TempDir(), args...)
+}
+
+// runBinaryIn runs the binary in dir ("" = the test's own folder) with the user
+// config folder pointed at configBase, so no run reads or writes the real one.
+func runBinaryIn(t *testing.T, bin, dir, configBase string, args ...string) (code int, stdout, stderr string) {
+	t.Helper()
 	var out, errOut bytes.Buffer
 	cmd := exec.Command(bin, args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), configEnv(configBase)...)
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	err := cmd.Run()
 	if ee, ok := err.(*exec.ExitError); ok {

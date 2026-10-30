@@ -176,9 +176,10 @@ func ctxRowLine(t *testing.T, view, id string) string {
 	return ""
 }
 
-// ctxCells are the figures of a row, read from its right end: the sparkline, when
+// ctxCells are the figures of a row up to the unapplied count, read from the right end,
+// after the compaction cost cell that ends the figures: the sparkline, when
 // the row has one, is dropped first, so rows without calls parse too.
-type ctxCells struct{ calls, first, firstWrite, peak, final, logged, detected string }
+type ctxCells struct{ calls, first, firstWrite, peak, final, logged, harness, detected, unapplied string }
 
 func ctxRowCells(t *testing.T, view, id string) ctxCells {
 	t.Helper()
@@ -193,11 +194,11 @@ func ctxRowCells(t *testing.T, view, id string) ctxCells {
 	if n := len(merged); n > 0 && strings.Trim(merged[n-1], "▁▂▃▄▅▆▇█┃│┊") == "" {
 		merged = merged[:n-1]
 	}
-	if len(merged) < 7 {
-		t.Fatalf("row of %s has fewer than 7 figures: %q", id, merged)
+	if len(merged) < 10 {
+		t.Fatalf("row of %s has fewer than 10 figures: %q", id, merged)
 	}
-	c := merged[len(merged)-7:]
-	return ctxCells{c[0], c[1], c[2], c[3], c[4], c[5], c[6]}
+	c := merged[len(merged)-10 : len(merged)-1] // the last figure is the compaction cost
+	return ctxCells{c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8]}
 }
 
 // ctxSparkline is the sparkline token ending a row, or "" when it has none.

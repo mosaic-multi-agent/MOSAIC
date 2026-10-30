@@ -15,6 +15,7 @@ import os
 import time
 
 import mosaic_logger_core as core
+from mosaic_logger_locked_append import holding_lock, locked_append
 
 SESSION_RUN_ID_MAX_AGE_SECONDS = 86400
 UNKNOWN_RUN = "unknown-run"
@@ -75,10 +76,8 @@ def _acquire_lock(lock_path) -> bool:
             time.sleep(0.02)
 
 
-def _append_bytes(path, data: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "ab") as fh:
-        fh.write(data)
+def _report(message, exc):
+    core.debug_log("relocation: " + message, exc)
 
 
 def _split_session_lines(raw: bytes, session_id: str, run_id: str):
@@ -97,35 +96,48 @@ def _split_session_lines(raw: bytes, session_id: str, run_id: str):
     return moved, kept
 
 
+def _snapshot_stream(source):
+    """Rename the stream to a private snapshot while holding its append lock; None if not done.
+
+    Writers then start a fresh file, so no concurrent append is lost. When the append lock is
+    not obtained in time the stream is left untouched.
+    """
+    snapshot = source.with_name(source.name + ".relocating-" + str(os.getpid()))
+    with holding_lock(source, _report) as held:
+        if not held:
+            return None
+        os.replace(str(source), str(snapshot))
+    return snapshot
+
+
 def _relocate_locked(paths: "core.LogPaths", session_id: str, run_id: str) -> None:
     """Move the session's lines without ever rewriting the file concurrent writers append to.
 
-    The shared stream is first renamed to a private snapshot (writers then start a fresh
-    file, so no concurrent append is lost); the snapshot's other lines are appended back
-    to the live stream and the snapshot is removed only after both writes succeeded.
+    The snapshot is removed only after its lines are written: the session's lines to the
+    run's stream and the others back to the unknown-run stream, each under that stream's
+    append lock. If the run's stream cannot be written the whole snapshot goes back to the
+    unknown-run stream; if that fails too the snapshot stays in place.
     """
     source = paths.orchestrator_events(UNKNOWN_RUN)
     if not source.is_file():
         return
-    snapshot = source.with_name(source.name + ".relocating-" + str(os.getpid()))
-    os.replace(str(source), str(snapshot))
-    try:
-        raw = snapshot.read_bytes()
-        moved, kept = _split_session_lines(raw, session_id, run_id)
-        if moved:
-            try:
-                _append_bytes(paths.orchestrator_events(run_id),
-                              "".join(moved).encode("utf-8"))
-            except Exception:
-                _append_bytes(source, raw)
+    snapshot = _snapshot_stream(source)
+    if snapshot is None:
+        return
+    raw = snapshot.read_bytes()
+    moved, kept = _split_session_lines(raw, session_id, run_id)
+    if moved:
+        target = paths.orchestrator_events(run_id)
+        if not locked_append(target, "".join(moved).encode("utf-8"), _report):
+            if locked_append(source, raw, _report):
                 snapshot.unlink()
-                raise
-        if kept:
-            _append_bytes(source, b"".join(kept))
-        snapshot.unlink()
-    except Exception:
+            else:
+                core.debug_log("relocation left snapshot in place: " + str(snapshot))
+            return
+    if kept and not locked_append(source, b"".join(kept), _report):
         core.debug_log("relocation left snapshot in place: " + str(snapshot))
-        raise
+        return
+    snapshot.unlink()
 
 
 def relocate_unknown_run_events(paths: "core.LogPaths", session_id: "str | None",

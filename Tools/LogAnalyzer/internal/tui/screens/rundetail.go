@@ -11,7 +11,7 @@ import (
 )
 
 // dispatchKeys are the short help keys of the Dispatches view.
-var dispatchKeys = []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: KeySort, Desc: "sort"}, {Key: "esc", Desc: "back"}}
+var dispatchKeys = []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: KeySort, Desc: "sort"}, exportKeyEntry, {Key: "esc", Desc: "back"}}
 
 // RunDetailScreen is the Dispatches view of one run: a table with the orchestrator
 // row first and one row per dispatch with its cost, share of the run, status,
@@ -29,7 +29,9 @@ type RunDetailScreen struct {
 	width  int
 	height int
 	styles Styles
-	back   bool
+	// reasons explain why models of the run were left unpriced, shown below the notice.
+	reasons []domain.UnpricedReason
+	back    bool
 	nav    viewNav
 	runChrome
 }
@@ -85,7 +87,7 @@ func (s *RunDetailScreen) View(width, height int) string {
 	s.width, s.height = width, height
 	entries := dispatchEntries(s.run.ByAgentType)
 	order := s.sort.Active()
-	rows := dispatchTableRows(s.run, true, entries, dispatchOrder(entries, order), s.styles.Theme)
+	rows := dispatchTableRows(s.styles.Currency, s.run, true, entries, dispatchOrder(entries, order), s.styles.Theme)
 
 	head := s.summaryLines()
 	lines, w := dispatchTableLines(rows, s.cursor, &s.offset, order, width, bodyBudget(height)-len(head)-1, s.styles)
@@ -99,19 +101,23 @@ func (s *RunDetailScreen) View(width, height int) string {
 // notices about unpriced models and assumed cache-write tiers.
 func (s *RunDetailScreen) summaryLines() []string {
 	st := s.styles
-	lines := []string{st.Subtitle.Render("Run totals") + st.Body.Render("  "+FormatTotalsLine(s.run.Totals))}
+	lines := []string{st.Subtitle.Render("Run totals") + st.Body.Render("  "+FormatTotalsLine(st.Currency, s.run.Totals))}
 	if len(s.run.UnpricedModels) > 0 {
 		models := make([]string, len(s.run.UnpricedModels))
 		for i, m := range s.run.UnpricedModels {
 			models[i] = m.String()
 		}
 		lines = append(lines, st.Warning.Render("Unpriced models: "+strings.Join(models, ", ")))
+		lines = append(lines, unpricedReasonLines(st, s.width, s.run.UnpricedModels, s.reasons)...)
 	}
 	if assumed := s.run.Totals.AssumedTierCacheWrite; assumed > 0 {
-		lines = append(lines, st.Warning.Render(AssumedTierNotice(assumed)))
+		lines = append(lines, st.Warning.Render(AssumedTierNotice(assumed, s.run.Totals.AssumedTiers)))
 	}
 	return lines
 }
+
+// SetUnpricedReasons sets the reasons shown next to the run's unpriced models.
+func (s *RunDetailScreen) SetUnpricedReasons(r []domain.UnpricedReason) { s.reasons = r }
 
 // Help returns the key hints for this screen.
 func (s *RunDetailScreen) Help() string { return shortHelpText("", dispatchKeys) }

@@ -12,7 +12,7 @@ STATE_VERSION = 1
 LOCK_STALE_AFTER_SECONDS = 600
 DEFAULT_BUDGET_SECONDS = 5.0
 STATE_DIR_NAME = ".otel-ingest"
-RECORD_SCHEMA_VERSION = "1.4.0"
+RECORD_SCHEMA_VERSION = "1.6.0"
 PROVIDER_NAME = "github-copilot"
 
 _TIME_PATTERN = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$")
@@ -32,13 +32,14 @@ class IngestResult:
     """Outcome of one ingest."""
 
     def __init__(self, status, records_written=0, finalized=0, pending=0,
-                 lines_read=0, lines_malformed=0, diagnostics=None):
+                 lines_read=0, lines_malformed=0, diagnostics=None, tool_ends_written=0):
         self.status = status
         self.records_written = records_written
         self.finalized = finalized
         self.pending = pending
         self.lines_read = lines_read
         self.lines_malformed = lines_malformed
+        self.tool_ends_written = tool_ends_written  # tool_call_end lines written for failed tool calls
         self.diagnostics = diagnostics if diagnostics is not None else []
 
 

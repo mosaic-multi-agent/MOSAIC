@@ -1,0 +1,15 @@
+{
+  "description": "VS Code dialect, orchestrator: gen_ai.agent.name of the chat span is copied verbatim into call_label and mapped to call_kind. Main: panel/editAgent, the exact label tool/runSubagent, tool/runSubagent-<agent>, retry variants of them (one or two retry-<word>- prefixes). Compaction: summarizeConversationHistory, with a retry prefix, or with a suffix. Auxiliary: backgroundTodoAgent, title, progressMessages, copilotLanguageModelWrapper/*. Unknown names (retry-err2-panel/editAgent: a retry word with a digit is not a prefix, XtabProvider, Title: case-sensitive, tool/runSubagentX, panel/editAgent2) keep call_label and have no call_kind. A span without the attribute, or with an empty one, has neither field. The invoke_agent name is not a label.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

@@ -88,6 +88,7 @@ const helpTitle = "Keys"
 // runChrome is the state every per-run view shares: the findings of its run for
 // the header and the help overlay.
 type runChrome struct {
+	configHelp
 	quality RunQuality
 	help    helpOverlay
 }
@@ -117,7 +118,7 @@ func (c *runChrome) render(spec frameSpec, body []string, width, height int, st 
 	f := Frame{Run: spec.run, Quality: c.quality, Active: spec.active, Keys: spec.keys, Hint: spec.hint, Sort: spec.sort}
 	if c.help.open {
 		f.Keys, f.Hint = overlayKeys, ""
-		body = c.help.linesIn(overlayGroups(spec.escDesc, spec.screenKeys), width, FrameBodyHeight(height), st.Theme)
+		body = c.help.linesIn(c.withConfigGroup(overlayGroups(spec.escDesc, spec.screenKeys)), width, FrameBodyHeight(height), st.Theme)
 	}
 	return RenderFrame(f, body, width, height, st)
 }

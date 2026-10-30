@@ -12,7 +12,7 @@ import (
 )
 
 // scrollKeys are the short help keys of the views that only scroll.
-var scrollKeys = []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "scroll"}, {Key: "esc", Desc: "back"}}
+var scrollKeys = []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "scroll"}, exportKeyEntry, {Key: "esc", Desc: "back"}}
 
 // bodyBudget returns how many body lines fit on a terminal of the given height.
 func bodyBudget(height int) int { return FrameBodyHeight(height) }
@@ -94,16 +94,16 @@ func (n *viewNav) reset() { n.req = "" }
 
 // formatMoneyTotal renders a CategoryMoney total; the partial marker is added
 // only to a known amount, never to an unpriced or absent one.
-func formatMoneyTotal(c domain.CategoryMoney) string {
+func formatMoneyTotal(cur domain.CurrencyCode, c domain.CategoryMoney) string {
 	if c.Total.State == domain.MoneyKnown {
-		return FormatTotal(c)
+		return FormatTotal(cur, c)
 	}
-	return FormatMoney(c.Total)
+	return FormatMoney(cur, c.Total)
 }
 
 // incompleteness lists the labels for unpriced models, assumed cache-write tier,
 // missing token usage and open invocations that apply to a figure.
-func incompleteness(unpriced []domain.PricingKey, assumed int64, missing, open int) []string {
+func incompleteness(unpriced []domain.PricingKey, assumed int64, tiers []domain.CacheWriteTier, missing, open int) []string {
 	var out []string
 	if len(unpriced) > 0 {
 		names := make([]string, len(unpriced))
@@ -112,7 +112,7 @@ func incompleteness(unpriced []domain.PricingKey, assumed int64, missing, open i
 		}
 		out = append(out, UnpricedMarker+": "+strings.Join(names, ", "))
 	}
-	if s := FormatAssumedTier(assumed); s != "" {
+	if s := FormatAssumedTier(assumed, tiers); s != "" {
 		out = append(out, s)
 	}
 	if missing > 0 {

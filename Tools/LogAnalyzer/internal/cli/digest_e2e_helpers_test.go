@@ -67,7 +67,7 @@ func e2eService(t *testing.T) *app.Service {
 	return app.New(app.Deps{
 		Source:      logscan.NewScanner(),
 		Reader:      logread.NewReader(),
-		Pricing:     pricing.NewStore(root),
+		Pricing:     pricing.NewStore(t.TempDir(), root),
 		Digests:     digest.NewStore(),
 		Clock:       newFakeClock(),
 		Interaction: cli.NewInteraction(&bytes.Buffer{}, cli.Answers{}),

@@ -146,7 +146,7 @@ func TestToolsTable_WithColourOffEveryMarkerRemainsAsText(t *testing.T) {
 
 func toolsSortAscending() map[screens.SortKey][]string {
 	return map[screens.SortKey][]string{
-		screens.SortCalls:    {screens.UnnamedToolLabel, "Bash", "Read"},
+		screens.SortCalls:    {screens.StartMissingLabel, "Bash", "Read"},
 		screens.SortDuration: {"Bash", "Read"},
 		screens.SortErrors:   {"Bash", "Read"},
 		screens.SortName:     {"Bash", "Read"},
@@ -161,7 +161,7 @@ func TestToolsTable_DefaultSortIsCallsDescendingAndTheHeaderSaysSo(t *testing.T)
 	if key, desc := activeSort(t, view); key != screens.SortCalls || !desc {
 		t.Errorf("default sort = %q desc=%v, want calls descending", key, desc)
 	}
-	assertAppearInOrder(t, view, []string{"Read", "Bash", screens.UnnamedToolLabel}, true)
+	assertAppearInOrder(t, view, []string{"Read", "Bash", screens.StartMissingLabel}, true)
 }
 
 func TestToolsTable_SortKeyCyclesThroughEveryOrderAndWrapsAround(t *testing.T) {
@@ -182,7 +182,7 @@ func TestToolsTable_SortingNeverDropsAToolOrASection(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		view := s.View(tableW, tallH)
-		assertContains(t, view, "Read", "Bash", screens.UnnamedToolLabel, "Grep", "Edit", "Write", "builder", screens.UnknownTypeLabel)
+		assertContains(t, view, "Read", "Bash", screens.StartMissingLabel, "Grep", "Edit", "Write", "builder", screens.UnknownTypeLabel)
 		assertContains(t, strings.ToLower(view), "orchestrator")
 		press(s, screens.KeySort)
 	}

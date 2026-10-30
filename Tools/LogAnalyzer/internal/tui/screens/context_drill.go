@@ -62,11 +62,12 @@ func (s *ContextScreen) drillHead(a domain.ActorContext) []string {
 	figure("Peak context:", a.Peak)
 	figure("Final context:", a.Final)
 	figure("First write context*:", a.FirstWrite)
-	head = append(head, clip(st.Body, s.width, fmt.Sprintf("Compactions: %d logged, %d detected",
-		a.LoggedCount(), a.DetectedCount())))
+	for _, l := range compactionLines(st.Currency, a) {
+		head = append(head, clip(st.Body, s.width, l))
+	}
 	for _, note := range []string{
 		"* heuristic. Final = " + domain.FinalContextDefinition + ".",
-		"Bands: under 100,000 below optimal, 100,000 to 250,000 optimal, 250,000 to 350,000 above optimal, from 350,000 degraded.",
+		"Bands: under 250,000 optimal, 250,000 to 350,000 above optimal, from 350,000 degraded.",
 	} {
 		for _, l := range strings.Split(tuicommon.Wrap(note, s.width), "\n") {
 			head = append(head, st.Muted.Render(l))
@@ -79,15 +80,21 @@ func (s *ContextScreen) drillHead(a domain.ActorContext) []string {
 // and a marker for the first write and for each compaction.
 func contextCurve(a domain.ActorContext) chart.Curve {
 	c := chart.Curve{YLabel: func(v float64) string { return fmt.Sprintf("%dk", int(v/1000+0.5)) }}
-	for _, call := range a.Calls {
-		c.Values = append(c.Values, float64(call.Context.ValueOr(0)))
+	// Only main calls are drawn; mainIndex maps a call to its point (-1: none).
+	mainIndex := make([]int, len(a.Calls))
+	for i, call := range a.Calls {
+		mainIndex[i] = -1
+		if isMainCall(call) {
+			mainIndex[i] = len(c.Values)
+			c.Values = append(c.Values, float64(call.Context.ValueOr(0)))
+		}
 	}
 	for _, r := range domain.ContextBandRanges() {
 		c.Guides = append(c.Guides, chart.Guide{From: float64(r.From), To: float64(r.To), Role: BandRole(r.Band), Label: r.Band.Label()})
 	}
 	for i, call := range a.Calls {
-		if call.FirstWrite {
-			c.Markers = append(c.Markers, chart.Marker{Index: i, Kind: chart.MarkerPrimary})
+		if call.FirstWrite && mainIndex[i] >= 0 {
+			c.Markers = append(c.Markers, chart.Marker{Index: mainIndex[i], Kind: chart.MarkerPrimary})
 		}
 	}
 	for _, m := range a.Compactions {
@@ -99,7 +106,9 @@ func contextCurve(a domain.ActorContext) chart.Curve {
 		if idx < 0 {
 			idx = m.Before
 		}
-		c.Markers = append(c.Markers, chart.Marker{Index: idx, Kind: kind})
+		if idx >= 0 && idx < len(mainIndex) && mainIndex[idx] >= 0 {
+			c.Markers = append(c.Markers, chart.Marker{Index: mainIndex[idx], Kind: kind})
+		}
 	}
 	return c
 }

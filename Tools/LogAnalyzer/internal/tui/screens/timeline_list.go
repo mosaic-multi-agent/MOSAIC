@@ -82,9 +82,9 @@ func timelineColumns() []table.Column {
 	right := table.AlignRight
 	cols := make([]table.Column, ivCount)
 	cols[ivInstance] = table.Column{Title: "instance", Flex: true, MinWidth: 8}
-	cols[ivType] = table.Column{Title: "type", Priority: 2}
-	cols[ivStart] = table.Column{Title: "start", Priority: 1}
-	cols[ivEnd] = table.Column{Title: "end", Priority: 1}
+	cols[ivType] = table.Column{Title: "type", Priority: 1}
+	cols[ivStart] = table.Column{Title: "start", Priority: 2}
+	cols[ivEnd] = table.Column{Title: "end", Priority: 2}
 	cols[ivDuration] = table.Column{Title: "duration", Align: right}
 	cols[ivStatus] = table.Column{Title: "status"}
 	cols[ivOverlap] = table.Column{Title: "overlap", Align: right, Priority: 3}

@@ -17,6 +17,7 @@ import (
 const (
 	kcTime = iota
 	kcModel
+	kcKind
 	kcContext
 	kcInput
 	kcCacheRead
@@ -32,6 +33,9 @@ const (
 	markFirstWriteText = "first write"
 	markLoggedText     = "logged compaction"
 	markDetectedText   = "detected compaction"
+	markHarnessText    = "harness compaction (OTel)"
+	markCompactCall    = "compaction call"
+	markUnappliedCall  = "unapplied compaction call"
 )
 
 // tableOf assembles a kit table from its parts.
@@ -45,13 +49,14 @@ func callColumns() []table.Column {
 	right := table.AlignRight
 	cols := make([]table.Column, kcCount)
 	cols[kcTime] = table.Column{Title: "time"}
-	cols[kcModel] = table.Column{Title: "model", Priority: 4, Flex: true, MinWidth: 8}
+	cols[kcModel] = table.Column{Title: "model", Priority: 1, Flex: true, MinWidth: 8}
+	cols[kcKind] = table.Column{Title: "kind", Priority: 1, MinWidth: 8}
 	cols[kcContext] = table.Column{Title: "context", Align: right}
-	cols[kcInput] = table.Column{Title: "input", Align: right, Priority: 3}
+	cols[kcInput] = table.Column{Title: "input", Align: right, Priority: 4}
 	cols[kcCacheRead] = table.Column{Title: "cache read", Align: right, Priority: 5}
 	cols[kcCacheWrite] = table.Column{Title: "cache write", Align: right, Priority: 5}
-	cols[kcOutput] = table.Column{Title: "output", Align: right, Priority: 3}
-	cols[kcCost] = table.Column{Title: "cost", Align: right, Priority: 1}
+	cols[kcOutput] = table.Column{Title: "output", Align: right, Priority: 4}
+	cols[kcCost] = table.Column{Title: "cost", Align: right, Priority: 3}
 	cols[kcMark] = table.Column{Title: "mark", Priority: 2, Flex: true, MinWidth: 8}
 	return cols
 }
@@ -122,29 +127,53 @@ func callMarks(a domain.ActorContext) [][]string {
 			add(i, markFirstWriteText)
 		}
 	}
-	for _, kind := range []domain.CompactionKind{domain.CompactionLogged, domain.CompactionDetected} {
-		text := markLoggedText
-		if kind == domain.CompactionDetected {
-			text = markDetectedText
+	for i, c := range a.Calls {
+		switch {
+		case c.Kind != domain.CallCompaction:
+		case c.Unapplied:
+			add(i, markUnappliedCall)
+		default:
+			add(i, markCompactCall)
 		}
-		for _, m := range a.Compactions {
-			if m.Kind == kind {
-				add(m.Before, text)
-				add(m.After, text)
-			}
+	}
+	for _, r := range a.Rewrites {
+		add(r.Call, "rewrite: "+r.Label())
+	}
+	for _, m := range a.Compactions {
+		text := compactionMarkText(m)
+		if text == "" {
+			continue
 		}
+		add(m.Before, text)
+		add(m.After, text)
 	}
 	return marks
 }
 
+// compactionMarkText names the kind of a compaction on the calls around it. A
+// drop matched to a logged compaction has no mark of its own: the logged mark
+// stands for it.
+func compactionMarkText(m domain.CompactionMark) string {
+	switch {
+	case m.Kind == domain.CompactionLogged:
+		return markLoggedText
+	case m.MatchedLogged:
+		return ""
+	case m.Harness:
+		return markHarnessText
+	}
+	return markDetectedText
+}
+
 // callCells builds the cells of one call row.
-func callCells(c domain.ContextCall, marks []string) []table.Cell {
+func callCells(cur domain.CurrencyCode, c domain.ContextCall, marks []string) []table.Cell {
 	cells := make([]table.Cell, kcCount)
 	cells[kcTime] = table.Cell{Text: c.At.Format("15:04:05"), Role: tuicommon.RoleDataTime}
 	cells[kcModel] = table.Cell{Text: string(c.Model)}
 	if c.Model == "" {
 		cells[kcModel] = mutedCell(AbsentMarker)
 	}
+	cells[kcKind] = table.Cell{Text: callKindText(c)}
 	ctx := domain.ContextFigure{Tokens: c.Context, Partial: c.Partial}
 	if v, ok := c.Context.Value(); ok {
 		ctx.Band = domain.BandOf(v)
@@ -154,7 +183,7 @@ func callCells(c domain.ContextCall, marks []string) []table.Cell {
 	cells[kcCacheRead] = tokensCell(c.Usage.CacheRead)
 	cells[kcCacheWrite] = tokensCell(c.Usage.CacheCreation)
 	cells[kcOutput] = tokensCell(c.Usage.Output)
-	cost := FormatMoney(c.Cost)
+	cost := FormatMoney(cur, c.Cost)
 	cells[kcCost] = table.Cell{Text: cost, Role: MoneyRole(c.Cost, true)}
 	cells[kcMark] = warningCell(strings.Join(marks, ", "))
 	return cells
@@ -167,10 +196,27 @@ func callTableLines(a domain.ActorContext, o SortOrder, cursor int, offset *int,
 	order := callOrder(a.Calls, o)
 	rows := make([][]table.Cell, len(order))
 	for r, i := range order {
-		rows[r] = callCells(a.Calls[i], marks[i])
+		rows[r] = callCells(st.Currency, a.Calls[i], marks[i])
 	}
 	w := ScrollWindow(*offset, cursor, len(rows), rowBudget)
 	*offset = w.Offset
 	t := tableOf(callColumns(), rows, cursor, w.Offset, callSortColumn(o.Key), o.Desc)
 	return renderTableLines(t, width, w.Count, st), w
+}
+
+// callKindText names the kind of a helper call, with its label when it has one;
+// a main call shows nothing.
+func callKindText(c domain.ContextCall) string {
+	if isMainCall(c) {
+		return ""
+	}
+	if c.Label == "" {
+		return string(c.Kind)
+	}
+	return string(c.Kind) + " (" + c.Label + ")"
+}
+
+// rewriteCountCell is the number of context rewrites of one scope.
+func rewriteCountCell(n int) table.Cell {
+	return table.Cell{Text: formatGrouped(int64(n))}
 }

@@ -5,13 +5,14 @@ run folder, places the step's OTel file and log overlay, runs one ingest and com
 state, result and diagnostics with the expected files, exactly as the Go runner does.
 """
 
+import json
 import pathlib
 import shutil
 
 import pytest
 
 import mosaic_logger_otel as otel
-from otel_ingest_helpers import CONFORMANCE_DIR, FIXED_NOW, read_json, read_otel_records
+from otel_ingest_helpers import CONFORMANCE_DIR, FIXED_NOW, read_json
 
 CASE_NAMES = sorted(p.name for p in CONFORMANCE_DIR.iterdir() if p.is_dir())
 STREAM_TOP_LEVEL = {"00_orchestrator_events.jsonl", "00_unattributed_events.jsonl"}
@@ -24,8 +25,21 @@ def is_stream_file(rel):
     return len(parts) == 2 and parts[1] == "03_events.jsonl" and not parts[0].startswith(".")
 
 
+def read_stream_events(path):
+    """In file order, the OTel usage_record lines and every tool_call_end line of a stream, timestamp kept."""
+    events = []
+    for line in path.read_bytes().split(b"\n"):
+        if not line.strip():
+            continue
+        obj = json.loads(line)
+        is_otel_usage = obj.get("event") == "usage_record" and obj.get("source") == "otel"
+        if is_otel_usage or obj.get("event") == "tool_call_end":
+            events.append(obj)
+    return events
+
+
 def collect_streams(root, selected):
-    """OTel usage records per selected stream file (relative posix path) under root."""
+    """OTel usage records and tool_call_end lines per selected stream file (relative posix path) under root."""
     out = {}
     if not root.is_dir():
         return out
@@ -35,7 +49,7 @@ def collect_streams(root, selected):
         rel = path.relative_to(root).as_posix()
         if not selected(rel):
             continue
-        records = read_otel_records(path)
+        records = read_stream_events(path)
         if records:
             out[rel] = records
     return out
@@ -102,6 +116,7 @@ def check_result(case_dir, step, res):
         "status": res.status, "records_written": res.records_written,
         "finalized": res.finalized, "pending": res.pending,
         "lines_read": res.lines_read, "lines_malformed": res.lines_malformed,
+        "tool_ends_written": res.tool_ends_written,
     }
     assert got == want, f"{step}: result differs"
 
@@ -123,7 +138,7 @@ def check_diagnostics(case_dir, step, res):
 def check_streams(ws, step):
     want = collect_streams(ws.case_dir / "expected" / step / "streams", lambda rel: True)
     got = collect_streams(ws.run_dir, is_stream_file)
-    assert got == want, f"{step}: ingested usage_record streams differ"
+    assert got == want, f"{step}: ingested usage_record and tool_call_end streams differ"
 
 
 def check_state(ws, step):

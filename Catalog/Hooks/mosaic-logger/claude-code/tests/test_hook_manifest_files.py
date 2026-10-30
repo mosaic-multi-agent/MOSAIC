@@ -77,5 +77,20 @@ class TestClaudeCodeManifestIsComplete(unittest.TestCase):
         self.assertEqual([], missing)
 
 
+class TestClaudeCodeShipsTheLockedAppendModule(unittest.TestCase):
+
+    _NAME = "mosaic_logger_locked_append.py"
+
+    def test_the_module_exists_in_the_folder_and_is_listed_with_a_local_flat_entry(self):
+        self.assertTrue(os.path.isfile(os.path.join(_HOOK_DIR, _VARIANT, self._NAME)))
+        self.assertIn((self._NAME, self._NAME), _claude_code_entries())
+
+    def test_no_listed_file_is_named_for_otel(self):
+        otel = [e for e in _claude_code_entries()
+                if "otel" in e[0].lower() or "otel" in e[1].lower()]
+
+        self.assertEqual([], otel)
+
+
 if __name__ == "__main__":
     unittest.main()

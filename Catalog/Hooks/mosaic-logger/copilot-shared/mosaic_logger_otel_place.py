@@ -100,6 +100,7 @@ def place_calls(final, scope, state, resolver, writer, calls, result):
     already placed is not written again. A final ingest sends pending calls of its scope to the
     unattributed stream."""
     untied_calls = 0
+    timed_out = 0
     pending = []
     keys = resolver.keys
     for call in calls:
@@ -116,7 +117,11 @@ def place_calls(final, scope, state, resolver, writer, calls, result):
         if not ok:
             pending.append(call)
             continue
-        writer.write(call, dest)
+        if not writer.write(call, dest):
+            # The append lock was not obtained in time: the call is not placed and is retried.
+            pending.append(call)
+            timed_out += 1
+            continue
         state.placements[call.record_id] = dest
         result.records_written += 1
         if finalized:
@@ -124,6 +129,10 @@ def place_calls(final, scope, state, resolver, writer, calls, result):
     state.pending = pending
     result.pending = len(pending)
     result.diagnostics.extend(placement_diagnostics(keys, untied_calls, result.finalized))
+    if timed_out > 0:
+        result.diagnostics.append(Diagnostic(
+            "append_timed_out", "lines not written because the append lock wait limit was reached",
+            counts={"lines": timed_out}))
 
 
 def placement_diagnostics(keys, untied_calls, finalized):

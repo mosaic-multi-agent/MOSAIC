@@ -16,7 +16,8 @@
         "token_usage": {
           "input_tokens": 70,
           "output_tokens": 7
-        }
+        },
+        "timestamp": "2026-10-28T09:00:00.000Z"
       },
       "parent_span_id": "inv-vs-missing",
       "conversation_id": "vsc-conv-sub",

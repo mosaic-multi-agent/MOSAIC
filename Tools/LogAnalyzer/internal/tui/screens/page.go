@@ -75,26 +75,15 @@ func badgeHeader(title string, badges []headerBadge, width int, theme tuicommon.
 	return line
 }
 
-// pageHelpLine fits the page's short help into width. When it is too long the
-// keys are cut and the help hint, if the page offers one, stays.
+// pageHelpLine fits the page's short help into width, dropping whole entries by
+// priority; the help hint, if the page offers one, stays.
 func pageHelpLine(p Page, width int) string {
-	lead := leadHelp(p.Hint, p.Keys)
-	if !p.Help {
-		return textwidth.Truncate(lead, width)
-	}
-	line := joinHelp(lead, helpHintText)
-	if textwidth.Of(line) <= width {
-		return line
-	}
-	room := width - textwidth.Of(helpHintText) - 2
-	if room <= 0 {
-		return textwidth.Truncate(helpHintText, width)
-	}
-	return textwidth.Truncate(lead, room) + "  " + helpHintText
+	return fitFooter(footerEntries(p.Hint, p.Keys), p.Help, width)
 }
 
 // pageChrome is the state every page screen shares: the help overlay.
 type pageChrome struct {
+	configHelp
 	help helpOverlay
 }
 
@@ -105,7 +94,7 @@ func (c *pageChrome) HelpOpen() bool { return c.help.open }
 func (c *pageChrome) render(p Page, groups []chrome.HelpGroup, body []string, width, height int, st Styles) string {
 	if c.help.open {
 		p.Keys, p.Hint = overlayKeys, ""
-		body = c.help.linesIn(groups, width, PageBodyHeight(height), st.Theme)
+		body = c.help.linesIn(c.withConfigGroup(groups), width, PageBodyHeight(height), st.Theme)
 	}
 	return RenderPage(p, body, width, height, st)
 }

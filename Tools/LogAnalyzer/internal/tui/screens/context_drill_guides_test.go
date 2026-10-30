@@ -45,16 +45,16 @@ func collapse(in []string) []string {
 func TestContextDrill_CurveRowsAreColouredByBandGuides(t *testing.T) {
 	roles := ctxGuideRoles(t, "builder#1", tableW, tallH)
 
-	// The curve of builder#1 reaches 380,000, so all four bands show, from the
-	// degraded band at the top down to the below-optimal band at the bottom.
+	// The curve of builder#1 reaches 380,000, so all three bands show, from the
+	// degraded band at the top down to the optimal band at the bottom.
 	colourOn(t)
 	bad := rolePrefix(screens.BandRole(domain.BandDegraded))
 	warn := rolePrefix(screens.BandRole(domain.BandAboveOptimal))
 	good := rolePrefix(screens.BandRole(domain.BandOptimal))
-	want := []string{bad, warn, good, warn}
+	want := []string{bad, warn, good}
 	got := collapse(roles)
 	if len(got) != len(want) {
-		t.Fatalf("the chart rows show %d band runs from %d rows, want degraded, above optimal, optimal, below optimal", len(got), len(roles))
+		t.Fatalf("the chart rows show %d band runs from %d rows, want degraded, above optimal, optimal", len(got), len(roles))
 	}
 	for i := range want {
 		if got[i] != want[i] {

@@ -220,7 +220,7 @@ func TestGantt_LanesShowNoMoneyOrPricingMarkers(t *testing.T) {
 	view := timelineView(t, timelineRun(), wideW, tallH)
 
 	for id, typ := range timelineTypes {
-		assertNotContains(t, laneLine(t, view, id, typ), "$", screens.UnpricedMarker, "(partial)", screens.AssumedTierLabel)
+		assertNotContains(t, laneLine(t, view, id, typ), "$", screens.UnpricedMarker, "(partial)", screens.AssumedTierLabel(nil))
 	}
 	if i := orchestratorLaneIndex(view); i >= 0 {
 		assertNotContains(t, viewLines(view)[i], "$", screens.UnpricedMarker)

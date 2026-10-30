@@ -45,8 +45,10 @@ type Result struct {
 	Pending        int
 	LinesRead      int
 	LinesMalformed int
-	Diagnostics    []diag.Diagnostic // sorted by Kind
-	Err            error             // non-nil only with StatusFailed
+	// ToolEndsWritten counts tool_call_end lines this ingest wrote for failed tool calls.
+	ToolEndsWritten int
+	Diagnostics     []diag.Diagnostic // sorted by Kind
+	Err             error             // non-nil only with StatusFailed
 }
 
 // PendingStatus is the read-only view of a run's ingest state.

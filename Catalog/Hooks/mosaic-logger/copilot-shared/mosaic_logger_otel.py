@@ -19,13 +19,14 @@ import time
 
 from mosaic_logger_otel_contract import (
     DEFAULT_BUDGET_SECONDS, ENV_VAR, LOCK_STALE_AFTER_SECONDS, STATE_VERSION, Diagnostic,
-    IngestResult, PendingStatus,
+    IngestResult, PendingStatus, format_time,
 )
 from mosaic_logger_otel_keys import read_run_keys
 from mosaic_logger_otel_lock import acquire_lock
 from mosaic_logger_otel_notices import report_once as _report_once
 from mosaic_logger_otel_place import Resolver, place_calls
 from mosaic_logger_otel_scan import scan_file
+from mosaic_logger_otel_toolend import write_tool_ends
 from mosaic_logger_otel_state import (
     cursor_valid, head_digest, load_state, save_state, state_path,
 )
@@ -125,8 +126,11 @@ def _ingest_into(run_dir, otel_path, size, moment, state, start, out_of_time, fi
     scanned = scan_file(otel_path, start, out_of_time)
     keys = read_run_keys(run_dir)
     calls = list(state.pending)
+    failed = []
     known_ids = {call.record_id for call in calls}
     for parsed in scanned.lines:
+        if parsed.tool is not None:
+            failed.append(parsed.tool)
         link = parsed.link
         if link is not None and keys.tied(link.get("conversation_id", ""), link.get("chat_session_id", ""),
                                           link.get("parent_chat_session_id", "")):
@@ -134,11 +138,14 @@ def _ingest_into(run_dir, otel_path, size, moment, state, start, out_of_time, fi
         call = parsed.call
         if call is not None and call.record_id not in known_ids:
             known_ids.add(call.record_id)
+            if not call.timestamp:
+                call.timestamp = format_time(moment)
             calls.append(call)
     result = IngestResult("ingested", lines_read=scanned.read, lines_malformed=scanned.malformed)
     writer = Writer(run_dir, moment, keys)
     # A cut-off ingest has not seen the rest of the file, so it must not finalise pending spans.
     place_calls(final and not scanned.cut, scope, state, Resolver(keys, state.links), writer, calls, result)
+    write_tool_ends(run_dir, moment, failed, result)
     end = max(scanned.end, start)
     head_len, digest = head_digest(otel_path, max(size, end))
     state.cursor = {"offset": end, "head_len": head_len, "head_sha256": digest}

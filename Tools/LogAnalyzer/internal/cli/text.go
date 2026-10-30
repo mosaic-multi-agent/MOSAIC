@@ -20,23 +20,23 @@ import (
 func EncodeText(w io.Writer, r domain.Report) error {
 	// All-runs total (named runs only)
 	fmt.Fprintf(w, "=== All Runs Total ===\n")
-	writeTextTotals(w, r.AllRuns, "  ")
+	writeTextTotals(w, r.Currency, r.AllRuns, "  ")
 
 	// Named runs
 	if len(r.Runs) > 0 {
 		fmt.Fprintf(w, "\n=== Runs ===\n")
 		for _, run := range r.Runs {
-			writeTextRun(w, run)
+			writeTextRun(w, r.Currency, run)
 		}
 	}
 
 	// Unattributable bucket (distinct section, not folded into named-run totals)
 	if r.Unattributable != nil {
 		fmt.Fprintf(w, "\n=== Unattributable ===\n")
-		writeTextTotals(w, r.Unattributable.Totals, "  ")
+		writeTextTotals(w, r.Currency, r.Unattributable.Totals, "  ")
 		for _, agent := range r.Unattributable.Agents {
 			fmt.Fprintf(w, "  Agent: %s\n", agent.Actor.Label())
-			writeTextTotals(w, agent.Totals, "    ")
+			writeTextTotals(w, r.Currency, agent.Totals, "    ")
 		}
 	}
 
@@ -69,52 +69,61 @@ func EncodeText(w io.Writer, r domain.Report) error {
 	// Unpriced model list
 	if len(r.UnpricedModels) > 0 {
 		fmt.Fprintf(w, "\nUnpriced models (no pricing entry found):\n")
+		reasons := make(map[domain.PricingKey]string, len(r.UnpricedReasons))
+		for _, ur := range r.UnpricedReasons {
+			reasons[ur.Key] = ur.Reason
+		}
 		for _, m := range r.UnpricedModels {
+			if reason := reasons[m]; reason != "" {
+				fmt.Fprintf(w, "  %s: %s\n", m.String(), reason)
+				continue
+			}
 			fmt.Fprintf(w, "  %s\n", m.String())
 		}
 	}
 
 	if assumed := reportAssumedTierTokens(r); assumed > 0 {
-		fmt.Fprintf(w, "\nNote: these costs are estimates; cache writes priced at the assumed 5m tier (no tier split reported): %s tokens\n", formatGrouped(assumed))
+		fmt.Fprintf(w, "\nNote: these costs are estimates; cache writes priced at the %s (no tier split reported): %s tokens\n", domain.AssumedTierLabel(reportAssumedTiers(r)), formatGrouped(assumed))
 	}
 
 	return nil
 }
 
 // writeTextRun writes one run's section to w.
-func writeTextRun(w io.Writer, run domain.RunReport) {
+func writeTextRun(w io.Writer, cur domain.CurrencyCode, run domain.RunReport) {
 	label := run.Run.Label()
 	if run.Provisional {
 		fmt.Fprintf(w, "\nRun: %s  [in progress]\n", label)
 	} else {
 		fmt.Fprintf(w, "\nRun: %s\n", label)
 	}
-	writeTextTotals(w, run.Totals, "  ")
+	writeTextTotals(w, cur, run.Totals, "  ")
+	writeTextRewrites(w, cur, run.Cache.Rewrites, "  ")
 
 	// Orchestrator actor
 	fmt.Fprintf(w, "  Orchestrator:\n")
 	writeTextEffort(w, run.Orchestrator.Effort, "    ")
-	writeTextTotals(w, run.Orchestrator.Totals, "    ")
+	writeTextTotals(w, cur, run.Orchestrator.Totals, "    ")
 
 	// Agent-instance actors
 	for _, agent := range run.Agents {
 		fmt.Fprintf(w, "  Agent: %s\n", agent.Actor.Label())
 		writeTextEffort(w, agent.Effort, "    ")
-		writeTextTotals(w, agent.Totals, "    ")
+		writeTextTotals(w, cur, agent.Totals, "    ")
 	}
 
-	writeTextUnattributed(w, run)
+	writeTextUnattributed(w, cur, run)
 	writeTextUsageIngest(w, run)
 }
 
 // writeTextTotals writes a compact token + money summary at the given indent level.
-func writeTextTotals(w io.Writer, t domain.Totals, indent string) {
+func writeTextTotals(w io.Writer, cur domain.CurrencyCode, t domain.Totals, indent string) {
 	// Token figures
 	writeTextTokens(w, t.Tokens, indent)
 	// Money summary (total)
-	fmt.Fprintf(w, "%sMoney: %s\n", indent, formatTextMoney(t.Money.Total))
+	fmt.Fprintf(w, "%sMoney: %s\n", indent, formatTextMoney(cur, t.Money.Total))
 	if t.AssumedTierCacheWrite > 0 {
-		fmt.Fprintf(w, "%sCache writes priced at assumed 5m tier: %s tokens\n", indent, formatGrouped(t.AssumedTierCacheWrite))
+		fmt.Fprintf(w, "%sCache writes priced at %s: %s tokens\n", indent, domain.AssumedTierLabel(t.AssumedTiers), formatGrouped(t.AssumedTierCacheWrite))
 	}
 }
 
@@ -160,12 +169,12 @@ func formatGrouped(n int64) string {
 }
 
 // formatTextMoney returns a human-readable money string.
-// Unpriced is rendered as "unpriced" (not "$0.00") to distinguish it from zero.
+// Unpriced is rendered as "unpriced" (not a zero amount) to distinguish it from zero.
 // No-data is rendered as "-".
-func formatTextMoney(mv domain.MoneyValue) string {
+func formatTextMoney(cur domain.CurrencyCode, mv domain.MoneyValue) string {
 	switch mv.State {
 	case domain.MoneyKnown:
-		return "$" + mv.Amount.StringFixed(2)
+		return domain.FormatAmount(mv.Amount, cur, false)
 	case domain.MoneyUnpriced:
 		return "unpriced"
 	default: // MoneyNoData
@@ -190,4 +199,13 @@ func writeTextEffort(w io.Writer, l domain.EffortLevels, indent string) {
 		label = "-"
 	}
 	fmt.Fprintf(w, "%sEffort: %s\n", indent, label)
+}
+
+// reportAssumedTiers merges the assumed tiers of the named runs and the
+// unattributable bucket.
+func reportAssumedTiers(r domain.Report) []domain.CacheWriteTier {
+	if r.Unattributable == nil {
+		return r.AllRuns.AssumedTiers
+	}
+	return domain.MergeCacheWriteTiers(r.AllRuns.AssumedTiers, r.Unattributable.Totals.AssumedTiers)
 }

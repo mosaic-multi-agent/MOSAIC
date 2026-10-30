@@ -27,6 +27,9 @@ type call struct {
 	Model               string      `json:"model,omitempty"`
 	Effort              string      `json:"effort,omitempty"`
 	TokenUsage          *tokenUsage `json:"token_usage"`
+	Timestamp           string      `json:"-"`
+	CallLabel           string      `json:"-"`
+	CallKind            string      `json:"-"`
 }
 
 // convertChat maps the usage, model and effort attributes of a chat span; nil when the span carries no usage.
@@ -44,6 +47,8 @@ func convertChat(attrs map[string]any, dialect string) *call {
 		c.Effort = stringValue(attrs["gen_ai.request.reasoning.level"])
 	} else {
 		c.Effort = vscodeEffort(stringValue(attrs["copilot_chat.request.options"]))
+		c.CallLabel = stringValue(attrs["gen_ai.agent.name"])
+		c.CallKind = callKindOf(c.CallLabel)
 	}
 	return c
 }

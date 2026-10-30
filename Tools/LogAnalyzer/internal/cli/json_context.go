@@ -19,8 +19,10 @@ type jsonFirstWrite struct {
 }
 
 type jsonCompactionCounts struct {
-	Logged   int `json:"logged"`
-	Detected int `json:"detected"`
+	Logged       int `json:"logged"`
+	Detected     int `json:"detected"`
+	Harness      int `json:"harness"`
+	DetectedOnly int `json:"detected_only"`
 }
 
 // jsonDetectedCompaction is a compaction inferred from a context drop.
@@ -30,6 +32,11 @@ type jsonDetectedCompaction struct {
 	ToAt         *string `json:"to_at"`
 	BeforeTokens int64   `json:"before_tokens"`
 	AfterTokens  int64   `json:"after_tokens"`
+
+	MatchedLogged      bool           `json:"matched_logged"`
+	Harness            bool           `json:"harness"`
+	CompactionCalls    int            `json:"compaction_calls"`
+	CompactionCallCost jsonMoneyValue `json:"compaction_call_cost"`
 }
 
 type jsonActorContext struct {
@@ -41,6 +48,9 @@ type jsonActorContext struct {
 	FirstWrite          *jsonFirstWrite          `json:"first_write"`
 	Compactions         jsonCompactionCounts     `json:"compactions"`
 	DetectedCompactions []jsonDetectedCompaction `json:"detected_compactions"`
+	CallsByKind         jsonCallsByKind          `json:"calls_by_kind"`
+	CompactionCalls     jsonCompactionCalls      `json:"compaction_calls"`
+	Rewrites            []jsonRewrite            `json:"rewrites"`
 }
 
 // encodeContextFigure returns nil for an absent figure.
@@ -72,17 +82,28 @@ func encodeActorContext(a domain.ActorContext) jsonActorContext {
 			ToAt:         callTimeOrNull(a.Calls, m.After),
 			BeforeTokens: m.BeforeTokens,
 			AfterTokens:  m.AfterTokens,
+
+			MatchedLogged:      m.MatchedLogged,
+			Harness:            m.Harness && !m.MatchedLogged,
+			CompactionCalls:    m.CallCount,
+			CompactionCallCost: encodeMoneyValue(m.CallCost),
 		})
 	}
 	return jsonActorContext{
-		Calls:               len(a.Calls),
-		First:               encodeContextFigure(a.First),
-		Peak:                encodeContextFigure(a.Peak),
-		Final:               encodeContextFigure(a.Final),
-		FinalDefinition:     domain.FinalContextDefinition,
-		FirstWrite:          encodeFirstWrite(a.FirstWrite),
-		Compactions:         jsonCompactionCounts{Logged: a.LoggedCount(), Detected: a.DetectedCount()},
+		Calls:           len(a.Calls),
+		First:           encodeContextFigure(a.First),
+		Peak:            encodeContextFigure(a.Peak),
+		Final:           encodeContextFigure(a.Final),
+		FinalDefinition: domain.FinalContextDefinition,
+		FirstWrite:      encodeFirstWrite(a.FirstWrite),
+		Compactions: jsonCompactionCounts{
+			Logged: a.LoggedCount(), Detected: a.DetectedCount(),
+			Harness: a.HarnessCount(), DetectedOnly: a.DetectedOnlyCount(),
+		},
 		DetectedCompactions: detected,
+		CallsByKind:         countCallsByKind(a.Calls),
+		CompactionCalls:     encodeCompactionCalls(a.CompactionCalls),
+		Rewrites:            encodeRewrites(a),
 	}
 }
 
@@ -104,4 +125,20 @@ func encodeRunActorContext(run domain.RunContext, a domain.ActorReport) *jsonAct
 	}
 	enc := encodeActorContext(ctx)
 	return &enc
+}
+
+// jsonCompactionCalls are an actor's compaction-call totals; the cost is part
+// of the actor's spend.
+type jsonCompactionCalls struct {
+	Count          int            `json:"count"`
+	Cost           jsonMoneyValue `json:"cost"`
+	UnappliedCount int            `json:"unapplied_count"`
+	UnappliedCost  jsonMoneyValue `json:"unapplied_cost"`
+}
+
+func encodeCompactionCalls(f domain.CompactionCallFigures) jsonCompactionCalls {
+	return jsonCompactionCalls{
+		Count: f.Count, Cost: encodeMoneyValue(f.Cost),
+		UnappliedCount: f.UnappliedCount, UnappliedCost: encodeMoneyValue(f.UnappliedCost),
+	}
 }

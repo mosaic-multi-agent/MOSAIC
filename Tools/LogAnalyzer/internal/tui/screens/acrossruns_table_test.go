@@ -165,7 +165,7 @@ func TestAcrossRunsTable_WithColourOffEveryLabelAndMarkerRemainsAsText(t *testin
 	if view != stripStyling(view) {
 		t.Errorf("colour off must leave no escape sequences: %q", view)
 	}
-	assertContains(t, view, "(partial)", screens.ProvisionalLabel, screens.AssumedTierLabel, screens.OpenLabel,
+	assertContains(t, view, "(partial)", screens.ProvisionalLabel, screens.AssumedTierLabel(nil), screens.OpenLabel,
 		screens.MissingUsageLabel, "sort: cost")
 }
 

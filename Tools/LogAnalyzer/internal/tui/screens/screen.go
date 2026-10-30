@@ -9,6 +9,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	tuicommon "mosaic-common/tui"
+
+	"mosaic-log-analyzer/internal/domain"
+
+	"mosaic-log-analyzer/internal/domain"
 )
 
 // ScreenID names each screen for navigation and testing.
@@ -61,4 +65,8 @@ type Styles struct {
 
 	// Theme is the palette theme passed to kit widgets.
 	Theme tuicommon.Theme
+
+	// Currency is the effective currency every money figure is shown in; empty
+	// reads as USD.
+	Currency domain.CurrencyCode
 }

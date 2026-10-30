@@ -53,6 +53,9 @@ func (m Model) handleSettingsEditDone(done settingsEditDoneMsg) (tea.Model, tea.
 	if m.screen == screenTools {
 		m = m.openRunView(m.viewRunID, screens.ScreenTools)
 	}
+	if done.result.ConfigPath == "" {
+		return m, nil // the level question was skipped: nothing was saved
+	}
 	m = m.setStatus("Marked "+done.result.Tool+" as user-interaction in "+done.result.ConfigPath, tuicommon.RoleSignalGood)
 	return m, nil
 }

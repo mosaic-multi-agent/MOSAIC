@@ -1,0 +1,51 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 6204,
+    "head_len": 4096,
+    "head_sha256": "d1a643e36c3393b7e9d9b80353fd8cc488c518549b232f115489b7359f0f958a"
+  },
+  "placements": {
+    "chat-sub-A": "invocation/Implementation#1",
+    "chat-sub-B": "invocation/Review#1",
+    "chat-orch": "orchestrator"
+  },
+  "pending": [],
+  "links": {
+    "inv-sub-A": {
+      "kind": "invoke_agent",
+      "parent_span_id": "tool-run-A",
+      "conversation_id": "vsc-session-5",
+      "chat_session_id": "toolu_A",
+      "parent_chat_session_id": "vsc-session-5"
+    },
+    "tool-run-A": {
+      "kind": "execute_tool",
+      "parent_span_id": "invoke-orch",
+      "conversation_id": "vsc-session-5",
+      "chat_session_id": "vsc-session-5",
+      "tool_call_id": "toolu_A",
+      "tool_name": "runSubagent"
+    },
+    "inv-sub-B": {
+      "kind": "invoke_agent",
+      "parent_span_id": "tool-run-B",
+      "conversation_id": "vsc-session-5",
+      "chat_session_id": "toolu_B",
+      "parent_chat_session_id": "vsc-session-5"
+    },
+    "tool-run-B": {
+      "kind": "execute_tool",
+      "parent_span_id": "invoke-orch",
+      "conversation_id": "vsc-session-5",
+      "chat_session_id": "vsc-session-5",
+      "tool_call_id": "toolu_B",
+      "tool_name": "runSubagent"
+    },
+    "invoke-orch": {
+      "kind": "invoke_agent",
+      "conversation_id": "vsc-session-5",
+      "chat_session_id": "vsc-session-5"
+    }
+  }
+}

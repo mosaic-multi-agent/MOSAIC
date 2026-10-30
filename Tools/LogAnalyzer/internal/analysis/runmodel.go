@@ -98,7 +98,7 @@ func (a *Aggregator) recordToolOrCompaction(rs *runState, ref domain.StreamRef, 
 		})
 	case ev.ToolCallEnd != nil:
 		target.tools = append(target.tools, toolEvent{
-			callID: ev.ToolCallEnd.CallID, isEnd: true, status: ev.ToolCallEnd.Status, at: ev.Timestamp,
+			callID: ev.ToolCallEnd.CallID, name: ev.ToolCallEnd.ToolName, isEnd: true, status: ev.ToolCallEnd.Status, at: ev.Timestamp,
 		})
 	case ev.Compaction != nil:
 		ra.compactions = append(ra.compactions, newCompactionFeedEntry(ref, actor, ev))
@@ -233,7 +233,7 @@ func pairedCall(start, end toolEvent) domain.ToolCall {
 
 func unpairedCall(e toolEvent) domain.ToolCall {
 	if e.isEnd {
-		return domain.ToolCall{CallID: e.callID, Status: e.status, EndedAt: e.at, Pairing: domain.ToolCallEndOnly}
+		return domain.ToolCall{CallID: e.callID, ToolName: e.name, Status: e.status, EndedAt: e.at, Pairing: domain.ToolCallEndOnly}
 	}
 	return domain.ToolCall{CallID: e.callID, ToolName: e.name, StartedAt: e.at, Pairing: domain.ToolCallStartOnly}
 }

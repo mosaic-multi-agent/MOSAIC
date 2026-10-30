@@ -259,7 +259,7 @@ func TestFirstWrite_FirstNonEmptyUsageHarnessExcludesNamesOfOtherHarnesses(t *te
 func TestBands_PeakFinalAndFirstWriteEachCarryTheirBand(t *testing.T) {
 	agent := ctxAgent{id: ctxAgentID, tools: []domain.ToolCall{ctxTool("w", "Write", 25, 26)},
 		usage: []domain.InvocationUsage{
-			ctxCall("r1", 10, 90_000, 0, 0, 1),  // below optimal
+			ctxCall("r1", 10, 90_000, 0, 0, 1),  // optimal
 			ctxCall("r2", 20, 120_000, 0, 0, 1), // optimal: the first-write call
 			ctxCall("r3", 30, 360_000, 0, 0, 1), // degraded: the peak
 			ctxCall("r4", 40, 260_000, 0, 0, 1), // above optimal: the final
@@ -267,8 +267,8 @@ func TestBands_PeakFinalAndFirstWriteEachCarryTheirBand(t *testing.T) {
 
 	got := ctxRequireAgent(t, ctxPriceDefault(t, ctxRunSpec{agents: []ctxAgent{agent}}), ctxAgentID)
 
-	if got.First.Band != domain.BandBelowOptimal {
-		t.Errorf("first band = %v, want below optimal", got.First.Band)
+	if got.First.Band != domain.BandOptimal {
+		t.Errorf("first band = %v, want optimal", got.First.Band)
 	}
 	if got.FirstWrite.Band != domain.BandOptimal {
 		t.Errorf("first write band = %v, want optimal", got.FirstWrite.Band)
@@ -286,7 +286,7 @@ func TestBands_FigureAtABoundaryBelongsToTheUpperBand(t *testing.T) {
 		tokens int64
 		want   domain.ContextBand
 	}{
-		{99_999, domain.BandBelowOptimal},
+		{99_999, domain.BandOptimal},
 		{100_000, domain.BandOptimal},
 		{249_999, domain.BandOptimal},
 		{250_000, domain.BandAboveOptimal},

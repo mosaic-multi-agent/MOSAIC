@@ -59,11 +59,9 @@ func Render(t Table, width, height int, theme tui.Theme) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
-	widths := naturalWidths(t)
-	visible := chooseColumns(t.Columns, widths, width)
-	shrinkFlex(t.Columns, widths, visible, width)
+	visible, hidden, widths := layoutWidths(t, width)
 
-	lines := []string{cutLine(headerLine(t, widths, visible, theme), width)}
+	lines := []string{cutLine(headerLine(t, widths, visible, hidden, theme), width)}
 	body := BodyRows(height)
 	start := min(max(t.Offset, 0), max(len(t.Rows)-1, 0))
 	for r := start; r < len(t.Rows) && r < start+body; r++ {
@@ -81,7 +79,7 @@ func cutLine(line string, width int) string {
 	return ansi.Truncate(line, width, "")
 }
 
-func headerLine(t Table, widths []int, visible []int, theme tui.Theme) string {
+func headerLine(t Table, widths []int, visible []int, hidden int, theme tui.Theme) string {
 	style := theme.Style(tui.RoleTitle)
 	var b strings.Builder
 	b.WriteString(strings.Repeat(" ", gutterWidth))
@@ -91,6 +89,10 @@ func headerLine(t Table, widths []int, visible []int, theme tui.Theme) string {
 		}
 		text := textwidth.Pad(headerText(t, i), widths[i], t.Columns[i].Align == AlignRight)
 		b.WriteString(style.Render(text))
+	}
+	if hidden > 0 {
+		b.WriteString(strings.Repeat(" ", gapWidth))
+		b.WriteString(style.Render(markerText(hidden)))
 	}
 	return b.String()
 }

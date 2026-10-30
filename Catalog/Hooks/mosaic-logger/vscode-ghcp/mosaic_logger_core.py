@@ -17,6 +17,12 @@ import re
 import sys
 import tempfile
 
+try:
+    import mosaic_logger_locked_append
+except ImportError:  # run from the source tree, where the module sits in the shared folder
+    sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent / "copilot-shared"))
+    import mosaic_logger_locked_append
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -28,6 +34,7 @@ EVENT_SCHEMA_VERSIONS = {
     "invocation_start": "1.4.0",   # spawn_call_id
     "usage_record": "1.4.0",
     "compaction": "1.5.0",         # single-hook harness: no phase
+    "tool_call_end": "1.6.0",      # tool_name
 }
 HARNESS = "vscode-ghcp"          # D1 — the schema harness enum value
 LOGS_DIRNAME = "OrchestrationLogs"
@@ -185,15 +192,24 @@ def effective_run_id(ctx: "HookContext") -> str:
 def append_event(path: pathlib.Path, event: dict) -> None:
     """Append one JSON object as one line to a JSONL file, creating parent dirs.
 
-    Opens in append mode, writes one line, closes. No size cap. Swallows errors.
+    Appends the whole line under the file's exclusive lock. No size cap. Swallows errors; a
+    writer that cannot get the lock in time drops the event and writes a debug message.
     """
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(event, ensure_ascii=False) + "\n"
-        with open(path, "a", encoding="utf-8") as fh:
-            fh.write(line)
+        line = (json.dumps(event, ensure_ascii=False) + "\n").encode("utf-8")
+        mosaic_logger_locked_append.locked_append(path, line, _append_report(path))
     except Exception as exc:
         debug_log(f"append_event failed for {path}", exc)
+
+
+def _append_report(path: pathlib.Path):
+    """Debug callback for locked_append: names append_event and the file in the message."""
+    def report(message: str, exc: "BaseException | None") -> None:
+        if exc is None:
+            debug_log(f"append_event dropped (lock wait limit) for {path}")
+        else:
+            debug_log(f"append_event failed for {path}", exc)
+    return report
 
 
 def atomic_replace(path: pathlib.Path, data: bytes) -> bool:

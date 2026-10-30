@@ -77,6 +77,7 @@
 #       cache_write_1h: "6.00"
 #       output: "15.00"
 
+currency: USD
 models: {}
 providers:
   anthropic:

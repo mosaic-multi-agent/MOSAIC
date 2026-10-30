@@ -227,7 +227,7 @@ func TestStatusTable_WithColourOffEveryMarkerStaysAsTextAndNoEscapeSequenceRemai
 	if view != stripStyling(view) {
 		t.Errorf("colour off must leave no escape sequences: %q", view)
 	}
-	assertContains(t, view, "(partial)", screens.UnpricedMarker, screens.AssumedTierLabel, screens.MissingUsageLabel,
+	assertContains(t, view, "(partial)", screens.UnpricedMarker, screens.AssumedTierLabel(nil), screens.MissingUsageLabel,
 		screens.NoStatusLabel, screens.OpenLabel)
 	assertNotContains(t, view, "$0.00")
 }

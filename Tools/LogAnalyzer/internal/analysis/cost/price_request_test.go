@@ -70,7 +70,7 @@ func assertRequestMoney(t *testing.T, ic cost.InvocationCost, want wantMoney) {
 func priceOne(t *testing.T, usage domain.TokenUsage) cost.InvocationCost {
 	t.Helper()
 	table := testTable(longContextPricing(t, 200_000))
-	return cost.PriceInvocation(inv(requestTestModel, usage), table)
+	return priceAtDefaultTier(inv(requestTestModel, usage), table)
 }
 
 func TestPriceInvocation_ContextExactlyAtThreshold_AllCategoriesUseLongContextRates(t *testing.T) {
@@ -166,7 +166,7 @@ func TestPriceInvocation_LargeOutputDoesNotCountTowardContext(t *testing.T) {
 func TestPriceInvocation_ModelWithoutLongContext_UsesStandardRatesForAllCategories(t *testing.T) {
 	table := testTable(flatPricing(t, requestTestModel))
 
-	ic := cost.PriceInvocation(inv(requestTestModel, domain.TokenUsage{
+	ic := priceAtDefaultTier(inv(requestTestModel, domain.TokenUsage{
 		Input:           domain.Tokens(5_000_000),
 		CacheRead:       domain.Tokens(1_000_000),
 		CacheCreation:   domain.Tokens(1_000_000),
@@ -190,10 +190,10 @@ func TestSumCosts_RequestsTieredIndependently_AllCategories(t *testing.T) {
 	// Request A is below the threshold (100_000), request B above (300_000).
 	// Tiering the summed context (400_000) would price both at long-context rates.
 	table := testTable(longContextPricing(t, 200_000))
-	costA := cost.PriceInvocation(inv(requestTestModel, domain.TokenUsage{
+	costA := priceAtDefaultTier(inv(requestTestModel, domain.TokenUsage{
 		Input: domain.Tokens(100_000), Output: domain.Tokens(1_000),
 	}), table)
-	costB := cost.PriceInvocation(inv(requestTestModel, domain.TokenUsage{
+	costB := priceAtDefaultTier(inv(requestTestModel, domain.TokenUsage{
 		Input: domain.Tokens(300_000), Output: domain.Tokens(1_000),
 	}), table)
 

@@ -32,9 +32,9 @@ func TestContext_ListsTheOrchestratorAndEveryInvocationOnce(t *testing.T) {
 func TestContext_HeaderNamesEveryColumn(t *testing.T) {
 	view := strings.ToLower(ctxView(t, contextRun(), tableW, tallH))
 
-	header := lineWithAll(view, "instance", "type", "model", "calls", "first", "first write*", "peak", "final", "logged", "detected")
+	header := lineWithAll(view, "instance", "type", "model", "calls", "first", "first write*", "peak", "final", "logged", "harness", "det. only", "unapplied", "compaction cost")
 	if header == "" {
-		t.Errorf("no header line names instance, type, model, calls, first, first write*, peak, final, logged and detected\n%s", stripStyling(view))
+		t.Errorf("no header line names instance, type, model, calls, first, first write*, peak, final, logged, harness, det. only, unapplied and compaction cost\n%s", stripStyling(view))
 	}
 }
 
@@ -42,11 +42,11 @@ func TestContext_ShowsTheFiguresOfEachRow(t *testing.T) {
 	view := ctxView(t, contextRun(), tableW, tallH)
 
 	want := map[string]ctxCells{
-		"orchestrator": {"4", "40,000", screens.AbsentMarker, "180,000", "130,000", "2", "1"},
-		"builder#1":    {"4", "30,000", "260,000", "380,000", "360,000", "0", "0"},
-		"coder#1":      {"5", "100,000", screens.AbsentMarker, "300,000", "80,000", "0", "1"},
-		"reviewer#1":   {"3", "120,000", "150,000", "210,000 (partial)", "210,000 (partial)", "1", "0"},
-		"tester#1":     {"2", "50,000", screens.AbsentMarker, "95,000", "95,000", "0", "0"},
+		"orchestrator": {"4", "40,000", screens.AbsentMarker, "180,000", "130,000", "2", "0", "1", "0"},
+		"builder#1":    {"4", "30,000", "260,000", "380,000", "360,000", "0", "0", "0", "0"},
+		"coder#1":      {"5", "100,000", screens.AbsentMarker, "300,000", "80,000", "0", "0", "1", "0"},
+		"reviewer#1":   {"3", "120,000", "150,000", "210,000 (partial)", "210,000 (partial)", "1", "0", "0", "0"},
+		"tester#1":     {"2", "50,000", screens.AbsentMarker, "95,000", "95,000", "0", "0", "0", "0"},
 	}
 	for id, w := range want {
 		if got := ctxRowCells(t, view, id); got != w {
@@ -104,7 +104,7 @@ func TestContext_LoggedAndDetectedCompactionsAreCountedSeparately(t *testing.T) 
 func TestContext_DetectedCompactionsAreLabelledAsDetected(t *testing.T) {
 	view := strings.ToLower(ctxView(t, contextRun(), tableW, tallH))
 
-	if lineWithAll(view, "logged", "detected") == "" {
+	if lineWithAll(view, "logged", "det. only") == "" {
 		t.Errorf("the header must name the logged and the detected compactions columns\n%s", stripStyling(view))
 	}
 }

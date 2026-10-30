@@ -61,6 +61,8 @@ type Result struct {
 	Report  domain.Report // zero value unless Outcome == OutcomeReport
 	// Session lets the caller re-price without re-reading logs.
 	Session *Session
+	// GapConfigPath is the file the pricing-gap flow wrote ("" = it saved nothing).
+	GapConfigPath string
 }
 
 // PricingPath returns the config file path from the injected pricing store.
@@ -149,11 +151,12 @@ func (s *Service) Analyze(ctx context.Context, req Request) (Result, error) {
 
 	// Optionally run the interactive pricing-gap resolution flow.
 	if req.ResolvePricingGaps && report.HasUnpricedModels() {
-		updated, err := s.ResolvePricingGaps(ctx, sess, report)
+		updated, written, err := s.resolvePricingGapsWritten(ctx, sess, report)
 		if err != nil {
 			return Result{}, err
 		}
 		result.Report = updated
+		result.GapConfigPath = written
 	}
 
 	return result, nil

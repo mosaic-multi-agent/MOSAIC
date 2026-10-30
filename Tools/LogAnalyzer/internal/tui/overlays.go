@@ -24,7 +24,9 @@ type overlaySelectOne struct {
 }
 
 func newOverlaySelectOne(q interaction.ChoiceQuestion, theme tuicommon.Theme) *overlaySelectOne {
-	return &overlaySelectOne{q: q, theme: theme}
+	o := &overlaySelectOne{q: q, theme: theme}
+	o.cursor = defaultCursor(q)
+	return o
 }
 
 // totalOptions returns the number of options including the optional skip entry.
@@ -126,4 +128,15 @@ func (o *overlayText) answer() interaction.TextAnswer {
 		return interaction.TextAnswer{Status: interaction.Cancelled}
 	}
 	return interaction.TextAnswer{Status: interaction.Answered, Text: o.input.Value()}
+}
+
+// defaultCursor returns the index of the question's default option, or 0 when it
+// names no selectable option.
+func defaultCursor(q interaction.ChoiceQuestion) int {
+	for i, opt := range q.Options {
+		if opt.ID == q.DefaultOptionID && !opt.Disabled {
+			return i
+		}
+	}
+	return 0
 }

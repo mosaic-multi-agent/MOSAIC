@@ -13,8 +13,10 @@ import (
 type RunTotal struct {
 	RunID       string
 	Provisional bool
-	Tokens      domain.TokenUsage
-	Money       domain.MoneyValue
+	// Currency is the effective currency of the report the total came from.
+	Currency domain.CurrencyCode
+	Tokens   domain.TokenUsage
+	Money    domain.MoneyValue
 	// Complete is false when any model contributing to this run was unpriced.
 	Complete bool
 
@@ -68,6 +70,7 @@ func RunTotalFor(r domain.Report, runID string) (RunTotal, bool) {
 	return RunTotal{
 		RunID:                run.Run.ID,
 		Provisional:          run.Provisional,
+		Currency:             r.Currency,
 		Tokens:               run.Totals.Tokens,
 		Money:                run.Totals.Money.Total,
 		Complete:             run.Totals.Money.Complete,

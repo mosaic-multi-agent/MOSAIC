@@ -18,7 +18,7 @@ import (
 func newTestStore(t *testing.T) (*settings.Store, string) {
 	t.Helper()
 	root := t.TempDir()
-	return settings.NewStore(root), root
+	return settings.NewStore(t.TempDir(), root), root
 }
 
 // writeSettingsFile writes content to the store's settings file, creating parents.

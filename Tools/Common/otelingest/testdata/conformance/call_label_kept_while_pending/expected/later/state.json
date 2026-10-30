@@ -1,0 +1,28 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 2136,
+    "head_len": 2136,
+    "head_sha256": "32bfe0153b3736077c0be67b4b71aa54aaf5c6b990b05b9b4ff2d00d266acaf2"
+  },
+  "placements": {
+    "chat-vp-1": "orchestrator"
+  },
+  "pending": [],
+  "links": {
+    "invoke-vp": {
+      "kind": "invoke_agent",
+      "parent_span_id": "tool-vp",
+      "conversation_id": "vsc-session-9",
+      "chat_session_id": "toolu_Q",
+      "parent_chat_session_id": "vsc-session-9"
+    },
+    "tool-vp": {
+      "kind": "execute_tool",
+      "conversation_id": "vsc-session-9",
+      "chat_session_id": "vsc-session-9",
+      "tool_call_id": "toolu_Q",
+      "tool_name": "execution_subagent"
+    }
+  }
+}
