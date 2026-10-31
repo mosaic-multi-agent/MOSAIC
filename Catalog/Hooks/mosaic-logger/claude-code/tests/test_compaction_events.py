@@ -106,11 +106,15 @@ class TestSchemaStamp(CompactionCase):
 
     def test_build_event_keeps_other_events_at_1_3_0(self):
         for name in ("session_start", "run_start", "turn", "tool_call_start",
-                     "notification", "usage_record",
+                     "notification",
                      "invocation_start", "invocation_end"):
             with self.subTest(event=name):
                 event = core.build_event(name, self._ctx("SessionStart"))
                 self.assertEqual("1.3.0", event["schema_version"])
+
+    def test_build_event_stamps_usage_record_1_7_0(self):
+        event = core.build_event("usage_record", self._ctx("SessionStart"))
+        self.assertEqual("1.7.0", event["schema_version"])
 
     def test_handler_written_non_compaction_event_keeps_1_3_0(self):
         session_handlers.handle_session_start(
@@ -230,20 +234,20 @@ class TestUsageRecordEmissionUnchanged(CompactionCase):
         path.write_text(json.dumps(record) + "\n", encoding="utf-8")
         return str(path)
 
-    def test_pre_compact_still_emits_usage_record_stamped_1_3_0(self):
+    def test_pre_compact_still_emits_usage_record_stamped_1_7_0(self):
         self.pre(trigger="auto", transcript_path=self._transcript())
         events = self.orchestrator_events()
         usage = [e for e in events if e["event"] == "usage_record"]
         self.assertEqual(1, len(usage))
-        self.assertEqual("1.3.0", usage[0]["schema_version"])
+        self.assertEqual("1.7.0", usage[0]["schema_version"])
         self.assertEqual(1, len(self.compactions(events)))
 
-    def test_post_compact_still_emits_usage_record_stamped_1_3_0(self):
+    def test_post_compact_still_emits_usage_record_stamped_1_7_0(self):
         self.post(tokens_after=5, transcript_path=self._transcript())
         events = self.orchestrator_events()
         usage = [e for e in events if e["event"] == "usage_record"]
         self.assertEqual(1, len(usage))
-        self.assertEqual("1.3.0", usage[0]["schema_version"])
+        self.assertEqual("1.7.0", usage[0]["schema_version"])
         self.assertEqual(1, len(self.compactions(events)))
 
 

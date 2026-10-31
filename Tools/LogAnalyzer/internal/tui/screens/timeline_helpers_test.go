@@ -16,7 +16,6 @@ import (
 // Glyphs the Gantt draws in Unicode mode with colour off.
 const (
 	barGlyph      = '█' // interval cell
-	shadeGlyph    = '░' // shaded wait or between-session cell
 	loggedGlyph   = '│' // logged compaction marker
 	detectedGlyph = '┊' // detected compaction marker
 	openEndGlyph  = '>' // last cell of an open-ended bar

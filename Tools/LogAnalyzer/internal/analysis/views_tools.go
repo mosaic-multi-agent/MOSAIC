@@ -23,8 +23,9 @@ func tagCalls(calls []domain.ToolCall, h domain.Harness) []harnessedCall {
 
 // toolFigures computes exact per-tool figures: tools ascending by name, the
 // unnamed tool last. Durations come only from paired calls with usable timestamps.
-// Each row lists the distinct non-empty harnesses of its calls, sorted.
-func toolFigures(calls []harnessedCall) []domain.ToolFigures {
+// Each row lists the distinct non-empty harnesses of its calls, sorted. A tool
+// seen only through context growth gets a row with no calls.
+func toolFigures(calls []harnessedCall, growth map[string]*growthAcc) []domain.ToolFigures {
 	index := make(map[string]int)
 	seen := make(map[string]map[domain.Harness]bool)
 	var out []domain.ToolFigures
@@ -53,7 +54,16 @@ func toolFigures(calls []harnessedCall) []domain.ToolFigures {
 			f.Harnesses = append(f.Harnesses, hc.harness)
 		}
 	}
+	for tool := range growth {
+		if _, ok := index[tool]; !ok {
+			index[tool] = len(out)
+			out = append(out, domain.ToolFigures{Tool: tool})
+		}
+	}
 	for i := range out {
+		if acc := growth[out[i].Tool]; acc != nil {
+			out[i].Growth = acc.ToolGrowth
+		}
 		if n := out[i].Durations.Count; n > 0 {
 			out[i].Durations.Average = out[i].Durations.Total / time.Duration(n)
 		}
@@ -83,26 +93,34 @@ func addDuration(s *domain.DurationStats, d time.Duration) {
 // buildToolsBreakdown builds the tools view for the run, its orchestrator and
 // each agent type that made tool calls. Harnesses come from the same actor
 // attribution the wall-time split uses.
-func buildToolsBreakdown(run domain.RunAggregate, groups []typeGroup) domain.ToolsBreakdown {
+func buildToolsBreakdown(run domain.RunAggregate, groups []typeGroup, rc domain.RunContext) domain.ToolsBreakdown {
 	harnesses := resolveActorHarnesses(run)
 	orch := tagCalls(run.Activity.OrchestratorToolCalls, harnesses.orchestrator)
 	all := append([]harnessedCall(nil), orch...)
 	for _, inv := range run.Activity.Invocations {
 		all = append(all, tagCalls(inv.ToolCalls, harnesses.of(inv.Actor))...)
 	}
+	allActors := append([]domain.ActorContext{rc.Orchestrator}, rc.Invocations...)
 	b := domain.ToolsBreakdown{
-		Run:          toolFigures(all),
-		Orchestrator: toolFigures(orch),
+		Run:          toolFigures(all, growthByTool(allActors)),
+		Orchestrator: toolFigures(orch, growthByTool([]domain.ActorContext{rc.Orchestrator})),
 	}
 	for _, g := range groups {
 		var calls []harnessedCall
 		for _, d := range g.dispatches {
 			calls = append(calls, tagCalls(d.Invocation.ToolCalls, harnesses.of(d.Invocation.Actor))...)
 		}
-		if len(calls) == 0 {
+		var actors []domain.ActorContext
+		for _, a := range rc.Invocations {
+			if a.Actor.Type == g.agentType {
+				actors = append(actors, a)
+			}
+		}
+		tools := toolFigures(calls, growthByTool(actors))
+		if len(tools) == 0 {
 			continue
 		}
-		b.ByAgentType = append(b.ByAgentType, domain.AgentTypeTools{AgentType: g.agentType, Tools: toolFigures(calls)})
+		b.ByAgentType = append(b.ByAgentType, domain.AgentTypeTools{AgentType: g.agentType, Tools: tools})
 	}
 	return b
 }

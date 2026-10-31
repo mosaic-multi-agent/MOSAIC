@@ -1,5 +1,5 @@
 {
-  "description": "A file shorter than the stored cursor is read afresh from byte 0: lines already placed are not written again (placement is final) and new lines are not skipped.",
+  "description": "VS Code dialect. A file shorter than the stored cursor is read afresh from byte 0: lines already placed are not written again (placement is final) and new lines are not skipped.",
   "run_id": "20261028T000000Z-0000",
   "steps": [
     {

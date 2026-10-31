@@ -29,7 +29,7 @@ BASE_SCHEMA_VERSION = "1.0.0"
 # The version depends on the event type only, never on which optional fields are present.
 EVENT_SCHEMA_VERSIONS = {
     "invocation_start": "1.4.0",   # spawn_call_id
-    "usage_record": "1.4.0",
+    "usage_record": "1.7.0",        # requested_tools; GHCP CLI usage from the session transcript
     "compaction": "1.5.0",         # single-hook harness: no phase
     "tool_call_end": "1.6.0",      # tool_name
 }

@@ -5,7 +5,6 @@ package screens_test
 // on the first write call and on the calls around compactions.
 
 import (
-	"strings"
 	"testing"
 
 	"mosaic-log-analyzer/internal/tui/screens"
@@ -18,11 +17,13 @@ const (
 )
 
 func TestContextDrill_CallTableHasTheListedColumns(t *testing.T) {
-	view := strings.ToLower(stripStyling(ctxDrillView(t, "builder#1")))
+	view := stripStyling(ctxDrillView(t, "builder#1"))
 
-	header := lineWithAll(view, "time", "model", "context", "input", "cache read", "cache write", "output", "cost", "mark")
-	if header == "" {
-		t.Errorf("no header line names time, model, context, input, cache read, cache write, output, cost and mark\n%s", view)
+	titles := headerTitles(view, "time")
+	for _, want := range []string{"time", "model", "context", "input", "cache read", "cache write", "output", "cost", "mark"} {
+		if !hasTitle(titles, want) {
+			t.Errorf("the call table has no column titled %q, got %q: %s", want, titles, view)
+		}
 	}
 }
 

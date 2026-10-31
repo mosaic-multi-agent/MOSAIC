@@ -2,7 +2,7 @@ package screens_test
 
 // The order in which the Context table and the per-call table of a Context
 // drill-down lose columns as the terminal narrows: the sparkline first, the
-// figures next by importance, and the columns that name the row (type, model,
+// figures next by importance, and the columns that name the row (model,
 // kind) last. Hidden figures stay reachable through the drill-down.
 
 import "testing"
@@ -14,14 +14,14 @@ func contextTableAt(t *testing.T) func(width int) string {
 func TestContextTable_ColumnsDropFromTheSparklineThroughTheFiguresToTheNamingColumns(t *testing.T) {
 	assertDropOrder(t, contextTableAt(t), "instance",
 		[]string{"context"},
-		[]string{"peak", "final", "calls", "logged", "harness", "det. only", "first", "first write*", "compaction cost", "unapplied", "rewrites"},
-		[]string{"type", "model"},
+		[]string{"peak context", "final context", "API calls", "logged", "harness", "detected only", "first context", "context at first write", "cost", "unapplied", "rewrites"},
+		[]string{"model"},
 	)
 }
 
 func TestContextTable_ModelOutlastsEveryFigureColumn(t *testing.T) {
 	assertDropOrder(t, contextTableAt(t), "instance",
-		[]string{"peak", "final", "calls", "logged", "harness", "det. only", "first", "first write*", "compaction cost", "unapplied", "rewrites"},
+		[]string{"peak context", "final context", "API calls", "logged", "harness", "detected only", "first context", "context at first write", "cost", "unapplied", "rewrites"},
 		[]string{"model"},
 	)
 }
@@ -29,7 +29,7 @@ func TestContextTable_ModelOutlastsEveryFigureColumn(t *testing.T) {
 func TestContextTable_SparklineIsDroppedBeforeAnyFigureColumn(t *testing.T) {
 	assertDropOrder(t, contextTableAt(t), "instance",
 		[]string{"context"},
-		[]string{"unapplied", "rewrites", "first", "first write*", "compaction cost", "calls", "logged", "harness", "det. only", "peak", "final"},
+		[]string{"unapplied", "rewrites", "first context", "context at first write", "cost", "API calls", "logged", "harness", "detected only", "peak context", "final context"},
 	)
 }
 

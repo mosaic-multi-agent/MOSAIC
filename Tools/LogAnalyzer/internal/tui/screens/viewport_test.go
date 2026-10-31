@@ -209,8 +209,9 @@ func TestScrollWindow_NegativePrevOffset_DoesNotProduceNegativeOffset(t *testing
 // cursor; the offset is then only clamped."
 //
 // With prevOffset=3, cursor=-1, itemCount=5, visibleItems=3:
-//   maxOffset = 5 - 3 = 2, so Offset should be clamped to 2.
-//   No cursor-visibility obligation exists.
+//
+//	maxOffset = 5 - 3 = 2, so Offset should be clamped to 2.
+//	No cursor-visibility obligation exists.
 func TestScrollWindow_NoCursorMode_OffsetOnlyClamped(t *testing.T) {
 	// cursor=-1 signals no-cursor mode.
 	w := screens.ScrollWindow(3, -1, 5, 3)
@@ -294,11 +295,11 @@ func TestVisibleItems_NormalFloorDivision(t *testing.T) {
 	cases := []struct {
 		avail, perItem, want int
 	}{
-		{10, 2, 5},  // exact division
-		{11, 2, 5},  // floor(11/2) = 5
-		{12, 3, 4},  // exact division
-		{13, 3, 4},  // floor(13/3) = 4
-		{2, 2, 1},   // exactly one item
+		{10, 2, 5}, // exact division
+		{11, 2, 5}, // floor(11/2) = 5
+		{12, 3, 4}, // exact division
+		{13, 3, 4}, // floor(13/3) = 4
+		{2, 2, 1},  // exactly one item
 	}
 	for _, tc := range cases {
 		got := screens.VisibleItems(tc.avail, tc.perItem)

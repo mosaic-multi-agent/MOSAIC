@@ -33,9 +33,12 @@ func buildWallTime(run domain.RunAggregate, settings domain.AnalysisSettings, ax
 	}
 	waits := clipIntervals(mergeIntervals(w.intervals), axis)
 	subagents := subtractIntervals(clipIntervals(subagentIntervals(run.Activity.Invocations, axis.End), axis), waits)
-	gaps := subtractIntervals(subtractIntervals(clipIntervals(mergeIntervals(split.SessionGaps), axis), waits), subagents)
+	gaps := betweenSessionIntervals(split.SessionGaps, waits, subagents, axis)
 
 	split.WaitIntervals = waits
+	split.ActorWaits = w.actorWaits(axis)
+	split.BetweenSessionIntervals = gaps
+	split.Collapsible = collapsibleStretches(split.ActorWaits, gaps, run.Activity.Invocations, axis)
 	split.Waiting = totalIntervals(waits)
 	split.Subagents = totalIntervals(subagents)
 	split.BetweenSessions = totalIntervals(gaps)

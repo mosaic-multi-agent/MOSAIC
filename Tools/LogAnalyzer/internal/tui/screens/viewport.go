@@ -22,11 +22,11 @@ func (w Window) HasBelow(itemCount int) bool { return w.Offset+w.Count < itemCou
 
 // ScrollWindow computes the visible slice of a list of items.
 //
-//   prevOffset   the offset carried from the previous render/keypress
-//   cursor       the currently selected item index (use -1 or any out-of-range
-//                value when the list has no cursor; the offset is then only clamped)
-//   itemCount    total number of items in the list
-//   visibleItems how many items fit in the space available
+//	prevOffset   the offset carried from the previous render/keypress
+//	cursor       the currently selected item index (use -1 or any out-of-range
+//	             value when the list has no cursor; the offset is then only clamped)
+//	itemCount    total number of items in the list
+//	visibleItems how many items fit in the space available
 //
 // The returned Window always satisfies:
 //   - 0 <= Offset <= max(0, itemCount-Count)

@@ -43,6 +43,19 @@ func diffValue(path string, a, b reflect.Value) string {
 				return d
 			}
 		}
+	case reflect.Map:
+		if a.Len() != b.Len() {
+			return fmt.Sprintf("%s: map length %d != %d", path, a.Len(), b.Len())
+		}
+		for _, k := range a.MapKeys() {
+			bv := b.MapIndex(k)
+			if !bv.IsValid() {
+				return fmt.Sprintf("%s[%v]: missing", path, k)
+			}
+			if d := diffValue(fmt.Sprintf("%s[%v]", path, k), a.MapIndex(k), bv); d != "" {
+				return d
+			}
+		}
 	case reflect.Ptr:
 		if a.IsNil() != b.IsNil() {
 			return fmt.Sprintf("%s: nil-ness differs (%v vs %v)", path, a.IsNil(), b.IsNil())

@@ -1,8 +1,8 @@
 package screens_test
 
-// Behaviour of the drill-down of one actor in the Context view: the curve with
-// its markers and the band names as text, the way back to the table, and the
-// bounds at narrow and short terminals.
+// Behaviour of the context curve of the Session screen: the curve with its
+// markers and the band names as text, the way back, and the bounds at narrow and
+// short terminals.
 
 import (
 	"strings"
@@ -80,20 +80,13 @@ func TestContextDrill_NamesTheDegradedBand(t *testing.T) {
 	}
 }
 
-func TestContextDrill_EscReturnsToTheTableThenLeavesTheView(t *testing.T) {
+func TestContextDrill_EscAsksTheRouterToGoBackToTheOpener(t *testing.T) {
 	s := ctxDrill(t, contextRun(), "builder#1", tableW, tallH)
 
 	press(s, "esc")
-	if s.Back() {
-		t.Error("the first esc must close the drill-down, not leave the per-run views")
-	}
-	table := stripStyling(s.View(tableW, tallH))
-	assertContains(t, table, "builder#1", "coder#1", "reviewer#1")
-	assertNotContains(t, table, ctxCallLabels(70)[0])
 
-	press(s, "esc")
 	if !s.Back() {
-		t.Error("the second esc must leave the per-run views")
+		t.Error("esc must ask to leave the Session screen")
 	}
 }
 

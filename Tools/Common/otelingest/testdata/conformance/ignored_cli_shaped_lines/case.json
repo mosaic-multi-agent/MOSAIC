@@ -1,0 +1,15 @@
+{
+  "description": "VS Code dialect with GHCP CLI-shaped lines mixed in. A line wrapped as {\"type\":\"span\"} is no longer a supported dialect: it is consumed without effect, writes no record, leaves no link or placement and is not counted as malformed; the VS Code lines around it are ingested as usual.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

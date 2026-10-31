@@ -1,16 +1,17 @@
 {
   "state_version": 1,
   "cursor": {
-    "offset": 1170,
-    "head_len": 1170,
-    "head_sha256": "6ce664715ec3e0a4f5e8cc74f01ff460c39b175a66f7ea6704308e16c168f204"
+    "offset": 1485,
+    "head_len": 1485,
+    "head_sha256": "210556fb983f154279d239a0a651a322f937fcb70165f097f398ab617238a233"
   },
   "placements": {},
   "pending": [],
   "links": {
     "invoke-root": {
       "kind": "invoke_agent",
-      "conversation_id": "cli-session-4"
+      "conversation_id": "vsc-session-4",
+      "chat_session_id": "vsc-session-4"
     }
   }
 }

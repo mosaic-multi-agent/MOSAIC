@@ -31,7 +31,9 @@ func TestAgentTypesDrillTable_ShowsTheDispatchesOfTheTypeWithTheDispatchesColumn
 	assertContains(t, rowFor(t, view, "builder#3"), "$0.35 (partial)", screens.NoStatusLabel, "40,000")
 	assertContains(t, rowFor(t, view, "builder#4"), screens.UnpricedMarker, screens.OpenLabel)
 	assertNotContains(t, view, "reviewer#1", longInstance)
-	assertContains(t, view, "unread cache write")
+	if !hasTitle(headerTitles(view, "instance"), "unread cache writes") {
+		t.Errorf("the table must title its column \"unread cache writes\": %s", view)
+	}
 }
 
 func TestAgentTypesDrillTable_HasNoOrchestratorRowAndNoRunTotalsSummary(t *testing.T) {

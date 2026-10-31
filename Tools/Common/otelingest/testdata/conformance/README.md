@@ -36,16 +36,18 @@ ingest iterates the same folder with pytest. A new behaviour is added as a case 
   without an expected file must hold no such lines. Expected stream files are cumulative (the whole file after the
   step). Other lines (starts, other events, usage records of other sources) are ignored.
 - `state.json`, `result.json` and `diagnostics.json` are compared as JSON data. Arrays compare in the order given.
-- Fixed by the fixtures, so both implementations produce identical records: `schema_version` is `1.6.0` on every
-  `usage_record` and on every ingest-written `tool_call_end`; `harness` is the envelope harness of the session the span is tied through (else of the invocation
+- Fixed by the fixtures, so both implementations produce identical records: `schema_version` is `1.7.0` on every
+  `usage_record` and on every ingest-written `tool_call_end` (hook-written ends copied from `logs/` keep their own
+  version); `harness` is the envelope harness of the session the span is tied through (else of the invocation
   whose `spawn_call_id` matches); `session_id` is the tying session or omitted. Only diagnostic `message` is not
   compared.
 - Placement keys come only from the MOSAIC logs in `logs/`: envelope `session_id` of the orchestrator stream and
   invocation streams, and `invocation_start.spawn_call_id`.
-- Inputs hold no content attributes except in cases that test their exclusion (marked by the text
-  `CONTENT-SENTINEL`, which must never appear in any expected file).
-- Cases `conv_cli_real_excerpt` and `attr_cli_native_real_excerpt` hold verbatim lines cut from real GHCP CLI
-  captures. The other OTel files are hand-written in the shape of real captures.
+- The ingest reads tool names only from content attributes: the `tool_call` parts of `gen_ai.output.messages`.
+  Inputs hold no other content attributes except in cases that test their exclusion (marked by the text
+  `CONTENT-SENTINEL`, which must never appear in any expected file). In the requested-tools cases the sentinel
+  surrounds the tool names (text, reasoning, arguments, call ids).
+- The OTel files are hand-written in the shape of real captures.
 - Lock-held and time-budget behaviour are tested in each language's own suite, not here.
 
 ## Reading rules (counts)
@@ -70,11 +72,29 @@ ingest iterates the same folder with pytest. A new behaviour is added as a case 
 ## Decisions fixed by the fixtures
 
 - Token names: when a span carries both the new generation (`cache_write`, `reasoning.output_tokens`) and the legacy
-  names (`cache_creation`, `reasoning_tokens`), the new generation wins (`conv_cli_basic`, span `cli-3`).
+  names (`cache_creation`, `reasoning_tokens`), the new generation wins (`conv_vscode_token_names`, span `tn-2`).
 - A negative input-minus-cache difference omits `input_tokens` from the record (`conv_vscode_variants`, `var-4`).
 - Token attribute values that are strings are not usage and are ignored (`conv_vscode_variants`, `var-6`).
 
+## Unsupported dialects
+
+- Only the VS Code dialect (raw SDK span objects) is ingested. A line wrapped as `{"type":"span", ...}` (the former
+  GHCP CLI shape) is consumed without effect: it writes no record, creates no link, placement or pending entry, and is
+  not counted as malformed (`ignored_cli_shaped_lines`). `lines_read` still counts it.
+  The wrapper alone decides: a wrapped line that carries VS Code attributes (including `copilot_chat.chat_session_id`)
+  is ignored too.
+- A state file written before the removal still loads (`state_version` 1). A pending entry without `chat_session_id`
+  (the shape the old code wrote for a CLI span) is placed by the VS Code rules: tied to a logged session, it is placed
+  on the orchestrator and written; untied, it is skipped and the next state write leaves it out. A pending entry with
+  `chat_session_id` still resolves; VS Code ingest is unaffected
+  (`legacy_pending_entries_load`).
+
 ## Incremental ingest, pending spans and finality
+
+The cursor, pending, split, placement, call-time-while-pending, robustness and state cases below (and the
+attribution-order cases `attr_children_before_parents` and `attr_parents_before_children`) use VS Code dialect input
+(raw SDK span objects). A subagent chat span there is pending until the `execution_subagent` tool span whose call id
+is its `chat_session_id` has been read; that tool span's own `chat_session_id` is the spawn call id of the invocation.
 
 - Cursor cases (`cursor_*`): a start offset inside a line skips that partial line without counting it; a stored
   cursor beats `start_offset`; a file shorter than the cursor or with a changed head fingerprint is read from byte 0;
@@ -112,8 +132,6 @@ ingest iterates the same folder with pytest. A new behaviour is added as a case 
   (`call_kind_vscode_subagent_session`). A subagent-session span kept pending carries its label and kind to the
   later ingest (`call_label_kept_while_pending`). Pending records carry `timestamp`, `call_kind` and `call_label` (the last
   two omitted when absent).
-- GHCP CLI dialect: records have neither `call_kind` nor `call_label`; `github.copilot.initiator` is not read
-  (`call_kind_cli_none`).
 
 ## Ends of failed tool calls (`tool_end_*`)
 
@@ -125,12 +143,24 @@ ingest iterates the same folder with pytest. A new behaviour is added as a case 
 - The end carries the start's `call_id` verbatim, `tool_name` from the span (else the start), `status` `error`,
   `error` = `status.message` (omitted when empty), `timestamp` = the span's `endTime` converted like `startTime`
   (fallback: the ingest moment), `harness` and `session_id` of the start (`session_id` omitted when the start has
-  none) and `schema_version` `1.6.0` (`tool_end_fallbacks`). Content attributes of the span are never copied.
-- Matching: a VS Code start `call_id` equals the span call id after removing one trailing `__vscode-<digits>`; a
-  GHCP CLI start matches only verbatim (`tool_end_cli_verbatim_match`, `tool_end_cli_nonmatching_start`). Spans with
+  none) and `schema_version` `1.7.0` (`tool_end_fallbacks`). Content attributes of the span are never copied.
+- Matching: a start `call_id` equals the span call id after removing one trailing `__vscode-<digits>`. Spans with
   an empty or missing call id never match (`tool_end_empty_call_id`). A start found in two or more streams writes
   nothing (`tool_end_start_in_two_streams`).
 - Nothing is written for a successful span (`tool_end_successful_span`) or when the stream already holds an end for
   the call, hook-written or ingest-written (`tool_end_hook_end_exists`, `tool_end_not_written_twice`).
 - A failed span whose start is not found is not kept; a whole-file ingest after the start appears matches it
   (`tool_end_start_found_by_later_whole_file_ingest`).
+
+## Requested tools (`requested_tools_*`)
+
+- `requested_tools` of a VS Code `usage_record` is filled from the `tool_call` parts of the chat span's
+  `gen_ai.output.messages` (a JSON string holding an array of messages with `parts`): the object maps each tool
+  `name` to the number of `tool_call` parts carrying it, across all messages (`requested_tools_vscode`). Text,
+  reasoning, arguments and call ids are never read into a record, the state file or a diagnostic.
+- Output messages without any `tool_call` part (or an empty array) give `{}`; a span without the attribute (OTel
+  content capture off) leaves the field out.
+- A value that cannot be read (cut-off JSON, JSON that is not an array of messages) leaves the field out and never
+  drops the usage record (`requested_tools_malformed_output_messages`).
+- A pending span keeps its requested tools (`{}` included) in `state.json` `pending[].record.requested_tools` until a
+  later ingest places it; `state_version` stays 1 (`requested_tools_kept_while_pending`).

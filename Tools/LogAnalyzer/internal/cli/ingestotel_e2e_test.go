@@ -4,14 +4,14 @@ package cli_test
 // testdata/ingestotel, through cli.Execute with the real scanner, reader and
 // ingest adapter. Every test works on a temporary copy of the run folder.
 //
-// Fixture (run 20261031T100000Z-f001, harness ghcp-cli, session cli-session-6,
+// Fixture (run 20261031T100000Z-f001, harness vscode-ghcp, session vsc-session-6,
 // invocation Implementation#1 with spawn id toolu_A):
 //   - run folder state: one pending usage span (chat-sub-1) from an earlier,
 //     non-final ingest; the stored cursor sits after line 1 of the export, so
 //     chat-orch-1 (line 1, neither placed nor pending) is only reached by
 //     reading the whole file
 //   - export.jsonl: chat-orch-1 (root span of the orchestrator session),
-//     chat-sub-1 (parent span unknown, stays pending until a final ingest) and
+//     chat-sub-1 (chat session unknown, stays pending until a final ingest) and
 //     chat-foreign-1 (a conversation that is not part of this run)
 //
 // Rules under test:

@@ -12,11 +12,11 @@ import (
 
 func TestDispatchesScroll_ShortTerminalShowsTheFirstRowsAndAPositionHint(t *testing.T) {
 	colourOff(t)
-	s := screens.NewRunDetailScreen(withDispatchCount(40), 100, shortH, paletteStyles())
+	s := screens.NewRunDetailScreen(withDispatchCount(40), 100, shortTableH, paletteStyles())
 
-	view := s.View(100, shortH)
+	view := s.View(100, shortTableH)
 
-	assertWithinBounds(t, view, 100, shortH)
+	assertWithinBounds(t, view, 100, shortTableH)
 	assertContains(t, view, "builder#01")
 	assertNotContains(t, view, "builder#40")
 	if !scrollHintRE.MatchString(view) {

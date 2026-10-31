@@ -1,5 +1,5 @@
 // Package otelingest ingests Copilot OpenTelemetry usage into a run's MOSAIC log folder: it reads an OTel JSONL
-// file (GHCP CLI or VS Code dialect), turns each per-call chat span into a usage_record with source "otel" and
+// file (VS Code dialect), turns each per-call chat span into a usage_record with source "otel" and
 // places it on the stream of the actor a hard key ties it to.
 //
 // This package mirrors the Python ingest module of the mosaic-logger hook bundle (counterpart file:
@@ -65,7 +65,11 @@ func ingestInto(req Request, st *ingestState, size int64, now time.Time) (Result
 	keys := readRunKeys(req.RunDir)
 	var calls []*call
 	var failed []*failedTool
-	calls = append(calls, st.Pending...)
+	for _, c := range st.Pending {
+		if c != nil {
+			calls = append(calls, c)
+		}
+	}
 	for _, p := range sc.lines {
 		if p.tool != nil {
 			failed = append(failed, p.tool)

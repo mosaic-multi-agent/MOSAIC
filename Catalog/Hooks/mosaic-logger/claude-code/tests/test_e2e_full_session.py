@@ -788,7 +788,8 @@ class TestSchemaConformance(unittest.TestCase):
 
     def test_schema_version_is_1_3_0_except_newer_event_types(self):
         for ev in self.all_events:
-            expected = {"compaction": "1.5.0", "tool_call_end": "1.6.0"}.get(
+            expected = {"compaction": "1.5.0", "tool_call_end": "1.6.0",
+                        "usage_record": "1.7.0"}.get(
                 ev.get("event"), "1.3.0")
             self.assertEqual(
                 expected, ev.get("schema_version"),

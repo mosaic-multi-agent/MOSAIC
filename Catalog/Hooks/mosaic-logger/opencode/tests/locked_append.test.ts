@@ -21,8 +21,6 @@ import {
   WAIT_LIMIT_MS,
   lockPath,
   STALE_AFTER_MS,
-
-
   lockedAppend,
   lockedAppendSync,
 } from "../lib/locked_append";
@@ -34,7 +32,6 @@ import {
   seqsOf,
   range,
   holdLock,
-  lockFileOf,
   lockFileOf,
   releaseAfter,
   runNodeWriter,

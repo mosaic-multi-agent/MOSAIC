@@ -104,6 +104,7 @@ func (s *TimelineScreen) View(width, height int) string {
 		all := s.listBody()
 		w := s.scroll.window(len(all), height)
 		spec.hint, spec.sort = FormatScrollHint(w, len(all)), s.sort.Label()
+		spec.legend = timelineLegend()
 		body = all[w.Offset:w.End()]
 	} else {
 		body, spec.hint = s.ganttBody(width, height)

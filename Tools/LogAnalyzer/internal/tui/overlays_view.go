@@ -91,11 +91,13 @@ func (o *overlaySelectOne) view(width, height int) string {
 
 	lines := head
 	if rows := height - len(head) - 1 - 1; rows >= 0 && n > 0 {
-		w := screens.ScrollWindow(o.offset, o.cursor, n, rows)
-		o.offset = w.Offset
 		cols := o.optionColumns()
-		t := table.Table{Columns: cols, Rows: o.optionRows(len(cols)), Cursor: o.cursor, Offset: w.Offset, SortColumn: table.NoSort}
-		lines = append(lines, strings.Split(table.Render(t, width, 1+w.Count, o.theme), "\n")...)
+		t := table.Table{Columns: cols, Rows: o.optionRows(len(cols)), Cursor: o.cursor, SortColumn: table.NoSort, WrapTitles: true}
+		header := table.HeaderHeight(t, width)
+		w := screens.ScrollWindow(o.offset, o.cursor, n, max(rows+1-header, 0))
+		o.offset = w.Offset
+		t.Offset = w.Offset
+		lines = append(lines, strings.Split(table.Render(t, width, header+w.Count, o.theme), "\n")...)
 	}
 	return fitHeight(append(lines, help...), height)
 }

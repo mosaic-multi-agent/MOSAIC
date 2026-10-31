@@ -55,10 +55,10 @@ func compareColumns() []table.Column {
 	cols := make([]table.Column, cmCount)
 	cols[cmType] = table.Column{Title: "type", Flex: true, MinWidth: 10}
 	cols[cmNote] = table.Column{Title: "note", Priority: 1}
-	cols[cmInvA], cols[cmInvB], cols[cmInvChange] = num("inv A", 9), num("inv B", 9), num("inv chg", 5)
-	cols[cmTokensA], cols[cmTokensB], cols[cmTokensChange] = num("tok A", 8), num("tok B", 8), num("tok chg", 4)
-	cols[cmCostA], cols[cmCostB], cols[cmCostChange], cols[cmCostPercent] = num("cost A", 0), num("cost B", 0), num("cost chg", 0), num("cost %", 2)
-	cols[cmPeakA], cols[cmPeakB], cols[cmPeakChange], cols[cmPeakPercent] = num("peak A", 3), num("peak B", 3), num("peak chg", 6), num("peak %", 7)
+	cols[cmInvA], cols[cmInvB], cols[cmInvChange] = num("invocations A", 9), num("invocations B", 9), num("invocations change", 5)
+	cols[cmTokensA], cols[cmTokensB], cols[cmTokensChange] = num("tokens A", 8), num("tokens B", 8), num("tokens change", 4)
+	cols[cmCostA], cols[cmCostB], cols[cmCostChange], cols[cmCostPercent] = num("cost A", 0), num("cost B", 0), num("cost change", 0), num("cost change percent", 2)
+	cols[cmPeakA], cols[cmPeakB], cols[cmPeakChange], cols[cmPeakPercent] = num("peak context A", 3), num("peak context B", 3), num("peak context change", 6), num("peak context change percent", 7)
 	return cols
 }
 
@@ -230,6 +230,17 @@ func formatSignedMoney(cur domain.CurrencyCode, v domain.MoneyValue) string {
 		return "+" + text
 	}
 	return text
+}
+
+// compareExtraHeaderLines is how many lines the wrapped header takes beyond one
+// at the given width, so the row budget leaves room for it.
+func compareExtraHeaderLines(cmp domain.RunComparison, width int, st Styles) int {
+	rows := make([][]table.Cell, 0, len(cmp.Rows)+1)
+	for _, r := range cmp.Rows {
+		rows = append(rows, compareCells(st.Currency, r, ""))
+	}
+	rows = append(rows, compareCells(st.Currency, cmp.Totals, totalsLabel))
+	return extraHeaderLines(table.Table{Columns: compareColumns(), Rows: rows, Cursor: table.NoCursor}, width)
 }
 
 // compareTableLines draws the rows in the order of the sort, then the totals row.

@@ -76,7 +76,7 @@ func TestContext_DefaultSortIsPeakContextDescending(t *testing.T) {
 		t.Errorf("default sort = %q desc=%v, want peak context descending", key, desc)
 	}
 	assertAppearInOrder(t, view, []string{"builder#1", "coder#1", "reviewer#1", "tester#1"}, true)
-	if !regexp.MustCompile(`peak\s?(↓|v)`).MatchString(strings.ToLower(stripStyling(view))) {
+	if !regexp.MustCompile(`peak context\s?(↓|v)`).MatchString(strings.ToLower(stripStyling(view))) {
 		t.Errorf("the peak column header must show the descending sort marker\n%s", stripStyling(view))
 	}
 }

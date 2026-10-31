@@ -17,7 +17,6 @@ import (
 // Columns of the Context table, in display order.
 const (
 	xcInstance = iota
-	xcType
 	xcModel
 	xcRewrites
 	xcCalls
@@ -37,25 +36,27 @@ const (
 // sparkWidth is the fixed width of the context sparkline column.
 const sparkWidth = 16
 
+// compactionGroup labels the header line above the compaction columns.
+const compactionGroup = "compactions"
+
 // contextColumns lists the columns with the priority at which each is dropped on
 // a narrow terminal: the identity and the peak stay.
 func contextColumns() []table.Column {
 	right := table.AlignRight
 	cols := make([]table.Column, xcCount)
-	cols[xcInstance] = table.Column{Title: "instance", Flex: true, MinWidth: 10}
-	cols[xcType] = table.Column{Title: "type", Priority: 1, Flex: true, MinWidth: 8}
+	cols[xcInstance] = table.Column{Title: "instance", Flex: true, Identity: true, MinWidth: identityMinWidth}
 	cols[xcModel] = table.Column{Title: "model", Priority: 1, Flex: true, MinWidth: 8}
 	cols[xcRewrites] = table.Column{Title: "rewrites", Align: right, Priority: 6}
-	cols[xcCalls] = table.Column{Title: "calls", Align: right, Priority: 4}
-	cols[xcFirst] = table.Column{Title: "first", Align: right, Priority: 5}
-	cols[xcFirstWrite] = table.Column{Title: "first write*", Align: right, Priority: 5}
-	cols[xcPeak] = table.Column{Title: "peak", Align: right, Priority: 2}
-	cols[xcFinal] = table.Column{Title: "final", Align: right, Priority: 3}
-	cols[xcLogged] = table.Column{Title: "logged", Align: right, Priority: 6}
-	cols[xcHarness] = table.Column{Title: "harness", Align: right, Priority: 6}
-	cols[xcDetected] = table.Column{Title: "det. only", Align: right, Priority: 6}
-	cols[xcUnapplied] = table.Column{Title: "unapplied", Align: right, Priority: 6}
-	cols[xcCompactionCost] = table.Column{Title: "compaction cost", Align: right, Priority: 6}
+	cols[xcCalls] = table.Column{Title: "API calls", Align: right, Priority: 4}
+	cols[xcFirst] = table.Column{Title: "first context", Align: right, Priority: 5}
+	cols[xcFirstWrite] = table.Column{Title: "context at first write", Align: right, Priority: 5}
+	cols[xcPeak] = table.Column{Title: "peak context", Align: right, Priority: 2}
+	cols[xcFinal] = table.Column{Title: "final context", Align: right, Priority: 3}
+	cols[xcLogged] = table.Column{Title: "logged", Align: right, Priority: 6, Group: compactionGroup}
+	cols[xcHarness] = table.Column{Title: "harness", Align: right, Priority: 6, Group: compactionGroup}
+	cols[xcDetected] = table.Column{Title: "detected only", Align: right, Priority: 6, Group: compactionGroup}
+	cols[xcUnapplied] = table.Column{Title: "unapplied", Align: right, Priority: 6, Group: compactionGroup}
+	cols[xcCompactionCost] = table.Column{Title: "cost", Align: right, Priority: 6, Group: compactionGroup}
 	cols[xcSpark] = table.Column{Title: "context", Priority: 7, Width: sparkWidth}
 	return cols
 }
@@ -151,10 +152,6 @@ func countCell(n int) table.Cell { return table.Cell{Text: strconv.Itoa(n)} }
 func contextCells(cur domain.CurrencyCode, a domain.ActorContext, label string, labelRole tuicommon.StyleRole, theme tuicommon.Theme) []table.Cell {
 	cells := make([]table.Cell, xcCount)
 	cells[xcInstance] = table.Cell{Text: label, Role: labelRole}
-	cells[xcType] = mutedCell(AbsentMarker)
-	if label != orchestratorRowLabel {
-		cells[xcType] = table.Cell{Text: typeLabel(a.Actor.Type)}
-	}
 	cells[xcModel] = mutedCell(AbsentMarker)
 	if models := modelsOf(a.Calls); len(models) > 0 {
 		cells[xcModel] = table.Cell{Text: strings.Join(models, ",")}
@@ -186,21 +183,6 @@ func contextTableRows(cur domain.CurrencyCode, rc domain.RunContext, order []int
 		rows = append(rows, contextCells(cur, a, a.Actor.Label(), tuicommon.RoleDataActor, theme))
 	}
 	return rows
-}
-
-// contextNotes are the lines that explain the table: the first write heuristic,
-// the detected compactions and the definition of final context.
-func contextNotes(width int) []string {
-	notes := []string{
-		"* first write is a heuristic: the context at the first write-class tool call; it is not computed for the orchestrator.",
-		"logged compactions were recorded by the harness; detected ones are inferred from a drop in context between calls.",
-		"final context = " + domain.FinalContextDefinition + ".",
-	}
-	var out []string
-	for _, n := range notes {
-		out = append(out, strings.Split(tuicommon.Wrap(n, width), "\n")...)
-	}
-	return out
 }
 
 // hasContextCalls reports whether any actor of the run has per-call records.

@@ -220,7 +220,7 @@ func runCLIMode(args, cobraArgs []string) int {
 	// Use cobraArgs (not args) so the entry-point-only --dev flag does not reach cobra.
 	sess = withGHCPTrustPreflight(sess, runIdentity.RunFolder, harnessStr, interact, false, logger)
 	sess = newPanicLoggingSession(sess, logger)
-	sess = newRunLifecycleSession(sess, newRunLogConfig(h, runIdentity.RunFolder, harnessStr, logger, &realClock{}))
+	sess = newRunLifecycleSession(sess, newRunLogConfig(runIdentity.RunFolder, harnessStr, logger, &realClock{}))
 	runCtx, releaseRunCtx := newCLIRunContext(context.Background(), osInterrupt)
 	defer releaseRunCtx()
 	return cli.Run(runCtx, cobraArgs, store, runIdentity, sess, os.Stdout, os.Stderr)

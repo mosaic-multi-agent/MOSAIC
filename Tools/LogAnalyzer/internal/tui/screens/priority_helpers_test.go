@@ -6,7 +6,6 @@ package screens_test
 
 import (
 	"regexp"
-	"strings"
 	"testing"
 )
 
@@ -24,24 +23,14 @@ var (
 	hiddenMarkerRE = regexp.MustCompile(`^\+\d+\s`)
 )
 
-// headerTitles are the column titles on the header line of the table whose first
+// headerTitles are the column titles on the header lines of the table whose first
 // column is anchor, or nil when the view has no such header.
 func headerTitles(view, anchor string) []string {
-	for _, line := range viewLines(view) {
-		segments := headerGapRE.Split(strings.TrimSpace(stripStyling(line)), -1)
-		if len(segments) == 0 || sortMarkerRE.ReplaceAllString(segments[0], "") != anchor {
-			continue
-		}
-		var titles []string
-		for _, seg := range segments {
-			if hiddenMarkerRE.MatchString(seg) {
-				continue
-			}
-			titles = append(titles, sortMarkerRE.ReplaceAllString(seg, ""))
-		}
-		return titles
+	block, ok := parseHeader(view, anchor)
+	if !ok {
+		return nil
 	}
-	return nil
+	return block.titles()
 }
 
 func hasTitle(titles []string, want string) bool {

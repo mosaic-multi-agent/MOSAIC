@@ -40,9 +40,10 @@ Known Runner-mode field gaps (what native mode produces that Runner mode cannot)
   - Notification, preCompact, errorOccurred, permissionRequest,
     userPromptTransformed, subagentStart and subagentStop firings write nothing
     in the subagent role (no native invocation-stream counterpart).
-  - No usage_record events (native GHCP CLI emits none) and no
-    00_orchestrator_session.raw export for a subagent-role run; 04_session.raw
-    holds the primary session transcript.
+  - No 00_orchestrator_session.raw export for a subagent-role run; 04_session.raw
+    holds the primary session transcript. usage_record and compaction events are
+    read from the session transcript at agentStop and sessionEnd (every call of the
+    session belongs to the invocation) and written after invocation_end.
   - A resumed invocation (same instance id, new session id) appends to the same
     03_events.jsonl but overwrites 01_input.md, 02_output.md and 04_session.raw.
 """
@@ -55,6 +56,7 @@ import mosaic_logger_handlers_invocation as invocation
 import mosaic_logger_artifacts as artifacts
 import mosaic_logger_export as export
 import mosaic_logger_transcript as transcript
+import mosaic_logger_transcript_logging as transcript_logging
 
 
 STATE_DIRNAME = ".runner-session"
@@ -172,6 +174,16 @@ def complete_invocation(ctx: "core.HookContext") -> None:
         path, ctx.paths.invocation_raw(run_id, instance_id), "transcriptPath")
 
 
+def stop_subagent_role(ctx: "core.HookContext") -> None:
+    """Complete the invocation once, then log the transcript's usage.
+
+    The completion is claimed once, but calls made after it (a resumed or late session end)
+    are still read at every stop.
+    """
+    complete_invocation(ctx)
+    transcript_logging.log_transcript_usage(ctx)
+
+
 def ignore_event(ctx: "core.HookContext") -> None:
     """Primary-session events with no native invocation counterpart."""
 
@@ -179,8 +191,8 @@ def ignore_event(ctx: "core.HookContext") -> None:
 SUBAGENT_HANDLERS = {
     "sessionStart": ignore_event,
     "userPromptSubmitted": handle_subagent_role_prompt,
-    "agentStop": complete_invocation,
-    "sessionEnd": complete_invocation,
+    "agentStop": stop_subagent_role,
+    "sessionEnd": stop_subagent_role,
 }
 
 _IGNORED_SUBAGENT_EVENTS = (

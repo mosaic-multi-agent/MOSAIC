@@ -20,6 +20,7 @@ type AgentTypesScreen struct {
 	back   bool
 	nav    viewNav
 	runChrome
+	sessionRequest
 
 	typeSort SortCycle
 	cursor   int // selected row of the sorted type list
@@ -67,10 +68,7 @@ func (s *AgentTypesScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case "down", "j":
 		s.moveCursor(1)
 	case "enter":
-		if !s.drilled && len(s.run.ByAgentType) > 0 {
-			s.drilled, s.drillCursor, s.drillOffset = true, 0, 0
-			s.drillSort = newDispatchSortCycle()
-		}
+		s.enter()
 	case KeySort:
 		if s.drilled {
 			s.drillSort = s.drillSort.Next()
@@ -127,14 +125,15 @@ func (s *AgentTypesScreen) View(width, height int) string {
 		body = append(body, lines...)
 	}
 	spec := frameSpec{run: s.run, active: ScreenAgentTypes, keys: s.helpKeys(), screenKeys: s.screenKeys(), escDesc: s.escDesc(),
-		hint: FormatScrollHint(w, len(groups)), sort: s.typeSort.Label()}
+		legend: typeLegend(),
+		hint:   FormatScrollHint(w, len(groups)), sort: s.typeSort.Label()}
 	return s.render(spec, body, width, height, st)
 }
 
 // helpKeys are the short help keys of the list currently shown.
 func (s *AgentTypesScreen) helpKeys() []tuicommon.HelpEntry {
 	if s.drilled {
-		return []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: KeySort, Desc: "sort"}, exportKeyEntry, {Key: "esc", Desc: "types"}}
+		return []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: "enter", Desc: "session"}, {Key: KeySort, Desc: "sort"}, exportKeyEntry, {Key: "esc", Desc: "types"}}
 	}
 	return []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: "enter", Desc: "dispatches"},
 		{Key: KeySort, Desc: "sort"}, exportKeyEntry, {Key: "esc", Desc: "back"}}
@@ -143,7 +142,7 @@ func (s *AgentTypesScreen) helpKeys() []tuicommon.HelpEntry {
 // screenKeys are the overlay entries of the keys this view has of its own.
 func (s *AgentTypesScreen) screenKeys() []tuicommon.HelpEntry {
 	if s.drilled {
-		return []tuicommon.HelpEntry{sortKeyEntry}
+		return []tuicommon.HelpEntry{sortKeyEntry, {Key: "enter", Desc: "open the session of the selected dispatch"}}
 	}
 	return []tuicommon.HelpEntry{sortKeyEntry, {Key: "enter", Desc: "list the dispatches of the selected type"}}
 }

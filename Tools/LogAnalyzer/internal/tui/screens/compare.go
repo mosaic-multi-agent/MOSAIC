@@ -90,7 +90,7 @@ func (s *CompareScreen) scrollBy(delta int) {
 
 // window clamps the first shown row to the rows that fit the current height.
 func (s *CompareScreen) window(offset int) Window {
-	budget := PageBodyHeight(s.height) - compareChromeRows
+	budget := PageBodyHeight(s.height) - compareChromeRows - compareExtraHeaderLines(s.cmp, s.width, s.styles)
 	w := ScrollWindow(offset, -1, len(s.cmp.Rows), budget)
 	s.offset = w.Offset
 	return w
@@ -104,7 +104,7 @@ func (s *CompareScreen) View(width, height int) string {
 	body := compareTableLines(s.cmp, compareOrder(s.cmp.Rows, o), w, o, width, s.styles)
 	page := Page{Title: compareTitle, Badges: s.badges(), Keys: compareKeys, Help: true,
 		Hint: FormatScrollHint(w, len(s.cmp.Rows))}
-	return s.render(page, compareOverlayGroups(), body, width, height, s.styles)
+	return s.render(page, withLegend(compareOverlayGroups(), compareLegend()...), body, width, height, s.styles)
 }
 
 // badges are the header badges: both runs, a run still in progress marked next

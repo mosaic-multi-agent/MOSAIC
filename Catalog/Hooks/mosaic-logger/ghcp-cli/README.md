@@ -96,15 +96,22 @@ events that GHCP CLI fires will silently produce no log output. To correct this:
 The script name and event name that follow the interpreter name must be preserved
 exactly. Only the leading interpreter token changes.
 
-## Compaction events
+## Token usage and compactions
 
-`preCompact` is the only compaction hook, so it writes one self-contained `compaction`
-event (log format 1.5.0) without `phase`. The event goes to a subagent's stream only
-when the payload names it (`agentId`), otherwise to the orchestrator stream. No token
-fields are written; the `preCompact` payload shape carries none.
+Usage and compactions come from the CLI session transcript
+(`~/.copilot/session-state/<session-id>/events.jsonl`), in native and Runner mode, with
+no OpenTelemetry setup and no environment variable. `mosaic_logger_transcript_logging.py`
+reads the transcript at the hook read points and appends each API call as a
+`usage_record` (with the tools it requested) and each compaction as a `compaction`
+event, to the stream of the actor that made it. Every item is logged once.
 
-Unverified pending a live run: whether the GHCP CLI fires `preCompact` for a
-subagent's own compaction, and whether that payload carries `agentId`.
+If the transcript has assistant turns but no usage records, its format may have
+changed. The hook then writes a `transcript_format_changed` entry to
+`OrchestrationLogs/mosaic-logger-diagnostics.jsonl`, and LogAnalyzer shows a finding
+for the run instead of a silent zero.
+
+`preCompact` itself writes no `compaction` event: the transcript is the source, so a
+compaction is never logged twice.
 
 ## Supported events
 

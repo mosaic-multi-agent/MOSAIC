@@ -80,7 +80,7 @@ func TestTimelineList_HeaderNamesTheColumns(t *testing.T) {
 	if header == "" {
 		t.Fatalf("the table has no header line with an instance column\n%s", view)
 	}
-	for _, col := range []string{"type", "start", "end", "duration", "status", "overlap"} {
+	for _, col := range []string{"start", "end", "duration", "status", "overlap"} {
 		if !strings.Contains(header, col) {
 			t.Errorf("header %q must name the column %q", header, col)
 		}
@@ -104,7 +104,7 @@ func TestTimelineList_EveryInvocationHasOneRowWithItsFields(t *testing.T) {
 			t.Errorf("%s must have exactly one invocation row, found it %d times\n%s", c.id, n, view)
 		}
 		row := rowFor(t, view, c.id)
-		assertContains(t, row, timelineTypes[c.id], c.start, c.end, c.status)
+		assertContains(t, row, c.start, c.end, c.status)
 		if !hasDuration(row, wantDuration(t, c.d)) {
 			t.Errorf("row %q must carry its duration %q", row, wantDuration(t, c.d))
 		}
@@ -116,7 +116,7 @@ func TestTimelineList_OpenInvocationIsLabelledOpenWithoutDuration(t *testing.T) 
 
 	row := rowFor(t, view, "rev#4")
 
-	assertContains(t, row, "10:00:40", "reviewer")
+	assertContains(t, row, "10:00:40")
 	if !openLabelToken.MatchString(row) {
 		t.Errorf("rev#4 row %q must carry %q as a separate token", row, screens.OpenLabel)
 	}
@@ -144,7 +144,6 @@ func TestTimelineList_InvocationWithoutTimestampsStaysListedWithAbsentMarkers(t 
 	if n := strings.Count(row, screens.AbsentMarker); n < 3 {
 		t.Errorf("delta#5 has no usable start, end or duration and must show %q for each: %q", screens.AbsentMarker, row)
 	}
-	assertContains(t, row, screens.UnknownTypeLabel)
 }
 
 func TestTimelineList_OverlapCountIncludesTheOpenInvocationAsRunningToTheAxisEnd(t *testing.T) {

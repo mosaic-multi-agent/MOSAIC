@@ -275,11 +275,12 @@ type jsonDurations struct {
 
 // jsonToolFigures are exact figures only: no token or money attribution.
 type jsonToolFigures struct {
-	Tool      string        `json:"tool"`
-	Calls     int           `json:"calls"`
-	Errors    int           `json:"errors"`
-	Unpaired  int           `json:"unpaired"`
-	Durations jsonDurations `json:"durations"`
+	Tool      string         `json:"tool"`
+	Calls     int            `json:"calls"`
+	Errors    int            `json:"errors"`
+	Unpaired  int            `json:"unpaired"`
+	Durations jsonDurations  `json:"durations"`
+	Growth    jsonToolGrowth `json:"context_growth"`
 }
 
 type jsonAgentTypeTools struct {
@@ -303,7 +304,7 @@ func encodeToolFigures(tools []domain.ToolFigures) []jsonToolFigures {
 			d.MaxMS = durationMillis(f.Durations.Max)
 			d.AverageMS = durationMillis(f.Durations.Average)
 		}
-		out[i] = jsonToolFigures{Tool: f.Tool, Calls: f.Calls, Errors: f.Errors, Unpaired: f.Unpaired, Durations: d}
+		out[i] = jsonToolFigures{Tool: f.Tool, Calls: f.Calls, Errors: f.Errors, Unpaired: f.Unpaired, Durations: d, Growth: encodeToolGrowth(f.Growth)}
 	}
 	return out
 }

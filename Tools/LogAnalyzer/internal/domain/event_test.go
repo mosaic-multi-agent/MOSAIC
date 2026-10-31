@@ -294,8 +294,8 @@ func TestEventType_EventUsageRecord_WireValue(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSchemaVersionCurrent_Value(t *testing.T) {
-	if domain.SchemaVersionCurrent != "1.5.0" {
-		t.Errorf("SchemaVersionCurrent = %q, want %q", domain.SchemaVersionCurrent, "1.5.0")
+	if domain.SchemaVersionCurrent != "1.7.0" {
+		t.Errorf("SchemaVersionCurrent = %q, want %q", domain.SchemaVersionCurrent, "1.7.0")
 	}
 }
 

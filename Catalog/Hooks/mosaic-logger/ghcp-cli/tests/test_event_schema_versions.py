@@ -1,8 +1,8 @@
 """Per-event schema_version stamping.
 
 Each event carries the highest schema_version whose fields the adapter implements for it:
-invocation_start (spawn_call_id) and usage_record are 1.4.0, compaction is 1.5.0,
-tool_call_end is 1.6.0, every other event is 1.0.0.
+invocation_start (spawn_call_id) is 1.4.0, compaction is 1.5.0, tool_call_end is 1.6.0,
+usage_record is 1.7.0 (requested_tools, transcript-sourced usage), every other event is 1.0.0.
 Applies in native mode and in Runner mode.
 """
 
@@ -22,7 +22,7 @@ import mosaic_logger
 import mosaic_logger_core as core
 from tests.runner_mode_support import RunnerModeTestCase
 
-_NEWER = {"invocation_start": "1.4.0", "usage_record": "1.4.0", "compaction": "1.5.0",
+_NEWER = {"invocation_start": "1.4.0", "usage_record": "1.7.0", "compaction": "1.5.0",
           "tool_call_end": "1.6.0"}
 _RUN_ID = "20261028T100000Z-b7c4"
 _INSTANCE_ID = "Research#3"
@@ -51,8 +51,8 @@ class TestSchemaVersionFor(unittest.TestCase):
     def test_invocation_start_is_1_4_0(self):
         self.assertEqual("1.4.0", core.schema_version_for("invocation_start"))
 
-    def test_usage_record_is_1_4_0(self):
-        self.assertEqual("1.4.0", core.schema_version_for("usage_record"))
+    def test_usage_record_is_1_7_0(self):
+        self.assertEqual("1.7.0", core.schema_version_for("usage_record"))
 
     def test_compaction_is_1_5_0(self):
         self.assertEqual("1.5.0", core.schema_version_for("compaction"))
@@ -73,6 +73,10 @@ class TestBuildEventStampsPerEventVersion(unittest.TestCase):
     def test_invocation_start_is_stamped_1_4_0(self):
         event = core.build_event("invocation_start", _ctx())
         self.assertEqual("1.4.0", event["schema_version"])
+
+    def test_usage_record_is_stamped_1_7_0(self):
+        event = core.build_event("usage_record", _ctx())
+        self.assertEqual("1.7.0", event["schema_version"])
 
     def test_tool_call_start_is_stamped_1_0_0(self):
         event = core.build_event("tool_call_start", _ctx())
@@ -106,6 +110,17 @@ class TestNativeSessionEventVersions(unittest.TestCase):
         self._fire("subagentStop", agentId="agent-v1",
                    response='{"status_code": "SUCCESS", "run_id": "%s"}' % _RUN_ID)
         self._fire("preCompact", trigger="auto")
+        transcript = self.ws / "events.jsonl"
+        transcript.write_text("".join(json.dumps(e) + "\n" for e in (
+            {"type": "session.usage_record", "id": "u1", "timestamp": "2026-10-30T13:00:10.000Z",
+             "data": {"usage": {"apiCallId": "call-1", "model": "m", "inputTokens": 10,
+                                "outputTokens": 5, "cacheReadTokens": 0, "cacheWriteTokens": 0,
+                                "duration": 100, "toolCounts": {}}}},
+            {"type": "session.compaction_complete", "id": "c1", "timestamp": "2026-10-30T13:00:20.000Z",
+             "data": {"success": True, "outcome": "applied", "compactionAttemptId": "a1",
+                      "trigger": "threshold", "preCompactionTokens": 100, "postCompactionTokens": 10}},
+        )), encoding="utf-8")
+        self._fire("agentStop", transcriptPath=str(transcript))
         self._fire("sessionEnd", reason="complete")
         self.events = _read_all_events(self.ws)
 
@@ -117,7 +132,7 @@ class TestNativeSessionEventVersions(unittest.TestCase):
     def test_session_exercises_the_versioned_event_types(self):
         names = {e["event"] for e in self.events}
         self.assertTrue({"run_start", "invocation_start", "invocation_end",
-                         "tool_call_start", "tool_call_end", "compaction",
+                         "tool_call_start", "tool_call_end", "compaction", "usage_record",
                          "run_end"} <= names, names)
 
     def test_every_emitted_event_carries_the_version_of_its_type(self):

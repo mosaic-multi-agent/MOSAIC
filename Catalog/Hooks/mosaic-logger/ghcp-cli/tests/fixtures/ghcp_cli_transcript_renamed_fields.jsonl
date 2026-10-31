@@ -1,0 +1,2 @@
+{"type":"session.usage_record","data":{"usage":{"model":"claude-sonnet-5.5","tokensIn":58152,"tokensOut":356,"cachedIn":12492,"callId":"msg_renamed_1"}},"id":"ev-r1","timestamp":"2026-10-30T13:18:58.576Z","parentId":"ev-p"}
+{"type":"assistant.turn_end","data":{"turnId":"0"},"id":"ev-r2","timestamp":"2026-10-30T13:18:59.476Z","parentId":"ev-p"}

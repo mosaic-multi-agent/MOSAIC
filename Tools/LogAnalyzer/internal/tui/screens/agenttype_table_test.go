@@ -171,7 +171,7 @@ func TestAgentTypesTable_UnattributedRowIsReadableAtEightyColumns(t *testing.T) 
 
 func TestAgentTypesTable_UnattributedRowStaysVisibleWhileScrolling(t *testing.T) {
 	colourOff(t)
-	for _, height := range []int{shortH, 12, 20} {
+	for _, height := range []int{shortTableH, 12, 20} {
 		s := screens.NewAgentTypesScreen(withUnattributed(manyTypesRun(30)), tableW, height, paletteStyles())
 
 		top := s.View(tableW, height)

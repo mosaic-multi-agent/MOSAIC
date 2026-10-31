@@ -1,5 +1,5 @@
 {
-  "description": "A different file at the same path, longer than the stored cursor, is detected by the head fingerprint and read afresh from byte 0: none of its lines is skipped.",
+  "description": "VS Code dialect. A different file at the same path, longer than the stored cursor, is detected by the head fingerprint and read afresh from byte 0: none of its lines is skipped.",
   "run_id": "20261028T000000Z-0000",
   "steps": [
     {

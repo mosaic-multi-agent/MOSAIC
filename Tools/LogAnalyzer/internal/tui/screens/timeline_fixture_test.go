@@ -134,13 +134,6 @@ func timelineRun() domain.RunReport {
 	return run
 }
 
-// withShades adds wall-time intervals to a run.
-func withShades(run domain.RunReport, waits, gaps []domain.TimeInterval) domain.RunReport {
-	run.WallTime.WaitIntervals = waits
-	run.WallTime.SessionGaps = gaps
-	return run
-}
-
 func tlSpan(from, to int) domain.TimeInterval {
 	return domain.TimeInterval{Start: tlAt(from), End: tlAt(to)}
 }

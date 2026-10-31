@@ -1,5 +1,5 @@
 {
-  "description": "A final ingest moves the pending spans of its scope (all when the scope is empty) to the unattributed stream and reports how many.",
+  "description": "VS Code dialect. A final ingest moves the pending spans of its scope (all when the scope is empty) to the unattributed stream and reports how many.",
   "run_id": "20261028T000000Z-0000",
   "steps": [
     {

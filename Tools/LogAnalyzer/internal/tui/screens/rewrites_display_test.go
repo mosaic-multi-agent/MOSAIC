@@ -90,6 +90,18 @@ func TestOverviewCache_OrchestratorFiguresAreNotTakenFromTheRunFigures(t *testin
 // the needle. The header is the line naming both "rewrites" and the anchor column.
 func rewriteCell(t *testing.T, view, rowNeedle, anchor string) string {
 	t.Helper()
+	if block, ok := parseHeader(view, anchor); ok {
+		// Wrapped titles: the column is read from the rendered header block.
+		col, found := block.col("rewrites")
+		if !found {
+			t.Fatalf("the table anchored at %q has no \"rewrites\" column\n%s", anchor, stripStyling(view))
+		}
+		cells := runesOf(rowFor(t, stripStyling(view), rowNeedle))
+		if len(cells) < col.end {
+			t.Fatalf("row of %s is shorter than the rewrites column: %q", rowNeedle, string(cells))
+		}
+		return strings.TrimSpace(string(cells[col.start:col.end]))
+	}
 	var header string
 	for _, l := range viewLines(view) {
 		low := strings.ToLower(l)
@@ -121,7 +133,7 @@ func TestDispatches_RewritesColumnCountsEachDispatchsRewrites(t *testing.T) {
 	view := dispatchesView(run, tableW, tallH)
 
 	for id, want := range map[string]string{"builder#1": "4", "reviewer#1": "2"} {
-		if got := rewriteCell(t, view, id, "cache hit"); got != want {
+		if got := rewriteCell(t, view, id, "instance"); got != want {
 			t.Errorf("%s rewrites = %q, want %q", id, got, want)
 		}
 	}
@@ -135,7 +147,7 @@ func TestDispatches_OrchestratorRowShowsItsOwnRewriteCount(t *testing.T) {
 
 	view := dispatchesView(run, tableW, tallH)
 
-	if got := rewriteCell(t, view, "orchestrator", "cache hit"); got != "6" {
+	if got := rewriteCell(t, view, "orchestrator", "instance"); got != "6" {
 		t.Errorf("orchestrator rewrites = %q, want 6 (its own, not the run's 9)", got)
 	}
 }

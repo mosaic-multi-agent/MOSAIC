@@ -10,12 +10,6 @@ import (
 // before any JSON parsing.
 var usageMarker = []byte(`"gen_ai.operation.name"`)
 
-// Dialects: the GHCP CLI wraps every object as {"type":"span"|"metric",...}; VS Code writes raw SDK objects.
-const (
-	dialectCLI    = "cli"
-	dialectVSCode = "vscode"
-)
-
 // Span kinds that matter for attribution besides the per-call chat span.
 const (
 	kindInvokeAgent = "invoke_agent"
@@ -57,12 +51,9 @@ func parseLine(line []byte, offset int64) parsedLine {
 	if dec.More() {
 		return parsedLine{malformed: true}
 	}
-	dialect := dialectVSCode
-	if t, ok := obj["type"].(string); ok {
-		if t != "span" {
-			return parsedLine{}
-		}
-		dialect = dialectCLI
+	// A line with a "type" member is a wrapped object of the removed GHCP CLI shape: consumed without effect.
+	if _, wrapped := obj["type"].(string); wrapped {
+		return parsedLine{}
 	}
 	spanID := stringValue(obj["spanId"])
 	attrs, _ := obj["attributes"].(map[string]any)
@@ -81,8 +72,8 @@ func parseLine(line []byte, offset int64) parsedLine {
 	}
 	switch stringValue(attrs["gen_ai.operation.name"]) {
 	case "chat":
-		if c := convertChat(attrs, dialect); c != nil {
-			c.RecordID, c.RecordIndex, c.Dialect = spanID, offset, dialect
+		if c := convertChat(attrs); c != nil {
+			c.RecordID, c.RecordIndex = spanID, offset
 			c.Timestamp = startTimestamp(obj["startTime"])
 			c.ParentSpanID, c.ConversationID = l.ParentSpanID, l.ConversationID
 			c.ChatSessionID, c.ParentChatSessionID = l.ChatSessionID, l.ParentChatSessionID
@@ -93,7 +84,7 @@ func parseLine(line []byte, offset int64) parsedLine {
 		return parsedLine{linkID: spanID, link: &l}
 	case kindExecuteTool:
 		name := stringValue(attrs["gen_ai.tool.name"])
-		tool := failedToolOf(obj, attrs, dialect)
+		tool := failedToolOf(obj, attrs)
 		if spawnToolNames[name] {
 			l.Kind, l.ToolName = kindExecuteTool, name
 			l.ToolCallID = stringValue(attrs["gen_ai.tool.call.id"])

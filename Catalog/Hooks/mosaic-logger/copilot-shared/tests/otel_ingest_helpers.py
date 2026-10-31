@@ -9,7 +9,7 @@ REPO_ROOT = SHARED_DIR.parents[3]
 CONFORMANCE_DIR = REPO_ROOT / "Tools" / "Common" / "otelingest" / "testdata" / "conformance"
 
 RUN_ID = "20261028T000000Z-0000"
-SESSION = "cli-session-6"
+SESSION = "vsc-session-6"
 FIXED_NOW = datetime.datetime(2026, 10, 28, 9, 0, 0, tzinfo=datetime.timezone.utc)
 
 
@@ -26,7 +26,7 @@ def make_run(tmp_path, session=SESSION):
     run_dir.mkdir(parents=True)
     start = {
         "schema_version": "1.0.0", "event": "session_start",
-        "timestamp": "2026-10-28T08:00:00.000Z", "harness": "ghcp-cli",
+        "timestamp": "2026-10-28T08:00:00.000Z", "harness": "vscode-ghcp",
         "session_id": session, "run_id": RUN_ID,
     }
     (run_dir / "00_orchestrator_events.jsonl").write_text(json.dumps(start) + "\n", encoding="utf-8")
@@ -35,10 +35,10 @@ def make_run(tmp_path, session=SESSION):
     return run_dir, otel_dir / "copilot-otel.jsonl"
 
 
-def chat_line(span_id, conversation=SESSION, input_tokens=100, output_tokens=10):
-    """A GHCP CLI dialect root chat span line (no parent) carrying usage."""
+def chat_line(span_id, conversation=SESSION, input_tokens=100, output_tokens=10, chat_session=None):
+    """A VS Code dialect chat span line carrying usage; without chat_session it is the orchestrator's own."""
     span = {
-        "type": "span", "traceId": "0123456789abcdef0123456789abcdef", "spanId": span_id,
+        "traceId": "0123456789abcdef0123456789abcdef", "spanId": span_id,
         "name": "chat", "kind": 2,
         "attributes": {
             "gen_ai.operation.name": "chat",
@@ -48,6 +48,8 @@ def chat_line(span_id, conversation=SESSION, input_tokens=100, output_tokens=10)
             "gen_ai.usage.output_tokens": output_tokens,
         },
     }
+    if chat_session:
+        span["attributes"]["copilot_chat.chat_session_id"] = chat_session
     return json.dumps(span, separators=(",", ":"))
 
 

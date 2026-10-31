@@ -36,10 +36,11 @@ func (s *Service) readSource(ctx context.Context, src domain.Source, digestFiles
 	// Aggregate (pure attribution).
 	agg, aggFindings := analysis.Aggregate(analysis.Input{Streams: streams})
 
-	logFindings := make([]domain.Finding, 0, len(enumFindings)+len(readFindings)+len(aggFindings))
+	logFindings := make([]domain.Finding, 0, len(enumFindings)+len(readFindings)+len(aggFindings)+1)
 	logFindings = append(logFindings, enumFindings...)
 	logFindings = append(logFindings, readFindings...)
 	logFindings = append(logFindings, aggFindings...)
+	logFindings = append(logFindings, s.alarmFindings(ctx, src, agg)...)
 
 	// Merge digest runs into the aggregate. Load-time findings (skipped or
 	// duplicate digests) join the report's findings but are never exported.

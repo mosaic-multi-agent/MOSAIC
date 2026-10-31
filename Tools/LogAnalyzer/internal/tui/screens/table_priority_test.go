@@ -22,14 +22,14 @@ func dispatchTableAt(t *testing.T) func(width int) string {
 	}
 }
 
-var dispatchFigures = []string{"tokens", "duration", "peak ctx", "cache hit", "rewrites", "cache write", "write cost", "net cache", "unread cache writes", "effort"}
+var dispatchFigures = []string{"tokens", "duration", "peak context", "cache hit", "rewrites", "cache write", "write cost", "net cache", "unread cache writes", "effort"}
 
 func TestDispatchTable_ShareBarIsDroppedBeforeEveryFigureColumn(t *testing.T) {
 	assertDropOrder(t, dispatchTableAt(t), "instance", []string{"share"}, dispatchFigures)
 }
 
-func TestDispatchTable_TypeOutlastsEveryFigureColumn(t *testing.T) {
-	assertDropOrder(t, dispatchTableAt(t), "instance", dispatchFigures, []string{"type"})
+func TestDispatchTable_StatusOutlastsEveryFigureColumn(t *testing.T) {
+	assertDropOrder(t, dispatchTableAt(t), "instance", dispatchFigures, []string{"status"})
 }
 
 func agentTypeTableAt(t *testing.T) func(width int) string {
@@ -39,7 +39,7 @@ func agentTypeTableAt(t *testing.T) func(width int) string {
 	}
 }
 
-var typeFigures = []string{"average", "min", "max", "avg peak", "max peak", "cache hit", "rewrites", "cache write", "write cost"}
+var typeFigures = []string{"average", "average peak context", "maximum peak context", "cache hit", "rewrites", "cache write", "write cost"}
 
 func TestAgentTypeTable_ShareBarIsDroppedBeforeEveryFigureColumn(t *testing.T) {
 	assertDropOrder(t, agentTypeTableAt(t), "type", []string{"share"}, typeFigures)
@@ -57,7 +57,7 @@ func TestToolsTable_ShareBarIsDroppedBeforeEveryFigureColumn(t *testing.T) {
 
 	// The last tier is the anchor: the header is found by it at every width, so
 	// asserting it keeps the identifying column from being dropped for a figure.
-	assertDropOrder(t, render, "tool", []string{"share"}, []string{"avg", "min", "max", "unpaired"}, []string{"tool"})
+	assertDropOrder(t, render, "tool", []string{"share"}, []string{"average duration", "minimum duration", "maximum duration", "unpaired"}, []string{"tool"})
 }
 
 func TestStatusTable_ShareBarsAreDroppedBeforeTheFlags(t *testing.T) {
@@ -66,13 +66,13 @@ func TestStatusTable_ShareBarsAreDroppedBeforeTheFlags(t *testing.T) {
 		return screens.NewStatusScreen(statusRun(), width, tallH, paletteStyles()).View(width, tallH)
 	}
 
-	assertDropOrder(t, render, "status", []string{"disp. share", "cost share"}, []string{"flags"}, []string{"status"})
+	assertDropOrder(t, render, "status", []string{"dispatch share", "cost share"}, []string{"flags"}, []string{"status"})
 }
 
-func TestTimelineInvocationTable_TypeOutlastsTheTimesAndTheOverlap(t *testing.T) {
+func TestTimelineInvocationTable_StatusOutlastsTheTimesAndTheOverlap(t *testing.T) {
 	render := func(width int) string { return listView(t, timelineRun(), width, tallH) }
 
-	assertDropOrder(t, render, "instance", []string{"overlap", "start", "end"}, []string{"type"})
+	assertDropOrder(t, render, "instance", []string{"overlap", "start", "end"}, []string{"status"})
 }
 
 func TestTimelineCompactionTable_TriggerOutlastsTheContextFigures(t *testing.T) {
@@ -96,7 +96,7 @@ func TestAcrossRunsTypeTable_ShareBarIsDroppedBeforeTheFigures(t *testing.T) {
 
 	assertDropOrder(t, render, "type",
 		[]string{"share"},
-		[]string{"invocations", "runs", "avg/run", "inv/run", "tokens/run", "flags"},
+		[]string{"invocations", "runs", "average per run", "invocations per run", "tokens per run", "flags"},
 		[]string{"type"},
 	)
 }
@@ -105,8 +105,8 @@ func TestCompareTable_TypeOutlastsEveryFigureColumn(t *testing.T) {
 	render := func(width int) string { return compareView(width, tallH) }
 
 	assertDropOrder(t, render, "type",
-		[]string{"inv A", "inv B", "tok A", "tok B", "peak A", "peak B", "inv chg", "tok chg", "peak chg", "peak %", "cost %"},
-		[]string{"cost A", "cost B", "cost chg"},
+		[]string{"invocations A", "invocations B", "tokens A", "tokens B", "invocations change", "tokens change"},
+		[]string{"cost A", "cost B", "cost change"},
 		[]string{"type"},
 	)
 }
@@ -114,7 +114,7 @@ func TestCompareTable_TypeOutlastsEveryFigureColumn(t *testing.T) {
 func TestRunsTable_RunOutlastsTheInvocationsAndTheDuration(t *testing.T) {
 	render := func(width int) string { return runsView(runsReport(), width, tallH) }
 
-	assertDropOrder(t, render, "cmp", []string{"duration", "invocations"}, []string{"run", "cost"})
+	assertDropOrder(t, render, "compare|cmp", []string{"duration", "invocations"}, []string{"run", "cost"})
 }
 
 func TestOverviewModelTable_ShareBarIsDroppedBeforeTheFigures(t *testing.T) {
@@ -123,7 +123,7 @@ func TestOverviewModelTable_ShareBarIsDroppedBeforeTheFigures(t *testing.T) {
 		return screens.NewOverviewScreen(analysesRun(), width, overviewTallH, paletteStyles()).View(width, overviewTallH)
 	}
 
-	assertDropOrder(t, render, "model", []string{"share"}, []string{"tokens", "requests", "cost"}, []string{"model"})
+	assertDropOrder(t, render, "model", []string{"share"}, []string{"tokens", "API calls", "cost"}, []string{"model"})
 }
 
 // The wall-time table of the Overview has one droppable column, harness; the

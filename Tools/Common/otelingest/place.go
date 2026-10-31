@@ -10,7 +10,6 @@ import (
 // placeCalls places every call it can, in file order, and keeps the rest pending. A call whose record_id was
 // already placed is not written again. A final ingest sends pending calls of its scope to the unattributed stream.
 func placeCalls(req Request, st *ingestState, r *resolver, w *writer, calls []*call, res *Result) error {
-	untiedCalls := 0
 	timedOut := 0
 	pending := []*call{}
 	for _, c := range calls {
@@ -18,9 +17,6 @@ func placeCalls(req Request, st *ingestState, r *resolver, w *writer, calls []*c
 			continue
 		}
 		if !r.keys.tied(c.ConversationID, c.ChatSessionID, c.ParentChatSessionID) {
-			if c.Dialect == dialectCLI && c.ConversationID != "" {
-				untiedCalls++
-			}
 			continue
 		}
 		dest, ok := r.place(c)
@@ -48,7 +44,7 @@ func placeCalls(req Request, st *ingestState, r *resolver, w *writer, calls []*c
 	}
 	st.Pending = pending
 	res.Pending = len(pending)
-	res.Diagnostics = append(res.Diagnostics, placementDiagnostics(r.keys, untiedCalls, res.Finalized)...)
+	res.Diagnostics = append(res.Diagnostics, placementDiagnostics(res.Finalized)...)
 	if timedOut > 0 {
 		res.Diagnostics = append(res.Diagnostics, diag.Diagnostic{
 			Kind:    diag.KindAppendTimedOut,
@@ -59,17 +55,9 @@ func placeCalls(req Request, st *ingestState, r *resolver, w *writer, calls []*c
 	return nil
 }
 
-// placementDiagnostics reports usage the ingest could not tie to the run and pending calls it finalised.
-func placementDiagnostics(keys *runKeys, untiedCalls, finalized int) []diag.Diagnostic {
+// placementDiagnostics reports the pending calls a final ingest placed on the unattributed stream.
+func placementDiagnostics(finalized int) []diag.Diagnostic {
 	var out []diag.Diagnostic
-	if untiedCalls > 0 {
-		out = append(out, diag.Diagnostic{
-			Kind:    diag.KindConversationNotTied,
-			Message: "usage of a GHCP CLI conversation that no logged session id ties to the run was not ingested",
-			Counts:  map[string]int{"usage_spans": untiedCalls},
-			IDs:     keys.sessionIDs(),
-		})
-	}
 	if finalized > 0 {
 		out = append(out, diag.Diagnostic{
 			Kind:    diag.KindPendingFinalized,

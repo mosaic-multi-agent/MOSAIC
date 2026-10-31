@@ -1,0 +1,15 @@
+{
+  "description": "VS Code: a gen_ai.output.messages value that is a valid JSON array with bad elements is read element by element. A message that is not an object, a message whose parts is not an array, and a part whose type is not a string are skipped; keys match exactly (Parts, TYPE are not parts, type), so only well-formed tool_call parts count. Content marked CONTENT-SENTINEL never reaches a record.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

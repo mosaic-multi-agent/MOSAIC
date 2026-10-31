@@ -16,7 +16,6 @@ import mosaic_logger_handlers_invocation as _invocation
 import mosaic_logger_handlers_tools as _tools
 import mosaic_logger_handlers_runner as _runner
 import mosaic_logger_runner_mode as runner_mode
-import mosaic_logger_otel_hook as otel_hook
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +130,6 @@ def dispatch(event: str, raw_input: str) -> None:
       4. Emit run_start on sessionStart.
       5. Invoke registered handler for ctx.event, if any.
       6. Emit run_end on sessionEnd -- always runs even if step 5 raised.
-      7. Native mode only: record the OTel start offset or ingest usage at stops.
     """
     try:
         # Step 1: parse
@@ -174,15 +172,6 @@ def dispatch(event: str, raw_input: str) -> None:
                 _session.emit_run_end(ctx, outcome)
         except Exception as exc:
             core.debug_log("emit_run_end failed", exc)
-
-        # Step 7: OTel usage ingest -- offset at sessionStart, non-final ingest at stops
-        try:
-            if ctx.event == "sessionStart":
-                otel_hook.record_session_start(ctx)
-            elif ctx.event in ("agentStop", "subagentStop"):
-                otel_hook.ingest_at_stop(ctx)
-        except Exception as exc:
-            core.debug_log("otel ingest step failed", exc)
 
     except Exception as exc:
         core.debug_log("dispatch outer exception", exc)

@@ -69,7 +69,7 @@ func (s *OverviewScreen) View(width, height int) string {
 	body := s.body()
 	w := s.scroll.window(len(body), height)
 	spec := frameSpec{run: s.run, active: ScreenOverview, keys: s.helpKeys(), screenKeys: s.screenKeys(),
-		escDesc: "back to the runs list", hint: FormatScrollHint(w, len(body)), sort: s.modelSort.Label()}
+		legend: overviewLegend(), escDesc: "back to the runs list", hint: FormatScrollHint(w, len(body)), sort: s.modelSort.Label()}
 	return s.render(spec, body[w.Offset:w.End()], width, height, s.styles)
 }
 

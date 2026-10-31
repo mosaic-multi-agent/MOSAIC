@@ -39,13 +39,29 @@ type WallTimeSplit struct {
 	Subagents        time.Duration
 	OrchestratorOnly time.Duration
 	BetweenSessions  time.Duration
-	WaitIntervals    []TimeInterval // merged, sorted; for shading
-	SessionGaps      []TimeInterval // sorted; for shading
+	WaitIntervals    []TimeInterval // merged, sorted; not used for shading
+	SessionGaps      []TimeInterval // sorted; raw list, not used for shading
 	CountedTools     []CountedTool  // sorted by tool, then harness
 	OpenWaits        []OpenWait     // sorted by At (zero last)
 
+	// ActorWaits are each actor's waits on the user: merged, sorted, clipped to Span.
+	// The union of all their intervals equals WaitIntervals. Orchestrator first, then
+	// invocations by instance id; actors without waits are left out.
+	ActorWaits []ActorWaitIntervals
+	// BetweenSessionIntervals are the merged, sorted intervals whose total is BetweenSessions.
+	BetweenSessionIntervals []TimeInterval
+	// Collapsible are the Timeline stretches drawn collapsed. Sorted, never
+	// overlapping, may touch. Drawing only.
+	Collapsible []TimeInterval
+
 	MissingContactToolsHint bool
 	UnconfiguredTools       []string // distinct, sorted; non-empty exactly when the hint is set
+}
+
+// ActorWaitIntervals are one actor's waits on the user.
+type ActorWaitIntervals struct {
+	Actor     ActorRef
+	Intervals []TimeInterval // merged, sorted
 }
 
 // PermissionPairingNote is shown with the waiting figure.

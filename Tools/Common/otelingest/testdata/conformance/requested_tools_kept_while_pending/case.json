@@ -1,0 +1,24 @@
+{
+  "description": "VS Code: a subagent chat span held as pending keeps its requested tools in state.json (pending[].record.requested_tools) until a later ingest places it: tool names with counts, an empty object for output messages without tool calls, and no field for a span without gen_ai.output.messages. state_version stays 1. Content marked CONTENT-SENTINEL never reaches the state file or a record.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "early",
+      "otel": "otel/early.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    },
+    {
+      "name": "later",
+      "otel": "otel/later.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

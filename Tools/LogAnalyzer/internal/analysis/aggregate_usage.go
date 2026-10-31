@@ -61,6 +61,8 @@ func (a *Aggregator) handleUsageRecord(rs *runState, ref domain.StreamRef, ev do
 		Kind:      callKindOrMain(rec.CallKind),
 		Label:     rec.CallLabel,
 		SessionID: ev.SessionID,
+
+		RequestedTools: rec.RequestedTools,
 	}
 
 	if rec.RecordID == "" {

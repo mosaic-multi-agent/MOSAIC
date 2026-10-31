@@ -18,6 +18,7 @@ func buildRunContext(run domain.RunAggregate, table domain.PricingTable, setting
 			usage:       run.Orchestrator.Invocations,
 			runHarness:  runHarness,
 			compactions: run.Activity.Compactions,
+			turns:       run.Turns,
 		}, table, settings),
 	}
 	for _, inv := range run.Activity.Invocations {
@@ -27,6 +28,7 @@ func buildRunContext(run domain.RunAggregate, table domain.PricingTable, setting
 			tools:       inv.ToolCalls,
 			runHarness:  runHarness,
 			compactions: run.Activity.Compactions,
+			turns:       run.Turns,
 			firstWrite:  true,
 		}, table, settings))
 	}
@@ -51,6 +53,7 @@ type actorInput struct {
 	tools       []domain.ToolCall
 	runHarness  domain.Harness
 	compactions []domain.Compaction
+	turns       []domain.Turn
 	firstWrite  bool // compute the context at first write
 }
 
@@ -78,6 +81,7 @@ func buildActorContext(in actorInput, table domain.PricingTable, settings domain
 	out.Compactions = append(out.Compactions, detectedMarks(out.Calls, settings.CompactionDropPercent)...)
 	orderMarks(out.Compactions)
 	applyCompactionCalls(&out)
+	applyToolGrowth(&out, in.turns)
 	return out
 }
 
@@ -111,6 +115,8 @@ func contextCalls(usage []domain.InvocationUsage, table domain.PricingTable, set
 			Kind:      callKindOrMain(u.Kind),
 			Label:     u.Label,
 			SessionID: u.SessionID,
+
+			RequestedTools: u.RequestedTools,
 		})
 	}
 	sort.SliceStable(calls, func(i, j int) bool {

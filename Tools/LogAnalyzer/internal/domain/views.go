@@ -128,6 +128,8 @@ type ToolFigures struct {
 	// Harnesses are the distinct non-empty harnesses (actor attribution) of the
 	// calls in this row, sorted.
 	Harnesses []Harness
+	// Growth is the context growth of the singular calls that requested only this tool.
+	Growth ToolGrowth
 }
 
 // AgentTypeTools is one agent type's tool figures.

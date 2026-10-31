@@ -1,12 +1,11 @@
-"""Tests for the compaction event written by the preCompact hook.
+"""Tests for the preCompact hook, which no longer writes a compaction event.
 
+GHCP CLI compactions are logged from the session transcript (a native compaction fires no
+preCompact at all), so a preCompact firing adds nothing to any stream, whatever its payload names.
 Covers:
-  - one phase-less compaction event per preCompact firing, stamped schema 1.5.0
-  - no token fields are written when the payload has none. Whether the GHCP CLI
-    preCompact payload carries token counts is unverified (no documented payload
-    shape), so positive and non-integer token cases are deliberately untested here.
-  - the event goes to a subagent's stream only when the payload names the
-    compacted subagent (agentId); a subagent merely running is not enough
+  - no compaction event on the orchestrator stream
+  - no compaction event on a subagent's stream when the payload names the subagent (agentId)
+  - no other event type is written on behalf of preCompact either
 """
 
 import contextlib
@@ -57,57 +56,39 @@ class CompactionCase(unittest.TestCase):
                   toolArgs={"prompt": prompt})
         self.fire("subagentStart", agentId=_AGENT_ID, agentType="Research")
 
-    def orchestrator_compactions(self):
-        # The run folder of the orchestrator stream depends on run-id resolution,
-        # so every orchestrator stream under the log root is read.
+    def all_events(self):
         events = []
-        for f in sorted(self.paths.root.rglob("00_orchestrator_events.jsonl")):
+        for f in sorted(self.paths.root.rglob("*_events.jsonl")):
             events.extend(_read_jsonl(f))
-        return [e for e in events if e["event"] == "compaction"]
+        return events
 
-    def subagent_compactions(self):
-        events = _read_jsonl(self.paths.invocation_events(_RUN_ID, _INSTANCE_ID))
-        return [e for e in events if e["event"] == "compaction"]
+    def compactions(self):
+        return [e for e in self.all_events() if e["event"] == "compaction"]
 
 
-class TestEventShape(CompactionCase):
+class TestPreCompactWritesNothing(CompactionCase):
 
-    def test_pre_compact_writes_one_event_stamped_1_5_0(self):
+    def test_pre_compact_without_agent_id_writes_no_compaction_event(self):
         self.start_running_subagent()
         self.fire("preCompact", trigger="auto")
-        (event,) = self.orchestrator_compactions()
-        self.assertEqual("1.5.0", event["schema_version"])
-        self.assertEqual("auto", event["trigger"])
+        self.assertEqual([], self.compactions())
 
-    def test_event_has_no_phase(self):
-        self.start_running_subagent()
-        self.fire("preCompact", trigger="manual")
-        (event,) = self.orchestrator_compactions()
-        self.assertNotIn("phase", event)
-
-    def test_payload_without_token_values_writes_no_token_fields(self):
-        self.start_running_subagent()
-        self.fire("preCompact", trigger="auto")
-        (event,) = self.orchestrator_compactions()
-        self.assertNotIn("tokens_before", event)
-        self.assertNotIn("tokens_after", event)
-
-
-class TestRouting(CompactionCase):
-
-    def test_pre_compact_without_agent_id_goes_to_orchestrator_stream(self):
-        self.start_running_subagent()
-        self.fire("preCompact", trigger="auto")
-        self.assertEqual(1, len(self.orchestrator_compactions()))
-        self.assertEqual([], self.subagent_compactions())
-
-    def test_pre_compact_naming_the_subagent_goes_to_its_stream(self):
+    def test_pre_compact_naming_the_subagent_writes_no_compaction_event(self):
         self.start_running_subagent()
         self.fire("preCompact", agentId=_AGENT_ID, trigger="auto")
-        (event,) = self.subagent_compactions()
-        self.assertEqual("1.5.0", event["schema_version"])
-        self.assertNotIn("phase", event)
-        self.assertEqual([], self.orchestrator_compactions())
+        self.assertEqual([], self.compactions())
+
+    def test_manual_trigger_writes_no_compaction_event(self):
+        self.start_running_subagent()
+        self.fire("preCompact", trigger="manual")
+        self.assertEqual([], self.compactions())
+
+    def test_pre_compact_adds_no_event_at_all(self):
+        self.start_running_subagent()
+        before = len(self.all_events())
+        self.fire("preCompact", agentId=_AGENT_ID, trigger="auto")
+        self.fire("preCompact", trigger="auto")
+        self.assertEqual(before, len(self.all_events()))
 
 
 if __name__ == "__main__":

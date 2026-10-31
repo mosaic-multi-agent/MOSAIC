@@ -1,5 +1,5 @@
 {
-  "description": "A subagent chat span exported before the spans that attribute it is held as pending; the next ingest sees its invoke_agent and the execute_tool task span and places it on the matching invocation.",
+  "description": "VS Code dialect. A subagent chat span exported before the execution_subagent tool span that attributes it is held as pending; the next ingest sees the tool span and places the chat span on the matching invocation.",
   "run_id": "20261028T000000Z-0000",
   "steps": [
     {

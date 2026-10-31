@@ -2,7 +2,7 @@
 
 > **Status:** Draft for review
 > **Created:** 2026-07-27
-> **Last Updated:** 2026-10-29
+> **Last Updated:** 2026-10-31
 > **Scope:** The canonical log event schema, the on-disk artifact layout, run identity, and the merge utility's contract. 
 
 ---
@@ -65,7 +65,7 @@ These twelve event types are the complete set in schema version 1. A human promp
 |---|---|---|---|
 | `schema_version` | string | Required | See §6. |
 | `event` | enum (§3.1) | Required | Discriminator field. |
-| `timestamp` | string (ISO 8601) | Required | Time the adapter captured/emitted the event. **Exception:** on a `usage_record` with `source: "otel"` it is the start time of the API call, taken from the span (§4.7). |
+| `timestamp` | string (ISO 8601) | Required | Time the adapter captured/emitted the event. **Exception:** on a `usage_record` with `source: "otel"` it is the start time of the API call, taken from the span (§4.7); on a `ghcp-cli` `usage_record` read from the session transcript it is the start time of the API call, the transcript event's timestamp minus the call's `duration` in milliseconds (§4.8). |
 | `harness` | enum: `"claude-code"` \| `"opencode"` \| `"vscode-ghcp"` \| `"ghcp-cli"` | Required | Which harness adapter emitted this entry. |
 | `session_id` | string | Optional | Harness-native session identifier, normalized to this single field name regardless of the harness's native casing. |
 | `run_id` | string | Optional | Identifier of the orchestration run, when determinable. Primary correlation key for the merge utility — see §4. |
@@ -218,6 +218,13 @@ One compaction is either one self-contained event without `phase`, or a `"pre"` 
 | `call_kind` | enum: `"main"` \| `"compaction"` \| `"auxiliary"` | Optional | What the API call was for. `main`: a step of the actor's own conversation. `compaction`: a request that summarises the actor's context to compact it; whether its result was applied is not stated. `auxiliary`: a harness helper call made inside the actor's session (title generation, a background todo list, and similar). Absent means `main`; producers whose source cannot tell the kinds apart omit it. Consumers count every kind for usage and cost, and use only `main` calls for context-size figures. |
 | `call_label` | string | Optional | The harness's own name for the kind of call, copied verbatim (for example `panel/editAgent`, `summarizeConversationHistory`, `backgroundTodoAgent`). Descriptive only; `call_kind` is the field consumers act on. |
 | `token_usage` | object | Optional | Present when at least one sub-field is resolvable. Sub-fields `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens`, `cache_creation_5m_tokens`, `cache_creation_1h_tokens`, `reasoning_tokens`, each independently optional and present only when its source value is a genuine number, including 0. Cache-write tier, reasoning and provider rules as for `invocation_end` (§3.4). |
+| `requested_tools` | object | Optional | The tools this API call requested: each key is a tool name as the harness reports it, each value the number of times the call requested it (integer >= 1). `{}` means the call requested no tools. Absent means the harness did not provide it for this record. Producers write `{}` even where their event builder prunes empty values, never write `null` or a 0 count, and fill it only from the harness's per-call data, never from timestamps. Sources: Claude Code, the `tool_use` blocks of the API message (one API message spans several transcript records, grouped by `message.id`); OpenCode, the `tool` parts of the assistant message; GHCP CLI, `toolCounts` of the transcript usage record; VS Code, the `tool_call` parts of `gen_ai.output.messages` (tool names only; absent when OTel content capture is off). |
+
+Example: `{"event": "usage_record", "record_id": "msg_01...", "requested_tools": {"read_file": 2, "glob": 1}}`.
+
+**Compaction usage record key.** For a `ghcp-cli` compaction, the `usage_record` with `call_kind: "compaction"` has `record_id` `compaction:<compactionAttemptId>`, where `compactionAttemptId` is the id the transcript's compaction event carries. The prefix keeps it apart from the `apiCallId` keys of ordinary calls. When the event has no `compactionAttemptId`, the key is `compaction:event:<transcript event id>`; when it has neither, no `usage_record` and no `compaction` event is written for it. The key is unique per compaction and the same on every read of the transcript, so the cost is logged once however often the transcript is read (supersede rule below).
+
+**Unsuccessful compaction.** A `ghcp-cli` compaction that did not succeed (the transcript reports `success` other than true, or an `outcome` other than `applied`) writes its `usage_record` with `call_kind: "compaction"` when the transcript reports the cost, so the tokens are counted, and writes **no** `compaction` event. A consumer therefore never shows it as an applied compaction.
 
 **Supersede rule (normative).** A producer may observe the same `record_id` more than once as its values settle. When the same `record_id` appears more than once within a stream, the later observation is authoritative and supersedes all earlier ones. A consumer totals the final observed value for each `record_id`, never the first.
 
@@ -364,7 +371,7 @@ An adapter is in Runner mode only when `MOSAIC_ROLE` is set. Without it the adap
   - `response`, `status_code`, `model` and `token_usage` come from the session transcript (the last assistant text and record) and are omitted when the transcript is missing, unreadable or holds no assistant text; `04_session.raw` is not written when no transcript can be read.
   - No `session_start`/`session_end` in the invocation stream; a session without any prompt gets its `invocation_start` (without prompt) at completion.
   - `Notification`, `preCompact`, `errorOccurred`, `permissionRequest`, `userPromptTransformed`, `subagentStart` and `subagentStop` write nothing in the subagent role.
-  - No transcript-based `usage_record` events and no `00_orchestrator_session.raw` for a subagent-role run. Usage comes from the OTel ingest (§4.7) when the user has enabled the export, and is absent otherwise.
+  - No `00_orchestrator_session.raw` for a subagent-role run. `usage_record` and `compaction` events come from the session transcript, in native and Runner mode alike, with no OpenTelemetry setup (§4.8).
   - Resume behaves as for Claude Code (append events, overwrite the three files).
 - OpenCode:
   - Subagent role: no `run_start`, `run_end`, `session_start` or `session_end`; nothing is written to `00_orchestrator_events.jsonl`.
@@ -377,7 +384,7 @@ An adapter is in Runner mode only when `MOSAIC_ROLE` is set. Without it the adap
 
 ### 4.7 Usage from OpenTelemetry
 
-Some harnesses carry no usage in their transcripts but export it through OpenTelemetry (OTel) to a file the harness writes. For those harnesses the adapter **ingests** the file: it turns each per-API-call span into a `usage_record` with `source: "otel"` and writes it to the stream of the actor the span belongs to. Consumers read only MOSAIC logs; they never read the OTel file. Which harnesses use this, and which span attributes map to which fields, is adapter design, not part of this format.
+VS Code (`vscode-ghcp`) carries no usage in its transcripts but exports it through OpenTelemetry (OTel) to a file the harness writes. GHCP CLI does not use the OTel ingest; its usage comes from the session transcript (§4.8). For VS Code the adapter **ingests** the file: it turns each per-API-call span into a `usage_record` with `source: "otel"` and writes it to the stream of the actor the span belongs to. Consumers read only MOSAIC logs; they never read the OTel file. Which harnesses use this, and which span attributes map to which fields, is adapter design, not part of this format.
 
 **Rules for producers (normative).**
 
@@ -407,6 +414,19 @@ Some harnesses carry no usage in their transcripts but export it through OpenTel
 - **Malformed lines** are skipped, never fatal: several harness windows may append to the same file without locking.
 
 **Coverage.** Usage the harness exports but no hook can tie to a run stays out of the logs: helper calls with no conversation ID, such as some title-generation calls. Helper calls that do carry an actor's conversation ID are recorded on that actor's stream, with `call_kind: "auxiliary"`. When the user has not enabled the export, the harness logs no usage, and consumers report it as not provided.
+
+### 4.8 GHCP CLI usage from the session transcript
+
+GHCP CLI `usage_record` and `compaction` events come from the CLI session transcript (`~/.copilot/session-state/<session-id>/events.jsonl`), in native and Runner mode, with no OpenTelemetry setup.
+
+- **One record per call.** Each transcript `session.usage_record` event becomes one `usage_record`, with `record_id` the event's `apiCallId`.
+- **Timestamp.** The record `timestamp` is the call start: the transcript event's timestamp minus its `duration` in milliseconds (§3.3 exception).
+- **Tokens.** The transcript's `inputTokens` includes cache. `token_usage.input_tokens` is the uncached input: `inputTokens` minus cache read minus cache write. Cache read and cache write map to `cache_read_tokens` and `cache_creation_tokens`; no cache-write tier fields are written. The reasoning count maps to `reasoning_tokens` under the §3.4 rule.
+- **Model, provider, effort.** `model` and `provider` are carried when the transcript names them; `effort` is the transcript's `reasoningEffort` verbatim.
+- **Requested tools.** `requested_tools` comes from the event's `toolCounts` (§3.4).
+- **Compaction.** Each `session.compaction_complete` event writes one `compaction` event on the stream of the compacted actor, only when the compaction was applied (`success` true and `outcome` `applied`). Its `compactionTokensUsed` becomes a `usage_record` with `call_kind: "compaction"`, keyed as described under "Compaction usage record key" (§3.4), written for applied and unsuccessful compactions alike. An unsuccessful compaction writes no `compaction` event (§3.4).
+- **Hooks.** The `preCompact` hook no longer writes a `compaction` event for GHCP CLI.
+- **Alarm.** When a transcript holds assistant turns but no readable usage, the adapter reports it as a diagnostic so consumers can mark the run's cost as incomplete.
 
 ## 5. Tool Payload Capture Policy
 
@@ -443,6 +463,7 @@ Every event carries `schema_version` in its common envelope (§3.3).
 | `1.4.0` | Added the `otel` value of `usage_record.source`, the unattributed stream `00_unattributed_events.jsonl` (§4.7) and `invocation_start.spawn_call_id`. |
 | `1.5.0` | Added `compaction.phase` and the rule that a compaction is written to the stream of the actor whose context was compacted. |
 | `1.6.0` | Added `usage_record.call_kind` and `call_label`, and `tool_call_end.tool_name`. An OTel `usage_record` is timestamped with the API call's start (§3.3, §4.7). The OTel ingest writes the missing `tool_call_end` of a failed tool call, with the error message (§4.7). Every append is made under an exclusive per-file lock (§4.1). |
+| `1.7.0` | Added `usage_record.requested_tools`. GHCP CLI usage and compactions come from the session transcript, with no OTel setup (§4.8); the compaction `usage_record` key is `compaction:<compactionAttemptId>` and an unsuccessful compaction writes only its `usage_record`. The call-start timestamp exception extends to transcript-sourced GHCP CLI `usage_record` events (§3.3). |
 
 Adapters emit the highest version whose fields they implement; an adapter that does not produce the 1.2.0 sub-fields keeps emitting its earlier version. A version covers its fields as a set of things the adapter implements, not as fields that must appear on every event: an adapter that implements 1.3.0 but cannot know the provider in a given run still emits 1.3.0 and omits `provider`. The version is per event, so an event type added in a version (for example `usage_record` in 1.1.0) is never written with an earlier version.
 

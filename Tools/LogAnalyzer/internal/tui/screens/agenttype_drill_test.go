@@ -131,9 +131,9 @@ func TestAgentTypesDrill_LabelsAssumedTierCacheWrites(t *testing.T) {
 }
 
 func TestAgentTypesDrill_ShortTerminalScrollsAndShowsHint(t *testing.T) {
-	s, first := drilled(manyDispatchesRun(30), shortH, "enter")
+	s, first := drilled(manyDispatchesRun(30), shortTableH, "enter")
 
-	assertFits(t, first, shortH)
+	assertFits(t, first, shortTableH)
 	assertContains(t, first, "builder#01")
 	assertNotContains(t, first, "builder#30")
 	if !scrollHintRE.MatchString(first) {
@@ -141,8 +141,8 @@ func TestAgentTypesDrill_ShortTerminalScrollsAndShowsHint(t *testing.T) {
 	}
 
 	press(s, repeat("down", 40)...)
-	last := s.View(tableW, shortH)
-	assertFits(t, last, shortH)
+	last := s.View(tableW, shortTableH)
+	assertFits(t, last, shortTableH)
 	assertContains(t, last, "builder#30")
 	assertNotContains(t, last, "builder#01")
 	if got, ok := s.DrilledType(); !ok || got != "builder" {

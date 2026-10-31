@@ -11,6 +11,7 @@ import (
 type waitCollector struct {
 	settings  domain.AnalysisSettings
 	intervals []domain.TimeInterval
+	owners    []domain.ActorRef // owners[i] made the wait intervals[i]
 	open      []domain.OpenWait
 	counted   map[domain.CountedTool]int
 }
@@ -75,7 +76,7 @@ func (w *waitCollector) addToolCalls(actor domain.ActorRef, h domain.Harness, ca
 			w.open = append(w.open, domain.OpenWait{Actor: actor, At: c.StartedAt, Kind: domain.OpenWaitToolCall, Tool: c.ToolName})
 			continue
 		}
-		w.intervals = append(w.intervals, domain.TimeInterval{Start: c.StartedAt, End: c.EndedAt})
+		w.addInterval(actor, domain.TimeInterval{Start: c.StartedAt, End: c.EndedAt})
 	}
 }
 
@@ -152,7 +153,7 @@ func (w *waitCollector) addGroup(group []domain.Notification) {
 		}
 		return
 	}
-	w.intervals = append(w.intervals, domain.TimeInterval{Start: first.At, End: last.At})
+	w.addInterval(first.Actor, domain.TimeInterval{Start: first.At, End: last.At})
 }
 
 // countedTools lists the counted tool names sorted by tool, then harness.

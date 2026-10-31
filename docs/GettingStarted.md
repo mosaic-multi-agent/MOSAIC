@@ -168,14 +168,16 @@ Checkpoints disabled.
 
 ## Token Usage on Copilot Harnesses
 
-GHCP CLI and VS Code Copilot Chat report token usage through Copilot's OpenTelemetry file export, which the MOSAIC logging hook reads. To get usage and cost in `mosaic-log-analyzer` for these harnesses:
+**GHCP CLI needs no setup.** The MOSAIC logging hook reads usage and compactions from the CLI's session transcript, in native and Runner mode. If a transcript's format changes so that no usage can be read, the hook writes a diagnostic and `mosaic-log-analyzer` shows a finding for the run instead of a silent zero.
+
+**VS Code Copilot Chat** reports token usage through Copilot's OpenTelemetry file export, which the MOSAIC logging hook reads. To get usage and cost in `mosaic-log-analyzer` for VS Code:
 
 1. Set the environment variable `COPILOT_OTEL_FILE_EXPORTER_PATH` to the path of a `.jsonl` file. This one variable enables both Copilot's export and MOSAIC's ingest. Do not use the VS Code user setting for the export instead: the hooks cannot read it.
 2. Set it at user level (Windows user environment variables; macOS/Linux login environment), not in a single shell, and restart VS Code afterwards. VS Code started from the desktop sees only user-level variables.
-3. Content capture is optional and only makes the file larger. MOSAIC never reads content and never modifies the file.
+3. Content capture is optional for usage and only makes the file larger, but VS Code logs the tools each call requested (and so LogAnalyzer's context growth per tool) only with it. MOSAIC never copies content to the logs and never modifies the file.
 4. Cost needs `github-copilot` entries that you maintain in `pricing.yaml`; the shipped file has none.
 
-If usage is missing from a run (the variable was unset, the file was missing, a session crashed, or the hooks did not see the variable), recover it with `mosaic-log-analyzer ingest-otel <otel-file> --run <run-id>`. The [LogAnalyzer Guide](LogAnalyzerGuide.md#token-usage-recovery-ingest-otel) explains the recovery, the views, the pricing and settings files, and the `currency` key. Hook-side details are in the hook README (`Catalog/Hooks/mosaic-logger/README.md`).
+If VS Code usage is missing from a run (the variable was unset, the file was missing, a session crashed, or the hooks did not see the variable), recover it with `mosaic-log-analyzer ingest-otel <otel-file> --run <run-id>`. The [LogAnalyzer Guide](LogAnalyzerGuide.md#token-usage-recovery-ingest-otel) explains the recovery, the views, the pricing and settings files, and the `currency` key. Hook-side details are in the hook README (`Catalog/Hooks/mosaic-logger/README.md`).
 
 ---
 

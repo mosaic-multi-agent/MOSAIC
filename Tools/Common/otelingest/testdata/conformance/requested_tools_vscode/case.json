@@ -1,0 +1,15 @@
+{
+  "description": "VS Code: requested_tools comes from the tool_call parts of the chat span's gen_ai.output.messages (a JSON string), counted by tool name across all messages. Output messages without tool calls (text and reasoning parts only, or an empty array) give an empty object; a span without gen_ai.output.messages (content capture off) leaves the field out. Only tool names are read: text, arguments and call ids (marked CONTENT-SENTINEL) never reach a record.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

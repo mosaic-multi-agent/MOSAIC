@@ -216,7 +216,7 @@ func buildInteractiveWiring(in interactiveWiringInput) interactiveWiring {
 				sess := withGHCPTrustPreflight(session.New(deps),
 					sessionRunFolder, cfg.Harness, in.ProgramRef, true, in.Debug)
 				return newRunLifecycleSession(sess,
-					newRunLogConfig(deps.Harness, sessionRunFolder, cfg.Harness, in.Debug, in.Clock))
+					newRunLogConfig(sessionRunFolder, cfg.Harness, in.Debug, in.Clock))
 			},
 			MintRunIdentity:        in.Minter,
 			OrchestratorDiscoverer: harness.DiscoverOrchestrator,

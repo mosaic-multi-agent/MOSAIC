@@ -21,15 +21,22 @@ type tickLabel struct {
 func tickLabels(a Axis, plotWidth int) []tickLabel {
 	loc := a.Start.Location()
 	crossesDate := !sameDate(a.Start, a.End.In(loc))
-	step, layout := chooseStep(a, plotWidth, crossesDate)
+	d, scaleWidth := a.End.Sub(a.Start), plotWidth
+	if p, ok := a.collapsePlan(plotWidth); ok {
+		d, scaleWidth = p.linear, p.cells
+	}
+	step, layout := chooseStep(d, scaleWidth, crossesDate)
 	length := len(layout)
+	cols, stretches := a.markerColumns(plotWidth)
 	var labels []tickLabel
-	for _, tick := range ticks(a, step) {
+	usedEnd := 0
+	for _, tick := range axisTicks(a, plotWidth, step) {
 		col, _ := a.Column(tick, plotWidth)
-		if col+length > plotWidth {
+		if col+length > plotWidth || tickBlocked(tick, col, length, usedEnd, cols, stretches) {
 			continue
 		}
 		labels = append(labels, tickLabel{col: col, text: tick.In(loc).Format(layout)})
+		usedEnd = col + length
 	}
 	if len(labels) == 0 && length <= plotWidth {
 		labels = append(labels, tickLabel{col: 0, text: a.Start.Format(layout)})
@@ -54,10 +61,9 @@ func layoutFor(step time.Duration, crossesDate bool) string {
 	return layout
 }
 
-// chooseStep returns the smallest step whose labels sit at least two blanks apart, with the
-// time layout for that step.
-func chooseStep(a Axis, plotWidth int, crossesDate bool) (time.Duration, string) {
-	d := a.End.Sub(a.Start)
+// chooseStep returns the smallest step whose labels sit at least two blanks apart when d of
+// time is laid out on plotWidth cells, with the time layout for that step.
+func chooseStep(d time.Duration, plotWidth int, crossesDate bool) (time.Duration, string) {
 	fits := func(step time.Duration) bool {
 		need := int64(len(layoutFor(step, crossesDate)) + 2)
 		return int64(step)*int64(plotWidth) >= need*int64(d)

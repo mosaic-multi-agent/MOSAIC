@@ -6,7 +6,6 @@ package screens_test
 // compaction, and no figure is labelled "below optimal".
 
 import (
-	"regexp"
 	"strings"
 	"testing"
 
@@ -18,8 +17,6 @@ const (
 	markCompactCall   = "compaction call"
 	markUnappliedCall = "unapplied compaction call"
 )
-
-var ccSplit = regexp.MustCompile(`\s{2,}`)
 
 // ccCall turns a call into a compaction call of the given cost.
 func ccCall(sec int, cents int64, unapplied bool) domain.ContextCall {
@@ -91,29 +88,17 @@ func compactionRun() domain.RunReport {
 // ccCell is the cell of the actor's row under the named header column.
 func ccCell(t *testing.T, view, id, model, column string) string {
 	t.Helper()
-	var header, row string
-	for _, l := range viewLines(view) {
-		low := strings.ToLower(l)
-		switch {
-		case strings.Contains(low, "instance") && strings.Contains(low, "compaction cost"):
-			header = low
-		case strings.Contains(l, id) && strings.Contains(l, model):
-			row = l
+	block := readHeader(t, view, "instance")
+	col, ok := block.col(column)
+	if !ok {
+		t.Fatalf("no column %q in %q", column, block.titles())
+	}
+	for _, row := range block.rows {
+		if strings.Contains(row, id) && strings.Contains(row, model) {
+			return fragment(runesOf(row), col.start, col.end)
 		}
 	}
-	if header == "" || row == "" {
-		t.Fatalf("no header (%q) or row of %s (%q)\n%s", header, id, row, stripStyling(view))
-	}
-	names, cells := ccSplit.Split(strings.TrimSpace(header), -1), ccSplit.Split(strings.TrimSpace(row), -1)
-	if len(names) != len(cells) {
-		t.Fatalf("header has %d columns, row of %s has %d cells: %q vs %q", len(names), id, len(cells), names, cells)
-	}
-	for i, n := range names {
-		if strings.TrimSuffix(strings.TrimSpace(n), " ↓") == column {
-			return cells[i]
-		}
-	}
-	t.Fatalf("no column %q in %q", column, names)
+	t.Fatalf("no row of %s with model %s\n%s", id, model, stripStyling(view))
 	return ""
 }
 
@@ -128,7 +113,7 @@ func TestContext_HarnessCompactionsAreCountedInTheirOwnColumn(t *testing.T) {
 	view := ctxView(t, compactionRun(), tableW, tallH)
 
 	ccAssertCell(t, view, "harn#1", "model-h", "harness", "1")
-	ccAssertCell(t, view, "harn#1", "model-h", "det. only", "0")
+	ccAssertCell(t, view, "harn#1", "model-h", "detected only", "0")
 	ccAssertCell(t, view, "harn#1", "model-h", "logged", "0")
 	ccAssertCell(t, view, "mixed#1", "model-m", "harness", "1")
 }
@@ -138,14 +123,14 @@ func TestContext_DropMatchedToALoggedCompaction_IsNotCountedAsDetectedOnlyOrHarn
 
 	ccAssertCell(t, view, "logm#1", "model-l", "logged", "1")
 	ccAssertCell(t, view, "logm#1", "model-l", "harness", "0")
-	ccAssertCell(t, view, "logm#1", "model-l", "det. only", "0")
+	ccAssertCell(t, view, "logm#1", "model-l", "detected only", "0")
 }
 
 func TestContext_CompactionCostColumnShowsTheCostOfTheActorsCompactionCalls(t *testing.T) {
 	view := ctxView(t, compactionRun(), tableW, tallH)
 
-	ccAssertCell(t, view, "harn#1", "model-h", "compaction cost", "$0.10")
-	ccAssertCell(t, view, "mixed#1", "model-m", "compaction cost", "$0.24")
+	ccAssertCell(t, view, "harn#1", "model-h", "cost", "$0.10")
+	ccAssertCell(t, view, "mixed#1", "model-m", "cost", "$0.24")
 }
 
 func TestContext_UnappliedColumnCountsTheCompactionCallsNoCompactionFollowed(t *testing.T) {

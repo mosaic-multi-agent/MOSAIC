@@ -11,7 +11,7 @@ import (
 
 const (
 	// recordSchemaVersion is the highest MOSAIC log schema version whose fields this package implements.
-	recordSchemaVersion = "1.6.0"
+	recordSchemaVersion = "1.7.0"
 	unattributedStream  = "00_unattributed_events.jsonl"
 	// timestampLayout is the envelope timestamp format: UTC, milliseconds.
 	timestampLayout = "2006-01-02T15:04:05.000Z"
@@ -35,6 +35,7 @@ type usageRecord struct {
 	TokenUsage      *tokenUsage `json:"token_usage,omitempty"`
 	CallLabel       string      `json:"call_label,omitempty"`
 	CallKind        string      `json:"call_kind,omitempty"`
+	RequestedTools  *toolCounts `json:"requested_tools,omitempty"`
 }
 
 // writer appends records to the streams of one run.
@@ -49,21 +50,22 @@ type writer struct {
 func (w *writer) write(c *call, dest string) error {
 	session := w.keys.conversation(c)
 	rec := usageRecord{
-		SchemaVersion: recordSchemaVersion,
-		Event:         "usage_record",
-		Timestamp:     c.Timestamp,
-		Harness:       w.harness(c, session),
-		SessionID:     session,
-		RunID:         w.runID,
-		RecordID:      c.RecordID,
-		RecordIndex:   c.RecordIndex,
-		Source:        "otel",
-		Model:         c.Model,
-		Provider:      providerName,
-		Effort:        c.Effort,
-		TokenUsage:    c.TokenUsage,
-		CallLabel:     c.CallLabel,
-		CallKind:      c.CallKind,
+		SchemaVersion:  recordSchemaVersion,
+		Event:          "usage_record",
+		Timestamp:      c.Timestamp,
+		Harness:        w.harness(c, session),
+		SessionID:      session,
+		RunID:          w.runID,
+		RecordID:       c.RecordID,
+		RecordIndex:    c.RecordIndex,
+		Source:         "otel",
+		Model:          c.Model,
+		Provider:       providerName,
+		Effort:         c.Effort,
+		TokenUsage:     c.TokenUsage,
+		CallLabel:      c.CallLabel,
+		CallKind:       c.CallKind,
+		RequestedTools: c.RequestedTools,
 	}
 	path := filepath.Join(w.runDir, unattributedStream)
 	switch {

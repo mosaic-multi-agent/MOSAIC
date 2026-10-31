@@ -10,7 +10,7 @@ import (
 	"mosaic-log-analyzer/internal/domain"
 )
 
-// The per-call table of the Context drill-down: the API calls of one actor with
+// The per-call table of the Session screen: the API calls of one actor with
 // the marks of the first write call and of the calls around compactions.
 
 // Columns of the per-call table, in display order.
@@ -24,6 +24,8 @@ const (
 	kcCacheWrite
 	kcOutput
 	kcCost
+	kcTools
+	kcGrowth
 	kcMark
 	kcCount
 )
@@ -57,6 +59,8 @@ func callColumns() []table.Column {
 	cols[kcCacheWrite] = table.Column{Title: "cache write", Align: right, Priority: 5}
 	cols[kcOutput] = table.Column{Title: "output", Align: right, Priority: 4}
 	cols[kcCost] = table.Column{Title: "cost", Align: right, Priority: 3}
+	cols[kcTools] = table.Column{Title: "requested tools", Priority: 2, Flex: true, MinWidth: 12}
+	cols[kcGrowth] = table.Column{Title: "context growth", Align: right, Priority: 3, MinWidth: 12}
 	cols[kcMark] = table.Column{Title: "mark", Priority: 2, Flex: true, MinWidth: 8}
 	return cols
 }
@@ -185,6 +189,7 @@ func callCells(cur domain.CurrencyCode, c domain.ContextCall, marks []string) []
 	cells[kcOutput] = tokensCell(c.Usage.Output)
 	cost := FormatMoney(cur, c.Cost)
 	cells[kcCost] = table.Cell{Text: cost, Role: MoneyRole(c.Cost, true)}
+	cells[kcTools], cells[kcGrowth] = toolsCell(c.RequestedTools), growthCell(c)
 	cells[kcMark] = warningCell(strings.Join(marks, ", "))
 	return cells
 }
@@ -198,9 +203,10 @@ func callTableLines(a domain.ActorContext, o SortOrder, cursor int, offset *int,
 	for r, i := range order {
 		rows[r] = callCells(st.Currency, a.Calls[i], marks[i])
 	}
-	w := ScrollWindow(*offset, cursor, len(rows), rowBudget)
+	t := tableOf(callColumns(), rows, cursor, 0, callSortColumn(o.Key), o.Desc)
+	w := ScrollWindow(*offset, cursor, len(rows), rowBudget-extraHeaderLines(t, width))
 	*offset = w.Offset
-	t := tableOf(callColumns(), rows, cursor, w.Offset, callSortColumn(o.Key), o.Desc)
+	t.Offset = w.Offset
 	return renderTableLines(t, width, w.Count, st), w
 }
 

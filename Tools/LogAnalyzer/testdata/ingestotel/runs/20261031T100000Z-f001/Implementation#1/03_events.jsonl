@@ -1,1 +1,1 @@
-{"schema_version":"1.4.0","event":"invocation_start","timestamp":"2026-10-28T08:00:00.000Z","harness":"ghcp-cli","session_id":"cli-session-6","run_id":"20261031T100000Z-f001","agent_instance_id":"Implementation#1","spawn_call_id":"toolu_A"}
+{"schema_version":"1.4.0","event":"invocation_start","timestamp":"2026-10-28T08:00:00.000Z","harness":"vscode-ghcp","session_id":"vsc-session-6","run_id":"20261031T100000Z-f001","agent_instance_id":"Implementation#1","spawn_call_id":"toolu_A"}

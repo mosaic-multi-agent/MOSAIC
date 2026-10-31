@@ -9,12 +9,18 @@
 
 ### LogAnalyzer v1.2.0
 #### Changes
-- New `ingest-otel` command recovers Copilot token usage from the OpenTelemetry file into a run's logs
+- New `ingest-otel` command recovers VS Code Copilot Chat token usage from the OpenTelemetry file into a run's logs. GHCP CLI usage comes from its session transcript and needs no recovery
 - Views show usage that is not tied to an agent as unattributed, and flag runs whose usage is not fully ingested
+- A GHCP CLI run whose transcript format changed so that no usage could be read shows a finding instead of a silent zero
+- The Tools view and the JSON report show how much the context grew after each tool (measured on calls that requested a single tool)
+- New Session screen (`enter` on a row in Dispatches, By type or Context) with the actor's head, cost split, findings, per-call tools and context growth, and tools. It replaces the Context drill-down
+- Tables are aligned and stacked, instance names stay visible, column titles wrap or show in full, and shares show their percent next to the bar. The `type` column is gone from the Context, Dispatches and Timeline lists, and the Context view has a compaction column group and `API calls` as title
+- The `?` overlay lists the columns of the current view, replacing the notes under the Context table
+- The Timeline shades only `waiting on the user` and `between sessions`, with a legend, and collapses idle stretches over 10 minutes with nobody working into a length marker
 
 ### Runner v1.8.0
 #### Changes
-- Copilot token usage from the OpenTelemetry file is added to the logs of GHCP CLI runs (set `COPILOT_OTEL_FILE_EXPORTER_PATH`)
+- GHCP CLI runs log usage and compactions from the CLI session transcript with no setup; the Runner no longer reads the OpenTelemetry file for them
 - The loop guard can be switched off for a session with `g` on the progress screen, or when resuming after a guard stop
 - Pre-consultation guidance is saved with the run, can be reviewed and edited (also during a run with `e`), and is reused on resume
 - Resuming asks fewer questions and shows a summary of the recorded settings
@@ -25,7 +31,9 @@
 - Resume no longer asks again for settings the run already recorded
 
 ## Catalog
-- **mosaic-logger** hook (v1.8.0): GHCP CLI and VS Code Copilot Chat now log token usage read from the Copilot OpenTelemetry file; enable it with the user-level environment variable `COPILOT_OTEL_FILE_EXPORTER_PATH` and restart VS Code (see the hook README). Copilot cost needs `github-copilot` entries in `pricing.yaml`. Redeploy to get the new files
+- **mosaic-logger** hook (v1.9.0): GHCP CLI now logs token usage and compactions from its session transcript, in native and Runner mode, with no setup and no OpenTelemetry; a transcript whose format changed raises a diagnostic instead of a silent zero
+- **mosaic-logger** hook (v1.9.0): VS Code Copilot Chat logs token usage read from the Copilot OpenTelemetry file; enable it with the user-level environment variable `COPILOT_OTEL_FILE_EXPORTER_PATH` and restart VS Code (see the hook README). Copilot cost needs `github-copilot` entries in `pricing.yaml`
+- **mosaic-logger** hook (v1.9.0, log format 1.7.0): every `usage_record` lists the tools the call requested, on all four harnesses; VS Code needs OpenTelemetry content capture for it. Redeploy to get the new files
 
 # 0.7.2 (2026-10-25)
 

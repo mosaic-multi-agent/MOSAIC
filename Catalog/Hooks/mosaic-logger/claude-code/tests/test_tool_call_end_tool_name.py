@@ -129,7 +129,7 @@ class TestSchemaVersionTable(unittest.TestCase):
 
     def test_other_events_keep_their_versions(self):
         expected = {"session_start": "1.3.0", "tool_call_start": "1.3.0", "turn": "1.3.0",
-                    "usage_record": "1.3.0", "invocation_start": "1.3.0",
+                    "usage_record": "1.7.0", "invocation_start": "1.3.0",
                     "invocation_end": "1.3.0", "compaction": "1.5.0"}
         for name, version in expected.items():
             with self.subTest(event=name):

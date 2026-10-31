@@ -93,13 +93,23 @@ See `ghcp-cli/README.md`.
 
 ## Copilot token usage (GHCP CLI and VS Code Copilot Chat)
 
-Both Copilot harnesses report token usage through the harness's OpenTelemetry file
-export, not through hook payloads. The `ghcp-cli` and `vscode-ghcp` hooks read that
-file and add the usage to the run's logs as `usage_record` events.
+**GHCP CLI** needs no setup. The `ghcp-cli` hook reads the CLI's session transcript
+(`~/.copilot/session-state/<session-id>/events.jsonl`) and logs `usage_record` and
+`compaction` events from it, in native mode and in Runner mode. If a transcript has
+assistant turns but no usage records (the CLI's transcript format may have changed),
+the hook writes a `transcript_format_changed` entry to
+`OrchestrationLogs/mosaic-logger-diagnostics.jsonl` and LogAnalyzer shows a finding
+for the run, instead of a silent zero.
 
-### Enable it
+**VS Code Copilot Chat** reports token usage through the harness's OpenTelemetry file
+export, not through hook payloads. The `vscode-ghcp` hook reads that file and adds
+the usage to the run's logs as `usage_record` events. Every `usage_record` of all four
+harnesses also lists the tools the call requested (`requested_tools`); in VS Code
+that needs content capture (see below).
 
-Set one environment variable, for both harnesses, to a file path of your choice:
+### Enable it (VS Code only)
+
+Set one environment variable to a file path of your choice:
 
 ```
 COPILOT_OTEL_FILE_EXPORTER_PATH=<absolute path of a .jsonl file>
@@ -111,16 +121,18 @@ COPILOT_OTEL_FILE_EXPORTER_PATH=<absolute path of a .jsonl file>
 - Set it at user level (Windows: user environment variables; macOS/Linux: your login
   environment), not in one shell. Restart VS Code afterwards: VS Code started from the
   desktop sees only user-level variables.
-- Content capture (prompt and response text in the file) is optional and only makes
-  the file larger. MOSAIC never reads content and never modifies the OTel file.
+- Content capture (prompt and response text in the file) is optional for usage and
+  only makes the file larger, but it is required for the tools each call requested
+  (`requested_tools`) and therefore for LogAnalyzer's context growth per tool. MOSAIC
+  never copies content to the logs and never modifies the OTel file.
 - Copilot usage is priced from `github-copilot` entries you maintain in
   `pricing.yaml`; the shipped file has no priced entry, so without one costs stay
   unpriced.
 
 ### Recover missing usage
 
-Usage can be missing when the variable was unset, the file is missing, a session
-crashed, or a run's hooks did not see the variable. Recover the run with:
+VS Code usage can be missing when the variable was unset, the file is missing, a
+session crashed, or a run's hooks did not see the variable. Recover the run with:
 
 ```
 mosaic-log-analyzer ingest-otel [otel-file] --run <run-id>
@@ -134,8 +146,9 @@ unattributed usage is usage tied to the run but not to an agent.
 
 ### Compactions and failed tool calls
 
-The export also records the API requests a harness makes to compact a context, and
-tool executions. The ingest uses both:
+For VS Code the export also records the API requests the harness makes to compact a
+context, and tool executions. The ingest uses both (GHCP CLI compactions come from
+its transcript instead):
 
 - **VS Code compactions** are recognised from the OTel compaction calls (written as
   `usage_record` events with `call_kind` `compaction`), not from a hook. LogAnalyzer

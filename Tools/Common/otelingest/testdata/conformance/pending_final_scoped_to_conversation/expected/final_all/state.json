@@ -1,9 +1,9 @@
 {
   "state_version": 1,
   "cursor": {
-    "offset": 668,
-    "head_len": 668,
-    "head_sha256": "c6868e6ec79c8fd05f65876e8cf3668be0a9ee510ed35a392ab4ee01c384c3c4"
+    "offset": 968,
+    "head_len": 968,
+    "head_sha256": "232eace51e636444eec1acc4a8d63f4aba607b00d85d231b8bc92d0117fb261d"
   },
   "placements": {
     "s7": "unattributed",

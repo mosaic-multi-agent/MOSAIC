@@ -26,7 +26,6 @@ import {
   range,
   holdLock,
   lockFileOf,
-  lockFileOf,
   releaseAfter,
   runNodeWriter,
 } from "./locked_append_support";

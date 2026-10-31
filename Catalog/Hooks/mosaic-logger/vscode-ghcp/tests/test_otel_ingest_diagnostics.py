@@ -147,14 +147,13 @@ class TestIngestDiagnosticsAreDefaultVisible(_OtelCase):
         self.ws.stop()
         self.assertEqual([], self.ws.diag_lines())
 
-    def test_a_conversation_that_cannot_be_tied_to_the_run_is_reported(self):
+    def test_a_cli_shaped_line_is_ignored_silently_while_vscode_usage_is_ingested(self):
         self.ws.start_session()
-        self.ws.add_spans(support.cli_usage_span("x1", "some-other-session"))
+        self.ws.add_spans(support.cli_usage_span("x1", support.SESSION),
+                          support.usage_span("ok-1"))
         self.ws.stop()
-        found = self.ws.diag_lines("conversation_not_tied")
-        self.assertEqual(1, len(found), f"diagnostics: {self.ws.diag_lines()}")
-        self.assertEqual(1, found[0]["counts"]["usage_spans"])
-        self.assertEqual([], self.ws.orchestrator_record_ids())
+        self.assertEqual(["ok-1"], self.ws.orchestrator_record_ids())
+        self.assertEqual([], self.ws.diag_lines(), f"diagnostics: {self.ws.diag_lines()}")
 
     def test_an_unknown_state_version_is_reported_and_nothing_is_ingested(self):
         self.ws.start_session()

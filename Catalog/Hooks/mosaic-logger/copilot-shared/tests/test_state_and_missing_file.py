@@ -75,9 +75,7 @@ def test_unparseable_state_is_refused_and_left_byte_identical(tmp_path):
 
 def test_pending_status_does_not_take_the_lock_or_rewrite_the_state(tmp_path):
     run_dir, otel_path = make_run(tmp_path)
-    orphan = json.loads(chat_line("c1"))
-    orphan["parentSpanId"] = "parent-never-seen"
-    write_otel(otel_path, [json.dumps(orphan)])
+    write_otel(otel_path, [chat_line("c1", chat_session="session-never-seen")])
     run_ingest(run_dir, otel_path)
     lock_path(run_dir).write_text(lock_stamp(), encoding="utf-8")
     state_before = state_path(run_dir).read_bytes()

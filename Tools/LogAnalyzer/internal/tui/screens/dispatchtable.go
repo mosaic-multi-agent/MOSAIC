@@ -15,7 +15,6 @@ import (
 // Columns of the Dispatches table, in display order.
 const (
 	dcInstance = iota
-	dcType
 	dcStatus
 	dcCost
 	dcShare
@@ -38,14 +37,13 @@ const (
 func dispatchColumns() []table.Column {
 	right := table.AlignRight
 	cols := make([]table.Column, dcCount)
-	cols[dcInstance] = table.Column{Title: "instance", Flex: true, MinWidth: 10}
-	cols[dcType] = table.Column{Title: "type", Priority: 1, Flex: true, MinWidth: 8}
+	cols[dcInstance] = table.Column{Title: "instance", Flex: true, Identity: true, MinWidth: identityMinWidth}
 	cols[dcStatus] = table.Column{Title: "status"}
 	cols[dcCost] = table.Column{Title: "cost", Align: right}
 	cols[dcShare] = shareBarColumn(6)
 	cols[dcTokens] = table.Column{Title: "tokens", Align: right, Priority: 3}
 	cols[dcDuration] = table.Column{Title: "duration", Align: right, Priority: 3}
-	cols[dcPeak] = table.Column{Title: "peak ctx", Align: right, Priority: 2}
+	cols[dcPeak] = table.Column{Title: "peak context", Align: right, Priority: 2}
 	cols[dcHit] = table.Column{Title: "cache hit", Align: right, Priority: 3}
 	cols[dcRewrites] = table.Column{Title: "rewrites", Align: right, Priority: 3}
 	cols[dcWrite] = table.Column{Title: "cache write", Align: right, Priority: 4}
@@ -80,10 +78,9 @@ func dispatchSortColumn(key SortKey) int {
 	return table.NoSort
 }
 
-// dispatchEntry is one dispatch with the agent type group it was listed under.
+// dispatchEntry is one dispatch of a table row.
 type dispatchEntry struct {
-	d        domain.Dispatch
-	typeName string
+	d domain.Dispatch
 }
 
 // typeLabel is the displayed name of an agent type.
@@ -99,7 +96,7 @@ func dispatchEntries(groups []domain.AgentTypeGroup) []dispatchEntry {
 	var out []dispatchEntry
 	for _, g := range groups {
 		for _, d := range g.Dispatches {
-			out = append(out, dispatchEntry{d: d, typeName: typeLabel(g.AgentType)})
+			out = append(out, dispatchEntry{d: d})
 		}
 	}
 	return out
@@ -145,7 +142,6 @@ func dispatchCells(cur domain.CurrencyCode, e dispatchEntry, runCost domain.Mone
 	inv := d.Invocation
 	cells := make([]table.Cell, dcCount)
 	cells[dcInstance] = table.Cell{Text: inv.Actor.Label(), Role: tuicommon.RoleDataActor}
-	cells[dcType] = table.Cell{Text: e.typeName}
 	cells[dcStatus] = table.Cell{Text: "[" + statusText(inv) + "]", Role: StatusRole(inv)}
 	cells[dcCost] = moneyTotalCell(cur, d.Totals.Money)
 	cells[dcShare] = shareBarCell(d.Totals.Money.Total, runCost, theme)
@@ -247,11 +243,12 @@ func dispatchTableRows(cur domain.CurrencyCode, run domain.RunReport, withOrches
 // dispatchTableLines draws the table of rows into lines. The window follows the
 // cursor within rowBudget rows and the offset carries to the next render.
 func dispatchTableLines(rows [][]table.Cell, cursor int, offset *int, o SortOrder, width, rowBudget int, st Styles) ([]string, Window) {
-	w := ScrollWindow(*offset, cursor, len(rows), rowBudget)
-	*offset = w.Offset
 	t := table.Table{
-		Columns: dispatchColumns(), Rows: rows, Cursor: cursor, Offset: w.Offset,
+		Columns: dispatchColumns(), Rows: rows, Cursor: cursor,
 		SortColumn: dispatchSortColumn(o.Key), SortDesc: o.Desc,
 	}
+	w := ScrollWindow(*offset, cursor, len(rows), rowBudget-extraHeaderLines(t, width))
+	*offset = w.Offset
+	t.Offset = w.Offset
 	return renderTableLines(t, width, w.Count, st), w
 }

@@ -30,14 +30,14 @@ func TestDispatches_EveryDispatchAndTheOrchestratorHaveARow(t *testing.T) {
 	assertContains(t, rowFor(t, view, "reviewer#1"), "$1.39")
 }
 
-func TestDispatches_LongInstanceIdsAndTypesStayIntactWhenThereIsRoom(t *testing.T) {
+func TestDispatches_LongInstanceIdsStayIntactWhenThereIsRoom(t *testing.T) {
 	colourOff(t)
 
 	view := dispatchesView(dispatchRun(), tableW, tallH)
 
-	assertContains(t, view, longInstance, longType)
+	assertContains(t, view, longInstance)
 	row := rowFor(t, view, longInstance)
-	assertContains(t, row, longType, "$2.28")
+	assertContains(t, row, "$2.28")
 }
 
 func TestDispatches_LongNamesNeverBreakTheColumnsAtNarrowWidths(t *testing.T) {

@@ -11,7 +11,7 @@ import (
 	"mosaic-common/otelingest/diag"
 )
 
-const testSession = "cli-session-6"
+const testSession = "vsc-session-6"
 
 // ingestRun is a throw-away run folder plus an OTel file path for tests that do not use a conformance case.
 type ingestRun struct {
@@ -31,7 +31,7 @@ func newIngestRun(t *testing.T) *ingestRun {
 	if err := os.MkdirAll(r.runDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	start := fmt.Sprintf(`{"schema_version":"1.0.0","event":"session_start","timestamp":"2026-10-28T08:00:00.000Z","harness":"ghcp-cli","session_id":%q,"run_id":"20261028T000000Z-0000"}`+"\n", testSession)
+	start := fmt.Sprintf(`{"schema_version":"1.0.0","event":"session_start","timestamp":"2026-10-28T08:00:00.000Z","harness":"vscode-ghcp","session_id":%q,"run_id":"20261028T000000Z-0000"}`+"\n", testSession)
 	if err := os.WriteFile(r.orchestratorLog(), []byte(start), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -95,13 +95,14 @@ func (r *ingestRun) exists(path string) bool {
 
 func fixedNowFunc() time.Time { return fixedNow }
 
-// chatLine is a CLI chat span with token usage; parent "" makes it a root span.
-func chatLine(id, conv, parent string) string {
-	p := ""
-	if parent != "" {
-		p = fmt.Sprintf(`"parentSpanId":%q,`, parent)
+// chatLine is a VS Code chat span with token usage. A chatSession of "" makes it a span of the orchestrator's own
+// session; any other value is the chat session the span ran in (an unknown one keeps the span pending).
+func chatLine(id, conv, chatSession string) string {
+	cs := ""
+	if chatSession != "" {
+		cs = fmt.Sprintf(`"copilot_chat.chat_session_id":%q,`, chatSession)
 	}
-	return fmt.Sprintf(`{"type":"span","traceId":"0123456789abcdef0123456789abcdef","spanId":%q,%s"name":"chat","kind":2,"attributes":{"gen_ai.operation.name":"chat","gen_ai.conversation.id":%q,"gen_ai.response.model":"m","gen_ai.usage.input_tokens":10,"gen_ai.usage.output_tokens":1},"status":{"code":0},"events":[]}`, id, p, conv)
+	return fmt.Sprintf(`{"traceId":"0123456789abcdef0123456789abcdef","spanId":%q,"name":"chat","kind":2,"attributes":{"gen_ai.operation.name":"chat",%s"gen_ai.conversation.id":%q,"gen_ai.response.model":"m","gen_ai.usage.input_tokens":10,"gen_ai.usage.output_tokens":1},"status":{"code":0},"events":[]}`, id, cs, conv)
 }
 
 func hasDiagnostic(res otelingest.Result, kind diag.Kind) bool {

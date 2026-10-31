@@ -145,7 +145,7 @@ const framedRunSpan = 90 * time.Second
 // that it lists every given view key and the way back, one entry per line.
 func assertOverlayListsViewKeys(t *testing.T, s screens.Screen, keys ...string) {
 	t.Helper()
-	overlay := strings.Join(overlayLines(openOverlay(s, wideW, tallH)), "\n")
+	overlay := strings.Join(overlayLines(openOverlay(s, wideW, legendOverlayH)), "\n")
 	for _, k := range append(keys, "esc") {
 		if !regexp.MustCompile(`(?m)^\s+` + regexp.QuoteMeta(k) + `\s+\S`).MatchString(overlay) {
 			t.Errorf("help overlay must list key %q\n%s", k, overlay)

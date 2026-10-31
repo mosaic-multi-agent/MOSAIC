@@ -70,6 +70,7 @@ type wireEvent struct {
 	TokensAfter     *int64           `json:"tokens_after"`
 	CallKind        string           `json:"call_kind"`
 	CallLabel       string           `json:"call_label"`
+	RequestedTools  json.RawMessage  `json:"requested_tools"`
 
 	wireLifecycle
 }
@@ -234,7 +235,7 @@ func buildEvent(wire wireEvent) domain.Event {
 	case domain.EventTurn:
 		ev.Type = domain.EventTurn
 		fields := &domain.TurnFields{
-			Role:  domain.TurnRole(wire.Role),
+			Role:     domain.TurnRole(wire.Role),
 			Model:    domain.ModelID(wire.Model),
 			Provider: domain.ProviderID(wire.Provider),
 		}
@@ -258,6 +259,7 @@ func buildEvent(wire wireEvent) domain.Event {
 			Effort:          wire.Effort,
 			CallKind:        callKind(wire.CallKind),
 			CallLabel:       wire.CallLabel,
+			RequestedTools:  decodeRequestedTools(wire.RequestedTools),
 		}
 		if wire.RecordIndex != nil {
 			fields.RecordIndex, fields.HasRecordIndex = *wire.RecordIndex, true

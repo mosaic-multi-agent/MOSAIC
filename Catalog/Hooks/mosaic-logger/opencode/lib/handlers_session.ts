@@ -15,6 +15,7 @@ import { currentTimestamp, effectiveRunId } from "./core.js";
 import { extractRunId } from "./runstate.js";
 import type { LogPaths } from "./core.js";
 import type { SessionCorrelationStore, ClosedSessionRegistry } from "./correlation.js";
+import type { RequestedToolsTracker } from "./requested_tools.js";
 
 // ---------------------------------------------------------------------------
 // Shared OpenCode hook-input types
@@ -206,6 +207,13 @@ export interface HandlerDependencies {
   appendEvent: (filePath: string, event: Record<string, unknown>) => Promise<void>;
   /** Generate a fallback tool call_id. */
   fallbackCallId: (toolName?: string) => string;
+
+  /**
+   * Per-message requested tool tracking shared by the message and tool-part
+   * handlers. Optional so tests that build dependencies by hand keep working;
+   * the message handler falls back to its own tracker when absent.
+   */
+  requestedTools?: RequestedToolsTracker;
 
   /**
    * NEW — durable closed-session record. Consulted on every session close to

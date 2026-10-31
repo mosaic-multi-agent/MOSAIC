@@ -1,5 +1,5 @@
 {
-  "description": "An export holding only metrics, execute_tool spans and an agent total yields no records and no diagnostics; the cursor still advances past every line.",
+  "description": "VS Code dialect. An export holding only metrics, execute_tool spans and an agent total yields no records and no diagnostics; the cursor still advances past every line.",
   "run_id": "20261028T000000Z-0000",
   "steps": [
     {

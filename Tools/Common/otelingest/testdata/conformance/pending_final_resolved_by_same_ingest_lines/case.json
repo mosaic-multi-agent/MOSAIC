@@ -1,5 +1,5 @@
 {
-  "description": "A final ingest applies the placement rules to the lines it reads before it finalises anything: a pending span whose parent arrives in the same ingest goes to its invocation, and only the pending span whose parent is still missing goes to the unattributed stream.",
+  "description": "VS Code dialect. A final ingest applies the placement rules to the lines it reads before it finalises anything: a pending span whose execution_subagent tool span arrives in the same ingest goes to its invocation, and only the pending span whose tool span is still missing goes to the unattributed stream.",
   "run_id": "20261028T000000Z-0000",
   "steps": [
     {

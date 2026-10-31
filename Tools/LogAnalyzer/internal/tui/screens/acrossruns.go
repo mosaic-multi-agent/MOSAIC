@@ -90,7 +90,7 @@ func (s *AcrossRunsScreen) View(width, height int) string {
 		{Text: s.sort.Label(), Role: tuicommon.RoleSignalMuted},
 	}
 	page := Page{Title: acrossTitle, Badges: badges, Keys: acrossKeys, Help: true, Hint: FormatScrollHint(w, len(body))}
-	return s.render(page, acrossOverlayGroups(), body[w.Offset:w.End()], width, height, s.styles)
+	return s.render(page, withLegend(acrossOverlayGroups(), acrossRunsLegend()...), body[w.Offset:w.End()], width, height, s.styles)
 }
 
 // body renders every line of the view; the caller scrolls through it.

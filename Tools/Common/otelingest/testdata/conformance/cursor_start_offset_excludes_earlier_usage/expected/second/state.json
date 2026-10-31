@@ -1,9 +1,9 @@
 {
   "state_version": 1,
   "cursor": {
-    "offset": 1535,
-    "head_len": 1535,
-    "head_sha256": "38637b3595ef177cf2a4f45ca079befb2ddfedc9e0eaf89bbd298852efeb9491"
+    "offset": 1895,
+    "head_len": 1895,
+    "head_sha256": "9270e5cbb81a10c52276aade6b034e3d235f3858c22344e572fa9a5035e49e51"
   },
   "placements": {
     "c1": "orchestrator",

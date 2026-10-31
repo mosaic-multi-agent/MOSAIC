@@ -37,9 +37,9 @@ func TestHelpOverlay_ListsViewExportAndNavigationKeys(t *testing.T) {
 	colourOff(t)
 	for _, fv := range allFrameViews() {
 		t.Run(string(fv.id), func(t *testing.T) {
-			s := fv.make(fv.run, 120, 60, paletteStyles())
+			s := fv.make(fv.run, 120, legendOverlayH, paletteStyles())
 
-			overlay := strings.Join(overlayLines(openOverlay(s, 120, 60)), "\n")
+			overlay := strings.Join(overlayLines(openOverlay(s, 120, legendOverlayH)), "\n")
 
 			assertContains(t, overlay, "Views", "Export", "Navigation")
 			for _, k := range []string{

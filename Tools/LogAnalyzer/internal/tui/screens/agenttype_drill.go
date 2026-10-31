@@ -2,6 +2,25 @@ package screens
 
 import "mosaic-log-analyzer/internal/domain"
 
+// enter drills into the type under the cursor, or, in the drill-down, asks for the
+// session of the dispatch under the cursor.
+func (s *AgentTypesScreen) enter() {
+	if len(s.run.ByAgentType) == 0 {
+		return
+	}
+	if !s.drilled {
+		s.drilled, s.drillCursor, s.drillOffset = true, 0, 0
+		s.drillSort = newDispatchSortCycle()
+		return
+	}
+	entries := dispatchEntries([]domain.AgentTypeGroup{s.drilledGroup()})
+	if len(entries) == 0 {
+		return
+	}
+	order := dispatchOrder(entries, s.drillSort.Active())
+	s.requestSession(entries[order[clampIndex(s.drillCursor, len(order))]].d.Invocation.Actor)
+}
+
 // viewDrill renders the dispatches of the drilled agent type in the table of the
 // Dispatches view, without the orchestrator row.
 func (s *AgentTypesScreen) viewDrill() string {
@@ -17,7 +36,8 @@ func (s *AgentTypesScreen) viewDrill() string {
 	lines, w := dispatchTableLines(rows, s.drillCursor, &s.drillOffset, order, s.width, bodyBudget(s.height)-len(head)-1, s.styles)
 
 	spec := frameSpec{run: s.run, active: ScreenAgentTypes, keys: s.helpKeys(), screenKeys: s.screenKeys(), escDesc: s.escDesc(),
-		hint: FormatScrollHint(w, len(rows)), sort: s.drillSort.Label()}
+		legend: dispatchLegend(),
+		hint:   FormatScrollHint(w, len(rows)), sort: s.drillSort.Label()}
 	return s.render(spec, append(head, lines...), s.width, s.height, s.styles)
 }
 

@@ -23,7 +23,7 @@ const (
 )
 
 // SchemaVersionCurrent is the version this tool is written against.
-const SchemaVersionCurrent = "1.5.0"
+const SchemaVersionCurrent = "1.7.0"
 
 // SupportedSchemaMajor is the only major version read without a finding.
 const SupportedSchemaMajor = 1
@@ -93,7 +93,7 @@ const (
 type CompactionPhase string
 
 const (
-	CompactionPhaseNone CompactionPhase = ""     // absent, or any value other than pre/post
+	CompactionPhaseNone CompactionPhase = "" // absent, or any value other than pre/post
 	CompactionPhasePre  CompactionPhase = "pre"
 	CompactionPhasePost CompactionPhase = "post"
 )
@@ -139,9 +139,10 @@ type UsageRecordFields struct {
 	Provider        ProviderID // "" when absent
 	Effort          string     // verbatim; "" when absent
 	Usage           TokenUsage
-	HasUsage        bool     // false when the token_usage key was absent entirely
-	CallKind        CallKind // CallMain when absent or unknown
-	CallLabel       string   // verbatim; "" when absent
+	HasUsage        bool           // false when the token_usage key was absent entirely
+	CallKind        CallKind       // CallMain when absent or unknown
+	CallLabel       string         // verbatim; "" when absent
+	RequestedTools  RequestedTools // zero = not provided
 }
 
 // TurnRole is the role (user or assistant) of a turn event.

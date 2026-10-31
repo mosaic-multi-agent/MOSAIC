@@ -1,6 +1,7 @@
 package digest
 
 import (
+	"encoding/json"
 	"regexp"
 	"strconv"
 	"strings"
@@ -8,7 +9,7 @@ import (
 )
 
 // Version is the digest_version this package writes. MAJOR.MINOR.PATCH.
-const Version = "1.4.0"
+const Version = "1.5.0"
 
 // formatName is the value of the top-level "format" key.
 const formatName = "mosaic-run-digest"
@@ -146,6 +147,8 @@ type usageDoc struct {
 	CallLabel   string     `json:"call_label,omitempty"`
 	SessionID   string     `json:"session_id,omitempty"`
 	Tokens      *tokensDoc `json:"tokens,omitempty"`
+
+	RequestedTools json.RawMessage `json:"requested_tools,omitempty"` // key omitted when not provided
 }
 
 type tokensDoc struct {

@@ -17,6 +17,8 @@ import (
 const (
 	wideW, tallH = 120, 60
 	shortH       = 8
+	// shortTableH is a short terminal that still has room for a wrapped table header and a few rows.
+	shortTableH = 14
 )
 
 // Compile-time proof that the per-run view screens satisfy RunView.

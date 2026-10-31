@@ -3,6 +3,7 @@ package gantt
 import (
 	"math/bits"
 	"time"
+	"unicode/utf8"
 
 	"mosaic-common/tui"
 )
@@ -30,7 +31,13 @@ func (a Axis) Narrow(from, to time.Time) Axis {
 	if e.Before(s) {
 		return Axis{}
 	}
-	return Axis{Start: s, End: e}
+	var kept []Collapse
+	for _, c := range a.Collapsed {
+		if c.Start.After(s) && c.End.Before(e) {
+			kept = append(kept, c)
+		}
+	}
+	return Axis{Start: s, End: e, Collapsed: kept}
 }
 
 // Column maps t to a cell index in [0, width) (clamped); ok is false when the axis is empty.
@@ -45,6 +52,9 @@ func (a Axis) Column(t time.Time, width int) (col int, ok bool) {
 // scaled returns floor((t - Start) / D * width), with t clamped to the axis, and whether the
 // division was exact. The product is computed in 128 bits so long axes cannot overflow.
 func (a Axis) scaled(t time.Time, width int) (q int, exact bool) {
+	if p, ok := a.collapsePlan(width); ok {
+		return p.scaled(a, t, width)
+	}
 	d := uint64(a.End.Sub(a.Start))
 	off := t.Sub(a.Start)
 	switch {
@@ -91,11 +101,10 @@ func RenderAxis(a Axis, labelWidth, width int, theme tui.Theme) string {
 	if plotWidth < 1 || a.empty() {
 		return spaces(width)
 	}
-	labels := tickLabels(a, plotWidth)
 	line, used := spaces(offset), 0
-	for _, l := range labels {
+	for _, l := range axisItems(a, plotWidth) {
 		line += spaces(l.col-used) + paint(theme, tui.RoleMuted, l.text)
-		used = l.col + len(l.text)
+		used = l.col + utf8.RuneCountInString(l.text)
 	}
 	return line + spaces(plotWidth-used)
 }

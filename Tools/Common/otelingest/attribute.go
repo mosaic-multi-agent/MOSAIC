@@ -37,9 +37,6 @@ func (r *resolver) place(c *call) (dest string, ok bool) {
 	}
 	conv := k.conversation(c)
 	if k.orchSessions[conv] {
-		if c.Dialect == dialectCLI {
-			return r.placeCLI(c)
-		}
 		return r.owner(c.ChatSessionID, 0)
 	}
 	if ids := k.invBySession[conv]; len(ids) > 0 {
@@ -66,31 +63,6 @@ func (r *resolver) owner(chatSession string, depth int) (string, bool) {
 		return r.owner(tool.ChatSessionID, depth+1)
 	}
 	return destUnattributed, true
-}
-
-// placeCLI follows the span parents of a GHCP CLI call: an invoke_agent without a parent is the orchestrator's;
-// one under an execute_tool task span belongs to the invocation whose spawn_call_id is that tool call id.
-func (r *resolver) placeCLI(c *call) (string, bool) {
-	parent := c.ParentSpanID
-	for depth := 0; ; depth++ {
-		if parent == "" {
-			return destOrchestrator, true
-		}
-		l := r.links[parent]
-		if l == nil {
-			return "", false
-		}
-		if depth > maxOwnerDepth {
-			return destUnattributed, true
-		}
-		if l.Kind == kindExecuteTool {
-			if ids := r.keys.invBySpawn[l.ToolCallID]; len(ids) > 0 {
-				return soleInvocation(ids), true
-			}
-			return destUnattributed, true
-		}
-		parent = l.ParentSpanID
-	}
 }
 
 // soleInvocation returns the invocation stream for a key carried by exactly one invocation; a key shared by

@@ -165,6 +165,7 @@ func main() {
 			Interaction: tuiInteract,
 			WorkDir:     workDir,
 			IngestProbe: usageIngest,
+			Alarms:      scanner,
 		})
 
 		os.Exit(tui.Run(tui.Options{
@@ -193,6 +194,7 @@ func main() {
 		WorkDir:     workDir,
 		Ingester:    usageIngest,
 		IngestProbe: usageIngest,
+		Alarms:      scanner,
 	})
 
 	os.Exit(cli.Execute(cli.Options{

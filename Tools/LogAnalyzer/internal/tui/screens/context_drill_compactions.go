@@ -6,7 +6,7 @@ import (
 	"mosaic-log-analyzer/internal/domain"
 )
 
-// The compaction lines of the Context drill-down: the count of each kind, the
+// The compaction lines of the Session screen: the count of each kind, the
 // compaction calls each harness compaction took, and the unapplied attempts.
 
 // compactionLines lists the plain-text lines that describe an actor's

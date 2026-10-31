@@ -80,7 +80,7 @@ func (s *ToolsScreen) View(width, height int) string {
 		height--
 	}
 	w := s.scroll.window(len(body), height)
-	spec := frameSpec{run: s.run, active: ScreenTools, keys: toolsKeys, screenKeys: []tuicommon.HelpEntry{sortKeyEntry, markKeyEntry},
+	spec := frameSpec{run: s.run, active: ScreenTools, keys: toolsKeys, legend: toolsLegend(), screenKeys: []tuicommon.HelpEntry{sortKeyEntry, markKeyEntry},
 		escDesc: "back to the runs list", hint: FormatScrollHint(w, len(body)), sort: s.sort.Label()}
 	out := s.render(spec, body[w.Offset:w.End()], width, height, s.styles)
 	if s.status != "" {
@@ -98,19 +98,17 @@ func (s *ToolsScreen) body() []string {
 		return []string{clip(st.Body, width, "No tool calls in this run.")}
 	}
 	order := s.sort.Active()
-	section := func(out []string, title string, tools []domain.ToolFigures, cursor int) []string {
-		out = append(out, clip(st.Subtitle, width, title))
-		if len(tools) > 0 {
-			out = append(out, toolsTableLines(tools, order, cursor, width, st)...)
-		}
-		return out
+	section := func(title string, tools []domain.ToolFigures, cursor int) tableSection {
+		return tableSection{title, toolsTable(tools, order, cursor, width, st)}
 	}
-	out := section(nil, "Run", tb.Run, clampIndex(s.cursor, len(tb.Run)))
-	out = section(out, "Orchestrator", tb.Orchestrator, table.NoCursor)
+	sections := []tableSection{
+		section("Run", tb.Run, clampIndex(s.cursor, len(tb.Run))),
+		section("Orchestrator", tb.Orchestrator, table.NoCursor),
+	}
 	for _, t := range tb.ByAgentType {
-		out = section(out, typeLabel(t.AgentType), t.Tools, table.NoCursor)
+		sections = append(sections, section(typeLabel(t.AgentType), t.Tools, table.NoCursor))
 	}
-	return out
+	return append(stackedTableLines(sections, width, st), growthNoteLines(width, st)...)
 }
 
 // toolsKeys are the short help keys of the view.

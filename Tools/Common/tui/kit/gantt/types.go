@@ -9,7 +9,19 @@ import (
 )
 
 // Axis is the time range that lanes and tick labels are laid out on.
-type Axis struct{ Start, End time.Time }
+type Axis struct {
+	Start, End time.Time
+	// Collapsed are stretches cut out of the axis and drawn as fixed-width markers.
+	// Sorted, non-overlapping (touching allowed), each strictly inside (Start, End).
+	// nil = linear axis.
+	Collapsed []Collapse
+}
+
+// Collapse is one stretch of time removed from the axis.
+type Collapse struct{ Start, End time.Time }
+
+// CollapseMarkerWidth is the number of columns one collapsed stretch occupies.
+const CollapseMarkerWidth = 10
 
 // Interval is a span of time drawn on a lane.
 type Interval struct {
@@ -25,10 +37,16 @@ type Point struct {
 	Role tui.StyleRole
 }
 
-// Shade is a background span drawn where no interval or point covers the cell.
+// Shade is a background span. As a render-wide shade it is drawn in every lane where no
+// interval or point covers the cell; as a Lane shade it follows the cell precedence rule.
 type Shade struct {
 	Start, End time.Time
 	Role       tui.StyleRole
+	// Flat draws the shade as a blank cell in Role's style (Role carries a background)
+	// in Unicode mode, instead of the dotted glyph. Ignored in ASCII mode.
+	Flat bool
+	// ASCII is the glyph drawn in ASCII mode; 0 = '.'.
+	ASCII byte
 }
 
 // Lane is one labelled row of intervals and points.
@@ -37,4 +55,6 @@ type Lane struct {
 	LabelRole tui.StyleRole
 	Intervals []Interval
 	Points    []Point
+	// Shades are drawn in this lane's row only, over the lane's own intervals.
+	Shades []Shade
 }

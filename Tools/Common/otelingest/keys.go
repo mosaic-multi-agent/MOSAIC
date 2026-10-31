@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -125,23 +124,6 @@ func (k *runKeys) conversation(c *call) string {
 // tied reports whether any hard key ties the span to the run.
 func (k *runKeys) tied(conv, chatSession, parentChatSession string) bool {
 	return k.known(conv) || k.known(parentChatSession) || (chatSession != "" && len(k.invBySpawn[chatSession]) > 0)
-}
-
-// sessionIDs lists the run's session ids, sorted.
-func (k *runKeys) sessionIDs() []string {
-	set := map[string]bool{}
-	for s := range k.orchSessions {
-		set[s] = true
-	}
-	for s := range k.invBySession {
-		set[s] = true
-	}
-	out := make([]string, 0, len(set))
-	for s := range set {
-		out = append(out, s)
-	}
-	sort.Strings(out)
-	return out
 }
 
 func appendUnique(list []string, v string) []string {

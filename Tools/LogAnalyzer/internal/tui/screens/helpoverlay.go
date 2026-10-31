@@ -40,7 +40,7 @@ func (h *helpOverlay) handle(key string) bool {
 
 // overlayGroups lists every key of a per-run view; escDesc says what esc does
 // on the current screen and screenKeys are the keys only this screen has.
-func overlayGroups(escDesc string, screenKeys []tuicommon.HelpEntry) []chrome.HelpGroup {
+func overlayGroups(escDesc string, screenKeys []tuicommon.HelpEntry, legend []chrome.HelpGroup) []chrome.HelpGroup {
 	groups := []chrome.HelpGroup{
 		{Title: "Views", Entries: []tuicommon.HelpEntry{
 			{Key: KeyViewDispatches, Desc: "dispatches of the run"},
@@ -59,14 +59,14 @@ func overlayGroups(escDesc string, screenKeys []tuicommon.HelpEntry) []chrome.He
 	if len(screenKeys) > 0 {
 		groups = append(groups, chrome.HelpGroup{Title: "This screen", Entries: screenKeys})
 	}
-	return append(groups, chrome.HelpGroup{Title: "Navigation", Entries: []tuicommon.HelpEntry{
+	return append(groups, append(legend, chrome.HelpGroup{Title: "Navigation", Entries: []tuicommon.HelpEntry{
 		{Key: "↑/↓ j/k", Desc: "scroll, or move the selection"},
 		{Key: "enter", Desc: "open the selected row where the view has one"},
 		{Key: "esc", Desc: escDesc},
 		{Key: "q", Desc: "same as esc"},
 		{Key: KeyHelp, Desc: "show or hide this help"},
 		{Key: "ctrl+c", Desc: "quit"},
-	}})
+	}})...)
 }
 
 // sortKeyEntry is the overlay entry of the sort key of a table view.
@@ -109,6 +109,7 @@ type frameSpec struct {
 	keys       []tuicommon.HelpEntry // short help keys of the view
 	screenKeys []tuicommon.HelpEntry // keys only this view has, for the overlay
 	escDesc    string                // what esc does, for the overlay
+	legend     []chrome.HelpGroup    // column legend groups of the view, may be nil
 	hint       string                // scroll hint
 	sort       string                // active sort label of a table view, may be ""
 }
@@ -118,7 +119,7 @@ func (c *runChrome) render(spec frameSpec, body []string, width, height int, st 
 	f := Frame{Run: spec.run, Quality: c.quality, Active: spec.active, Keys: spec.keys, Hint: spec.hint, Sort: spec.sort}
 	if c.help.open {
 		f.Keys, f.Hint = overlayKeys, ""
-		body = c.help.linesIn(c.withConfigGroup(overlayGroups(spec.escDesc, spec.screenKeys)), width, FrameBodyHeight(height), st.Theme)
+		body = c.help.linesIn(c.withConfigGroup(overlayGroups(spec.escDesc, spec.screenKeys, spec.legend)), width, FrameBodyHeight(height), st.Theme)
 	}
 	return RenderFrame(f, body, width, height, st)
 }

@@ -59,9 +59,9 @@ func acrossTypeColumns() []table.Column {
 	cols[atRuns] = table.Column{Title: "runs", Align: right, Priority: 1}
 	cols[atTotal] = table.Column{Title: "total", Align: right}
 	cols[atShare] = shareBarColumn(4)
-	cols[atAverage] = table.Column{Title: "avg/run", Align: right, Priority: 1}
-	cols[atPerRunInvocations] = table.Column{Title: "inv/run", Align: right, Priority: 2}
-	cols[atPerRunTokens] = table.Column{Title: "tokens/run", Align: right, Priority: 2}
+	cols[atAverage] = table.Column{Title: "average per run", Align: right, Priority: 1}
+	cols[atPerRunInvocations] = table.Column{Title: "invocations per run", Align: right, Priority: 2}
+	cols[atPerRunTokens] = table.Column{Title: "tokens per run", Align: right, Priority: 2}
 	cols[atFlags] = table.Column{Title: "flags", Priority: 3}
 	return cols
 }
@@ -104,11 +104,11 @@ func acrossRunCells(cur domain.CurrencyCode, r domain.RunSummary, whole int64, t
 		labels = append(labels, ProvisionalLabel)
 	}
 	labels = append(labels, incompleteness(r.UnpricedModels, r.Totals.AssumedTierCacheWrite, r.Totals.AssumedTiers, r.Subagents.MissingUsage, r.Subagents.Open)...)
-	part, _ := moneyNanos(r.Totals.Money.Total)
+	part, priced := moneyNanos(r.Totals.Money.Total)
 	cells := make([]table.Cell, arCount)
 	cells[arRun] = table.Cell{Text: r.Run.Label(), Role: tuicommon.RoleSubtitle}
 	cells[arCost] = moneyTotalCell(cur, r.Totals.Money)
-	cells[arShare] = barCell(part, whole, tuicommon.RoleDataCost, theme)
+	cells[arShare] = shareCell(part, whole, priced, tuicommon.RoleDataCost, theme)
 	cells[arSubagents] = table.Cell{Text: formatGrouped(int64(r.Subagents.Invocations))}
 	cells[arFlags] = warningCell(badgeLabels(labels))
 	return cells
@@ -126,13 +126,13 @@ func acrossTypeCells(cur domain.CurrencyCode, g domain.AgentTypeAcrossRuns, whol
 	if g.PerRunMoney.Basis > 0 && !g.PerRunMoney.Complete && f.Totals.Money.Complete {
 		avg += " (partial)"
 	}
-	part, _ := moneyNanos(f.Totals.Money.Total)
+	part, priced := moneyNanos(f.Totals.Money.Total)
 	cells := make([]table.Cell, atCount)
 	cells[atType] = table.Cell{Text: typeLabel(g.AgentType), Role: tuicommon.RoleDataActor}
 	cells[atInvocations] = table.Cell{Text: formatGrouped(int64(f.Invocations))}
 	cells[atRuns] = table.Cell{Text: formatGrouped(int64(g.Runs))}
 	cells[atTotal] = moneyTotalCell(cur, f.Totals.Money)
-	cells[atShare] = barCell(part, whole, tuicommon.RoleDataCost, theme)
+	cells[atShare] = shareCell(part, whole, priced, tuicommon.RoleDataCost, theme)
 	cells[atAverage] = table.Cell{Text: avg, Role: MoneyRole(g.PerRunMoney.Average, g.PerRunMoney.Complete)}
 	cells[atPerRunInvocations] = table.Cell{Text: formatPerRun(g.PerRunInvocations, 1)}
 	cells[atPerRunTokens] = table.Cell{Text: formatPerRun(g.PerRunTokens, 0)}

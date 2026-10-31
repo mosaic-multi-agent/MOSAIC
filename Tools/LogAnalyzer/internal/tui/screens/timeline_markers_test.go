@@ -1,15 +1,13 @@
 package screens_test
 
 // Compaction markers and shading on the Gantt: one marker per compaction on the
-// orchestrator lane or on the owning agent's own lane, shaded wait and
-// between-session intervals, and markers that stay text with colour off.
+// orchestrator lane or on the owning agent's own lane, and markers that stay
+// text with colour off.
 
 import (
 	"sort"
 	"strings"
 	"testing"
-
-	"mosaic-log-analyzer/internal/domain"
 )
 
 // markerOrder lists the marker glyphs of a lane from left to right.
@@ -138,73 +136,4 @@ func TestGanttMarkers_AreTextWithColourOffAndSevenBitInAsciiMode(t *testing.T) {
 	if !strings.HasSuffix(strings.TrimRight(rev, " "), ">") || !strings.Contains(rev, "=") {
 		t.Errorf("an ASCII open bar is = cells ending in >: %q", rev)
 	}
-}
-
-func TestGanttShading_NothingIsShadedWithoutWaitsOrGaps(t *testing.T) {
-	view := timelineView(t, timelineRun(), wideW, tallH)
-
-	for _, l := range laneAndOrchestratorLines(view) {
-		if strings.ContainsRune(l, shadeGlyph) {
-			t.Errorf("no interval is shaded without waits or gaps: %q", l)
-		}
-	}
-}
-
-func TestGanttShading_UserWaitIsShadedWhereNoBarCoversIt(t *testing.T) {
-	run := withShades(timelineRun(), []domain.TimeInterval{tlSpan(55, 70)}, nil)
-	view := timelineView(t, run, wideW, tallH)
-
-	shade := glyphCols(laneLine(t, view, "solo#1", "planner"), shadeGlyph)
-	alphaEnd := lastBar(laneLine(t, view, "alpha#2", "coder"))
-	betaEnd := lastBar(laneLine(t, view, "beta#3", "tester"))
-
-	if len(shade) == 0 {
-		t.Fatalf("the wait from 55s to 70s must be shaded on the solo#1 lane\n%s", stripStyling(view))
-	}
-	if shade[0] <= alphaEnd || shade[len(shade)-1] > betaEnd {
-		t.Errorf("shade columns %d..%d must lie after alpha#2's end (%d) and within the axis (%d)", shade[0], shade[len(shade)-1], alphaEnd, betaEnd)
-	}
-}
-
-func TestGanttShading_BetweenSessionGapIsShadedOnTheAxis(t *testing.T) {
-	run := withShades(timelineRun(), nil, []domain.TimeInterval{tlSpan(12, 18)})
-	view := timelineView(t, run, wideW, tallH)
-
-	solo := laneLine(t, view, "solo#1", "planner")
-	shade := glyphCols(solo, shadeGlyph)
-	alphaStart := firstCol(t, laneLine(t, view, "alpha#2", "coder"), barGlyph)
-
-	if len(shade) == 0 {
-		t.Fatalf("the gap from 12s to 18s must be shaded\n%s", stripStyling(view))
-	}
-	if shade[0] <= lastBar(solo) || shade[len(shade)-1] >= alphaStart {
-		t.Errorf("the gap lies between solo#1's end (%d) and alpha#2's start (%d): shade %d..%d", lastBar(solo), alphaStart, shade[0], shade[len(shade)-1])
-	}
-}
-
-func TestGanttShading_NeverCoversABar(t *testing.T) {
-	plain := timelineView(t, timelineRun(), wideW, tallH)
-	shaded := timelineView(t, withShades(timelineRun(), []domain.TimeInterval{tlSpan(0, 75)}, nil), wideW, tallH)
-
-	for id, typ := range timelineTypes {
-		if id == "delta#5" {
-			continue
-		}
-		a, b := glyphCols(laneLine(t, plain, id, typ), barGlyph), glyphCols(laneLine(t, shaded, id, typ), barGlyph)
-		if len(a) == 0 || len(a) != len(b) || a[0] != b[0] || a[len(a)-1] != b[len(b)-1] {
-			t.Errorf("shading must not change the bar of %s: %v vs %v", id, a, b)
-		}
-	}
-	if !strings.ContainsRune(laneLine(t, shaded, "alpha#2", "coder"), shadeGlyph) {
-		t.Errorf("the span outside alpha#2's bar must be shaded when the whole run is a wait")
-	}
-}
-
-// lastBar is the column of the last bar cell of a lane, or -1.
-func lastBar(line string) int {
-	cols := glyphCols(line, barGlyph)
-	if len(cols) == 0 {
-		return -1
-	}
-	return cols[len(cols)-1]
 }

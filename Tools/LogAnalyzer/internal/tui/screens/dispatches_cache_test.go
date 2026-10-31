@@ -54,7 +54,9 @@ func TestDispatches_UnreadCacheWritesAreLabelledAsSuch(t *testing.T) {
 
 	view := strings.ToLower(dispatchesView(dispatchRun(), tableW, tallH))
 
-	assertContains(t, view, "unread cache write")
+	if !hasTitle(headerTitles(view, "instance"), "unread cache writes") {
+		t.Errorf("the table must title its column \"unread cache writes\": %s", view)
+	}
 }
 
 func TestDispatches_AnAbsentUnreadFigureShowsTheMarkerNotZero(t *testing.T) {

@@ -6,7 +6,6 @@ package screens_test
 // definition of final context.
 
 import (
-	"regexp"
 	"strings"
 	"testing"
 
@@ -30,11 +29,14 @@ func TestContext_ListsTheOrchestratorAndEveryInvocationOnce(t *testing.T) {
 }
 
 func TestContext_HeaderNamesEveryColumn(t *testing.T) {
-	view := strings.ToLower(ctxView(t, contextRun(), tableW, tallH))
+	view := ctxView(t, contextRun(), tableW, tallH)
 
-	header := lineWithAll(view, "instance", "type", "model", "calls", "first", "first write*", "peak", "final", "logged", "harness", "det. only", "unapplied", "compaction cost")
-	if header == "" {
-		t.Errorf("no header line names instance, type, model, calls, first, first write*, peak, final, logged, harness, det. only, unapplied and compaction cost\n%s", stripStyling(view))
+	titles := headerTitles(view, "instance")
+	for _, want := range []string{"instance", "model", "API calls", "first context", "context at first write", "peak context",
+		"final context", "logged", "harness", "detected only", "unapplied", "cost"} {
+		if !hasTitle(titles, want) {
+			t.Errorf("the header has no column titled %q; its columns are %q", want, titles)
+		}
 	}
 }
 
@@ -55,12 +57,12 @@ func TestContext_ShowsTheFiguresOfEachRow(t *testing.T) {
 	}
 }
 
-func TestContext_RowsShowTypeAndModel(t *testing.T) {
+func TestContext_RowsShowTheModel(t *testing.T) {
 	view := ctxView(t, contextRun(), tableW, tallH)
 
-	assertContains(t, ctxRowLine(t, view, "builder#1"), "builder", "model-b")
-	assertContains(t, ctxRowLine(t, view, "reviewer#1"), "reviewer", "model-r")
-	assertContains(t, ctxRowLine(t, view, "tester#1"), screens.UnknownTypeLabel, "model-t")
+	assertContains(t, ctxRowLine(t, view, "builder#1"), "model-b")
+	assertContains(t, ctxRowLine(t, view, "reviewer#1"), "model-r")
+	assertContains(t, ctxRowLine(t, view, "tester#1"), "model-t")
 }
 
 func TestContext_AnInvocationWithoutCallsShowsTheAbsentMarkerNeverZero(t *testing.T) {
@@ -102,23 +104,23 @@ func TestContext_LoggedAndDetectedCompactionsAreCountedSeparately(t *testing.T) 
 }
 
 func TestContext_DetectedCompactionsAreLabelledAsDetected(t *testing.T) {
-	view := strings.ToLower(ctxView(t, contextRun(), tableW, tallH))
+	titles := headerTitles(ctxView(t, contextRun(), tableW, tallH), "instance")
 
-	if lineWithAll(view, "logged", "det. only") == "" {
-		t.Errorf("the header must name the logged and the detected compactions columns\n%s", stripStyling(view))
+	if !hasTitle(titles, "logged") || !hasTitle(titles, "detected only") {
+		t.Errorf("the header must name the logged and the detected compactions columns; its columns are %q", titles)
 	}
 }
 
-func TestContext_FirstWriteIsLabelledAHeuristic(t *testing.T) {
-	view := ctxView(t, contextRun(), tableW, tallH)
+func TestContext_FirstWriteTitleNeedsNoNoteToBeUnderstood(t *testing.T) {
+	titles := headerTitles(ctxView(t, contextRun(), tableW, tallH), "instance")
 
-	assertContains(t, stripStyling(view), "first write*")
-	var footnote bool
-	for _, l := range viewLines(view) {
-		footnote = footnote || (regexp.MustCompile(`\*\s*.*heuristic`).MatchString(l) && !strings.Contains(l, "first write*"))
+	if !hasTitle(titles, "context at first write") {
+		t.Errorf("the first write figure must be titled \"context at first write\"; its columns are %q", titles)
 	}
-	if !footnote {
-		t.Errorf("a footnote must mark the first write figure with * as a heuristic\n%s", stripStyling(view))
+	for _, title := range titles {
+		if strings.Contains(title, "*") {
+			t.Errorf("title %q points at a note", title)
+		}
 	}
 }
 
@@ -131,7 +133,8 @@ func TestContext_OrchestratorHasNoFirstWriteFigure(t *testing.T) {
 }
 
 func TestContext_StatesTheDefinitionOfFinalContext(t *testing.T) {
-	view := ctxView(t, contextRun(), tableW, tallH)
+	// The definition lives in the column legend of the ? overlay, not under the table.
+	overlay := strings.Join(overlayLines(openOverlay(ctxOpen(t), tableW, legendOverlayH)), "\n")
 
-	assertContains(t, stripStyling(view), domain.FinalContextDefinition)
+	assertContains(t, stripStyling(overlay), domain.FinalContextDefinition)
 }

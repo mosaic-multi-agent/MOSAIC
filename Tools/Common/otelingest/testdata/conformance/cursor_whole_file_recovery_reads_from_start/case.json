@@ -1,5 +1,5 @@
 {
-  "description": "Whole-file recovery ignores the stored cursor and the start offset and reads from byte 0: earlier lines are now ingested, lines already placed are not written again, and new records are appended after the existing ones.",
+  "description": "VS Code dialect. Whole-file recovery ignores the stored cursor and the start offset and reads from byte 0: earlier lines are now ingested, lines already placed are not written again, and new records are appended after the existing ones.",
   "run_id": "20261028T000000Z-0000",
   "steps": [
     {
@@ -8,7 +8,7 @@
       "logs": null,
       "final": false,
       "whole_file": false,
-      "start_offset": 306,
+      "start_offset": 378,
       "scope": []
     },
     {

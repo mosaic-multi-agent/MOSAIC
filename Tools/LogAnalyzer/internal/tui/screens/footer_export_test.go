@@ -19,7 +19,7 @@ type runViewFooterCase struct {
 }
 
 // footerCases lists every per-run view, with the states that have their own key
-// list: Overview and Timeline in both versions, By type and Context drilled or not.
+// list: Overview and Timeline in both versions, By type drilled or not, Context and the Session screen.
 func footerCases() []runViewFooterCase {
 	var cases []runViewFooterCase
 	for _, fv := range allFrameViews() {
@@ -50,7 +50,7 @@ func footerCases() []runViewFooterCase {
 		runViewFooterCase{"context", func(t *testing.T) screens.RunView {
 			return ctxOpen(t)
 		}},
-		runViewFooterCase{"context-drilled", func(t *testing.T) screens.RunView {
+		runViewFooterCase{"session", func(t *testing.T) screens.RunView {
 			return ctxDrill(t, contextRun(), "builder#1", tableW, tallH)
 		}},
 	)

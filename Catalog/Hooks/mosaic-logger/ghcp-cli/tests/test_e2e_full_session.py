@@ -260,7 +260,7 @@ class TestSessionScopedEvents(unittest.TestCase):
             for turn in assistant_turns:
                 self.assertNotIn("content", turn)
 
-    def test_pre_compact_emits_compaction_event(self):
+    def test_pre_compact_emits_no_compaction_event(self):
         with _GhcpReplayHarness(self.tmp_path) as h:
             h.dispatch("sessionStart", {"sessionId": _SESSION_ID})
             h.dispatch("preCompact", {
@@ -268,8 +268,7 @@ class TestSessionScopedEvents(unittest.TestCase):
                 "trigger": "auto",
             })
             events = h.orchestrator_events("unknown-run")
-            compaction = next((e for e in events if e.get("event") == "compaction"), None)
-            self.assertIsNotNone(compaction)
+            self.assertEqual([], [e for e in events if e.get("event") == "compaction"])
 
 
 # ---------------------------------------------------------------------------

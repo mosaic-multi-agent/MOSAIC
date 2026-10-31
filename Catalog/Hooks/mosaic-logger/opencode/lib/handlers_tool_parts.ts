@@ -22,6 +22,7 @@ export interface ToolPart {
   callID?: string;
   tool?: string;
   sessionID?: string;
+  messageID?: string;
   state?: ToolPartState;
   [key: string]: unknown;
 }
@@ -36,6 +37,9 @@ export function createToolPartHandlers(deps: HandlerDependencies): {
     try {
       const props = event?.properties as Record<string, unknown> | undefined;
       const part = props?.["part"] as ToolPart | undefined;
+      if (part?.type === "tool" && typeof part.sessionID === "string" && typeof part.messageID === "string") {
+        deps.requestedTools?.recordPart(part.sessionID, part.messageID, part);
+      }
       if (!part || part.type !== "tool" || part.state?.status !== "error") return;
 
       const callId = part.callID;

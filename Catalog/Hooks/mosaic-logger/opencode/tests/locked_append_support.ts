@@ -175,8 +175,3 @@ export function startPythonHolder(
 export function lockFileOf(target: string): string {
   return nodePath.join(nodePath.dirname(target), "." + nodePath.basename(target) + ".lock");
 }
-
-/** The lock file the log format names for target (<dir>/.<name>.lock), independent of the module under test. */
-export function lockFileOf(target: string): string {
-  return nodePath.join(nodePath.dirname(target), "." + nodePath.basename(target) + ".lock");
-}

@@ -157,6 +157,7 @@ func (s *Service) TotalForRun(ctx context.Context, req Request, runID string) (R
 	in := analysis.Input{Streams: streams}
 	agg, aggFindings := analysis.Aggregate(in)
 	carried = append(carried, aggFindings...)
+	carried = append(carried, s.alarmFindings(ctx, src, agg)...)
 
 	// Step 8: Price.
 	report, priceFindings := analysis.Price(agg, table, settings, src)

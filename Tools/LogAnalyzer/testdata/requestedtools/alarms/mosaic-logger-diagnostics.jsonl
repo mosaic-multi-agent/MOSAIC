@@ -1,0 +1,7 @@
+{"timestamp":"2026-10-31T10:05:00.000Z","harness":"ghcp-cli","kind":"transcript_format_changed","message":"no usage","run_id":"20261031T100000Z-a001","session_id":"s1","counts":{"assistant_turns":4,"usage_records":0}}
+{"timestamp":"2026-10-31T10:06:00.000Z","harness":"ghcp-cli","kind":"transcript_field_unreadable","message":"field","run_id":"20261031T100000Z-a002","session_id":"s2","counts":{"records":1},"ids":["toolCounts"]}
+{"timestamp":"2026-10-31T10:07:00.000Z","harness":"ghcp-cli","kind":"transcript_format_changed","message":"bad run id","run_id":"not-a-run","session_id":"s3"}
+{"timestamp":"2026-10-31T10:08:00.000Z","harness":"ghcp-cli","kind":"transcript_format_changed","message":"no run id","session_id":"s4"}
+this line is not json
+{"timestamp":"2026-10-31T10:09:00.000Z","harness":"ghcp-cli","kind":"transcript_format_changed","message":"other run","run_id":"20261031T100000Z-a003","session_id":"s5"}
+{"timestamp":"2026-10-31T10:10:00.000Z","harness":"ghcp-cli","kind":"transcript_format_changed","message":"second session","run_id":"20261031T100000Z-a001","session_id":"s6"}

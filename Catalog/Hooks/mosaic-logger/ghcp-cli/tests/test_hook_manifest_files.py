@@ -1,7 +1,7 @@
-"""The hook manifest ships the OTel ingest files with both Copilot variants.
+"""The hook manifest ships the OTel ingest files with the vscode-ghcp variant only.
 
-hook.yaml lists the shared OTel ingest modules (shared source, flat target) and every
-adapter module of the variant folder for vscode-ghcp and ghcp-cli, every listed source
+hook.yaml lists the shared OTel ingest modules (shared source, flat target) for vscode-ghcp,
+none for ghcp-cli, and every adapter module of the variant folder for both, every listed source
 resolves to a real file, the description block (not comments) mentions COPILOT_OTEL_FILE_EXPORTER_PATH, and the claude-code and opencode variants ship
 no OTel ingest file.
 """
@@ -86,16 +86,25 @@ class TestCopilotVariantsShipOtelFiles(unittest.TestCase):
 
     def test_each_shared_otel_module_is_listed_with_a_shared_source_and_flat_target(self):
         shared_dir = os.path.normpath(os.path.join(_HOOK_DIR, "copilot-shared"))
-        for variant in ("vscode-ghcp", "ghcp-cli"):
-            for name in _shared_otel_files():
-                matches = [e for e in self.entries[variant] if os.path.basename(e[0]) == name]
-                self.assertEqual(1, len(matches), "%s: %s listed once" % (variant, name))
-                source, target = matches[0]
-                self.assertEqual(name, target, "%s: %s target is flat" % (variant, name))
-                self.assertNotIn("/", target)
-                resolved = os.path.normpath(os.path.join(_HOOK_DIR, variant, source))
-                self.assertEqual(os.path.join(shared_dir, name), resolved, variant)
-                self.assertTrue(os.path.isfile(resolved), "%s: %s" % (variant, source))
+        variant = "vscode-ghcp"
+        for name in _shared_otel_files():
+            matches = [e for e in self.entries[variant] if os.path.basename(e[0]) == name]
+            self.assertEqual(1, len(matches), "%s: %s listed once" % (variant, name))
+            source, target = matches[0]
+            self.assertEqual(name, target, "%s: %s target is flat" % (variant, name))
+            self.assertNotIn("/", target)
+            resolved = os.path.normpath(os.path.join(_HOOK_DIR, variant, source))
+            self.assertEqual(os.path.join(shared_dir, name), resolved, variant)
+            self.assertTrue(os.path.isfile(resolved), "%s: %s" % (variant, source))
+
+    def test_ghcp_cli_ships_no_otel_module(self):
+        otel = [e for e in self.entries["ghcp-cli"]
+                if "otel" in os.path.basename(e[0]).lower() or "otel" in e[1].lower()]
+        self.assertEqual([], otel)
+
+    def test_ghcp_cli_folder_holds_no_otel_module(self):
+        found = [m for m in _variant_modules("ghcp-cli") if "otel" in m]
+        self.assertEqual([], found)
 
     def test_each_copilot_variant_lists_every_adapter_module_in_its_folder(self):
         for variant in ("vscode-ghcp", "ghcp-cli"):
@@ -115,6 +124,29 @@ class TestCopilotVariantsShipOtelFiles(unittest.TestCase):
         for variant in ("claude-code", "opencode"):
             otel = [s for s, _ in self.entries[variant] if "otel" in os.path.basename(s)]
             self.assertEqual([], otel, variant)
+
+
+class TestTranscriptLoggingModulesAreShipped(unittest.TestCase):
+    """The ghcp-cli variant lists the transcript reader, the transcript logging and its own
+    diagnostics writer, each with a local source and a flat target, and every one exists."""
+
+    _NAMES = ("mosaic_logger_transcript_usage.py", "mosaic_logger_transcript_logging.py",
+              "mosaic_logger_diagnostics.py")
+
+    def setUp(self):
+        self.entries = _entries_by_variant()["ghcp-cli"]
+
+    def test_each_module_is_listed_once_with_a_local_source_and_flat_target(self):
+        for name in self._NAMES:
+            with self.subTest(module=name):
+                matches = [e for e in self.entries if e[1] == name]
+                self.assertEqual(1, len(matches))
+                self.assertEqual(name, matches[0][0])
+
+    def test_each_module_exists_in_the_variant_folder(self):
+        for name in self._NAMES:
+            with self.subTest(module=name):
+                self.assertTrue(os.path.isfile(os.path.join(_HOOK_DIR, "ghcp-cli", name)))
 
 
 class TestLockedAppendModuleIsShipped(unittest.TestCase):

@@ -212,25 +212,22 @@ func ctxSparkline(t *testing.T, view, id string) string {
 	return last
 }
 
-// ctxDrill opens the context view of the standard run and drills into an actor:
-// it moves the cursor down until the actor's row is selected, then presses enter.
-func ctxDrill(t *testing.T, run domain.RunReport, id string, w, h int) *screens.ContextScreen {
+// ctxDrill opens the Session screen of an actor of the run, as from the Context
+// view: the screen that shows the actor's context curve and per-call table.
+func ctxDrill(t *testing.T, run domain.RunReport, id string, w, h int) *screens.SessionScreen {
 	t.Helper()
 	colourOff(t)
-	s := screens.NewContextScreen(run, w, h, paletteStyles())
-	for i := 0; i < 12; i++ {
-		row := ctxRowLine(t, s.View(w, h), id)
-		if strings.HasPrefix(strings.TrimSpace(row), ">") {
-			press(s, "enter")
-			if after := stripStyling(s.View(w, h)); strings.Contains(after, "reviewer#1") && strings.Contains(after, "coder#1") {
-				t.Fatalf("enter on %s did not open a drill-down; the table is still shown\n%s", id, after)
-			}
-			return s
+	rc := run.Context
+	actor, found := rc.Orchestrator.Actor, id == "orchestrator"
+	for _, a := range rc.Invocations {
+		if a.Actor.Label() == id {
+			actor, found = a.Actor, true
 		}
-		press(s, "down")
 	}
-	t.Fatalf("the cursor never reached the row of %s", id)
-	return nil
+	if !found {
+		t.Fatalf("the run has no actor %s", id)
+	}
+	return screens.NewSessionScreen(run, actor, screens.ScreenContext, w, h, paletteStyles())
 }
 
 // ctxCallRow is the per-call table row of the call made at the given second.

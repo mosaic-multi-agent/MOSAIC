@@ -23,6 +23,7 @@
 import type { HandlerDependencies, MessageInfo, OpenCodeEvent } from "./handlers_session.js";
 import { currentTimestamp } from "./core.js";
 import { extractTextFromParts } from "./handlers_invocation.js";
+import { RequestedToolsTracker } from "./requested_tools.js";
 
 // ---------------------------------------------------------------------------
 // Public factory
@@ -37,6 +38,7 @@ export function createMessageHandlers(deps: HandlerDependencies): {
   handleMessageEvent: (event: OpenCodeEvent) => Promise<void>;
 } {
   const { store, paths, buildEvent, appendEvent } = deps;
+  const requestedTools = deps.requestedTools ?? new RequestedToolsTracker();
 
   async function handleMessageEvent(event: OpenCodeEvent): Promise<void> {
     try {
@@ -135,6 +137,14 @@ export function createMessageHandlers(deps: HandlerDependencies): {
         // Token usage object — omitted entirely when nothing is resolvable.
         const tokenUsage = buildTokenUsage(info);
 
+        // Tools requested by this message so far, from message.part.updated and
+        // from this observation's parts; absent when the message has no id.
+        let requested: Record<string, number> | undefined;
+        if (messageId) {
+          requestedTools.recordParts(sessionId, messageId, partsRaw);
+          requested = requestedTools.snapshot(sessionId, messageId);
+        }
+
         const usageEvent = buildEvent(
           "usage_record",
           { sessionId, runId, timestamp: ts },
@@ -148,6 +158,9 @@ export function createMessageHandlers(deps: HandlerDependencies): {
             token_usage: tokenUsage,             // undefined → omitted by buildEvent
           },
         );
+        // Set after buildEvent: its pruning would drop an empty object, but an
+        // empty requested_tools is meaningful (the message requested no tools).
+        if (requested) usageEvent["requested_tools"] = requested;
         await appendEvent(sink, usageEvent);
       }
     } catch {

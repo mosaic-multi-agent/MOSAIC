@@ -125,7 +125,7 @@ func TestContext_ShowsTheSelectedRunNotTheFirst(t *testing.T) {
 	}
 }
 
-func TestContext_EnterOpensTheDrillDownAndEscClosesItBeforeLeaving(t *testing.T) {
+func TestContext_EnterOpensTheSessionScreenAndEscReturnsToTheTableBeforeLeaving(t *testing.T) {
 	report := navViewsReport(contextNavRun(runA, 1000, "worker-a"))
 	m := send(onRunDetail(t, report), screens.KeyViewContext)
 	assertOn(t, m, screens.ScreenContext)
@@ -136,9 +136,9 @@ func TestContext_EnterOpensTheDrillDownAndEscClosesItBeforeLeaving(t *testing.T)
 
 	m = send(m, "enter")
 
-	assertOn(t, m, screens.ScreenContext)
+	assertOn(t, m, screens.ScreenSession)
 	if view := m.View(); !strings.Contains(view, contextCallLabel) {
-		t.Errorf("the drill-down must list the call made at %s\n%s", contextCallLabel, view)
+		t.Errorf("the Session screen must list the call made at %s\n%s", contextCallLabel, view)
 	}
 
 	m = send(m, "esc")

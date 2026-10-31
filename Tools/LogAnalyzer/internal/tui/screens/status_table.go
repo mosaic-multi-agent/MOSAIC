@@ -2,7 +2,6 @@ package screens
 
 import (
 	tuicommon "mosaic-common/tui"
-	"mosaic-common/tui/kit/chart"
 	"mosaic-common/tui/kit/table"
 
 	"mosaic-log-analyzer/internal/domain"
@@ -23,18 +22,15 @@ const (
 	scCount
 )
 
-// statusBarWidth is the fixed width of the two share bar columns.
-const statusBarWidth = 11
-
 // statusColumns lists the columns with the priority at which each is dropped on a
 // narrow terminal: the group, its dispatch count and its cost stay.
 func statusColumns() []table.Column {
 	cols := make([]table.Column, scCount)
 	cols[scName] = table.Column{Title: "status", Flex: true, MinWidth: 10}
 	cols[scDispatches] = table.Column{Title: "dispatches", Align: table.AlignRight}
-	cols[scDispatchShare] = table.Column{Title: "disp. share", Priority: 3, Width: statusBarWidth}
+	cols[scDispatchShare] = table.Column{Title: "dispatch share", Priority: 3, Width: shareColumnWidth}
 	cols[scCost] = table.Column{Title: "cost", Align: table.AlignRight}
-	cols[scCostShare] = table.Column{Title: "cost share", Priority: 2, Width: statusBarWidth}
+	cols[scCostShare] = table.Column{Title: "cost share", Priority: 2, Width: shareColumnWidth}
 	cols[scFlags] = table.Column{Title: "flags", Priority: 1}
 	return cols
 }
@@ -96,11 +92,9 @@ func statusTotals(groups []domain.StatusGroup) (dispatches, cost int64) {
 	return dispatches, cost
 }
 
-// barCell is a bar of part's share of whole.
+// barCell is a bar of part's share of whole with its whole percent.
 func barCell(part, whole int64, role tuicommon.StyleRole, theme tuicommon.Theme) table.Cell {
-	return table.Cell{Fill: func(width int) string {
-		return chart.Bar(float64(part), float64(whole), width, role, theme)
-	}}
+	return shareCell(part, whole, true, role, theme)
 }
 
 // statusCells builds the cells of one status group row.
@@ -110,26 +104,25 @@ func statusCells(cur domain.CurrencyCode, g domain.StatusGroup, dispatches, cost
 	if g.Kind == domain.StatusOpen {
 		open = 0 // the group name already says open
 	}
-	part, _ := moneyNanos(f.Totals.Money.Total)
+	part, priced := moneyNanos(f.Totals.Money.Total)
 	cells := make([]table.Cell, scCount)
 	cells[scName] = table.Cell{Text: statusName(g), Role: StatusGroupRole(g)}
 	cells[scDispatches] = table.Cell{Text: formatGrouped(int64(f.Invocations))}
 	cells[scDispatchShare] = barCell(int64(f.Invocations), dispatches, tuicommon.RoleDataActor, theme)
 	cells[scCost] = moneyTotalCell(cur, f.Totals.Money)
-	cells[scCostShare] = barCell(part, cost, tuicommon.RoleDataCost, theme)
+	cells[scCostShare] = shareCell(part, cost, priced, tuicommon.RoleDataCost, theme)
 	cells[scFlags] = warningCell(badgeLabels(incompleteness(f.UnpricedModels, f.Totals.AssumedTierCacheWrite, f.Totals.AssumedTiers, f.MissingUsage, open)))
 	return cells
 }
 
-// statusTableLines draws the groups as a table in the order of the sort.
-func statusTableLines(groups []domain.StatusGroup, o SortOrder, width int, st Styles) []string {
+// statusTable is the groups as a table in the order of the sort.
+func statusTable(groups []domain.StatusGroup, o SortOrder, st Styles) table.Table {
 	dispatches, cost := statusTotals(groups)
 	var rows [][]table.Cell
 	for _, i := range statusGroupOrder(groups, o) {
 		rows = append(rows, statusCells(st.Currency, groups[i], dispatches, cost, st.Theme))
 	}
-	t := table.Table{
+	return table.Table{
 		Columns: statusColumns(), Rows: rows, Cursor: table.NoCursor, SortColumn: statusSortColumn(o.Key), SortDesc: o.Desc,
 	}
-	return renderTableLines(t, width, len(rows), st)
 }

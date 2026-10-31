@@ -1,5 +1,5 @@
 {
-  "description": "A non-final ingest never moves pending spans to the unattributed stream, even when it is given a scope; the span stays pending across ingests.",
+  "description": "VS Code dialect. A non-final ingest never moves pending spans to the unattributed stream, even when it is given a scope; the span stays pending across ingests.",
   "run_id": "20261028T000000Z-0000",
   "steps": [
     {
@@ -19,7 +19,7 @@
       "whole_file": false,
       "start_offset": null,
       "scope": [
-        "cli-session-6"
+        "vsc-session-6"
       ]
     },
     {
@@ -30,7 +30,7 @@
       "whole_file": false,
       "start_offset": null,
       "scope": [
-        "cli-session-6"
+        "vsc-session-6"
       ]
     }
   ]

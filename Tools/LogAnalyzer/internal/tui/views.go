@@ -17,6 +17,7 @@ const (
 	screenTimeline   screenName = screenName(screens.ScreenTimeline)
 	screenAcrossRuns screenName = screenName(screens.ScreenAcrossRuns)
 	screenContext    screenName = screenName(screens.ScreenContext)
+	screenSession    screenName = screenName(screens.ScreenSession)
 	screenCompare    screenName = screenName(screens.ScreenCompare)
 )
 
@@ -66,12 +67,19 @@ func (m Model) updateRunView(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.runView = updated.(screens.RunView)
 	if m.runView.Back() {
 		m.runView.Reset()
+		if m.screen == screenSession {
+			return m.closeSession(), nil
+		}
 		m.screen = screenRuns
 		return m, nil
 	}
 	if id, ok := m.runView.Requested(); ok {
 		m.runView.Reset()
+		m.sessionOpener = nil
 		return m.openRunView(m.viewRunID, id), nil
+	}
+	if opened, ok := m.openSessionIfRequested(); ok {
+		return opened, nil
 	}
 	if markCmd := m.markToolCmd(); markCmd != nil {
 		return m, markCmd

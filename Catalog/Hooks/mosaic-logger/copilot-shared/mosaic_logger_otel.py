@@ -6,7 +6,7 @@ reading and writing the same .otel-ingest/ state, so a run can be ingested partl
 partly by the Go tools. Behaviour is defined by the shared conformance fixtures in
 Tools/Common/otelingest/testdata/conformance/.
 
-It reads an OTel JSONL file (GHCP CLI or VS Code dialect), turns each per-call chat span into a
+It reads an OTel JSONL file (VS Code dialect), turns each per-call chat span into a
 usage_record with source "otel" and places it on the stream of the actor a hard key ties it to.
 
 Standard library only; deployed flat next to the adapter modules. Never raises into the caller:

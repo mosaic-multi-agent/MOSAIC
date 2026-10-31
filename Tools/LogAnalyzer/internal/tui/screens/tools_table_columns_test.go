@@ -4,7 +4,6 @@ package screens_test
 // every section.
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -30,17 +29,11 @@ func TestToolsTable_HeaderNamesEveryColumnAndAToolRowShowsItsDurations(t *testin
 	colourOff(t)
 	view := toolsView(t, toolsRun(), tableW, tallH)
 
-	header := ""
-	for _, line := range strings.Split(stripStyling(view), "\n") {
-		l := strings.ToLower(line)
-		if strings.Contains(l, "tool") && strings.Contains(l, "calls") && strings.Contains(l, "errors") &&
-			strings.Contains(l, "avg") && strings.Contains(l, "min") && strings.Contains(l, "max") && strings.Contains(l, "unpaired") {
-			header = line
-			break
+	titles := headerTitles(view, "tool")
+	for _, want := range []string{"tool", "calls", "errors", "average duration", "minimum duration", "maximum duration", "unpaired"} {
+		if !hasTitle(titles, want) {
+			t.Errorf("the header has no column titled %q; its columns are %q", want, titles)
 		}
-	}
-	if header == "" {
-		t.Errorf("no header line names tool, calls, errors, avg, min, max and unpaired\n%s", view)
 	}
 	read := rowFor(t, view, "Read")
 	for _, d := range []time.Duration{4 * time.Second, ms(1250), ms(7500)} {

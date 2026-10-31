@@ -15,7 +15,6 @@ import (
 // Columns of the invocation table, in display order.
 const (
 	ivInstance = iota
-	ivType
 	ivStart
 	ivEnd
 	ivDuration
@@ -81,8 +80,7 @@ func timelineEntryOrder(entries []domain.TimelineEntry, o SortOrder) []int {
 func timelineColumns() []table.Column {
 	right := table.AlignRight
 	cols := make([]table.Column, ivCount)
-	cols[ivInstance] = table.Column{Title: "instance", Flex: true, MinWidth: 8}
-	cols[ivType] = table.Column{Title: "type", Priority: 1}
+	cols[ivInstance] = table.Column{Title: "instance", Flex: true, Identity: true, MinWidth: 8}
 	cols[ivStart] = table.Column{Title: "start", Priority: 2}
 	cols[ivEnd] = table.Column{Title: "end", Priority: 2}
 	cols[ivDuration] = table.Column{Title: "duration", Align: right}
@@ -110,7 +108,6 @@ func invocationCells(e domain.TimelineEntry) []table.Cell {
 	inv := e.Invocation
 	cells := make([]table.Cell, ivCount)
 	cells[ivInstance] = table.Cell{Text: inv.Actor.Label(), Role: tuicommon.RoleDataActor}
-	cells[ivType] = table.Cell{Text: typeLabel(inv.Actor.Type)}
 	cells[ivStart] = clockCell(inv.StartedAt)
 	cells[ivEnd] = clockCell(inv.EndedAt)
 	if inv.State == domain.InvocationOpen {

@@ -4,12 +4,12 @@ package domain
 type SourceKind uint8
 
 const (
-	SourceNotFound  SourceKind = iota // nothing at the probed/supplied location
-	SourceLogsRoot                    // a tree of run folders
-	SourceSingleRun                   // the path is itself one run folder
-	SourceUnusable                    // exists but is not a logs tree
-	SourceDigestFile                  // the path is one digest file
-	SourceDigestDir                   // a directory holding digests and no log structure
+	SourceNotFound   SourceKind = iota // nothing at the probed/supplied location
+	SourceLogsRoot                     // a tree of run folders
+	SourceSingleRun                    // the path is itself one run folder
+	SourceUnusable                     // exists but is not a logs tree
+	SourceDigestFile                   // the path is one digest file
+	SourceDigestDir                    // a directory holding digests and no log structure
 )
 
 // Source describes a resolved (or unresolved) log source. It is never an error.

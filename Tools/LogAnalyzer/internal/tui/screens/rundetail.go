@@ -11,7 +11,7 @@ import (
 )
 
 // dispatchKeys are the short help keys of the Dispatches view.
-var dispatchKeys = []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: KeySort, Desc: "sort"}, exportKeyEntry, {Key: "esc", Desc: "back"}}
+var dispatchKeys = []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: "enter", Desc: "session"}, {Key: KeySort, Desc: "sort"}, exportKeyEntry, {Key: "esc", Desc: "back"}}
 
 // RunDetailScreen is the Dispatches view of one run: a table with the orchestrator
 // row first and one row per dispatch with its cost, share of the run, status,
@@ -32,8 +32,9 @@ type RunDetailScreen struct {
 	// reasons explain why models of the run were left unpriced, shown below the notice.
 	reasons []domain.UnpricedReason
 	back    bool
-	nav    viewNav
+	nav     viewNav
 	runChrome
+	sessionRequest
 }
 
 // NewRunDetailScreen creates the run-detail screen for the given run report.
@@ -64,8 +65,11 @@ func (s *RunDetailScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	if s.help.handle(k) {
 		return s, nil
 	}
-	rows := 1 + len(dispatchEntries(s.run.ByAgentType))
+	entries := dispatchEntries(s.run.ByAgentType)
+	rows := 1 + len(entries)
 	switch k {
+	case "enter":
+		s.requestSession(s.actorAt(entries))
 	case "up", "k":
 		s.cursor = clampIndex(s.cursor-1, rows)
 	case "down", "j":
@@ -80,6 +84,16 @@ func (s *RunDetailScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	return s, nil
 }
 
+// actorAt is the actor of the row under the cursor: the orchestrator on the first
+// row, then the dispatches in the order of the sort.
+func (s *RunDetailScreen) actorAt(entries []dispatchEntry) domain.ActorRef {
+	if s.cursor <= 0 {
+		return domain.Orchestrator()
+	}
+	order := dispatchOrder(entries, s.sort.Active())
+	return entries[order[clampIndex(s.cursor-1, len(order))]].d.Invocation.Actor
+}
+
 // View renders the Dispatches table, clipped to the given height. The scroll
 // offset is settled against the passed-in height on every render so that
 // terminal resizes are handled on the next call.
@@ -92,7 +106,7 @@ func (s *RunDetailScreen) View(width, height int) string {
 	head := s.summaryLines()
 	lines, w := dispatchTableLines(rows, s.cursor, &s.offset, order, width, bodyBudget(height)-len(head)-1, s.styles)
 
-	spec := frameSpec{run: s.run, active: ScreenRunDetail, keys: dispatchKeys, screenKeys: []tuicommon.HelpEntry{sortKeyEntry},
+	spec := frameSpec{run: s.run, active: ScreenRunDetail, keys: dispatchKeys, legend: dispatchLegend(), screenKeys: []tuicommon.HelpEntry{sortKeyEntry, {Key: "enter", Desc: "open the session of the selected row"}},
 		escDesc: "back to the runs list", hint: FormatScrollHint(w, len(rows)), sort: s.sort.Label()}
 	return s.render(spec, append(head, lines...), width, height, s.styles)
 }

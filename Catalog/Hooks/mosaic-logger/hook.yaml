@@ -301,6 +301,8 @@ variants:
         target: lib/handlers_tools.ts
       - source: lib/handlers_tool_parts.ts
         target: lib/handlers_tool_parts.ts
+      - source: lib/requested_tools.ts
+        target: lib/requested_tools.ts
       - source: lib/failed_calls.ts
         target: lib/failed_calls.ts
       - source: lib/handlers_messages.ts
@@ -424,6 +426,16 @@ variants:
         target: mosaic_logger_export.py
       - source: mosaic_logger_transcript.py
         target: mosaic_logger_transcript.py
+      - source: mosaic_logger_transcript_usage.py
+        target: mosaic_logger_transcript_usage.py
+      - source: mosaic_logger_transcript_logging.py
+        target: mosaic_logger_transcript_logging.py
+      - source: mosaic_logger_transcript_events.py
+        target: mosaic_logger_transcript_events.py
+      - source: mosaic_logger_transcript_state.py
+        target: mosaic_logger_transcript_state.py
+      - source: mosaic_logger_diagnostics.py
+        target: mosaic_logger_diagnostics.py
       - source: mosaic_logger_handlers_session.py
         target: mosaic_logger_handlers_session.py
       - source: mosaic_logger_handlers_invocation.py
@@ -438,34 +450,8 @@ variants:
         target: mosaic_logger_handlers_runner.py
       - source: mosaic_logger_spawn_key.py
         target: mosaic_logger_spawn_key.py
-      - source: mosaic_logger_otel_hook.py
-        target: mosaic_logger_otel_hook.py
-      - source: ../copilot-shared/mosaic_logger_otel.py
-        target: mosaic_logger_otel.py
-      - source: ../copilot-shared/mosaic_logger_otel_contract.py
-        target: mosaic_logger_otel_contract.py
-      - source: ../copilot-shared/mosaic_logger_otel_keys.py
-        target: mosaic_logger_otel_keys.py
-      - source: ../copilot-shared/mosaic_logger_otel_lock.py
-        target: mosaic_logger_otel_lock.py
-      - source: ../copilot-shared/mosaic_logger_otel_notices.py
-        target: mosaic_logger_otel_notices.py
-      - source: ../copilot-shared/mosaic_logger_otel_parse.py
-        target: mosaic_logger_otel_parse.py
-      - source: ../copilot-shared/mosaic_logger_otel_place.py
-        target: mosaic_logger_otel_place.py
-      - source: ../copilot-shared/mosaic_logger_otel_scan.py
-        target: mosaic_logger_otel_scan.py
-      - source: ../copilot-shared/mosaic_logger_otel_toolend.py
-        target: mosaic_logger_otel_toolend.py
-      - source: ../copilot-shared/mosaic_logger_otel_toolevents.py
-        target: mosaic_logger_otel_toolevents.py
-      - source: ../copilot-shared/mosaic_logger_otel_state.py
-        target: mosaic_logger_otel_state.py
       - source: ../copilot-shared/mosaic_logger_locked_append.py
         target: mosaic_logger_locked_append.py
-      - source: ../copilot-shared/mosaic_logger_otel_write.py
-        target: mosaic_logger_otel_write.py
       - source: ../hook.yaml
         target: hook.yaml
     # Registration covers all 14 GHCP CLI hook events. subagentStart is

@@ -123,16 +123,34 @@ func TestTools_ShowsNoTokenOrMoneyAttribution(t *testing.T) {
 	// The frame header carries the run's total cost; the body itself shows none.
 	body := strings.Join(overlayLines(view), "\n")
 	assertNotContains(t, body, "$", screens.UnpricedMarker, "(partial)", screens.AssumedTierLabel(nil))
-	assertNotContains(t, strings.ToLower(body), "cost", "token")
+	assertNotContains(t, strings.ToLower(body), "cost")
+	// The context growth group label and note speak of tokens; the rows attribute none.
+	assertNotContains(t, strings.ToLower(withoutGrowthText(body)), "token")
 }
+
+// withoutGrowthText drops the lines of the context growth group label and the
+// content-capture note, the only places the Tools view legitimately names tokens.
+func withoutGrowthText(body string) string {
+	var kept []string
+	for _, l := range strings.Split(body, "\n") {
+		if !strings.Contains(strings.ToLower(l), "context growth") {
+			kept = append(kept, l)
+		}
+	}
+	return strings.Join(kept, "\n")
+}
+
+// toolsShortH is short enough to scroll 30 rows, yet tall enough for the
+// three-line header group, a row and the content-capture note.
+const toolsShortH = 14
 
 func TestTools_ShortTerminalScrollsAndShowsHint(t *testing.T) {
 	colourOff(t)
-	s := screens.NewToolsScreen(manyToolsRun(30), wideW, shortH, paletteStyles())
+	s := screens.NewToolsScreen(manyToolsRun(30), wideW, toolsShortH, paletteStyles())
 
 	// Calls sort puts the busiest tool (tool-30) first and the quietest (tool-01) last.
-	first := s.View(wideW, shortH)
-	assertWithinBounds(t, first, wideW, shortH)
+	first := s.View(wideW, toolsShortH)
+	assertWithinBounds(t, first, wideW, toolsShortH)
 	if !scrollHintRE.MatchString(first) {
 		t.Errorf("short terminal must show a scroll hint\n%s", first)
 	}
@@ -141,12 +159,12 @@ func TestTools_ShortTerminalScrollsAndShowsHint(t *testing.T) {
 
 	var scrolled screens.Screen = s
 	scrolled = press(scrolled, repeat("down", 80)...)
-	last := scrolled.View(wideW, shortH)
-	assertWithinBounds(t, last, wideW, shortH)
+	last := scrolled.View(wideW, toolsShortH)
+	assertWithinBounds(t, last, wideW, toolsShortH)
 	assertContains(t, last, "tool-01")
 	assertNotContains(t, last, "tool-30")
 
-	back := press(scrolled, repeat("up", 80)...).View(wideW, shortH)
+	back := press(scrolled, repeat("up", 80)...).View(wideW, toolsShortH)
 	if back != first {
 		t.Errorf("scrolling back to the top must restore the first view\n%s\nvs\n%s", back, first)
 	}

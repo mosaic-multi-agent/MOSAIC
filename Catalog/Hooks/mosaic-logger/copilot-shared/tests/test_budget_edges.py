@@ -9,7 +9,8 @@ import json
 
 import mosaic_logger_otel as otel
 from otel_ingest_helpers import (
-    chat_line, fixed_now, lock_path, make_run, read_json, read_otel_records, state_path, write_otel,
+    SESSION, chat_line, fixed_now, lock_path, make_run, read_json, read_otel_records, state_path,
+    write_otel,
 )
 
 LINE_COUNT = 40
@@ -24,15 +25,18 @@ def stepping_clock():
 
 
 def child_line(span_id, parent):
-    span = json.loads(chat_line(span_id))
-    span["parentSpanId"] = parent
-    return json.dumps(span, separators=(",", ":"))
+    """A chat span of a subagent chat session; it stays pending until the spawning tool call (id `parent`) is read."""
+    return chat_line(span_id, chat_session=parent)
 
 
 def parent_line(span_id):
+    """The execution_subagent tool span whose call id is `span_id`, run in the orchestrator's own session."""
     span = json.loads(chat_line(span_id))
-    span["name"] = "invoke_agent"
-    span["attributes"]["gen_ai.operation.name"] = "invoke_agent"
+    span["name"] = "execute_tool"
+    span["attributes"]["gen_ai.operation.name"] = "execute_tool"
+    span["attributes"]["gen_ai.tool.name"] = "execution_subagent"
+    span["attributes"]["gen_ai.tool.call.id"] = span_id
+    span["attributes"]["copilot_chat.chat_session_id"] = SESSION
     return json.dumps(span, separators=(",", ":"))
 
 

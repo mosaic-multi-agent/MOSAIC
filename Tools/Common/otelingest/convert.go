@@ -19,7 +19,6 @@ type tokenUsage struct {
 type call struct {
 	RecordID            string      `json:"record_id"`
 	RecordIndex         int64       `json:"record_index"`
-	Dialect             string      `json:"dialect"`
 	ParentSpanID        string      `json:"parent_span_id,omitempty"`
 	ConversationID      string      `json:"conversation_id,omitempty"`
 	ChatSessionID       string      `json:"chat_session_id,omitempty"`
@@ -30,11 +29,12 @@ type call struct {
 	Timestamp           string      `json:"-"`
 	CallLabel           string      `json:"-"`
 	CallKind            string      `json:"-"`
+	RequestedTools      *toolCounts `json:"-"`
 }
 
 // convertChat maps the usage, model and effort attributes of a chat span; nil when the span carries no usage.
 // Only the named attributes are read, so content attributes never reach a record.
-func convertChat(attrs map[string]any, dialect string) *call {
+func convertChat(attrs map[string]any) *call {
 	usage := convertTokens(attrs)
 	if usage == nil {
 		return nil
@@ -43,13 +43,10 @@ func convertChat(attrs map[string]any, dialect string) *call {
 	if c.Model == "" {
 		c.Model = stringValue(attrs["gen_ai.request.model"])
 	}
-	if dialect == dialectCLI {
-		c.Effort = stringValue(attrs["gen_ai.request.reasoning.level"])
-	} else {
-		c.Effort = vscodeEffort(stringValue(attrs["copilot_chat.request.options"]))
-		c.CallLabel = stringValue(attrs["gen_ai.agent.name"])
-		c.CallKind = callKindOf(c.CallLabel)
-	}
+	c.Effort = vscodeEffort(stringValue(attrs["copilot_chat.request.options"]))
+	c.CallLabel = stringValue(attrs["gen_ai.agent.name"])
+	c.CallKind = callKindOf(c.CallLabel)
+	c.RequestedTools = requestedTools(attrs)
 	return c
 }
 

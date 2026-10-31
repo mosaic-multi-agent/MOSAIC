@@ -1,5 +1,5 @@
 {
-  "description": "Split ingest, full: the whole file of the split case with the same name in one ingest; its records and final state equal that case's part 2.",
+  "description": "VS Code dialect. Split ingest, full: the whole file of the split case with the same name in one ingest; its records and final state equal that case's part 2.",
   "run_id": "20261028T000000Z-0000",
   "steps": [
     {

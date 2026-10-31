@@ -5,7 +5,6 @@ const statusCodeError = 2
 
 // failedTool is a failed execute_tool span with a call id: the facts the end of its tool call is written from.
 type failedTool struct {
-	dialect  string
 	callID   string
 	toolName string
 	message  string
@@ -14,7 +13,7 @@ type failedTool struct {
 
 // failedToolOf returns the failed tool call a span describes, or nil when the span did not fail or has no call id.
 // Content attributes (arguments, results) are never read.
-func failedToolOf(obj, attrs map[string]any, dialect string) *failedTool {
+func failedToolOf(obj, attrs map[string]any) *failedTool {
 	status, _ := obj["status"].(map[string]any)
 	if code := intValue(status["code"]); code == nil || *code != statusCodeError {
 		return nil
@@ -24,7 +23,6 @@ func failedToolOf(obj, attrs map[string]any, dialect string) *failedTool {
 		return nil
 	}
 	return &failedTool{
-		dialect:  dialect,
 		callID:   callID,
 		toolName: stringValue(attrs["gen_ai.tool.name"]),
 		message:  stringValue(status["message"]),

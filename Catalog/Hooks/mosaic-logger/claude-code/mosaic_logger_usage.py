@@ -7,7 +7,7 @@ usage_record event
 -------------------
 
     {
-      "schema_version": "1.3.0",
+      "schema_version": "1.7.0",
       "event": "usage_record",
       "timestamp": "2026-08-08T06:27:35.412Z",
       "harness": "claude-code",
@@ -20,6 +20,7 @@ usage_record event
       "model": "claude-opus-4-6",
       "service_tier": "standard",
       "effort": "medium",
+      "requested_tools": {"Read": 1, "Grep": 2},
       "token_usage": { }
     }
 
@@ -32,6 +33,7 @@ agent_instance_id | string | invocation streams only | Omitted on the orchestrat
 model           | string  | when resolvable          | The model of this record.
 service_tier    | string  | when present             | Descriptive detail only; drives no pricing decision.
 effort          | string  | when present            | The transcript record's top-level effort, copied verbatim. Never read from agent files, settings or environment.
+requested_tools | object  | when the transcript provides message content | Tool name -> count over the tool_use blocks of the whole API message (every transcript record sharing the message.id). {} means the call requested no tools; absent only when no record of the message carried a content list. Written even when empty.
 token_usage     | object  | when at least one sub-field resolved | See below.
 
 The envelope (schema_version, event, timestamp, harness, session_id, run_id)
@@ -52,7 +54,7 @@ streams treats it as a data-quality finding, not a double-count.
 
 Emit-on-change semantics. A record is written to a stream only when its
 record_id is new to that stream, or when its analyzer-significant values
-(token_usage, model) have changed since it was last written. Per-stream
+(token_usage, model, effort, requested_tools) have changed since it was last written. Per-stream
 state is maintained in a dot-prefixed sidecar directory so the analyzer's
 scanner skips it. The analyzer's supersede rule remains authoritative and
 last-wins: re-emission delivers the settled values, not the first
@@ -113,8 +115,8 @@ def record_fingerprint(record) -> str:
     """Return a short, stable fingerprint of the record content whose change
     must reach the analyzer.
 
-    Covers model, token_usage and effort — the analyzer-significant
-    fields. record_id, record_index and service_tier are excluded.
+    Covers model, token_usage, effort and requested_tools — the
+    analyzer-significant fields. record_id, record_index and service_tier are excluded.
     Envelope fields are not inputs to this function.
 
     Returns "" when the record cannot be fingerprinted for any reason —
@@ -130,8 +132,11 @@ def record_fingerprint(record) -> str:
         token_usage = record.token_usage or {}
         # Serialize with sorted keys for order-independence
         effort = getattr(record, "effort", None) or ""
+        # None (unknown) and {} (no tools requested) must fingerprint apart.
+        requested_tools = getattr(record, "requested_tools", None)
         content = json.dumps({"model": model, "token_usage": token_usage,
-                              "effort": effort},
+                              "effort": effort,
+                              "requested_tools": requested_tools},
                              sort_keys=True, ensure_ascii=False)
         return hashlib.sha256(content.encode("utf-8")).hexdigest()
     except Exception:
@@ -313,6 +318,11 @@ def emit_usage_records(ctx: "core.HookContext",
                 if agent_instance_id is not None:
                     fields["agent_instance_id"] = agent_instance_id
                 event = core.build_event(USAGE_EVENT, ctx, **fields)
+                # An empty object means "requested no tools", so it is set
+                # after build_event, which would prune it.
+                requested_tools = getattr(rec, "requested_tools", None)
+                if requested_tools is not None:
+                    event["requested_tools"] = requested_tools
                 core.append_event(sink, event)
                 count += 1
                 # Update state only after the write is confirmed, so state

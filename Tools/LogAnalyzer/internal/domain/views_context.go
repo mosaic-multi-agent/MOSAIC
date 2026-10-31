@@ -92,6 +92,11 @@ type ContextCall struct {
 	Label     string
 	SessionID string
 
+	RequestedTools RequestedTools // zero = not provided
+
+	// Growth is the call's context growth; the zero value means not singular.
+	Growth CallGrowth
+
 	// Unapplied marks a compaction call (Kind == CallCompaction) that no later
 	// compaction of the actor followed: an unapplied attempt.
 	Unapplied bool

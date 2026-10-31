@@ -166,6 +166,10 @@ func TestStatusTools_AfterRepricingStatusShowsTheNewFigures(t *testing.T) {
 	}
 }
 
+// shortTerminalH is short enough to scroll 30 rows, yet tall enough for the Tools
+// three-line header group, a row and the content-capture note.
+const shortTerminalH = 14
+
 func TestStatusTools_ScrollOnAShortTerminal(t *testing.T) {
 	run := statusToolsRun(runA, 1000, "ToolA")
 	for i := 1; i <= 30; i++ {
@@ -180,12 +184,12 @@ func TestStatusTools_ScrollOnAShortTerminal(t *testing.T) {
 	cases := map[string]string{screens.KeyViewStatus: "type-30", screens.KeyViewTools: "tool-30"}
 	for key, last := range cases {
 		m := onRunDetail(t, navViewsReport(run))
-		updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 8})
+		updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: shortTerminalH})
 		m = send(asModel(updated), key)
 
 		view := m.View()
-		if n := strings.Count(view, "\n") + 1; n > 8 {
-			t.Errorf("key %q: view has %d lines on an 8-line terminal\n%s", key, n, view)
+		if n := strings.Count(view, "\n") + 1; n > shortTerminalH {
+			t.Errorf("key %q: view has %d lines on a %d-line terminal\n%s", key, n, shortTerminalH, view)
 		}
 		if strings.Contains(view, last) {
 			t.Errorf("key %q: %s must be scrolled out of view\n%s", key, last, view)

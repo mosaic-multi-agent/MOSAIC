@@ -1,5 +1,5 @@
 {
-  "description": "Once a record_id is on a stream it stays there: after a final ingest put a pending span on the unattributed stream, a later ingest that sees its parents places new sibling spans on the invocation but does not write the first span again, also not in a whole-file recovery.",
+  "description": "VS Code dialect. Once a record_id is on a stream it stays there: after a final ingest put a pending span on the unattributed stream, a later ingest that sees its tool span places new sibling spans on the invocation but does not write the first span again, also not in a whole-file recovery.",
   "run_id": "20261028T000000Z-0000",
   "steps": [
     {

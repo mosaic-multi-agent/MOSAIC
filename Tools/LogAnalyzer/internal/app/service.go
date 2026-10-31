@@ -21,6 +21,7 @@ type Deps struct {
 	ToolVersion string                  // LogAnalyzer version recorded in exported digests
 	Ingester    domain.UsageIngester    // nil = ingest-otel off
 	IngestProbe domain.IngestStateProbe // nil = pending usage is never reported
+	Alarms      domain.AlarmSource      // nil = adapter alarms are not read
 }
 
 // Service is the single use-case layer both frontends drive.

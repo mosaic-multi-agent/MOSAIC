@@ -12,7 +12,7 @@ import (
 )
 
 // The Gantt version of the timeline: an axis line, the orchestrator lane, one
-// lane per invocation and the detail strip of the lane under the cursor.
+// lane per invocation, the legend and the detail strip of the lane under the cursor.
 
 // orchestratorLaneLabel labels the lane of the orchestrator's compactions.
 const orchestratorLaneLabel = "orchestrator"
@@ -39,11 +39,17 @@ func (s *TimelineScreen) ganttBody(width, height int) ([]string, string) {
 		return out, ""
 	}
 	s.cursor = clampIndex(s.cursor, len(entries))
-	w := ScrollWindow(s.offset, s.cursor, len(entries), max(FrameBodyHeight(height)-ganttFixedLines, 1))
+	legend := s.ganttLegend(width)
+	room := FrameBodyHeight(height) - ganttFixedLines
+	if room-len(legend) < 1 {
+		legend = nil
+	}
+	w := ScrollWindow(s.offset, s.cursor, len(entries), max(room-len(legend), 1))
 	s.offset = w.Offset
 	for i := w.Offset; i < w.End(); i++ {
 		out = append(out, gantt.RenderLane(axis, s.invocationLane(entries[i]), shades, labelWidth, width, i == s.cursor, st.Theme))
 	}
+	out = append(out, legend...)
 	out = append(out, s.detailStrip(entries[s.cursor])...)
 	return out, FormatScrollHint(w, len(entries))
 }
@@ -69,31 +75,19 @@ func (s *TimelineScreen) ganttAxis() gantt.Axis {
 	if !end.After(tl.Axis.Start) {
 		end = tl.Axis.Start.Add(time.Second)
 	}
-	return gantt.Axis{Start: tl.Axis.Start, End: end}
-}
-
-// ganttShades are the user-wait intervals and the gaps between sessions.
-func (s *TimelineScreen) ganttShades() []gantt.Shade {
-	wt := s.run.WallTime
-	var out []gantt.Shade
-	for _, spans := range [][]domain.TimeInterval{wt.WaitIntervals, wt.SessionGaps} {
-		for _, iv := range spans {
-			out = append(out, gantt.Shade{Start: iv.Start, End: iv.End, Role: tuicommon.RoleSignalMuted})
-		}
-	}
-	return out
+	return gantt.Axis{Start: tl.Axis.Start, End: end, Collapsed: s.collapsedStretches()}
 }
 
 // orchestratorLane carries one marker per compaction of the orchestrator.
 func (s *TimelineScreen) orchestratorLane() gantt.Lane {
 	return gantt.Lane{Label: orchestratorLaneLabel, LabelRole: tuicommon.RoleDataActor,
-		Points: markerPoints(s.run.Context.Orchestrator.Compactions)}
+		Points: markerPoints(s.run.Context.Orchestrator.Compactions), Shades: s.actorWaitShades(domain.Orchestrator())}
 }
 
 // invocationLane is one invocation's lane: its bar and its own compactions.
 func (s *TimelineScreen) invocationLane(e domain.TimelineEntry) gantt.Lane {
 	inv := e.Invocation
-	lane := gantt.Lane{Label: inv.Actor.Label(), LabelRole: tuicommon.RoleDataActor}
+	lane := gantt.Lane{Label: inv.Actor.Label(), LabelRole: tuicommon.RoleDataActor, Shades: s.actorWaitShades(inv.Actor)}
 	if iv, ok := invocationInterval(inv); ok {
 		lane.Intervals = []gantt.Interval{iv}
 	}
@@ -158,6 +152,15 @@ func (s *TimelineScreen) orderedEntries() []domain.TimelineEntry {
 				out = append(out, e)
 			}
 		}
+	}
+	return out
+}
+
+// collapsedStretches are the wall-time analysis stretches the axis draws as markers.
+func (s *TimelineScreen) collapsedStretches() []gantt.Collapse {
+	var out []gantt.Collapse
+	for _, iv := range s.run.WallTime.Collapsible {
+		out = append(out, gantt.Collapse{Start: iv.Start, End: iv.End})
 	}
 	return out
 }

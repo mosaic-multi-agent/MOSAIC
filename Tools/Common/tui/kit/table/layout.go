@@ -52,6 +52,9 @@ func naturalWidths(t Table) []int {
 			continue
 		}
 		w := textwidth.Of(headerText(t, i))
+		if t.WrapTitles {
+			w = longestWord(titleWords(t, i))
+		}
 		for _, row := range t.Rows {
 			w = max(w, textwidth.Of(cellText(row, i)))
 		}
@@ -111,9 +114,13 @@ func Layout(t Table, width int) (visible []int, hidden int) {
 
 // layoutWidths is Layout plus the final column widths, shrunk to fit beside the marker.
 func layoutWidths(t Table, width int) (visible []int, hidden int, widths []int) {
-	widths = naturalWidths(t)
-	visible, hidden = chooseColumns(t.Columns, minWidths(t.Columns, widths), width)
-	shrinkFlex(t.Columns, widths, visible, width-markerWidth(hidden))
+	return fit(t.Columns, naturalWidths(t), width)
+}
+
+// fit chooses the visible columns and shrinks the natural widths (modified in place) to fit width.
+func fit(cols []Column, widths []int, width int) (visible []int, hidden int, _ []int) {
+	visible, hidden = chooseColumns(cols, minWidths(cols, widths), width)
+	shrinkFlex(cols, widths, visible, width-markerWidth(hidden))
 	return visible, hidden, widths
 }
 
@@ -142,13 +149,21 @@ func chooseColumns(cols []Column, widths []int, width int) (visible []int, hidde
 }
 
 // shrinkFlex narrows flex columns, down to their MinWidth, until the line fits width.
+// Identity columns shrink only after every other flex column is at its MinWidth.
 func shrinkFlex(cols []Column, widths []int, visible []int, width int) {
-	deficit := totalWidth(widths, visible) - width
+	for _, identity := range []bool{false, true} {
+		deficit := totalWidth(widths, visible) - width
+		shrinkPass(cols, widths, visible, deficit, identity)
+	}
+}
+
+// shrinkPass narrows, left to right, the flex columns whose Identity flag equals identity.
+func shrinkPass(cols []Column, widths []int, visible []int, deficit int, identity bool) {
 	for _, i := range visible {
 		if deficit <= 0 {
 			return
 		}
-		if !cols[i].Flex || cols[i].Width > 0 {
+		if !cols[i].Flex || cols[i].Width > 0 || cols[i].Identity != identity {
 			continue
 		}
 		floor := max(cols[i].MinWidth, 1)

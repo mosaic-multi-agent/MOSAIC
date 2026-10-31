@@ -64,7 +64,7 @@ func (s *StatusScreen) View(width, height int) string {
 	s.width, s.height = width, height
 	body := s.body()
 	w := s.scroll.window(len(body), height)
-	spec := frameSpec{run: s.run, active: ScreenStatus, keys: statusKeys, screenKeys: []tuicommon.HelpEntry{sortKeyEntry}, escDesc: "back to the runs list",
+	spec := frameSpec{run: s.run, active: ScreenStatus, keys: statusKeys, legend: statusLegend(), screenKeys: []tuicommon.HelpEntry{sortKeyEntry}, escDesc: "back to the runs list",
 		hint: FormatScrollHint(w, len(body)), sort: s.sort.Label()}
 	return s.render(spec, body[w.Offset:w.End()], width, height, s.styles)
 }
@@ -77,16 +77,14 @@ func (s *StatusScreen) body() []string {
 		return []string{clip(st.Body, width, "No subagent invocations in this run.")}
 	}
 	order := s.sort.Active()
-	var out []string
+	var sections []tableSection
 	if len(bs.Run) > 0 {
-		out = append(out, clip(st.Subtitle, width, "Run"))
-		out = append(out, statusTableLines(bs.Run, order, width, st)...)
+		sections = append(sections, tableSection{"Run", statusTable(bs.Run, order, st)})
 	}
 	for _, t := range bs.ByAgentType {
-		out = append(out, clip(st.Subtitle, width, typeLabel(t.AgentType)))
-		out = append(out, statusTableLines(t.Groups, order, width, st)...)
+		sections = append(sections, tableSection{typeLabel(t.AgentType), statusTable(t.Groups, order, st)})
 	}
-	return out
+	return stackedTableLines(sections, width, st)
 }
 
 // statusKeys are the short help keys of the view.

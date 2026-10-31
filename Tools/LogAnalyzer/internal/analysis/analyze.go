@@ -44,6 +44,8 @@ func Price(agg domain.Aggregate, table domain.PricingTable, settings domain.Anal
 	for _, run := range agg.Runs {
 		rr := priceRunAggregate(run, table, settings)
 		findings = append(findings, compactionFindings(run.Run, rr.Context, run.Activity.Compactions)...)
+		// Compaction matching settles the marks in place; the actor figures read them after.
+		rr.ActorSessions = buildActorSessions(run, rr)
 		runReports = append(runReports, rr)
 		allRunMoneys = append(allRunMoneys, rr.Totals.Money)
 		allRunTokens = allRunTokens.Add(run.Totals())
@@ -238,7 +240,7 @@ func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable, setti
 	rr.Cache = buildRunCache(run, rr.Totals, table, settings)
 	rr.OrchestratorCache = buildOrchestratorCache(run, orchReport.Totals, table, settings)
 	rr.ByStatus = buildStatusBreakdown(dispatches, groups)
-	rr.Tools = buildToolsBreakdown(run, groups)
+	rr.Tools = buildToolsBreakdown(run, groups, rr.Context)
 	rr.Timeline = buildTimeline(run)
 	rr.WallTime = buildWallTime(run, settings, rr.Timeline.Axis, rr.Timeline.HasAxis)
 	return rr

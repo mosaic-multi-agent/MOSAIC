@@ -1,0 +1,68 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 2324,
+    "head_len": 2324,
+    "head_sha256": "8a5263355b4d047fd77d20beab357f56210433d17244ac49e3e6120f1cc29bee"
+  },
+  "placements": {},
+  "pending": [
+    {
+      "record": {
+        "record_id": "chat-sub-1",
+        "record_index": 0,
+        "model": "m-sub",
+        "provider": "github-copilot",
+        "token_usage": {
+          "input_tokens": 100,
+          "output_tokens": 10
+        },
+        "timestamp": "2026-10-28T09:00:00.000Z",
+        "requested_tools": {
+          "read_file": 2,
+          "grep_search": 1
+        }
+      },
+      "parent_span_id": "inv-sub",
+      "conversation_id": "vsc-session-6",
+      "chat_session_id": "toolu_L1",
+      "parent_chat_session_id": "vsc-session-6"
+    },
+    {
+      "record": {
+        "record_id": "chat-sub-2",
+        "record_index": 1112,
+        "model": "m-sub",
+        "provider": "github-copilot",
+        "token_usage": {
+          "input_tokens": 100,
+          "output_tokens": 10
+        },
+        "timestamp": "2026-10-28T09:00:00.000Z",
+        "requested_tools": {}
+      },
+      "parent_span_id": "inv-sub",
+      "conversation_id": "vsc-session-6",
+      "chat_session_id": "toolu_L1",
+      "parent_chat_session_id": "vsc-session-6"
+    },
+    {
+      "record": {
+        "record_id": "chat-sub-3",
+        "record_index": 1781,
+        "model": "m-sub",
+        "provider": "github-copilot",
+        "token_usage": {
+          "input_tokens": 100,
+          "output_tokens": 10
+        },
+        "timestamp": "2026-10-28T09:00:00.000Z"
+      },
+      "parent_span_id": "inv-sub",
+      "conversation_id": "vsc-session-6",
+      "chat_session_id": "toolu_L1",
+      "parent_chat_session_id": "vsc-session-6"
+    }
+  ],
+  "links": {}
+}

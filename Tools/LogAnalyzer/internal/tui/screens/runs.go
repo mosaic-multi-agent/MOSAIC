@@ -65,12 +65,12 @@ const (
 // narrow terminal: the run and its cost stay.
 func runsColumns() []table.Column {
 	return []table.Column{
-		rcMark:        {Title: "cmp"},
-		rcRun:         {Title: "run", Flex: true, MinWidth: 12},
+		rcMark:        {Title: "compare"},
+		rcRun:         {Title: "run", Flex: true, MinWidth: 16},
 		rcCost:        {Title: "cost", Align: table.AlignRight},
 		rcInvocations: {Title: "invocations", Align: table.AlignRight, Priority: 1},
 		rcDuration:    {Title: "duration", Align: table.AlignRight, Priority: 2},
-		rcMarkers:     {Title: "markers", Priority: 1},
+		rcMarkers:     {Title: "markers", Priority: 3},
 	}
 }
 
@@ -243,15 +243,16 @@ func (s *RunsScreen) View(width, height int) string {
 			rows[i] = runCells(st.Currency, run, s.marks.markerOf(run.Run.ID))
 		}
 		budget := PageBodyHeight(height) - len(head) - len(tail) - 1
-		w = ScrollWindow(s.offset, s.cursor, n, budget)
-		s.offset = w.Offset
-		t := table.Table{Columns: runsColumns(), Rows: rows, Cursor: s.cursor, Offset: w.Offset,
+		t := table.Table{Columns: runsColumns(), Rows: rows, Cursor: s.cursor,
 			SortColumn: runsSortColumn(order.Key), SortDesc: order.Desc}
+		w = ScrollWindow(s.offset, s.cursor, n, budget-extraHeaderLines(t, width))
+		s.offset = w.Offset
+		t.Offset = w.Offset
 		body = append(append(head, renderTableLines(t, width, w.Count, st)...), tail...)
 	}
 
 	page := Page{Title: runsTitle, Badges: s.badges(), Keys: runsKeys, Help: true, Hint: FormatScrollHint(w, n)}
-	return s.render(page, runsOverlayGroups(), body, width, height, st)
+	return s.render(page, withLegend(runsOverlayGroups(), runsLegend()...), body, width, height, st)
 }
 
 // badges are the page header badges: the count of named runs, the findings and

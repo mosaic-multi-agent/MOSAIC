@@ -1,0 +1,15 @@
+{
+  "description": "VS Code dialect. The run starts from a state file written before the GHCP CLI dialect was removed, holding three pending entries: two without chat_session_id (the shape the old code wrote for a CLI span) and one with chat_session_id (a VS Code span). An entry without chat_session_id is placed like any other: the one whose conversation is a logged session is placed on the orchestrator and written; the one whose conversation no logged session ties to the run is skipped, not counted as pending, and the next state write leaves it out. The VS Code entry is resolved by the invocation line of the ingest. state_version stays 1.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

@@ -151,7 +151,8 @@ func TestRunsScreen_ProvisionalLabel(t *testing.T) {
 
 	styles := plainStyles()
 	s := screens.NewRunsScreen(report, 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	if !strings.Contains(view, ProvisionalLabel) {
 		t.Errorf("runs screen view does not contain ProvisionalLabel %q", ProvisionalLabel)
@@ -183,7 +184,8 @@ func TestRunsScreen_UnattributableSection(t *testing.T) {
 
 	styles := plainStyles()
 	s := screens.NewRunsScreen(report, 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	if !strings.Contains(view, UnattributableLabel) {
 		t.Errorf("runs screen view does not contain UnattributableLabel %q", UnattributableLabel)
@@ -215,7 +217,8 @@ func TestRunsScreen_QualityFindingsVisible(t *testing.T) {
 
 	styles := plainStyles()
 	s := screens.NewRunsScreen(report, 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	if !strings.Contains(view, "finding") {
 		t.Errorf("runs screen view does not mention data-quality findings; got:\n%s", view)
@@ -248,7 +251,8 @@ func TestRunsScreen_AbsentCostShowsMarker(t *testing.T) {
 
 	styles := plainStyles()
 	s := screens.NewRunsScreen(report, 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	var absentRow string
 	for _, line := range strings.Split(view, "\n") {
@@ -363,7 +367,8 @@ func TestRunDetailScreen_OrchestratorLineIsDistinctFromAgentLines(t *testing.T) 
 
 	styles := plainStyles()
 	s := screens.NewRunDetailScreen(run, 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	var orchestratorRow, agentRow string
 	for _, line := range strings.Split(view, "\n") {
@@ -417,7 +422,8 @@ func TestRunDetailScreen_PerAgentTotalsAppear(t *testing.T) {
 
 	styles := plainStyles()
 	s := screens.NewRunDetailScreen(run, 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	for _, want := range []struct{ label, cost string }{{"Alpha#1", "$4.00"}, {"Beta#2", "$6.00"}} {
 		row := ""
@@ -448,7 +454,8 @@ func TestRunDetailScreen_UnpricedModelsListed(t *testing.T) {
 
 	styles := plainStyles()
 	s := screens.NewRunDetailScreen(run, 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	if !strings.Contains(view, "claude-mystery-model") {
 		t.Errorf("run-detail view does not list unpriced model 'claude-mystery-model'; got:\n%s", view)
@@ -473,7 +480,8 @@ func TestPricingScreen_ShowsAllModelsInReport(t *testing.T) {
 	}
 	styles := plainStyles()
 	s := screens.NewPricingScreen(models, "/config/pricing.yaml", 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	for _, m := range models {
 		if !strings.Contains(view, string(m.Model)) {
@@ -490,7 +498,8 @@ func TestPricingScreen_ShowsConfigFilePath(t *testing.T) {
 	configPath := "/home/user/.mosaic/MosaicLogAnalyzer/config/pricing.yaml"
 	styles := plainStyles()
 	s := screens.NewPricingScreen(models, configPath, 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	if !strings.Contains(view, configPath) {
 		t.Errorf("pricing screen view does not contain config path %q; got:\n%s", configPath, view)
@@ -502,7 +511,8 @@ func TestPricingScreen_ShowsConfigFilePath(t *testing.T) {
 func TestPricingScreen_EmptyModelListRendersWithoutPanic(t *testing.T) {
 	styles := plainStyles()
 	s := screens.NewPricingScreen(nil, "/config/pricing.yaml", 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	if view == "" {
 		t.Error("PricingScreen.View() returned empty string for nil model list")
@@ -526,7 +536,8 @@ func TestPricingScreen_DistinguishesPricedFromUnpriced(t *testing.T) {
 	}
 	styles := plainStyles()
 	s := screens.NewPricingScreen(models, "/config/pricing.yaml", 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	lines := strings.Split(view, "\n")
 
@@ -580,7 +591,8 @@ func TestPricingScreen_CursorMovement_SelectsCorrectModel(t *testing.T) {
 	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 
 	// Verify the rendered view highlights "model-third" (cursor at index 2).
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 	if !strings.Contains(view, "model-third") {
 		t.Errorf("after moving cursor to index 2, view does not contain 'model-third'; got:\n%s", view)
 	}
@@ -762,7 +774,8 @@ func TestRunsScreen_HelpAndView_AdvertiseSourceSwitchKey(t *testing.T) {
 	s := screens.NewRunsScreen(report, 100, 30, styles)
 
 	help := s.Help()
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	// Help() must advertise 's' as a standalone key binding.
 	// "s " (s followed by its description word) distinguishes the 's' key from
@@ -803,7 +816,8 @@ func TestRunsScreen_HelpBar_AdvertisesPricingUnconditionally(t *testing.T) {
 	s := screens.NewRunsScreen(report, 100, 30, styles)
 
 	help := s.Help()
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	// Help() must advertise 'p' as a standalone key binding.
 	// "p " (p followed by its description word) distinguishes the 'p' key from

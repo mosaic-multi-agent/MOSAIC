@@ -1,5 +1,5 @@
 {
-  "description": "A state with a version this implementation does not know is neither read nor written: no record is written, the state file stays byte-for-byte as it was, and the ingest reports unknown_state with the raw version text.",
+  "description": "VS Code dialect. A state with a version this implementation does not know is neither read nor written: no record is written, the state file stays byte-for-byte as it was, and the ingest reports unknown_state with the raw version text.",
   "run_id": "20261028T000000Z-0000",
   "steps": [
     {

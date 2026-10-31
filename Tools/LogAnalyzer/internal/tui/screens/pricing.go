@@ -159,13 +159,14 @@ func (s *PricingScreen) View(width, height int) string {
 		rows[i] = pricingCells(m)
 	}
 	budget := PageBodyHeight(height) - len(head) - len(tail) - 1
-	w := ScrollWindow(s.offset, s.cursor, len(rows), budget)
+	t := table.Table{Columns: pricingColumns(), Rows: rows, Cursor: s.cursor, SortColumn: table.NoSort}
+	w := ScrollWindow(s.offset, s.cursor, len(rows), budget-extraHeaderLines(t, width))
 	s.offset = w.Offset
-	t := table.Table{Columns: pricingColumns(), Rows: rows, Cursor: s.cursor, Offset: w.Offset, SortColumn: table.NoSort}
+	t.Offset = w.Offset
 	body := append(append(head, renderTableLines(t, width, w.Count, st)...), tail...)
 
 	page := Page{Title: pricingTitle, Keys: pricingKeys, Help: true, Hint: FormatScrollHint(w, len(rows))}
-	return s.render(page, pricingOverlayGroups(), body, width, height, st)
+	return s.render(page, withLegend(pricingOverlayGroups(), pricingLegend()...), body, width, height, st)
 }
 
 // Help returns the key hints for this screen.

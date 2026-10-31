@@ -1,9 +1,9 @@
 {
   "state_version": 1,
   "cursor": {
-    "offset": 653,
-    "head_len": 653,
-    "head_sha256": "3c71c432e5cd13c387e1fcd486a40ad9724c134b2e06ecdd0eed2a45174488a7"
+    "offset": 922,
+    "head_len": 922,
+    "head_sha256": "8ce08abf6340da23147e8d63335208532c210af5b6f6ac2a5dafdc67e453270a"
   },
   "placements": {
     "o1": "orchestrator"
@@ -22,7 +22,9 @@
         "timestamp": "2026-10-28T09:00:00.000Z"
       },
       "parent_span_id": "inv-sub",
-      "conversation_id": "cli-session-6"
+      "conversation_id": "vsc-session-6",
+      "chat_session_id": "toolu_L1",
+      "parent_chat_session_id": "vsc-session-6"
     }
   ],
   "links": {}

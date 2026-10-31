@@ -9,7 +9,7 @@ import re
 from collections import namedtuple
 
 from mosaic_logger_otel_keys import INVOCATION_STREAM, ORCHESTRATOR_STREAM
-from mosaic_logger_otel_parse import DIALECT_CLI, loads_strict
+from mosaic_logger_otel_parse import loads_strict
 
 ToolEvent = namedtuple("ToolEvent", "event call_id tool_name harness session_id")
 
@@ -28,7 +28,7 @@ class ToolStream:
     def first_start(self, tool):
         """The first start in the stream that belongs to the failed span, or None."""
         for start in self.starts:
-            if matches(tool.dialect, start.call_id, tool.call_id):
+            if matches(start.call_id, tool.call_id):
                 return start
         return None
 
@@ -85,9 +85,6 @@ def read_tool_stream(path):
     return stream
 
 
-def matches(dialect, start_call_id, span_call_id):
-    """Whether a logged start call id belongs to the span call id: verbatim for a GHCP CLI span, and
-    after removing the VS Code suffix for a VS Code span."""
-    if dialect == DIALECT_CLI:
-        return start_call_id == span_call_id
+def matches(start_call_id, span_call_id):
+    """Whether a logged start call id belongs to the span call id, after removing the VS Code suffix."""
     return _VSCODE_CALL_SUFFIX.sub("", start_call_id) == span_call_id

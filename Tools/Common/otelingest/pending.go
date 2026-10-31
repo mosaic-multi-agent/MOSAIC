@@ -4,15 +4,16 @@ import "encoding/json"
 
 // pendingRecord is the placement-independent part of a pending span as stored in the state.
 type pendingRecord struct {
-	RecordID    string      `json:"record_id"`
-	RecordIndex int64       `json:"record_index"`
-	Model       string      `json:"model,omitempty"`
-	Provider    string      `json:"provider"`
-	Effort      string      `json:"effort,omitempty"`
-	TokenUsage  *tokenUsage `json:"token_usage"`
-	Timestamp   string      `json:"timestamp,omitempty"`
-	CallLabel   string      `json:"call_label,omitempty"`
-	CallKind    string      `json:"call_kind,omitempty"`
+	RecordID       string      `json:"record_id"`
+	RecordIndex    int64       `json:"record_index"`
+	Model          string      `json:"model,omitempty"`
+	Provider       string      `json:"provider"`
+	Effort         string      `json:"effort,omitempty"`
+	TokenUsage     *tokenUsage `json:"token_usage"`
+	Timestamp      string      `json:"timestamp,omitempty"`
+	CallLabel      string      `json:"call_label,omitempty"`
+	CallKind       string      `json:"call_kind,omitempty"`
+	RequestedTools *toolCounts `json:"requested_tools,omitempty"`
 }
 
 // pendingSpan is the stored shape of a call waiting for the span it needs for attribution.
@@ -31,6 +32,7 @@ func (c *call) MarshalJSON() ([]byte, error) {
 			RecordID: c.RecordID, RecordIndex: c.RecordIndex, Model: c.Model,
 			Provider: providerName, Effort: c.Effort, TokenUsage: c.TokenUsage,
 			Timestamp: c.Timestamp, CallLabel: c.CallLabel, CallKind: c.CallKind,
+			RequestedTools: c.RequestedTools,
 		},
 		ParentSpanID:        c.ParentSpanID,
 		ConversationID:      c.ConversationID,
@@ -39,8 +41,7 @@ func (c *call) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// UnmarshalJSON reads a call from the pending-span shape. The dialect is not stored: only VS Code spans carry a
-// chat session id, and a pending call is placed through its parent span chain only in the GHCP CLI dialect.
+// UnmarshalJSON reads a call from the pending-span shape.
 func (c *call) UnmarshalJSON(data []byte) error {
 	var p pendingSpan
 	if err := json.Unmarshal(data, &p); err != nil {
@@ -50,12 +51,9 @@ func (c *call) UnmarshalJSON(data []byte) error {
 		RecordID: p.Record.RecordID, RecordIndex: p.Record.RecordIndex, Model: p.Record.Model,
 		Effort: p.Record.Effort, TokenUsage: p.Record.TokenUsage,
 		Timestamp: p.Record.Timestamp, CallLabel: p.Record.CallLabel, CallKind: p.Record.CallKind,
-		ParentSpanID: p.ParentSpanID, ConversationID: p.ConversationID,
+		RequestedTools: p.Record.RequestedTools,
+		ParentSpanID:   p.ParentSpanID, ConversationID: p.ConversationID,
 		ChatSessionID: p.ChatSessionID, ParentChatSessionID: p.ParentChatSessionID,
-		Dialect: dialectCLI,
-	}
-	if p.ChatSessionID != "" {
-		c.Dialect = dialectVSCode
 	}
 	return nil
 }

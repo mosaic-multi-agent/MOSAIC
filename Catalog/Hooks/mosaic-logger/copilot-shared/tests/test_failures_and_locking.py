@@ -97,9 +97,7 @@ def test_read_pending_status_never_raises():
 
 def test_pending_status_reports_pending_spans_of_a_known_state(tmp_path):
     run_dir, otel_path = make_run(tmp_path)
-    child = json.loads(chat_line("c1"))
-    child["parentSpanId"] = "parent-never-seen"
-    write_otel(otel_path, [json.dumps(child)])
+    write_otel(otel_path, [chat_line("c1", chat_session="session-never-seen")])
     run_ingest(run_dir, otel_path)
 
     status = otel.read_pending_status(str(run_dir))

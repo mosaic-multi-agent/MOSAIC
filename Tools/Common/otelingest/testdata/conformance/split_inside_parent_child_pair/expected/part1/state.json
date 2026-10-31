@@ -1,9 +1,9 @@
 {
   "state_version": 1,
   "cursor": {
-    "offset": 930,
-    "head_len": 930,
-    "head_sha256": "ff402a2d4a21ba8537dd4c137e39a44d8997d70a12f3faeeea387711bcbd9df5"
+    "offset": 1396,
+    "head_len": 1396,
+    "head_sha256": "a03cbcc2b3b298b022f5d1a08561e021bed3985047d9e43dac4822408d63c71e"
   },
   "placements": {
     "chat-orch": "orchestrator"
@@ -12,7 +12,7 @@
     {
       "record": {
         "record_id": "chat-sub-1",
-        "record_index": 319,
+        "record_index": 391,
         "model": "m-sub",
         "provider": "github-copilot",
         "token_usage": {
@@ -22,14 +22,18 @@
         "timestamp": "2026-10-28T09:00:00.000Z"
       },
       "parent_span_id": "inv-sub",
-      "conversation_id": "cli-session-6"
+      "conversation_id": "vsc-session-6",
+      "chat_session_id": "toolu_L1",
+      "parent_chat_session_id": "vsc-session-6"
     }
   ],
   "links": {
     "inv-sub": {
       "kind": "invoke_agent",
       "parent_span_id": "tool-task",
-      "conversation_id": "cli-session-6"
+      "conversation_id": "vsc-session-6",
+      "chat_session_id": "toolu_L1",
+      "parent_chat_session_id": "vsc-session-6"
     }
   }
 }

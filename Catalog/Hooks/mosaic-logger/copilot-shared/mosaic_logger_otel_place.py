@@ -5,7 +5,7 @@ Standard library only; deployed flat next to the adapter modules.
 """
 
 from mosaic_logger_otel_contract import Diagnostic
-from mosaic_logger_otel_parse import DIALECT_CLI, KIND_EXECUTE_TOOL
+from mosaic_logger_otel_parse import KIND_EXECUTE_TOOL
 
 DEST_ORCHESTRATOR = "orchestrator"
 DEST_UNATTRIBUTED = "unattributed"
@@ -40,8 +40,6 @@ class Resolver:
             return sole_invocation(spawn_ids), True
         conversation = keys.conversation(call)
         if conversation in keys.orch_sessions:
-            if call.dialect == DIALECT_CLI:
-                return self._place_cli(call)
             return self._owner(call.chat_session_id, 0)
         session_ids = keys.inv_by_session.get(conversation)
         if session_ids:
@@ -64,28 +62,6 @@ class Resolver:
             return self._owner(tool.get("chat_session_id", ""), depth + 1)
         return DEST_UNATTRIBUTED, True
 
-    def _place_cli(self, call):
-        """Follow the span parents of a GHCP CLI call: an invoke_agent without a parent is the
-        orchestrator's; one under an execute_tool task span belongs to the invocation whose
-        spawn_call_id is that tool call id."""
-        parent = call.parent_span_id
-        depth = 0
-        while True:
-            if parent == "":
-                return DEST_ORCHESTRATOR, True
-            link = self.links.get(parent)
-            if link is None:
-                return None, False
-            if depth > MAX_OWNER_DEPTH:
-                return DEST_UNATTRIBUTED, True
-            if link.get("kind") == KIND_EXECUTE_TOOL:
-                spawn_ids = self.keys.inv_by_spawn.get(link.get("tool_call_id", ""))
-                if spawn_ids:
-                    return sole_invocation(spawn_ids), True
-                return DEST_UNATTRIBUTED, True
-            parent = link.get("parent_span_id", "")
-            depth += 1
-
 
 def in_scope(scope, call):
     """Whether a final ingest with the given scope may finalise the call: an empty scope covers every
@@ -99,7 +75,6 @@ def place_calls(final, scope, state, resolver, writer, calls, result):
     """Place every call it can, in file order, and keep the rest pending. A call whose record_id was
     already placed is not written again. A final ingest sends pending calls of its scope to the
     unattributed stream."""
-    untied_calls = 0
     timed_out = 0
     pending = []
     keys = resolver.keys
@@ -107,8 +82,6 @@ def place_calls(final, scope, state, resolver, writer, calls, result):
         if call.record_id in state.placements:
             continue
         if not keys.tied(call.conversation_id, call.chat_session_id, call.parent_chat_session_id):
-            if call.dialect == DIALECT_CLI and call.conversation_id:
-                untied_calls += 1
             continue
         dest, ok = resolver.place(call)
         finalized = False
@@ -128,21 +101,16 @@ def place_calls(final, scope, state, resolver, writer, calls, result):
             result.finalized += 1
     state.pending = pending
     result.pending = len(pending)
-    result.diagnostics.extend(placement_diagnostics(keys, untied_calls, result.finalized))
+    result.diagnostics.extend(placement_diagnostics(result.finalized))
     if timed_out > 0:
         result.diagnostics.append(Diagnostic(
             "append_timed_out", "lines not written because the append lock wait limit was reached",
             counts={"lines": timed_out}))
 
 
-def placement_diagnostics(keys, untied_calls, finalized):
-    """Usage the ingest could not tie to the run and pending calls it finalised."""
+def placement_diagnostics(finalized):
+    """The pending calls a final ingest placed on the unattributed stream."""
     out = []
-    if untied_calls > 0:
-        out.append(Diagnostic(
-            "conversation_not_tied",
-            "usage of a GHCP CLI conversation that no logged session id ties to the run was not ingested",
-            counts={"usage_spans": untied_calls}, ids=keys.session_ids()))
     if finalized > 0:
         out.append(Diagnostic("pending_finalized", "pending spans were placed on the unattributed stream",
                               counts={"records": finalized}))

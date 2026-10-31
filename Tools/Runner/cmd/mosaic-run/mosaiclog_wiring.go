@@ -30,8 +30,12 @@ type runLogConfig struct {
 	HarnessID string             // selected harness id
 	Debug     domain.DebugLogger // where swallowed write failures are recorded
 	Clock     domain.Clock       // timestamp source
+}
 
-	UsageIngest *usageIngestConfig // nil = no usage session wrapper
+// newRunLogConfig builds the runLogConfig that both production call sites
+// (main.go and wiring_stub.go) pass to newRunLifecycleSession.
+func newRunLogConfig(runFolder, harnessID string, logger domain.DebugLogger, clock domain.Clock) runLogConfig {
+	return runLogConfig{RunFolder: runFolder, HarnessID: harnessID, Debug: logger, Clock: clock}
 }
 
 // runIDReporter is the narrow assertion target for the run id an adapter was bound to.
@@ -75,11 +79,7 @@ func (s *runLifecycleSession) Start(ctx context.Context, cfg domain.RunConfig) (
 		mosaiclog.WithClock(s.cfg.Clock), mosaiclog.WithDebugLogger(s.cfg.Debug))
 
 	w.RunStart(runID, root)
-	inner := s.inner
-	if s.cfg.UsageIngest != nil {
-		inner = newRunUsageSession(inner, s.cfg.UsageIngest)
-	}
-	out, err := inner.Start(ctx, cfg)
+	out, err := s.inner.Start(ctx, cfg)
 	w.RunEnd(runID, mosaiclog.OutcomeForRun(out, err, ctx.Err()))
 	return out, err
 }

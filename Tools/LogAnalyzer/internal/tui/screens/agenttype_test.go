@@ -89,10 +89,10 @@ func TestAgentTypes_LabelsMissingUsageAndOpenInvocations(t *testing.T) {
 }
 
 func TestAgentTypes_ShortTerminalScrollsAndShowsHint(t *testing.T) {
-	s := screens.NewAgentTypesScreen(manyTypesRun(25), wideW, shortH, plain())
+	s := screens.NewAgentTypesScreen(manyTypesRun(25), wideW, shortTableH, plain())
 
-	first := s.View(wideW, shortH)
-	assertFits(t, first, shortH)
+	first := s.View(wideW, shortTableH)
+	assertFits(t, first, shortTableH)
 	assertContains(t, first, "type-01")
 	assertNotContains(t, first, "type-25")
 	if !scrollHintRE.MatchString(first) {
@@ -101,8 +101,8 @@ func TestAgentTypes_ShortTerminalScrollsAndShowsHint(t *testing.T) {
 
 	var cur screens.Screen = s
 	cur = press(cur, repeat("down", 30)...)
-	last := cur.View(wideW, shortH)
-	assertFits(t, last, shortH)
+	last := cur.View(wideW, shortTableH)
+	assertFits(t, last, shortTableH)
 	assertContains(t, last, "type-25")
 	assertNotContains(t, last, "type-01")
 }

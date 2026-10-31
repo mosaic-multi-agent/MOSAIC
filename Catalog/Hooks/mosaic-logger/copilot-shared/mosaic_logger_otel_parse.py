@@ -1,4 +1,4 @@
-"""Dialect reading and conversion of one OTel line into a link or a call.
+"""Reading and conversion of one OTel line into a link or a call.
 
 This module mirrors Tools/Common/otelingest/ (span.go, convert.go and the call shape of attribute.go).
 Standard library only; deployed flat next to the adapter modules.
@@ -12,8 +12,6 @@ from collections import namedtuple
 from mosaic_logger_otel_contract import PROVIDER_NAME, format_time
 
 USAGE_MARKER = b'"gen_ai.operation.name"'
-DIALECT_CLI = "cli"
-DIALECT_VSCODE = "vscode"
 KIND_INVOKE_AGENT = "invoke_agent"
 KIND_EXECUTE_TOOL = "execute_tool"
 SPAWN_TOOL_NAMES = {"task", "runSubagent", "execution_subagent"}
@@ -33,10 +31,9 @@ _MALFORMED = ParsedLine(True, "", None, None)
 class Call:
     """One API call (a per-call chat span with usage) waiting for placement."""
 
-    def __init__(self, record_id, record_index, dialect, token_usage):
+    def __init__(self, record_id, record_index, token_usage):
         self.record_id = record_id
         self.record_index = record_index
-        self.dialect = dialect
         self.token_usage = token_usage
         self.parent_span_id = ""
         self.conversation_id = ""
@@ -47,6 +44,7 @@ class Call:
         self.timestamp = ""
         self.call_label = ""
         self.call_kind = ""
+        self.requested_tools = None  # {tool name: count}; None when not provided
 
     def to_pending(self):
         """The pending-span shape stored in the state."""
@@ -60,6 +58,8 @@ class Call:
         for key in ("timestamp", "call_label", "call_kind"):
             if getattr(self, key):
                 record[key] = getattr(self, key)
+        if self.requested_tools is not None:
+            record["requested_tools"] = self.requested_tools
         out = {"record": record}
         for key in ("parent_span_id", "conversation_id", "chat_session_id", "parent_chat_session_id"):
             if getattr(self, key):
@@ -112,13 +112,14 @@ def call_from_pending(data):
         raise ValueError("record_index is not an integer")
     usage = _usage_from_state(record.get("token_usage"))
     chat_session = optional_string(data, "chat_session_id")
-    call = Call(optional_string(record, "record_id"), index,
-                DIALECT_VSCODE if chat_session else DIALECT_CLI, usage)
+    call = Call(optional_string(record, "record_id"), index, usage)
     call.model = optional_string(record, "model")
     call.effort = optional_string(record, "effort")
     call.timestamp = optional_string(record, "timestamp")
     call.call_label = optional_string(record, "call_label")
     call.call_kind = optional_string(record, "call_kind")
+    tools = record.get("requested_tools")
+    call.requested_tools = tools if isinstance(tools, dict) else None
     call.parent_span_id = optional_string(data, "parent_span_id")
     call.conversation_id = optional_string(data, "conversation_id")
     call.chat_session_id = chat_session
@@ -174,11 +175,9 @@ def parse_line(line, offset):
         return _MALFORMED
     if not isinstance(obj, dict):
         return _MALFORMED
-    dialect = DIALECT_VSCODE
+    # A line with a "type" member is a wrapped object of the removed GHCP CLI shape: consumed without effect.
     if isinstance(obj.get("type"), str):
-        if obj["type"] != "span":
-            return _NOTHING
-        dialect = DIALECT_CLI
+        return _NOTHING
     span_id = string_value(obj.get("spanId"))
     attrs = obj.get("attributes")
     if span_id == "" or not isinstance(attrs, dict):
@@ -192,7 +191,7 @@ def parse_line(line, offset):
               string_value(attrs.get("copilot_chat.parent_chat_session_id")))
     operation = string_value(attrs.get("gen_ai.operation.name"))
     if operation == "chat":
-        call = convert_chat(attrs, dialect)
+        call = convert_chat(attrs)
         if call is None:
             return _NOTHING
         call.record_id, call.record_index = span_id, offset
@@ -204,7 +203,7 @@ def parse_line(line, offset):
         return ParsedLine(False, span_id, make_link(KIND_INVOKE_AGENT, fields), None)
     if operation == KIND_EXECUTE_TOOL:
         name = string_value(attrs.get("gen_ai.tool.name"))
-        tool = failed_tool_of(obj, attrs, dialect)
+        tool = failed_tool_of(obj, attrs)
         if name in SPAWN_TOOL_NAMES:
             link = make_link(KIND_EXECUTE_TOOL, fields,
                              string_value(attrs.get("gen_ai.tool.call.id")), name)
@@ -216,15 +215,14 @@ def parse_line(line, offset):
 class FailedTool:
     """A failed execute_tool span with a call id: the facts the end of its tool call is written from."""
 
-    def __init__(self, dialect, call_id, tool_name, message, end_time):
-        self.dialect = dialect
+    def __init__(self, call_id, tool_name, message, end_time):
         self.call_id = call_id
         self.tool_name = tool_name
         self.message = message
         self.end_time = end_time  # formatted span end time; "" when the span has no usable endTime
 
 
-def failed_tool_of(obj, attrs, dialect):
+def failed_tool_of(obj, attrs):
     """The failed tool call a span describes, or None when the span did not fail or has no call
     id. Content attributes (arguments, results) are never read."""
     status = obj.get("status")
@@ -235,25 +233,56 @@ def failed_tool_of(obj, attrs, dialect):
     call_id = string_value(attrs.get("gen_ai.tool.call.id"))
     if call_id == "":
         return None
-    return FailedTool(dialect, call_id, string_value(attrs.get("gen_ai.tool.name")),
+    return FailedTool(call_id, string_value(attrs.get("gen_ai.tool.name")),
                       string_value(status.get("message")), start_timestamp(obj.get("endTime")))
 
 
-def convert_chat(attrs, dialect):
+def convert_chat(attrs):
     """Map the usage, model and effort attributes of a chat span; None when it carries no usage."""
     usage = convert_tokens(attrs)
     if usage is None:
         return None
-    call = Call("", 0, dialect, usage)
+    call = Call("", 0, usage)
     call.model = (string_value(attrs.get("gen_ai.response.model"))
                   or string_value(attrs.get("gen_ai.request.model")))
-    if dialect == DIALECT_CLI:
-        call.effort = string_value(attrs.get("gen_ai.request.reasoning.level"))
-    else:
-        call.effort = vscode_effort(string_value(attrs.get("copilot_chat.request.options")))
-        call.call_label = string_value(attrs.get("gen_ai.agent.name"))
-        call.call_kind = call_kind_of(call.call_label)
+    call.effort = vscode_effort(string_value(attrs.get("copilot_chat.request.options")))
+    call.call_label = string_value(attrs.get("gen_ai.agent.name"))
+    call.call_kind = call_kind_of(call.call_label)
+    call.requested_tools = requested_tools(attrs)
     return call
+
+
+def _reject_constant(token):
+    """Refuse NaN/Infinity literals, which strict JSON (and the Go ingest) reject."""
+    raise ValueError(token)
+
+
+def requested_tools(attrs):
+    """Count the tool_call parts of gen_ai.output.messages by tool name; only names are kept.
+
+    None when the attribute is missing or unreadable (field absent); {} when it holds no tool calls.
+    """
+    raw = attrs.get("gen_ai.output.messages")
+    if not isinstance(raw, str):
+        return None
+    try:
+        messages = json.loads(raw, parse_constant=_reject_constant)
+    except (ValueError, RecursionError):
+        return None
+    if not isinstance(messages, list):
+        return None
+    counts = {}
+    for message in messages:
+        parts = message.get("parts") if isinstance(message, dict) else None
+        if not isinstance(parts, list):
+            continue
+        for part in parts:
+            if not isinstance(part, dict) or part.get("type") != "tool_call":
+                continue
+            name = part.get("name")
+            if isinstance(name, str) and name:
+                counts[name] = counts.get(name, 0) + 1
+    return counts
 
 
 _RETRY_PREFIX = re.compile(r"^retry-[A-Za-z]+-")

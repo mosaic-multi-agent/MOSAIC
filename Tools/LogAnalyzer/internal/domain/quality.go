@@ -82,6 +82,9 @@ var dataLossKinds = map[FindingKind]bool{
 	// Digest files skipped at load time.
 	FindingInvalidDigest:            true,
 	FindingUnsupportedDigestVersion: true,
+
+	// An adapter reported a transcript with assistant turns and no readable usage.
+	FindingTranscriptFormatChanged: true,
 }
 
 // Incomplete reports whether the data behind the report is known to be partial.

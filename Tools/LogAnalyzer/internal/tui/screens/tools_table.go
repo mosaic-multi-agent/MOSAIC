@@ -23,6 +23,12 @@ const (
 	tlMin
 	tlMax
 	tlUnpaired
+	tlGrowthAverage
+	tlGrowthMin
+	tlGrowthMax
+	tlGrowthSamples
+	tlGrowthNegative
+	tlGrowthNotMeasurable
 	tlShare
 	tlCount
 )
@@ -35,10 +41,11 @@ func toolsColumns() []table.Column {
 	cols[tlName] = table.Column{Title: "tool", Flex: true, MinWidth: 10}
 	cols[tlCalls] = table.Column{Title: "calls", Align: right}
 	cols[tlErrors] = table.Column{Title: "errors", Align: right}
-	cols[tlAverage] = table.Column{Title: "avg", Align: right, Priority: 2}
-	cols[tlMin] = table.Column{Title: "min", Align: right, Priority: 3}
-	cols[tlMax] = table.Column{Title: "max", Align: right, Priority: 3}
+	cols[tlAverage] = table.Column{Title: "average duration", Align: right, Priority: 2}
+	cols[tlMin] = table.Column{Title: "minimum duration", Align: right, Priority: 3}
+	cols[tlMax] = table.Column{Title: "maximum duration", Align: right, Priority: 3}
 	cols[tlUnpaired] = table.Column{Title: "unpaired", Priority: 1}
+	cols[tlGrowthAverage], cols[tlGrowthMin], cols[tlGrowthMax], cols[tlGrowthSamples], cols[tlGrowthNegative], cols[tlGrowthNotMeasurable] = growthColumns()
 	cols[tlShare] = shareBarColumn(4)
 	return cols
 }
@@ -121,6 +128,7 @@ func toolCells(t domain.ToolFigures, tools []domain.ToolFigures, o SortOrder, na
 	if t.Unpaired > 0 {
 		cells[tlUnpaired] = warningCell(fmt.Sprintf("%d %s", t.Unpaired, UnpairedLabel))
 	}
+	growthCells(t.Growth, cells)
 	part, whole := toolShare(t, tools, o)
 	role := tuicommon.RoleDataTool
 	if o.Key == SortDuration {
@@ -130,17 +138,20 @@ func toolCells(t domain.ToolFigures, tools []domain.ToolFigures, o SortOrder, na
 	return cells
 }
 
-// toolsTableLines draws the tools as a table in the order of the sort; cursor is
-// the selected row, or table.NoCursor for a table without a selection.
-func toolsTableLines(tools []domain.ToolFigures, o SortOrder, cursor, width int, st Styles) []string {
+// toolsTable is the tools as a table in the order of the sort; cursor is the
+// selected row, or table.NoCursor for a table without a selection. No tools give
+// a table without columns.
+func toolsTable(tools []domain.ToolFigures, o SortOrder, cursor, width int, st Styles) table.Table {
+	if len(tools) == 0 {
+		return table.Table{}
+	}
 	var rows [][]table.Cell
 	for _, i := range toolOrder(tools, o) {
 		rows = append(rows, toolCells(tools[i], tools, o, toolNameWidth(width), st.Theme))
 	}
-	t := table.Table{
+	return table.Table{
 		Columns: toolsColumns(), Rows: rows, Cursor: cursor, SortColumn: toolsSortColumn(o.Key), SortDesc: o.Desc,
 	}
-	return renderTableLines(t, width, len(rows), st)
 }
 
 // toolNameWidth is the widest a tool name is drawn at the terminal width. Long

@@ -157,17 +157,18 @@ func encodeUsages(usages []domain.InvocationUsage) []usageDoc {
 	var docs []usageDoc
 	for _, u := range usages {
 		docs = append(docs, usageDoc{
-			RecordID:    u.RecordID,
-			At:          formatTime(u.At),
-			Model:       string(u.Model),
-			Provider:    string(u.Provider),
-			Effort:      u.Effort,
-			ServiceTier: u.ServiceTier,
-			Harness:     string(u.Harness),
-			CallKind:    encodeCallKind(u.Kind),
-			CallLabel:   u.Label,
-			SessionID:   u.SessionID,
-			Tokens:      encodeTokens(u.Usage),
+			RecordID:       u.RecordID,
+			At:             formatTime(u.At),
+			Model:          string(u.Model),
+			Provider:       string(u.Provider),
+			Effort:         u.Effort,
+			ServiceTier:    u.ServiceTier,
+			Harness:        string(u.Harness),
+			CallKind:       encodeCallKind(u.Kind),
+			CallLabel:      u.Label,
+			SessionID:      u.SessionID,
+			Tokens:         encodeTokens(u.Usage),
+			RequestedTools: encodeRequestedTools(u.RequestedTools),
 		})
 	}
 	return docs
@@ -253,4 +254,16 @@ func encodeCallKind(k domain.CallKind) string {
 		return string(k)
 	}
 	return ""
+}
+
+// encodeRequestedTools returns nil when the value is not provided, so the key is omitted.
+func encodeRequestedTools(r domain.RequestedTools) json.RawMessage {
+	if !r.IsProvided() {
+		return nil
+	}
+	raw, err := json.Marshal(r)
+	if err != nil {
+		return nil
+	}
+	return raw
 }

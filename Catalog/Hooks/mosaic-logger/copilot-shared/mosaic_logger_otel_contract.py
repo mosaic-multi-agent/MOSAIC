@@ -12,7 +12,7 @@ STATE_VERSION = 1
 LOCK_STALE_AFTER_SECONDS = 600
 DEFAULT_BUDGET_SECONDS = 5.0
 STATE_DIR_NAME = ".otel-ingest"
-RECORD_SCHEMA_VERSION = "1.6.0"
+RECORD_SCHEMA_VERSION = "1.7.0"
 PROVIDER_NAME = "github-copilot"
 
 _TIME_PATTERN = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$")

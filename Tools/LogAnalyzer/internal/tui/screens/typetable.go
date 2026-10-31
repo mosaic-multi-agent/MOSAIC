@@ -1,6 +1,8 @@
 package screens
 
 import (
+	"strings"
+
 	tuicommon "mosaic-common/tui"
 	"mosaic-common/tui/kit/table"
 
@@ -46,12 +48,12 @@ func typeColumns() []table.Column {
 	cols[tcInvocations] = table.Column{Title: "invocations", Align: right}
 	cols[tcTotal] = table.Column{Title: "total", Align: right}
 	cols[tcAverage] = table.Column{Title: "average", Align: right, Priority: 1}
-	cols[tcMin] = table.Column{Title: "min", Align: right, Priority: 3}
-	cols[tcMax] = table.Column{Title: "max", Align: right, Priority: 3}
+	cols[tcMin] = table.Column{Title: "minimum", Align: right, Priority: 3}
+	cols[tcMax] = table.Column{Title: "maximum", Align: right, Priority: 3}
 	cols[tcShare] = shareBarColumn(5)
 	cols[tcFlags] = table.Column{Title: "flags", Priority: 1}
-	cols[tcAvgPeak] = table.Column{Title: "avg peak", Align: right, Priority: 2}
-	cols[tcMaxPeak] = table.Column{Title: "max peak", Align: right, Priority: 2}
+	cols[tcAvgPeak] = table.Column{Title: "average peak context", Align: right, Priority: 2}
+	cols[tcMaxPeak] = table.Column{Title: "maximum peak context", Align: right, Priority: 2}
 	cols[tcHit] = table.Column{Title: "cache hit", Align: right, Priority: 4}
 	cols[tcRewrites] = table.Column{Title: "rewrites", Align: right, Priority: 4}
 	cols[tcWrite] = table.Column{Title: "cache write", Align: right, Priority: 4}
@@ -151,27 +153,36 @@ func unattributedCells(cur domain.CurrencyCode, u domain.ActorReport, runCost do
 }
 
 // typeTableLines draws the type rows, then the unattributed row when there is one,
-// into lines. The window follows the cursor within rowBudget rows of types.
+// into lines. The window follows the cursor within rowBudget rows of types. The
+// column layout is that of the whole table, so the header keeps its height as the
+// window scrolls.
 func typeTableLines(run domain.RunReport, order []int, cursor int, offset *int, o SortOrder, width, rowBudget int, st Styles) ([]string, Window) {
+	cells := make([][]table.Cell, len(run.ByAgentType))
+	for _, i := range order {
+		cells[i] = typeCells(st.Currency, run.ByAgentType[i], run.Totals.Money.Total, st.Theme)
+	}
+	var tail [][]table.Cell
+	if u := run.Unattributed; u != nil {
+		tail = append(tail, unattributedCells(st.Currency, *u, run.Totals.Money.Total, st.Theme))
+	}
+	whole := table.Table{Columns: typeColumns(), SortColumn: typeSortColumn(o.Key), SortDesc: o.Desc, WrapTitles: true}
+	for _, i := range order {
+		whole.Rows = append(whole.Rows, cells[i])
+	}
+	whole.Rows = append(whole.Rows, tail...)
+	layout := table.NewSharedLayout([]table.Table{whole}, width)
+
+	w := ScrollWindow(*offset, cursor, len(order), rowBudget-(layout.HeaderHeight()-1))
+	*offset = w.Offset
 	// Only the visible types are handed to the table, so its own offset stays 0 and
 	// the cursor is relative to the window.
-	w := ScrollWindow(*offset, cursor, len(order), rowBudget)
-	*offset = w.Offset
-	var rows [][]table.Cell
-	for _, i := range order[w.Offset:w.End()] {
-		rows = append(rows, typeCells(st.Currency, run.ByAgentType[i], run.Totals.Money.Total, st.Theme))
-	}
-	if u := run.Unattributed; u != nil {
-		rows = append(rows, unattributedCells(st.Currency, *u, run.Totals.Money.Total, st.Theme))
-	}
-	rowCursor := cursor - w.Offset
+	t := whole
+	t.Rows = append(append([][]table.Cell{}, whole.Rows[w.Offset:w.End()]...), tail...)
+	t.Cursor = cursor - w.Offset
 	if len(order) == 0 {
-		rowCursor = table.NoCursor
+		t.Cursor = table.NoCursor
 	}
-	t := table.Table{
-		Columns: typeColumns(), Rows: rows, Cursor: rowCursor, SortColumn: typeSortColumn(o.Key), SortDesc: o.Desc,
-	}
-	return renderTableLines(t, width, len(rows), st), w
+	return strings.Split(layout.Render(t, layout.HeaderHeight()+len(t.Rows), st.Theme), "\n"), w
 }
 
 // UnattributedRowLabel titles the type table row of the run's unattributed usage.

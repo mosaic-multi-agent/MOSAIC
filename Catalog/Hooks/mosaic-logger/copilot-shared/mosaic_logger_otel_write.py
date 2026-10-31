@@ -65,6 +65,9 @@ class Writer:
         for key in ("call_label", "call_kind"):
             if getattr(call, key, ""):
                 record[key] = getattr(call, key)
+        tools = getattr(call, "requested_tools", None)
+        if tools is not None:
+            record["requested_tools"] = dict(sorted(tools.items()))
         line = json.dumps(record, separators=(",", ":")).encode("ascii") + b"\n"
         return append_line(path, line)
 

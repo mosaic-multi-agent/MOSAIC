@@ -43,16 +43,12 @@ func plotCells(a Axis, lane Lane, shades []Shade, plotWidth int, theme tui.Theme
 	if _, ok := a.Column(a.Start, plotWidth); !ok {
 		return spaces(plotWidth)
 	}
-	shade, bar, open := "░", "█", ">"
+	bar, open := "█", ">"
 	if tui.CurrentRenderMode().Glyphs == tui.GlyphASCII {
-		shade, bar = ".", "="
+		bar = "="
 	}
-	shadeCells := make([]cell, plotWidth)
-	for _, s := range shades {
-		if first, last, ok := a.coverage(s.Start, s.End, plotWidth); ok {
-			fill(shadeCells, first, last, cell{glyph: shade, role: s.Role, set: true})
-		}
-	}
+	shadeCells := shadeLayer(a, shades, plotWidth)
+	laneShadeCells := shadeLayer(a, lane.Shades, plotWidth)
 	barCells := make([]cell, plotWidth)
 	for _, iv := range lane.Intervals {
 		if iv.Open {
@@ -79,9 +75,14 @@ func plotCells(a Axis, lane Lane, shades []Shade, plotWidth int, theme tui.Theme
 			pointCells[col] = cell{glyph: chart.MarkerGlyph(p.Kind), role: p.Role, set: true, kind: int(p.Kind)}
 		}
 	}
+	markerCells := markerLayer(a, plotWidth)
 	var b strings.Builder
 	for i := 0; i < plotWidth; i++ {
-		switch c := pickCell(pointCells[i], barCells[i], shadeCells[i]); {
+		c := pickCell(pointCells[i], laneShadeCells[i], barCells[i], shadeCells[i])
+		if markerCells != nil && markerCells[i].set {
+			c = markerCells[i]
+		}
+		switch {
 		case c.set:
 			b.WriteString(paint(theme, c.role, c.glyph))
 		default:
@@ -91,11 +92,43 @@ func plotCells(a Axis, lane Lane, shades []Shade, plotWidth int, theme tui.Theme
 	return b.String()
 }
 
-// pickCell returns the topmost set cell of point, interval and shade layers.
-func pickCell(point, bar, shade cell) cell {
+// shadeLayer draws shades into one layer of plotWidth cells; later shades win.
+func shadeLayer(a Axis, shades []Shade, plotWidth int) []cell {
+	cells := make([]cell, plotWidth)
+	for _, s := range shades {
+		if first, last, ok := a.coverage(s.Start, s.End, plotWidth); ok {
+			fill(cells, first, last, cell{glyph: shadeGlyph(s), role: s.Role, set: true})
+		}
+	}
+	return cells
+}
+
+// shadeGlyph is the text of one shaded cell in the current render mode.
+func shadeGlyph(s Shade) string {
+	ascii := tui.CurrentRenderMode().Glyphs == tui.GlyphASCII
+	if !s.Flat {
+		if ascii {
+			return "."
+		}
+		return "░"
+	}
+	// A flat shade is a coloured blank; without colour it falls back to its plain character.
+	if ascii || !tui.CurrentRenderMode().Color {
+		if s.ASCII == 0 {
+			return "."
+		}
+		return string(rune(s.ASCII))
+	}
+	return " "
+}
+
+// pickCell returns the topmost set cell of the point, lane shade, interval and shade layers.
+func pickCell(point, laneShade, bar, shade cell) cell {
 	switch {
 	case point.set:
 		return point
+	case laneShade.set:
+		return laneShade
 	case bar.set:
 		return bar
 	}

@@ -56,9 +56,6 @@ class RunKeys:
         return (self.known(conversation) or self.known(parent_chat_session)
                 or (bool(chat_session) and bool(self.inv_by_spawn.get(chat_session))))
 
-    def session_ids(self):
-        return sorted(self.orch_sessions | set(self.inv_by_session))
-
 
 def each_log_event(path):
     """Parsable events of a JSONL log, skipping OTel-sourced usage records so the ingest never

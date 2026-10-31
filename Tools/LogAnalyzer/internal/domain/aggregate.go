@@ -21,6 +21,8 @@ type InvocationUsage struct {
 	Kind      CallKind // CallMain for every non-usage_record source
 	Label     string
 	SessionID string // envelope session_id; "" when absent
+
+	RequestedTools RequestedTools // usage_record only; zero = not provided
 }
 
 // ActorAggregate holds one actor's invocation records within one run.

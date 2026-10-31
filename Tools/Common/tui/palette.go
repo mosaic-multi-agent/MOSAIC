@@ -19,6 +19,10 @@ const (
 	RoleDataLead   StyleRole = "data-lead"  // the coordinating actor
 	RoleDataTool   StyleRole = "data-tool"
 	RoleDataModel  StyleRole = "data-model"
+
+	// quiet background roles for flat shades (the style sets a background, not a foreground)
+	RoleShadeNeutral StyleRole = "shade-neutral"
+	RoleShadeCool    StyleRole = "shade-cool"
 )
 
 // paletteColours maps each new role to a colour chosen for dark backgrounds.
@@ -37,12 +41,21 @@ var paletteColours = map[StyleRole]string{
 	RoleDataModel:  "#d19a66",
 }
 
+// paletteBackgrounds maps each background role to a quiet colour for dark backgrounds.
+var paletteBackgrounds = map[StyleRole]string{
+	RoleShadeNeutral: "#3a3a3a",
+	RoleShadeCool:    "#26384f",
+}
+
 // PaletteTheme returns DefaultTheme()'s roles with unchanged values plus every role above.
 // DefaultTheme() itself is unchanged.
 func PaletteTheme() Theme {
 	theme := DefaultTheme()
 	for role, code := range paletteColours {
 		theme.Styles[role] = lipgloss.NewStyle().Foreground(lipgloss.Color(code))
+	}
+	for role, code := range paletteBackgrounds {
+		theme.Styles[role] = lipgloss.NewStyle().Background(lipgloss.Color(code))
 	}
 	return theme
 }

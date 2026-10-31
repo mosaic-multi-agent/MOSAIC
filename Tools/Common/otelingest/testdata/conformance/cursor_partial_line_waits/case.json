@@ -1,5 +1,5 @@
 {
-  "description": "Only complete lines are consumed: a trailing partial line is neither read nor counted and the cursor stays before it; once the harness finishes the line, the next ingest reads it. The state head covers the whole file including the partial tail.",
+  "description": "VS Code dialect. Only complete lines are consumed: a trailing partial line is neither read nor counted and the cursor stays before it; once the harness finishes the line, the next ingest reads it. The state head covers the whole file including the partial tail.",
   "run_id": "20261028T000000Z-0000",
   "steps": [
     {

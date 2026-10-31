@@ -1,0 +1,32 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 3878,
+    "head_len": 3878,
+    "head_sha256": "d822c9ff0b1ed8c8fcc1f1af6241098fddafb3b1933e415fbca5ec2eead4431d"
+  },
+  "placements": {
+    "chat-sub-1": "invocation/Implementation#1",
+    "chat-sub-2": "invocation/Implementation#1",
+    "chat-sub-3": "invocation/Implementation#1",
+    "chat-orch": "orchestrator"
+  },
+  "pending": [],
+  "links": {
+    "inv-sub": {
+      "kind": "invoke_agent",
+      "parent_span_id": "tool-task",
+      "conversation_id": "vsc-session-6",
+      "chat_session_id": "toolu_L1",
+      "parent_chat_session_id": "vsc-session-6"
+    },
+    "tool-task": {
+      "kind": "execute_tool",
+      "conversation_id": "vsc-session-6",
+      "chat_session_id": "toolu_A",
+      "parent_chat_session_id": "vsc-session-6",
+      "tool_call_id": "toolu_L1",
+      "tool_name": "execution_subagent"
+    }
+  }
+}

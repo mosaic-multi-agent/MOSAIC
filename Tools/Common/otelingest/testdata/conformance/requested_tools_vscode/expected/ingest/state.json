@@ -1,0 +1,17 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 3270,
+    "head_len": 3270,
+    "head_sha256": "4910917df92b2996f0a619d5df2ea7af8d3036f30ba047a3b2ee0220d35c7249"
+  },
+  "placements": {
+    "rt-1": "orchestrator",
+    "rt-2": "orchestrator",
+    "rt-3": "orchestrator",
+    "rt-4": "orchestrator",
+    "rt-5": "orchestrator"
+  },
+  "pending": [],
+  "links": {}
+}

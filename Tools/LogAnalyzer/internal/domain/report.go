@@ -58,7 +58,11 @@ type RunReport struct {
 	// OrchestratorCache is the orchestrator's own cache figures (its usage records
 	// only). Not part of the JSON report.
 	OrchestratorCache CacheFigures
-	WallTime    WallTimeSplit    // wall-time split over the run's logged span
+	WallTime          WallTimeSplit // wall-time split over the run's logged span
+
+	// ActorSessions are the Session screen figures: orchestrator first, then one per
+	// invocation sorted by instance id. Not part of the JSON report.
+	ActorSessions []ActorSession
 
 	// Unattributed is the run-level unattributed usage; nil when the run has none.
 	Unattributed *ActorReport

@@ -1,9 +1,9 @@
 {
   "state_version": 1,
   "cursor": {
-    "offset": 1255,
-    "head_len": 1255,
-    "head_sha256": "9a774780df2ea827e8a041b83c99f0bbd268379da20eeda895c5caa9719a734b"
+    "offset": 1981,
+    "head_len": 1981,
+    "head_sha256": "7909cf983d42dafeee666deebb33f647a0a8232189a7123ff150e1a1b0dca6ff"
   },
   "placements": {
     "chat-sub-1": "unattributed",
@@ -14,13 +14,17 @@
     "inv-sub": {
       "kind": "invoke_agent",
       "parent_span_id": "tool-task",
-      "conversation_id": "cli-session-6"
+      "conversation_id": "vsc-session-6",
+      "chat_session_id": "toolu_L1",
+      "parent_chat_session_id": "vsc-session-6"
     },
     "tool-task": {
       "kind": "execute_tool",
-      "conversation_id": "cli-session-6",
-      "tool_call_id": "toolu_A",
-      "tool_name": "task"
+      "conversation_id": "vsc-session-6",
+      "chat_session_id": "toolu_A",
+      "parent_chat_session_id": "vsc-session-6",
+      "tool_call_id": "toolu_L1",
+      "tool_name": "execution_subagent"
     }
   }
 }

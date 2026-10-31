@@ -32,7 +32,7 @@ func (r *ingestRun) holdAppendLock(t *testing.T) {
 // bigChatLine is a root chat span of the run's session whose model name makes the written line long.
 func bigChatLine(id string, modelSize int) string {
 	model := strings.Repeat("m", modelSize)
-	return fmt.Sprintf(`{"type":"span","traceId":"0123456789abcdef0123456789abcdef","spanId":%q,"name":"chat","kind":2,"attributes":{"gen_ai.operation.name":"chat","gen_ai.conversation.id":%q,"gen_ai.response.model":%q,"gen_ai.usage.input_tokens":10,"gen_ai.usage.output_tokens":1},"status":{"code":0},"events":[]}`, id, testSession, model)
+	return fmt.Sprintf(`{"traceId":"0123456789abcdef0123456789abcdef","spanId":%q,"name":"chat","kind":2,"attributes":{"gen_ai.operation.name":"chat","gen_ai.conversation.id":%q,"gen_ai.response.model":%q,"gen_ai.usage.input_tokens":10,"gen_ai.usage.output_tokens":1},"status":{"code":0},"events":[]}`, id, testSession, model)
 }
 
 func usageRecordCount(t *testing.T, data []byte) int {

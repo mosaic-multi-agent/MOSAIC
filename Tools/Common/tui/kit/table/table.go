@@ -27,6 +27,13 @@ type Column struct {
 	Flex     bool
 	MinWidth int
 	Width    int
+	// Identity marks a flex column that names the row (for example an instance id).
+	// It shrinks only after every other visible flex column is at its MinWidth, and an
+	// identity cell that does not fit is cut in the middle so its tail stays visible.
+	Identity bool
+	// Group is a label shown on an extra header line above this column and the adjacent
+	// visible columns with the same Group. "" = no group.
+	Group string
 }
 
 // Cell is one table cell.
@@ -49,6 +56,8 @@ type Table struct {
 	Offset     int
 	SortColumn int
 	SortDesc   bool
+	// WrapTitles lets every column title wrap at its spaces onto more header lines.
+	WrapTitles bool
 }
 
 // BodyRows is the number of rows Render shows for height.
@@ -60,13 +69,23 @@ func Render(t Table, width, height int, theme tui.Theme) string {
 		return ""
 	}
 	visible, hidden, widths := layoutWidths(t, width)
+	return draw(t, newShape([]Table{t}, visible, hidden, widths), width, height, theme)
+}
 
-	lines := []string{cutLine(headerLine(t, widths, visible, hidden, theme), width)}
-	body := BodyRows(height)
+// draw renders t in the given shape. When height is smaller than the header, the bottom
+// header lines are kept and no rows are shown.
+func draw(t Table, s shape, width, height int, theme tui.Theme) string {
+	lines := headerLines(t, s, theme)
+	if len(lines) > height {
+		lines = lines[len(lines)-height:]
+	}
+	body := max(height-s.headerHeight(), 0)
 	start := min(max(t.Offset, 0), max(len(t.Rows)-1, 0))
 	for r := start; r < len(t.Rows) && r < start+body; r++ {
-		line := rowLine(t.Rows[r], r == t.Cursor, t.Columns, widths, visible, theme)
-		lines = append(lines, cutLine(line, width))
+		lines = append(lines, rowLine(t.Rows[r], r == t.Cursor, t.Columns, s.widths, s.visible, theme))
+	}
+	for i, line := range lines {
+		lines[i] = cutLine(line, width)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -77,24 +96,6 @@ func cutLine(line string, width int) string {
 		return line
 	}
 	return ansi.Truncate(line, width, "")
-}
-
-func headerLine(t Table, widths []int, visible []int, hidden int, theme tui.Theme) string {
-	style := theme.Style(tui.RoleTitle)
-	var b strings.Builder
-	b.WriteString(strings.Repeat(" ", gutterWidth))
-	for n, i := range visible {
-		if n > 0 {
-			b.WriteString(strings.Repeat(" ", gapWidth))
-		}
-		text := textwidth.Pad(headerText(t, i), widths[i], t.Columns[i].Align == AlignRight)
-		b.WriteString(style.Render(text))
-	}
-	if hidden > 0 {
-		b.WriteString(strings.Repeat(" ", gapWidth))
-		b.WriteString(style.Render(markerText(hidden)))
-	}
-	return b.String()
 }
 
 func rowLine(row []Cell, cursor bool, cols []Column, widths []int, visible []int, theme tui.Theme) string {
@@ -126,5 +127,28 @@ func renderCell(row []Cell, i int, col Column, width int, cursor bool, theme tui
 	if cursor {
 		role = tui.RoleSelected
 	}
-	return theme.Style(role).Render(textwidth.Pad(cell.Text, width, col.Align == AlignRight))
+	text := cell.Text
+	if col.Identity {
+		text = cutIdentity(text, width)
+	}
+	return theme.Style(role).Render(textwidth.Pad(text, width, col.Align == AlignRight))
+}
+
+// cutIdentity shortens text to width cells by cutting its middle, keeping the tail from the
+// last "#" (for example "#12"). Text without a "#" is cut at the end as usual.
+func cutIdentity(text string, width int) string {
+	k := strings.LastIndex(text, "#")
+	if textwidth.Of(text) <= width || k < 0 {
+		return text
+	}
+	ell := "..."
+	if tui.CurrentRenderMode().Glyphs != tui.GlyphASCII {
+		ell = "…"
+	}
+	tail := text[k:]
+	room := width - textwidth.Of(ell) - textwidth.Of(tail)
+	if room < 1 {
+		return text
+	}
+	return ansi.Truncate(text, room, "") + ell + tail
 }

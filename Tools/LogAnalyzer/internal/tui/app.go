@@ -85,6 +85,7 @@ type Model struct {
 	runDetailScreen *screens.RunDetailScreen
 	runView         screens.RunView // the active per-run view
 	viewRunID       string          // run shown by the per-run views
+	sessionOpener   screens.RunView // the view the Session screen was opened from, kept while it is shown
 	pricingScreen   *screens.PricingScreen
 	noDataScreen    *screens.NoDataScreen
 
@@ -254,7 +255,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateSource(msg)
 	case screenRuns:
 		return m.updateRuns(msg)
-	case screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline, screenContext, screenAcrossRuns, screenCompare:
+	case screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline, screenContext, screenSession, screenAcrossRuns, screenCompare:
 		return m.updateRunView(msg)
 	case screenPricing:
 		return m.updatePricing(msg)
@@ -634,7 +635,7 @@ func (m Model) View() string {
 	case screenExport:
 		return m.viewExport()
 
-	case screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline, screenContext, screenAcrossRuns, screenCompare:
+	case screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline, screenContext, screenSession, screenAcrossRuns, screenCompare:
 		return m.viewRunView()
 
 	case screenPricing:

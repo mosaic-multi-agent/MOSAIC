@@ -1,5 +1,5 @@
 {
-  "description": "A final ingest scoped to one conversation finalises only the pending spans of that conversation; the pending spans of other conversations stay pending until a later final ingest covers them.",
+  "description": "VS Code dialect. A final ingest scoped to one conversation finalises only the pending spans of that conversation; the pending spans of other conversations stay pending until a later final ingest covers them.",
   "run_id": "20261028T000000Z-0000",
   "steps": [
     {
@@ -19,7 +19,7 @@
       "whole_file": false,
       "start_offset": null,
       "scope": [
-        "cli-session-7"
+        "vsc-session-7"
       ]
     },
     {

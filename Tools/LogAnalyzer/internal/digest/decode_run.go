@@ -250,16 +250,17 @@ func decodeUsages(docs []usageDoc) []domain.InvocationUsage {
 	var usages []domain.InvocationUsage
 	for _, u := range docs {
 		entry := domain.InvocationUsage{
-			Model:       domain.ModelID(u.Model),
-			Provider:    domain.ProviderID(u.Provider),
-			Effort:      u.Effort,
-			Harness:     domain.Harness(u.Harness),
-			RecordID:    u.RecordID,
-			At:          parseTime(u.At),
-			ServiceTier: u.ServiceTier,
-			Kind:        decodeCallKind(u.CallKind),
-			Label:       u.CallLabel,
-			SessionID:   u.SessionID,
+			Model:          domain.ModelID(u.Model),
+			Provider:       domain.ProviderID(u.Provider),
+			Effort:         u.Effort,
+			Harness:        domain.Harness(u.Harness),
+			RecordID:       u.RecordID,
+			At:             parseTime(u.At),
+			ServiceTier:    u.ServiceTier,
+			Kind:           decodeCallKind(u.CallKind),
+			Label:          u.CallLabel,
+			RequestedTools: domain.ParseRequestedTools(u.RequestedTools),
+			SessionID:      u.SessionID,
 		}
 		if t := u.Tokens; t != nil {
 			entry.Usage = domain.TokenUsage{

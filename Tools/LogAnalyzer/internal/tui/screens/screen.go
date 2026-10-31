@@ -5,12 +5,10 @@
 package screens
 
 import (
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	tuicommon "mosaic-common/tui"
-
-	"mosaic-log-analyzer/internal/domain"
 
 	"mosaic-log-analyzer/internal/domain"
 )
@@ -32,6 +30,7 @@ const (
 	ScreenTimeline   ScreenID = "run-timeline"    // V5 timeline
 	ScreenAcrossRuns ScreenID = "across-runs"     // V6 across runs
 	ScreenContext    ScreenID = "run-context"     // V7 context
+	ScreenSession    ScreenID = "run-session"     // one actor's session, opened from Dispatches, By type or Context
 
 	ScreenCompare ScreenID = "compare" // run comparison (not a per-run view)
 )

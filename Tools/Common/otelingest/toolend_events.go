@@ -70,19 +70,15 @@ func readToolStream(path string) *toolStream {
 	}
 }
 
-// matches reports whether a logged start call id belongs to the span call id: verbatim for a GHCP CLI span, and
-// after removing the VS Code suffix for a VS Code span.
-func matches(dialect, startCallID, spanCallID string) bool {
-	if dialect == dialectCLI {
-		return startCallID == spanCallID
-	}
+// matches reports whether a logged start call id belongs to the span call id, after removing the VS Code suffix.
+func matches(startCallID, spanCallID string) bool {
 	return vscodeCallSuffix.ReplaceAllString(startCallID, "") == spanCallID
 }
 
 // firstStart is the first start in the stream that belongs to the span, if any.
 func (ts *toolStream) firstStart(t *failedTool) (toolEvent, bool) {
 	for _, s := range ts.starts {
-		if matches(t.dialect, s.CallID, t.callID) {
+		if matches(s.CallID, t.callID) {
 			return s, true
 		}
 	}

@@ -12,6 +12,7 @@ import mosaic_logger_spawn_key as spawn_key
 import mosaic_logger_export as export
 import mosaic_logger_transcript as transcript
 import mosaic_logger_artifacts as artifacts
+import mosaic_logger_transcript_logging as transcript_logging
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +134,9 @@ def handle_subagent_start(ctx: "core.HookContext") -> None:
         "transcript_path",
     )
 
+    # 11. Log the transcript's usage; the mapping written above places this agent's calls
+    transcript_logging.log_transcript_usage(ctx)
+
 
 def handle_subagent_stop(ctx: "core.HookContext") -> None:
     """Handle subagentStop: emit invocation_end with status_code extraction,
@@ -155,6 +159,9 @@ def handle_subagent_stop(ctx: "core.HookContext") -> None:
         return
 
     sink = ctx.paths.invocation_events(run_id, agent_instance_id)
+
+    # Log the transcript's usage first so the stream's usage precedes invocation_end
+    transcript_logging.log_transcript_usage(ctx)
 
     # 2. Read subagent transcript facts
     subagent_transcript_path = ctx.field("transcriptPath")

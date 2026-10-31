@@ -66,7 +66,7 @@ func (m Model) exportOrigin() bool {
 	switch m.screen {
 	case screenRuns:
 		return m.runsScreen == nil || !m.runsScreen.HelpOpen() // the open help overlay takes every key
-	case screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline, screenContext:
+	case screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline, screenContext, screenSession:
 		help, ok := m.runView.(interface{ HelpOpen() bool })
 		return !ok || !help.HelpOpen() // the open help overlay takes every key
 	}

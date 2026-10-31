@@ -24,7 +24,7 @@ func modelColumns() []table.Column {
 	right := table.AlignRight
 	cols := make([]table.Column, mcCount)
 	cols[mcModel] = table.Column{Title: "model", Flex: true, MinWidth: 10}
-	cols[mcRequests] = table.Column{Title: "requests", Align: right}
+	cols[mcRequests] = table.Column{Title: "API calls", Align: right}
 	cols[mcCost] = table.Column{Title: "cost", Align: right}
 	cols[mcTokens] = table.Column{Title: "tokens", Align: right, Priority: 1}
 	cols[mcShare] = shareBarColumn(2)

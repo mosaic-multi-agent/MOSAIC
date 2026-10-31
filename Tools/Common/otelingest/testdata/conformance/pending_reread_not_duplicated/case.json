@@ -1,5 +1,5 @@
 {
-  "description": "A pending span that is read again (file shorter than the cursor, then a whole-file read) stays pending exactly once; when its parent arrives it is written once.",
+  "description": "VS Code dialect. A pending span that is read again (file shorter than the cursor, then a whole-file read) stays pending exactly once; when its tool span arrives it is written once.",
   "run_id": "20261028T000000Z-0000",
   "steps": [
     {
