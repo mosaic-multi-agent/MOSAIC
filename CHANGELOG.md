@@ -31,9 +31,9 @@
 - Resume no longer asks again for settings the run already recorded
 
 ## Catalog
-- **mosaic-logger** hook (v1.9.0): GHCP CLI now logs token usage and compactions from its session transcript, in native and Runner mode, with no setup and no OpenTelemetry; a transcript whose format changed raises a diagnostic instead of a silent zero
-- **mosaic-logger** hook (v1.9.0): VS Code Copilot Chat logs token usage read from the Copilot OpenTelemetry file; enable it with the user-level environment variable `COPILOT_OTEL_FILE_EXPORTER_PATH` and restart VS Code (see the hook README). Copilot cost needs `github-copilot` entries in `pricing.yaml`
-- **mosaic-logger** hook (v1.9.0, log format 1.7.0): every `usage_record` lists the tools the call requested, on all four harnesses; VS Code needs OpenTelemetry content capture for it. Redeploy to get the new files
+- **mosaic-logger** hook (v1.10.0): GHCP CLI now logs token usage and compactions from its session transcript, in native and Runner mode, with no setup and no OpenTelemetry; a transcript whose format changed raises a diagnostic instead of a silent zero
+- **mosaic-logger** hook (v1.10.0): VS Code Copilot Chat logs token usage read from the Copilot OpenTelemetry file; enable it with the user-level environment variable `COPILOT_OTEL_FILE_EXPORTER_PATH` and restart VS Code (see the hook README). Copilot cost needs `github-copilot` entries in `pricing.yaml`
+- **mosaic-logger** hook (v1.10.0, log format 1.7.0): every `usage_record` lists the tools the call requested, on all four harnesses; VS Code needs OpenTelemetry content capture for it. Redeploy to get the new files
 
 # 0.7.2 (2026-10-25)
 

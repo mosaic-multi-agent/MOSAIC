@@ -1,6 +1,6 @@
 schema_version: "1"
 id: mosaic-logger
-version: 1.9.0
+version: 1.10.0
 # description is user-facing: the Deploy tool shows it in the hook picker.
 # Keep it short and actionable; maintainer detail belongs in the comments below.
 description: >-
