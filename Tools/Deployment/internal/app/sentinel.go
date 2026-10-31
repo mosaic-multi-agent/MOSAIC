@@ -70,3 +70,6 @@ func (e *RevertedRunError) Unwrap() error {
 func (e *RevertedRunError) Is(target error) bool {
 	return target == ErrRunReverted
 }
+
+// ErrTransformSameHarness reports a transform request whose source and target harness are identical.
+var ErrTransformSameHarness = errors.New("source and target harness must differ")

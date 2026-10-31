@@ -405,7 +405,7 @@ func (m *rootModel) launchSession() tea.Cmd {
 	m.progressScreen = m.newProgressScreenWithHistory(style)
 	m.progressScreen.SetStatus(runselect.Announce(m.announceIdentity()), false)
 	m.screen = screenProgress
-	return tea.Batch(m.progressScreen.Init(), m.startSession())
+	return tea.Batch(m.startProgressTicks(),m.startSession())
 }
 
 func (m *rootModel) updateSetupGHCPMode(msg tea.Msg) (tea.Model, tea.Cmd) {

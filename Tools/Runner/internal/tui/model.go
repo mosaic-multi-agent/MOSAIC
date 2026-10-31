@@ -204,6 +204,10 @@ type rootModel struct {
 	// guard off and consumed by the next session start.
 	guardOffNextStart bool
 
+	// tickChainRunning is set once a progress tick has been handled: from then
+	// on the chain re-arms itself, so a restart must not start a second one.
+	tickChainRunning bool
+
 	// debug records the TUI-side stop-lifecycle entries. It is the same
 	// instance the session logs through, so both halves of the lifecycle land
 	// in one ordered log. See Options.Debug for the contract; never nil after

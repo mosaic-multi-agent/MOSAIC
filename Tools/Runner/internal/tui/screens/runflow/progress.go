@@ -25,8 +25,10 @@ type ProgressRow struct {
 	Reason         string // recorded Summary; shown only for a failed infrastructure row
 }
 
-// tickMsg is sent periodically to update elapsed time.
-type tickMsg time.Time
+// TickMsg is sent periodically to update elapsed time. The root model must
+// deliver every TickMsg to the progress screen, whichever screen is current,
+// because the screen re-arms the next tick only when it receives one.
+type TickMsg time.Time
 
 // Text shown by the stop-confirmation gate. The prompt is rendered inside a
 // bordered banner rather than as a bare line, and each resolution leaves an
@@ -86,7 +88,7 @@ func NewProgressScreen(width, height int, styles screens.Styles) *ProgressScreen
 // Init returns a tick command so the elapsed time updates every second.
 func (s *ProgressScreen) Init() tea.Cmd {
 	return tea.Every(time.Second, func(t time.Time) tea.Msg {
-		return tickMsg(t)
+		return TickMsg(t)
 	})
 }
 
@@ -172,9 +174,9 @@ func (s *ProgressScreen) Update(msg tea.Msg) tea.Cmd {
 				}
 			}
 		}
-	case tickMsg:
+	case TickMsg:
 		return tea.Every(time.Second, func(t time.Time) tea.Msg {
-			return tickMsg(t)
+			return TickMsg(t)
 		})
 	}
 	return nil

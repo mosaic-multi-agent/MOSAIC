@@ -212,6 +212,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if sz, ok := msg.(tea.WindowSizeMsg); ok {
 		m.width = sz.Width
 		m.height = sz.Height
+		if m.textOverlay != nil {
+			m.textOverlay.setWidth(sz.Width)
+		}
 		return m, nil
 	}
 
@@ -329,6 +332,7 @@ func (m Model) handlePending(p Pending) (tea.Model, tea.Cmd) {
 		}
 		// Generic text overlay for all other text questions (pricing rates, threshold).
 		m.textOverlay = newOverlayText(p.textQ, stylesFromTheme(m.theme).Theme)
+		m.textOverlay.setWidth(m.width)
 		m.screen = screenQuestion
 		return m, tea.Batch(
 			m.textOverlay.init(),

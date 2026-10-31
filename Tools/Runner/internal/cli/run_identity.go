@@ -70,7 +70,7 @@ func resolveRunIdentityByRunID(workDir, runIDFlag string, errOut io.Writer) (run
 	// parse errors are treated as resumable (the session layer will surface
 	// any real parse issues). A successful parse also yields the recorded
 	// position directly, so the announcement need not read the artifact again.
-	state, parseErr := artifact.Parse(data)
+	state, parseErr := artifact.ParseAt(filepath.Join(runFolder, "Orchestration.md"), data)
 	var idErr *domain.RunIdentityError
 	if errors.As(parseErr, &idErr) {
 		reason := idErr.Error()
@@ -190,7 +190,7 @@ func announceIdentity(runID, runFolder string, isNewRun bool, position *runselec
 	if err != nil {
 		return id
 	}
-	state, err := artifact.Parse(data)
+	state, err := artifact.ParseAt(filepath.Join(runFolder, "Orchestration.md"), data)
 	if err != nil {
 		return id
 	}

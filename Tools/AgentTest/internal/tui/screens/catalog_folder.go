@@ -21,7 +21,7 @@ type CatalogFolderScreen struct {
 // NewCatalogFolderScreen creates a CatalogFolderScreen initialized to initial.
 func NewCatalogFolderScreen(initial string, width int, styles Styles) *CatalogFolderScreen {
 	return &CatalogFolderScreen{
-		entry:     newDraftEntry(),
+		entry:     newDraftEntry(width),
 		confirmed: initial,
 		width:     width,
 		styles:    styles,
@@ -55,7 +55,7 @@ func (s *CatalogFolderScreen) View() string {
 		display = s.confirmed
 	}
 	title := s.styles.Title.Render("Catalog Folder")
-	value := s.styles.Selected.Render(display)
+	value := s.entry.render(display, s.styles.Selected)
 	help := s.styles.Help.Render("type folder  enter confirm  esc back")
 	content := title + "\n\n  " + value + "\n\n" + help
 	if s.width > 0 {
@@ -82,6 +82,7 @@ func (s *CatalogFolderScreen) Reset() {
 // current folder.
 func (s *CatalogFolderScreen) Resize(width int) {
 	s.width = width
+	s.entry.setWidth(width)
 }
 
 // Folder returns the currently confirmed catalog folder override, normalized.

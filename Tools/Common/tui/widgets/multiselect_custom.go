@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"mosaic-common/tui/pastesafe"
 )
@@ -80,7 +81,11 @@ func (m *MultiSelect) toggleCustomRow() {
 		return
 	}
 	if m.cursor == m.addRow() {
-		m.custom.field = pastesafe.NewField(pastesafe.WithPlaceholder(m.custom.prompt))
+		m.custom.field = pastesafe.NewField(
+			pastesafe.WithPlaceholder(m.custom.prompt),
+			pastesafe.WithPrompt(""), // the row label already precedes the field
+			pastesafe.WithWidth(m.addFieldWidth()),
+		)
 		return
 	}
 	idx := m.cursor - len(m.items)
@@ -138,4 +143,26 @@ func (m *MultiSelect) customRowLabel(i int) (label string, checked, isAdd bool) 
 	}
 	e := m.custom.entries[i-len(m.items)]
 	return e.text, e.checked, false
+}
+
+// addFieldWidth is the width left for the open entry field on the add-entry
+// row: the label width of a row minus the "prompt: " text before the field.
+func (m *MultiSelect) addFieldWidth() int {
+	if m.width <= 0 {
+		return 0
+	}
+	cursor := m.styles.Cursor
+	if cursor == "" {
+		cursor = ">"
+	}
+	checkOn := m.styles.CheckOn
+	if checkOn == "" {
+		checkOn = "[x]"
+	}
+	labelWidth := m.width - (len([]rune(cursor)) + 1) - (len([]rune(checkOn)) + 1)
+	w := labelWidth - lipgloss.Width(m.custom.prompt+": ")
+	if w < 1 {
+		w = 1
+	}
+	return w
 }

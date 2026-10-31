@@ -244,6 +244,9 @@ func (m *MultiSelect) Reset() {
 func (m *MultiSelect) Resize(height, width int) {
 	m.height = height
 	m.width = width
+	if m.Editing() {
+		m.custom.field.SetWidth(m.addFieldWidth())
+	}
 	m.adjustViewport()
 }
 

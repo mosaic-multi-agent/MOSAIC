@@ -99,6 +99,13 @@ func applyFrontmatter(
 	var changes []FieldChange
 	var gaps []domain.Gap
 
+	// Frontmatter computation below consults req.Deployed only; when the deployed frontmatter
+	// is to be ignored, the original is kept solely for the carried bundle stamp.
+	frontmatterDeployed := req.Deployed
+	if req.IgnoreDeployedFrontmatter {
+		req.Deployed = nil
+	}
+
 	// touchedKeys records every frontmatter key that any transform step explicitly
 	// manages (sets or removes). Used by the deployed-field preservation pass (Step 5c)
 	// to determine which deployed-file keys are user-owned and should be copied into
@@ -220,7 +227,12 @@ func applyFrontmatter(
 	// staleness detection on subsequent runs. Written only when AppliesToRole is true, so the
 	// orchestrator (which today receives no bundle blocks) is never stamped.
 	bvField, _ := agentfields.ByDeployedName("bundle_version")
-	if req.Bundle.AppliesToRole(req.Role) && req.Bundle.Version != "" {
+	if req.PreserveDeployedManaged && frontmatterDeployed != nil {
+		touchedKeys[bvField.Deployed] = true
+		if c := carryDeployedBundleStamp(fm, frontmatterDeployed); c != nil {
+			changes = append(changes, *c)
+		}
+	} else if req.Bundle.AppliesToRole(req.Role) && req.Bundle.Version != "" {
 		touchedKeys[bvField.Deployed] = true
 		before := ""
 		if v, ok := fm.Get(bvField.Deployed); ok {
@@ -387,6 +399,9 @@ func applyFrontmatter(
 		mergeChanges := mergeDeployedTools(fm, req.Deployed, desc)
 		changes = append(changes, mergeChanges...)
 	}
+
+	// Step 5b2: append target-native tool names requested by the caller.
+	changes = append(changes, appendRequestedTools(fm, req.AppendTools, desc)...)
 
 	// Step 5c: Preserve user-owned fields from the deployed file. After all managed-field
 	// steps have run, any key in the deployed file's frontmatter that was not touched by

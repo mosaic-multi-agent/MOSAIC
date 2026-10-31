@@ -27,6 +27,7 @@ import (
 	"mosaic-common/docformat"
 	"mosaic-deploy/internal/agentfields"
 	"mosaic-deploy/internal/catalog"
+	"mosaic-deploy/internal/agentkey"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -172,7 +173,7 @@ func scanWorkspaceAgents(workspace, agentsDir string, c catalog.Catalog) Workspa
 			// Parse failed or no frontmatter — attempt filename-key fallback before skipping.
 			// If the filename matches a catalog agent, surface the file as parse-failed
 			// so it can be classified as CONFLICT downstream instead of silently skipped.
-			derivedKey := agentKeyFromFileName(name)
+			derivedKey := agentkey.FromFileName(name)
 			if agent, ok := c.Agent(derivedKey); ok {
 				targetPath := filepath.Join(agentsDir, name)
 				matched = append(matched, ScannedAgentMatch{
@@ -214,7 +215,7 @@ func scanWorkspaceAgents(workspace, agentsDir string, c catalog.Catalog) Workspa
 
 		// Catalog matching step 2: try filename key lookup. Fallback for agents with no
 		// numeric id, notably both orchestrator-role files.
-		fileKey := agentKeyFromFileName(name)
+		fileKey := agentkey.FromFileName(name)
 		if agent, ok := c.Agent(fileKey); ok {
 			matched = append(matched, ScannedAgentMatch{
 				TargetPath: targetPath,

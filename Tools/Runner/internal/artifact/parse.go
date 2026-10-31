@@ -2,10 +2,11 @@ package artifact
 
 import (
 	"bytes"
+	"errors"
 	"strconv"
+	"strings"
 	"time"
 
-	"mosaic-common/docformat"
 	"mosaic-run/internal/domain"
 )
 
@@ -19,6 +20,17 @@ import (
 // Checkpoint columns are returned as "" in the ArtifactState. No other component
 // ever sees or produces "-" for these fields.
 func Parse(data []byte) (domain.ArtifactState, error) {
+	state, err := parseDocument(data)
+	var re *domain.RefusalError
+	if errors.As(err, &re) && re.Section == "" {
+		re.Section = "frontmatter"
+	}
+	return state, err
+}
+
+// parseDocument does the work of Parse; refusals raised before the body
+// sections are read carry no section yet.
+func parseDocument(data []byte) (domain.ArtifactState, error) {
 	refuse := func(reason string) (domain.ArtifactState, error) {
 		return domain.ArtifactState{}, &domain.RefusalError{
 			Component: "artifact",
@@ -46,8 +58,12 @@ func Parse(data []byte) (domain.ArtifactState, error) {
 		return refuse("missing or incorrect 'type: orchestration-artifact' field")
 	}
 
-	// Check for required sections in raw bytes (before full parse).
-	if err := checkRequiredSections(data); err != nil {
+	// Locate the tagged sections; the required ones must be present and closed.
+	bodyFirstLine := strings.Count(fmContent, "\n") + 3
+	lines := splitBodyLines(bodyContent, bodyFirstLine)
+	execSec := scanSection(lines, "ExecutionLog")
+	artsSec := scanSection(lines, "Artifacts")
+	if err := requireSections(execSec, artsSec); err != nil {
 		return domain.ArtifactState{}, err
 	}
 
@@ -57,16 +73,9 @@ func Parse(data []byte) (domain.ArtifactState, error) {
 		return domain.ArtifactState{}, err
 	}
 
-	// Parse body sections.
-	body := []byte(bodyContent)
-
-	execContent, ok := extractSectionContent(body, "ExecutionLog")
-	if !ok {
-		return refuse("ExecutionLog section content could not be extracted")
-	}
-	logEntries, err := parseExecutionLog(execContent)
+	logEntries, err := parseExecutionLog(execSec.content)
 	if err != nil {
-		return domain.ArtifactState{}, refuseSection("failed to parse execution log: ", err)
+		return domain.ArtifactState{}, execSec.refuse("failed to parse execution log: ", err)
 	}
 	state.ExecutionLog = logEntries
 
@@ -78,63 +87,30 @@ func Parse(data []byte) (domain.ArtifactState, error) {
 		}
 	}
 
-	artsContent, ok := extractSectionContent(body, "Artifacts")
-	if !ok {
-		return refuse("Artifacts section content could not be extracted")
-	}
-	regEntries, err := parseArtifactRegistry(artsContent)
+	regEntries, err := parseArtifactRegistry(artsSec.content)
 	if err != nil {
-		return domain.ArtifactState{}, refuseSection("failed to parse artifact registry: ", err)
+		return domain.ArtifactState{}, artsSec.refuse("failed to parse artifact registry: ", err)
 	}
 	state.ArtifactRegistry = regEntries
 
-	// WorkflowNotes section is optional; absence means empty notes.
-	if notesContent, ok := extractSectionContent(body, "WorkflowNotes"); ok {
-		notes, err := parseWorkflowNotes(notesContent)
+	// WorkflowNotes section is optional; an opening tag makes it required to be readable.
+	notesSec := scanSection(lines, "WorkflowNotes")
+	if notesSec.openFound {
+		if !notesSec.closed {
+			return domain.ArtifactState{}, &domain.RefusalError{
+				Component: "artifact",
+				Reason:    "file appears truncated: missing </WorkflowNotes> closing tag",
+				Section:   "WorkflowNotes",
+			}
+		}
+		notes, err := parseWorkflowNotes(notesSec.content)
 		if err != nil {
-			return domain.ArtifactState{}, refuseSection("failed to parse workflow notes: ", err)
+			return domain.ArtifactState{}, notesSec.refuse("failed to parse workflow notes: ", err)
 		}
 		state.WorkflowNotes = notes
 	}
 
 	return state, nil
-}
-
-// checkRequiredSections verifies the required XML-tagged sections are present
-// and not truncated. It checks raw bytes before full parsing so that the error
-// message preserves the original check order.
-// Trim the trailing newline from tag bytes before searching: files checked out
-// on Windows may have CRLF line endings, so searching for a tag with a bare LF
-// suffix would fail to match.
-func checkRequiredSections(data []byte) error {
-	refuse := func(reason string) error {
-		return &domain.RefusalError{
-			Component: "artifact",
-			Reason:    reason,
-		}
-	}
-
-	execLogOpenTagRaw, _ := docformat.RenderOpenTagLine(docformat.NodeSection, "ExecutionLog", "")
-	execLogCloseTagRaw, _ := docformat.RenderCloseTagLine("ExecutionLog")
-	artifactsOpenTagRaw, _ := docformat.RenderOpenTagLine(docformat.NodeSection, "Artifacts", "")
-	artifactsCloseTagRaw, _ := docformat.RenderCloseTagLine("Artifacts")
-	execLogOpenTag := bytes.TrimSuffix(execLogOpenTagRaw, []byte("\n"))
-	execLogCloseTag := bytes.TrimSuffix(execLogCloseTagRaw, []byte("\n"))
-	artifactsOpenTag := bytes.TrimSuffix(artifactsOpenTagRaw, []byte("\n"))
-	artifactsCloseTag := bytes.TrimSuffix(artifactsCloseTagRaw, []byte("\n"))
-	if !bytes.Contains(data, execLogOpenTag) {
-		return refuse(`missing <ExecutionLog type="core"> section`)
-	}
-	if !bytes.Contains(data, execLogCloseTag) {
-		return refuse("file appears truncated: missing </ExecutionLog> closing tag")
-	}
-	if !bytes.Contains(data, artifactsOpenTag) {
-		return refuse(`missing <Artifacts type="core"> section`)
-	}
-	if !bytes.Contains(data, artifactsCloseTag) {
-		return refuse("file appears truncated: missing </Artifacts> closing tag")
-	}
-	return nil
 }
 
 // buildStateFromFrontmatter constructs an ArtifactState from the parsed

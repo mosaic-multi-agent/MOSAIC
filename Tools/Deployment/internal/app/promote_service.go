@@ -16,6 +16,7 @@ import (
 
 	"mosaic-common/docformat"
 	"mosaic-deploy/internal/catalog"
+	"mosaic-deploy/internal/agentkey"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
 )
@@ -419,7 +420,7 @@ func (s *service) Promote(ctx context.Context, req PromoteRequest) (PromoteResul
 
 	// Derive the agent key from the source filename — the same derivation the catalog uses
 	// so the promoted file is reachable under the key the user expects.
-	key := agentKeyFromFileName(filepath.Base(req.FilePath))
+	key := agentkey.FromFileName(filepath.Base(req.FilePath))
 
 	// Inspect the deployed source for harness-side facts (tool entries and key presence set)
 	// before asking any questions. This is a pure parse — no I/O, no questions.

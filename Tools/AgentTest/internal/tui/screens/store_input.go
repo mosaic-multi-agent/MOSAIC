@@ -22,7 +22,7 @@ type StoreInputScreen struct {
 // NewStoreInputScreen creates a StoreInputScreen initialized to initialPath.
 func NewStoreInputScreen(initialPath string, width int, styles Styles) *StoreInputScreen {
 	return &StoreInputScreen{
-		entry:     newDraftEntry(),
+		entry:     newDraftEntry(width),
 		confirmed: initialPath,
 		width:     width,
 		styles:    styles,
@@ -58,7 +58,7 @@ func (s *StoreInputScreen) View() string {
 	}
 	title := s.styles.Title.Render("Store Reports")
 	subtitle := s.styles.Muted.Render("Enter a file path or directory path containing report JSON files")
-	value := s.styles.Selected.Render(display)
+	value := s.entry.render(display, s.styles.Selected)
 	help := s.styles.Help.Render("type path  backspace delete  enter confirm  esc back")
 	content := title + "\n" + subtitle + "\n\n  " + value + "\n\n" + help
 	if s.width > 0 {
@@ -85,6 +85,7 @@ func (s *StoreInputScreen) Reset() {
 // current path.
 func (s *StoreInputScreen) Resize(width int) {
 	s.width = width
+	s.entry.setWidth(width)
 }
 
 // Path returns the currently confirmed file or directory path, normalized.

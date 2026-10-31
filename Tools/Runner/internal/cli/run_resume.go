@@ -29,7 +29,7 @@ type resumePreflight struct {
 func runResumePreflight(runID, runFolder, harnessFlag string, infraFilter []string, errOut io.Writer) (pre resumePreflight, exitCode int, ok bool) {
 	data, readErr := os.ReadFile(filepath.Join(runFolder, "Orchestration.md"))
 	if readErr == nil {
-		pre.state, readErr = artifact.Parse(data)
+		pre.state, readErr = artifact.ParseAt(filepath.Join(runFolder, "Orchestration.md"), data)
 	}
 	if err := resumecheck.CheckArtifact(runID, pre.state, readErr); err != nil {
 		return pre, reportEarlyRefusal(err, errOut), false

@@ -23,7 +23,7 @@ type RepetitionsScreen struct {
 // NewRepetitionsScreen creates a RepetitionsScreen initialized to initial.
 func NewRepetitionsScreen(initial int, width int, styles Styles) *RepetitionsScreen {
 	return &RepetitionsScreen{
-		entry:  newDigitEntry(),
+		entry:  newDigitEntry(width),
 		value:  initial,
 		width:  width,
 		styles: styles,
@@ -59,7 +59,7 @@ func (s *RepetitionsScreen) View() string {
 		display = fmt.Sprintf("%d", s.value)
 	}
 	title := s.styles.Title.Render("Repetitions")
-	value := s.styles.Selected.Render(display)
+	value := s.entry.render(display, s.styles.Selected)
 	help := s.styles.Help.Render("type digits  backspace delete  enter confirm  esc back")
 	content := title + "\n\n  " + value + "\n\n" + help
 	if s.width > 0 {
@@ -93,6 +93,7 @@ func (s *RepetitionsScreen) WasEdited() bool { return s.entry.edited }
 // current value.
 func (s *RepetitionsScreen) Resize(width int) {
 	s.width = width
+	s.entry.setWidth(width)
 }
 
 // Value returns the currently confirmed repetition count.

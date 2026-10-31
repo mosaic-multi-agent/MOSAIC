@@ -197,7 +197,7 @@ func (s *dirScanner) Scan(rootDir string) (ScanResult, error) {
 		}
 
 		// Try to parse the artifact.
-		state, parseErr := artifact.Parse(data)
+		state, parseErr := artifact.ParseAt(artifactPath, data)
 		if parseErr != nil {
 			if detail, refused := identityRefusalDetail(parseErr); refused {
 				result.Unresumable = append(result.Unresumable, refusedRun(runID, folderPath, detail))

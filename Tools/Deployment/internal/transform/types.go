@@ -53,6 +53,29 @@ type Request struct {
 	// region; ignored for agents that declare none.
 	Bundle domain.BundleContent
 
+	// PreserveDeployedManaged takes every protocol-sourced and bundle-sourced managed region
+	// from Deployed instead of regenerating it from Protocol/Bundle. For each such region in
+	// Source, the output region holds the canonical content of the same-named region in
+	// Deployed, its version attribute, and the nested user regions Deployed holds there
+	// (each exactly once). No ErrProtocolContentMissing or ErrBundleBlockMissingForRole is
+	// raised. The mosaic_bundle_version stamp is written only when Deployed's frontmatter
+	// carries it, with Deployed's value. Requires Deployed != nil; ignored otherwise.
+	PreserveDeployedManaged bool
+
+	// IgnoreDeployedFrontmatter computes the output frontmatter as if Deployed were nil:
+	// Deployed's tools key is not preserved, its tool names are not merged, its untouched
+	// keys are not copied, and no stamp is removed because Deployed holds it. Body
+	// processing (project, custom, workflow, infrastructure and harness regions) still uses
+	// Deployed.
+	IgnoreDeployedFrontmatter bool
+
+	// AppendTools are target-harness tool names added to the main tools field after tool
+	// resolution, in order. A name already present is not added again. Permission shape
+	// gets "<name>: allow"; an existing pair with the same name is set to allow. Names are
+	// appended the same way after a placeholder expansion. Nil adds nothing. Names are not
+	// reported in Report.Tools.
+	AppendTools []string
+
 	// InjectionRenames overrides the package-level InjectionRenames table for this call.
 	// Nil means use transform.InjectionRenames. Intended for tests so that conflict,
 	// chain, precedence, and no-op cases are exercisable without mutating package state.

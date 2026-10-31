@@ -180,6 +180,12 @@ func processRegions(doc *docformat.Document, req Request) (outcomes []RegionOutc
 			infraAgentKeys = ids
 
 		case domain.InjectionProtocol:
+			if req.PreserveDeployedManaged {
+				if outcome, ok := preserveDeployedManagedRegion(node, name, class, RegionProtocolFilled, req, depDoc); ok {
+					outcomes = append(outcomes, outcome)
+					break
+				}
+			}
 			outcome, protoErr := applyProtocolRegion(node, name, req)
 			if protoErr != nil {
 				return nil, nil, nil, nil, protoErr
@@ -187,6 +193,12 @@ func processRegions(doc *docformat.Document, req Request) (outcomes []RegionOutc
 			outcomes = append(outcomes, outcome)
 
 		case domain.InjectionBundle:
+			if req.PreserveDeployedManaged {
+				if outcome, ok := preserveDeployedManagedRegion(node, name, class, RegionBundleFilled, req, depDoc); ok {
+					outcomes = append(outcomes, outcome)
+					break
+				}
+			}
 			outcome, bundleErr := applyBundleRegion(node, name, req)
 			if bundleErr != nil {
 				return nil, nil, nil, nil, bundleErr

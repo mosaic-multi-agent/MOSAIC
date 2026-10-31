@@ -13,6 +13,7 @@ import (
 	"mosaic-common/docformat"
 	"mosaic-deploy/internal/agentfields"
 	"mosaic-deploy/internal/catalog"
+	"mosaic-deploy/internal/agentkey"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -186,16 +187,6 @@ func isOrchestratorFileName(name string) bool {
 		lower == "orchestrator-script.agent.md"
 }
 
-// agentKeyFromFileName derives an agent key from a deployed file name by stripping the
-// trailing ".agent.md" or ".md" suffix, matching how the catalog derives a key from a
-// generic source file name.
-func agentKeyFromFileName(name string) string {
-	if strings.HasSuffix(name, ".agent.md") {
-		return strings.TrimSuffix(name, ".agent.md")
-	}
-	return strings.TrimSuffix(name, ".md")
-}
-
 // catalogAgentKeys returns the set of every agent key the generic catalog knows about:
 // worker agents (Agents), utility agents (UtilityAgents), the orchestrator (Orchestrator),
 // and the script orchestrator (OrchestratorScript). A deployed file whose derived key is in
@@ -273,7 +264,7 @@ func scanHarnessOnlyAgents(workspace, agentsDir string, catalogKeys map[string]b
 		}
 
 		// Derive agent key and check against catalog.
-		key := agentKeyFromFileName(name)
+		key := agentkey.FromFileName(name)
 		if catalogKeys[key] {
 			// This file has a generic catalog counterpart; not harness-only.
 			continue

@@ -21,7 +21,7 @@ func validateHarnessFlag(harnessFlag string, errOut io.Writer) (exitCode int, ok
 	return ExitSuccess, true
 }
 
-// discoverOrchestratorPath auto-discovers the orchestrator-script.md path from
+// discoverOrchestratorPath auto-discovers the orchestrator-script.md or orchestrator-script.agent.md path from
 // the harness convention. For CLI-backed harnesses, this verifies the
 // workspace is deployed for the selected harness. For non-CLI harnesses (e.g.
 // the "fake" test double), discovery is skipped and the returned path is left

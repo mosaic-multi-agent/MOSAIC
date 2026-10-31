@@ -375,6 +375,7 @@ func buildPermissionToolFields(d *domain.HarnessDescriptor, resolutions []domain
 		fieldBuckets[fieldKey].names[name] = true
 	}
 
+	var customNames []string // custom main-destination names, in resolution order
 	for _, res := range resolutions {
 		if res.Outcome != domain.ToolMapped && res.Outcome != domain.ToolCustom {
 			continue
@@ -384,6 +385,9 @@ func buildPermissionToolFields(d *domain.HarnessDescriptor, resolutions []domain
 			case domain.DestMain:
 				for _, name := range dest.Names {
 					resolved[name] = true
+					if res.Outcome == domain.ToolCustom {
+						customNames = append(customNames, name)
+					}
 				}
 			case domain.DestField:
 				for _, name := range dest.Names {
@@ -405,6 +409,8 @@ func buildPermissionToolFields(d *domain.HarnessDescriptor, resolutions []domain
 			Value: domain.FieldValue{Kind: domain.KindScalar, Scalar: disposition},
 		}
 	}
+
+	pairs = appendCustomPermissionPairs(pairs, d.Tools.Universe, customNames)
 
 	fields := []domain.FrontmatterField{
 		{

@@ -116,6 +116,10 @@ func newOverlayText(q interaction.TextQuestion, theme tuicommon.Theme) *overlayT
 // init returns the cursor blink command for the text input.
 func (o *overlayText) init() tea.Cmd { return o.input.Init() }
 
+// setWidth bounds the input line to the terminal width, so a wide value keeps
+// the cursor and the text around it visible.
+func (o *overlayText) setWidth(width int) { o.input.SetWidth(width) }
+
 // update processes a message. Returns a Cmd for cursor blinking.
 func (o *overlayText) update(msg tea.Msg) tea.Cmd { return o.input.Update(msg) }
 

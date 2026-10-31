@@ -611,8 +611,9 @@ func (e *executor) executeConflict(
 	switch decision {
 	case domain.DecisionSkip:
 		ar.Taken = domain.TakenSkipped
-		// Return the prior entry unchanged so entryMap preserves it.
-		if entry, ok := prior.Lookup(item.Ref); ok {
+		// Return the prior entry recorded at this item's own target path, unchanged, so
+		// entryMap preserves it. An entry for the same ref at another path is not this file's.
+		if entry, ok := prior.LookupAt(item.Ref, item.TargetPath); ok {
 			return ar, &entry
 		}
 		return ar, nil

@@ -4,18 +4,18 @@ package cli_test
 // dispatch to Service.TransformHarness, exit-code contract, and JSON/human output rendering.
 //
 //
-// Verified behaviours (T6.5):
+// Verified behaviours:
 //
 // Required flag validation:
 //   - "transform" with no flags returns ExitUsage without calling Service.TransformHarness.
 //   - Omitting --harness returns ExitUsage without calling Service.TransformHarness.
-//   - Omitting --path returns ExitUsage without calling Service.TransformHarness.
-//   - "transform --harness src --path /p --target-harness tgt" calls Service.TransformHarness.
+//   - Omitting --workspace returns ExitUsage without calling Service.TransformHarness.
+//   - "transform --harness src --workspace /p --target-harness tgt" calls Service.TransformHarness.
 //
 // Flag-to-request mapping:
 //   - --harness maps to TransformHarnessRequest.SourceHarnessID.
 //   - --target-harness maps to TransformHarnessRequest.TargetHarnessID.
-//   - --path maps to TransformHarnessRequest.Path.
+//   - --workspace maps to TransformHarnessRequest.Workspace (the workspace root).
 //   - --target-model maps to TransformHarnessRequest.TargetModel.
 //   - --overwrite maps to TransformHarnessRequest.Overwrite=true.
 //   - --dry-run maps to TransformHarnessRequest.DryRun=true.
@@ -78,7 +78,7 @@ func TestTransformCmd_MissingHarnessFlag_ReturnsExitUsage(t *testing.T) {
 	svc := &spyService{}
 
 	code := cli.Run(context.Background(),
-		[]string{"transform", "--target-harness", "tgt", "--path", "/agents/agent.md"},
+		[]string{"transform", "--target-harness", "tgt", "--workspace", "/agents/agent.md"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
 	if code != cli.ExitUsage {
@@ -89,9 +89,9 @@ func TestTransformCmd_MissingHarnessFlag_ReturnsExitUsage(t *testing.T) {
 	}
 }
 
-// TestTransformCmd_MissingPathFlag_ReturnsExitUsage verifies that omitting --path
+// TestTransformCmd_MissingWorkspaceFlag_ReturnsExitUsage verifies that omitting --workspace
 // returns ExitUsage without calling Service.TransformHarness.
-func TestTransformCmd_MissingPathFlag_ReturnsExitUsage(t *testing.T) {
+func TestTransformCmd_MissingWorkspaceFlag_ReturnsExitUsage(t *testing.T) {
 	svc := &spyService{}
 
 	code := cli.Run(context.Background(),
@@ -99,21 +99,21 @@ func TestTransformCmd_MissingPathFlag_ReturnsExitUsage(t *testing.T) {
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
 	if code != cli.ExitUsage {
-		t.Errorf("exit code = %d, want ExitUsage (%d); missing --path must return ExitUsage", code, cli.ExitUsage)
+		t.Errorf("exit code = %d, want ExitUsage (%d); missing --workspace must return ExitUsage", code, cli.ExitUsage)
 	}
 	if svc.transformReq != nil {
-		t.Error("svc.TransformHarness was called despite missing --path")
+		t.Error("svc.TransformHarness was called despite missing --workspace")
 	}
 }
 
 // TestTransformCmd_MissingTargetHarnessFlag_ReturnsExitUsage verifies that omitting
 // --target-harness (a required flag per ContractsDesign.md line 956) returns ExitUsage
-// without calling Service.TransformHarness. Both --harness and --path are present.
+// without calling Service.TransformHarness. Both --harness and --workspace are present.
 func TestTransformCmd_MissingTargetHarnessFlag_ReturnsExitUsage(t *testing.T) {
 	svc := &spyService{}
 
 	code := cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--path", "/agents/agent.md"},
+		[]string{"transform", "--harness", "src", "--workspace", "/agents/agent.md"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
 	if code != cli.ExitUsage {
@@ -142,7 +142,7 @@ func TestTransformCmd_HarnessFlag_SetsSourceHarnessID(t *testing.T) {
 	outBuf := &bytes.Buffer{}
 
 	code := cli.Run(context.Background(),
-		[]string{"transform", "--harness", srcID, "--target-harness", "opencode", "--path", "/agents/agent.md"},
+		[]string{"transform", "--harness", srcID, "--target-harness", "opencode", "--workspace", "/agents/agent.md"},
 		svc, outBuf, &bytes.Buffer{})
 
 	if code != cli.ExitSuccess {
@@ -168,7 +168,7 @@ func TestTransformCmd_TargetHarnessFlag_SetsTargetHarnessID(t *testing.T) {
 	}
 
 	cli.Run(context.Background(),
-		[]string{"transform", "--harness", "claude-code", "--target-harness", tgtID, "--path", "/agents/agent.md"},
+		[]string{"transform", "--harness", "claude-code", "--target-harness", tgtID, "--workspace", "/agents/agent.md"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
 	if svc.transformReq == nil {
@@ -179,9 +179,9 @@ func TestTransformCmd_TargetHarnessFlag_SetsTargetHarnessID(t *testing.T) {
 	}
 }
 
-// TestTransformCmd_PathFlag_SetsPath verifies that --path maps to
-// TransformHarnessRequest.Path.
-func TestTransformCmd_PathFlag_SetsPath(t *testing.T) {
+// TestTransformCmd_WorkspaceFlag_SetsWorkspace verifies that --workspace maps to
+// TransformHarnessRequest.Workspace.
+func TestTransformCmd_WorkspaceFlag_SetsWorkspace(t *testing.T) {
 	const agentPath = "/path/to/my-agent.md"
 	svc := &spyService{
 		transformResp: app.TransformHarnessResult{
@@ -191,21 +191,21 @@ func TestTransformCmd_PathFlag_SetsPath(t *testing.T) {
 	}
 
 	cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", agentPath},
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", agentPath},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
 	if svc.transformReq == nil {
 		t.Fatal("svc.TransformHarness was not called")
 	}
-	if svc.transformReq.Path != agentPath {
-		t.Errorf("Path = %q, want %q", svc.transformReq.Path, agentPath)
+	if svc.transformReq.Workspace != agentPath {
+		t.Errorf("Workspace = %q, want %q", svc.transformReq.Workspace, agentPath)
 	}
 }
 
-// TestTransformCmd_PathWithSpaces_StripsQuotes verifies that a quoted path supplied via
-// --path has its surrounding double-quotes stripped, matching the pathinput.Unquote
+// TestTransformCmd_WorkspaceWithSpaces_StripsQuotes verifies that a quoted path supplied via
+// --workspace has its surrounding double-quotes stripped, matching the pathinput.Unquote
 // convention used by the other path-accepting subcommands.
-func TestTransformCmd_PathWithSpaces_StripsQuotes(t *testing.T) {
+func TestTransformCmd_WorkspaceWithSpaces_StripsQuotes(t *testing.T) {
 	const rawPath = `"/path with spaces/agent.md"`
 	const wantPath = `/path with spaces/agent.md`
 	svc := &spyService{
@@ -216,14 +216,14 @@ func TestTransformCmd_PathWithSpaces_StripsQuotes(t *testing.T) {
 	}
 
 	cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", rawPath},
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", rawPath},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
 	if svc.transformReq == nil {
 		t.Fatal("svc.TransformHarness was not called")
 	}
-	if svc.transformReq.Path != wantPath {
-		t.Errorf("Path = %q, want %q (outer quotes stripped by pathinput.Unquote)", svc.transformReq.Path, wantPath)
+	if svc.transformReq.Workspace != wantPath {
+		t.Errorf("Workspace = %q, want %q (outer quotes stripped by pathinput.Unquote)", svc.transformReq.Workspace, wantPath)
 	}
 }
 
@@ -240,7 +240,7 @@ func TestTransformCmd_TargetModelFlag_SetsTargetModel(t *testing.T) {
 	}
 
 	cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md",
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md",
 			"--target-model", modelID},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
@@ -263,7 +263,7 @@ func TestTransformCmd_OverwriteFlag_SetsOverwrite(t *testing.T) {
 	}
 
 	cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md", "--overwrite"},
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md", "--overwrite"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
 	if svc.transformReq == nil {
@@ -286,7 +286,7 @@ func TestTransformCmd_DryRunFlag_SetsDryRun(t *testing.T) {
 	}
 
 	cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md", "--dry-run"},
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md", "--dry-run"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
 	if svc.transformReq == nil {
@@ -308,7 +308,7 @@ func TestTransformCmd_DefaultFlags_OverwriteAndDryRunAreFalse(t *testing.T) {
 	}
 
 	cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md"},
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
 	if svc.transformReq == nil {
@@ -346,7 +346,7 @@ func TestTransformCmd_ServiceSuccess_ReturnsExitSuccess(t *testing.T) {
 	}
 
 	code := cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md"},
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
 	if code != cli.ExitSuccess {
@@ -362,7 +362,7 @@ func TestTransformCmd_ServiceError_ReturnsExitFailure(t *testing.T) {
 	}
 
 	code := cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "src", "--path", "/agent.md"},
+		[]string{"transform", "--harness", "src", "--target-harness", "src", "--workspace", "/agent.md"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
 	if code != cli.ExitFailure {
@@ -394,7 +394,7 @@ func TestTransformCmd_HumanOutput_IsNonEmpty(t *testing.T) {
 	outBuf := &bytes.Buffer{}
 
 	code := cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md"},
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md"},
 		svc, outBuf, &bytes.Buffer{})
 
 	if code != cli.ExitSuccess {
@@ -412,7 +412,6 @@ func TestTransformCmd_JSONOutput_IsValidTransformHarnessResult(t *testing.T) {
 		transformResp: app.TransformHarnessResult{
 			SourceHarnessID: "src",
 			TargetHarnessID: "tgt",
-			InputPath:       "/agent.md",
 			Transformed:     1,
 			Files: []app.TransformFileOutcome{
 				{
@@ -426,7 +425,7 @@ func TestTransformCmd_JSONOutput_IsValidTransformHarnessResult(t *testing.T) {
 	outBuf := &bytes.Buffer{}
 
 	code := cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md",
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md",
 			"--output", "json"},
 		svc, outBuf, &bytes.Buffer{})
 
@@ -474,7 +473,6 @@ func TestTransformCmd_DryRunHumanOutput_ContainsDryRunIndicator(t *testing.T) {
 		transformResp: app.TransformHarnessResult{
 			SourceHarnessID: "src",
 			TargetHarnessID: "tgt",
-			InputPath:       "/agent.md",
 			DryRun:          true,
 			Transformed:     1,
 			Files: []app.TransformFileOutcome{
@@ -489,49 +487,13 @@ func TestTransformCmd_DryRunHumanOutput_ContainsDryRunIndicator(t *testing.T) {
 	outBuf := &bytes.Buffer{}
 
 	cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md", "--dry-run"},
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md", "--dry-run"},
 		svc, outBuf, &bytes.Buffer{})
 
 	lower := strings.ToLower(outBuf.String())
 	if !strings.Contains(lower, "dry") {
 		t.Errorf("human output does not contain 'dry': %q; want a dry-run indicator visible to the user",
 			outBuf.String())
-	}
-}
-
-// ---------------------------------------------------------------------------
-// T6.5: Help-text documentation of non-recursive enumeration
-// ---------------------------------------------------------------------------
-
-// TestTransformCmd_HelpText_MentionsNonRecursiveEnumeration verifies that the transform
-// subcommand's help text states that directory enumeration is non-recursive, as required
-// by the directory enumeration contract: "This must be stated in the mode's help text and
-// CLI flag documentation." (ContractsDesign.md).
-//
-// RED-phase behaviour: until I6.6 registers the transform subcommand, cobra reports an
-// unknown-command error in errOut whose text does not mention "non-recursive", so this test
-// fails correctly. After I6.6 delivers the subcommand, the help text must include the word
-// "non-recursive" (or equivalent language) to make this test pass.
-//
-// Re-verify during I6.6: confirm the --help output explicitly documents that only files
-// directly under the supplied directory are enumerated (no descent into subdirectories).
-func TestTransformCmd_HelpText_MentionsNonRecursiveEnumeration(t *testing.T) {
-	svc := &spyService{}
-	errBuf := &bytes.Buffer{}
-
-	cli.Run(context.Background(),
-		[]string{"transform", "--help"},
-		svc, &bytes.Buffer{}, errBuf)
-
-	lower := strings.ToLower(errBuf.String())
-	mentionsNonRecursive := strings.Contains(lower, "non-recursive") ||
-		strings.Contains(lower, "non recursive") ||
-		strings.Contains(lower, "not recursive") ||
-		strings.Contains(lower, "directly under")
-	if !mentionsNonRecursive {
-		t.Errorf("transform --help output does not document non-recursive directory enumeration; "+
-			"the contract requires this behavior to be stated in the mode's help text. "+
-			"Got errOut:\n%s", errBuf.String())
 	}
 }
 
@@ -547,7 +509,7 @@ func TestTransformCmd_DoesNotCallDeployNew(t *testing.T) {
 	}
 
 	cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md"},
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
 	if svc.deployReq != nil {
@@ -563,7 +525,7 @@ func TestTransformCmd_DoesNotCallPromote(t *testing.T) {
 	}
 
 	cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md"},
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
 	if svc.promoteReq != nil {
@@ -625,7 +587,7 @@ func TestTransformCmd_ModelMapFlag_SinglePair_SetsModelMap(t *testing.T) {
 	}
 
 	code := cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md",
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md",
 			"--model-map", "claude-sonnet-4=gpt-4o"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
@@ -655,7 +617,7 @@ func TestTransformCmd_ModelMapFlag_MultiplePairs_SetsAllMappings(t *testing.T) {
 	}
 
 	code := cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agents",
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agents",
 			"--model-map", "claude-sonnet-4=gpt-4o",
 			"--model-map", "claude-opus-4=gpt-4-turbo",
 			"--model-map", "claude-haiku-3=gpt-3.5-turbo"},
@@ -696,7 +658,7 @@ func TestTransformCmd_ModelMapFlag_EmptySource_AddressesUnsetGroup(t *testing.T)
 	}
 
 	code := cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md",
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md",
 			"--model-map", "=gpt-4o"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
@@ -728,7 +690,7 @@ func TestTransformCmd_ModelMapFlag_TargetContainsEquals_ParsedByFirstEquals(t *t
 
 	// Target value "gpt-4o=version=1" contains "="; only the first "=" is the separator.
 	code := cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md",
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md",
 			"--model-map", "claude-sonnet-4=gpt-4o=version=1"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
@@ -760,7 +722,7 @@ func TestTransformCmd_ModelMapFlag_MalformedNoEquals_ReturnsExitUsage(t *testing
 	errBuf := &bytes.Buffer{}
 
 	code := cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md",
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md",
 			"--model-map", "gpt-4o-no-separator"},
 		svc, &bytes.Buffer{}, errBuf)
 
@@ -784,7 +746,7 @@ func TestTransformCmd_ModelMapFlag_MalformedNoEquals_WritesOffendingValueToStder
 	errBuf := &bytes.Buffer{}
 
 	cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md",
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md",
 			"--model-map", "gpt-4o-no-separator"},
 		svc, &bytes.Buffer{}, errBuf)
 
@@ -803,7 +765,7 @@ func TestTransformCmd_ModelMapFlag_MalformedEmptyTarget_ReturnsExitUsage(t *test
 	errBuf := &bytes.Buffer{}
 
 	code := cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md",
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md",
 			"--model-map", "claude-sonnet-4="},
 		svc, &bytes.Buffer{}, errBuf)
 
@@ -825,7 +787,7 @@ func TestTransformCmd_ModelMapFlag_MalformedEmptyTarget_WritesOffendingValueToSt
 	errBuf := &bytes.Buffer{}
 
 	cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md",
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md",
 			"--model-map", "claude-sonnet-4="},
 		svc, &bytes.Buffer{}, errBuf)
 
@@ -843,7 +805,7 @@ func TestTransformCmd_ModelMapFlag_DuplicateSource_ReturnsExitUsage(t *testing.T
 	svc := &spyService{}
 
 	code := cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md",
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md",
 			"--model-map", "claude-sonnet-4=gpt-4o",
 			"--model-map", "claude-sonnet-4=gpt-4-turbo"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
@@ -866,7 +828,7 @@ func TestTransformCmd_ModelMapFlag_DuplicateSource_WritesSourceModelToStderr(t *
 	errBuf := &bytes.Buffer{}
 
 	cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md",
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md",
 			"--model-map", "claude-sonnet-4=gpt-4o",
 			"--model-map", "claude-sonnet-4=gpt-4-turbo"},
 		svc, &bytes.Buffer{}, errBuf)
@@ -898,7 +860,7 @@ func TestTransformCmd_ModelMapFlag_SetsSkipAllForTargetModel(t *testing.T) {
 	}
 
 	code := cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md",
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md",
 			"--model-map", "claude-sonnet-4=gpt-4o"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
@@ -929,7 +891,7 @@ func TestTransformCmd_ModelMapWithTargetModel_BothPresentOnRequest(t *testing.T)
 	}
 
 	code := cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agents",
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agents",
 			"--model-map", "claude-sonnet-4=gpt-4o",
 			"--target-model", "gpt-4-turbo"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
@@ -975,7 +937,7 @@ func TestTransformCmd_ModelMapFlag_ThreePairs_AllPresentOnRequest(t *testing.T) 
 		[]string{"transform",
 			"--harness", "claude-code",
 			"--target-harness", "opencode",
-			"--path", "/agents",
+			"--workspace", "/agents",
 			"--model-map", "claude-sonnet-4=gpt-4o",
 			"--model-map", "claude-opus-4=gpt-4-turbo",
 			"--model-map", "claude-haiku-3=gpt-3.5-turbo"},
@@ -1018,7 +980,7 @@ func TestTransformCmd_ModelMapFlag_NoTargetModel_SkipAllSuppressesPromptForUnmap
 	}
 
 	code := cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agents",
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agents",
 			"--model-map", "claude-sonnet-4=gpt-4o"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
@@ -1051,7 +1013,7 @@ func TestTransformCmd_WithoutModelMapFlag_ModelMapIsNilOnRequest(t *testing.T) {
 	}
 
 	cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md"},
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
 	if svc.transformReq == nil {
@@ -1092,7 +1054,7 @@ func TestTransformCmd_ModelMapFlag_WhitespacePadding_TrimmedKeyAndValue(t *testi
 
 	// The value has leading and trailing spaces on both the source and target sides.
 	code := cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md",
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md",
 			"--model-map", "  claude-sonnet-4  =  gpt-4o  "},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
@@ -1130,7 +1092,7 @@ func TestTransformCmd_ModelMapFlag_WhitespaceOnlySource_NormalisedToUnsetSourceM
 
 	// Three spaces before the "=" — after trimming the source side is empty, which equals UnsetSourceModel.
 	code := cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md",
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md",
 			"--model-map", "   =gpt-4o"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 

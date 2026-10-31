@@ -11,6 +11,7 @@ import (
 
 	"mosaic-common/docformat"
 	"mosaic-deploy/internal/catalog/catalogpaths"
+	"mosaic-deploy/internal/agentkey"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -100,7 +101,7 @@ func (c *catalogImpl) loadAgents(root string) []Issue {
 				if name == "README.md" || !strings.HasSuffix(name, ".md") {
 					continue
 				}
-				key := strings.TrimSuffix(name, ".md")
+				key := agentkey.FromFileName(name)
 				if _, exists := c.agentIdx[key]; exists {
 					continue // Already loaded from a higher-priority path.
 				}
@@ -139,7 +140,7 @@ func (c *catalogImpl) loadAgents(root string) []Issue {
 			if name == "README.md" || !strings.HasSuffix(name, ".md") {
 				continue
 			}
-			key := strings.TrimSuffix(name, ".md")
+			key := agentkey.FromFileName(name)
 			if _, exists := c.agentIdx[key]; exists {
 				continue // Already loaded from a higher-priority path.
 			}
@@ -175,7 +176,7 @@ func (c *catalogImpl) loadAgents(root string) []Issue {
 			if name == "README.md" || !strings.HasSuffix(name, ".md") {
 				continue
 			}
-			key := strings.TrimSuffix(name, ".md")
+			key := agentkey.FromFileName(name)
 			if _, exists := c.agentIdx[key]; exists {
 				continue
 			}
@@ -210,7 +211,7 @@ func (c *catalogImpl) loadAgents(root string) []Issue {
 				if name == "README.md" || !strings.HasSuffix(name, ".md") {
 					continue
 				}
-				key := strings.TrimSuffix(name, ".md")
+				key := agentkey.FromFileName(name)
 				if _, exists := c.agentIdx[key]; exists {
 					continue
 				}
@@ -250,7 +251,7 @@ func parseAgentFile(path string, role domain.AgentRole, category string) (domain
 	}
 	fm := doc.Frontmatter()
 
-	key := strings.TrimSuffix(filepath.Base(path), ".md")
+	key := agentkey.FromFileName(filepath.Base(path))
 
 	var issues []Issue
 

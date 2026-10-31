@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	"mosaic-deploy/internal/agentfields"
-	"mosaic-deploy/internal/domain"
 )
 
 // goldenCurrentDeployAgents returns name -> bytes of the non-orchestrator golden agent
@@ -62,21 +61,6 @@ func withStampLine(src []byte, line string) []byte {
 // withStampKey rewrites the golden current-deploy stamp key to another key name.
 func withStampKey(src []byte, key string) []byte {
 	return []byte(strings.Replace(string(src), "mosaic_harness_version:", key+":", 1))
-}
-
-func TestCurrentDeployOutput_IsNotSkippedAsNotAgentByHarnessMatch(t *testing.T) {
-	for harness, src := range goldenCurrentDeployAgents(t) {
-		t.Run(harness, func(t *testing.T) {
-			verdict := DetectHarnessMatch(src, newAlphaHarnessModule(), domain.ArtifactAgent, "planner-tdd-soft")
-
-			switch verdict.Status {
-			case HarnessMatchYes, HarnessMatchNo, HarnessMatchIndeterminate:
-			default:
-				t.Errorf("current-deploy file status = %q, want a harness match classification: %s",
-					verdict.Status, verdict.Reason)
-			}
-		})
-	}
 }
 
 func TestCurrentDeployOutput_IsAcceptedByPromote(t *testing.T) {

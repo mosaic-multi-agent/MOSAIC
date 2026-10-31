@@ -45,7 +45,7 @@ Progress-screen keys: `s` graceful stop (asks for confirmation), `m` manual disp
   --timeout 30m
 ```
 
-The orchestrator script is discovered automatically from the harness-convention agents directory (e.g., `.claude/agents/orchestrator-script.md` for `claude-code`). If the workspace has not been deployed for the selected harness, the Runner exits immediately with a clear error.
+The orchestrator script is discovered automatically from the harness-convention agents directory (e.g., `.claude/agents/orchestrator-script.md` for `claude-code`). The file may also be named `orchestrator-script.agent.md`; a folder holding both names is refused. If the workspace has not been deployed for the selected harness, the Runner exits immediately with a clear error.
 
 ---
 
@@ -106,7 +106,7 @@ There is no `--orchestrator-file` flag. The Runner derives the orchestrator path
 | `opencode` | `.opencode/agents/orchestrator-script.md` |
 | `ghcp-cli` | `.github/agents/orchestrator-script.md` |
 
-If the file does not exist, the Runner exits immediately with a message indicating the workspace is not properly deployed for the selected harness. Run the Deploy tool to populate the agents directory before using the Runner.
+`orchestrator-script.agent.md` is accepted in place of `orchestrator-script.md` in each of these folders, and a folder holding both is refused. If the file does not exist, the Runner exits immediately with a message indicating the workspace is not properly deployed for the selected harness. Run the Deploy tool to populate the agents directory before using the Runner.
 
 ### Agent Snapshot Directories
 

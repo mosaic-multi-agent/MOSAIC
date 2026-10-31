@@ -68,8 +68,20 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return model, cmd
 	}
 
+	// Progress tick: always reaches the progress screen.
+	if tick, ok := msg.(runflow.TickMsg); ok {
+		return m.handleProgressTick(tick)
+	}
+
 	// Delegate to current screen.
-	return m.dispatchScreen(msg)
+	before := m.screen
+	model, cmd := m.dispatchScreen(msg)
+	if before != screenProgress && m.screen == screenProgress {
+		// Control just returned to the progress screen: the session may have
+		// taken a request while another screen was shown.
+		m.syncPendingRequests()
+	}
+	return model, cmd
 }
 
 // handleRunDone handles the runDoneMsg sent by the session goroutine when the
@@ -333,4 +345,5 @@ func (m *rootModel) resizeScreens() {
 	if m.testResultsScreen != nil {
 		m.testResultsScreen.Resize(m.width, m.height)
 	}
+	m.resizeOverlays()
 }

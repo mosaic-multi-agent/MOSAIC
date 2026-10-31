@@ -23,7 +23,7 @@ func (m *rootModel) readRunState() (domain.ArtifactState, error) {
 	if err != nil {
 		return domain.ArtifactState{}, err
 	}
-	return artifact.Parse(data)
+	return artifact.ParseAt(filepath.Join(m.selections.runFolder, "Orchestration.md"), data)
 }
 
 // recordedWorkflowVersion returns the workflow version recorded in the run's

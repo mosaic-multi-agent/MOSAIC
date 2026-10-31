@@ -15,7 +15,7 @@ This guide is for **project authors** who want to get MOSAIC running in their AI
 | **Update workflows** | Replace the workflow set without touching agents or hooks | `mosaic-deploy workflows` |
 | **Deploy agents** | Deploy a chosen mix of agents without touching workflows or hooks | `mosaic-deploy agents` |
 | **Deploy hooks** | Deploy hook bundles alone | `mosaic-deploy hooks` |
-| **Transform** | Convert deployed agents from one harness to another | `mosaic-deploy transform` |
+| **Transform** | Move a workspace's whole deployment to another harness | `mosaic-deploy transform` |
 | **Promote** | Turn a harness-only agent into a reusable generic source | `mosaic-deploy promote` |
 
 **Two ways to run:** Launch without a subcommand for the interactive TUI, or pass a subcommand for scriptable CLI mode.
@@ -216,23 +216,26 @@ Deploys hook bundles alone. No agent, model, workflow, or orchestrator work is p
 
 ## Transform — Cross-Harness Conversion
 
-Converts already-deployed agent files from one harness to another.
+Moves the whole deployment of a workspace (agents, skills and hook bundles) from one harness to another. The input is the workspace root, as for deploy.
 
 ```sh
-# Preview what would happen
+# Preview the plan; nothing is written
 ./mosaic-deploy transform \
   --harness claude-code \
   --target-harness opencode \
-  --path /path/to/agents/ \
+  --workspace /path/to/my-project \
   --dry-run
 
-# Execute the transformation
+# Execute the transformation, confirming the plan
 ./mosaic-deploy transform \
   --harness claude-code \
   --target-harness opencode \
-  --path /path/to/agents/ \
+  --workspace /path/to/my-project \
+  --yes \
   --overwrite
 ```
+
+Agents are read from the source harness's agents folder and written to the target's. Agent bodies, stamps, protocol and bundle regions, workflow tables, infrastructure declarations, and project and custom regions and skills are kept unchanged from the source and never upgraded. Tool names, frontmatter shape, role-dependent fields and the regions the harness fills in come from the target. Hooks are deployed from the target's catalog variant for the bundles present in the source (excluded for the GHCP CLI / VS Code GHCP pair), so injections and hooks may be newer than the source. Existing destinations are skipped unless `--overwrite` is given. Source files and source manifest entries are never changed; the target deployment is recorded in the manifest, and `update` is the explicit way to upgrade it. Esc at a question cancels the run with nothing written. A model that cannot be resolved is left out of the agent (no `model` key) and named in the summary and the TODO file.
 
 Map models between harnesses with `--model-map`:
 
@@ -306,7 +309,7 @@ Enter is refused while the stack would have no layer at all. A problem with the 
 The screen starts from:
 
 1. the stack the TUI was launched with, if you passed `--catalog-folder` or `--include-default-catalog` (for example `mosaic-deploy --catalog-folder /my/catalog`), otherwise
-2. the stack persisted with the workspace you just entered (see [Persistence](#persistence-on-update-and-redeploy)): in deploy, update, workflows, agents and hooks modes when the path is itself a workspace; in promote and transform modes the workspace that contains the file or folder, otherwise
+2. the stack persisted with the workspace you just entered (see [Persistence](#persistence-on-update-and-redeploy)): in deploy, update, workflows, agents and hooks modes when the path is itself a workspace; in promote mode the workspace that contains the file, and in transform mode the workspace you entered, otherwise
 3. the default layer alone.
 
 If the persisted stack can no longer be used (for example a layer folder moved), the screen shows the reason and you must change the stack before confirming.
@@ -411,7 +414,7 @@ Where the workspace comes from:
 |------------|-------------------------|
 | `deploy`, `update`, `workflows`, `agents`, `hooks`, `render` | `--workspace` (`render --dest` without `--workspace` has none) |
 | `promote` | the workspace containing `--file` |
-| `transform` | the workspace containing `--path` |
+| `transform` | `--workspace` |
 | `check-index` | none; it never reuses |
 
 `promote` and `transform` reuse the persisted stack but never persist anything. `render` never persists either.
@@ -579,7 +582,7 @@ Work through this checklist before using the workspace. Filling project regions 
 | Add hook bundles only | `mosaic-deploy hooks --harness claude-code --workspace /path` |
 | Preview without writing files | Add `--dry-run` to any command |
 | Keep my local edits as backups during update | `--conflict backup` |
-| Convert agents to a different harness | `mosaic-deploy transform --harness X --target-harness Y --path /path` |
+| Move a deployment to a different harness | `mosaic-deploy transform --harness X --target-harness Y --workspace /path` |
 | Turn a one-off agent into a reusable generic | `mosaic-deploy promote --file /path/to/agent.md --category Category` |
 | Deploy from my catalog on top of the default one | Add `--catalog-folder /my/catalog --include-default-catalog` |
 | Layer several catalogs | Repeat `--catalog-folder`; the first is the highest layer |

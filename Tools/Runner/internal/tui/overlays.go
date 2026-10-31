@@ -170,7 +170,7 @@ func newInlineText(q interaction.TextQuestion, styles tuicommon.Theme, width, he
 	if q.Multiline {
 		return &inlineText{q: q, area: newMultilineArea(q, styles, width, height), styles: styles, width: width, height: height}
 	}
-	field := pastesafe.NewField(pastesafe.WithPlaceholder(q.Prompt), pastesafe.WithValidate(q.Validate))
+	field := pastesafe.NewField(pastesafe.WithPlaceholder(q.Prompt), pastesafe.WithValidate(q.Validate), pastesafe.WithWidth(width))
 	if q.Default != "" {
 		field.SetValue(q.Default)
 	}

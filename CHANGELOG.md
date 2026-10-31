@@ -2,10 +2,31 @@
 
 ## Tools
 
+### AgentTest v1.2.0
+#### Changes
+- Reading a run's orchestration state is more tolerant, and a malformed orchestration file now gives a clear error
+#### Bugfixes
+- Text entry screens no longer break when the text is wider than the screen or is pasted
+
+### Deploy v1.3.0
+#### Changes
+- `transform` now moves a whole deployment (agents, skills and hook bundles) to another harness. Its input is the workspace root given with `--workspace`, as for `deploy`; single files and loose folders are no longer accepted. The plan is shown and must be confirmed (`--yes` confirms without prompting)
+- `transform` keeps agent bodies, stamps, protocol and bundle regions, workflow tables, infrastructure declarations, and project and custom regions and skills unchanged from the source and never upgrades them; `update` is the way to upgrade. Tool names, frontmatter and harness-filled regions come from the target, and hooks come from the target's catalog variant. Existing destinations are skipped unless `--overwrite` is given
+- `transform` records the target deployment in the manifest, never changes source files or source manifest entries, and cancelling with Esc writes nothing
+- An agent whose model cannot be resolved is written without a `model` key and named in the summary and TODO
+- Tool lists are mapped correctly for OpenCode
+- Text inputs in the interactive screens handle wide text and pasted text better
+#### Bugfixes
+- `transform` no longer assumes the stack of the workspace containing the input path; it uses the stack of `--workspace`
+
 ### Deploy v1.2.1
 #### Bugfixes
 - The VS Code Copilot Chat hooks are now deployed to `.github/hooks/` and log to the workspace root
 - Agents deployed by recent versions are recognised as MOSAIC agents again. Before, `transform` and `retarget` skipped them as "not agent", `promote` refused them, and `update` silently left them out of the harness-only refresh. No migration is needed: affected workspaces are recognised on the next run
+
+### LogAnalyzer v1.2.1
+#### Bugfixes
+- Text entry overlays no longer overflow the screen with long text
 
 ### LogAnalyzer v1.2.0
 #### Changes
@@ -17,6 +38,12 @@
 - Tables are aligned and stacked, instance names stay visible, column titles wrap or show in full, and shares show their percent next to the bar. The `type` column is gone from the Context, Dispatches and Timeline lists, and the Context view has a compaction column group and `API calls` as title
 - The `?` overlay lists the columns of the current view, replacing the notes under the Context table
 - The Timeline shades only `waiting on the user` and `between sessions`, with a legend, and collapses idle stretches over 10 minutes with nobody working into a length marker
+
+### Runner v1.9.0
+#### Changes
+- The script orchestrator may be named `orchestrator-script.md` or `orchestrator-script.agent.md`; a folder holding both is refused with a clear error
+- Orchestration files are parsed more tolerantly
+- The progress screen and text inputs handle long text better
 
 ### Runner v1.8.0
 #### Changes

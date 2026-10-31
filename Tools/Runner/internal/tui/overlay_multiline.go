@@ -17,10 +17,10 @@ const (
 	multilineDefaultRows = 8
 )
 
-// newMultilineArea builds the multi-line entry for a text question that asks
-// for one: pre-filled with the default, validated on submit, focused.
-func newMultilineArea(q interaction.TextQuestion, styles tuicommon.Theme, width, height int) *widgets.TextArea {
-	cols, rows := width, height-multilineChromeLines-lineCount(q.Detail)
+// multilineSize is the column and row count of the multi-line entry for a
+// terminal of the given size.
+func multilineSize(q interaction.TextQuestion, width, height int) (cols, rows int) {
+	cols, rows = width, height-multilineChromeLines-lineCount(q.Detail)
 	if cols < 1 {
 		cols = multilineDefaultCols
 	}
@@ -30,6 +30,13 @@ func newMultilineArea(q interaction.TextQuestion, styles tuicommon.Theme, width,
 	if rows < multilineMinRows {
 		rows = multilineMinRows
 	}
+	return cols, rows
+}
+
+// newMultilineArea builds the multi-line entry for a text question that asks
+// for one: pre-filled with the default, validated on submit, focused.
+func newMultilineArea(q interaction.TextQuestion, styles tuicommon.Theme, width, height int) *widgets.TextArea {
+	cols, rows := multilineSize(q, width, height)
 	area := widgets.NewTextArea(q.Prompt, cols, rows, widgets.TextAreaStyles{
 		Label:  styles.Style(tuicommon.RoleBody),
 		Input:  lipgloss.NewStyle(),
@@ -55,6 +62,11 @@ func (t *inlineText) multilineView() string {
 		sb.WriteString(t.styles.Style(tuicommon.RoleMuted).Width(t.width).Render(t.q.Detail))
 		sb.WriteByte('\n')
 	}
-	sb.WriteString(t.area.View())
+	// The widget's key hint line is not wrapped; wrap it to the overlay width.
+	body := t.area.View()
+	if t.width > 0 {
+		body = lipgloss.NewStyle().Width(t.width).Render(body)
+	}
+	sb.WriteString(body)
 	return sb.String()
 }

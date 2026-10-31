@@ -13,8 +13,8 @@ const (
 	// ModePromoteToGeneric generates a generic agent source file from a harness-only agent.
 	// It is never triggered by an Update run; it is always an explicit, opt-in command.
 	ModePromoteToGeneric RunMode = "promote-to-generic"
-	// ModeTransformHarness converts already-deployed agents from one harness's form to
-	// another's, preserving injection content. Never triggered by an Update run.
+	// ModeTransformHarness moves the whole deployment of a workspace root (agents, skills and
+	// hook bundles) from one harness to another. Never triggered by an Update run.
 	ModeTransformHarness RunMode = "transform-harness"
 
 	// ModeDeployAgents deploys a user-chosen mix of subagents, utility agents, and
