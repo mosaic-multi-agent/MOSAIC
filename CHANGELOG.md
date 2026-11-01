@@ -76,6 +76,9 @@
 - **mosaic-logger** hook (v1.11.0): on all four harnesses a session no longer joins a run just because a message mentions the run id, and a run's orchestrator transcript is no longer replaced by another session's. Runs logged before this are not repaired
 - **mosaic-logger** hook (v1.11.0): the adapter version is read from `.mosaic/manifest.yaml` and `hook.yaml` is no longer deployed. Redeploy to get this; a leftover `hook.yaml` in an existing workspace is harmless
 - **mosaic-logger** hook (v1.11.0): the hook-picker description now says `COPILOT_OTEL_FILE_EXPORTER_PATH` is needed for the VS Code GHCP Local target only; GHCP CLI needs no setup
+- **brownfield-pr-fix** (v1.1): PR scope is pinned in a new `PullRequestContext.md`, so agents can tell PR code from pre-existing code; `Requirements.md` needs only the PR ID; Tests-Only stages now write replies
+- **pull-request-comment-interface** (v2.3.0): resolves PR refs and adds participants to `pr_context`. Needs the new `pr_details_read` tool mapped, or `brownfield-pr-fix` stops at retrieval
+- **fix-to-pr-response** (v1.1.0): reports threads its stage plan names but the work did not fix, and sends them back for a fix
 
 # 0.7.2 (2026-10-25)
 
