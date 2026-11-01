@@ -231,7 +231,7 @@ class TestHookSafetyOnIngestTrouble(_OtelCase):
         baseline.stop()
         expected = baseline.event_names()
         os.environ[support.ENV_VAR] = str(self.ws.otel_path)
-        self.assertIn("turn", expected)
+        self.assertIn("session_end", expected)
         self.assertEqual(expected, self._events_of_a_stop(_raise))
 
     def test_a_raising_ingest_does_not_propagate_out_of_dispatch(self):
@@ -241,11 +241,11 @@ class TestHookSafetyOnIngestTrouble(_OtelCase):
             self.ws.stop()
             self.ws.stop()
         self.assertEqual(2, len(calls))
-        self.assertIn("turn", self.ws.event_names())
+        self.assertIn("session_end", self.ws.event_names())
 
     def test_a_budget_overrun_leaves_the_events_and_stdout_unchanged(self):
         events = self._events_of_a_stop(_budget_exhausted)
-        self.assertIn("turn", events)
+        self.assertIn("session_end", events)
 
     def test_a_failing_ingest_in_a_hook_process_exits_0_with_empty_stdout(self):
         self.ws.start_session()
@@ -266,7 +266,6 @@ class TestHookSafetyOnIngestTrouble(_OtelCase):
     def test_ingest_trouble_on_subagent_stop_keeps_the_subagent_completion(self):
         ws = self.ws
         ws.session_start()
-        ws.prompt(support.SESSION, flow.RUN_ID)
         ws.send("pre_dispatch", session_id=support.SESSION)
         ws.send("start", session_id=support.SESSION)
         ws.add_spans(support.usage_span("s1"))

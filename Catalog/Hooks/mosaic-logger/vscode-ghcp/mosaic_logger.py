@@ -11,10 +11,9 @@ Key vscode-ghcp divergences:
 - HANDLERS contains exactly 8 events; SessionEnd, Notification, PostToolUseFailure,
   and PostCompact are absent (those events are unconfirmed for VS Code).
 - run_start is emitted on SessionStart; run_end is emitted on Stop.
-- RUN_ID_PROMPT_FIELDS maps UserPromptSubmit to 'prompt' (not 'user_prompt'),
-  and SubagentStart and SubagentStop are absent (SubagentStart takes its run_id from
-  the popped pending dispatch; SubagentStop carries neither prompt text nor a response,
-  and finds its run through the workspace-level spawn index).
+- Run identity comes only from the session cache written by a PreToolUse dispatch;
+  prompt and reply text never bind. SubagentStart takes its run_id from the popped
+  pending dispatch; SubagentStop finds its run through the workspace-level spawn index.
 """
 
 import json
@@ -43,17 +42,6 @@ for _mod in [_session, _invocation, _tools]:
 # Dispatcher functions
 # ---------------------------------------------------------------------------
 
-# Events with prompt-bearing fields from which run_id may be extracted.
-# SubagentStart and SubagentStop are deliberately absent: neither carries prompt
-# text or a response; SubagentStart's run_id comes from the popped pending dispatch
-# and SubagentStop finds its run through the spawn index.
-# UserPromptSubmit maps to 'prompt' — VS Code's field name (not 'user_prompt').
-RUN_ID_PROMPT_FIELDS: dict = {
-    "UserPromptSubmit": "prompt",
-    "Stop":             "last_assistant_message",
-}
-
-
 def build_context(payload: dict) -> core.HookContext:
     """Construct the immutable per-firing context from a parsed hook payload.
 
@@ -68,32 +56,18 @@ def build_context(payload: dict) -> core.HookContext:
 
 
 def resolve_run_identity(ctx: core.HookContext) -> None:
-    """Set ctx.run_id from the prompt-bearing field, else from the session cache.
+    """Set ctx.run_id from the session's cached run.
 
-    Prompt extraction wins and is written back to the workspace-level session -> run
-    cache; when it establishes or changes the session's run, the session's earlier
-    unknown-run/ lines are moved to that run. Events without a prompt field (tool
-    events, SessionStart, compaction, subagent events) take the cached run of their
-    session; with none cached ctx.run_id stays None and effective_run_id() routes to
-    unknown-run/.
+    Prompt text (user prompts, assistant replies) never binds a session to a run. The
+    binding is established by a MOSAIC dispatch (see the PreToolUse handler), which writes
+    the session -> run cache this function reads. With none cached ctx.run_id stays None
+    and effective_run_id() routes to unknown-run/.
 
     Never raises.
     """
     try:
-        field_name = RUN_ID_PROMPT_FIELDS.get(ctx.event)
-        extracted = None
-        if field_name is not None:
-            extracted = runstate.extract_run_id(ctx.field(field_name))
         cached = session_run.get_session_run_id(ctx.paths, ctx.session_id)
-        if extracted:
-            ctx.run_id = extracted
-            if extracted != cached:
-                session_run.put_session_run_id(ctx.paths, ctx.session_id, extracted,
-                                               created_at=ctx.timestamp)
-            # Always attempted (cheap when nothing is pending) so a failed or timed-out
-            # relocation is retried on the next prompt of the session.
-            session_run.relocate_unknown_run_events(ctx.paths, ctx.session_id, extracted)
-        elif cached:
+        if cached:
             ctx.run_id = cached
     except Exception as exc:
         core.debug_log("resolve_run_identity failed", exc)
@@ -105,7 +79,7 @@ def dispatch(raw_input: str) -> None:
     Steps (in fixed order):
       1. Parse raw_input as JSON; abort silently if not a dict.
       2. Build HookContext from the payload.
-      3. resolve_run_identity — extracts run_id from the prompt field, else the session cache.
+      3. resolve_run_identity — takes run_id from the session cache.
       4. Emit run_start when ctx.event == 'SessionStart' (D5).
       5. Invoke registered handler for ctx.event when registered; unknown events
          are silent no-ops.
@@ -128,7 +102,7 @@ def dispatch(raw_input: str) -> None:
         # Step 2: context
         ctx = build_context(payload)
 
-        # Step 3: resolve run identity via extraction
+        # Step 3: resolve run identity from the session cache
         try:
             resolve_run_identity(ctx)
         except Exception as exc:

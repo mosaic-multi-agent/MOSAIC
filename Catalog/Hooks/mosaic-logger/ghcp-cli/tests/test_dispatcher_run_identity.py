@@ -1,21 +1,24 @@
 """Tests for dispatcher run-identity resolution including session cache fallback
-and prompt-extraction write-back in mosaic_logger (ghcp-cli variant).
+and dispatch write-back in mosaic_logger (ghcp-cli variant).
 
 Design: resolve_run_identity sets ctx.run_id via the following precedence:
-  1. Prompt-field extraction (unchanged, highest priority)
+  1. A subagentStart dispatch prompt (agent instance id plus run id)
   2. Session cache (fallback when step 1 yields nothing)
   3. None -> core.effective_run_id yields "unknown-run"
+  Free text (a user prompt, a notification message, a subagent response) that
+  merely quotes a run id is never a source and does not touch the cache.
   Write-back: when step 1 produces a run_id and ctx.session_id is present,
   the value is persisted to the session cache. A value from step 2 is not
   written back (it is already cached).
 
 Covers:
-- Prompt extraction still wins when it yields a run_id (existing behaviour)
-- Prompt result supersedes a different cached value for the same session
+- A subagentStart dispatch still binds
+- A dispatch result supersedes a different cached value for the same session
+- Quoted run ids in free-text fields neither bind nor supersede the cache
 - Session cache supplies run_id for events with no prompt-bearing field
 - Cache miss leaves ctx.run_id as None (core.effective_run_id -> "unknown-run")
 - No session_id means no cache lookup and no write-back; never raises
-- Write-back: prompt-extracted run_id is persisted to the session cache
+- Write-back: a dispatch run_id is persisted to the session cache
 - Write-back is skipped when session_id is absent
 - Never raises under any input shape
 """
@@ -65,7 +68,7 @@ def _make_ctx(event, tmp_path, session_id=_SESSION_ID, ts=_TS, **payload_extra):
 
 
 class TestPromptExtractionStillWins(unittest.TestCase):
-    """Prompt-field extraction behaviour is unchanged (existing tests remain green)."""
+    """A dispatch prompt binds and wins over the cache; free-text quotes do not."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -80,26 +83,50 @@ class TestPromptExtractionStillWins(unittest.TestCase):
         mosaic_logger.resolve_run_identity(ctx)
         self.assertEqual(_RUN_ID, ctx.run_id)
 
-    def test_user_prompt_submitted_extracts_run_id_from_prompt_field(self):
+    def test_subagent_start_prompt_without_instance_id_does_not_bind(self):
+        prompt = f'{{"run_id": "{_RUN_ID}", "task_description": "no instance id"}}'
+        ctx = _make_ctx("subagentStart", self.tmp_path, agentPrompt=prompt)
+        mosaic_logger.resolve_run_identity(ctx)
+        self.assertIsNone(ctx.run_id)
+
+    def test_user_prompt_submitted_prompt_does_not_bind(self):
         prompt = f"Starting orchestration run {_RUN_ID}"
         ctx = _make_ctx("userPromptSubmitted", self.tmp_path, prompt=prompt)
         mosaic_logger.resolve_run_identity(ctx)
-        self.assertEqual(_RUN_ID, ctx.run_id)
+        self.assertIsNone(ctx.run_id)
 
-    def test_notification_extracts_run_id_from_message_field(self):
+    def test_notification_message_does_not_bind(self):
         message = f"run_id: {_RUN_ID}"
         ctx = _make_ctx("notification", self.tmp_path, message=message)
         mosaic_logger.resolve_run_identity(ctx)
-        self.assertEqual(_RUN_ID, ctx.run_id)
+        self.assertIsNone(ctx.run_id)
 
-    def test_prompt_result_supersedes_cached_different_run_id(self):
-        """When cache holds a different run_id, prompt extraction wins."""
+    def test_subagent_stop_response_does_not_bind(self):
+        response = f'{{"run_id": "{_RUN_ID}", "status_code": "SUCCESS"}}'
+        ctx = _make_ctx("subagentStop", self.tmp_path, response=response)
+        mosaic_logger.resolve_run_identity(ctx)
+        self.assertIsNone(ctx.run_id)
+
+    def test_dispatch_result_supersedes_cached_different_run_id(self):
+        """When cache holds a different run_id, a dispatch for another run wins."""
         paths = core.build_paths(self.tmp_path)
         runstate.put_session_run_id(paths, _SESSION_ID, _RUN_ID_CACHED)
-        prompt = f"run_id: {_RUN_ID}"
-        ctx = _make_ctx("userPromptSubmitted", self.tmp_path, prompt=prompt)
+        prompt = f'{{"agent_instance_id": "planner#1", "run_id": "{_RUN_ID}"}}'
+        ctx = _make_ctx("subagentStart", self.tmp_path, agentPrompt=prompt)
         mosaic_logger.resolve_run_identity(ctx)
         self.assertEqual(_RUN_ID, ctx.run_id)
+
+    def test_quoted_run_id_does_not_supersede_cached_run_id(self):
+        """A quoted run id in free text leaves the session's binding alone."""
+        paths = core.build_paths(self.tmp_path)
+        runstate.put_session_run_id(paths, _SESSION_ID, _RUN_ID_CACHED)
+        for event, field in (("userPromptSubmitted", "prompt"),
+                             ("notification", "message"),
+                             ("subagentStop", "response")):
+            with self.subTest(event=event):
+                ctx = _make_ctx(event, self.tmp_path, **{field: f"run_id: {_RUN_ID}"})
+                mosaic_logger.resolve_run_identity(ctx)
+                self.assertEqual(_RUN_ID_CACHED, ctx.run_id)
 
     def test_never_raises_on_malformed_prompt(self):
         ctx = _make_ctx("subagentStart", self.tmp_path, agentPrompt="}{broken json}")
@@ -201,16 +228,11 @@ class TestRunIdentityWriteBack(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_prompt_extracted_run_id_is_persisted_to_cache(self):
+    def test_quoted_run_id_is_not_persisted_to_cache(self):
         prompt = f"run_id: {_RUN_ID}"
-        # Use a fresh timestamp so that resolve_run_identity writes the cache
-        # entry with a created_at that is within the staleness window on read-back.
-        # (The production code stores ctx.timestamp as created_at; a frozen constant
-        # that is more than 24 hours old causes get_session_run_id to return None.)
         ctx = _make_ctx("userPromptSubmitted", self.tmp_path, ts=_now_ts(), prompt=prompt)
         mosaic_logger.resolve_run_identity(ctx)
-        cached = runstate.get_session_run_id(ctx.paths, _SESSION_ID)
-        self.assertEqual(_RUN_ID, cached)
+        self.assertIsNone(runstate.get_session_run_id(ctx.paths, _SESSION_ID))
 
     def test_subagent_start_prompt_run_id_is_cached(self):
         prompt = f'{{"agent_instance_id": "planner#1", "run_id": "{_RUN_ID}"}}'
@@ -224,10 +246,10 @@ class TestRunIdentityWriteBack(unittest.TestCase):
 
     def test_no_write_back_when_session_id_is_none(self):
         """Without session_id, no cache write is attempted and nothing is created."""
-        prompt = f"run_id: {_RUN_ID}"
-        payload = {"prompt": prompt}  # no sessionId
+        prompt = f'{{"agent_instance_id": "planner#1", "run_id": "{_RUN_ID}"}}'
+        payload = {"agentPrompt": prompt}  # no sessionId
         paths = core.build_paths(self.tmp_path)
-        ctx = core.HookContext("userPromptSubmitted", payload, self.tmp_path, paths, _TS)
+        ctx = core.HookContext("subagentStart", payload, self.tmp_path, paths, _TS)
         self.assertIsNone(ctx.session_id)
         try:
             mosaic_logger.resolve_run_identity(ctx)
@@ -253,8 +275,8 @@ class TestRunIdentityWriteBack(unittest.TestCase):
 
     def test_never_raises_on_write_back_failure(self):
         """Even if the cache write fails, the resolved run_id must still be set."""
-        prompt = f"run_id: {_RUN_ID}"
-        ctx = _make_ctx("userPromptSubmitted", self.tmp_path, prompt=prompt)
+        prompt = f'{{"agent_instance_id": "planner#1", "run_id": "{_RUN_ID}"}}'
+        ctx = _make_ctx("subagentStart", self.tmp_path, agentPrompt=prompt)
         # Sabotage the session run-id dir by placing a file where the dir should be
         session_dir = ctx.paths.session_run_id_dir()
         session_dir.parent.mkdir(parents=True, exist_ok=True)

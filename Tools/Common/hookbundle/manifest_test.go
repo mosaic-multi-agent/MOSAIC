@@ -402,8 +402,7 @@ func TestLoad_RealMosaicLoggerBundle_PlaceholderAndContentHashAbsent(t *testing.
 		t.Error("Placeholder = true, want false; the real bundle's comments explain both variants are fully authored")
 	}
 	if m.ContentHash != "" {
-		t.Errorf("ContentHash = %q, want empty; the real bundle's comments explain hashing would be unstable "+
-			"because claude-code lists ../hook.yaml in its own file set", m.ContentHash)
+		t.Errorf("ContentHash = %q, want empty; the bundle does not declare a content_hash", m.ContentHash)
 	}
 }
 
@@ -419,27 +418,6 @@ func TestLoad_RealMosaicLoggerBundle_OpenCodeRegistrationEmpty(t *testing.T) {
 	}
 	if len(v.Registration) != 0 {
 		t.Errorf(`Variants["opencode"].Registration has %d steps, want 0 (opencode registers by directory drop)`, len(v.Registration))
-	}
-}
-
-func TestLoad_RealMosaicLoggerBundle_ClaudeCodeFileEscapesVariantDirectory(t *testing.T) {
-	m, err := hookbundle.Load(realLoggerBundleDir(t))
-	if err != nil {
-		t.Fatalf("Load: unexpected error: %v", err)
-	}
-
-	v, ok := m.Variants["claude-code"]
-	if !ok {
-		t.Fatal(`Variants["claude-code"] not found`)
-	}
-	var found bool
-	for _, f := range v.Files {
-		if f.Source == "../hook.yaml" && f.Target == "hook.yaml" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf(`Variants["claude-code"].Files does not contain the self-referencing "../hook.yaml" entry: %+v`, v.Files)
 	}
 }
 

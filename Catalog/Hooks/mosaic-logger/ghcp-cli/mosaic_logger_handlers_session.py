@@ -9,6 +9,7 @@ Also exposes emit_run_start and emit_run_end, called by the dispatcher.
 
 import mosaic_logger_core as core
 import mosaic_logger_export as export
+import mosaic_logger_manifest_version as manifest_version
 import mosaic_logger_handlers_tools as tools
 import mosaic_logger_transcript as transcript
 import mosaic_logger_transcript_logging as transcript_logging
@@ -25,7 +26,7 @@ def emit_run_start(ctx: "core.HookContext") -> None:
         "run_start", ctx,
         run_id=ctx.run_id,
         cwd=ctx.field("cwd"),
-        adapter_version=core.adapter_version(ctx),
+        adapter_version=manifest_version.adapter_version(ctx),
     )
     core.append_event(ctx.paths.orchestrator_events(run_id), event)
 
@@ -116,6 +117,7 @@ def handle_agent_stop(ctx: "core.HookContext") -> None:
         ctx.transcript_path,
         ctx.paths.orchestrator_raw(run_id, ctx.session_id),
         "transcript_path",
+        owner_session_id=ctx.session_id,
     )
 
 

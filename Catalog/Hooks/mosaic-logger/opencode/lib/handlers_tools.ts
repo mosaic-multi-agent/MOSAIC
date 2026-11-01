@@ -12,7 +12,8 @@
 
 import { currentTimestamp } from "./core.js";
 import { isCallFailed, markCallFailed } from "./failed_calls.js";
-import { extractInstanceId, extractRunId } from "./runstate.js";
+import { extractInstanceId } from "./runstate.js";
+import { dispatchRunId } from "./run_binding.js";
 import type {
   HandlerDependencies,
   ToolBeforeInput,
@@ -163,7 +164,7 @@ export function createToolHandlers(deps: HandlerDependencies): {
         parentSessionId: sessionId,
         agentInstanceId: extractInstanceId(promptText),
         agentType: subagentType,
-        runId: extractRunId(promptText),
+        runId: dispatchRunId(promptText),
         prompt: promptText,
         dispatchedAt: ts,
       });

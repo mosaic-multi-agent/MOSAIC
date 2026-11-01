@@ -147,7 +147,7 @@ export function createMessageHandlers(deps: HandlerDependencies): {
 
         const usageEvent = buildEvent(
           "usage_record",
-          { sessionId, runId, timestamp: ts },
+          { sessionId, runId, timestamp: callStartTimestamp(createdAt) ?? ts },
           {
             record_id: recordId,
             record_index: recordIndex,
@@ -174,6 +174,21 @@ export function createMessageHandlers(deps: HandlerDependencies): {
 // ---------------------------------------------------------------------------
 // Exported pure helper (directly testable)
 // ---------------------------------------------------------------------------
+
+/**
+ * ISO 8601 UTC timestamp (ms precision, `Z`) for a message's start time, or
+ * `undefined` when it is not usable.
+ *
+ * `info.time.created` is read as epoch milliseconds (OpenCode's SDK convention;
+ * not verified against the host here). It is usable when it is a finite number
+ * greater than zero and before the year 10000. The value is fixed at message
+ * creation, so every re-observation of a message yields the same timestamp.
+ */
+export function callStartTimestamp(createdAt: number | undefined): string | undefined {
+  if (createdAt === undefined || !Number.isFinite(createdAt)) return undefined;
+  if (createdAt <= 0 || createdAt >= 253402300800000) return undefined;
+  return new Date(createdAt).toISOString();
+}
 
 /**
  * Build the `token_usage` object from an assistant message's `info.tokens` field.

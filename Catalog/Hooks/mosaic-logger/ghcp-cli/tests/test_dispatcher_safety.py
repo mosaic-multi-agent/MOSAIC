@@ -216,50 +216,6 @@ class TestHandlersRegistry(unittest.TestCase):
             )
 
 
-class TestRunIdPromptFieldsMapping(unittest.TestCase):
-    """_RUN_ID_PROMPT_FIELDS maps GHCP CLI event names to prompt-bearing payload fields."""
-
-    def test_run_id_prompt_fields_is_a_dict(self):
-        self.assertIsInstance(mosaic_logger._RUN_ID_PROMPT_FIELDS, dict)
-
-    def test_subagent_start_maps_to_agent_prompt(self):
-        """subagentStart carries run_id in the 'agentPrompt' field."""
-        self.assertIn("subagentStart", mosaic_logger._RUN_ID_PROMPT_FIELDS)
-        self.assertEqual("agentPrompt", mosaic_logger._RUN_ID_PROMPT_FIELDS["subagentStart"])
-
-    def test_subagent_stop_maps_to_response(self):
-        """subagentStop carries run_id in the 'response' field."""
-        self.assertIn("subagentStop", mosaic_logger._RUN_ID_PROMPT_FIELDS)
-        self.assertEqual("response", mosaic_logger._RUN_ID_PROMPT_FIELDS["subagentStop"])
-
-    def test_user_prompt_submitted_maps_to_prompt(self):
-        """userPromptSubmitted carries run_id in the 'prompt' field."""
-        self.assertIn("userPromptSubmitted", mosaic_logger._RUN_ID_PROMPT_FIELDS)
-        self.assertEqual("prompt", mosaic_logger._RUN_ID_PROMPT_FIELDS["userPromptSubmitted"])
-
-    def test_notification_maps_to_message(self):
-        """notification carries run_id in the 'message' field."""
-        self.assertIn("notification", mosaic_logger._RUN_ID_PROMPT_FIELDS)
-        self.assertEqual("message", mosaic_logger._RUN_ID_PROMPT_FIELDS["notification"])
-
-    def test_agent_stop_is_not_in_mapping(self):
-        """agentStop is intentionally absent: GHCP CLI's agentStop payload does not
-        carry a last_assistant_message or equivalent text field for run_id extraction."""
-        self.assertNotIn("agentStop", mosaic_logger._RUN_ID_PROMPT_FIELDS)
-
-    def test_session_start_is_not_in_mapping(self):
-        """sessionStart has no prompt-bearing field."""
-        self.assertNotIn("sessionStart", mosaic_logger._RUN_ID_PROMPT_FIELDS)
-
-    def test_session_end_is_not_in_mapping(self):
-        """sessionEnd has no prompt-bearing field."""
-        self.assertNotIn("sessionEnd", mosaic_logger._RUN_ID_PROMPT_FIELDS)
-
-    def test_pre_tool_use_is_not_in_mapping(self):
-        """preToolUse has no prompt-bearing field for run_id extraction."""
-        self.assertNotIn("preToolUse", mosaic_logger._RUN_ID_PROMPT_FIELDS)
-
-
 class TestBuildContext(unittest.TestCase):
     """build_context constructs a HookContext from event name and camelCase payload."""
 

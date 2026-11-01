@@ -80,16 +80,31 @@ function makeNullSdk(): SdkClient {
 }
 
 /**
- * An SDK client whose messages() returns content containing a run_id.
- * Uses the real { info, parts } shape via the fixture builder so no message
- * is constructed as { role, content } anywhere in the suite.
+ * An SDK client whose messages() returns a history holding a Task dispatch
+ * (a tool part whose input prompt carries an agent instance id and the run_id).
+ * Only such a dispatch binds a resumed session; message text never does.
+ * Uses the real { info, parts } shape so no message is { role, content }.
  */
 function makeSdkWithRunId(runId: string): SdkClient {
+  const dispatch = JSON.stringify({ agent_instance_id: "Research#1", run_id: runId });
   return {
     session: {
       get: async () => undefined,
       messages: async () => [
-        userMessageEntry(`run_id: "${runId}"`),
+        userMessageEntry("start the work"),
+        {
+          info: { id: "msg-task", role: "assistant", sessionID: "sess-fixture" },
+          parts: [
+            {
+              id: "part-task",
+              messageID: "msg-task",
+              sessionID: "sess-fixture",
+              type: "tool",
+              tool: "task",
+              state: { status: "completed", input: { prompt: dispatch } },
+            },
+          ],
+        },
       ],
     },
     app: {
@@ -215,7 +230,7 @@ describe("session.created — top-level orchestrator session", () => {
     }
   });
 
-  it("uses extracted run_id in event routing when SDK returns a run_id", async () => {
+  it("uses the run_id of a Task dispatch in the history for event routing", async () => {
     const store = makeStore();
     const paths = makePaths();
     const collected: CollectedEvent[] = [];

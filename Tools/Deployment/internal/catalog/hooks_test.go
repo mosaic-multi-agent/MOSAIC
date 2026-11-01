@@ -360,7 +360,7 @@ func TestHook_Variant_VscodeGhcp_DoesNotReuseClaudeCode(t *testing.T) {
 }
 
 // TestHook_Variant_VscodeGhcp_CarriesOwnFiles verifies that the vscode-ghcp variant carries
-// its own hook.yaml deployment manifest rather than inheriting claude-code's files.
+// its own file list rather than inheriting claude-code's files.
 func TestHook_Variant_VscodeGhcp_CarriesOwnFiles(t *testing.T) {
 	cat := loadRealCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
@@ -370,22 +370,10 @@ func TestHook_Variant_VscodeGhcp_CarriesOwnFiles(t *testing.T) {
 		t.Fatal("mosaic-logger Variants[\"vscode-ghcp\"]: not found")
 	}
 
-	// The variant must carry its own hook.yaml — proof it has its own deployment manifest.
-	hasHookYaml := false
-	for _, f := range v.Files {
-		if f.TargetName == "hook.yaml" {
-			hasHookYaml = true
-			break
-		}
-	}
-	if !hasHookYaml {
-		var names []string
-		for _, f := range v.Files {
-			names = append(names, f.TargetName)
-		}
-		t.Errorf("vscode-ghcp variant has no hook.yaml in its Files list; "+
-			"the variant must carry its own deployment manifest, not inherit another variant's files; "+
-			"got files: %v", names)
+	// The variant carries its own file list, not another variant's files.
+	if len(v.Files) == 0 {
+		t.Error("vscode-ghcp variant has an empty Files list; " +
+			"the variant must carry its own files, not inherit another variant's files")
 	}
 }
 

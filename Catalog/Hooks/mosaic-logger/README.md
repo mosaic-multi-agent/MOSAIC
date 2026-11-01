@@ -13,6 +13,28 @@ A hook adapter bundle that captures hook events and writes structured logs under
 | `vscode-ghcp` | Implemented — Python adapter deployed to `.github/hooks/` |
 | `ghcp-cli` | Implemented — Python adapter deployed to `.github/hooks/` |
 
+## Where the data comes from
+
+Hooks tell the adapter what happened; a second source tells it what each call used.
+Hook payloads alone are not enough, because they carry no per-call token usage on most
+harnesses.
+
+| Data | `claude-code` | `opencode` | `ghcp-cli` | `vscode-ghcp` |
+|---|---|---|---|---|
+| Sessions, subagents, tool start and end, prompts | Hooks | Plugin events | Hooks | Hooks |
+| Tool input and output | Hooks | Plugin hooks | Hooks | Hooks |
+| Tokens and model per call | Transcript | `message.updated` events | Transcript | OTel file |
+| Tools each call requested | Transcript | Message parts | Transcript | OTel file, with content capture |
+| Compactions | Hooks | Plugin hook | Transcript | OTel file |
+| Failed tool calls | Hooks | Plugin hooks | Hooks | Hooks, completed from the OTel file |
+| Full `.raw` session copy | Transcript file | SDK `session.messages()` | Transcript file | Transcript file |
+
+- **`opencode`** parses no transcript file for usage: the plugin runs inside the OpenCode
+  process and receives tokens and model in its live events.
+- **Fragility:** the Claude Code and GHCP CLI transcript formats are not public contracts.
+  `ghcp-cli` writes a `transcript_format_changed` diagnostic when a transcript has
+  assistant turns but no usage; `claude-code` has no such check.
+
 ## Claude Code: subagent result delivery
 
 On Claude Code 2.1.271+ in auto mode a subagent delivers its result through a
@@ -91,9 +113,9 @@ See `ghcp-cli/README.md`.
 `opencode run` does not await the plugin's `session.idle` handler at exit. See
 `opencode/LIMITATIONS.md`.
 
-## Copilot token usage (GHCP CLI and VS Code Copilot Chat)
+## Copilot token usage (`ghcp-cli` and `vscode-ghcp`)
 
-**GHCP CLI** needs no setup. The `ghcp-cli` hook reads the CLI's session transcript
+**GHCP CLI / VS Code GHCP Copilot** (`ghcp-cli`) needs no setup. The `ghcp-cli` hook reads the CLI's session transcript
 (`~/.copilot/session-state/<session-id>/events.jsonl`) and logs `usage_record` and
 `compaction` events from it, in native mode and in Runner mode. If a transcript has
 assistant turns but no usage records (the CLI's transcript format may have changed),
@@ -101,13 +123,13 @@ the hook writes a `transcript_format_changed` entry to
 `OrchestrationLogs/mosaic-logger-diagnostics.jsonl` and LogAnalyzer shows a finding
 for the run, instead of a silent zero.
 
-**VS Code Copilot Chat** reports token usage through the harness's OpenTelemetry file
-export, not through hook payloads. The `vscode-ghcp` hook reads that file and adds
+**VS Code GHCP Local** (`vscode-ghcp`) reports token usage through the harness's
+OpenTelemetry file export, not through hook payloads. The `vscode-ghcp` hook reads that file and adds
 the usage to the run's logs as `usage_record` events. Every `usage_record` of all four
 harnesses also lists the tools the call requested (`requested_tools`); in VS Code
 that needs content capture (see below).
 
-### Enable it (VS Code only)
+### Enable it (VS Code GHCP Local only)
 
 Set one environment variable to a file path of your choice:
 
@@ -161,7 +183,7 @@ its transcript instead):
 
 ### Locations
 
-The VS Code Copilot Chat hooks are deployed to `.github/hooks/` (the same place as
+The `vscode-ghcp` hooks are deployed to `.github/hooks/` (the same place as
 GHCP CLI) and log to the workspace root's `OrchestrationLogs/`. Existing deployments
 keep their old file set until redeployed.
 
@@ -206,12 +228,8 @@ states, so the whole-bundle key is omitted.
 
 ## Why `content_hash` is absent
 
-The `claude-code` variant lists `../hook.yaml` in its file set so the deployed adapter
-can read its own version at runtime (the `run_start.adapter_version` field). Including
-`hook.yaml` in the hash computation makes the stored hash unstable by construction: any
-change to the version field changes the hash, which must then be updated in the file,
-which changes the hash again. `content_hash` is left unset; the deployment tool skips
-hash validation when the field is absent.
+Not used; the bundle does not declare one. `content_hash` is left unset; the deployment
+tool skips hash validation when the field is absent.
 
 ## Maintainer: Copilot OTel ingest cost
 

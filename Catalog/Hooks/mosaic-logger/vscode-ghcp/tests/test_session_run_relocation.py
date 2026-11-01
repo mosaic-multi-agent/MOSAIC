@@ -1,6 +1,6 @@
 """Events a session wrote to unknown-run/ before its run was known follow it to the run.
 
-Once a firing establishes a session's run, that session's lines in
+Once a MOSAIC dispatch establishes a session's run, that session's lines in
 unknown-run/00_orchestrator_events.jsonl are moved to the run's orchestrator stream in
 their original order with the envelope run_id set to the run. Other sessions' lines
 stay byte-for-byte; repeating the step moves nothing twice.
@@ -39,40 +39,38 @@ class TestRelocationOfEarlierEvents(_Base):
         self.early_events_of(sf.SESSION_A, 2)
         before = [e["event"] for e in self.ws.events_of(sf.UNKNOWN, sf.SESSION_A)]
         self.assertTrue(before)
-        self.ws.send_all(sf.prompt_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
+        self.ws.send_all(sf.dispatch_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
         self.assertEqual([], self.ws.events_of(sf.UNKNOWN, sf.SESSION_A))
         moved = [e["event"] for e in self.ws.events_of(sf.RUN_A, sf.SESSION_A)]
-        for name in set(before):
-            self.assertEqual(before.count(name), moved.count(name), name)
+        self.assertEqual(before, moved[:len(before)])
 
     def test_moved_events_keep_their_original_order(self):
         self.early_events_of(sf.SESSION_A, 3)
         original = [e["event"] for e in self.ws.events_of(sf.UNKNOWN, sf.SESSION_A)]
-        self.ws.send_all(sf.prompt_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
+        self.ws.send_all(sf.dispatch_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
         moved = [e["event"] for e in self.ws.events_of(sf.RUN_A, sf.SESSION_A)]
         self.assertEqual(original, moved[:len(original)])
 
     def test_moved_events_have_the_run_in_their_envelope_and_other_fields_unchanged(self):
         self.early_events_of(sf.SESSION_A, 1)
         original = self.ws.events_of(sf.UNKNOWN, sf.SESSION_A, "tool_call_start")[0]
-        self.ws.send_all(sf.prompt_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
+        self.ws.send_all(sf.dispatch_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
         moved = self.ws.events_of(sf.RUN_A, sf.SESSION_A, "tool_call_start")[0]
         self.assertEqual(sf.RUN_A, moved.get("run_id"))
         self.assertEqual({**original, "run_id": sf.RUN_A}, moved)
 
     def test_run_start_written_before_the_run_was_known_ends_up_in_the_run_folder(self):
         self.early_events_of(sf.SESSION_A, 0)
-        self.ws.send_all(sf.prompt_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
+        self.ws.send_all(sf.dispatch_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
         starts = self.ws.events_of(sf.RUN_A, sf.SESSION_A, "run_start")
         self.assertEqual(1, len(starts))
         self.assertEqual(sf.RUN_A, starts[0].get("run_id"))
 
     def test_events_after_the_prompt_follow_the_relocated_ones(self):
         self.early_events_of(sf.SESSION_A, 1)
-        self.ws.send_all(sf.prompt_payload(self.ws.path, sf.SESSION_A, sf.RUN_A),
+        self.ws.send_all(sf.dispatch_payload(self.ws.path, sf.SESSION_A, sf.RUN_A),
                          sf.tool_payload(self.ws.path, sf.SESSION_A, "pre", 9))
-        starts = self.ws.events_of(sf.RUN_A, sf.SESSION_A, "tool_call_start")
-        self.assertEqual(2, len(starts))
+        self.assertEqual(2, len(self.ws.read_starts(sf.RUN_A, sf.SESSION_A)))
         self.assertEqual([], self.ws.events_of(sf.UNKNOWN, sf.SESSION_A, "tool_call_start"))
 
 
@@ -86,36 +84,35 @@ class TestOtherSessionsLeftUntouched(_Base):
         b_lines = [ln for ln in self.ws.stream_text(sf.UNKNOWN).splitlines(keepends=True)
                    if json.loads(ln).get("session_id") == sf.SESSION_B]
         self.assertTrue(b_lines)
-        self.ws.send_all(sf.prompt_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
+        self.ws.send_all(sf.dispatch_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
         self.assertEqual(b_lines, self.ws.stream_text(sf.UNKNOWN).splitlines(keepends=True))
         self.assertEqual([], self.ws.events_of(sf.RUN_A, sf.SESSION_B))
 
     def test_events_already_in_the_run_folder_from_another_session_are_kept(self):
-        self.ws.send_all(sf.prompt_payload(self.ws.path, sf.SESSION_B, sf.RUN_A),
+        self.ws.send_all(sf.dispatch_payload(self.ws.path, sf.SESSION_B, sf.RUN_A),
                          sf.tool_payload(self.ws.path, sf.SESSION_B, "pre", 1))
         self.early_events_of(sf.SESSION_A, 1)
-        self.ws.send_all(sf.prompt_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
-        self.assertEqual(1, len(self.ws.events_of(sf.RUN_A, sf.SESSION_B, "tool_call_start")))
-        self.assertEqual(1, len(self.ws.events_of(sf.RUN_A, sf.SESSION_A, "tool_call_start")))
+        self.ws.send_all(sf.dispatch_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
+        self.assertEqual(1, len(self.ws.read_starts(sf.RUN_A, sf.SESSION_B)))
+        self.assertEqual(1, len(self.ws.read_starts(sf.RUN_A, sf.SESSION_A)))
 
 
 class TestRelocationIsIdempotent(_Base):
 
-    def test_repeating_the_prompt_does_not_duplicate_events(self):
+    def test_repeating_the_dispatch_does_not_duplicate_events(self):
         self.early_events_of(sf.SESSION_A, 2)
-        self.ws.send_all(sf.prompt_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
+        self.ws.send_all(sf.dispatch_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
         first = self.ws.stream_text(sf.RUN_A)
-        count = len(self.ws.events_of(sf.RUN_A, sf.SESSION_A, "tool_call_start"))
-        self.ws.send_all(sf.prompt_payload(self.ws.path, sf.SESSION_A, sf.RUN_A),
+        count = len(self.ws.read_starts(sf.RUN_A, sf.SESSION_A))
+        self.ws.send_all(sf.dispatch_payload(self.ws.path, sf.SESSION_A, sf.RUN_A),
                          sf.tool_payload(self.ws.path, sf.SESSION_A, "pre", 5))
-        self.assertEqual(count + 1,
-                         len(self.ws.events_of(sf.RUN_A, sf.SESSION_A, "tool_call_start")))
+        self.assertEqual(count + 1, len(self.ws.read_starts(sf.RUN_A, sf.SESSION_A)))
         self.assertEqual(1, len(self.ws.events_of(sf.RUN_A, sf.SESSION_A, "run_start")))
         self.assertTrue(self.ws.stream_text(sf.RUN_A).startswith(first))
 
     def test_a_session_with_a_known_run_never_writes_again_to_unknown_run(self):
         self.early_events_of(sf.SESSION_A, 1)
-        self.ws.send_all(sf.prompt_payload(self.ws.path, sf.SESSION_A, sf.RUN_A),
+        self.ws.send_all(sf.dispatch_payload(self.ws.path, sf.SESSION_A, sf.RUN_A),
                          sf.stop_payload(self.ws.path, sf.SESSION_A))
         self.assertEqual([], self.ws.events_of(sf.UNKNOWN, sf.SESSION_A))
 
@@ -124,10 +121,10 @@ class TestRunChange(_Base):
 
     def test_events_written_under_an_earlier_run_stay_there_when_the_run_changes(self):
         self.early_events_of(sf.SESSION_A, 1)
-        self.ws.send_all(sf.prompt_payload(self.ws.path, sf.SESSION_A, sf.RUN_A),
+        self.ws.send_all(sf.dispatch_payload(self.ws.path, sf.SESSION_A, sf.RUN_A),
                          sf.tool_payload(self.ws.path, sf.SESSION_A, "pre", 4),
-                         sf.prompt_payload(self.ws.path, sf.SESSION_A, sf.RUN_B))
-        self.assertEqual(2, len(self.ws.events_of(sf.RUN_A, sf.SESSION_A, "tool_call_start")))
+                         sf.dispatch_payload(self.ws.path, sf.SESSION_A, sf.RUN_B))
+        self.assertEqual(2, len(self.ws.read_starts(sf.RUN_A, sf.SESSION_A)))
         self.assertEqual([], self.ws.events_of(sf.UNKNOWN, sf.SESSION_A))
 
 
@@ -135,23 +132,22 @@ class TestHookProcess(_Base):
 
     def test_hook_exits_zero_and_prints_nothing_when_it_relocates(self):
         self.early_events_of(sf.SESSION_A, 1)
-        data = json.dumps(sf.prompt_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
+        data = json.dumps(sf.dispatch_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
         proc = subprocess.run([sys.executable, _ADAPTER], input=data, capture_output=True,
                               text=True, cwd=str(self.ws.path))
         self.assertEqual(0, proc.returncode)
         self.assertEqual("", proc.stdout)
         self.assertEqual([], self.ws.events_of(sf.UNKNOWN, sf.SESSION_A))
-        self.assertTrue(self.ws.events_of(sf.RUN_A, sf.SESSION_A, "tool_call_start"))
+        self.assertTrue(self.ws.read_starts(sf.RUN_A, sf.SESSION_A))
 
     def test_unreadable_unknown_run_stream_never_loses_the_current_event(self):
         # A directory where the shared stream file should be makes reading it fail.
         stream = self.ws.stream_path(sf.UNKNOWN)
         stream.parent.mkdir(parents=True, exist_ok=True)
         stream.mkdir()
-        self.ws.send_all(sf.prompt_payload(self.ws.path, sf.SESSION_A, sf.RUN_A),
+        self.ws.send_all(sf.dispatch_payload(self.ws.path, sf.SESSION_A, sf.RUN_A),
                          sf.tool_payload(self.ws.path, sf.SESSION_A, "pre", 8))
-        starts = self.ws.events_of(sf.RUN_A, sf.SESSION_A, "tool_call_start")
-        self.assertEqual(1, len(starts))
+        self.assertEqual(1, len(self.ws.read_starts(sf.RUN_A, sf.SESSION_A)))
 
 
 if __name__ == "__main__":

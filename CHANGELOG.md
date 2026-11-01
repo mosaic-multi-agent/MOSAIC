@@ -71,6 +71,11 @@
 - **mosaic-logger** hook (v1.10.0): GHCP CLI now logs token usage and compactions from its session transcript, in native and Runner mode, with no setup and no OpenTelemetry; a transcript whose format changed raises a diagnostic instead of a silent zero
 - **mosaic-logger** hook (v1.10.0): VS Code Copilot Chat logs token usage read from the Copilot OpenTelemetry file; enable it with the user-level environment variable `COPILOT_OTEL_FILE_EXPORTER_PATH` and restart VS Code (see the hook README). Copilot cost needs `github-copilot` entries in `pricing.yaml`
 - **mosaic-logger** hook (v1.10.0, log format 1.7.0): every `usage_record` lists the tools the call requested, on all four harnesses; VS Code needs OpenTelemetry content capture for it. Redeploy to get the new files
+- **mosaic-logger** hook (v1.11.0): Claude Code and OpenCode `usage_record` timestamps now mean the start of the call (Claude Code: the first transcript line of the message; OpenCode: the message's `time.created`), so per-call times in LogAnalyzer are correct. Runs logged before this are not repaired
+- **mosaic-logger** hook (v1.11.0): Claude Code no longer re-writes usage records in bulk when several hooks fire at the same time
+- **mosaic-logger** hook (v1.11.0): on all four harnesses a session no longer joins a run just because a message mentions the run id, and a run's orchestrator transcript is no longer replaced by another session's. Runs logged before this are not repaired
+- **mosaic-logger** hook (v1.11.0): the adapter version is read from `.mosaic/manifest.yaml` and `hook.yaml` is no longer deployed. Redeploy to get this; a leftover `hook.yaml` in an existing workspace is harmless
+- **mosaic-logger** hook (v1.11.0): the hook-picker description now says `COPILOT_OTEL_FILE_EXPORTER_PATH` is needed for the VS Code GHCP Local target only; GHCP CLI needs no setup
 
 # 0.7.2 (2026-10-25)
 

@@ -1,7 +1,9 @@
 """mosaic_logger_session_run.py - Workspace-level session -> run association and relocation.
 
-Every VS Code hook payload carries a session_id, but only prompt text names the run. Once
-a prompt reveals a session's run, this module remembers it (OrchestrationLogs/
+Every VS Code hook payload carries a session_id, but only a MOSAIC dispatch (the prompt of
+a subagent-launch tool call, carrying an agent instance id and a run id) names the run.
+Quoted ids in user prompts or assistant replies never bind. Once a dispatch reveals a
+session's run, this module remembers it (OrchestrationLogs/
 .session-run-id/<session>.json, skipped by log readers) so later firings of that session
 - tool calls, SessionStart, Stop - resolve the same run. It also moves the session's
 earlier lines from unknown-run/00_orchestrator_events.jsonl into the run's orchestrator
@@ -162,3 +164,21 @@ def relocate_unknown_run_events(paths: "core.LogPaths", session_id: "str | None"
                 pass
     except Exception as exc:
         core.debug_log("relocate_unknown_run_events failed", exc)
+
+
+def bind_session_to_dispatch_run(paths: "core.LogPaths", session_id: "str | None",
+                                 run_id: "str | None", created_at: "str | None" = None) -> None:
+    """Bind the session to the run named by a MOSAIC dispatch and relocate its earlier lines.
+
+    A dispatch for a different run than the cached one switches the binding. Relocation is
+    always attempted (cheap when nothing is pending) so a failed one is retried by the
+    session's next dispatch. Never raises.
+    """
+    try:
+        if not session_id or not run_id:
+            return
+        if run_id != get_session_run_id(paths, session_id):
+            put_session_run_id(paths, session_id, run_id, created_at=created_at)
+        relocate_unknown_run_events(paths, session_id, run_id)
+    except Exception as exc:
+        core.debug_log("bind_session_to_dispatch_run failed", exc)

@@ -189,5 +189,22 @@ class TestLockedAppendModuleIsShipped(unittest.TestCase):
             self.assertEqual([], otel, variant)
 
 
+class TestManifestIsNotDeployed(unittest.TestCase):
+    """No variant lists hook.yaml as a source or a target: the deployed copy has no use."""
+
+    def test_no_variant_lists_hook_yaml(self):
+        entries = _entries_by_variant()
+
+        listed = {variant: [e for e in pairs
+                            if os.path.basename(e[0]) == "hook.yaml" or e[1] == "hook.yaml"]
+                  for variant, pairs in entries.items()}
+
+        self.assertEqual({}, {v: e for v, e in listed.items() if e})
+
+    def test_all_four_variants_were_checked(self):
+        self.assertEqual({"claude-code", "opencode", "vscode-ghcp", "ghcp-cli"},
+                         set(_entries_by_variant()))
+
+
 if __name__ == "__main__":
     unittest.main()

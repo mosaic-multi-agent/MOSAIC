@@ -232,18 +232,34 @@ class TestHandlePreToolUse(unittest.TestCase):
         self.assertEqual("", buf.getvalue())
 
     def test_captures_pending_dispatch_for_agent_tool(self):
-        """When toolName is 'agent', must persist pending dispatch for subagentStart handoff."""
-        prompt_with_id = f'agent_instance_id: "Planner#3"\nrun_id: "20260101T000000Z-bb22"'
+        """When toolName is 'agent', must persist pending dispatch for subagentStart handoff.
+
+        The dispatch binds the session first, so the pending dispatch is stored
+        under the dispatched run (where subagentStart looks it up)."""
+        dispatched_run = "20260101T000000Z-bb22"
+        prompt_with_id = f'agent_instance_id: "Planner#3"\nrun_id: "{dispatched_run}"'
         ctx = _make_ctx("preToolUse", self.tmp_path, toolName="agent",
                         toolArgs={"prompt": prompt_with_id}, toolUseId="tu-006")
         tools.handle_pre_tool_use(ctx)
         paths = ctx.paths
-        dispatch = runstate.pop_pending_dispatch(paths, _RUN_ID, _SESSION_ID)
+        dispatch = runstate.pop_pending_dispatch(paths, dispatched_run, _SESSION_ID)
         self.assertIsNotNone(dispatch)
         self.assertEqual("Planner#3", dispatch["agent_instance_id"])
 
+    def test_agent_dispatch_binds_the_session_to_the_dispatched_run(self):
+        dispatched_run = "20260101T000000Z-bb22"
+        prompt_with_id = f'agent_instance_id: "Planner#3"\nrun_id: "{dispatched_run}"'
+        ctx = _make_ctx("preToolUse", self.tmp_path, toolName="agent",
+                        toolArgs={"prompt": prompt_with_id}, toolUseId="tu-006b")
+        tools.handle_pre_tool_use(ctx)
+        self.assertEqual(dispatched_run, ctx.run_id)
+        self.assertEqual(dispatched_run,
+                         runstate.get_session_run_id(ctx.paths, _SESSION_ID))
+
     def test_captures_pending_dispatch_for_task_tool(self):
-        """When toolName is 'task' (lowercase GHCP CLI native), also captures dispatch."""
+        """When toolName is 'task' (lowercase GHCP CLI native), also captures dispatch.
+        A dispatch without a run id binds nothing, so the pending dispatch stays
+        under the context's run."""
         prompt_with_id = f'agent_instance_id: "Executor#1"\n'
         ctx = _make_ctx("preToolUse", self.tmp_path, toolName="task",
                         toolArgs={"prompt": prompt_with_id}, toolUseId="tu-007")
@@ -290,19 +306,16 @@ class TestHandlePreToolUse(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# handle_pre_tool_use — run_id capture end-to-end wiring
+# handle_pre_tool_use -- tool-argument file paths never bind a session
 # ---------------------------------------------------------------------------
 
-_CAPTURE_RUN_ID = "20260804T150537Z-796a"
-_CAPTURE_SESSION_ID = "ghcp-sess-capture-e2e"
-_CAPTURE_PATH = f"C:/AI/MOSAIC/MOSAIC/Orchestration-{_CAPTURE_RUN_ID}/Stage-1/Plan.md"
+_PATH_RUN_ID = "20260804T150537Z-796a"
+_PATH_SESSION_ID = "ghcp-sess-path-args"
+_PATH_ARG = f"C:/AI/MOSAIC/MOSAIC/Orchestration-{_PATH_RUN_ID}/Stage-1/Plan.md"
 
 
-class TestHandlePreToolUseRunIdCapture(unittest.TestCase):
-    """handle_pre_tool_use must invoke capture_run_id_from_tool_args before
-    resolve_destination, so the triggering preToolUse event is routed correctly
-    and the session cache is populated as a side effect.
-    """
+class TestHandlePreToolUseIgnoresPathArguments(unittest.TestCase):
+    """A session that only reads or writes files of a run does not join that run."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -311,71 +324,36 @@ class TestHandlePreToolUseRunIdCapture(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def _make_capture_ctx(self, tool_args=None, run_id_preset=None):
-        """Build a preToolUse HookContext for the capture tests, without a pre-set run_id."""
-        payload = {"sessionId": _CAPTURE_SESSION_ID}
-        if tool_args is not None:
-            payload["toolArgs"] = tool_args
+    def _ctx(self, tool_args, tool_name="view"):
+        payload = {"sessionId": _PATH_SESSION_ID, "toolName": tool_name,
+                   "toolArgs": tool_args, "toolUseId": "tu-path-1"}
         paths = core.build_paths(self.tmp_path)
         ctx = core.HookContext("preToolUse", payload, self.tmp_path, paths, _TS)
-        ctx.run_id = run_id_preset
+        ctx.run_id = None
         return ctx
 
-    def test_session_cache_is_populated_when_tool_args_contain_orchestration_path(self):
-        """Driving a preToolUse payload with an Orchestration-{run_id} path through
-        handle_pre_tool_use must populate the session run-id cache as a side effect.
-        """
-        ctx = self._make_capture_ctx(
-            tool_args={"filePath": _CAPTURE_PATH},
-        )
+    def test_orchestration_path_does_not_populate_the_session_cache(self):
+        ctx = self._ctx({"filePath": _PATH_ARG})
         tools.handle_pre_tool_use(ctx)
-        cached = runstate.get_session_run_id(ctx.paths, _CAPTURE_SESSION_ID)
-        self.assertEqual(_CAPTURE_RUN_ID, cached)
+        self.assertIsNone(runstate.get_session_run_id(ctx.paths, _PATH_SESSION_ID))
 
-    def test_ctx_run_id_is_set_before_destination_resolution(self):
-        """When handle_pre_tool_use processes a path-bearing preToolUse event and
-        ctx.run_id is unset, ctx.run_id must be assigned the observed run_id so
-        the emitted tool_call_start event lands in the correct run folder.
-        """
-        ctx = self._make_capture_ctx(
-            tool_args={"filePath": _CAPTURE_PATH},
-            run_id_preset=None,
-        )
+    def test_orchestration_path_does_not_set_ctx_run_id(self):
+        ctx = self._ctx({"filePath": _PATH_ARG})
         tools.handle_pre_tool_use(ctx)
-        # The event must have been written to the correct run folder, not unknown-run.
-        expected_orch = ctx.paths.orchestrator_events(_CAPTURE_RUN_ID)
-        self.assertTrue(
-            expected_orch.exists(),
-            f"Expected tool_call_start in run {_CAPTURE_RUN_ID!r} folder, "
-            f"but {expected_orch} was not created.",
-        )
+        self.assertIsNone(ctx.run_id)
 
-    def test_session_cache_not_written_when_tool_args_have_no_run_id(self):
-        """When toolArgs carry no Orchestration-{run_id} path, the cache must not
-        be written for that session.
-        """
-        ctx = self._make_capture_ctx(
-            tool_args={"filePath": "/workspace/src/main.py"},
-        )
+    def test_tool_call_start_lands_in_unknown_run_not_the_path_run(self):
+        ctx = self._ctx({"filePath": _PATH_ARG})
         tools.handle_pre_tool_use(ctx)
-        cached = runstate.get_session_run_id(ctx.paths, _CAPTURE_SESSION_ID)
-        self.assertIsNone(cached)
+        self.assertFalse(ctx.paths.run_root(_PATH_RUN_ID).exists())
+        events = _read_jsonl(ctx.paths.orchestrator_events("unknown-run"))
+        self.assertEqual(["tool_call_start"], [e["event"] for e in events])
 
-    def test_capture_does_not_suppress_tool_call_start_event(self):
-        """A successful run_id capture must not prevent the tool_call_start event
-        from being written — the capture runs before destination resolution, inside
-        its own guard, so even if it were to fail the event write must still happen.
-        """
-        ctx = self._make_capture_ctx(
-            tool_args={"filePath": _CAPTURE_PATH},
-            run_id_preset=None,
-        )
+    def test_agent_tool_prompt_quoting_a_run_without_instance_id_does_not_bind(self):
+        ctx = self._ctx({"prompt": f"look at run_id: {_PATH_RUN_ID}"}, tool_name="agent")
         tools.handle_pre_tool_use(ctx)
-        # After capture sets ctx.run_id, the event is written to the correct run folder.
-        orch_path = ctx.paths.orchestrator_events(_CAPTURE_RUN_ID)
-        events = [json.loads(ln) for ln in orch_path.read_text("utf-8").splitlines() if ln.strip()]
-        self.assertEqual(1, len(events))
-        self.assertEqual("tool_call_start", events[0]["event"])
+        self.assertIsNone(runstate.get_session_run_id(ctx.paths, _PATH_SESSION_ID))
+        self.assertFalse(ctx.paths.run_root(_PATH_RUN_ID).exists())
 
 
 # ---------------------------------------------------------------------------

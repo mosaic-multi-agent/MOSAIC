@@ -10,6 +10,7 @@ Covers:
   Native mode keeps prompt extraction and the session cache behaviour
 """
 
+import json
 import os
 import sys
 import unittest
@@ -173,9 +174,8 @@ class TestRunnerModeRunIdentity(RunnerModeTestCase):
 
     def test_invalid_env_run_id_falls_back_to_prompt_extraction_and_write_back(self):
         self.set_runner_env("orchestrator", run_id="not-a-run-id")
-        ctx = self._build("userPromptSubmitted", prompt=f"run_id: {OTHER_RUN_ID}")
-        mosaic_logger.resolve_run_identity(ctx)
-        self.assertEqual(OTHER_RUN_ID, ctx.run_id)
+        self.dispatch("preToolUse", {"toolName": "task", "toolUseId": "tu-1",
+                                     "toolArgs": {"prompt": _dispatch_prompt(OTHER_RUN_ID)}})
         self.assertEqual(OTHER_RUN_ID, runstate.get_session_run_id(self.paths, SESSION_ID))
 
     def test_invalid_env_run_id_without_other_source_yields_unknown_run(self):
@@ -183,6 +183,11 @@ class TestRunnerModeRunIdentity(RunnerModeTestCase):
         ctx = self._build("preToolUse")
         mosaic_logger.resolve_run_identity(ctx)
         self.assertEqual("unknown-run", core.effective_run_id(ctx))
+
+
+def _dispatch_prompt(run_id):
+    return json.dumps({"agent_instance_id": "TestWriter#7", "run_id": run_id,
+                       "task_description": "do the work"})
 
 
 class TestNativeModeIdentityUnchanged(RunnerModeTestCase):
@@ -193,13 +198,11 @@ class TestNativeModeIdentityUnchanged(RunnerModeTestCase):
                                                            "cwd": str(self.workspace)})
         self.assertIsNone(ctx.runner_mode)
 
-    def test_prompt_extraction_wins_without_role(self):
+    def test_dispatch_content_wins_without_role(self):
         os.environ["MOSAIC_RUN_ID"] = CACHED_RUN_ID
-        ctx = mosaic_logger.build_context("userPromptSubmitted", {
-            "sessionId": SESSION_ID, "cwd": str(self.workspace),
-            "prompt": f"run_id: {RUN_ID}"})
-        mosaic_logger.resolve_run_identity(ctx)
-        self.assertEqual(RUN_ID, ctx.run_id)
+        self.dispatch("preToolUse", {"toolName": "task", "toolUseId": "tu-1",
+                                     "toolArgs": {"prompt": _dispatch_prompt(RUN_ID)}})
+        self.assertEqual(RUN_ID, runstate.get_session_run_id(self.paths, SESSION_ID))
 
     def test_session_cache_still_supplies_run_id_without_role(self):
         runstate.put_session_run_id(self.paths, SESSION_ID, RUN_ID)

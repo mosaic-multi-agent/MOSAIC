@@ -364,45 +364,6 @@ def event_sink_for(ctx: "HookContext", agent_instance_id: "str | None") -> pathl
 
 
 # ---------------------------------------------------------------------------
-# Adapter version
-# ---------------------------------------------------------------------------
-
-_VERSION_RE = re.compile(r"^version:\s*(.+?)\s*$")
-
-
-def read_adapter_version(hook_yaml_path: pathlib.Path) -> "str | None":
-    """Extract the top-level version value from hook.yaml without a YAML parser.
-    Matches only zero-indented lines. Returns None on any ambiguity. Never raises."""
-    try:
-        matches = []
-        with open(hook_yaml_path, "r", encoding="utf-8", errors="replace") as fh:
-            for line in fh:
-                if not line or line[0] in ("#", " ", "\t"):
-                    continue
-                m = _VERSION_RE.match(line.rstrip("\r\n"))
-                if m:
-                    value = m.group(1)
-                    if len(value) >= 2 and (
-                        (value[0] == '"' and value[-1] == '"') or
-                        (value[0] == "'" and value[-1] == "'")
-                    ):
-                        value = value[1:-1]
-                    if value:
-                        matches.append(value)
-        if len(matches) == 1:
-            return matches[0]
-        return None
-    except Exception:
-        return None
-
-
-def adapter_version(ctx: "HookContext") -> "str | None":
-    """Read version from the hook.yaml deployed alongside the adapter scripts."""
-    hook_yaml = pathlib.Path(__file__).parent / "hook.yaml"
-    return read_adapter_version(hook_yaml)
-
-
-# ---------------------------------------------------------------------------
 # Diagnostics
 # ---------------------------------------------------------------------------
 

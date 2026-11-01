@@ -21,11 +21,11 @@ Key vscode-ghcp behaviors exercised here:
 Event-routing note:
   Different events carry different run_id context, so events are distributed across
   multiple run-bucket directories within OrchestrationLogs/:
-  - 'unknown-run': events fired without a extractable run_id context
-    (SessionStart → run_start, session_start; PreToolUse/PostToolUse → tool events;
-    Stop without run_id in last_assistant_message → session_end, run_end)
-  - '{extracted-run-id}': events fired when a run_id was resolved
-    (UserPromptSubmit with run_id in prompt → user turn;
+  - 'unknown-run': events fired before the session is bound to a run
+    (SessionStart → run_start, session_start; UserPromptSubmit → user turn, because a
+    quoted run id never binds)
+  - '{dispatched-run-id}': events fired once a MOSAIC dispatch bound the session
+    (the dispatching PreToolUse and later tool events, Stop → session_end, run_end;
     SubagentStart after popping dispatch → invocation events in sub-dir)
   E2E tests aggregate across all run buckets for presence assertions,
   while invocation-correlation tests use the specific invocation bucket.
@@ -52,9 +52,9 @@ import mosaic_logger_core as core
 _SESSION_ID = "e2e-vscode-session-001"
 
 # Canonical run_id in MOSAIC format: {YYYYMMDD}T{HHMMSS}Z-{4 lowercase hex}.
-# Embedded in UserPromptSubmit's prompt and in PreToolUse's tool_input.prompt
-# so that SubagentStart can recover it from the pending dispatch queue,
-# placing the invocation directory under this run_id bucket.
+# Embedded in PreToolUse's tool_input.prompt (a MOSAIC dispatch) so that the dispatch
+# binds the session to it and SubagentStart can recover it from the pending dispatch
+# queue, placing the invocation directory under this run_id bucket.
 _RUN_ID = "20260101T120000Z-abcd"
 
 # The spawning tool-call ID: agent_id of SubagentStart/SubagentStop and, with a
@@ -212,18 +212,19 @@ def _full_session_payloads(
 
     Covers the sequence specified in Stage 4:
       1. SessionStart — source: startup
-      2. UserPromptSubmit — prompt embedding run_id (routes user turn to run_id bucket)
+      2. UserPromptSubmit — prompt quoting run_id (quoting never binds: user turn
+         stays in 'unknown-run')
       3. PreToolUse (runSubagent dispatch) — tool_input.prompt carrying agent_instance_id
-         and run_id; this populates the pending-dispatch queue under 'unknown-run'
-         (no run_id context at PreToolUse time)
+         and run_id; binds the session to run_id, relocates its earlier unknown-run lines
+         and populates the pending-dispatch queue under run_id
       4. SubagentStart — agent_id (spawning tool-call ID) and agent_type (D3)
          Pops the pending dispatch, recovers run_id, places invocation under run_id bucket
-      5. PreToolUse (ordinary) — no agent_id, routes to orchestrator stream (unknown-run)
+      5. PreToolUse (ordinary) — no agent_id, routes to the bound run's orchestrator stream
       6. PostToolUse (ordinary) — tool_response present (D4)
       7. SubagentStop — agent_id, agent_type, stop_hook_active only (no response text)
       8. PostToolUse (runSubagent) — tool_response = subagent response; writes invocation_end
       9. Stop — stop_reason end_turn, stop_hook_active false (D5)
-         session_end and run_end go to unknown-run (no run_id in last_assistant_message)
+         session_end and run_end go to the bound run's orchestrator stream
     """
     tp = str(transcript_path) if transcript_path else None
 
@@ -242,8 +243,7 @@ def _full_session_payloads(
         # 1 — SessionStart: emits run_start then session_start (to unknown-run).
         _base("SessionStart", source="startup"),
 
-        # 2 — UserPromptSubmit: embeds run_id so resolve_run_identity extracts it.
-        #     The user turn lands in the run_id bucket.
+        # 2 — UserPromptSubmit: quotes the run_id; a quoted id never binds the session.
         _base(
             "UserPromptSubmit",
             prompt=(
@@ -254,8 +254,7 @@ def _full_session_payloads(
 
         # 3 — PreToolUse with Agent dispatch tool: tool_input.prompt embeds
         #     agent_instance_id and run_id so the pending dispatch is populated.
-        #     Context at this point: no run_id (PreToolUse not in RUN_ID_PROMPT_FIELDS),
-        #     so pending dispatch is queued under the 'unknown-run' bucket.
+        #     The dispatch binds the session to run_id before the pending dispatch is stored.
         _base(
             "PreToolUse",
             tool_name="runSubagent",
@@ -270,12 +269,12 @@ def _full_session_payloads(
         ),
 
         # 4 — SubagentStart: agent_id is the spawning tool-call ID (D3).
-        #     Pops pending dispatch from 'unknown-run' queue, recovers run_id
+        #     Pops the pending dispatch from the run_id queue, recovers run_id
         #     and agent_instance_id; places invocation directory under run_id bucket.
         _base("SubagentStart", agent_id=_CALL_ID, agent_type=_AGENT_TYPE),
 
         # 5 — PreToolUse (ordinary, no agent_id): routes to orchestrator stream.
-        #     No run_id at this point → lands in unknown-run orchestrator stream.
+        #     The session is bound → lands in the run_id orchestrator stream.
         _base(
             "PreToolUse",
             tool_name="Read",
@@ -303,8 +302,7 @@ def _full_session_payloads(
             tool_response=_SUBAGENT_RESPONSE,
         ),
 
-        # 9 — Stop: emits session_end + run_end (D5). No run_id in last_assistant_message
-        #     here, so session_end/run_end land in the unknown-run orchestrator stream.
+        # 9 — Stop: emits session_end + run_end (D5) to the bound run's orchestrator stream.
         _base(
             "Stop",
             stop_reason="end_turn",
@@ -595,7 +593,7 @@ class TestEventStreamScoping(unittest.TestCase):
         self.assertIn("session_start", types)
 
     def test_orchestrator_stream_contains_user_turn(self):
-        """UserPromptSubmit extracts run_id from the prompt; user turn lands in run_id bucket."""
+        """UserPromptSubmit emits the user turn (it lands in unknown-run: a quoted id never binds)."""
         user_turns = [
             e for e in self.all_orch_events
             if e["event"] == "turn" and e.get("role") == "user"

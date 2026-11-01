@@ -12,6 +12,9 @@ import mosaic_logger_core as core
 from mosaic_logger_transcript import _long_path_safe
 
 
+FOREIGN_SESSION_REASON = "target transcript belongs to a different session"
+
+
 # ---------------------------------------------------------------------------
 # Data structures
 # ---------------------------------------------------------------------------
@@ -51,12 +54,26 @@ def _sidecar_path(raw_path: pathlib.Path) -> pathlib.Path:
 # Public API
 # ---------------------------------------------------------------------------
 
+def _recorded_owner(target_raw: pathlib.Path) -> "str | None":
+    """Session recorded in the target's sidecar; None when unowned
+    (no sidecar, unreadable, not an object, or no non-empty session_id)."""
+    try:
+        doc = json.loads(_sidecar_path(target_raw).read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(doc, dict):
+        return None
+    owner = doc.get("session_id")
+    return owner if isinstance(owner, str) and owner else None
+
+
 def build_sidecar(source_path: str,
                   source_mechanism: str,
-                  byte_count: int) -> dict:
+                  byte_count: int,
+                  owner_session_id: "str | None" = None) -> dict:
     """Build the sidecar document. Exposed separately so content is assertable
-    without performing a copy."""
-    return {
+    without performing a copy. session_id is recorded only with an owner."""
+    doc = {
         "harness": core.HARNESS,
         "native_format": "claude-code-transcript-jsonl",
         "source_path": source_path,
@@ -64,11 +81,15 @@ def build_sidecar(source_path: str,
         "captured_at": _now_iso(),
         "byte_count": byte_count,
     }
+    if owner_session_id:
+        doc["session_id"] = owner_session_id
+    return doc
 
 
 def export_transcript(source_path: "str | None",
                       target_raw: pathlib.Path,
-                      source_mechanism: str) -> ExportResult:
+                      source_mechanism: str,
+                      owner_session_id: "str | None" = None) -> ExportResult:
     """Copy a harness transcript byte-for-byte to target_raw and write the sidecar.
 
     Contract:
@@ -76,6 +97,9 @@ def export_transcript(source_path: "str | None",
       - Write goes through atomic_replace (no torn files under contention).
       - Sidecar written only when the raw copy succeeded.
       - Missing/unreadable/None/empty source_path returns ok=False, writes nothing.
+      - With owner_session_id, a target whose sidecar names a different session
+        is kept as is (ok=False, FOREIGN_SESSION_REASON); an unowned target is
+        replaced and the sidecar records the exporting session.
       - Never raises.
     """
     try:
@@ -89,6 +113,15 @@ def export_transcript(source_path: "str | None",
             core.debug_log(f"export_transcript: cannot read {source_path}", exc)
             return ExportResult(ok=False, reason=f"unreadable: {exc}")
 
+        if owner_session_id:
+            existing = _recorded_owner(target_raw)
+            if existing and existing != owner_session_id:
+                core.debug_log(
+                    f"export_transcript: {target_raw.name} belongs to session "
+                    f"{existing!r}; not replacing with session {owner_session_id!r}"
+                )
+                return ExportResult(ok=False, reason=FOREIGN_SESSION_REASON)
+
         byte_count = len(data)
         target_raw.parent.mkdir(parents=True, exist_ok=True)
         ok = core.atomic_replace(target_raw, data)
@@ -96,7 +129,8 @@ def export_transcript(source_path: "str | None",
             return ExportResult(ok=False, reason="atomic_replace failed for raw file")
 
         # Sidecar written only after successful raw copy
-        sidecar_doc = build_sidecar(source_path, source_mechanism, byte_count)
+        sidecar_doc = build_sidecar(source_path, source_mechanism, byte_count,
+                                   owner_session_id)
         sidecar_json = json.dumps(sidecar_doc, ensure_ascii=False).encode("utf-8")
         meta_path = _sidecar_path(target_raw)
         core.atomic_replace(meta_path, sidecar_json)

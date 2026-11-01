@@ -153,7 +153,7 @@ Build: `py -m pytest`. CI runs on GitHub Actions.
 
 Pick a small, well-scoped feature for your first real run. This is the main workhorse workflow — it takes a requirement, researches the codebase, plans the implementation with TDD, and executes it. With injections filled, agents understand your conventions and produce code that fits your codebase.
 
-Unlike kb-generation, brownfield-tdd uses **approval gates** — HITL (human-in-the-loop) steps where agents pause for your approval at key points (e.g. before starting implementation). These are different from orchestrator checkpoints (which pause between workflow stages). Approval gates require a **user interaction tool** that subagents can call. Not every harness provides this automatically — for example, Claude Code's `ask_user_questions` built-in tool is only available to the primary agent, not to subagents dispatched via the task tool. If you hit this, check `HarnessKnowledge/KnownIssues/{your-harness}/` for harness-specific setup guidance.
+Unlike kb-generation, brownfield-tdd uses **approval gates** — HITL (human-in-the-loop) steps where agents pause for your approval at key points (e.g. before starting implementation). These are different from orchestrator checkpoints (which pause between workflow stages). Approval gates require a **user interaction tool** that subagents can call. Not every harness provides this automatically — for example, Claude Code's built-in `AskUserQuestion` tool is only available to the primary agent, not to subagents dispatched via the task tool. If you hit this, check `HarnessKnowledge/KnownIssues/{your-harness}/` for harness-specific setup guidance.
 
 For your first brownfield-tdd run, disable orchestrator checkpoints to keep things simple:
 
@@ -166,18 +166,20 @@ Checkpoints disabled.
 
 ---
 
-## Token Usage on Copilot Harnesses
+## See What Your Runs Cost
 
-**GHCP CLI needs no setup.** The MOSAIC logging hook reads usage and compactions from the CLI's session transcript, in native and Runner mode. If a transcript's format changes so that no usage can be read, the hook writes a diagnostic and `mosaic-log-analyzer` shows a finding for the run instead of a silent zero.
+To log your runs, deploy the `mosaic-logger` hook: run the deploy tool and choose **Deploy hooks**. Runs then appear in `OrchestrationLogs/` in your project, and running `mosaic-log-analyzer` there shows their token usage, cost and context size.
 
-**VS Code Copilot Chat** reports token usage through Copilot's OpenTelemetry file export, which the MOSAIC logging hook reads. To get usage and cost in `mosaic-log-analyzer` for VS Code:
+What each harness needs:
 
-1. Set the environment variable `COPILOT_OTEL_FILE_EXPORTER_PATH` to the path of a `.jsonl` file. This one variable enables both Copilot's export and MOSAIC's ingest. Do not use the VS Code user setting for the export instead: the hooks cannot read it.
-2. Set it at user level (Windows user environment variables; macOS/Linux login environment), not in a single shell, and restart VS Code afterwards. VS Code started from the desktop sees only user-level variables.
-3. Content capture is optional for usage and only makes the file larger, but VS Code logs the tools each call requested (and so LogAnalyzer's context growth per tool) only with it. MOSAIC never copies content to the logs and never modifies the file.
-4. Cost needs `github-copilot` entries that you maintain in `pricing.yaml`; the shipped file has none.
+| Harness | Needs |
+|---------|-------|
+| Claude Code | Python 3 |
+| OpenCode | Nothing extra |
+| GHCP CLI / VS Code GHCP Copilot | Python 3. The GHCP CLI runs hooks only in a [trusted folder](../Catalog/Hooks/mosaic-logger/ghcp-cli/README.md); elsewhere it logs nothing and shows no warning |
+| VS Code GHCP Local | Python 3 and [one environment variable](LogAnalyzerGuide.md#token-usage-on-vs-code-ghcp-local) for token usage |
 
-If VS Code usage is missing from a run (the variable was unset, the file was missing, a session crashed, or the hooks did not see the variable), recover it with `mosaic-log-analyzer ingest-otel <otel-file> --run <run-id>`. The [LogAnalyzer Guide](LogAnalyzerGuide.md#token-usage-recovery-ingest-otel) explains the recovery, the views, the pricing and settings files, and the `currency` key. Hook-side details are in the hook README (`Catalog/Hooks/mosaic-logger/README.md`).
+The [LogAnalyzer Guide](LogAnalyzerGuide.md) explains the views, the pricing and how to share runs without their content.
 
 ---
 

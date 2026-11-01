@@ -183,6 +183,7 @@ def handle_subagent_start(ctx: "core.HookContext") -> None:
             ctx.transcript_path,
             ctx.paths.orchestrator_raw(run_id, ctx.session_id),
             "transcript_path",
+            owner_session_id=ctx.session_id,
         )
 
     except Exception as exc:

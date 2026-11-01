@@ -41,6 +41,15 @@ is produced by the unchanged core.build_event, including its pruning rule:
 None, empty string, empty dict and empty list are dropped; False and 0 are
 kept.
 
+Timestamp. The envelope timestamp of a usage_record is the call start taken
+from the transcript, not the hook-firing time: the timestamp of the first
+transcript line of the record's API message (message.id) that has a usable
+one, in envelope format (UTC, milliseconds, Z). The transcript carries no
+duration, so nothing is subtracted; this is the same meaning as the call start
+of the GHCP CLI adapter. Every emitted copy of one message carries the same
+time, and re-reading the same transcript gives the same time. A message
+without a usable transcript timestamp keeps the hook-firing time.
+
 Single-stream invariant (format spec). A given record_id belongs to exactly
 one stream within a run, so a record contributes to exactly one actor's
 total. Producers must not emit the same record_id on more than one stream.
@@ -85,6 +94,7 @@ import json
 import os
 
 import mosaic_logger_core as core
+import mosaic_logger_locked_append as locked_append
 import mosaic_logger_transcript as transcript
 
 
@@ -150,12 +160,13 @@ def stream_key_for(sink) -> str:
 
 def load_usage_state(paths: "core.LogPaths",
                      run_id: str,
-                     stream_key: str) -> dict:
+                     stream_key: str) -> "dict | None":
     """Return the record_id -> fingerprint mapping last persisted for this stream.
 
-    Returns {} when the file is absent, unreadable, not valid JSON, not the
-    expected shape, or of an unrecognised version. Entries whose key or
-    value is not a non-empty string are skipped.
+    Returns {} when the file is absent, not valid JSON, not the expected
+    shape, or of an unrecognised version. Returns None when the file exists
+    but reading it fails (the caller must not treat that as empty). Entries
+    whose key or value is not a non-empty string are skipped.
 
     Never raises.
     """
@@ -164,7 +175,10 @@ def load_usage_state(paths: "core.LogPaths",
         try:
             text = entry.read_text(encoding="utf-8")
         except Exception:
-            return {}
+            try:
+                return None if entry.exists() else {}
+            except Exception:
+                return None
         try:
             data = json.loads(text)
         except Exception:
@@ -278,80 +292,19 @@ def emit_usage_records(ctx: "core.HookContext",
 
         # Derive a stable, fixed-length stream key from the resolved sink.
         stream_key = stream_key_for(sink)
+        run_id = core.effective_run_id(ctx)
+        state_path = ctx.paths.usage_state_entry(run_id, stream_key)
 
-        # Load per-stream state; treat any failure as empty (emit everything).
-        try:
-            state = load_usage_state(ctx.paths, core.effective_run_id(ctx), stream_key)
-        except Exception as exc:
-            core.debug_log(
-                f"usage-capture: state load failed transcript_path={transcript_path} "
-                f"agent_instance_id={agent_instance_id}",
-                exc,
-            )
-            state = {}
-
-        updated_state = dict(state)  # copy; we accumulate changes here
-        count = 0
-        for rec in records:
-            try:
-                record_id = getattr(rec, "record_id", None) or ""
-                fp = record_fingerprint(rec)
-
-                # Decide whether to emit this record.
-                if record_id and fp:
-                    stored_fp = updated_state.get(record_id)
-                    if stored_fp == fp:
-                        # Unchanged and already emitted — skip.
-                        continue
-                # else: falsy record_id or unfingerprintable → always emit,
-                # do not store state entry.
-
-                fields = {
-                    "record_id": rec.record_id,
-                    "record_index": rec.record_index,
-                    "source": source,
-                    "model": rec.model,
-                    "service_tier": rec.service_tier,
-                    "effort": rec.effort,
-                    "token_usage": rec.token_usage,
-                }
-                if agent_instance_id is not None:
-                    fields["agent_instance_id"] = agent_instance_id
-                event = core.build_event(USAGE_EVENT, ctx, **fields)
-                # An empty object means "requested no tools", so it is set
-                # after build_event, which would prune it.
-                requested_tools = getattr(rec, "requested_tools", None)
-                if requested_tools is not None:
-                    event["requested_tools"] = requested_tools
-                core.append_event(sink, event)
-                count += 1
-                # Update state only after the write is confirmed, so state
-                # can never mark a record as written unless the append succeeded.
-                if record_id and fp:
-                    updated_state[record_id] = fp
-            except Exception as exc:
-                core.debug_log(
-                    f"usage-capture: failed transcript_path={transcript_path} "
-                    f"agent_instance_id={agent_instance_id}",
-                    exc,
-                )
-                continue
-
-        # Persist updated state only when something changed.
-        if updated_state != state:
-            try:
-                save_usage_state(
-                    ctx.paths, core.effective_run_id(ctx), stream_key, updated_state,
-                    stream=str(sink),
-                )
-            except Exception as exc:
-                core.debug_log(
-                    f"usage-capture: state save failed transcript_path={transcript_path} "
-                    f"agent_instance_id={agent_instance_id}",
-                    exc,
-                )
-
-        return count
+        # The state lock spans load, append and save, so overlapping firings
+        # cannot read a half-replaced state or save an older view over a newer
+        # one. A firing that cannot get the lock emits nothing; the next
+        # firing catches up.
+        with locked_append.holding_lock(state_path, core.debug_log) as held:
+            if not held:
+                return 0
+            return _emit_under_lock(
+                ctx, records, sink, stream_key, run_id, agent_instance_id,
+                source, transcript_path)
     except Exception as exc:
         core.debug_log(
             f"usage-capture: failed transcript_path={transcript_path} "
@@ -359,3 +312,109 @@ def emit_usage_records(ctx: "core.HookContext",
             exc,
         )
         return 0
+
+
+def _load_state_or_none(ctx, run_id, stream_key, transcript_path,
+                        agent_instance_id):
+    """The loaded state, or None when it could not be read (a raising load
+    counts as a read error). Writes a debug line for every None."""
+    state_path = ctx.paths.usage_state_entry(run_id, stream_key)
+    try:
+        state = load_usage_state(ctx.paths, run_id, stream_key)
+    except Exception as exc:
+        core.debug_log(
+            f"usage-capture: state load failed {state_path} "
+            f"transcript_path={transcript_path} "
+            f"agent_instance_id={agent_instance_id}",
+            exc,
+        )
+        return None
+    if state is None:
+        core.debug_log(
+            f"usage-capture: state read error, emitting nothing {state_path}")
+    return state
+
+
+def _emit_under_lock(ctx, records, sink, stream_key, run_id,
+                     agent_instance_id, source, transcript_path) -> int:
+    """Load the stream state, append the new and changed records, save the
+    state. The caller holds the state lock."""
+    state = _load_state_or_none(
+        ctx, run_id, stream_key, transcript_path, agent_instance_id)
+    if state is None:
+        return 0
+
+    updated_state = dict(state)  # copy; we accumulate changes here
+    count = 0
+    for rec in records:
+        try:
+            if _emit_record(ctx, rec, sink, agent_instance_id, source,
+                            updated_state):
+                count += 1
+        except Exception as exc:
+            core.debug_log(
+                f"usage-capture: failed transcript_path={transcript_path} "
+                f"agent_instance_id={agent_instance_id}",
+                exc,
+            )
+            continue
+
+    # Persist updated state only when something changed.
+    if updated_state != state:
+        try:
+            save_usage_state(
+                ctx.paths, run_id, stream_key, updated_state,
+                stream=str(sink),
+            )
+        except Exception as exc:
+            core.debug_log(
+                f"usage-capture: state save failed transcript_path={transcript_path} "
+                f"agent_instance_id={agent_instance_id}",
+                exc,
+            )
+    return count
+
+
+def _emit_record(ctx, rec, sink, agent_instance_id, source,
+                 updated_state) -> bool:
+    """Append one usage_record when it is new or changed, updating
+    updated_state after the write. True when an event was appended."""
+    record_id = getattr(rec, "record_id", None) or ""
+    fp = record_fingerprint(rec)
+
+    # Decide whether to emit this record.
+    if record_id and fp:
+        if updated_state.get(record_id) == fp:
+            # Unchanged and already emitted - skip.
+            return False
+    # else: falsy record_id or unfingerprintable -> always emit,
+    # do not store state entry.
+
+    fields = {
+        "record_id": rec.record_id,
+        "record_index": rec.record_index,
+        "source": source,
+        "model": rec.model,
+        "service_tier": rec.service_tier,
+        "effort": rec.effort,
+        "token_usage": rec.token_usage,
+    }
+    if agent_instance_id is not None:
+        fields["agent_instance_id"] = agent_instance_id
+    event = core.build_event(USAGE_EVENT, ctx, **fields)
+    # Call start from the transcript; the firing time (already in
+    # the envelope) stays when the message has no usable time.
+    call_time = getattr(rec, "call_time", None)
+    if call_time:
+        event["timestamp"] = call_time
+    # An empty object means "requested no tools", so it is set
+    # after build_event, which would prune it.
+    requested_tools = getattr(rec, "requested_tools", None)
+    if requested_tools is not None:
+        event["requested_tools"] = requested_tools
+    core.append_event(sink, event)
+    # Update state only after the write is confirmed, so state
+    # can never mark a record as written unless the append succeeded.
+    if record_id and fp:
+        updated_state[record_id] = fp
+    return True

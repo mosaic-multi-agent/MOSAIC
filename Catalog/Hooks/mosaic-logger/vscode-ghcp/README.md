@@ -23,8 +23,8 @@ The adapter is a flat set of 9 Python modules, all deployed to `.github/hooks/`:
 | `mosaic_logger_handlers_invocation.py` | `SubagentStart`, `SubagentStop` |
 | `mosaic_logger_handlers_tools.py` | `PreToolUse`, `PostToolUse` |
 
-A copy of `hook.yaml` (the bundle manifest) is also deployed alongside the modules so
-the adapter can stamp `adapter_version` on `run_start` events at runtime.
+The adapter stamps `adapter_version` on `run_start` events from the workspace manifest
+(`.mosaic/manifest.yaml`).
 
 ## Deployment target
 
@@ -53,6 +53,24 @@ any unrecognised event it receives. Compactions are recognised from the OTel
 compaction calls, not from a hook, and failed tool calls (no `PostToolUseFailure`
 hook) are completed from OTel when the export is enabled; see "Copilot token usage"
 in the parent `README.md`.
+
+## Run binding and transcript export
+
+A session is bound to a run only by a MOSAIC dispatch: the `PreToolUse` prompt of the
+subagent-launch tool when it carries an agent instance id (`Name#N`) as well as a run id.
+The dispatch writes the session -> run cache before the dispatching `tool_call_start` is
+routed, and moves the session's earlier `unknown-run/` lines into that run. A dispatch for
+another run switches the binding. User prompts (`UserPromptSubmit`) and assistant replies
+(`Stop` `last_assistant_message`) never bind, whether they quote a run id bare or as
+`run_id: <id>`; until the first dispatch an orchestrator session's events stay in
+`unknown-run/`.
+
+`00_orchestrator_session.raw` is shared by the sessions of a run. Its sidecar
+(`00_orchestrator_session.meta.json`) records the exporting `session_id`. A different
+session never replaces a target owned by another session; the owning session's re-export
+replaces it, and a target with no sidecar or no recorded session is replaced.
+
+The `MOSAIC_RUN_ID` environment fallback does not exist in this adapter (not affected).
 
 ## Compaction events
 

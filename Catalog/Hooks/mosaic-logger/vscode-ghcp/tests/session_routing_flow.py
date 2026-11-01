@@ -4,6 +4,7 @@ Drives hook payloads for several VS Code sessions through mosaic_logger.dispatch
 against a temporary workspace and reads back the orchestrator streams per run folder.
 """
 
+import json
 import os
 import sys
 
@@ -19,13 +20,37 @@ UNKNOWN = "unknown-run"
 
 
 def prompt_payload(workspace, session_id, run_id, text=None):
-    """A UserPromptSubmit payload whose prompt names `run_id` (or carries `text`)."""
+    """A UserPromptSubmit payload whose prompt quotes `run_id` (or carries `text`).
+
+    A user prompt never binds a session to a run; it only mentions one.
+    """
     prompt = text or f'{{"run_id":"{run_id}","task_description":"work"}}'
     return {
         "timestamp": "2026-10-28T10:00:00.000Z",
         "hook_event_name": "UserPromptSubmit",
         "session_id": session_id,
         "prompt": prompt,
+        "cwd": str(workspace),
+    }
+
+
+def reply_payload(workspace, session_id, text):
+    """A Stop payload whose last_assistant_message is `text`."""
+    return flow.payload("orchestrator_stop", workspace, session_id=session_id,
+                        last_assistant_message=text)
+
+
+def dispatch_payload(workspace, session_id, run_id, instance_id="worker#1", n=1):
+    """A PreToolUse subagent-launch payload whose prompt is a MOSAIC dispatch for `run_id`."""
+    prompt = json.dumps({"agent_instance_id": instance_id, "run_id": run_id,
+                         "task_description": "work"})
+    return {
+        "timestamp": "2026-10-28T10:00:00.500Z",
+        "hook_event_name": "PreToolUse",
+        "session_id": session_id,
+        "tool_name": "runSubagent",
+        "tool_input": {"agentName": "worker", "prompt": prompt},
+        "tool_use_id": f"toolu_dispatch_{session_id}_{n}__vscode-{n}",
         "cwd": str(workspace),
     }
 
@@ -79,6 +104,11 @@ class RoutingWorkspace(flow.Workspace):
         return [e for e in self.stream(run_id)
                 if e.get("session_id") == session_id
                 and (name is None or e.get("event") == name)]
+
+    def read_starts(self, run_id, session_id):
+        """The session's read_file tool_call_start events (not subagent dispatches)."""
+        return [e for e in self.events_of(run_id, session_id, "tool_call_start")
+                if e.get("tool_name") == "read_file"]
 
     def names(self, run_id, session_id):
         return [e.get("event") for e in self.events_of(run_id, session_id)]

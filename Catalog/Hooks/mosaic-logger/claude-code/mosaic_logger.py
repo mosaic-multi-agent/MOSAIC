@@ -32,14 +32,11 @@ for _mod in [_session, _invocation, _tools]:
 # Dispatcher functions
 # ---------------------------------------------------------------------------
 
-# Events with prompt-bearing fields from which run_id may be extracted.
-_RUN_ID_PROMPT_FIELDS: dict = {
-    "SubagentStart": "agent_prompt",
-    "SubagentStop": "last_assistant_message",
-    "UserPromptSubmit": "user_prompt",
-    "Stop": "last_assistant_message",
-    "Notification": "message",
-}
+# The only event whose payload text can bind a session to a run: a subagent
+# launch prompt, and only when it is a dispatch (carries an agent instance id).
+# User prompts, assistant replies and notification text never bind.
+_DISPATCH_PROMPT_EVENT = "SubagentStart"
+_DISPATCH_PROMPT_FIELD = "agent_prompt"
 
 
 def build_context(payload: dict) -> core.HookContext:
@@ -62,16 +59,18 @@ def resolve_run_identity(ctx: core.HookContext) -> None:
     """Populate ctx.run_id before any handler runs.
 
     Resolution order:
-      1. Text extraction. When ctx.event has a prompt-bearing field and
-         extract_run_id yields a value, that value is adopted via
-         runstate.adopt_run_id -- it takes effect for this firing AND
-         extends the session timeline. A value differing from the currently
-         bound run therefore wins for this firing and every later firing.
+      1. Dispatch prompt. On SubagentStart, when agent_prompt carries an
+         agent instance id (a MOSAIC dispatch) and extract_run_id yields a
+         value, that value is adopted via runstate.adopt_run_id -- it takes
+         effect for this firing AND extends the session timeline. A run
+         differing from the currently bound one therefore wins from then on.
+         User prompts, assistant replies, notification text and prompts
+         without an instance id never bind, quoted run ids included.
       2. Binding lookup. Otherwise the run active at ctx.timestamp is read
-         from the session timeline and assigned to ctx.run_id. This is the
-         path that resolves the event types carrying no prompt-bearing
-         field.
-      3. Unresolved. ctx.run_id stays None, core.effective_run_id returns
+         from the session timeline (set earlier by a dispatch, e.g. the
+         Agent/Task PreToolUse adoption) and assigned to ctx.run_id.
+      3. Native MOSAIC_RUN_ID environment fallback.
+      4. Unresolved. ctx.run_id stays None, core.effective_run_id returns
          'unknown-run', and a 'run-identity: unresolved' diagnostic is
          emitted.
 
@@ -86,11 +85,11 @@ def resolve_run_identity(ctx: core.HookContext) -> None:
             runstate.adopt_run_id(ctx, mode.run_id)
             return
 
-        field_name = _RUN_ID_PROMPT_FIELDS.get(ctx.event)
         extracted = None
-        if field_name is not None:
-            prompt = ctx.field(field_name)
-            extracted = runstate.extract_run_id(prompt)
+        if ctx.event == _DISPATCH_PROMPT_EVENT:
+            prompt = ctx.field(_DISPATCH_PROMPT_FIELD)
+            if runstate.extract_instance_id(prompt):
+                extracted = runstate.extract_run_id(prompt)
 
         if extracted:
             runstate.adopt_run_id(ctx, extracted)

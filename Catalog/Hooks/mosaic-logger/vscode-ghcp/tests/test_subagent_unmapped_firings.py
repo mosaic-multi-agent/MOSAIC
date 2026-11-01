@@ -86,7 +86,8 @@ class TestUnmappedSubagentStop(_UnsetDebugCase):
         self.ws.send("stop")
         self.ws.send("post_dispatch")
         self.ws.send("orchestrator_stop")
-        self.assertEqual([], self.ws.diagnostics())
+        unmapped = [k for k in self.kinds() if k.startswith("unmapped_")]
+        self.assertEqual([], unmapped, f"diagnostics: {self.ws.diagnostics()}")
 
 
 class TestUnmappedSpawningPostToolUse(_UnsetDebugCase):

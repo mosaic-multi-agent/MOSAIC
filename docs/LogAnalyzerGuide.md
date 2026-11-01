@@ -1,8 +1,8 @@
 # LogAnalyzer Guide
 
-How to read the views of `mosaic-log-analyzer` and how to configure its pricing and analysis settings.
+How to start `mosaic-log-analyzer`, read its views, share runs and configure its pricing and analysis settings.
 
-This guide is for **users of the log analyzer**. The tool reads the logs MOSAIC's logging hook writes (`OrchestrationLogs/`) and reports token usage, estimated cost, context size, compactions and cache behaviour per run. Start it without arguments for the interactive TUI, or use the CLI subcommands (`report`, `total`, `export`, `ingest-otel`, `pricing path`, `settings path`).
+This guide is for **users of the log analyzer**. The tool reads the logs MOSAIC's logging hook writes (`OrchestrationLogs/`) and reports token usage, estimated cost, context size, compactions and cache behaviour per run.
 
 ---
 
@@ -10,28 +10,71 @@ This guide is for **users of the log analyzer**. The tool reads the logs MOSAIC'
 
 | Concept | Summary |
 |---------|---------|
+| **Start it** | Run `mosaic-log-analyzer` in your project folder for the interactive TUI |
+| **Share a run without its content** | `mosaic-log-analyzer export --out run.digest.json`, or `e` in the TUI; see [Sharing Runs](#sharing-runs-without-content) |
 | **Two config levels** | Global (your user config folder, all projects) and project (`MosaicLogAnalyzer/config/` under the folder you start the tool from) |
 | **Two config files per level** | `pricing.yaml` (model prices) and `analysis.yaml` (analysis settings) |
 | **Where are they?** | `mosaic-log-analyzer pricing path` and `mosaic-log-analyzer settings path`; the TUI help overlay lists them too |
-| **Missing VS Code usage** | `mosaic-log-analyzer ingest-otel <otel-file> --run <run-id>` (GHCP CLI usage comes from its transcript and needs no recovery) |
+| **Missing usage on VS Code GHCP Local** | `mosaic-log-analyzer ingest-otel <otel-file> --run <run-id>`. The other harnesses need no recovery |
 | **Transcript format changed** | A finding on a GHCP CLI run whose transcript has assistant turns but no usage: the run's usage and cost are incomplete |
 | **Currency** | One `currency` key (`USD` or `EUR`) in the pricing file; no conversion |
 
 ---
 
+## Starting the Tool
+
+Without a subcommand the TUI opens the `OrchestrationLogs/` folder under the current directory, and asks for a source when there is none. To open something else, use `--path` or press `s` on the runs list. A source can be:
+
+- an `OrchestrationLogs/` folder,
+- a single run folder,
+- a `.digest.json` file, or a folder of digests.
+
+Output sent to a pipe or file skips the TUI; `--tui` forces it.
+
+### CLI commands
+
+| Command | What it does |
+|---------|--------------|
+| `report` | Full report of the source, as text or with `--format json` |
+| `total --run <run-id>` | The total of one run as JSON. Reads logs, not digests |
+| `export --out <file>.digest.json` | Writes a [digest](#sharing-runs-without-content); `--run <run-id>` for one run, `--force` to replace a file |
+| `ingest-otel` | [Recovers usage on VS Code GHCP Local](#token-usage-on-vs-code-ghcp-local) |
+| `pricing path`, `settings path` | Prints the [configuration files](#where-the-files-live) |
+
+Every command takes `--path`.
+
+### The runs list
+
+The first screen lists the runs of the source with their cost, invocations, duration and findings. `enter` opens a run. Its other keys:
+
+| Key | Action |
+|-----|--------|
+| `o` | Cycle the sort order |
+| `m`, then `c` | Mark two runs (A, then B) and compare them by agent type: invocations, tokens, cost and peak context, with the change from A to B |
+| `a` | Across-runs view: every run's cost, and each agent type summed over all runs |
+| `e` / `E` | Export the selected run / all runs as a digest |
+| `p` | Enter model prices |
+| `s` | Choose another log source |
+
+---
+
 ## What the Views Show
 
-The run screen has these views as tabs: Dispatches, Overview, By type, By status, Tools, Timeline and Context. Open the help overlay (`?`) in the TUI for the keys of the current screen.
+A run has seven views, on keys `1` to `7`. Press `?` on any screen for its keys and a **Columns** group with one sentence per column; views with several tables have one group per table. `o` sorts a table and `esc` goes back.
 
-### Tables and the column legend
-
-Tables are aligned, stacked tables with the instance names always visible. Column titles wrap onto two lines or show in full instead of being cut. The Dispatches, Timeline and Context lists no longer have a `type` column (the instance name already carries the agent type), the Context view's call count is titled `API calls`, and shares show the percent next to the share bar.
-
-The `?` overlay of every view with a table has a **Columns** group for that view, with one sentence per column. It replaces the notes that used to sit below the Context table. Views with several tables (the Tools view, the Session screen) have one group per table.
+| Key | View | Shows |
+|-----|------|-------|
+| `1` | **Dispatches** | Every dispatched instance with its status, cost, tokens, duration, peak context, cache figures and flags |
+| `2` | **Overview** | Cost split, token categories, models, outcomes, wall time, waits and the cache block. `v` switches between the visual and the figures-only version |
+| `3` | **By type** | Cost and context per agent type, including repeated dispatches and likely rework (a heuristic). `enter` lists a type's dispatches |
+| `4` | **By status** | Dispatches and cost per returned status code |
+| `5` | **Tools** | Tool use and [context growth](#context-growth-per-tool). `u` marks a tool as user-interaction tool |
+| `6` | **Timeline** | [Lanes per actor](#timeline). `v` switches between Gantt and list, `g` groups the lanes by agent type |
+| `7` | **Context** | [Context size per agent](#context) and compactions |
 
 ### Session screen
 
-Press `enter` on a row of Dispatches, of a By type drill-down, or of Context to open the Session screen of that actor (the orchestrator or one dispatched instance). It replaces the old Context drill-down and shows:
+Press `enter` on a row of Dispatches, of a By type drill-down, or of Context to open the Session screen of that actor (the orchestrator or one dispatched instance). It shows:
 
 - the **head**: who the actor is, its model, status and totals, and a **cost split** of what its calls cost,
 - the **findings** about the actor, as measured facts,
@@ -47,7 +90,7 @@ The Tools view, the Session screen and the JSON report (`report`, additive `cont
 - It is **measured on single-tool calls only**: an API call that requested exactly one tool, followed by the actor's next main call with no compaction and no user turn in between. A call that requested several tools cannot say which tool added what, so it is not a sample.
 - It is **the tokens the tool's result adds to the context**, read as the difference between the two calls' contexts. It is **not a cost split of the run**: output of the model and everything else that changes the context between the two calls is part of the difference, and the sum over tools does not equal the run's cost or context.
 - **Samples** are the calls that were measured. **Negative growth** counts samples where the context shrank (for example after a compaction) and **not measurable** counts calls whose growth could not be determined; both are left out of the average, minimum and maximum, and shown as counts so you can judge how many calls the figures rest on. With no sample the figures are empty.
-- The tools each call requested are logged on all four harnesses. **VS Code needs OpenTelemetry content capture** for it; without it the requested tools are `not provided` and no growth is measured. See [Getting Started](GettingStarted.md#token-usage-on-copilot-harnesses).
+- The tools each call requested are logged on all four harnesses. **VS Code GHCP Local needs OpenTelemetry content capture** for it; without it the requested tools are `not provided` and no growth is measured. See [Token Usage on VS Code GHCP Local](#token-usage-on-vs-code-ghcp-local).
 
 ### Timeline
 
@@ -83,7 +126,7 @@ A compaction replaces a long context with a shorter one. The Context view and th
 | Kind | Meaning |
 |------|---------|
 | **logged** | The harness hook wrote a `compaction` event to the MOSAIC log |
-| **harness (OTel)** | No hook event, but the context drops and OTel compaction calls (API requests that summarise the context) sit around the drop. This is how VS Code compactions are recognised |
+| **harness (OTel)** | No hook event, but the context drops and OTel compaction calls (API requests that summarise the context) sit around the drop. This is how compactions on VS Code GHCP Local are recognised |
 | **detected only** | A context drop with no logged compaction and no compaction calls |
 
 A drop counts as detected when the context falls by at least `detected_compaction.drop_percent` (default 30) between two consecutive calls; see [Settings](#analysis-settings-analysisyaml).
@@ -110,6 +153,23 @@ The Overview "Cache" block shows `Context rewrites` for the run and `Orchestrato
 ### Hidden columns
 
 When a table does not fit the terminal width, it drops its lowest-priority columns and marks the header with `+N >` (`+N` and an arrow; the arrow is `>` in ASCII mode), where N is the number of hidden columns. Widen the terminal to see more. The Session screen shows the fields of an actor in full, so nothing is lost to the width.
+
+---
+
+## Sharing Runs Without Content
+
+A **digest** is a statistics-only copy of runs, so you can share or analyse them elsewhere without their prompts, responses, tool input or tool output.
+
+```sh
+mosaic-log-analyzer export --out run.digest.json --run <run-id>
+```
+
+Leave out `--run` to export every run; in the TUI, press `e` or `E`. The file name must end in `.digest.json`. To read a digest, open it as a [source](#starting-the-tool): all views work on it.
+
+- **What stays in a digest:** token counts, model and provider names, timestamps, agent types, status codes, tool names (including MCP server names), and run, session and call ids. Check these are fine to share.
+- **Costs use the reader's prices.** A digest holds tokens, not money, so the same run can show a different cost with a different `pricing.yaml`.
+- **Findings** keep their kind but lose their detail text.
+- **Digests beside logs are merged.** A digest in a logs folder adds its runs to the list. If a run exists twice, the logs win, then the most recently written digest; a finding reports the discarded copy.
 
 ---
 
@@ -147,7 +207,7 @@ Output is one `global:` line and one `project:` line, each marked `(exists)` or 
 ### How the levels merge
 
 - **Pricing:** entries of both files are combined. When both files price the same provider and model, the **project entry wins**.
-- **Settings:** the built-in defaults come first, the global file overrides them, the project file overrides the global file. This applies per setting and, for tool lists, per harness. A harness list you write **replaces** that harness's default list.
+- **Settings:** the built-in defaults come first, the global file overrides them, the project file overrides the global file. This applies per setting and, for tool lists, per harness. A harness list you write **replaces** that harness's default list, and an empty list means no tools.
 
 ### When files are created
 
@@ -189,7 +249,7 @@ Some harnesses report cache writes without saying whether they used the 5-minute
 
 ## Pricing (`pricing.yaml`)
 
-Requests are priced by provider and model. Each model entry has five rates per million tokens, written as quoted strings (`input`, `cache_read`, `cache_write_5m`, `cache_write_1h`, `output`), and optionally one `long_context` tier with a `threshold`. The template at the head of the file shows complete examples. Lookup is strict: a request with a provider is priced only from that provider's section, a request without a provider only from the top-level `models`. A request that matches nothing is unpriced; the TUI then asks for the price.
+Requests are priced by provider and model. Each model entry has five rates per million tokens, written as quoted strings (`input`, `cache_read`, `cache_write_5m`, `cache_write_1h`, `output`), and optionally one `long_context` tier with a `threshold`. The template at the head of the file shows complete examples. Lookup is strict: a request with a provider is priced only from that provider's section, a request without a provider only from the top-level `models`. A request that matches nothing is unpriced; the TUI then asks for the price. Copilot usage is priced from `github-copilot` entries you maintain yourself: the shipped file has none, so without them Copilot costs stay unpriced.
 
 ### The `currency` key
 
@@ -205,14 +265,24 @@ currency: EUR
 
 ---
 
-## Token Usage Recovery (`ingest-otel`)
+## Token Usage on VS Code GHCP Local
 
-**GHCP CLI** usage and compactions come from the CLI's session transcript and need no setup, so `ingest-otel` does not apply to it. **VS Code Copilot Chat** reports usage through Copilot's OpenTelemetry file export, which the logging hook reads. Setup (VS Code only) is described in [Getting Started](GettingStarted.md#token-usage-on-copilot-harnesses). The same export also lets the hook:
+Only the **VS Code GHCP Local** target needs this. Every other target reads usage from the harness's own session data, with no setup and no recovery. If a GHCP CLI transcript's format changes so that no usage can be read, the run shows a finding instead of a silent zero.
 
-- record **compaction calls** and other helper calls with their kind (this is how VS Code compactions become visible), and
+VS Code GHCP Local reports usage through Copilot's OpenTelemetry file export, which the logging hook reads. To set it up:
+
+1. Set the environment variable `COPILOT_OTEL_FILE_EXPORTER_PATH` to the path of a `.jsonl` file. This one variable enables both Copilot's export and MOSAIC's ingest. Do not use the VS Code user setting for the export instead: the hooks cannot read it.
+2. Set it at user level (Windows user environment variables; Linux login environment), not in a single shell, and restart VS Code afterwards. VS Code started from the desktop sees only user-level variables.
+3. Content capture is optional for usage and only makes the file larger, but it is needed for the tools each call requested, and so for context growth per tool. MOSAIC never copies content to the logs.
+
+The same export also lets the hook:
+
+- record **compaction calls** and other helper calls with their kind (this is how compactions become visible on this target), and
 - complete a **failed tool call** with its end event when the harness fires no post-tool hook for it.
 
-When VS Code usage is missing from a run (variable unset, file missing, session crashed, hooks did not see the variable), recover it:
+### Recovering missing usage
+
+When usage is missing from a run (variable unset, file missing, session crashed, hooks did not see the variable), recover it:
 
 ```sh
 mosaic-log-analyzer ingest-otel <otel-file> --run <run-id>

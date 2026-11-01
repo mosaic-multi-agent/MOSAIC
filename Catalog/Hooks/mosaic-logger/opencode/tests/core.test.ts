@@ -31,7 +31,6 @@ import {
   LogPaths,
   setDebugLogger,
   debugLog,
-  readAdapterVersion,
   type DebugLogFn,
 } from "../lib/core";
 
@@ -851,53 +850,5 @@ describe("setDebugLogger / debugLog", () => {
     });
     // debugLog must swallow logger errors — never propagate
     expect(() => debugLog("this should not throw")).not.toThrow();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// readAdapterVersion
-// ---------------------------------------------------------------------------
-
-describe("readAdapterVersion", () => {
-  let tempDir: string;
-
-  beforeEach(() => {
-    tempDir = nodeFs.mkdtempSync(
-      nodePath.join(nodeOs.tmpdir(), "mosaic-adapter-version-test-"),
-    );
-  });
-
-  afterEach(() => {
-    nodeFs.rmSync(tempDir, { recursive: true, force: true });
-  });
-
-  it("returns the version string from a hook.yaml containing a version line", async () => {
-    const hookYamlPath = nodePath.join(tempDir, "hook.yaml");
-    nodeFs.writeFileSync(
-      hookYamlPath,
-      'version: "1.2.3"\nopencode:\n  supported: true\n',
-    );
-    const result = await readAdapterVersion(hookYamlPath);
-    expect(result).toBe("1.2.3");
-  });
-
-  it("returns undefined when the hook.yaml contains no version key", async () => {
-    const hookYamlPath = nodePath.join(tempDir, "hook.yaml");
-    nodeFs.writeFileSync(hookYamlPath, "opencode:\n  supported: true\n");
-    const result = await readAdapterVersion(hookYamlPath);
-    expect(result).toBeUndefined();
-  });
-
-  it("returns undefined without throwing when the file does not exist", async () => {
-    const missingPath = nodePath.join(tempDir, "nonexistent.yaml");
-    await expect(readAdapterVersion(missingPath)).resolves.toBeUndefined();
-  });
-
-  it("returns undefined for an ambiguous or malformed version value", async () => {
-    const hookYamlPath = nodePath.join(tempDir, "hook.yaml");
-    // A nested-object value is ambiguous for a regex-based parser with no YAML library
-    nodeFs.writeFileSync(hookYamlPath, "version: {nested: value}\n");
-    const result = await readAdapterVersion(hookYamlPath);
-    expect(result).toBeUndefined();
   });
 });

@@ -9,12 +9,11 @@
  *   - Resolve workspace root from ctx.directory
  *   - Initialize LogPaths, SessionCorrelationStore
  *   - Capture the SDK client reference
- *   - Read adapter version from hook.yaml
+ *   - Read adapter version from the workspace manifest (.mosaic/manifest.yaml)
  *   - Wire all handlers into the hook registration map
  *   - Wrap every hook handler in safeHandler
  */
 
-import * as nodePath from "node:path";
 import {
   LogPaths,
   buildEvent,
@@ -22,8 +21,8 @@ import {
   setDebugLogger,
   debugLog,
   safeHandler,
-  readAdapterVersion,
 } from "./lib/core.js";
+import { readManifestAdapterVersion } from "./lib/manifest_version.js";
 import { SessionCorrelationStore, FileClosedSessionRegistry } from "./lib/correlation.js";
 import { fallbackCallId } from "./lib/runstate.js";
 import {
@@ -92,9 +91,8 @@ export const MosaicLogger = async (ctx: {
         });
     });
 
-    // Read adapter version from hook.yaml (best-effort)
-    const hookYamlPath = nodePath.join(workspaceRoot, ".opencode", "plugins", "hook.yaml");
-    const adapterVersion = await readAdapterVersion(hookYamlPath);
+    // Read adapter version from the workspace manifest (best-effort)
+    const adapterVersion = await readManifestAdapterVersion(workspaceRoot);
 
     // Build shared dependency bundle
     const requestedTools = new RequestedToolsTracker();

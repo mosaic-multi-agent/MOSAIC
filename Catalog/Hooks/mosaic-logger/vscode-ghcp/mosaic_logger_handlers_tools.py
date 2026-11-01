@@ -22,6 +22,7 @@ High-frequency path: performs no transcript reads and no directory scanning.
 import mosaic_logger_core as core
 import mosaic_logger_handlers_invocation as invocation
 import mosaic_logger_runstate as runstate
+import mosaic_logger_session_run as session_run
 
 
 # Single module-top constant for the tool names treated as a subagent dispatch.
@@ -95,6 +96,13 @@ def handle_pre_tool_use(ctx: "core.HookContext") -> None:
                 agent_instance_id = runstate.extract_instance_id(prompt)
                 if agent_instance_id:
                     extracted_run_id = runstate.extract_run_id(prompt)
+                    if extracted_run_id:
+                        # The dispatch binds the session before the pending dispatch is
+                        # written and the destination is resolved.
+                        session_run.bind_session_to_dispatch_run(
+                            ctx.paths, ctx.session_id, extracted_run_id,
+                            created_at=ctx.timestamp)
+                        ctx.run_id = extracted_run_id
                     runstate.put_pending_dispatch(
                         ctx.paths,
                         core.effective_run_id(ctx),

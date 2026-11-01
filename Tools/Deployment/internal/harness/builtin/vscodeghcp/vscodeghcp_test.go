@@ -48,7 +48,7 @@ package vscodeghcp_test
 //   - Any non-project scope returns domain.ErrUnsupportedScope (via the shared contracttest universal invariant)
 //
 //   Hook plan:
-//   - The vscode-ghcp hook variant lists its own files in hook.yaml; the catalog hands them
+//   - The vscode-ghcp hook variant lists its own files in the bundle manifest; the catalog hands them
 //     to HookPlan in the HookPlanRequest.
 //   - HookPlan.TargetDir is ".github/hooks" and HookPlan.Files carries the variant's files
 //     unchanged, without duplicates.

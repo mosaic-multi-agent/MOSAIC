@@ -20,8 +20,8 @@ The adapter is a flat set of Python modules, all deployed to `.github/hooks/`:
 | `mosaic_logger_handlers_invocation.py` | `subagentStart`, `subagentStop` |
 | `mosaic_logger_handlers_tools.py` | `preToolUse`, `postToolUse`, `postToolUseFailure` |
 
-A copy of `hook.yaml` (the bundle manifest) is also deployed alongside the modules so
-the adapter can stamp `adapter_version` on `run_start` events at runtime.
+The adapter stamps `adapter_version` on `run_start` events from the workspace manifest
+(`.mosaic/manifest.yaml`).
 
 The Runner-mode additions are `mosaic_logger_runner_mode.py` (role selection from the
 environment) and `mosaic_logger_handlers_runner.py` (subagent-role handlers); the
@@ -40,6 +40,24 @@ the final assistant turn, `02_output.md` and `04_session.raw`, with the response
 omitted when the transcript cannot supply them. The list of fields Runner mode cannot
 produce is in `Development/Designs/MosaicLogFormat.md` section 4.6 and in the module
 docstring of `mosaic_logger_handlers_runner.py`.
+
+## Run binding and transcript export
+
+In native mode a session is bound to a run only by a MOSAIC dispatch (a prompt carrying
+an agent instance id and a run id) or by its existing binding. Dispatches are read from
+the `preToolUse` subagent-launch prompt (`agent`/`task` tool), which binds the session
+before the pending dispatch and the dispatching `tool_call_start` are written, and from
+the `subagentStart` `agentPrompt`. A dispatch for another run switches the binding. In
+Runner mode `MOSAIC_RUN_ID` is the run identity and is never overridden. User prompts,
+subagent replies, notification text and tool-argument file paths never bind, even when
+they quote a run id; an orchestrator's tool events before its first dispatch go to
+`unknown-run/`. GHCP CLI has no native `MOSAIC_RUN_ID` environment fallback outside
+Runner mode (not affected).
+
+The orchestrator transcript `00_orchestrator_session.raw` records the exporting session
+in its `.meta.json` sidecar (`session_id`). A different session never replaces it; the
+same session's re-export does; a target with no sidecar or no recorded session is
+replaced. See `Development/Designs/MosaicLogFormat.md` section 4.2.
 
 ## Trusted folder requirement
 

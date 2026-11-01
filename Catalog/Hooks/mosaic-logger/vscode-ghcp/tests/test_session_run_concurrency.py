@@ -63,9 +63,9 @@ class TestConcurrentRelocation(unittest.TestCase):
         self.assertEqual([self.source.name], os.listdir(self.source.parent))
 
     def test_a_later_prompt_retries_a_relocation_that_did_not_happen(self):
-        self.ws.send_all(sf.prompt_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
+        self.ws.send_all(sf.dispatch_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
         self.source.write_text(_line(sf.SESSION_A, 9), "utf-8")
-        self.ws.send_all(sf.prompt_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
+        self.ws.send_all(sf.dispatch_payload(self.ws.path, sf.SESSION_A, sf.RUN_A))
         self.assertIn(9, [e.get("n") for e in self.ws.stream(sf.RUN_A)])
 
 

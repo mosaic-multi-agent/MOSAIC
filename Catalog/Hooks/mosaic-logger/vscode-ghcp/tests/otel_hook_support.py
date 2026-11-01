@@ -140,8 +140,8 @@ class OtelWorkspace(rf.RoutingWorkspace):
         append_lines(self.otel_path, lines)
 
     def prompt(self, session_id=SESSION, run_id=RUN):
-        """UserPromptSubmit that makes `run_id` the run of `session_id`."""
-        rf.send(rf.prompt_payload(self.path, session_id, run_id))
+        """A MOSAIC dispatch that makes `run_id` the run of `session_id`."""
+        rf.send(rf.dispatch_payload(self.path, session_id, run_id))
 
     def session_start(self, session_id=SESSION):
         rf.send(rf.session_start_payload(self.path, session_id))
@@ -150,7 +150,7 @@ class OtelWorkspace(rf.RoutingWorkspace):
         rf.send(rf.stop_payload(self.path, session_id))
 
     def start_session(self, session_id=SESSION, run_id=RUN):
-        """SessionStart then the first prompt: the run is known afterwards."""
+        """SessionStart then the first dispatch: the run is known afterwards."""
         self.session_start(session_id)
         self.prompt(session_id, run_id)
 
@@ -163,7 +163,7 @@ class OtelWorkspace(rf.RoutingWorkspace):
         self.process_send(rf.session_start_payload(self.path, session_id))
 
     def process_prompt(self, session_id=SESSION, run_id=RUN):
-        self.process_send(rf.prompt_payload(self.path, session_id, run_id))
+        self.process_send(rf.dispatch_payload(self.path, session_id, run_id))
 
     def process_stop(self, session_id=SESSION):
         self.process_send(rf.stop_payload(self.path, session_id))

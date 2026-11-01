@@ -12,7 +12,9 @@ Has no bundle dependencies (stdlib only).
 import hashlib
 import json
 import os
+import re
 import sys
+from datetime import datetime
 
 
 # ---------------------------------------------------------------------------
@@ -98,12 +100,17 @@ class RecordFacts:
                       of every record sharing this record's message.id; {} when
                       the call requested none; None when no record of the group
                       carried a content list.
+      call_time     - str | None, the call time of this record's API message in
+                      envelope format (UTC, ms, Z): the timestamp of the first
+                      line of the message with a usable one, identical for
+                      every record of the message; None when none is usable.
     """
 
     def __init__(self, record_id, record_index,
                  model=None, token_usage=None, service_tier=None, effort=None,
-                 requested_tools=None):
+                 requested_tools=None, call_time=None):
         self.requested_tools = requested_tools
+        self.call_time = call_time
         self.record_id = record_id
         self.record_index = record_index
         self.model = model
@@ -325,6 +332,28 @@ def _resolve_record_id(record, record_index, record_line_bytes):
     return "pos:{}:{}".format(record_index, digest)
 
 
+_TIME_SHAPE = re.compile(
+    r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(?:Z|\+00:00)\Z")
+
+
+def _normalise_timestamp(value):
+    """The envelope-format time (UTC, ms, Z) of a transcript timestamp, or None.
+
+    Usable only as YYYY-MM-DDTHH:MM:SS[.f{1,9}] followed by Z or +00:00 and a
+    valid calendar time; anything else is None."""
+    if not isinstance(value, str):
+        return None
+    match = _TIME_SHAPE.match(value)
+    if not match:
+        return None
+    whole, fraction = match.group(1), match.group(2) or ""
+    try:
+        datetime.strptime(whole, "%Y-%m-%dT%H:%M:%S")
+    except ValueError:
+        return None
+    return "{}.{}Z".format(whole, (fraction + "000")[:3])
+
+
 def _group_key(message, record_index):
     """Key of the API message a record belongs to: its message.id, or the
     record's own position when it has none (a group of its own)."""
@@ -400,6 +429,7 @@ def read_assistant_records(transcript_path):
         results = []
         group_keys = []
         groups = {}
+        call_times = {}
 
         try:
             with open(_long_path_safe(transcript_path), "r", encoding="utf-8", errors="replace") as f:
@@ -439,6 +469,9 @@ def read_assistant_records(transcript_path):
                     group_keys.append(_group_key(message, record_index))
                     _collect_tool_blocks(
                         message, groups.setdefault(group_keys[-1], _ToolGroup()))
+                    if call_times.get(group_keys[-1]) is None:
+                        call_times[group_keys[-1]] = _normalise_timestamp(
+                            record.get("timestamp"))
                     record_index += 1
 
         except Exception:
@@ -447,6 +480,7 @@ def read_assistant_records(transcript_path):
 
         for facts, key in zip(results, group_keys):
             facts.requested_tools = groups[key].tools()
+            facts.call_time = call_times.get(key)
 
         return results
 

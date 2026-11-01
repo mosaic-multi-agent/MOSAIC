@@ -18,6 +18,7 @@ sys.path.insert(0, _TESTS_DIR)
 
 import mosaic_logger_core  # noqa: E402,F401  (puts the shared append module on sys.path)
 import mosaic_logger_locked_append as locked  # noqa: E402
+import mosaic_logger_runstate as runstate  # noqa: E402
 
 from tests.runner_mode_support import (  # noqa: E402
     INSTANCE_ID, RUN_ID, SESSION_ID, RunnerModeTestCase, read_jsonl)
@@ -70,8 +71,8 @@ class TranscriptLoggingCase(RunnerModeTestCase):
     # -- native mode driving -------------------------------------------------
 
     def start_run(self, run_id=FIRST_RUN):
-        """A user prompt naming run_id: the session now belongs to that run."""
-        self.dispatch("userPromptSubmitted", {"prompt": "Start the work. run_id: %s" % run_id})
+        """Bind the session to run_id, as an earlier dispatch in this session would have."""
+        runstate.put_session_run_id(self.paths, SESSION_ID, run_id)
 
     def spawn(self, agent_id, instance_id=INSTANCE_ID, run_id=FIRST_RUN):
         """Dispatch a task tool call and subagentStart so agent_id is mapped to instance_id."""
