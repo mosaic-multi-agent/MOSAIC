@@ -62,6 +62,9 @@ func (r *transformRun) run(ctx context.Context) (TransformHarnessResult, error) 
 	if err := r.resolveWorkspace(ctx); err != nil {
 		return TransformHarnessResult{}, err
 	}
+	if err := r.refuseBothGhcpTargets(); err != nil {
+		return TransformHarnessResult{}, err
+	}
 	if err := r.makePlan(); err != nil {
 		return TransformHarnessResult{}, err
 	}
@@ -88,7 +91,9 @@ func (r *transformRun) run(ctx context.Context) (TransformHarnessResult, error) 
 	if err != nil {
 		return TransformHarnessResult{}, err
 	}
-	return r.result(exec.TodoFilePath), nil
+	res := r.result(exec.TodoFilePath)
+	res.recordBackups(exec)
+	return res, nil
 }
 
 // failureResult is the result that accompanies a run-level error. Errors before a run exists

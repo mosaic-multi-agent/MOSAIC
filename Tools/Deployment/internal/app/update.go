@@ -25,7 +25,6 @@ package app
 
 import (
 	"context"
-	"path/filepath"
 
 	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/deploy"
@@ -96,6 +95,10 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 		workspace = ws
 	}
 
+	if err := s.checkGhcpTarget(harnessID, workspace); err != nil {
+		return domain.RunSummary{}, err
+	}
+
 	scope := domain.ScopeProject
 
 	// Load the protocol source once for the run. Failure aborts before any file is written.
@@ -141,12 +144,12 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	if orchPath, pathErr := module.TargetPath(domain.TargetPathRequest{
 		Kind:     domain.ArtifactAgent,
 		Key:      orchestrator.Key,
-		FileName: filepath.Base(orchestrator.SourcePath),
+		FileName: plan.AgentFileName(module, orchestrator),
 		Scope:    scope,
 		GOOS:     s.deps.GOOS,
 	}); pathErr == nil {
 		orchTargetPath = orchPath
-		orchState = probeDeployedArtifact(workspace, orchTargetPath, module.Descriptor().Frontmatter.ModelKey)
+		orchState = probeAgentWithRecordedLegacy(workspace, module, snap, orchestrator.Key, orchTargetPath)
 	}
 
 	// When this mode excludes orchestrators from force-inclusion, the orchestrator enters the
@@ -169,13 +172,13 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 			if scriptPath, pathErr := module.TargetPath(domain.TargetPathRequest{
 				Kind:     domain.ArtifactAgent,
 				Key:      script.Key,
-				FileName: filepath.Base(script.SourcePath),
+				FileName: plan.AgentFileName(module, script),
 				Scope:    scope,
 				GOOS:     s.deps.GOOS,
 			}); pathErr == nil {
 				orchScriptTargetPath = scriptPath
 				orchScriptAgent = script
-				orchScriptState = probeDeployedArtifact(workspace, orchScriptTargetPath, module.Descriptor().Frontmatter.ModelKey)
+				orchScriptState = probeAgentWithRecordedLegacy(workspace, module, snap, script.Key, orchScriptTargetPath)
 				if orchScriptState.Present {
 					scannedAgentKeys = append(scannedAgentKeys, script.Key)
 				}
@@ -310,6 +313,7 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
+	migrateLegacyGhcpAgents(&p, snap)
 
 	conflicts := map[string]domain.ConflictDecision{}
 	var latchedDecision domain.ConflictDecision

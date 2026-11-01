@@ -1,4 +1,4 @@
-// Package ghcpcli implements the GitHub Copilot CLI built-in harness module. It embeds the
+// Package ghcpcli implements the GHCP CLI / VS Code GHCP Copilot built-in harness module. It embeds the
 // ghcp-cli.yaml descriptor and provides tool formatting as a flow-style YAML sequence with
 // single-quoted items (the format GHCP CLI expects), which cannot be expressed through the
 // descriptor data alone.
@@ -54,7 +54,7 @@ func init() {
 	})
 }
 
-// module is the GitHub Copilot CLI built-in HarnessModule implementation.
+// module is the GHCP CLI / VS Code GHCP Copilot built-in HarnessModule implementation.
 type module struct {
 	ref             domain.HarnessRef
 	desc            *domain.HarnessDescriptor

@@ -216,21 +216,23 @@ func TestPlanTransform_HookBundleAlreadyInTargetIsSkippedUnlessOverwrite(t *test
 	}
 }
 
-func TestPlanTransform_HooksOfTheGhcpPairAreExcludedWithReasonNamingTheFolder(t *testing.T) {
+func TestPlanTransform_HooksOfTheGhcpPairAreCarriedWithTheTargetVariantNotSkipped(t *testing.T) {
 	for _, pair := range [][2]string{{tpCLI, tpVSCode}, {tpVSCode, tpCLI}} {
-		t.Run(pair[0]+"->"+pair[1], func(t *testing.T) {
-			ws := t.TempDir()
-			src, tgt := tpHarness(t, pair[0]), tpHarness(t, pair[1])
-			tpWriteFile(t, ws, ".github/hooks/logger.sh", "#!/bin/sh\n")
+		for _, overwrite := range []bool{false, true} {
+			t.Run(pair[0]+"->"+pair[1]+map[bool]string{false: "", true: " overwrite"}[overwrite], func(t *testing.T) {
+				ws := t.TempDir()
+				src, tgt := tpHarness(t, pair[0]), tpHarness(t, pair[1])
+				tpWriteFile(t, ws, ".github/hooks/logger.sh", "#!/bin/sh\n")
 
-			h := tpHook(t, tpPlan(t, ws, src, tgt, true))
+				h := tpHook(t, tpPlan(t, ws, src, tgt, overwrite))
 
-			if h.Action != PlanSkip || h.Skip != SkipSharedHooksFolder {
-				t.Errorf("action %q skip %q, want skip %q (also under overwrite)", h.Action, h.Skip, SkipSharedHooksFolder)
-			}
-			if !strings.Contains(filepath.ToSlash(h.Reason), ".github/hooks") {
-				t.Errorf("reason %q does not name the shared folder", h.Reason)
-			}
-		})
+				if h.Action != PlanWriteOverwrite || h.Skip != "" {
+					t.Errorf("action %q skip %q, want overwrite with no skip (same-named files are replaced, with or without Overwrite)", h.Action, h.Skip)
+				}
+				if !reflect.DeepEqual(h.Plan, tgt.hookPlan) {
+					t.Errorf("Plan = %+v, want the target variant plan %+v", h.Plan, tgt.hookPlan)
+				}
+			})
+		}
 	}
 }

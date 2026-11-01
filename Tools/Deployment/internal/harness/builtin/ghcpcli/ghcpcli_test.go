@@ -1,6 +1,6 @@
 package ghcpcli_test
 
-// Tests for the GitHub Copilot CLI built-in harness module.
+// Tests for the GHCP CLI / VS Code GHCP Copilot built-in harness module.
 //
 // Coverage:
 //   Golden file tests (tool-light, tool-heavy, skill-using, orchestrator agents):

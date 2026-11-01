@@ -107,6 +107,10 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 		workspace = ws
 	}
 
+	if err := s.checkGhcpTarget(harnessID, workspace); err != nil {
+		return domain.RunSummary{}, err
+	}
+
 	scope := req.Scope
 	if scope == "" {
 		scope = domain.ScopeProject
@@ -309,6 +313,7 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 		s.deps.Todo.AddGap(g)
 	}
 	orch.annotate(p.Items)
+	migrateLegacyGhcpAgents(&p, snap)
 
 	conflicts := map[string]domain.ConflictDecision{}
 	var latchedDecision domain.ConflictDecision

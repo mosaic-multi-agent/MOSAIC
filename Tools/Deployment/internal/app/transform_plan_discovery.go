@@ -70,7 +70,7 @@ type sourceAgentFile struct {
 // listSourceAgentFiles reads the agents folder without recursing. It returns the .md files in
 // name order with their recognition result, and the lower-cased workspace-relative slash
 // paths of every regular file in the folder. A missing folder yields no files and no error.
-func listSourceAgentFiles(dir, relDir string, src domain.HarnessModule) ([]sourceAgentFile, map[string]bool, error) {
+func listSourceAgentFiles(dir, relDir string, src domain.HarnessModule, anyCase bool) ([]sourceAgentFile, map[string]bool, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -85,7 +85,7 @@ func listSourceAgentFiles(dir, relDir string, src domain.HarnessModule) ([]sourc
 			continue
 		}
 		allFiles[strings.ToLower(slashJoin(relDir, e.Name()))] = true
-		if !strings.HasSuffix(e.Name(), agentFileExtPlain) {
+		if !hasAgentSuffix(e.Name(), anyCase) {
 			continue
 		}
 		f := sourceAgentFile{name: e.Name(), path: filepath.Join(dir, e.Name())}
@@ -101,4 +101,12 @@ func listSourceAgentFiles(dir, relDir string, src domain.HarnessModule) ([]sourc
 		files = append(files, f)
 	}
 	return files, allFiles, nil
+}
+
+// hasAgentSuffix reports whether name ends in .md, ignoring case when anyCase is set.
+func hasAgentSuffix(name string, anyCase bool) bool {
+	if anyCase {
+		name = strings.ToLower(name)
+	}
+	return strings.HasSuffix(name, agentFileExtPlain)
 }

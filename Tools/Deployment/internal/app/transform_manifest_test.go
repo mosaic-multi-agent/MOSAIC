@@ -1,9 +1,10 @@
 package app_test
 
 // transform_manifest_test.go specifies what the whole-deployment transform records in the
-// workspace manifest (target entries with the carried versions and real content hashes; the
-// source harness's entries and files untouched) and that repeating a transform changes nothing
-// for every harness pair outside GHCP CLI / VS Code GHCP.
+// workspace manifest (target entries with the carried versions and real content hashes) and, for
+// every harness pair outside GHCP CLI / VS Code GHCP, that the source harness's entries and
+// files stay untouched and that repeating a transform changes nothing. The GHCP pair moves its
+// source deployment instead; transform_ghcp_pair_exec_test.go specifies that.
 
 import (
 	"os"
@@ -57,7 +58,7 @@ func TestTransformManifest_RecordsTargetEntriesWithCarriedVersionsAndRealHashes(
 	}
 }
 
-func TestTransformManifest_SourceHarnessEntriesAreUnchanged(t *testing.T) {
+func TestTransformManifest_OutsideTheGhcpPair_SourceHarnessEntriesAreUnchanged(t *testing.T) {
 	r := trModelRun(t, nil)
 	var seeded []domain.ManifestEntry
 	for _, key := range []string{"subagent", "utility"} {
@@ -92,7 +93,7 @@ func TestTransformManifest_SourceHarnessEntriesAreUnchanged(t *testing.T) {
 	}
 }
 
-func TestTransformManifest_SourceFilesAreUnchangedByARealRun(t *testing.T) {
+func TestTransformManifest_OutsideTheGhcpPair_SourceFilesAreUnchangedByARealRun(t *testing.T) {
 	r := trModelRun(t, nil)
 	src := map[string]string{}
 	for _, key := range trAgentFixtures {

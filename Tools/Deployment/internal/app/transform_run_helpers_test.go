@@ -119,12 +119,13 @@ func (s *trSpy) modelSubjects() []string {
 
 // trRun is one wired service over a temporary workspace.
 type trRun struct {
-	t   *testing.T
-	ws  string
-	svc app.Service
-	spy *trSpy
-	src string
-	tgt string
+	t    *testing.T
+	ws   string
+	deps app.Deps
+	svc  app.Service
+	spy  *trSpy
+	src  string
+	tgt  string
 }
 
 // trNew wires a service for the harness pair over a fresh workspace. The script drives every
@@ -150,7 +151,7 @@ func trNew(t *testing.T, script *interactiontest.Stub, src, tgt string, opts ...
 	for _, o := range opts {
 		o(&deps)
 	}
-	return &trRun{t: t, ws: ws, svc: app.New(deps), spy: spy, src: src, tgt: tgt}
+	return &trRun{t: t, ws: ws, deps: deps, svc: app.New(deps), spy: spy, src: src, tgt: tgt}
 }
 
 // request returns a fully pre-answered request for the run's pair that confirms the plan.

@@ -35,7 +35,10 @@ func tpWrites(p TransformPlan) []PlannedAgent {
 func TestPlanTransform_DestinationIsTargetAgentsFolderWithTargetExtension(t *testing.T) {
 	cases := []struct{ name, source, target, srcName, want string }{
 		{"to ghcp-cli keeps agent.md naming", tpClaude, tpCLI, "x.md", ".github/agents/x.agent.md"},
+		{"to vscode-ghcp uses the same agent.md naming", tpClaude, tpVSCode, "x.md", ".github/agents/x.agent.md"},
 		{"to claude-code", tpCLI, tpClaude, "x.agent.md", ".claude/agents/x.md"},
+		{"from vscode-ghcp agent.md file", tpVSCode, tpClaude, "x.agent.md", ".claude/agents/x.md"},
+		{"from vscode-ghcp legacy md file", tpVSCode, tpClaude, "x.md", ".claude/agents/x.md"},
 		{"to opencode", tpClaude, tpOpen, "x.md", ".opencode/agents/x.md"},
 	}
 	for _, c := range cases {
@@ -67,23 +70,28 @@ func TestPlanTransform_PlanningLeavesTheWorkspaceUnchanged(t *testing.T) {
 }
 
 func TestPlanTransform_TargetExtensionFilesAreExcludedOnlyWhenBothHarnessesShareTheFolder(t *testing.T) {
-	t.Run("same folder: ghcp-cli files are not sources for vscode-ghcp", func(t *testing.T) {
+	t.Run("same folder: vscode-ghcp agent files of both names are recognised, none is a target-extension skip", func(t *testing.T) {
 		ws := t.TempDir()
 		src, tgt := tpHarness(t, tpVSCode), tpHarness(t, tpCLI)
 		tpPlaceAgent(t, ws, ".github/agents", "x.agent.md", "subagent.md")
 		tpPlaceAgent(t, ws, ".github/agents", "y.md", "subagent.md")
+		tpRecord(t, ws, "vscode-ghcp",
+			tpAgentEntry("x", ".github/agents/x.agent.md"),
+			tpAgentEntry("y", ".github/agents/y.md"))
 
 		p := tpPlan(t, ws, src, tgt, false)
 
-		a := tpAgent(t, p, "x.agent.md")
-		if a.Action != PlanSkip || a.Skip != SkipTargetExtension || a.Reason == "" {
-			t.Errorf("x.agent.md = action %q skip %q reason %q, want skip %q with a reason", a.Action, a.Skip, a.Reason, SkipTargetExtension)
-		}
-		if a.DestinationPath != "" {
-			t.Errorf("x.agent.md carries destination %q, want none", a.DestinationPath)
-		}
-		if y := tpAgent(t, p, "y.md"); y.Action != PlanWriteCreate || tpDest(y) != ".github/agents/y.agent.md" {
-			t.Errorf("y.md = action %q destination %q, want create at .github/agents/y.agent.md", y.Action, tpDest(y))
+		for _, f := range []string{"x.agent.md", "y.md"} {
+			a := tpAgent(t, p, f)
+			if a.Skip == SkipTargetExtension || a.Skip == SkipNotAgent {
+				t.Errorf("%s skipped as %q: %s", f, a.Skip, a.Reason)
+			}
+			if a.Action != PlanWriteCreate && a.Action != PlanWriteOverwrite {
+				t.Errorf("%s action %q, want a planned write", f, a.Action)
+			}
+			if k := tpAgentKeyOf(f); a.Key != k || tpDest(a) != ".github/agents/"+k+".agent.md" {
+				t.Errorf("%s key %q destination %q, want %s at .github/agents/%s.agent.md", f, a.Key, tpDest(a), k, k)
+			}
 		}
 	})
 
@@ -126,37 +134,27 @@ func TestPlanTransform_ExistingDestinationIsSkippedAndKeptUnlessOverwrite(t *tes
 	}
 }
 
-func TestPlanTransform_DestinationThatIsASourceFileIsNeverWritten(t *testing.T) {
-	cases := []struct{ name, source, target, writer, other string }{
-		// vscode -> cli: x.md would be written to x.agent.md, which is a source file.
-		{"vscode to cli", tpVSCode, tpCLI, "x.md", "x.agent.md"},
-		// cli -> vscode: x.agent.md would be written to x.md, which is a source file.
-		{"cli to vscode", tpCLI, tpVSCode, "x.agent.md", "x.md"},
+// tpAgentKeyOf returns the agent key of a GHCP agent file name (X.agent.md or X.md).
+func tpAgentKeyOf(fileName string) string {
+	return strings.TrimSuffix(strings.TrimSuffix(fileName, ".md"), ".agent")
+}
+
+func TestPlanTransform_DestinationThatIsASourceFileIsStillSkippedOutsideTheGhcpPair(t *testing.T) {
+	// A target whose agents folder and naming equal the source's: the destination is the
+	// source file, which transform never writes over.
+	ws := t.TempDir()
+	src, tgt := tpHarness(t, tpClaude), tpHarness(t, tpClaude)
+	tpPlaceAgent(t, ws, ".claude/agents", "x.md", "subagent.md")
+	before := tpSnapshot(t, ws)
+
+	p := tpPlan(t, ws, src, tgt, true)
+
+	a := tpAgent(t, p, "x.md")
+	if a.Action != PlanSkip || a.Skip != SkipDestinationIsSource || a.Reason == "" {
+		t.Errorf("x.md = action %q skip %q reason %q, want skip %q with a reason", a.Action, a.Skip, a.Reason, SkipDestinationIsSource)
 	}
-	for _, c := range cases {
-		for _, overwrite := range []bool{false, true} {
-			name := c.name + " overwrite=" + map[bool]string{false: "false", true: "true"}[overwrite]
-			t.Run(name, func(t *testing.T) {
-				ws := t.TempDir()
-				src, tgt := tpHarness(t, c.source), tpHarness(t, c.target)
-				tpPlaceAgent(t, ws, ".github/agents", c.writer, "subagent.md")
-				tpPlaceAgent(t, ws, ".github/agents", c.other, "subagent.md")
-				before := tpSnapshot(t, ws)
-
-				p := tpPlan(t, ws, src, tgt, overwrite)
-
-				a := tpAgent(t, p, c.writer)
-				if a.Action != PlanSkip || a.Skip != SkipDestinationIsSource || a.Reason == "" {
-					t.Errorf("%s = action %q skip %q reason %q, want skip %q with a reason", c.writer, a.Action, a.Skip, a.Reason, SkipDestinationIsSource)
-				}
-				for _, w := range tpWrites(p) {
-					t.Errorf("planned write %s -> %s although every destination is a source file", w.FileName, w.DestinationPath)
-				}
-				if after := tpSnapshot(t, ws); !reflect.DeepEqual(before, after) {
-					t.Errorf("source files changed by planning")
-				}
-			})
-		}
+	if after := tpSnapshot(t, ws); !reflect.DeepEqual(before, after) {
+		t.Errorf("source files changed by planning")
 	}
 }
 
@@ -232,22 +230,6 @@ func TestPlanTransform_SharedFolderPairNeverWritesASourceFile(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestPlanTransform_ResultWithBothFormsOfOneAgentWarnsAboutRunner(t *testing.T) {
-	ws := t.TempDir()
-	src, tgt := tpHarness(t, tpVSCode), tpHarness(t, tpCLI)
-	tpPlaceAgent(t, ws, ".github/agents", "Foo.md", "subagent.md")
-
-	p := tpPlan(t, ws, src, tgt, false)
-
-	notes := tpNotes(p, NoteBothForms)
-	if len(notes) != 1 {
-		t.Fatalf("both-forms notes = %d, want 1: %+v", len(notes), p.Notes)
-	}
-	if !tpNoteMentions(notes[0], ".github/agents/Foo.md", ".github/agents/Foo.agent.md") {
-		t.Errorf("note does not carry both paths: %+v", notes[0])
 	}
 }
 

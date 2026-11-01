@@ -5,6 +5,7 @@ package app
 import (
 	"path/filepath"
 
+	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -71,12 +72,42 @@ func (r *transformRun) result(todoPath string) TransformHarnessResult {
 	for i := range r.plan.Hooks {
 		res.add(r.hookOutcome(i))
 	}
+	for _, x := range r.plan.Removals {
+		res.Removals = append(res.Removals, newFileChange(x.Ref, x.Path, x.Reason))
+	}
+	for _, x := range r.plan.Replacements {
+		res.Replacements = append(res.Replacements, newFileChange(x.Ref, x.Path, x.Reason))
+	}
 	res.Notes = append([]TransformNote(nil), r.plan.Notes...)
 	if res.Transformed > 0 {
 		res.Notes = append(res.Notes, TransformNote{Kind: NoteNewerTargetContent, Message: newerInjectionsMessage})
 	}
 	r.addModelSummary(&res)
 	return res
+}
+
+// newFileChange is the result entry of one planned removal or replacement.
+func newFileChange(ref domain.ArtifactRef, p, reason string) TransformFileChange {
+	return TransformFileChange{Kind: ref.Kind, Key: ref.Key, Path: filepath.ToSlash(p), Reason: reason}
+}
+
+// recordBackups sets the backup path of every removal and replacement the executor backed up.
+func (res *TransformHarnessResult) recordBackups(exec deploy.ExecResult) {
+	for _, rec := range exec.Removals {
+		setBackup(res.Removals, rec.Removal.Path, rec.BackupPath)
+	}
+	for _, rec := range exec.Replacements {
+		setBackup(res.Replacements, rec.Replacement.Path, rec.BackupPath)
+	}
+}
+
+// setBackup sets the backup path of the change at p.
+func setBackup(changes []TransformFileChange, p, backup string) {
+	for i := range changes {
+		if changes[i].Path == filepath.ToSlash(p) {
+			changes[i].BackupPath = backup
+		}
+	}
 }
 
 // add appends an outcome to the result and counts it by status.

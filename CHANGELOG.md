@@ -8,6 +8,16 @@
 #### Bugfixes
 - Text entry screens no longer break when the text is wider than the screen or is pasted
 
+### Deploy v1.4.0
+#### Changes
+- The two GHCP targets are now named "GHCP CLI / VS Code GHCP Copilot" (`ghcp-cli`) and "VS Code GHCP Local" (`vscode-ghcp`) in the TUI, the CLI output, the TODO files and the docs; the IDs are unchanged. The docs explain which one to choose, that Local is being retired, and that subagents on the GHCP CLI / VS Code GHCP Copilot target have no built-in ask tool (human-in-the-loop for them needs an MCP ask tool you supply; untested)
+- A workspace holds one GHCP target at a time, decided by the manifest `harness_id`. Deploy flows refuse the other target without changing anything and point to `transform`; a workspace that holds both must be cleaned up by hand
+- Both GHCP targets write agents as `.github/agents/X.agent.md`. A workspace with agents recorded as `X.md` is migrated by the next deploy, deploy agents, update or workflow update for its target: each old file is backed up under `.mosaic/backups/` and replaced, and an existing `X.agent.md` is backed up and replaced
+- `transform` between `ghcp-cli` and `vscode-ghcp` now replaces the source deployment: agents are rewritten in place as `X.agent.md` (legacy `X.md` agents migrated), target hooks are written, source hook files and registration are replaced or removed, skills are left as they are, and every removed or replaced file is backed up under `.mosaic/backups/`. `--dry-run` and the confirmation plan list the removals and replacements, the JSON output carries them as `removals` and `replacements`, and a failure leaves the workspace unchanged
+- `transform` into `vscode-ghcp` and `render` for `vscode-ghcp` name agents `X.agent.md`
+#### Bugfixes
+- The README no longer says that `claude-code` and `vscode-ghcp` share `.claude/hooks/`; both GHCP harnesses use `.github/hooks` and Claude Code uses `.claude/hooks`
+
 ### Deploy v1.3.0
 #### Changes
 - `transform` now moves a whole deployment (agents, skills and hook bundles) to another harness. Its input is the workspace root given with `--workspace`, as for `deploy`; single files and loose folders are no longer accepted. The plan is shown and must be confirmed (`--yes` confirms without prompting)

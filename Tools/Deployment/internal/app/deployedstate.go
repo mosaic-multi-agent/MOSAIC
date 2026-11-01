@@ -248,6 +248,10 @@ func probeDeployedStateWithIndex(
 					// cleanly (or that the scan flagged) is parse-failed; files that simply
 					// have a different id still yield Present: false.
 					result[pp.TargetPath] = probePlannedPathForAgent(workspace, pp.TargetPath, modelKey, parseFailedPaths[pp.TargetPath])
+				} else if isLegacySiblingPath(resolved, pp.TargetPath) {
+					// A legacy X.md found by id is not the X.agent.md this run writes: the
+					// planned path is probed, so the agent is deployed as X.agent.md.
+					result[pp.TargetPath] = probePlannedPathForAgent(workspace, pp.TargetPath, modelKey, parseFailedPaths[pp.TargetPath])
 				} else {
 					// Probe at the id-resolved path (may differ from planned path if renamed).
 					result[pp.TargetPath] = probeDeployedArtifact(workspace, resolved, modelKey)

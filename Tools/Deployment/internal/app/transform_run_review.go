@@ -45,7 +45,8 @@ func (r *transformRun) reviewPlan() domain.Plan {
 	p := domain.Plan{
 		Mode: domain.ModeTransformHarness, Harness: r.tgt.Ref(),
 		WorkspacePath: r.workspace, Scope: domain.ScopeProject,
-		Items: r.writeItems(),
+		Items:    r.writeItems(),
+		Removals: r.plan.Removals, Replacements: r.plan.Replacements,
 	}
 	for _, pa := range r.plan.Agents {
 		if pa.Action != PlanSkip {

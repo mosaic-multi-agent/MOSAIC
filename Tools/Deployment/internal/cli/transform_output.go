@@ -107,8 +107,9 @@ func renderTransformHuman(out io.Writer, result app.TransformHarnessResult) {
 		fmt.Fprintln(out, transformFileLine(f))
 		writeTransformFileDetails(out, f)
 	}
-	fmt.Fprintf(out, "transformed: %d  skipped: %d  failed: %d\n",
-		result.Transformed, result.Skipped, result.Failed)
+	writeTransformChanges(out, result)
+	fmt.Fprintf(out, "transformed: %d  skipped: %d  failed: %d%s\n",
+		result.Transformed, result.Skipped, result.Failed, transformChangeCounts(result))
 	if len(result.UnresolvedModels) > 0 {
 		fmt.Fprintf(out, "agents written without a model (set one in the file): %s\n",
 			strings.Join(result.UnresolvedModels, ", "))

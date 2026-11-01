@@ -14,6 +14,7 @@ import (
 	"mosaic-deploy/internal/catalog"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
+	"mosaic-deploy/internal/manifest"
 )
 
 const (
@@ -77,9 +78,10 @@ func (tpCatalog) Hooks() []domain.HookBundle {
 	return []domain.HookBundle{{Key: tpHookKey, Version: "1.5.1"}}
 }
 
-// tpService returns a service whose catalog holds the logger hook bundle.
+// tpService returns a service whose catalog holds the logger hook bundle and whose manifest
+// store reads the workspace manifest.
 func tpService() *service {
-	return &service{deps: Deps{Catalog: tpCatalog{}}}
+	return &service{deps: Deps{Catalog: tpCatalog{}, Manifest: manifest.NewStore()}}
 }
 
 // tpWriteFile writes content below root, creating folders.

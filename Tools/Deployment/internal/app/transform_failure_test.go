@@ -4,7 +4,8 @@ package app_test
 // fails: the written agent is the rebuilt target-harness form, a file that cannot be rebuilt is
 // reported as failed while the others continue, a write failure reverts the whole run, nothing
 // is asked when nothing is written, the catalog is consulted by agent key as well as by id,
-// and a cancelled workspace question aborts with nothing written.
+// and a cancelled workspace question aborts with nothing written. The write-failure case runs
+// outside the GHCP pair; the pair's failures are in transform_ghcp_pair_failure_test.go.
 
 import (
 	"errors"
@@ -103,7 +104,7 @@ func TestTransformDeployment_AgentThatCannotBeRebuilt_IsFailedAndTheOthersContin
 	}
 }
 
-func TestTransformDeployment_WriteFailure_RevertsEveryWrittenFile(t *testing.T) {
+func TestTransformDeployment_OutsideTheGhcpPair_WriteFailure_RevertsEveryWrittenFile(t *testing.T) {
 	r := trNew(t, nil, hClaude, hOpen)
 	r.seed(trAgentFixtures...)
 	// A non-empty folder where the last planned agent (utility) must be written cannot be overwritten.

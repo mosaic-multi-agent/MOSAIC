@@ -27,6 +27,9 @@ const (
 	SkipUnsupported         TransformSkipKind = "unsupported"
 	SkipNoTargetVariant     TransformSkipKind = "no-target-variant"
 	SkipSharedHooksFolder   TransformSkipKind = "shared-hooks-folder"
+	// SkipNotRecorded - GHCP pair only: the agent file has no manifest record, so the pair
+	// transform neither writes, replaces nor removes it.
+	SkipNotRecorded TransformSkipKind = "not-recorded"
 )
 
 // TransformNoteKind names a run-level note of the plan.
@@ -86,6 +89,9 @@ type TransformPlan struct {
 	Skills          []PlannedSkill
 	Hooks           []PlannedHookBundle
 	Notes           []TransformNote
+	// Removals and Replacements are filled for the GHCP pair only; nil otherwise.
+	Removals     []domain.Removal
+	Replacements []domain.Replacement
 }
 
 // SourceModels returns the distinct SourceModel values of agents whose action writes, in

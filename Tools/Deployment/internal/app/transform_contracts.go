@@ -114,6 +114,21 @@ type TransformHarnessResult struct {
 	Transformed int `json:"transformed"`
 	Skipped     int `json:"skipped"`
 	Failed      int `json:"failed"`
+	// Removals lists the files a GHCP-pair run removes, or would remove. Absent otherwise.
+	Removals []TransformFileChange `json:"removals,omitempty"`
+	// Replacements lists existing files a GHCP-pair run overwrites, or would overwrite, after
+	// backing them up. Absent otherwise.
+	Replacements []TransformFileChange `json:"replacements,omitempty"`
+}
+
+// TransformFileChange is one file a GHCP-pair transform removes or replaces.
+type TransformFileChange struct {
+	Kind   domain.ArtifactKind `json:"kind"` // agent | hook
+	Key    string              `json:"key,omitempty"`
+	Path   string              `json:"path"` // workspace-relative, forward slashes
+	Reason string              `json:"reason,omitempty"`
+	// BackupPath is the absolute backup file; set only after a real run that backed it up.
+	BackupPath string `json:"backupPath,omitempty"`
 }
 
 // TransformHarness moves the deployment of a workspace from a source harness to a target

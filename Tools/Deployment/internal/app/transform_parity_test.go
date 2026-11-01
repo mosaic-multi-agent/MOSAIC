@@ -6,11 +6,12 @@ package app_test
 // byte-identical to the file a fresh deploy of the same catalog versions writes to the target
 // harness, given the same model.
 //
-// Allowed differences, and only these:
-//   - file naming (GHCP CLI X.md from deploy, X.agent.md from transform);
-//   - skill access on a utility agent whose catalog entry does not list the skill tool;
-//   - for the GHCP CLI / VS Code GHCP pair, a source the transform cannot discover because
-//     the pair's naming makes the destination the source itself: skipped with a stated reason.
+// The one allowed difference: skill access on a utility agent whose catalog entry does not
+// list the skill tool. File naming is no difference: both write X.agent.md for the GHCP
+// targets.
+//
+// Between the two GHCP targets the transform migrates the recorded X.md agents of the sample
+// deployment to X.agent.md, so every sample agent is transformed in both directions.
 //
 // Carried user content needs no allowance: the sample deployment holds none.
 
@@ -55,11 +56,6 @@ func assertParityAgent(t *testing.T, res app.TransformHarnessResult, ws, freshWs
 	t.Helper()
 	out := parityOutcome(t, res, a.key)
 	if out.Status != app.StatusTransformed {
-		namingUnknown := out.Skip == app.SkipDestinationIsSource || out.Skip == app.SkipTargetExtension
-		if namingUnknown && paritySharedAgentsFolder(t, src, tgt) {
-			t.Skipf("source %s files of %s cannot be told apart from the %s destination "+
-				"(shared agents folder and naming; accepted unknown of this pair)", src, a.key, tgt)
-		}
 		t.Fatalf("agent %s was not transformed: status %q skip %q reason %q", a.key, out.Status, out.Skip, out.Reason)
 	}
 

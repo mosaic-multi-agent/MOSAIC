@@ -41,6 +41,10 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 		workspace = ws
 	}
 
+	if err := s.checkGhcpTarget(harnessID, workspace); err != nil {
+		return domain.RunSummary{}, err
+	}
+
 	scope := domain.ScopeProject
 
 	// Load the protocol source once for the run. Failure aborts before any file is written.
@@ -250,6 +254,7 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 			return domain.RunSummary{}, serr
 		}
 	}
+	migrateLegacyGhcpAgents(&p, snap)
 	for _, g := range p.Gaps {
 		s.deps.Todo.AddGap(g)
 	}

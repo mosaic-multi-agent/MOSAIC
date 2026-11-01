@@ -325,6 +325,8 @@ func New(d Deps) Service {
 // pre-answered in the request (CD-6).
 type service struct {
 	deps Deps
+	// ghcpHeld, when set by the test-only constructor, replaces GHCP target detection.
+	ghcpHeld *ghcpTargets
 }
 
 // ListHarnesses returns every harness the registry knows about, including gated ones.

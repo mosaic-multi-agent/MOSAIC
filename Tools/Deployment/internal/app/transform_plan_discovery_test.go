@@ -85,6 +85,7 @@ func TestPlanTransform_OneEntryPerKeyWhenBothExtensionsExist(t *testing.T) {
 	}{
 		{"plain-md source keeps x.md", tpClaude, tpOpen, "x.md", "x.agent.md"},
 		{"agent-md source keeps x.agent.md", tpCLI, tpClaude, "x.agent.md", "x.md"},
+		{"vscode-ghcp source keeps x.agent.md", tpVSCode, tpClaude, "x.agent.md", "x.md"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -227,6 +228,22 @@ func TestPlanTransform_GhcpCliSourceWithPlainMdFileIsFoundWithKeyWithoutExtensio
 
 	if a.Key != "x" || a.Action != PlanWriteCreate || tpDest(a) != ".claude/agents/x.md" {
 		t.Errorf("key %q action %q destination %q, want x, create at .claude/agents/x.md", a.Key, a.Action, tpDest(a))
+	}
+}
+
+func TestPlanTransform_VSCodeGhcpSourceRecognisesAgentMdAndLegacyMdFiles(t *testing.T) {
+	ws := t.TempDir()
+	src, tgt := tpHarness(t, tpVSCode), tpHarness(t, tpClaude)
+	tpPlaceAgent(t, ws, src.desc.Paths.Agents.Project, "x.agent.md", "subagent.md")
+	tpPlaceAgent(t, ws, src.desc.Paths.Agents.Project, "y.md", "subagent.md")
+
+	p := tpPlan(t, ws, src, tgt, false)
+
+	for _, k := range []string{"x", "y"} {
+		a := tpAgent(t, p, map[string]string{"x": "x.agent.md", "y": "y.md"}[k])
+		if a.Key != k || a.Action != PlanWriteCreate || tpDest(a) != ".claude/agents/"+k+".md" {
+			t.Errorf("%s: key %q action %q destination %q, want create at .claude/agents/%s.md", k, a.Key, a.Action, tpDest(a), k)
+		}
 	}
 }
 

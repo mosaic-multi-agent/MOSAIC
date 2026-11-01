@@ -200,9 +200,11 @@ deployed; use Deploy or the deploy-hooks mode for that.
   review and `--dry-run` reports none.
 - A deployed hook with no manifest record is treated as a locally-modified file:
   `--conflict skip` leaves it as is, `overwrite` and `backup` refresh it.
-- `claude-code` and `vscode-ghcp` share `.claude/hooks/`; Update for either harness
-  refreshes the shared hook, writing that harness's variant files (files only the
-  other variant has keep their previous content).
+- Both GHCP harnesses (`ghcp-cli` and `vscode-ghcp`) use `.github/hooks`, and
+  `claude-code` uses `.claude/hooks`; Update refreshes the hook folder of the
+  harness it runs for.
+- For a GHCP workspace, Update also migrates agents the manifest records as `X.md`
+  to `X.agent.md`, with backups under `.mosaic/backups/`.
 
 **CLI example:**
 
@@ -669,8 +671,10 @@ Four built-in harnesses are compiled into the binary:
 |----|--------------|
 | `claude-code` | Claude Code |
 | `opencode` | OpenCode |
-| `ghcp-cli` | GitHub Copilot CLI |
-| `vscode-ghcp` | VS Code GitHub Copilot |
+| `ghcp-cli` | GHCP CLI / VS Code GHCP Copilot |
+| `vscode-ghcp` | VS Code GHCP Local |
+
+Use `ghcp-cli` for the terminal and for VS Code's default chat harness, and `vscode-ghcp` only for VS Code's Local harness. A workspace holds one GHCP target at a time. See [Choosing a GHCP target](../../docs/DeploymentGuide.md#choosing-a-ghcp-target).
 
 To add a harness without writing Go code, create a descriptor YAML file and
 pass it with `--harness /path/to/harness.yaml`. See [docs/descriptor-schema.md](docs/descriptor-schema.md).

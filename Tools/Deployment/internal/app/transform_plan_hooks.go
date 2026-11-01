@@ -22,15 +22,22 @@ func (s *service) planHooks(in transformPlanInput, plan *TransformPlan) {
 	}
 	srcHooks := in.Source.Descriptor().Paths.Hooks.Project
 	tgtHooks := in.Target.Descriptor().Paths.Hooks.Project
+	pair := inputIsGhcpPair(in)
 	for _, key := range s.deployedHookIDs(in.Source, in.Workspace, domain.ScopeProject) {
-		plan.Hooks = append(plan.Hooks, planHookBundle(in, bundles[key], srcHooks == tgtHooks))
+		hb := planHookBundle(in, bundles[key], srcHooks == tgtHooks, pair)
+		plan.Hooks = append(plan.Hooks, hb)
+		if pair {
+			planPairHookChanges(in, bundles[key], hb, plan)
+		}
 	}
 }
 
-// planHookBundle decides the action for one hook bundle of the source deployment.
-func planHookBundle(in transformPlanInput, bundle domain.HookBundle, sharedFolder bool) PlannedHookBundle {
+// planHookBundle decides the action for one hook bundle of the source deployment. The GHCP
+// pair shares the hooks folder but carries the bundle with the target variant: same-named
+// files are replaced, whatever Overwrite says.
+func planHookBundle(in transformPlanInput, bundle domain.HookBundle, sharedFolder, pair bool) PlannedHookBundle {
 	hb := PlannedHookBundle{Key: bundle.Key, Action: PlanSkip}
-	if sharedFolder {
+	if sharedFolder && !pair {
 		folder := in.Source.Descriptor().Paths.Hooks.Project
 		hb.Skip = SkipSharedHooksFolder
 		hb.Reason = "both harnesses use the hooks folder " + folder + " and its existing registration file " +
@@ -53,7 +60,7 @@ func planHookBundle(in transformPlanInput, bundle domain.HookBundle, sharedFolde
 	default:
 		present := probeHookPlanPresence(in.Workspace, hp).Present
 		switch {
-		case present && !in.Overwrite:
+		case present && !in.Overwrite && !pair:
 			hb.Skip = SkipDestinationExists
 			hb.Reason = "the bundle is already present in " + hp.TargetDir + " and is kept unchanged"
 		case present:

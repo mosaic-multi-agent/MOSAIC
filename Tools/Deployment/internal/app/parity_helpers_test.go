@@ -44,7 +44,10 @@ var parityAgents = []parityAgent{
 }
 
 // parityService wires a service over the sample catalog for one workspace.
-func parityService(t *testing.T) app.Service {
+func parityService(t *testing.T) app.Service { return parityServiceWith(t) }
+
+// parityServiceWith is parityService with the dependency adjustments applied before the service is built.
+func parityServiceWith(t *testing.T, opts ...func(*app.Deps)) app.Service {
 	t.Helper()
 	root, err := filepath.Abs(filepath.Join("testdata", "parity", "catalog"))
 	if err != nil {
@@ -70,6 +73,9 @@ func parityService(t *testing.T) app.Service {
 	deps.Executor = deploy.NewExecutor(deps.Manifest, deps.Logger, deps.Todo)
 	deps.ProtocolLoader = catalog.FileProtocolLoader{}
 	deps.BundleLoader = catalog.FileBundleLoader{}
+	for _, opt := range opts {
+		opt(&deps)
+	}
 	return app.New(deps)
 }
 
@@ -114,19 +120,20 @@ func parityTransform(t *testing.T, ws, src, tgt string) app.TransformHarnessResu
 }
 
 // parityAgentFile returns the content of the deployed file of an agent key in a harness's
-// agents folder. Both file spellings are tried, because deploy and transform name GHCP CLI
-// files differently (X.md versus X.agent.md), which is an allowed difference.
+// agents folder. Deploy and transform name the file alike: X.agent.md for the GHCP targets,
+// X.md for the other harnesses.
 func parityAgentFile(t *testing.T, ws, harnessID, key string) string {
 	t.Helper()
 	dir := rbModule(t, harnessID).Descriptor().Paths.Agents.Project
-	for _, ext := range []string{".md", ".agent.md"} {
-		b, err := os.ReadFile(filepath.Join(ws, filepath.FromSlash(dir), key+ext))
-		if err == nil {
-			return string(b)
-		}
+	ext := ".md"
+	if harnessID == hCLI || harnessID == hVSCode {
+		ext = ".agent.md"
 	}
-	t.Fatalf("no deployed file for agent %q in %s of %s", key, dir, harnessID)
-	return ""
+	b, err := os.ReadFile(filepath.Join(ws, filepath.FromSlash(dir), key+ext))
+	if err != nil {
+		t.Fatalf("no deployed file for agent %q in %s of %s: %v", key, dir, harnessID, err)
+	}
+	return string(b)
 }
 
 // parityReadRel returns a workspace-relative file, failing the test when it is missing.

@@ -20,7 +20,19 @@ This guide is for **project authors** who want to get MOSAIC running in their AI
 
 **Two ways to run:** Launch without a subcommand for the interactive TUI, or pass a subcommand for scriptable CLI mode.
 
-**Built-in harnesses:** `claude-code`, `opencode`, `ghcp-cli`, `vscode-ghcp`.
+**Built-in harnesses:** `claude-code` (Claude Code), `opencode` (OpenCode), `ghcp-cli` ("GHCP CLI / VS Code GHCP Copilot"), `vscode-ghcp` ("VS Code GHCP Local").
+
+### Choosing a GHCP target
+
+- **GHCP CLI / VS Code GHCP Copilot** (`ghcp-cli`): use it for the GitHub Copilot terminal CLI and for VS Code's default chat harness (the Copilot harness).
+- **VS Code GHCP Local** (`vscode-ghcp`): use it only for VS Code's Local harness. Local is being retired; no date has been announced.
+- To tell which harness a VS Code chat uses, look below the prompt input in the chat window: the `Set session target` control on the left switches between Local and Copilot, next to the agent mode and permissions controls.
+- Subagents on the GHCP CLI / VS Code GHCP Copilot target have no built-in ask tool, as with Claude Code background subagents. Human-in-the-loop for subagents there therefore needs an MCP ask tool that you supply. This setup is untested.
+- A workspace holds one GHCP target at a time, decided by the manifest `harness_id`. Deploy and the other deploy flows refuse the other target and point to Transform; a workspace that holds both must be cleaned up by hand.
+
+### GHCP agent file names
+
+Both GHCP targets write agents as `.github/agents/X.agent.md`, with content specific to each target. A workspace deployed earlier with `X.md` agents is migrated by the next full deploy, deploy agents, Update or workflow update for its target: each old file is backed up under `.mosaic/backups/` and replaced by `X.agent.md`, and an existing `X.agent.md` for the same agent is backed up and replaced too. Only agents recorded as `X.md` in the manifest are migrated.
 
 **Catalog stacks:** every subcommand and the TUI can deploy from several catalogs layered on top of each other (`--catalog-folder`, `--include-default-catalog`). See [Catalog Stacks](#catalog-stacks).
 
@@ -67,7 +79,7 @@ Add `--dry-run` to preview the plan without writing anything.
 
 ## Update — Existing Workspace
 
-Compares deployed versions against the catalog, shows what's stale, and applies updates — preserving your `project` and `custom` region content.
+Compares deployed versions against the catalog, shows what's stale, and applies updates — preserving your `project` and `custom` region content. For a GHCP workspace, Update refuses the other GHCP target (pointing to Transform) and migrates `X.md` agents to `X.agent.md` (see [Choosing a GHCP target](#choosing-a-ghcp-target)).
 
 ```sh
 ./mosaic-deploy update \
@@ -235,7 +247,20 @@ Moves the whole deployment of a workspace (agents, skills and hook bundles) from
   --overwrite
 ```
 
-Agents are read from the source harness's agents folder and written to the target's. Agent bodies, stamps, protocol and bundle regions, workflow tables, infrastructure declarations, and project and custom regions and skills are kept unchanged from the source and never upgraded. Tool names, frontmatter shape, role-dependent fields and the regions the harness fills in come from the target. Hooks are deployed from the target's catalog variant for the bundles present in the source (excluded for the GHCP CLI / VS Code GHCP pair), so injections and hooks may be newer than the source. Existing destinations are skipped unless `--overwrite` is given. Source files and source manifest entries are never changed; the target deployment is recorded in the manifest, and `update` is the explicit way to upgrade it. Esc at a question cancels the run with nothing written. A model that cannot be resolved is left out of the agent (no `model` key) and named in the summary and the TODO file.
+Agents are read from the source harness's agents folder and written to the target's. Agent bodies, stamps, protocol and bundle regions, workflow tables, infrastructure declarations, and project and custom regions and skills are kept unchanged from the source and never upgraded. Tool names, frontmatter shape, role-dependent fields and the regions the harness fills in come from the target. Hooks are deployed from the target's catalog variant for the bundles present in the source, so injections and hooks may be newer than the source. Existing destinations are skipped unless `--overwrite` is given. Except between the two GHCP targets, source files and source manifest entries are never changed; the target deployment is recorded in the manifest, and `update` is the explicit way to upgrade it. Esc at a question cancels the run with nothing written. A model that cannot be resolved is left out of the agent (no `model` key) and named in the summary and the TODO file. Agents written into `vscode-ghcp` are named `X.agent.md`, like those of `ghcp-cli`.
+
+### Transform between the GHCP targets
+
+"GHCP CLI / VS Code GHCP Copilot" (`ghcp-cli`) and "VS Code GHCP Local" (`vscode-ghcp`) share `.github/agents` and `.github/hooks`, so Transform between them replaces the source deployment instead of adding the target beside it:
+
+- Agents are rewritten in place as `.github/agents/X.agent.md` with the target's content. Legacy `X.md` agents recorded in the manifest are migrated to `X.agent.md`.
+- Target hooks are written; source hook files and registration are replaced or removed.
+- Skills are left as they are.
+- Every removed or replaced file is backed up under `.mosaic/backups/` first.
+- `--dry-run` and the confirmation plan list the removals and replacements; with `--output json` they appear as the `removals` and `replacements` arrays.
+- If something fails, the workspace is left as it was (atomic on failure).
+
+See `Tools/Deployment/docs/cli.md` for the JSON fields.
 
 Map models between harnesses with `--model-map`:
 

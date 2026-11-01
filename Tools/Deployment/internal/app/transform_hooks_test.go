@@ -2,8 +2,9 @@ package app_test
 
 // transform_hooks_test.go specifies how the whole-deployment transform carries hook bundles:
 // the bundles present in the source deployment are installed from the target harness's
-// variant, registration steps reach the TODO file, every bundle that is not carried is named
-// with a reason, and the harness pair that shares one hooks folder is excluded.
+// variant, registration steps reach the TODO file, and every bundle that is not carried is named
+// with a reason. Source hook files stay untouched outside the GHCP pair; between the GHCP
+// targets the source-only hook files are removed (transform_ghcp_pair_exec_test.go).
 
 import (
 	"strings"
@@ -48,7 +49,7 @@ func TestTransformHooks_InstallsTheTargetVariantOfABundlePresentInTheSource(t *t
 	}
 }
 
-func TestTransformHooks_SourceHookFilesAreLeftUntouched(t *testing.T) {
+func TestTransformHooks_OutsideTheGhcpPair_SourceHookFilesAreLeftUntouched(t *testing.T) {
 	r := trHookRun(t, trHookKey)
 	src := r.hooksDir(hClaude) + "/logger.sh"
 	before := r.read(src)
@@ -150,33 +151,25 @@ func TestTransformHooks_BundleWithoutTargetVariantIsNotCarriedAndNamedWithReason
 	}
 }
 
-func TestTransformHooks_GhcpPairHooksAreExcludedWithReasonNamingTheSharedFolder(t *testing.T) {
+func TestTransformHooks_GhcpPairCarriesTheBundleWithTheTargetVariantInsteadOfSkippingIt(t *testing.T) {
 	for _, pair := range [][2]string{{hCLI, hVSCode}, {hVSCode, hCLI}} {
 		t.Run(pair[0]+"->"+pair[1], func(t *testing.T) {
 			r := trCarryRun(t, pair[0], pair[1], nil)
 			r.seedHookBundle(trHookKey)
-			src := r.hooksDir(pair[0]) + "/logger.sh"
-			before := r.read(src)
+			dest := r.hooksDir(pair[1]) + "/logger.sh"
 			req := r.request()
-			req.Overwrite = true
 
 			res := r.mustRun(req)
 
 			f := trOutcome(t, res, domain.ArtifactHook, trHookKey)
-			if f.Status != app.StatusSkipped || f.Skip != app.SkipSharedHooksFolder {
-				t.Errorf("status %q skip %q, want skipped/shared-hooks-folder", f.Status, f.Skip)
+			if f.Status != app.StatusTransformed || f.Skip != "" || f.Action != app.PlanWriteOverwrite {
+				t.Errorf("status %q skip %q action %q, want transformed/overwrite with no skip", f.Status, f.Skip, f.Action)
 			}
-			if !strings.Contains(f.Reason, ".github/hooks") {
-				t.Errorf("reason %q does not name the shared hooks folder", f.Reason)
+			if got, want := r.read(dest), trReadTestdata(t, "hooks/flat/logger.sh"); got != want {
+				t.Error("the shared hook file is not the target variant's file")
 			}
-			if !strings.Contains(f.Reason, "mosaic-logger.json") {
-				t.Errorf("reason %q does not name the existing registration file", f.Reason)
-			}
-			if r.read(src) != before {
-				t.Error("the shared hook file was modified")
-			}
-			if got := trEntryByRef(trLoadManifestIfAny(t, r.ws), domain.ArtifactHook, trHookKey); len(got) != 0 {
-				t.Errorf("manifest records %d hook entries for an excluded bundle", len(got))
+			if got := trEntryByRef(trLoadManifestIfAny(t, r.ws), domain.ArtifactHook, trHookKey); len(got) != 1 {
+				t.Errorf("manifest records %d hook entries for the carried bundle, want 1", len(got))
 			}
 		})
 	}

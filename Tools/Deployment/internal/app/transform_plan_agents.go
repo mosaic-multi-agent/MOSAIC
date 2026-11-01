@@ -29,9 +29,12 @@ func (s *service) planAgents(in transformPlanInput, plan *TransformPlan) error {
 	srcDesc, tgtDesc := in.Source.Descriptor(), in.Target.Descriptor()
 	relDir := srcDesc.Paths.Agents.Project
 	plan.SourceAgentsDir = filepath.Join(in.Workspace, filepath.FromSlash(relDir))
-	files, sourceFiles, err := listSourceAgentFiles(plan.SourceAgentsDir, relDir, in.Source)
+	files, sourceFiles, err := listSourceAgentFiles(plan.SourceAgentsDir, relDir, in.Source, inputIsGhcpPair(in))
 	if err != nil {
 		return err
+	}
+	if inputIsGhcpPair(in) {
+		return s.planPairAgents(in, relDir, files, plan)
 	}
 
 	keeper := duplicateKeyKeepers(files, srcDesc.Extensions[domain.ArtifactAgent])
@@ -70,7 +73,7 @@ func (s *service) planAgents(in transformPlanInput, plan *TransformPlan) error {
 			Paths:   []string{plan.SourceAgentsDir},
 		})
 	}
-	plan.Notes = append(plan.Notes, bothFormsNotes(in.Workspace, plan.Agents)...)
+	plan.Notes = append(plan.Notes, bothFormsNotes(in.Workspace, plan.Agents, nil)...)
 	return nil
 }
 
@@ -125,7 +128,7 @@ func pathExists(p string) bool {
 // bothFormsNotes warns, per destination folder and agent stem, when the result would hold
 // both X.md and X.agent.md with at least one of them a planned write. Stems compare
 // case-insensitively, as Runner's agent resolution does.
-func bothFormsNotes(workspace string, agents []PlannedAgent) []TransformNote {
+func bothFormsNotes(workspace string, agents []PlannedAgent, omit map[string]bool) []TransformNote {
 	written := map[string]bool{} // lower-cased slash destination
 	folders := map[string]bool{}
 	for _, a := range agents {
@@ -146,7 +149,7 @@ func bothFormsNotes(workspace string, agents []PlannedAgent) []TransformNote {
 		names := map[string]string{} // lower-cased name -> actual name
 		if entries, err := os.ReadDir(filepath.Join(workspace, filepath.FromSlash(dir))); err == nil {
 			for _, e := range entries {
-				if e.Type().IsRegular() && strings.HasSuffix(e.Name(), agentFileExtPlain) {
+				if e.Type().IsRegular() && strings.HasSuffix(e.Name(), agentFileExtPlain) && !omit[strings.ToLower(dir+"/"+e.Name())] {
 					names[strings.ToLower(e.Name())] = e.Name()
 				}
 			}

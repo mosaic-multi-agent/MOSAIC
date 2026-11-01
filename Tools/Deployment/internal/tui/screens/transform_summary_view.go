@@ -19,6 +19,8 @@ func (s *TransformSummaryScreen) View() string {
 	for _, f := range s.result.Files {
 		lines = append(lines, transformFileLines(f)...)
 	}
+	lines = append(lines, transformChangeLines("remove", s.result.Removals)...)
+	lines = append(lines, transformChangeLines("replace", s.result.Replacements)...)
 	lines = append(lines, s.trailerLines()...)
 	lines = append(lines, transformLine{text: "press q or enter to exit", style: "help"})
 
@@ -103,6 +105,26 @@ func transformFileLines(f app.TransformFileOutcome) []transformLine {
 			text:  "    tools without a target equivalent: " + strings.Join(f.UnmappedTools, ", "),
 			style: "warning",
 		})
+	}
+	return lines
+}
+
+// transformChangeLines lists the files a run removes or replaces, each with its reason and,
+// when a backup was taken, the backup path.
+func transformChangeLines(verb string, changes []app.TransformFileChange) []transformLine {
+	var lines []transformLine
+	for _, c := range changes {
+		text := fmt.Sprintf("  %s %s:%s %s", verb, c.Kind, c.Key, c.Path)
+		if c.Key == "" {
+			text = fmt.Sprintf("  %s %s", verb, c.Path)
+		}
+		if c.Reason != "" {
+			text += " — " + c.Reason
+		}
+		lines = append(lines, transformLine{text: text, style: "warning"})
+		if c.BackupPath != "" {
+			lines = append(lines, transformLine{text: "    backup: " + c.BackupPath, style: "muted"})
+		}
 	}
 	return lines
 }

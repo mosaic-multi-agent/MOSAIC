@@ -173,12 +173,20 @@ a pure function: source bytes + harness module + request context in, output byte
      `Overwrite` / `BackupThenOverwrite`); a missing decision for any conflict item is a
      programming error (`ErrUndecidedConflict`) — the app layer must resolve every conflict
      before calling `Execute`.
+   - `Plan.Removals` and `Plan.Replacements` are handled before the per-item writes: each
+     removed file (and its manifest entry, when `DropEntry` is set) and each replaced file
+     is first backed up under `.mosaic/backups/`, and the result reports both lists. They
+     are used for the GHCP agent migration from `X.md` to `X.agent.md` in the deploy flows
+     and for the GHCP-pair Transform, which replaces the source deployment; every other
+     run leaves them empty. In atomic mode a failure reverses the journaled writes.
    - `BackupThenOverwrite` copies the current on-disk file to
      `<workspace>/.mosaic/backups/<relative-path>.<RFC3339-compact-with-nanoseconds>.bak`
      before writing the new content, so repeated backups of the same file in the same run
      never collide.
 3. **Hook deployment and registration** — hook bundle files are copied to the harness's
-   declared target directory; claude-code and vscode-ghcp share `.claude/hooks/`. In Update,
+   declared target directory; claude-code uses `.claude/hooks/`, while ghcp-cli and
+   vscode-ghcp both use `.github/hooks/` (a workspace holds only one of the two GHCP
+   targets, decided by the manifest `harness_id`). In Update,
    hook membership is not a selection: a Catalog hook is included when at least one file of
    the harness's hook variant is on disk (`deployedHookIDs` in update_hooks.go, using the
    layout-aware `probeHookPlanPresence`), and its deployed version comes from the manifest.

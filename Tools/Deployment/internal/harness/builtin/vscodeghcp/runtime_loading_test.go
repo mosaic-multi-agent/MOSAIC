@@ -1,7 +1,7 @@
 package vscodeghcp_test
 
 // runtime_loading_test.go: Tests for the run-time harness content loading path for the
-// VS Code GitHub Copilot built-in harness module.
+// VS Code GHCP Local built-in harness module.
 //
 // These tests provide per-package RED-phase coverage for vscodeghcp, mirroring the pattern
 // established in claudecode/runtime_loading_test.go. They verify that once I6.4 changes

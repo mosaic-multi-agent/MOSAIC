@@ -7,7 +7,6 @@ package app
 
 import (
 	"context"
-	"path/filepath"
 
 	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/deploy"
@@ -53,6 +52,10 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 		workspace = ws
 	}
 
+	if err := s.checkGhcpTarget(harnessID, workspace); err != nil {
+		return domain.RunSummary{}, err
+	}
+
 	scope := domain.ScopeProject
 
 	// Load the protocol source once for the run. Failure aborts before any file is written.
@@ -85,12 +88,12 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	if orchPath, pathErr := module.TargetPath(domain.TargetPathRequest{
 		Kind:     domain.ArtifactAgent,
 		Key:      orchestrator.Key,
-		FileName: filepath.Base(orchestrator.SourcePath),
+		FileName: plan.AgentFileName(module, orchestrator),
 		Scope:    scope,
 		GOOS:     s.deps.GOOS,
 	}); pathErr == nil {
 		orchTargetPath = orchPath
-		orchState = probeDeployedArtifact(workspace, orchTargetPath, module.Descriptor().Frontmatter.ModelKey)
+		orchState = probeAgentWithRecordedLegacy(workspace, module, snap, orchestrator.Key, orchTargetPath)
 	}
 
 	// Replace semantics: use the user's selection directly. No union with the deployed set.
@@ -163,6 +166,7 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
+	applyRecordedLegacyState(workspace, module, snap, plannedPaths, deployedState)
 
 	// Detect agents required by the selected workflows that have no file in the workspace.
 	// These are the agents this run will deploy for the first time.
@@ -252,6 +256,7 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	}
 	p.Items = filteredItems
 	p.Registrations = nil
+	migrateLegacyGhcpAgents(&p, snap)
 
 	// Forward plan gaps to the todo collector before conflict handling.
 	for _, g := range p.Gaps {

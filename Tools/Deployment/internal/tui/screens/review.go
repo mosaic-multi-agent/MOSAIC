@@ -162,7 +162,10 @@ func buildReviewLines(p domain.Plan) []reviewLine {
 		countParts = append(countParts, fmt.Sprintf("%d unchanged", n))
 	}
 
-	if p.Empty() {
+	removalParts := removalCountParts(p)
+	countParts = append(countParts, removalParts...)
+
+	if p.Empty() && len(removalParts) == 0 {
 		add("Nothing to do — all files are already up to date.", "muted")
 		// Fall through to still render the unchanged items below.
 	}
@@ -226,6 +229,8 @@ func buildReviewLines(p domain.Plan) []reviewLine {
 			}
 		}
 	}
+
+	lines = append(lines, removalReviewLines(p)...)
 
 	// Gaps summary.
 	if len(p.Gaps) > 0 {

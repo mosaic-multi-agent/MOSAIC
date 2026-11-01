@@ -97,6 +97,12 @@ type Plan struct {
 	// paths set it, from the run's report, after the plan is built and before Review; plan
 	// building never fills it. Empty when nothing is shadowed.
 	ConflictReport ConflictReport
+	// Removals are files the run deletes, after backup. Empty in every mode except a
+	// GHCP-pair transform.
+	Removals []Removal
+	// Replacements are existing files the run backs up and overwrites. Empty in every mode
+	// except a GHCP-pair transform.
+	Replacements []Replacement
 }
 
 // Counts returns the number of items for each PlanAction.

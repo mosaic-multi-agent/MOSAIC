@@ -1,4 +1,4 @@
-// Package vscodeghcp implements the VS Code GitHub Copilot built-in harness module. It embeds
+// Package vscodeghcp implements the VS Code GHCP Local built-in harness module. It embeds
 // the vscode-ghcp.yaml descriptor and provides tool formatting as a flow-style YAML sequence
 // with single-quoted hierarchical path items (e.g. ['read/readFile', 'edit/editFiles']).
 //
@@ -54,7 +54,7 @@ func init() {
 	})
 }
 
-// module is the VS Code GitHub Copilot built-in HarnessModule implementation.
+// module is the VS Code GHCP Local built-in HarnessModule implementation.
 type module struct {
 	ref             domain.HarnessRef
 	desc            *domain.HarnessDescriptor

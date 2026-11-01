@@ -17,15 +17,12 @@ package vscodeghcp_test
 //     mapping as test-runner plus execute/runInTerminal; skill maps to empty.
 //   - A transform of the generic orchestrator ({tool-permissions} placeholder) produces the
 //     full placeholder expansion including edit/createDirectory and agent.
-//   - All VS Code GHCP agents use the .md extension (see file extension decision below).
+//   - All VS Code GHCP agents use the .agent.md extension (see file extension decision below).
 //
-//   File extension decision (AC13.6):
-//   - The descriptor declares ".md" as the agent extension, matching the CodebaseAgnostic
-//     canonical reference set (Agents/VS code GHCP/CodebaseAgnostic/Agents/*.md).
-//   - Agents/VS code GHCP/UtilityAgents/*.agent.md use .agent.md, but those files were
-//     authored outside the deployment tool and represent a deviation from the declared extension.
-//   - VS Code GHCP recognises both .md and .agent.md files in .github/agents/; the deployment
-//     tool emits .md to match the canonical reference.
+//   File extension decision:
+//   - The descriptor declares ".agent.md" as the agent extension, the same name the GHCP CLI
+//     target uses, so both GHCP targets name agents .github/agents/<key>.agent.md.
+//   - VS Code GHCP recognises both .md and .agent.md files in .github/agents/.
 //
 //   Hierarchical tool path generation (one-to-many expansion and by-convention tools):
 //   - file_write maps to BOTH edit/createFile AND edit/editFiles (one-to-many expansion).
@@ -44,7 +41,7 @@ package vscodeghcp_test
 //   - A custom ModelID is also emitted verbatim with no reformatting (AC13.3, FR-11).
 //
 //   Project-scope path resolution:
-//   - Project-scoped agent path is ".github/agents/<key>.md"
+//   - Project-scoped agent path is ".github/agents/<key>.agent.md"
 //   - Project-scoped skill path is ".github/skills/<key>/SKILL.md" (key subdirectory)
 //   - Hook artifact paths resolve relative to .github/hooks/, the directory the bundle's
 //     hook registration runs its script from
@@ -905,7 +902,7 @@ func TestModel_CustomModelIDEmittedVerbatim(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestTargetPath_VSCodeGHCP_AgentProjectScope verifies that an agent deployed to project scope
-// lands at ".github/agents/<key>.md".
+// lands at ".github/agents/<key>.agent.md".
 func TestTargetPath_VSCodeGHCP_AgentProjectScope(t *testing.T) {
 	mod := newModule(t)
 	path, err := mod.TargetPath(domain.TargetPathRequest{
@@ -917,7 +914,7 @@ func TestTargetPath_VSCodeGHCP_AgentProjectScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TargetPath: %v", err)
 	}
-	want := ".github/agents/test-runner.md"
+	want := ".github/agents/test-runner.agent.md"
 	if path != want {
 		t.Errorf("TargetPath = %q, want %q", path, want)
 	}
@@ -1552,7 +1549,7 @@ func TestContract_VSCodeGHCP(t *testing.T) {
 			{
 				Name:     "agent_project_linux",
 				Request:  domain.TargetPathRequest{Kind: domain.ArtifactAgent, Key: "test-runner", Scope: domain.ScopeProject, GOOS: "linux"},
-				Expected: ".github/agents/test-runner.md",
+				Expected: ".github/agents/test-runner.agent.md",
 			},
 			{
 				Name:     "skill_project_linux",
@@ -1632,8 +1629,8 @@ func TestDescriptor_VSCodeGHCP_HarnessID(t *testing.T) {
 
 // TestDescriptor_VSCodeGHCP_AgentExtensionDeclaration verifies that the descriptor declares
 // the agent file extension. This test enforces that the file extension decision is recorded
-// in the descriptor rather than being implicit (AC13.6).
-// Decision: ".md" (to match the CodebaseAgnostic canonical reference set).
+// in the descriptor rather than being implicit.
+// Decision: ".agent.md", the name the GHCP CLI target also uses.
 func TestDescriptor_VSCodeGHCP_AgentExtensionDeclaration(t *testing.T) {
 	mod := newModule(t)
 	d := mod.Descriptor()
@@ -1645,14 +1642,9 @@ func TestDescriptor_VSCodeGHCP_AgentExtensionDeclaration(t *testing.T) {
 	if !ok {
 		t.Fatal("Descriptor().Extensions does not declare an extension for ArtifactAgent; the file extension decision must be explicit in the descriptor (AC13.6)")
 	}
-	// The canonical CodebaseAgnostic reference uses ".md" (not ".agent.md").
-	// Agents/VS code GHCP/UtilityAgents/*.agent.md use .agent.md but were authored separately.
-	// The descriptor declares ".md" to match the canonical reference.
-	want := ".md"
+	want := ".agent.md"
 	if ext != want {
-		t.Errorf("Descriptor().Extensions[ArtifactAgent] = %q, want %q\n"+
-			"Decision recorded here: CodebaseAgnostic canonical reference uses .md; descriptor declares .md.\n"+
-			"UtilityAgents use .agent.md but were authored outside the deployment tool.",
+		t.Errorf("Descriptor().Extensions[ArtifactAgent] = %q, want %q (both GHCP targets name agents X.agent.md)",
 			ext, want)
 	}
 }
