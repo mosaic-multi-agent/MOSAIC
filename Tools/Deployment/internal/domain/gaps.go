@@ -60,6 +60,14 @@ const (
 	// run: a higher catalog layer shadows an item of a lower layer without declaring it.
 	GapCatalogShadowing GapKind = "catalog-shadowing"
 
+	// GapUndeliveredOrchestratorInjection reports an orchestrator source that has no
+	// OrchestratorHarnessConstraints marker while the harness has orchestrator content.
+	// The content was not deployed; deploy continues.
+	GapUndeliveredOrchestratorInjection GapKind = "undelivered-orchestrator-injection"
+
+	// GapRoleForbiddenRegion reports a non-orchestrator agent that carries the
+	// OrchestratorHarnessConstraints region. Deploy and update continue.
+	GapRoleForbiddenRegion GapKind = "role-forbidden-region"
 )
 
 // Gap is produced by transform, plan, and deploy when a decision could not be made automatically.

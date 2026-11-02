@@ -109,7 +109,6 @@ var renderOpenTagCases = []renderOpenTagTest{
 
 	// Multi-segment compound name: everything after the first colon is the name attribute.
 	{docformat.NodeSection, "InfrastructureAgent:build-runner", "1.0.0", "<InfrastructureAgent type=\"core\" name=\"build-runner\" version=\"1.0.0\">\n"},
-
 }
 
 func TestRenderOpenTagLine_HappyPath_TableDriven(t *testing.T) {

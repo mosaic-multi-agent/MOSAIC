@@ -209,6 +209,7 @@ Six slots. There is no separate provenance slot: the artifact provenance stamp i
 | `Capabilities` core region | Required | Required |
 | `Constraints` core region | Required | Required |
 | `<HarnessConstraints type="managed">` | Required | Required |
+| `<OrchestratorHarnessConstraints type="managed">` | Absent | Required |
 | `ErrorHandling` core region | Required | Required |
 | `<ErrorHandlingCommon type="managed">` | Required | Absent (§8) |
 | `ExecutionPhilosophy` core region | Required | Required |
@@ -224,7 +225,7 @@ A region present with no canonical block matching the file's role **is** an erro
 |------|---------|-----------|---------|
 | **Contract** | `CommunicationProtocol` | **Error** | The agent receives no message shape, no status vocabulary, no HITL gate. It cannot produce a response the orchestrator can parse. This is interop, not style. |
 | **Conduct** | `ClosingProcedure`, `AuthorityHierarchy`, `ErrorHandlingCommon`, `ExecutionPhilosophyCommon` | **Warning** | The agent still speaks the contract and still works. It works *worse*: no retry rule, no ranking when the harness contradicts MOSAIC. Degradation an author should be told about and may knowingly accept. |
-| **Deployment** | `HarnessConstraints`, `AvailableWorkflows`, `InfrastructureAgents` | **Silent** | Content comes from a deployment's own selections. Most deployments select nothing for most of them, so absence is the ordinary case and flagging it is noise. |
+| **Deployment** | `HarnessConstraints`, `OrchestratorHarnessConstraints`, `AvailableWorkflows`, `InfrastructureAgents` | **Silent** | Content comes from a deployment's own selections. Most deployments select nothing for most of them, so absence is the ordinary case and flagging it is noise. |
 
 The tiers are about the *agent's* absence, not the block's. A bundle block with no matching region in a given agent remains normal (`DeployedSectionsBundle.md` §4).
 
@@ -239,15 +240,16 @@ Every managed-region name, its required parent, and where its content comes from
 | `ClosingProcedure` | `Identity` | Bundle | `DeploymentBlocks/ClosingProcedure.md` |
 | `AvailableWorkflows` | `Identity` | Assembled from selected workflow files | Workflow schema |
 | `InfrastructureAgents` | `Identity` | Assembled from selected infrastructure declarations | `InfrastructureAgentConcept.md` |
-| `HarnessConstraints` | `Constraints` | The selected harness module | Harness module |
+| `HarnessConstraints` | `Constraints` | `HarnessInjections.md` of the selected harness | Harness injection files |
+| `OrchestratorHarnessConstraints` | `Constraints` | `HarnessInjectionsOrchestrator.md` of the selected harness (orchestrator role only) | Harness injection files |
 | `ErrorHandlingCommon` | `ErrorHandling` | Bundle | `DeploymentBlocks/ErrorHandlingCommon.md` |
 | `ExecutionPhilosophyCommon` | `ExecutionPhilosophy` | Bundle | `DeploymentBlocks/ExecutionPhilosophyCommon.md` |
 
-Eight names. Three sources, and the distinction matters:
+Nine names. Three sources, and the distinction matters:
 
 - **Bundle** — `Catalog/DeployedSections.md`, the four blocks whose text is identical across every agent of a role and which are not contracts. Governed by `DeployedSectionsBundle.md`.
 - **Contract source** — `Catalog/CommunicationProtocol.md` ships the contract's text, with its rationale in `CommunicationProtocol.md`. It is a contract, so it is deliberately not in the bundle and carries its own version.
-- **Assembled** — no canonical text exists; the content is built from a deployment's own selections. `AvailableWorkflows` and `InfrastructureAgents` are assembled from what the deployment selected; `HarnessConstraints` comes from the one harness module in play.
+- **Assembled** — no canonical text exists; the content is built from a deployment's own selections. `AvailableWorkflows` and `InfrastructureAgents` are assembled from what the deployment selected; `HarnessConstraints` and `OrchestratorHarnessConstraints` come from the injection files of the one harness in play. An orchestrator carries both regions and a subagent only the first; the two are versioned separately from the `version` of their injection files.
 
 #### 2.5.1 Every Managed Name Names Its Generator
 
@@ -432,7 +434,7 @@ Capabilities is the least constrained section by design. It is where an agent's 
 - **Every constraint carries its justification.** "Do NOT make assumptions about technology choices — document options instead, because downstream agents need unbiased options to evaluate against broader context." A bare prohibition invites a model to find the edge of it; a prohibition with a reason gives it grounds to generalise correctly to a case the rule did not anticipate.
 - **Do not restate the contract.** Artifact access, status code discipline, and JSON response discipline already have canonical instructions above. Another copy in the agent's own list is the copy that drifts.
 
-**Managed last:** `<HarnessConstraints type="managed">`.
+**Managed last:** `<HarnessConstraints type="managed">`, followed in an orchestrator by `<OrchestratorHarnessConstraints type="managed">`.
 
 ### 4.5 ErrorHandling
 

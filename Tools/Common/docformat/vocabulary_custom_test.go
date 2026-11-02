@@ -95,6 +95,7 @@ func TestClassifyRegion_Custom_NeverReturnsError_ForAnyName(t *testing.T) {
 		// Canonical deployed names to confirm no mismatch error under NodeCustom:
 		"CommunicationProtocol",
 		"HarnessConstraints",
+		"OrchestratorHarnessConstraints",
 		"AuthorityHierarchy",
 		"ClosingProcedure",
 		"ErrorHandlingCommon",

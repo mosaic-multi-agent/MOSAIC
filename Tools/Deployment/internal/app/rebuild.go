@@ -164,17 +164,17 @@ func assembleRebuildResult(in RebuildInput, tgtDesc *domain.HarnessDescriptor, f
 			unmapped = append(unmapped, g)
 		}
 	}
-	injections := tgtDesc.InjectionsVersion
+	stamps := domain.VersionStamp{
+		Version: facts.Version, HarnessVersion: tgtDesc.TransformVersion,
+		InjectionsVersion: tgtDesc.InjectionsVersion, ToolMappingsVersion: in.ToolMappingsVersion,
+	}
 	if role == domain.RoleOrchestrator {
-		injections = tgtDesc.OrchestratorInjectionsVersion
+		stamps.OrchestratorInjectionsVersion = tgtDesc.OrchestratorInjectionsVersion
 	}
 	return RebuildResult{
 		Output: res.Output, Role: role, RefKey: refKey,
-		Stamps: domain.VersionStamp{
-			Version: facts.Version, HarnessVersion: tgtDesc.TransformVersion,
-			InjectionsVersion: injections, ToolMappingsVersion: in.ToolMappingsVersion,
-		},
-		Tools: tools, Conversions: conv.Conversions, Dropped: conv.Dropped,
+		Stamps: stamps,
+		Tools:  tools, Conversions: conv.Conversions, Dropped: conv.Dropped,
 		UnmappedTools: unmapped, DroppedFields: dropped, Gaps: uniqueGaps(res.Report.Gaps),
 	}, nil
 }

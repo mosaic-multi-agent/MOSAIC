@@ -8,6 +8,13 @@
 #### Bugfixes
 - Text entry screens no longer break when the text is wider than the screen or is pasted
 
+### Deploy v1.5.0
+#### Changes
+- Orchestrators are deployed with two harness regions: `HarnessConstraints` (from `HarnessInjections.md`) and `OrchestratorHarnessConstraints` (from `HarnessInjectionsOrchestrator.md`). Subagents keep one. Each region carries the version of its own injection file
+- The descriptor field `injections_version` is removed. A descriptor that still declares it loads and the value is ignored; injection versions come only from the frontmatter `version` of the injection files
+#### Bugfixes
+- A present injection file without a `version` now fails loading instead of deploying an unversioned region
+
 ### Deploy v1.4.0
 #### Changes
 - The two GHCP targets are now named "GHCP CLI / VS Code GHCP Copilot" (`ghcp-cli`) and "VS Code GHCP Local" (`vscode-ghcp`) in the TUI, the CLI output, the TODO files and the docs; the IDs are unchanged. The docs explain which one to choose, that Local is being retired, and that subagents on the GHCP CLI / VS Code GHCP Copilot target have no built-in ask tool (human-in-the-loop for them needs an MCP ask tool you supply; untested)
@@ -76,6 +83,8 @@
 - **mosaic-logger** hook (v1.11.0): on all four harnesses a session no longer joins a run just because a message mentions the run id, and a run's orchestrator transcript is no longer replaced by another session's. Runs logged before this are not repaired
 - **mosaic-logger** hook (v1.11.0): the adapter version is read from `.mosaic/manifest.yaml` and `hook.yaml` is no longer deployed. Redeploy to get this; a leftover `hook.yaml` in an existing workspace is harmless
 - **mosaic-logger** hook (v1.11.0): the hook-picker description now says `COPILOT_OTEL_FILE_EXPORTER_PATH` is needed for the VS Code GHCP Local target only; GHCP CLI needs no setup
+- **orchestrator** (v8.3.0) and **orchestrator-script** (v3.4.0): the orchestrator carries a second harness region, `OrchestratorHarnessConstraints`, for orchestrator-only harness rules. Redeploy to get it
+- **Claude Code injections**: `HarnessInjections.md` v1.4.0 and `HarnessInjectionsOrchestrator.md` v1.3.0; the orchestrator rules now deploy in their own region
 - **brownfield-pr-fix** (v1.1): PR scope is pinned in a new `PullRequestContext.md`, so agents can tell PR code from pre-existing code; `Requirements.md` needs only the PR ID; Tests-Only stages now write replies
 - **pull-request-comment-interface** (v2.3.0): resolves PR refs and adds participants to `pr_context`. Needs the new `pr_details_read` tool mapped, or `brownfield-pr-fix` stops at retrieval
 - **fix-to-pr-response** (v1.1.0): reports threads its stage plan names but the work did not fix, and sends them back for a fix

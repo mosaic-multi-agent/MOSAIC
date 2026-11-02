@@ -1243,15 +1243,16 @@ func TestInjection_OpenCode_ProjectInjectionsNotFilled(t *testing.T) {
 }
 
 // TestInjection_OpenCode_InjectionsVersion verifies that the descriptor carries
-// injections_version "1.3.1". This version stamps every deployed agent and signals
-// that agent content must be refreshed when the harness injections change.
+// the frontmatter version of the frozen catalog's HarnessInjections.md ("1.4.0"). This version
+// stamps every deployed agent and signals that agent content must be refreshed when the
+// harness injections change.
 func TestInjection_OpenCode_InjectionsVersion(t *testing.T) {
 	mod := newModule(t)
 	d := mod.Descriptor()
 	if d == nil {
 		t.Fatal("Descriptor() returned nil")
 	}
-	want := "1.3.1"
+	want := "1.4.0"
 	if d.InjectionsVersion != want {
 		t.Errorf("Descriptor().InjectionsVersion = %q, want %q", d.InjectionsVersion, want)
 	}

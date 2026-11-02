@@ -122,7 +122,7 @@ func classifyDeployedName(name string) (mosaic.InjectionClass, error) {
 	case "AuthorityHierarchy", "ClosingProcedure",
 		"ErrorHandlingCommon", "ExecutionPhilosophyCommon":
 		return mosaic.InjectionBundle, nil
-	case "HarnessConstraints":
+	case HarnessRegionName, OrchestratorHarnessRegionName:
 		return mosaic.InjectionHarness, nil
 	default:
 		// A canonical tool-managed name with no registered generator. This must never

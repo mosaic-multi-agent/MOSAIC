@@ -56,9 +56,14 @@ import (
 // Test helpers
 // ---------------------------------------------------------------------------
 
-// writeHarnessContentFile writes src to dir/filename, failing the test on any error.
+// writeHarnessContentFile writes src to dir/filename, failing the test on any error. A
+// HarnessInjections.md written without any frontmatter gets a default version, because loading
+// requires one; sources that start with frontmatter are written unchanged.
 func writeHarnessContentFile(t *testing.T, dir, filename, src string) {
 	t.Helper()
+	if filename == "HarnessInjections.md" && !strings.HasPrefix(src, "---") {
+		src = "---\nversion: \"1.0.0\"\n---\n" + src
+	}
 	if err := os.WriteFile(filepath.Join(dir, filename), []byte(src), 0o644); err != nil {
 		t.Fatalf("write %s: %v", filename, err)
 	}
@@ -106,9 +111,9 @@ Use idiomatic Go.
 const orchestratorHarnessInjectionsOrchestrator = `---
 version: "1.0.0"
 ---
-<HarnessConstraints type="managed">
+<OrchestratorHarnessConstraints type="managed">
 Orchestrator-specific constraint content.
-</HarnessConstraints>
+</OrchestratorHarnessConstraints>
 `
 
 // ---------------------------------------------------------------------------
@@ -348,17 +353,17 @@ func TestNoRebuild_ChangingOrchestratorFileChangesInjectedContent(t *testing.T) 
 
 	const firstOrchContent = "FIRST_ORCH_CONSTRAINT_SENTINEL"
 	writeHarnessContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md",
-		"---\nversion: \"1.0.0\"\n---\n<HarnessConstraints type=\"managed\">\n"+firstOrchContent+"\n</HarnessConstraints>\n")
+		"---\nversion: \"1.0.0\"\n---\n<OrchestratorHarnessConstraints type=\"managed\">\n"+firstOrchContent+"\n</OrchestratorHarnessConstraints>\n")
 
 	mod1 := newModuleFromOpts(t, root)
-	c1, _ := mod1.Injection(domain.InjectionRequest{Name: "HarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
+	c1, _ := mod1.Injection(domain.InjectionRequest{Name: "OrchestratorHarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
 
 	const secondOrchContent = "SECOND_ORCH_CONSTRAINT_SENTINEL"
 	writeHarnessContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md",
-		"---\nversion: \"2.0.0\"\n---\n<HarnessConstraints type=\"managed\">\n"+secondOrchContent+"\n</HarnessConstraints>\n")
+		"---\nversion: \"2.0.0\"\n---\n<OrchestratorHarnessConstraints type=\"managed\">\n"+secondOrchContent+"\n</OrchestratorHarnessConstraints>\n")
 
 	mod2 := newModuleFromOpts(t, root)
-	c2, _ := mod2.Injection(domain.InjectionRequest{Name: "HarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
+	c2, _ := mod2.Injection(domain.InjectionRequest{Name: "OrchestratorHarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
 
 	if c1 == c2 {
 		t.Errorf("orchestrator HarnessConstraints unchanged after editing orchestrator file: both = %q", c1)
@@ -439,40 +444,40 @@ func TestMerging_OrchestratorOnly_OrchestratorReceivesContent(t *testing.T) {
 	writeHarnessContentFile(t, contentDir, "HarnessInjections.md",
 		"<HarnessConstraints type=\"managed\">\n</HarnessConstraints>\n")
 	writeHarnessContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md",
-		"---\nversion: \"1.0.0\"\n---\n<HarnessConstraints type=\"managed\">\nOrchestrator-only constraint.\n</HarnessConstraints>\n")
+		"---\nversion: \"1.0.0\"\n---\n<OrchestratorHarnessConstraints type=\"managed\">\nOrchestrator-only constraint.\n</OrchestratorHarnessConstraints>\n")
 
 	mod := newModuleFromOpts(t, root)
 
-	c, ok := mod.Injection(domain.InjectionRequest{Name: "HarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
+	c, ok := mod.Injection(domain.InjectionRequest{Name: "OrchestratorHarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
 	if !ok {
-		t.Fatal("orchestrator: Injection(HarnessConstraints) returned ok=false; orchestrator-only content must reach orchestrator")
+		t.Fatal("orchestrator: Injection(OrchestratorHarnessConstraints) returned ok=false; orchestrator-only content must reach orchestrator")
 	}
 	if !strings.Contains(c, "Orchestrator-only constraint.") {
-		t.Errorf("orchestrator HarnessConstraints missing expected text; got: %q", c)
+		t.Errorf("orchestrator OrchestratorHarnessConstraints missing expected text; got: %q", c)
 	}
 }
 
-// TestMerging_BothNonEmpty_OrchestratorReceivesMergedWithSeparator verifies that when both
-// shared and orchestrator-only content are non-empty, the orchestrator receives
-// sharedContent + "\n\n" + orchContent (the canonical merge format).
-func TestMerging_BothNonEmpty_OrchestratorReceivesMergedWithSeparator(t *testing.T) {
+// TestMerging_BothNonEmpty_OrchestratorRegionsStaySeparate verifies that when both shared
+// and orchestrator-only content are non-empty, each region name returns exactly its own
+// file's content and nothing is merged.
+func TestMerging_BothNonEmpty_OrchestratorRegionsStaySeparate(t *testing.T) {
 	root, contentDir := makeTempRoot(t)
 	const sharedPart = "Shared constraint line."
 	const orchPart = "Orchestrator-only constraint line."
 	writeHarnessContentFile(t, contentDir, "HarnessInjections.md",
 		"<HarnessConstraints type=\"managed\">\n"+sharedPart+"\n</HarnessConstraints>\n")
 	writeHarnessContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md",
-		"---\nversion: \"1.0.0\"\n---\n<HarnessConstraints type=\"managed\">\n"+orchPart+"\n</HarnessConstraints>\n")
+		"---\nversion: \"1.0.0\"\n---\n<OrchestratorHarnessConstraints type=\"managed\">\n"+orchPart+"\n</OrchestratorHarnessConstraints>\n")
 
 	mod := newModuleFromOpts(t, root)
 
-	c, ok := mod.Injection(domain.InjectionRequest{Name: "HarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
-	if !ok {
-		t.Fatal("orchestrator: Injection(HarnessConstraints) returned ok=false")
+	shared, sharedOK := mod.Injection(domain.InjectionRequest{Name: "HarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
+	orch, orchOK := mod.Injection(domain.InjectionRequest{Name: "OrchestratorHarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
+	if !sharedOK || shared != sharedPart {
+		t.Errorf("orchestrator HarnessConstraints = %q (ok=%v), want exactly %q", shared, sharedOK, sharedPart)
 	}
-	want := sharedPart + "\n\n" + orchPart
-	if c != want {
-		t.Errorf("orchestrator HarnessConstraints merge format incorrect\ngot:  %q\nwant: %q", c, want)
+	if !orchOK || orch != orchPart {
+		t.Errorf("orchestrator OrchestratorHarnessConstraints = %q (ok=%v), want exactly %q", orch, orchOK, orchPart)
 	}
 }
 
@@ -551,24 +556,26 @@ func TestMerging_UndeclaredInBoth_OrchestratorOkFalse(t *testing.T) {
 	}
 }
 
-// TestMerging_SharedEmptyOrchNonEmpty_OrchestratorReceivesOrchContent verifies merge case:
-// shared is declared-but-empty, orchestrator has non-empty content → orchestrator receives
-// the orch content (not the empty shared content, not a merged pair).
-func TestMerging_SharedEmptyOrchNonEmpty_OrchestratorReceivesOrchContent(t *testing.T) {
+// TestMerging_SharedEmptyOrchNonEmpty_OrchestratorContentOnlyUnderOrchestratorRegion
+// verifies that when the shared region is declared-but-empty and the orchestrator file has
+// content, the HarnessConstraints region stays empty and the content reaches the orchestrator
+// only through OrchestratorHarnessConstraints.
+func TestMerging_SharedEmptyOrchNonEmpty_OrchestratorContentOnlyUnderOrchestratorRegion(t *testing.T) {
 	root, contentDir := makeTempRoot(t)
 	writeHarnessContentFile(t, contentDir, "HarnessInjections.md",
 		"<HarnessConstraints type=\"managed\">\n</HarnessConstraints>\n")
 	writeHarnessContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md",
-		"---\nversion: \"1.0.0\"\n---\n<HarnessConstraints type=\"managed\">\nOrchestrator-specific content when shared is empty.\n</HarnessConstraints>\n")
+		"---\nversion: \"1.0.0\"\n---\n<OrchestratorHarnessConstraints type=\"managed\">\nOrchestrator-specific content when shared is empty.\n</OrchestratorHarnessConstraints>\n")
 
 	mod := newModuleFromOpts(t, root)
 
-	c, ok := mod.Injection(domain.InjectionRequest{Name: "HarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
-	if !ok {
-		t.Fatal("orchestrator: Injection(HarnessConstraints) returned ok=false")
+	shared, sharedOK := mod.Injection(domain.InjectionRequest{Name: "HarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
+	orch, orchOK := mod.Injection(domain.InjectionRequest{Name: "OrchestratorHarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
+	if !sharedOK || shared != "" {
+		t.Errorf("orchestrator HarnessConstraints = %q (ok=%v), want declared-but-empty (\"\", true)", shared, sharedOK)
 	}
-	if !strings.Contains(c, "Orchestrator-specific content when shared is empty.") {
-		t.Errorf("orchestrator HarnessConstraints should be orch content (shared is empty); got: %q", c)
+	if !orchOK || orch != "Orchestrator-specific content when shared is empty." {
+		t.Errorf("orchestrator OrchestratorHarnessConstraints = %q (ok=%v), want the orchestrator content", orch, orchOK)
 	}
 }
 

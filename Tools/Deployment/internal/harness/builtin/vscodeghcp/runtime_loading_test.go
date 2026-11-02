@@ -31,7 +31,7 @@ package vscodeghcp_test
 //   Orchestrator/subagent content merging preserved (T6.5):
 //   - Shared-only: subagent receives it.
 //   - Orchestrator-only: subagent receives nothing (ok=false).
-//   - Both non-empty: orchestrator receives sharedContent + "\n\n" + orchContent.
+//   - Both non-empty: each region name returns exactly its own file's content (no merge).
 //   - Undeclared in both: ok=false.
 //
 // RED STATE:
@@ -53,9 +53,14 @@ import (
 // Test helpers
 // ---------------------------------------------------------------------------
 
-// writeVsCodeGhcpContentFile writes src to dir/filename, failing the test on any error.
+// writeVsCodeGhcpContentFile writes src to dir/filename, failing the test on any error. A
+// HarnessInjections.md written without any frontmatter gets a default version, because loading
+// requires one; sources that start with frontmatter are written unchanged.
 func writeVsCodeGhcpContentFile(t *testing.T, dir, filename, src string) {
 	t.Helper()
+	if filename == "HarnessInjections.md" && !strings.HasPrefix(src, "---") {
+		src = "---\nversion: \"1.0.0\"\n---\n" + src
+	}
 	if err := os.WriteFile(filepath.Join(dir, filename), []byte(src), 0o644); err != nil {
 		t.Fatalf("write %s: %v", filename, err)
 	}
@@ -336,27 +341,27 @@ func TestVsCodeGhcp_Merging_OrchestratorOnly_SubagentReceivesNothing(t *testing.
 	}
 }
 
-// TestVsCodeGhcp_Merging_BothNonEmpty_OrchestratorReceivesMergedWithSeparator verifies that
-// when both shared and orchestrator-only content are non-empty, the orchestrator receives
-// sharedContent + "\n\n" + orchContent.
-func TestVsCodeGhcp_Merging_BothNonEmpty_OrchestratorReceivesMergedWithSeparator(t *testing.T) {
+// TestVsCodeGhcp_Merging_BothNonEmpty_OrchestratorRegionsStaySeparate verifies that
+// when both shared and orchestrator-only content are non-empty, each region name returns
+// exactly its own file's content and nothing is merged.
+func TestVsCodeGhcp_Merging_BothNonEmpty_OrchestratorRegionsStaySeparate(t *testing.T) {
 	root, contentDir := makeTempRootForVsCodeGhcp(t)
 	const sharedPart = "Shared constraint line."
 	const orchPart = "Orchestrator-only constraint line."
 	writeVsCodeGhcpContentFile(t, contentDir, "HarnessInjections.md",
 		"<HarnessConstraints type=\"managed\">\n"+sharedPart+"\n</HarnessConstraints>\n")
 	writeVsCodeGhcpContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md",
-		"---\nversion: \"1.0.0\"\n---\n<HarnessConstraints type=\"managed\">\n"+orchPart+"\n</HarnessConstraints>\n")
+		"---\nversion: \"1.0.0\"\n---\n<OrchestratorHarnessConstraints type=\"managed\">\n"+orchPart+"\n</OrchestratorHarnessConstraints>\n")
 
 	mod := newVsCodeGhcpModuleFromOpts(t, root)
 
-	c, ok := mod.Injection(domain.InjectionRequest{Name: "HarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
-	if !ok {
-		t.Fatal("orchestrator: Injection(HarnessConstraints) returned ok=false")
+	shared, sharedOK := mod.Injection(domain.InjectionRequest{Name: "HarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
+	orch, orchOK := mod.Injection(domain.InjectionRequest{Name: "OrchestratorHarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
+	if !sharedOK || shared != sharedPart {
+		t.Errorf("orchestrator HarnessConstraints = %q (ok=%v), want exactly %q", shared, sharedOK, sharedPart)
 	}
-	want := sharedPart + "\n\n" + orchPart
-	if c != want {
-		t.Errorf("orchestrator HarnessConstraints merge format incorrect\ngot:  %q\nwant: %q", c, want)
+	if !orchOK || orch != orchPart {
+		t.Errorf("orchestrator OrchestratorHarnessConstraints = %q (ok=%v), want exactly %q", orch, orchOK, orchPart)
 	}
 }
 

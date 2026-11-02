@@ -2,7 +2,6 @@ schema_version: "1"
 id: "vscode-ghcp"
 display_name: "VS Code GHCP Local"
 transform_version: "3.0.0"
-injections_version: "1.3.0"
 
 tools:
   shape: list

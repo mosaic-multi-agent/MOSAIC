@@ -69,6 +69,10 @@ func probeDeployedArtifact(workspace, targetPath, modelKey string) domain.Deploy
 	// this signal determines whether AgentStaleness should compare InjectionsVersion at all.
 	state.InjectionsVersion, state.HasInjectionRegion = extractDeployedInjectionVersion(data, "injections_version")
 
+	// Read the orchestrator injection version from the OrchestratorHarnessConstraints region tag.
+	// No frontmatter fallback: an untagged second region reads as present with an empty version.
+	state.OrchestratorInjectionsVersion, state.HasOrchestratorInjectionRegion = extractDeployedOrchestratorInjectionVersion(data)
+
 	// Extract workflow section markers; nil when none are present.
 	state.Workflows = extractDeployedWorkflows(data)
 
@@ -101,8 +105,28 @@ func readDeployedStamp(fm *docformat.Frontmatter, legacyKey string) string {
 	return ""
 }
 
+// extractDeployedOrchestratorInjectionVersion returns the version attribute of the deployed
+// OrchestratorHarnessConstraints region and whether that region is present at all. The version
+// is empty for an untagged region; the region is found wherever it sits in the body.
+func extractDeployedOrchestratorInjectionVersion(data []byte) (version string, found bool) {
+	if len(data) == 0 {
+		return "", false
+	}
+	doc, err := docformat.Parse(data)
+	if err != nil {
+		return "", false
+	}
+	for _, node := range doc.Body().DeployedRegions() {
+		if node.Name() == docformat.OrchestratorHarnessRegionName {
+			return node.Version(), true
+		}
+	}
+	return "", false
+}
+
 // extractDeployedInjectionVersion parses a deployed agent file and returns the version
-// attribute from the first InjectionHarness-class region found, and whether such a region
+// attribute from the first shared InjectionHarness-class region found (every harness region
+// except the orchestrator region, which has its own reader), and whether such a region
 // was present at all. found is true whenever at least one InjectionHarness-class region
 // exists in the body, regardless of whether that region carries a version attribute.
 //
@@ -114,7 +138,7 @@ func readDeployedStamp(fm *docformat.Frontmatter, legacyKey string) string {
 // legacyFrontmatterKey is the agentfields registry key used for the frontmatter fallback
 // (e.g., "injections_version"). The primary path reads the tag version from whichever
 // InjectionHarness-class region it finds first, since all harness regions in a file share
-// the same version value (written by applyHarnessRegion with a single role-selected value).
+// the same version value (the shared injections version, written by applyHarnessRegion).
 func extractDeployedInjectionVersion(data []byte, legacyFrontmatterKey string) (version string, found bool) {
 	if len(data) == 0 {
 		return "", false
@@ -131,7 +155,7 @@ func extractDeployedInjectionVersion(data []byte, legacyFrontmatterKey string) (
 		if classErr != nil {
 			continue // skip unclassified or error regions
 		}
-		if class == mosaic.InjectionHarness {
+		if class == mosaic.InjectionHarness && node.Name() != docformat.OrchestratorHarnessRegionName {
 			v := node.Version()
 			if v != "" {
 				// Region found with a version attribute: return immediately.

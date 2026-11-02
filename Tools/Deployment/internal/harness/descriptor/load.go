@@ -15,13 +15,15 @@ type wireDescriptor struct {
 	ID                string              `yaml:"id"`
 	DisplayName       string              `yaml:"display_name"`
 	TransformVersion  string              `yaml:"transform_version"`
-	InjectionsVersion string              `yaml:"injections_version"`
 	Models            wireModelCatalog    `yaml:"models"`
 	Tools             wireToolSpec        `yaml:"tools"`
 	Paths             wirePathSpec        `yaml:"paths"`
 	Extensions        map[string]string   `yaml:"extensions"`
 	Frontmatter       wireFrontmatterSpec `yaml:"frontmatter"`
 	Injections        []wireInjection     `yaml:"injections"`
+	// DeprecatedInjectionsVersion is accepted so older descriptors keep loading; the value is
+	// ignored. The injection version comes from the frontmatter of HarnessInjections.md.
+	DeprecatedInjectionsVersion string `yaml:"injections_version"`
 	Hooks             wireHookSupport     `yaml:"hooks"`
 }
 
@@ -178,7 +180,6 @@ func mapWireToDomain(w *wireDescriptor) (*domain.HarnessDescriptor, []Validation
 		ID:                w.ID,
 		DisplayName:       w.DisplayName,
 		TransformVersion:  w.TransformVersion,
-		InjectionsVersion: w.InjectionsVersion,
 		Models:            mapWireModelCatalog(&w.Models),
 		Tools:             mapWireToolSpec(&w.Tools),
 		Paths:             mapWirePathSpec(&w.Paths),

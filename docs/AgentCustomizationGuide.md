@@ -80,6 +80,7 @@ Managed regions are filled from MOSAIC's canonical sources — the communication
 | `ClosingProcedure` | HITL review gate and response procedure |
 | `CommunicationProtocol` | The orchestration contract — message format, status codes |
 | `HarnessConstraints` | Platform-specific rules for your AI coding tool |
+| `OrchestratorHarnessConstraints` | Additional platform-specific rules for orchestrators; a subagent has only `HarnessConstraints` |
 | `ErrorHandlingCommon` | Shared error handling (retry rules) |
 | `ExecutionPhilosophyCommon` | Shared working posture (context, memory, quality) |
 

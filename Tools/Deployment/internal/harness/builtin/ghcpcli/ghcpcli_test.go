@@ -735,14 +735,15 @@ func TestInjection_GHCP_ProjectInjectionsNotFilled(t *testing.T) {
 	}
 }
 
-// TestInjection_GHCP_InjectionsVersion verifies injections_version "1.2.0" for GHCP CLI.
+// TestInjection_GHCP_InjectionsVersion verifies the descriptor carries the frontmatter version
+// of the frozen catalog's HarnessInjections.md ("1.3.0") for GHCP CLI.
 func TestInjection_GHCP_InjectionsVersion(t *testing.T) {
 	mod := newModule(t)
 	d := mod.Descriptor()
 	if d == nil {
 		t.Fatal("Descriptor() returned nil")
 	}
-	want := "1.2.0"
+	want := "1.3.0"
 	if d.InjectionsVersion != want {
 		t.Errorf("Descriptor().InjectionsVersion = %q, want %q", d.InjectionsVersion, want)
 	}

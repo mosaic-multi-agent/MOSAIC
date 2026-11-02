@@ -214,7 +214,7 @@ func buildReviewLines(p domain.Plan) []reviewLine {
 
 			// For updates, list each version delta that drove the update.
 			for _, delta := range item.Stale {
-				add("               "+formatVersionDelta(delta), "muted")
+				add("               "+formatReviewVersionDelta(delta), "muted")
 			}
 
 			// For conflicts, remind the user of the local modification.

@@ -115,14 +115,13 @@ func TestLoad_WellFormedDescriptor_TransformVersionPopulated(t *testing.T) {
 	}
 }
 
-func TestLoad_WellFormedDescriptor_InjectionsVersionPopulated(t *testing.T) {
+// valid-full.yaml still declares the deprecated injections_version; it must load and be ignored,
+// because the version comes from HarnessInjections.md at module construction.
+func TestLoad_DescriptorDeclaringInjectionsVersion_LoadsAndIgnoresIt(t *testing.T) {
 	d := loadFixture(t, "valid-full.yaml")
 
-	if d.InjectionsVersion == "" {
-		t.Error("InjectionsVersion should be populated, got empty string")
-	}
-	if d.InjectionsVersion != "1.1.0" {
-		t.Errorf("InjectionsVersion: want %q, got %q", "1.1.0", d.InjectionsVersion)
+	if d.InjectionsVersion != "" {
+		t.Errorf("InjectionsVersion: want empty (declared value ignored), got %q", d.InjectionsVersion)
 	}
 }
 

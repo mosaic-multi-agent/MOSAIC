@@ -102,8 +102,8 @@ func RetypeOpenTagLine(line []byte, kind NodeKind) (retyped []byte, ok bool) {
 	// Build the retyped line: everything up to and including the opening quote,
 	// then the new type value, then from the closing quote character onwards.
 	var buf bytes.Buffer
-	buf.Write(body[:qStart+1])  // ..type='  or ..type="
-	buf.WriteString(newTypeVal) // e.g. "managed"
+	buf.Write(body[:qStart+1])          // ..type='  or ..type="
+	buf.WriteString(newTypeVal)         // e.g. "managed"
 	buf.Write(body[qStart+1+closeIdx:]) // closing quote + rest of tag + '>'
 	if len(terminator) > 0 {
 		buf.Write(terminator)

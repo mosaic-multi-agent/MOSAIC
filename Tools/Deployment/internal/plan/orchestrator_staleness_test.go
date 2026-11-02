@@ -41,6 +41,7 @@ func deployedStateWithOrchVersion(contentHash, version, harnessVersion, injectio
 	// Orchestrator files contain InjectionHarness-class regions; set the signal so
 	// AgentStaleness performs the InjectionsVersion comparison for these tests.
 	s.HasInjectionRegion = true
+	s.HasOrchestratorInjectionRegion = true
 	return s
 }
 
@@ -234,7 +235,10 @@ func TestAgentStaleness_OrchestratorInjectionsVersion_DeployedAbsent_SourceNonEm
 		Version:                       "5.0",
 		HarnessVersion:                "3.0",
 		InjectionsVersion:             "2.0",
-		OrchestratorInjectionsVersion: "", // pre-migration: field not yet in deployed file
+		OrchestratorInjectionsVersion: "", // second region present but untagged (old external module output)
+
+		HasInjectionRegion:             true,
+		HasOrchestratorInjectionRegion: true,
 	}
 	agent := makeOrchestrator()
 	agent.Version = deployed.Version

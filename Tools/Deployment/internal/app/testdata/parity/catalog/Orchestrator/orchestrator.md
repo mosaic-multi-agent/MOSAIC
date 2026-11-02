@@ -1,5 +1,5 @@
 ---
-version: 8.2.2
+version: 8.3.0
 name: orchestrator
 description: Central coordinator that manages multi-agent workflow execution for the parity sample catalog
 role: orchestrator
@@ -93,6 +93,8 @@ You are the **Orchestrator** agent in a multi-agent orchestration system.
 
 <HarnessConstraints type="managed">
 </HarnessConstraints>
+<OrchestratorHarnessConstraints type="managed">
+</OrchestratorHarnessConstraints>
 
 </Constraints>
 ---

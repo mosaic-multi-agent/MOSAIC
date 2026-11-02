@@ -1,5 +1,5 @@
 ---
-version: 8.2.2
+version: 8.3.0
 name: orchestrator
 description: Central coordinator that manages multi-agent workflow execution, routing tasks to subagents and maintaining execution state
 role: orchestrator
@@ -747,6 +747,8 @@ Protect your context window from non-orchestration content. You hold a whole run
 
 <HarnessConstraints type="managed">
 </HarnessConstraints>
+<OrchestratorHarnessConstraints type="managed">
+</OrchestratorHarnessConstraints>
 
 </Constraints>
 ---

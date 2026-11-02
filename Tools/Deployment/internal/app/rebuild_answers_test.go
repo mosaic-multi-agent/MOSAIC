@@ -115,14 +115,14 @@ func TestRebuild_MainOrchestratorPlaceholder_UnmappedExtraNeedsAnswerOrGetsGap(t
 	}
 }
 
-func TestRebuild_OrchestratorHarnessRegionCarriesTargetOrchestratorVersion(t *testing.T) {
+func TestRebuild_OrchestratorHarnessRegionCarriesTargetInjectionsVersion(t *testing.T) {
 	in := rbInput(t, claudeToOpencode, false, withFileName("orchestrator.md"), withoutRoleStamp)
-	version := in.TargetModule.Descriptor().OrchestratorInjectionsVersion
-	if version == "" {
-		t.Skip("target declares no orchestrator injections version")
-	}
+	in.TargetModule = &rebuildRegionModule{HarnessModule: in.TargetModule, orchText: stampOrchText, orchOK: true, orchVersion: stampOrchVersion}
 
 	_, out := rbRebuild(t, in)
 
-	assertOnce(t, out, `<HarnessConstraints type="managed" version="`+version+`">`)
+	assertOnce(t, out, `<HarnessConstraints type="managed" version="`+stampSharedVersion+`">`)
+	if strings.Contains(out, `<HarnessConstraints type="managed" version="`+stampOrchVersion+`">`) {
+		t.Errorf("HarnessConstraints carries the orchestrator injections version %q:\n%s", stampOrchVersion, out)
+	}
 }

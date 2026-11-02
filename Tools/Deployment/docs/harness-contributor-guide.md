@@ -312,6 +312,7 @@ Before submitting a harness, verify:
 - [ ] All generic tool mappings are declared
 - [ ] Deployment paths are tested for `ScopeProject` on the target platforms; any other scope must return `ErrUnsupportedScope`
 - [ ] `injection("HarnessConstraints")` returns your constraints (or `ok=false` if none)
+- [ ] Orchestrators carry two harness regions: `HarnessConstraints` (from `HarnessInjections.md`) and `OrchestratorHarnessConstraints` (from `HarnessInjectionsOrchestrator.md`); subagents carry only the first. Each file needs a frontmatter `version`, which is the version of its region; a descriptor `injections_version` is ignored
 - [ ] `hook_plan` returns `Supported=false` with a non-empty `Reason` if hooks are not supported
 - [ ] `TargetPath` for an unknown artifact kind returns `ErrArtifactUnsupported` (code `"unsupported_artifact"`)
 - [ ] Each method returns consistent results on repeated calls with equal input (determinism)

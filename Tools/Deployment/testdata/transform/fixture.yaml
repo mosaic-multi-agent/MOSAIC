@@ -4,7 +4,7 @@
 #   - Adds:  mode: subagent
 #   - Sets model via model_key
 #   - Sets tools via tools_key (list shape)
-#   - Stamps transform_version and injections_version
+#   - Stamps transform_version (the injections version is set by the test module, not here)
 #   - Applies a key_order that includes the stamped fields
 #
 # The placeholder_expansion covers the orchestrator's {tool-permissions} placeholder (T8.7).
@@ -12,7 +12,6 @@ schema_version: "1"
 id: "fixture-harness"
 display_name: "Fixture Harness"
 transform_version: "3.0.0"
-injections_version: "1.2.0"
 
 models:
   ids:

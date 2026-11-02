@@ -467,12 +467,16 @@ func writeContentFile(t *testing.T, dir, filename string, src string) {
 	}
 }
 
+// versionedFrontmatter is a minimal frontmatter block giving a content file the
+// version the loader requires.
+const versionedFrontmatter = "---\nversion: \"1.0.0\"\n---\n"
+
 // TestLoadDir_BothFilesPresent_PopulatesHarnessContent verifies that LoadDir reads both
 // HarnessInjections.md and HarnessInjectionsOrchestrator.md from the given directory and
 // returns a populated HarnessContent.
 func TestLoadDir_BothFilesPresent_PopulatesHarnessContent(t *testing.T) {
 	dir := t.TempDir()
-	writeContentFile(t, dir, injectionfile.SharedFileName, `<LanguagePatterns type="managed">
+	writeContentFile(t, dir, injectionfile.SharedFileName, versionedFrontmatter+`<LanguagePatterns type="managed">
 Use Go idioms.
 </LanguagePatterns>
 
@@ -520,29 +524,6 @@ Orchestrator-only constraint.
 	}
 }
 
-// TestLoadDir_SharedContent_EmptyOrchestratorVersion_WhenNoFrontmatterVersion verifies that
-// when HarnessInjectionsOrchestrator.md has no frontmatter version, OrchestratorVersion is "".
-func TestLoadDir_SharedContent_EmptyOrchestratorVersion_WhenNoFrontmatterVersion(t *testing.T) {
-	dir := t.TempDir()
-	writeContentFile(t, dir, injectionfile.SharedFileName, `<HarnessConstraints type="managed">
-</HarnessConstraints>
-`)
-	writeContentFile(t, dir, injectionfile.OrchestratorFileName, `# No frontmatter, no version.
-
-<HarnessConstraints type="managed">
-Orch content.
-</HarnessConstraints>
-`)
-
-	content, err := injectionfile.LoadDir(dir)
-	if err != nil {
-		t.Fatalf("LoadDir returned unexpected error: %v", err)
-	}
-	if content.OrchestratorVersion != "" {
-		t.Errorf("OrchestratorVersion: want empty, got %q", content.OrchestratorVersion)
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Tests: LoadDir — failure modes (missing files)
 // ---------------------------------------------------------------------------
@@ -552,7 +533,7 @@ Orch content.
 func TestLoadDir_MissingSharedFile_ReturnsError(t *testing.T) {
 	dir := t.TempDir()
 	// Only write the orchestrator file; shared file is absent.
-	writeContentFile(t, dir, injectionfile.OrchestratorFileName, `<HarnessConstraints type="managed">
+	writeContentFile(t, dir, injectionfile.OrchestratorFileName, versionedFrontmatter+`<HarnessConstraints type="managed">
 Orch content.
 </HarnessConstraints>
 `)
@@ -567,7 +548,7 @@ Orch content.
 // HarnessInjections.md names the missing file so the user can diagnose the problem.
 func TestLoadDir_MissingSharedFile_ErrorNamesFile(t *testing.T) {
 	dir := t.TempDir()
-	writeContentFile(t, dir, injectionfile.OrchestratorFileName, `<HarnessConstraints type="managed">
+	writeContentFile(t, dir, injectionfile.OrchestratorFileName, versionedFrontmatter+`<HarnessConstraints type="managed">
 Orch.
 </HarnessConstraints>
 `)
@@ -587,7 +568,7 @@ Orch.
 func TestLoadDir_MissingOrchestratorFile_ReturnsError(t *testing.T) {
 	dir := t.TempDir()
 	// Only write the shared file; orchestrator file is absent.
-	writeContentFile(t, dir, injectionfile.SharedFileName, `<HarnessConstraints type="managed">
+	writeContentFile(t, dir, injectionfile.SharedFileName, versionedFrontmatter+`<HarnessConstraints type="managed">
 </HarnessConstraints>
 `)
 
@@ -601,7 +582,7 @@ func TestLoadDir_MissingOrchestratorFile_ReturnsError(t *testing.T) {
 // HarnessInjectionsOrchestrator.md names the missing file.
 func TestLoadDir_MissingOrchestratorFile_ErrorNamesFile(t *testing.T) {
 	dir := t.TempDir()
-	writeContentFile(t, dir, injectionfile.SharedFileName, `<HarnessConstraints type="managed">
+	writeContentFile(t, dir, injectionfile.SharedFileName, versionedFrontmatter+`<HarnessConstraints type="managed">
 </HarnessConstraints>
 `)
 
@@ -624,7 +605,7 @@ func TestLoadDir_MissingOrchestratorFile_ErrorNamesFile(t *testing.T) {
 func TestLoadDir_UnparseableSharedFile_ReturnsError(t *testing.T) {
 	dir := t.TempDir()
 	writeContentFile(t, dir, injectionfile.SharedFileName, malformedUnclosedFrontmatter)
-	writeContentFile(t, dir, injectionfile.OrchestratorFileName, `<HarnessConstraints type="managed">
+	writeContentFile(t, dir, injectionfile.OrchestratorFileName, versionedFrontmatter+`<HarnessConstraints type="managed">
 Orch.
 </HarnessConstraints>
 `)
@@ -640,7 +621,7 @@ Orch.
 func TestLoadDir_UnparseableSharedFile_ErrorNamesFile(t *testing.T) {
 	dir := t.TempDir()
 	writeContentFile(t, dir, injectionfile.SharedFileName, malformedUnclosedFrontmatter)
-	writeContentFile(t, dir, injectionfile.OrchestratorFileName, `<HarnessConstraints type="managed">
+	writeContentFile(t, dir, injectionfile.OrchestratorFileName, versionedFrontmatter+`<HarnessConstraints type="managed">
 Orch.
 </HarnessConstraints>
 `)
@@ -659,7 +640,7 @@ Orch.
 // HarnessInjectionsOrchestrator.md causes LoadDir to return a non-nil error.
 func TestLoadDir_UnparseableOrchestratorFile_ReturnsError(t *testing.T) {
 	dir := t.TempDir()
-	writeContentFile(t, dir, injectionfile.SharedFileName, `<HarnessConstraints type="managed">
+	writeContentFile(t, dir, injectionfile.SharedFileName, versionedFrontmatter+`<HarnessConstraints type="managed">
 </HarnessConstraints>
 `)
 	writeContentFile(t, dir, injectionfile.OrchestratorFileName, malformedUnclosedFrontmatter)
@@ -674,7 +655,7 @@ func TestLoadDir_UnparseableOrchestratorFile_ReturnsError(t *testing.T) {
 // unparseable HarnessInjectionsOrchestrator.md names the file.
 func TestLoadDir_UnparseableOrchestratorFile_ErrorNamesFile(t *testing.T) {
 	dir := t.TempDir()
-	writeContentFile(t, dir, injectionfile.SharedFileName, `<HarnessConstraints type="managed">
+	writeContentFile(t, dir, injectionfile.SharedFileName, versionedFrontmatter+`<HarnessConstraints type="managed">
 </HarnessConstraints>
 `)
 	writeContentFile(t, dir, injectionfile.OrchestratorFileName, malformedUnclosedFrontmatter)
@@ -919,7 +900,10 @@ func TestParseDeployedRegionsWithVersion_CRLF_VersionAndRegionsMatchLF(t *testin
 // harness files are checked out with CRLF, so this mismatch surfaces as a test failure
 // in the opencode and vscodeghcp packages.
 func TestLoadDir_CRLF_StoredFiles_MatchLFStoredFiles(t *testing.T) {
-	const sharedLF = `# Harness Injections
+	const sharedLF = `---
+version: "1.0.0"
+---
+# Harness Injections
 
 <HarnessConstraints type="managed">
 Do not invoke external APIs without explicit permission.

@@ -147,10 +147,13 @@ Build the ordered list of field operations to apply to an agent's frontmatter.
   "versions": {
     "version": "1.0.0",
     "transform_version": "3.0.0",
-    "injections_version": "1.3.1"
+    "injections_version": "1.3.1",
+    "orchestrator_injections_version": "1.2.1"
   }
 }
 ```
+
+The `versions` payload is computed by MOSAIC, not read from your descriptor. `injections_version` is the frontmatter `version` of the `HarnessInjections.md` placed next to your descriptor (the subagent and shared-region version), and `orchestrator_injections_version` is that of `HarnessInjectionsOrchestrator.md` (the orchestrator-region version; omitted when absent). A descriptor field `injections_version` is not a source of either value: a descriptor that still declares it loads, and the value is ignored.
 
 **Response result:**
 ```json
@@ -215,6 +218,8 @@ Return the harness-level content for one canonical injection name.
 ```
 
 Set `"ok": false` (and `"content": ""`) for injection names your harness does not fill. MOSAIC leaves those injection points empty.
+
+Orchestrators carry two harness regions: `HarnessConstraints` (content of `HarnessInjections.md`) and `OrchestratorHarnessConstraints` (content of `HarnessInjectionsOrchestrator.md`). Subagents carry only `HarnessConstraints`. Both files are read from next to your descriptor, not from your module.
 
 Canonical injection names: `HarnessConstraints`, `LanguagePatterns`, `IdentityExtension`, `ProtocolExtension`, `CodebaseContext`, `OutputArtifactTemplate`, `ErrorHandlingExtension`, `ContextLimits`, `AvailableWorkflows`.
 

@@ -965,6 +965,15 @@ func (s *service) buildContent(
 	opts ...buildContentOption,
 ) func(domain.PlanItem) ([]byte, error) {
 	itemOpts := newBuildContentOptions(opts)
+	undeliveredOnce := newGapOnce()
+	roleRegionOnce := newGapOnce()
+	reportRoleRegion := func(doc []byte, role domain.AgentRole, key string) {
+		for _, g := range roleRegionGaps(doc, role, key) {
+			if roleRegionOnce.first(g) {
+				s.deps.Todo.AddGap(g)
+			}
+		}
+	}
 	return func(item domain.PlanItem) ([]byte, error) {
 		// Harness-only route: checked first, before the artifact-kind switch. A harness-only
 		// agent has no catalog entry and no SourcePath. Catalog.ReadSource is deliberately
@@ -975,6 +984,7 @@ func (s *service) buildContent(
 			if deployedReader != nil {
 				deployed = deployedReader(item)
 			}
+			reportRoleRegion(deployed, plan.Agent.Role, plan.Agent.Key)
 			res, err := refreshHarnessOnly(HarnessOnlyRefreshRequest{
 				Deployed: deployed,
 				Scope:    plan.Scope,
@@ -1007,6 +1017,7 @@ func (s *service) buildContent(
 		if err != nil {
 			return nil, err
 		}
+		reportRoleRegion(src, agent.Role, agent.Key)
 		var deployed []byte
 		if deployedReader != nil {
 			deployed = deployedReader(item)
@@ -1041,6 +1052,9 @@ func (s *service) buildContent(
 		// Forward any gaps produced by the transform (e.g. parking events) to the
 		// todo collector so they appear in the TODO report for the user to act on.
 		for _, g := range res.Report.Gaps {
+			if g.Kind == domain.GapUndeliveredOrchestratorInjection && !undeliveredOnce.first(g) {
+				continue
+			}
 			s.deps.Todo.AddGap(g)
 		}
 		return res.Output, nil

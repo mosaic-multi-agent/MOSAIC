@@ -170,7 +170,7 @@ Pass `--dry-run` to see the plan without writing any files.
 The update flow updates an existing workspace to the latest agent versions. It:
 
 1. Reads the deployment manifest (written by the previous deploy/update)
-2. Computes which files are stale (version, transform_version, or injections_version changed)
+2. Computes which files are stale (version, transform_version, or an injection version changed)
 3. Identifies files that have been locally modified since deployment
 4. Shows a plan for review
 5. Applies updates, using your chosen conflict resolution strategy for modified files
@@ -473,7 +473,7 @@ The generated generic file:
   - All other source fields not in the drop set are carried over verbatim (e.g.
     `description`, `recommended_tier`, `tools`, `required_skills`).
   - Deployment and transform stamps are **dropped**: `transform_version`,
-    `injections_version`, `bundle_version`, `protocol_version`,
+    `injections_version` (a legacy stamp, distinct from the removed descriptor field of the same name), `bundle_version`, `protocol_version`,
     `tool_mappings_version`, `model`. These are per-deployment artifacts that
     have no place in a generic source. See "The `tool_mappings_version` stamp"
     in `docs/configuration.md` for what that particular field is and where it

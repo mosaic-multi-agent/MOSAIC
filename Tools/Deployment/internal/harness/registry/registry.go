@@ -416,13 +416,16 @@ func Discover(opts Options) (Registry, error) {
 				// Load orchestrator injection version from HarnessInjectionsOrchestrator.md so
 				// the descriptor carries the correct version before being forwarded to the
 				// subprocess during the protocol handshake.
-				_, extOrchVersion, _ := loadOrchInjections(h.yamlPath)
-				h.desc.OrchestratorInjectionsVersion = extOrchVersion
+				extInj, extInjErr := loadTierInjections(h.yamlPath)
+				h.desc.InjectionsVersion = extInj.sharedVersion
+				h.desc.OrchestratorInjectionsVersion = extInj.orchVersion
 				// Spawn the subprocess and perform the JSON-over-stdio protocol handshake.
 				// If the executable is missing, non-executable, or does not speak the protocol,
 				// the error is captured and the harness is marked unusable with a clear reason.
-				var constructErr error
-				mod, constructErr = external.New(h.execPath, h.desc, external.Options{MosaicRoot: opts.MosaicRoot})
+				constructErr := extInjErr
+				if constructErr == nil {
+					mod, constructErr = external.New(h.execPath, h.desc, external.Options{MosaicRoot: opts.MosaicRoot})
+				}
 				if constructErr != nil {
 					ref.Usable = false
 					ref.UnusableReason = fmt.Sprintf("external module construction failed: %v", constructErr)
@@ -444,12 +447,9 @@ func Discover(opts Options) (Registry, error) {
 			// Descriptor-only: always usable when the descriptor is valid.
 			// Load injection content from HarnessInjections.md and HarnessInjectionsOrchestrator.md
 			// in the same directory. Absence of either file is treated as no injections (empty map).
-			injections, injErr := loadInjections(h.yamlPath)
-			if injErr != nil {
-				injections = make(map[string]string)
-			}
-			orchInjections, orchVersion, _ := loadOrchInjections(h.yamlPath)
-			h.desc.OrchestratorInjectionsVersion = orchVersion
+			tierInj, tierErr := loadTierInjections(h.yamlPath)
+			h.desc.InjectionsVersion = tierInj.sharedVersion
+			h.desc.OrchestratorInjectionsVersion = tierInj.orchVersion
 			ref := domain.HarnessRef{
 				ID:          id,
 				DisplayName: h.desc.DisplayName,
@@ -457,7 +457,13 @@ func Discover(opts Options) (Registry, error) {
 				SourcePath:  h.yamlPath,
 				Usable:      true,
 			}
-			mod := newRuntimeModule(ref, h.desc, injections, orchInjections)
+			if tierErr != nil {
+				ref.Usable = false
+				ref.UnusableReason = tierErr.Error()
+				newEntry = harnessEntry{ref: ref}
+				break
+			}
+			mod := newRuntimeModule(ref, h.desc, tierInj.shared, tierInj.orch)
 			// Apply the ToolMappings hook then the ModelCatalog hook, wrapping the
 			// descriptor-only module with descriptor copies carrying the effective values.
 			wrapped := applyToolMappingsHook(id, mod, opts.ToolMappings)

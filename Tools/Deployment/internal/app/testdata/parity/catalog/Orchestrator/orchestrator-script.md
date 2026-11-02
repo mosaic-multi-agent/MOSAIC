@@ -1,5 +1,5 @@
 ---
-version: 3.3.0
+version: 3.4.0
 name: orchestrator-script
 description: Makes one routing decision per Runner invocation by reading the orchestration artifact
 role: orchestrator
@@ -52,6 +52,8 @@ You are the **Script-Mode Orchestrator** agent in a multi-agent orchestration sy
 
 <HarnessConstraints type="managed">
 </HarnessConstraints>
+<OrchestratorHarnessConstraints type="managed">
+</OrchestratorHarnessConstraints>
 
 </Constraints>
 ---

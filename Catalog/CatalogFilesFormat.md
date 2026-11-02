@@ -342,13 +342,14 @@ place user-authored content inside them; it will be overwritten.
 | `ClosingProcedure` | `Identity` | Bundle |
 | `AvailableWorkflows` | `Identity` | Assembled from selected workflows |
 | `InfrastructureAgents` | `Identity` | Assembled from selected declarations |
-| `HarnessConstraints` | `Constraints` | Selected harness module |
+| `HarnessConstraints` | `Constraints` | `HarnessInjections.md` of the selected harness |
+| `OrchestratorHarnessConstraints` | `Constraints` | `HarnessInjectionsOrchestrator.md` of the selected harness (orchestrator role only) |
 | `ErrorHandlingCommon` | `ErrorHandling` | Bundle |
 | `ExecutionPhilosophyCommon` | `ExecutionPhilosophy` | Bundle |
 
 "Bundle" means `Catalog/DeployedSections.md`.
 
-Eight names, and every one of them names a generator that exists. A name with
+Nine names, and every one of them names a generator that exists. A name with
 nothing to fill it does not belong here — see `AgentTemplateArchitecture.md`
 §2.5.1. `LanguagePatterns` and `CustomConstraints` were listed here until
 2026-08-08 with the source "Deployment configuration", which was never a real
@@ -362,7 +363,9 @@ language patterns declares its own `type="custom"` region, and
 |------|-------|-----------|
 | Contract | `CommunicationProtocol` | Error |
 | Conduct | `AuthorityHierarchy`, `ClosingProcedure`, `ErrorHandlingCommon`, `ExecutionPhilosophyCommon` | Warning |
-| Deployment | `HarnessConstraints`, `AvailableWorkflows`, `InfrastructureAgents` | Silent |
+| Deployment | `HarnessConstraints`, `OrchestratorHarnessConstraints`, `AvailableWorkflows`, `InfrastructureAgents` | Silent |
+
+An orchestrator carries two harness regions, `HarnessConstraints` and `OrchestratorHarnessConstraints`, one after the other in `Constraints`; a subagent carries only `HarnessConstraints`. The frontmatter `version` of `HarnessInjections.md` is the version of the subagent and shared region, that of `HarnessInjectionsOrchestrator.md` the version of the orchestrator region; a present file without a `version` fails loading.
 
 A region *present* with no content source for the file's role is always an error.
 

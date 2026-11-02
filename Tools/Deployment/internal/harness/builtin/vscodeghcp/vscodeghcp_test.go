@@ -1236,14 +1236,14 @@ func TestInjection_VSCodeGHCP_ProjectInjectionsNotFilled(t *testing.T) {
 }
 
 // TestInjection_VSCodeGHCP_InjectionsVersion verifies that the module's descriptor carries
-// injections_version "1.3.0" per the HarnessInjections.md reference.
+// the frontmatter version of the frozen catalog's HarnessInjections.md ("1.4.0").
 func TestInjection_VSCodeGHCP_InjectionsVersion(t *testing.T) {
 	mod := newModule(t)
 	d := mod.Descriptor()
 	if d == nil {
 		t.Fatal("Descriptor() returned nil")
 	}
-	want := "1.3.0"
+	want := "1.4.0"
 	if d.InjectionsVersion != want {
 		t.Errorf("Descriptor().InjectionsVersion = %q, want %q", d.InjectionsVersion, want)
 	}
