@@ -1,6 +1,63 @@
-# Unreleased
+# 0.7.3 (2026-11-02)
+
+> **To upgrade:** run `Update workspace` to get the new orchestrator region, the updated agents and the updated `mosaic-logger` hook.
+>
+> - `brownfield-pr-fix` needs the new `pr_details_read` tool mapped, or it stops at retrieval.
+> - `Transform harness` now works on a whole workspace (`--workspace` on the CLI). Single agent files and folders of agent files are no longer accepted.
 
 ## Tools
+
+### Deploy v1.5.1
+#### Changes
+- `Transform harness` now moves a whole deployment (agents, skills and hooks) to another harness. The plan is shown and you confirm it before anything is written, and existing files are skipped by default (`--overwrite` on the CLI replaces them)
+- `Transform harness` keeps your customizations and the deployed agent versions as they are, and never upgrades anything; use `Update workspace` for that. Tool names and harness-specific content come from the target harness. An agent whose model cannot be resolved is reported so you can set one
+- `Transform harness` between the two GHCP targets replaces the source deployment. The plan lists what is removed or replaced, those files are backed up under `.mosaic/backups/`, and a failure leaves the workspace unchanged
+- The two GHCP targets are now named "GHCP CLI / VS Code GHCP Copilot" (`ghcp-cli`) and "VS Code GHCP Local" (`vscode-ghcp`) everywhere; the IDs are unchanged. The docs explain which one to choose, that Local is being retired, and that subagents on the GHCP CLI / VS Code GHCP Copilot target have no built-in ask tool (human-in-the-loop for them needs an MCP ask tool you supply)
+- A workspace holds one GHCP target at a time. Deploy modes refuse the other target without changing anything and point to `Transform harness`; a workspace that holds both must be cleaned up by hand
+- Both GHCP targets write agents as `.github/agents/X.agent.md`. Agents still named `X.md` are migrated by the next `Deploy workspace`, `Deploy agents`, `Update workspace` or `Update workflows` for their target. Your customizations, model and workflow set are kept, and each old file is backed up under `.mosaic/backups/`
+- Orchestrator-only harness rules now deploy in their own region, `OrchestratorHarnessConstraints`, with their own version
+- Harness injection versions now come only from the injection files. The descriptor field `injections_version` is ignored, and an injection file without a `version` fails loading
+#### Bugfixes
+- `Update workspace` now refreshes agents and orchestrators when a harness injection file changes
+- `Deploy workspace` and `Deploy agents` no longer lose project and custom regions and tool choices when run over an out-of-date agent. The deployed model is kept unless you give a new one, and `Deploy workspace` keeps infrastructure declarations when no infrastructure is selected
+- Agents deployed by recent versions are recognised as MOSAIC agents again. Before, `Transform harness` skipped them, `Promote to generic` refused them, and `Update workspace` left them out of its harness-only refresh. No migration is needed
+- VS Code GHCP Local hooks are now deployed to `.github/hooks/` and log to the workspace root
+- `Transform harness` uses the catalog stack of the selected workspace
+- `Transform harness` maps tool lists correctly for OpenCode
+- `Update workflows` now gives a deployed `orchestrator-script` the same workflow set as `orchestrator`
+- The TODO file now lists each missing model and each unmapped tool once per agent
+- Text inputs in the interactive screens handle wide text and pasted text better
+- CLI only: usage errors such as unknown flags print the error and exit 3 instead of failing silently; an unknown hook id exits 1; `--dry-run` shows the plan on every write command without needing `--auto-confirm`; `update` and `workflows` refuse a workspace path that does not exist instead of creating it; the `--conflict` help now says it covers files the tool cannot confirm as its own
+
+### Runner v1.9.0
+#### Changes
+- The loop guard can be switched off for a session with `g` on the progress screen, or when resuming after a guard stop
+- Pre-consultation guidance is saved with the run, can be reviewed and edited (also during a run with `e`), and is reused on resume
+- Resuming needs no settings flags and asks only what belongs to the session, then shows a summary of the recorded settings
+- Infrastructure failures are visible on the progress screen and listed at the end of the run
+- GHCP CLI runs log usage and compactions from the CLI session transcript, with no setup
+- The script orchestrator may be named `orchestrator-script.md` or `orchestrator-script.agent.md`; a folder holding both is refused with a clear error
+- Orchestration files are parsed more tolerantly
+#### Bugfixes
+- Requests no longer send `null` instead of an empty artifact list
+- Row numbers are now consistently 1-based in logs and messages
+- The progress screen and text inputs handle long text better
+
+### LogAnalyzer v1.2.1
+#### Changes
+- New Session screen (`enter` on a row in Dispatches, By type or Context) with the actor's head, cost split, findings, per-call tools and context growth, and tools. It replaces the Context drill-down
+- The Tools view and the JSON report show how much the context grew after each tool (measured on calls that requested a single tool)
+- Compactions are counted per actor, and the Overview shows context rewrites with their cost and cause
+- New `analysis.yaml` settings file, at global and project level, for tool lists, compaction detection and the default cache-write tier. `mosaic-log-analyzer settings path` and `pricing path` print where the configuration files are
+- `pricing.yaml` takes a `currency` key (`USD` or `EUR`, no conversion)
+- New `ingest-otel` command recovers VS Code GHCP Local token usage from the OpenTelemetry file into a run's logs
+- Views show usage that is not tied to an agent as unattributed, and flag runs whose usage is not fully ingested
+- If a GHCP CLI update changes its session transcript so that token usage can no longer be read, the run shows a warning instead of a usage of zero
+- Tables are aligned and stacked, instance names stay visible, column titles wrap or show in full, and shares show their percent next to the bar. The `type` column is gone from the Context, Dispatches and Timeline lists, and the Context view has a compaction column group and `API calls` as title
+- The `?` overlay lists the columns of the current view, replacing the notes under the Context table
+- The Timeline shades only `waiting on the user` and `between sessions`, with a legend, and collapses idle stretches over 10 minutes with nobody working into a length marker
+#### Bugfixes
+- Text entry overlays no longer overflow the screen with long text
 
 ### AgentTest v1.2.0
 #### Changes
@@ -8,95 +65,32 @@
 #### Bugfixes
 - Text entry screens no longer break when the text is wider than the screen or is pasted
 
-### Deploy v1.5.1
+## Hooks
+
+### mosaic-logger v1.11.0
 #### Changes
-- Orchestrators are deployed with two harness regions: `HarnessConstraints` (from `HarnessInjections.md`) and `OrchestratorHarnessConstraints` (from `HarnessInjectionsOrchestrator.md`). Subagents keep one. Each region carries the version of its own injection file
-- The descriptor field `injections_version` is removed. A descriptor that still declares it loads and the value is ignored; injection versions come only from the frontmatter `version` of the injection files
+- GHCP CLI logs token usage and compactions from its session transcript, in native and Runner mode, with no setup
+- VS Code GHCP Local logs token usage from the Copilot OpenTelemetry file. This needs some setup, see the LogAnalyzer Guide. Copilot cost needs `github-copilot` entries in `pricing.yaml`
+- Every usage record lists the tools the call requested, on all four harnesses; VS Code GHCP Local needs OpenTelemetry content capture for it
+- `hook.yaml` is no longer deployed; a leftover copy in an existing workspace is harmless
 #### Bugfixes
-- A present injection file without a `version` now fails loading instead of deploying an unversioned region
-- Moving GHCP agents from `.github/agents/X.md` to `X.agent.md` (in `update`, `workflows`, `agents` and `deploy`) now keeps their project and custom regions, model, tool choices, infrastructure declarations and workflow set, and no longer reports them as new
-- Re-running `deploy` or `agents` over an out-of-date agent no longer loses its project and custom regions and tool choices. `agents` keeps the deployed model unless one is given; `deploy` keeps the deployed model when none is given and keeps infrastructure declarations when no infrastructure is selected
-- Unknown flags and other usage errors now print the error and exit 3 instead of failing silently
-- `workflows` now gives a deployed `orchestrator-script` the same workflow set as `orchestrator`
-- The help for `--conflict` now says it covers files the tool cannot confirm as its own, not only locally modified files
-- `--dry-run` shows the plan on every write command and no longer needs `--auto-confirm`
-- `update` and `workflows` now refuse a workspace path that does not exist instead of creating it
-- An unknown hook id now fails with exit 1, like other unknown ids
-- The TODO file now lists each missing model and each unmapped tool once per agent
-
-### Deploy v1.4.0
-#### Changes
-- The two GHCP targets are now named "GHCP CLI / VS Code GHCP Copilot" (`ghcp-cli`) and "VS Code GHCP Local" (`vscode-ghcp`) in the TUI, the CLI output, the TODO files and the docs; the IDs are unchanged. The docs explain which one to choose, that Local is being retired, and that subagents on the GHCP CLI / VS Code GHCP Copilot target have no built-in ask tool (human-in-the-loop for them needs an MCP ask tool you supply; untested)
-- A workspace holds one GHCP target at a time, decided by the manifest `harness_id`. Deploy flows refuse the other target without changing anything and point to `transform`; a workspace that holds both must be cleaned up by hand
-- Both GHCP targets write agents as `.github/agents/X.agent.md`. A workspace with agents recorded as `X.md` is migrated by the next deploy, deploy agents, update or workflow update for its target: each old file is backed up under `.mosaic/backups/` and replaced, and an existing `X.agent.md` is backed up and replaced
-- `transform` between `ghcp-cli` and `vscode-ghcp` now replaces the source deployment: agents are rewritten in place as `X.agent.md` (legacy `X.md` agents migrated), target hooks are written, source hook files and registration are replaced or removed, skills are left as they are, and every removed or replaced file is backed up under `.mosaic/backups/`. `--dry-run` and the confirmation plan list the removals and replacements, the JSON output carries them as `removals` and `replacements`, and a failure leaves the workspace unchanged
-- `transform` into `vscode-ghcp` and `render` for `vscode-ghcp` name agents `X.agent.md`
-#### Bugfixes
-- The README no longer says that `claude-code` and `vscode-ghcp` share `.claude/hooks/`; both GHCP harnesses use `.github/hooks` and Claude Code uses `.claude/hooks`
-
-### Deploy v1.3.0
-#### Changes
-- `transform` now moves a whole deployment (agents, skills and hook bundles) to another harness. Its input is the workspace root given with `--workspace`, as for `deploy`; single files and loose folders are no longer accepted. The plan is shown and must be confirmed (`--yes` confirms without prompting)
-- `transform` keeps agent bodies, stamps, protocol and bundle regions, workflow tables, infrastructure declarations, and project and custom regions and skills unchanged from the source and never upgrades them; `update` is the way to upgrade. Tool names, frontmatter and harness-filled regions come from the target, and hooks come from the target's catalog variant. Existing destinations are skipped unless `--overwrite` is given
-- `transform` records the target deployment in the manifest, never changes source files or source manifest entries, and cancelling with Esc writes nothing
-- An agent whose model cannot be resolved is written without a `model` key and named in the summary and TODO
-- Tool lists are mapped correctly for OpenCode
-- Text inputs in the interactive screens handle wide text and pasted text better
-#### Bugfixes
-- `transform` no longer assumes the stack of the workspace containing the input path; it uses the stack of `--workspace`
-
-### Deploy v1.2.1
-#### Bugfixes
-- The VS Code Copilot Chat hooks are now deployed to `.github/hooks/` and log to the workspace root
-- Agents deployed by recent versions are recognised as MOSAIC agents again. Before, `transform` and `retarget` skipped them as "not agent", `promote` refused them, and `update` silently left them out of the harness-only refresh. No migration is needed: affected workspaces are recognised on the next run
-
-### LogAnalyzer v1.2.1
-#### Bugfixes
-- Text entry overlays no longer overflow the screen with long text
-
-### LogAnalyzer v1.2.0
-#### Changes
-- New `ingest-otel` command recovers VS Code Copilot Chat token usage from the OpenTelemetry file into a run's logs. GHCP CLI usage comes from its session transcript and needs no recovery
-- Views show usage that is not tied to an agent as unattributed, and flag runs whose usage is not fully ingested
-- A GHCP CLI run whose transcript format changed so that no usage could be read shows a finding instead of a silent zero
-- The Tools view and the JSON report show how much the context grew after each tool (measured on calls that requested a single tool)
-- New Session screen (`enter` on a row in Dispatches, By type or Context) with the actor's head, cost split, findings, per-call tools and context growth, and tools. It replaces the Context drill-down
-- Tables are aligned and stacked, instance names stay visible, column titles wrap or show in full, and shares show their percent next to the bar. The `type` column is gone from the Context, Dispatches and Timeline lists, and the Context view has a compaction column group and `API calls` as title
-- The `?` overlay lists the columns of the current view, replacing the notes under the Context table
-- The Timeline shades only `waiting on the user` and `between sessions`, with a legend, and collapses idle stretches over 10 minutes with nobody working into a length marker
-
-### Runner v1.9.0
-#### Changes
-- The script orchestrator may be named `orchestrator-script.md` or `orchestrator-script.agent.md`; a folder holding both is refused with a clear error
-- Orchestration files are parsed more tolerantly
-- The progress screen and text inputs handle long text better
-
-### Runner v1.8.0
-#### Changes
-- GHCP CLI runs log usage and compactions from the CLI session transcript with no setup; the Runner no longer reads the OpenTelemetry file for them
-- The loop guard can be switched off for a session with `g` on the progress screen, or when resuming after a guard stop
-- Pre-consultation guidance is saved with the run, can be reviewed and edited (also during a run with `e`), and is reused on resume
-- Resuming asks fewer questions and shows a summary of the recorded settings
-- Infrastructure failures are visible on the progress screen and listed at the end of the run
-#### Bugfixes
-- Requests no longer send `null` instead of an empty artifact list
-- Row numbers are now consistently 1-based in logs and messages
-- Resume no longer asks again for settings the run already recorded
+- Claude Code and OpenCode usage timestamps now mean the start of the call, so per-call times in LogAnalyzer are correct. Runs logged before this are not repaired
+- Claude Code no longer re-writes usage records in bulk when several hooks fire at the same time
+- On all four harnesses a session no longer joins a run just because a message mentions the run id, and a run's orchestrator transcript is no longer replaced by another session's. Runs logged before this are not repaired
 
 ## Catalog
-- **mosaic-logger** hook (v1.10.0): GHCP CLI now logs token usage and compactions from its session transcript, in native and Runner mode, with no setup and no OpenTelemetry; a transcript whose format changed raises a diagnostic instead of a silent zero
-- **mosaic-logger** hook (v1.10.0): VS Code Copilot Chat logs token usage read from the Copilot OpenTelemetry file; enable it with the user-level environment variable `COPILOT_OTEL_FILE_EXPORTER_PATH` and restart VS Code (see the hook README). Copilot cost needs `github-copilot` entries in `pricing.yaml`
-- **mosaic-logger** hook (v1.10.0, log format 1.7.0): every `usage_record` lists the tools the call requested, on all four harnesses; VS Code needs OpenTelemetry content capture for it. Redeploy to get the new files
-- **mosaic-logger** hook (v1.11.0): Claude Code and OpenCode `usage_record` timestamps now mean the start of the call (Claude Code: the first transcript line of the message; OpenCode: the message's `time.created`), so per-call times in LogAnalyzer are correct. Runs logged before this are not repaired
-- **mosaic-logger** hook (v1.11.0): Claude Code no longer re-writes usage records in bulk when several hooks fire at the same time
-- **mosaic-logger** hook (v1.11.0): on all four harnesses a session no longer joins a run just because a message mentions the run id, and a run's orchestrator transcript is no longer replaced by another session's. Runs logged before this are not repaired
-- **mosaic-logger** hook (v1.11.0): the adapter version is read from `.mosaic/manifest.yaml` and `hook.yaml` is no longer deployed. Redeploy to get this; a leftover `hook.yaml` in an existing workspace is harmless
-- **mosaic-logger** hook (v1.11.0): the hook-picker description now says `COPILOT_OTEL_FILE_EXPORTER_PATH` is needed for the VS Code GHCP Local target only; GHCP CLI needs no setup
-- **orchestrator** (v8.3.0) and **orchestrator-script** (v3.4.0): the orchestrator carries a second harness region, `OrchestratorHarnessConstraints`, for orchestrator-only harness rules. Redeploy to get it
-- **Claude Code injections**: `HarnessInjections.md` v1.4.0 and `HarnessInjectionsOrchestrator.md` v1.3.0; the orchestrator rules now deploy in their own region
+- **orchestrator** (v8.3.0) and **orchestrator-script** (v3.4.0): the orchestrator carries a second harness region, `OrchestratorHarnessConstraints`, for orchestrator-only harness rules
+- **Claude Code injections**: `HarnessInjections.md` v1.4.0 and `HarnessInjectionsOrchestrator.md` v1.3.0. The orchestrator rules now deploy in their own region, and agents are told not to use heredocs or stdin scripts, overriding Claude Code's own guidance
+- **commit-manager-git** (v2.5.0) / **checkpoint-restore-git** (v2.3.0): commits and rollback reverts now leave out everything MOSAIC deploys or creates during runs: the files listed in `.mosaic/manifest.yaml`, `.mosaic/` itself and the Runner's temporary agent copies
 - **brownfield-pr-fix** (v1.1): PR scope is pinned in a new `PullRequestContext.md`, so agents can tell PR code from pre-existing code; `Requirements.md` needs only the PR ID; Tests-Only stages now write replies
-- **pull-request-comment-interface** (v2.3.0): resolves PR refs and adds participants to `pr_context`. Needs the new `pr_details_read` tool mapped, or `brownfield-pr-fix` stops at retrieval
+- **pull-request-comment-interface** (v2.3.0): resolves PR refs and adds participants to `pr_context`
 - **fix-to-pr-response** (v1.1.0): reports threads its stage plan names but the work did not fix, and sends them back for a fix
+
+## Documentation
+- New LogAnalyzer Guide: views, configuration, pricing and sharing runs
+- Getting Started: logging setup per harness and how to see what runs cost
+- Deployment Guide: the GHCP targets, the reworked `Transform harness`
+- Runner Guide: progress-screen keys, saved guidance and resuming without flags
 
 # 0.7.2 (2026-10-25)
 
