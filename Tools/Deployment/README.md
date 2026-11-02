@@ -6,7 +6,7 @@ target AI harness workspace. It handles several operations:
 - **Deploy** — create a new workspace from scratch by selecting agents, skills,
   workflows, and model assignments, then writing every file in one pass.
 - **Update** — bring an existing workspace up to date with the latest agent
-  versions, preserving locally-modified files as you choose; also refreshes
+  versions, preserving project and custom regions, models and tool choices; also refreshes
   hook bundles that are already deployed.
 - **Deploy agents** — deploy a chosen mix of subagents, utility,
   infrastructure and standalone agents and their required skills, without
@@ -145,7 +145,6 @@ need manual attention (empty injection sections, unmapped tools, hook registrati
 ./mosaic-deploy deploy \
   --harness claude-code \
   --workspace /path/to/my-project \
-  --scope project \
   --selections selections.yaml \
   --auto-confirm
 ```
@@ -171,17 +170,19 @@ The update flow updates an existing workspace to the latest agent versions. It:
 
 1. Reads the deployment manifest (written by the previous deploy/update)
 2. Computes which files are stale (version, transform_version, or an injection version changed)
-3. Identifies files that have been locally modified since deployment
+3. Identifies files it cannot confirm as its own: unparsable, or with no manifest record
 4. Shows a plan for review
-5. Applies updates, using your chosen conflict resolution strategy for modified files
+5. Applies updates, using your chosen conflict resolution strategy for those files
 
 **Conflict resolution (`--conflict`):**
 
 | Value | Behaviour |
 |-------|-----------|
-| `skip` (default) | Leave the modified file unchanged; add it to the TODO checklist |
-| `overwrite` | Replace with the latest version (local edits are lost) |
-| `backup` | Copy the local file to `<name>.backup` before overwriting |
+| `skip` (default) | Leave the file unchanged; add it to the TODO checklist |
+| `overwrite` | Replace with the latest version |
+| `backup` | Copy the file to `.mosaic/backups/<path>.<timestamp>.bak`, then overwrite |
+
+**What an update keeps.** Only project and custom regions, models and tool choices survive an update. Edits elsewhere in an agent or skill file are replaced the next time the file is rewritten, and `--conflict` does not protect them. Keep your own content in project and custom regions.
 
 **Hook refresh:** Update also refreshes hook bundles that are already deployed in
 the workspace (files of the harness's hook variant found on disk) when the Catalog
@@ -198,7 +199,7 @@ deployed; use Deploy or the deploy-hooks mode for that.
   created. Up-to-date hooks and hooks skipped in a conflict produce no registration
   TODO. The TODO is produced when the update is applied; it is not listed in the plan
   review and `--dry-run` reports none.
-- A deployed hook with no manifest record is treated as a locally-modified file:
+- A deployed hook with no manifest record is treated as a conflict:
   `--conflict skip` leaves it as is, `overwrite` and `backup` refresh it.
 - Both GHCP harnesses (`ghcp-cli` and `vscode-ghcp`) use `.github/hooks`, and
   `claude-code` uses `.claude/hooks`; Update refreshes the hook folder of the
@@ -220,7 +221,7 @@ deployed; use Deploy or the deploy-hooks mode for that.
 
 The agents flow deploys a chosen mix of subagents, utility agents, infrastructure agents, and standalone agents plus the skills they require. It never asks about workflows or hooks. Use it when you want to add or refresh agents in a workspace that already has its orchestrator and workflows configured.
 
-If an orchestrator file (`orchestrator.md`, `orchestrator-script.md`) is already present, declarations for newly deployed infrastructure agents are added to it. Existing declarations, including hand-added ones, are kept, and a re-deployed agent is refreshed in place. A locally modified orchestrator follows `--conflict`; when skipped, a TODO entry explains the manual step. No orchestrator is created when none is present, and its workflows are not changed: injecting infrastructure agents keeps the deployed workflow tables exactly as they are, and does not add the `Row` column described below.
+If an orchestrator file (`orchestrator.md`, `orchestrator-script.md`) is already present, declarations for newly deployed infrastructure agents are added to it. Existing declarations, including hand-added ones, are kept, and a re-deployed agent is refreshed in place, keeping its project and custom regions, models and tool choices. An orchestrator the tool cannot confirm as its own follows `--conflict`; when skipped, a TODO entry explains the manual step. No orchestrator is created when none is present, and its workflows are not changed: injecting infrastructure agents keeps the deployed workflow tables exactly as they are, and does not add the `Row` column described below.
 
 ### Workflow `Row` column
 
@@ -256,24 +257,9 @@ OpenCode refuses to run agents marked `mode: subagent` from the command line
 because that mode is reserved for agents spawned as child tasks by another agent.
 
 Runner deployment places the script-mode orchestrator alongside the regular
-agents in the harness's standard agents directory. Both the deploy and update
-flows support this via the `--runner` flag:
-
-```sh
-# First deploy — opt in to Runner support.
-./mosaic-deploy deploy \
-  --harness opencode \
-  --workspace /path/to/my-project \
-  --runner \
-  --selections selections.yaml \
-  --auto-confirm
-
-# Subsequent updates — auto-detected (no --runner needed).
-./mosaic-deploy update \
-  --harness opencode \
-  --workspace /path/to/my-project \
-  --auto-confirm
-```
+agents in the harness's standard agents directory. No flag is needed: every
+deploy writes it when the catalog has one, and update refreshes it when it is
+present in the workspace.
 
 **What changes:**
 
@@ -296,11 +282,6 @@ created and deleted by the Runner and is not a deployment artifact. For
 path-based harnesses (Claude Code), the Runner creates a run-scoped
 `agents-runner-{run_id}/` directory at runtime; these are also not deployment
 artifacts and are safe to delete if orphaned.
-
-**Auto-detection on update:** Once a runner-compatible workspace exists,
-the deploy tool automatically includes runner-specific files in every subsequent
-deploy and update run. No repeated `--runner` flag is needed — workspace state
-is the opt-in signal. This prevents stale runner agents when you forget the flag.
 
 **Known Runner-specific transformations:**
 
@@ -676,8 +657,9 @@ Four built-in harnesses are compiled into the binary:
 
 Use `ghcp-cli` for the terminal and for VS Code's default chat harness, and `vscode-ghcp` only for VS Code's Local harness. A workspace holds one GHCP target at a time. See [Choosing a GHCP target](../../docs/DeploymentGuide.md#choosing-a-ghcp-target).
 
-To add a harness without writing Go code, create a descriptor YAML file and
-pass it with `--harness /path/to/harness.yaml`. See [docs/descriptor-schema.md](docs/descriptor-schema.md).
+To add a harness without writing Go code, create a `harness.yaml` descriptor in a
+subfolder of `MosaicDeploy/harnesses/` and select it with `--harness <id>`. See
+[docs/descriptor-schema.md](docs/descriptor-schema.md).
 
 To build a fully custom harness, implement the external module protocol. See
 [docs/harness-contributor-guide.md](docs/harness-contributor-guide.md) and
@@ -814,10 +796,10 @@ The harness ID you specified is not recognised. Check the available harnesses:
 ./mosaic-deploy deploy --help
 ```
 
-For a custom descriptor file, pass the full path:
+For a custom descriptor under `MosaicDeploy/harnesses/`, pass its id:
 
 ```sh
-./mosaic-deploy deploy --harness /path/to/my-harness.yaml ...
+./mosaic-deploy deploy --harness my-harness ...
 ```
 
 ### Catalog stack errors
@@ -876,8 +858,10 @@ Omitting `--log-dir` preserves the existing behaviour exactly.
 
 ### TODO file
 
-After deploy or update, a `TODO.md` file is written to the workspace root.
+After deploy or update, a `MOSAIC-DEPLOYMENT-TODO-<timestamp>.md` file is written
+to the workspace root.
 It lists every item that needs manual attention: model selections that were
 skipped, unmapped tools, injection sections that need project-specific content,
 hook registration steps, and skipped files. Work through the checklist before
-using the workspace.
+using the workspace. Deploy and update also print two warnings on the console:
+orchestrator content with no region to go into, and a region a role may not carry.

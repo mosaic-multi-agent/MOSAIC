@@ -94,6 +94,16 @@ type Input struct {
 	// InfrastructureDeclarations is the caller's intent for the infrastructure declarations of
 	// orchestrator-role items. The zero value disables infrastructure drift.
 	InfrastructureDeclarations InfrastructureDeclarationIntent
+
+	// LegacyAgentPaths maps a planned agent target path to the manifest-recorded legacy path
+	// its deployed state was probed from (the recorded-legacy probe). nil: no migrating
+	// agents; classification is as before.
+	LegacyAgentPaths map[string]string
+
+	// OrchestratorRegionUndeliverable names orchestrator-role agent keys whose source has no
+	// OrchestratorHarnessConstraints marker while the harness has no orchestrator content.
+	// For these the expected orchestrator_injections_version is "". nil: compare as before.
+	OrchestratorRegionUndeliverable map[string]bool
 }
 
 // ArtifactSet is the derived deployment set: the union of referenced agents across all

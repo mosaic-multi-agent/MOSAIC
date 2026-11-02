@@ -95,6 +95,10 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 		workspace = ws
 	}
 
+	if err := requireExistingWorkspace(workspace); err != nil {
+		return domain.RunSummary{}, err
+	}
+
 	if err := s.checkGhcpTarget(harnessID, workspace); err != nil {
 		return domain.RunSummary{}, err
 	}
@@ -234,6 +238,7 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	}
 
 	applyHookPresence(workspace, deployedState, hookPlansByTargetPath(module, set.Hooks, plannedPaths, scope))
+	legacyAgentPaths := applyRecordedLegacyAgents(workspace, module, snap, plannedPaths, deployedState)
 
 	modelSelections := deployedModelSelections(set.Agents, plannedPaths, deployedState)
 
@@ -303,11 +308,13 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 		// call above, ensuring the probe map and the built plan resolve the identical artifact set.
 		ScannedAgentKeys:           scannedAgentKeys,
 		DeployedState:              deployedState,
+		LegacyAgentPaths:           legacyAgentPaths,
 		Models:                     allModels,
 		ToolMappingsVersion:        toolMappingsVersion,
 		ProtocolVersion:            protocol.Version,
 		BundleVersion:              bundle.Version,
 		InfrastructureDeclarations: refreshIntent(),
+		OrchestratorRegionUndeliverable: orchestratorRegionUndeliverable(s.deps.Catalog, module, set.Agents),
 	}
 	p, err := s.deps.Planner.Build(ctx, planInput)
 	if err != nil {
@@ -365,7 +372,7 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	if rerr != nil {
 		return domain.RunSummary{}, rerr
 	}
-	if !req.AutoConfirmPlan && (ans.Status == domain.Cancelled || !ans.Confirm) {
+	if !req.AutoConfirmPlan && !req.DryRun && (ans.Status == domain.Cancelled || !ans.Confirm) {
 		return domain.RunSummary{ConflictReport: report}, ErrPlanNotConfirmed
 	}
 
@@ -376,9 +383,7 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	hookPlans := buildHookPlans(module, writtenHooks, scope)
 
 	workflowBlocks := s.buildWorkflowBlocks(workflowIDs)
-	deployedReader := func(item domain.PlanItem) []byte {
-		return readDeployedFile(workspace, item.TargetPath)
-	}
+	deployedReader := newDeployedBytes(workspace, nil).withMigratedAgents(p).reader()
 	// Update never asks about or adds infrastructure declarations; it refreshes stale
 	// catalog-backed ones in place (refresh-only merge), leaving all others byte-identical.
 	contentFn := s.buildContent(module, agentByKey, allModels, req.CustomTools, nil, workflowBlocks, nil, scope, deployedReader, toolMappingsVersion, protocol, bundle, harnessOnlyPlan, orchRefresh.refreshContentOptions(s)...)
@@ -389,7 +394,7 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	execReq := deploy.ExecRequest{
 		Plan:          p,
 		MosaicRoot:    s.deps.MosaicRoot,
-		Content:       contentFn,
+		Content:       newDeployedBytes(workspace, nil).withMigratedAgents(p).keepingUnchangedMigrations(p, contentFn),
 		Conflicts:     conflicts,
 		VersionStamps: versionStamps,
 		ManifestMeta:  s.fullRunManifestMeta(),
@@ -440,5 +445,5 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 		s.notifyPersistFailure(ctx, err)
 	}
 
-	return withConflictReport(s.buildSummary(domain.ModeUpdateWorkspace, harnessRef, workspace, result), report), nil
+	return withDryRunPlan(withConflictReport(s.buildSummary(domain.ModeUpdateWorkspace, harnessRef, workspace, result), report), req.DryRun, p), nil
 }

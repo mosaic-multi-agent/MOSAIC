@@ -39,6 +39,9 @@ func renderJSON(out io.Writer, summary domain.RunSummary) {
 // renderHuman writes a human-readable one-paragraph summary of the run to out.
 // The output always includes the workspace path and an outcome word (success / fail / skip).
 func renderHuman(out io.Writer, summary domain.RunSummary) {
+	if writeDryRunReport(out, summary) {
+		return
+	}
 	switch summary.Outcome {
 	case domain.OutcomeSuccess:
 		fmt.Fprintf(out, "success: deployment complete\nworkspace: %s\n", summary.WorkspacePath)
@@ -50,6 +53,7 @@ func renderHuman(out io.Writer, summary domain.RunSummary) {
 		fmt.Fprintf(out, "outcome: %s\nworkspace: %s\n", string(summary.Outcome), summary.WorkspacePath)
 	}
 	writeFormatChanges(out, summary)
+	writeRegionWarnings(out, summary)
 }
 
 // writeFormatChanges lists each rewritten file whose BOM or line-ending style changed.
@@ -119,6 +123,9 @@ func renderAgentsOutput(out, errOut io.Writer, format string, dryRun bool, summa
 
 // renderAgentsHuman writes a human-readable summary of a deploy-agents run.
 func renderAgentsHuman(out io.Writer, dryRun bool, summary domain.RunSummary) {
+	if writeDryRunReport(out, summary) {
+		return
+	}
 	prefix := ""
 	if dryRun {
 		prefix = "dry run: "
@@ -154,6 +161,9 @@ func renderHooksOutput(out, errOut io.Writer, format string, dryRun bool, summar
 
 // renderHooksHuman writes a human-readable summary of a deploy-hooks run.
 func renderHooksHuman(out io.Writer, dryRun bool, summary domain.RunSummary) {
+	if writeDryRunReport(out, summary) {
+		return
+	}
 	prefix := ""
 	if dryRun {
 		prefix = "dry run: "

@@ -436,8 +436,9 @@ func applyFrontmatter(
 		if res.Outcome == domain.ToolUnmapped || res.Outcome == domain.ToolSkipped {
 			gaps = append(gaps, domain.Gap{
 				Kind:    domain.GapUnmappedTool,
-				Subject: req.Key,
-				Detail:  "unmapped tool: " + res.Generic,
+				Subject: res.Generic,
+				Owner:   req.Key,
+				Detail:  "unmapped tool: " + res.Generic + " for agent " + req.Key,
 			})
 		}
 	}

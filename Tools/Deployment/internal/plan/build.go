@@ -65,7 +65,7 @@ func (p *planner) Build(ctx context.Context, in Input) (domain.Plan, error) {
 		deployed := in.DeployedState[targetPath]
 
 		// Classify before evaluating gaps: the GapNoModel emission rule depends on the action.
-		item := classifyAgentItem(agent, targetPath, model, manifestUsable, in.Manifest.Manifest, deployed, desc, selectedWorkflows, in.ToolMappingsVersion, in.ProtocolVersion, in.BundleVersion, infrastructureInput{Catalog: in.Catalog, Intent: in.InfrastructureDeclarations}, supplierOf(in.Catalog))
+		item := classifyAgentItemLegacyAware(in.LegacyAgentPaths[targetPath], agent, targetPath, model, manifestUsable, in.Manifest.Manifest, deployed, descriptorForAgent(desc, agent, in.OrchestratorRegionUndeliverable), selectedWorkflows, in.ToolMappingsVersion, in.ProtocolVersion, in.BundleVersion, infrastructureInput{Catalog: in.Catalog, Intent: in.InfrastructureDeclarations}, supplierOf(in.Catalog))
 		items = append(items, item)
 
 		// Surface a GapNoModel gap only when the file write that would occur requires a model
@@ -112,6 +112,7 @@ func (p *planner) Build(ctx context.Context, in Input) (domain.Plan, error) {
 						gaps = append(gaps, domain.Gap{
 							Kind:    domain.GapUnmappedTool,
 							Subject: res.Generic,
+							Owner:   agent.Key,
 							Detail: fmt.Sprintf("generic tool %q has no harness mapping for agent %q; add a tool_destinations entry in tool-config.yaml (project scope) or user-config.yaml (user scope) for a durable fix — manually editing the deployed agent file does not persist", res.Generic, agent.Key),
 						})
 					}

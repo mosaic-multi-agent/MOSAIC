@@ -61,6 +61,9 @@ func migrateLegacyGhcpAgents(p *domain.Plan, snap manifest.Snapshot) {
 // is removed, so the agent must not be skipped as unchanged or decided as a conflict. An
 // existing X.agent.md is replaced after backup.
 func forceAgentWrite(item *domain.PlanItem, exists bool) {
+	if item.RenamedFrom != "" {
+		return // the planner already planned the rename as an update and gave its reason
+	}
 	if item.Action == domain.ActionCreate || (item.Action == domain.ActionUpdate && exists) {
 		return
 	}

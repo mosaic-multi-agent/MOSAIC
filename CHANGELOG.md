@@ -8,12 +8,21 @@
 #### Bugfixes
 - Text entry screens no longer break when the text is wider than the screen or is pasted
 
-### Deploy v1.5.0
+### Deploy v1.5.1
 #### Changes
 - Orchestrators are deployed with two harness regions: `HarnessConstraints` (from `HarnessInjections.md`) and `OrchestratorHarnessConstraints` (from `HarnessInjectionsOrchestrator.md`). Subagents keep one. Each region carries the version of its own injection file
 - The descriptor field `injections_version` is removed. A descriptor that still declares it loads and the value is ignored; injection versions come only from the frontmatter `version` of the injection files
 #### Bugfixes
 - A present injection file without a `version` now fails loading instead of deploying an unversioned region
+- Moving GHCP agents from `.github/agents/X.md` to `X.agent.md` (in `update`, `workflows`, `agents` and `deploy`) now keeps their project and custom regions, model, tool choices, infrastructure declarations and workflow set, and no longer reports them as new
+- Re-running `deploy` or `agents` over an out-of-date agent no longer loses its project and custom regions and tool choices. `agents` keeps the deployed model unless one is given; `deploy` keeps the deployed model when none is given and keeps infrastructure declarations when no infrastructure is selected
+- Unknown flags and other usage errors now print the error and exit 3 instead of failing silently
+- `workflows` now gives a deployed `orchestrator-script` the same workflow set as `orchestrator`
+- The help for `--conflict` now says it covers files the tool cannot confirm as its own, not only locally modified files
+- `--dry-run` shows the plan on every write command and no longer needs `--auto-confirm`
+- `update` and `workflows` now refuse a workspace path that does not exist instead of creating it
+- An unknown hook id now fails with exit 1, like other unknown ids
+- The TODO file now lists each missing model and each unmapped tool once per agent
 
 ### Deploy v1.4.0
 #### Changes

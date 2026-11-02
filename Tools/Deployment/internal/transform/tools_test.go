@@ -376,7 +376,8 @@ func findGapByKind(gaps []domain.Gap, kind domain.GapKind) *domain.Gap {
 // findGapNaming returns the first Gap whose Subject or Detail contains name, or nil.
 func findGapNaming(gaps []domain.Gap, name string) *domain.Gap {
 	for i := range gaps {
-		if strings.Contains(gaps[i].Subject, name) || strings.Contains(gaps[i].Detail, name) {
+		if strings.Contains(gaps[i].Subject, name) || strings.Contains(gaps[i].Detail, name) ||
+			strings.Contains(gaps[i].Owner, name) {
 			return &gaps[i]
 		}
 	}

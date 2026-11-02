@@ -80,6 +80,11 @@ type PlanItem struct {
 	// The executor copies this into ActionRecord.SourceVersion so the version is
 	// visible in the deploy --output json wire contract.
 	SourceVersion string
+
+	// RenamedFrom is the workspace-relative path of the manifest-recorded legacy file this
+	// item replaces (GHCP X.md -> X.agent.md) when the target path is absent and the agent's
+	// deployed state was read from that file. Empty for every other item.
+	RenamedFrom string
 }
 
 // Plan is the complete, pre-computed description of what a deployment run will do.

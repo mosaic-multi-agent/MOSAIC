@@ -207,45 +207,8 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 		}
 	}
 
-	// Model resolution — first batch: non-infrastructure agents.
-	// agentSkipOverride=false allows QAgentModel for ordinary subagents, utility agents, and
-	// standalone agents when their tier model is unresolved, matching the behavior available
-	// to infrastructure agents in the second batch.
-	orderedFirstBatch := s.orderedAgentsForModelResolution(nil, nonInfraProbeAgents)
-	modelRes, err := s.resolveModels(ctx, req.TierModels, req.AgentModels, req.SkipAll, harnessID, module, orderedFirstBatch, nil, false, false)
-	if err != nil {
-		return domain.RunSummary{}, err
-	}
-
-	// Model resolution — second batch: infrastructure agents.
-	// agentSkipOverride=false so QAgentModel is available for infra agents regardless of the
-	// first batch's agentSkippedAll state (which reflects whatever the first batch's users chose;
-	// each batch's QAgentModel availability is independent).
-	var infraModelRes modelResolution
-	if len(infraAgents) > 0 {
-		infraModelRes, err = s.resolveModels(
-			ctx,
-			modelRes.tierModelsUsed,
-			req.AgentModels,
-			req.SkipAll,
-			harnessID,
-			module,
-			infraAgents,
-			modelRes.accumulatedOptions,
-			modelRes.tierSkippedAll,
-			false, // infra agents always have QAgentModel available; not suppressed by first batch
-		)
-		if err != nil {
-			return domain.RunSummary{}, err
-		}
-		// Merge second-batch models into the combined map.
-		for k, v := range infraModelRes.models {
-			modelRes.models[k] = v
-		}
-	}
-
-	customTools, skippedTools := s.resolveCustomTools(ctx, req.CustomTools, req.SkipAll, module, orch.withoutOrchestrators(probeSet.Agents))
-
+	// Probe the deployed state before any model question: an agent deployed from a recorded
+	// legacy file is asked for no model, and a tier only such agents use is not asked.
 	snap, _ := s.deps.Manifest.Load(workspace)
 
 	agentsDir := module.Descriptor().Paths.Agents.Project
@@ -267,6 +230,61 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
+	legacyAgentPaths := applyRecordedLegacyAgents(workspace, module, snap, plannedPaths, deployedState)
+	askAgents, migratingAgents := splitMigratingAgents(nonInfraProbeAgents, plannedPaths, legacyAgentPaths)
+	askInfraAgents, migratingInfra := splitMigratingAgents(infraAgents, plannedPaths, legacyAgentPaths)
+
+	// Model resolution — first batch: non-infrastructure agents.
+	// agentSkipOverride=false allows QAgentModel for ordinary subagents, utility agents, and
+	// standalone agents when their tier model is unresolved, matching the behavior available
+	// to infrastructure agents in the second batch.
+	orderedFirstBatch := s.orderedAgentsForModelResolution(nil, askAgents)
+	modelRes, err := s.resolveModels(ctx, req.TierModels, req.AgentModels, req.SkipAll, harnessID, module, orderedFirstBatch, nil, false, false)
+	if err != nil {
+		return domain.RunSummary{}, err
+	}
+
+	// Model resolution — second batch: infrastructure agents.
+	// agentSkipOverride=false so QAgentModel is available for infra agents regardless of the
+	// first batch's agentSkippedAll state (which reflects whatever the first batch's users chose;
+	// each batch's QAgentModel availability is independent).
+	var infraModelRes modelResolution
+	if len(askInfraAgents) > 0 {
+		infraModelRes, err = s.resolveModels(
+			ctx,
+			modelRes.tierModelsUsed,
+			req.AgentModels,
+			req.SkipAll,
+			harnessID,
+			module,
+			askInfraAgents,
+			modelRes.accumulatedOptions,
+			modelRes.tierSkippedAll,
+			false, // infra agents always have QAgentModel available; not suppressed by first batch
+		)
+		if err != nil {
+			return domain.RunSummary{}, err
+		}
+		// Merge second-batch models into the combined map.
+		for k, v := range infraModelRes.models {
+			modelRes.models[k] = v
+		}
+	}
+
+	// Migrating agents are not asked: the run's supplied model applies, else the legacy file's.
+	suppliedTiers := modelRes.tierModelsUsed
+	if len(askInfraAgents) > 0 {
+		suppliedTiers = infraModelRes.tierModelsUsed
+	}
+	resolveMigratingModels(modelRes.models, append(migratingAgents, migratingInfra...), module, req.AgentModels, suppliedTiers)
+
+	customTools, skippedTools := s.resolveCustomTools(ctx, req.CustomTools, req.SkipAll, module, orch.withoutOrchestrators(probeSet.Agents))
+
+	// A rewritten agent keeps its deployed model unless this run resolved one for it.
+	keepDeployedModels(modelRes.models,
+		suppliedTierModels(req.TierModels, modelRes.interactivelyResolvedTiers, infraModelRes.interactivelyResolvedTiers),
+		false,
+		probeSet.Agents, plannedPaths, deployedState)
 
 	toolCfg, _ := s.deps.ToolConfig.Load()
 	userCfg, err := s.deps.UserConfig.Load()
@@ -295,6 +313,7 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 		HookIDs:                nil,
 		Models:                 orch.withDeployedModels(modelRes.models),
 		DeployedState:          deployedState,
+		LegacyAgentPaths:       legacyAgentPaths,
 		ToolMappingsVersion:    toolMappingsVersion,
 		ProtocolVersion:        protocol.Version,
 		BundleVersion:          bundle.Version,
@@ -353,7 +372,7 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 	if rerr != nil {
 		return domain.RunSummary{}, rerr
 	}
-	if !req.AutoConfirmPlan && (ans.Status == domain.Cancelled || !ans.Confirm) {
+	if !req.AutoConfirmPlan && !req.DryRun && (ans.Status == domain.Cancelled || !ans.Confirm) {
 		return domain.RunSummary{ConflictReport: report}, ErrPlanNotConfirmed
 	}
 
@@ -369,13 +388,13 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 	// No catalog workflow blocks: orchestrator files keep their deployed workflows, and only
 	// their infrastructure declarations are merged (see orch.contentOptions).
 	models := orch.withDeployedModels(modelRes.models)
-	contentFn := s.buildContent(module, agentByKey, models, customTools, skippedTools, nil, nil, scope, orch.deployedReaderFor(workspace), toolMappingsVersion, protocol, bundle, nil, orch.contentOptions(s)...)
+	contentFn := s.buildContent(module, agentByKey, models, customTools, skippedTools, nil, nil, scope, newDeployedBytes(workspace, orch.readPaths()).withMigratedAgents(p).reader(), toolMappingsVersion, protocol, bundle, nil, orch.contentOptions(s)...)
 
 	now := s.now()
 	execReq := deploy.ExecRequest{
 		Plan:          p,
 		MosaicRoot:    s.deps.MosaicRoot,
-		Content:       contentFn,
+		Content:       newDeployedBytes(workspace, nil).withMigratedAgents(p).keepingUnchangedMigrations(p, contentFn),
 		Conflicts:     conflicts,
 		VersionStamps: s.withProvenance(buildVersionStamps(append(probeSet.Agents, infraAgents...), probeSet.Skills, nil, p.Items, module.Descriptor(), toolMappingsVersion), p.Items),
 		Hooks:         nil,
@@ -410,5 +429,5 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 		s.notifyPersistFailure(ctx, err)
 	}
 
-	return withConflictReport(s.buildSummary(domain.ModeDeployAgents, harnessRef, workspace, result), report), nil
+	return withDryRunPlan(withConflictReport(s.buildSummary(domain.ModeDeployAgents, harnessRef, workspace, result), report), req.DryRun, p), nil
 }

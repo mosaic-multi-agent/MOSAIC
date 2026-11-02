@@ -233,7 +233,7 @@ func ResolveArtifactsFrom(c catalog.Catalog, sel Selection) (ArtifactSet, error)
 		}
 		hook, ok := c.Hook(hookKey)
 		if !ok {
-			continue
+			return ArtifactSet{}, &UnknownHookError{HookID: hookKey, Searched: searchedCatalogs(c)}
 		}
 		hooksSeen[hookKey] = true
 		hooks = append(hooks, hook)

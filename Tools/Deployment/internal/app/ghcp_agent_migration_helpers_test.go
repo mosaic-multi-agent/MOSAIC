@@ -110,7 +110,7 @@ func gamFlows() []gamFlow {
 		},
 		{
 			name: "UpdateWorkflows", subject: "orchestrator",
-			migrates: []string{"orchestrator"},
+			migrates: []string{"orchestrator", "orchestrator-script"},
 			keeps:    []string{"parity-runner", "parity-helper"},
 			run: func(t *testing.T, ws, h string, o gamOpts) error {
 				sum, err := parityServiceWith(t, o.deps...).UpdateWorkflows(ctx, app.WorkflowUpdateRequest{

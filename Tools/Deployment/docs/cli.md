@@ -6,7 +6,7 @@ The `mosaic-deploy` tool provides two modes: an interactive TUI (when no subcomm
 
 Multi-valued selections — workflows, utility agents, hooks, and per-tier model mappings — are expressed via a **YAML selections file** supplied with `--selections <path>` rather than as repeated flags.
 
-**Rationale:** Repeated flags grow unmanageable for batch multi-workspace scripting. A selections file is stable, shareable, and version-controllable: a team can commit one canonical `selections.yaml` per project and pass it to every invocation. Repeated flags, by contrast, produce long and fragile shell one-liners. Single-valued flags (`--harness`, `--workspace`, `--scope`) remain as flags for ergonomics on one-off invocations.
+**Rationale:** Repeated flags grow unmanageable for batch multi-workspace scripting. A selections file is stable, shareable, and version-controllable: a team can commit one canonical `selections.yaml` per project and pass it to every invocation. Repeated flags, by contrast, produce long and fragile shell one-liners. Single-valued flags (`--harness`, `--workspace`) remain as flags for ergonomics on one-off invocations.
 
 ---
 
@@ -72,7 +72,7 @@ When a layer shadows an item of a lower layer, the run reports it:
 
 ## `deploy` subcommand
 
-Deploy MOSAIC agents and skills into a new workspace.
+Deploy MOSAIC agents and skills into a new workspace, or re-deploy into an existing one.
 
 ```
 mosaic-deploy deploy [flags]
@@ -84,7 +84,7 @@ mosaic-deploy deploy [flags]
 |------|------|---------|-------------|
 | `--harness <id>` | string | — | Harness ID to deploy (e.g. `claude-code`) |
 | `--workspace <path>` | string | — | Absolute path to the target workspace |
-| `--scope <project\|user>` | string | `project` | Deployment scope |
+| `--conflict <skip\|overwrite\|backup>` | string | — | How to handle files the tool cannot confirm as its own |
 | `--selections <path>` | string | — | Path to a YAML selections file |
 | `--workflows <ids>` | string | — | Comma-separated workflow IDs; absent = use selections file; empty string = explicitly none |
 | `--infrastructure <ids>` | string | — | Comma-separated infrastructure agent IDs; absent = ask interactively; empty string = explicitly none |
@@ -113,6 +113,8 @@ Unknown keys in the selections file are silently ignored (forward-compatible).
 
 For `ghcp-cli` and `vscode-ghcp`, deploy refuses a workspace that already holds the other GHCP target and points to `transform`; both write agents as `X.agent.md` and migrate agents recorded as `X.md` (see "One GHCP target per workspace" and "GHCP agent file names" under `transform`).
 
+Re-running `deploy` on an existing workspace rewrites stale agents and keeps their project and custom regions and tool choices. A model the run supplies replaces the deployed one; otherwise the deployed model is kept. The selected workflows replace the deployed set. With no infrastructure selection, existing declarations are kept.
+
 ---
 
 ## `update` subcommand
@@ -129,15 +131,19 @@ mosaic-deploy update [flags]
 |------|------|---------|-------------|
 | `--harness <id>` | string | — | Harness ID |
 | `--workspace <path>` | string | — | Absolute path to the existing workspace |
-| `--conflict <skip\|overwrite\|backup>` | string | `skip` | How to handle locally-modified files |
+| `--conflict <skip\|overwrite\|backup>` | string | `skip` | How to handle files the tool cannot confirm as its own |
 | `--output <json>` | string | — | Machine-readable output format |
 | `--dry-run` | bool | false | Plan without writing any files |
 | `--auto-confirm` | bool | false | Skip plan review |
 
-The `--conflict` flag controls what happens when a file in the workspace has been locally modified since the last deployment:
+`--workspace` must exist; a missing path is an error and nothing is written.
+
+The `--conflict` flag controls what happens when the tool cannot confirm a file as its own: it cannot be parsed, or it has no manifest record:
 - `skip` (default): leave the file unchanged and record a TODO item
-- `overwrite`: replace the file with the latest version (local edits are lost)
-- `backup`: copy the local file to `<name>.backup` before overwriting
+- `overwrite`: replace the file with the latest version
+- `backup`: copy the file to `.mosaic/backups/<path>.<timestamp>.bak`, then overwrite
+
+**What an update keeps.** Only project and custom regions, models and tool choices survive an update. Edits elsewhere in an agent or skill file are replaced the next time the file is rewritten, and `--conflict` does not protect them. Keep your own content in project and custom regions.
 
 ### Orchestrator declaration refresh
 
@@ -149,7 +155,7 @@ Update also refreshes hook bundles that are already deployed in the workspace (f
 
 - Refreshed hook files are overwritten with the Catalog version (local edits are lost); files the new version no longer has are left in place.
 - An existing registration target (e.g. `.claude/settings.json`, `.github/hooks/mosaic-logger.json`) is never modified; a TODO with the registration fragment is reported for every refreshed hook whose target exists, whether or not the fragment changed. A missing target is created. The TODO is emitted when the update is applied, so the plan review and `--dry-run` show none. Up-to-date hooks and hooks skipped in a conflict produce no registration TODO.
-- A deployed hook with no manifest record is treated as locally modified: `--conflict skip` (default) leaves it as is; `overwrite` and `backup` refresh it.
+- A deployed hook with no manifest record is treated as a conflict: `--conflict skip` (default) leaves it as is; `overwrite` and `backup` refresh it.
 - Both GHCP harnesses keep hooks in `.github/hooks/`, and `claude-code` in `.claude/hooks/`; Update refreshes the hook folder of the harness it runs for.
 
 ### GHCP workspaces
@@ -294,7 +300,7 @@ Use `agents` when you want to add or refresh individual agents in an existing wo
 | `--utility <ids>` | string | — | Comma-separated utility agent IDs; absent = ask; empty = none |
 | `--infra <ids>` | string | — | Comma-separated infrastructure agent IDs; absent = ask; empty = none |
 | `--standalone <ids>` | string | — | Comma-separated standalone agent IDs; absent = ask; empty = none |
-| `--conflict <skip\|overwrite\|backup>` | string | — | Default decision for locally-modified files |
+| `--conflict <skip\|overwrite\|backup>` | string | — | Default decision for files the tool cannot confirm as its own |
 | `--output <json>` | string | — | Machine-readable output format |
 | `--dry-run` | bool | false | Compute and report without writing any file |
 | `--yes` | bool | false | Auto-confirm the deployment plan without prompting |
@@ -307,7 +313,7 @@ If any of the four per-class flags (`--subagents`, `--utility`, `--infra`, `--st
 
 ### Orchestrator declarations
 
-If an orchestrator file (`orchestrator.md`, `orchestrator-script.md`) is already present in the workspace, declarations for the newly deployed infrastructure agents are added to it. Existing declarations, including hand-added ones, are kept, and a re-deployed agent is refreshed in place. No extra question is asked. A locally modified orchestrator follows `--conflict`; when it is skipped, a TODO entry explains the manual step. No orchestrator is created when none is present, and the workflows in the orchestrator are not changed.
+If an orchestrator file (`orchestrator.md`, `orchestrator-script.md`) is already present in the workspace, declarations for the newly deployed infrastructure agents are added to it. Existing declarations, including hand-added ones, are kept, and a re-deployed agent is refreshed in place, keeping its project and custom regions, models and tool choices. No extra question is asked. An orchestrator the tool cannot confirm as its own follows `--conflict`; when it is skipped, a TODO entry explains the manual step. No orchestrator is created when none is present, and the workflows in the orchestrator are not changed.
 
 ### Exit codes
 
@@ -394,7 +400,7 @@ Exit code: `0` when every layer is clean (a missing index counts as clean), `2` 
 | 0 | success | All items deployed successfully |
 | 1 | failure | An unrecoverable error occurred |
 | 2 | completed-with-skips | Run completed but some items were skipped; see TODO file |
-| 3 | usage | Invalid arguments or unrecognised subcommand |
+| 3 | usage | Invalid arguments or unrecognised subcommand; the error is printed to stderr |
 
 With `deploy --strict-models`, an agent left without a resolved model fails the run with exit 1 and the stderr line `error: strict models: N agent(s) have no resolved model: <key> (tier <tier>), ...` (`<none>` when the agent declares no tier). Under `--output json` stdout then holds one failure document instead of a `RunSummary`:
 

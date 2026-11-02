@@ -52,6 +52,10 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 		workspace = ws
 	}
 
+	if err := requireExistingWorkspace(workspace); err != nil {
+		return domain.RunSummary{}, err
+	}
+
 	if err := s.checkGhcpTarget(harnessID, workspace); err != nil {
 		return domain.RunSummary{}, err
 	}
@@ -151,9 +155,16 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 
 	// Seed the full probe with the orchestrator state already probed above so the orchestrator
 	// file is read exactly once per run.
+	script := s.probeWorkflowScript(module, workspace, scope, snap)
 	var seed map[string]domain.DeployedArtifactState
-	if orchTargetPath != "" {
-		seed = map[string]domain.DeployedArtifactState{orchTargetPath: orchState}
+	if orchTargetPath != "" || script.targetPath != "" {
+		seed = make(map[string]domain.DeployedArtifactState)
+		if orchTargetPath != "" {
+			seed[orchTargetPath] = orchState
+		}
+		if script.targetPath != "" {
+			seed[script.targetPath] = script.state
+		}
 	}
 
 	// Build the agent-by-key map for id-based probe resolution.
@@ -166,7 +177,7 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
-	applyRecordedLegacyState(workspace, module, snap, plannedPaths, deployedState)
+	legacyAgentPaths := applyRecordedLegacyAgents(workspace, module, snap, plannedPaths, deployedState)
 
 	// Detect agents required by the selected workflows that have no file in the workspace.
 	// These are the agents this run will deploy for the first time.
@@ -205,6 +216,9 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	if orchState.ModelID != "" {
 		models[orchestrator.Key] = domain.ModelSelection{ModelID: orchState.ModelID, Origin: domain.OriginDeployed}
 	}
+	if script.deployed() && script.state.ModelID != "" {
+		models[script.agent.Key] = domain.ModelSelection{ModelID: script.state.ModelID, Origin: domain.OriginDeployed}
+	}
 	for k, v := range newAgentModelRes.models {
 		models[k] = v
 	}
@@ -224,10 +238,13 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 		WorkspacePath: workspace, Scope: scope, GOOS: s.deps.GOOS,
 		Manifest: snap, WorkflowIDs: workflowIDs,
 		DeployedState:       deployedState,
+		LegacyAgentPaths:    legacyAgentPaths,
 		Models:              models,
 		ToolMappingsVersion: toolMappingsVersion,
 		ProtocolVersion:     protocol.Version,
 		BundleVersion:       bundle.Version,
+
+		OrchestratorRegionUndeliverable: orchestratorRegionUndeliverable(s.deps.Catalog, module, append([]domain.Agent{script.agent}, set.Agents...)),
 	}
 	p, err := s.deps.Planner.Build(ctx, planInput)
 	if err != nil {
@@ -250,11 +267,12 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	// Registrations relate to hook artifacts and remain unconditionally cleared.
 	filteredItems := make([]domain.PlanItem, 0, len(p.Items))
 	for _, item := range p.Items {
-		if admitWorkflowUpdateItem(item, orchestrator.Key, newAgentKeys, newSkillKeys) {
+		if admitWorkflowUpdateItem(item, orchestrator.Key, newAgentKeys, newSkillKeys) || script.admits(item) {
 			filteredItems = append(filteredItems, item)
 		}
 	}
 	p.Items = filteredItems
+	p.Gaps = script.dropAbsentGaps(p.Gaps)
 	p.Registrations = nil
 	migrateLegacyGhcpAgents(&p, snap)
 
@@ -295,14 +313,14 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 		}
 	}
 
-	report := s.conflictReportFor(module.Ref().ID, workflowIDs, unionPreserveOrder(orchState.Workflows.IDs(), s.deployedWorkflowIDs(module, workspace, scope, false)), req.AutoConfirmPlan)
+	report := s.conflictReportFor(module.Ref().ID, workflowIDs, unionPreserveOrder(unionPreserveOrder(orchState.Workflows.IDs(), script.state.Workflows.IDs()), s.deployedWorkflowIDs(module, workspace, scope, false)), req.AutoConfirmPlan)
 	// Review is always shown; AutoConfirmPlan only controls whether a decline/cancel aborts the run.
 	p.ConflictReport = report
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {
 		return domain.RunSummary{}, rerr
 	}
-	if !req.AutoConfirmPlan && (ans.Status == domain.Cancelled || !ans.Confirm) {
+	if !req.AutoConfirmPlan && !req.DryRun && (ans.Status == domain.Cancelled || !ans.Confirm) {
 		return domain.RunSummary{ConflictReport: report}, ErrPlanNotConfirmed
 	}
 
@@ -312,9 +330,7 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	}
 
 	workflowBlocks := s.buildWorkflowBlocks(workflowIDs)
-	deployedReader := func(item domain.PlanItem) []byte {
-		return readDeployedFile(workspace, item.TargetPath)
-	}
+	deployedReader := newDeployedBytes(workspace, nil).withMigratedAgents(p).reader()
 	// Custom tools resolved above for new agents; already-deployed agents are never in the
 	// input to resolveCustomTools so no already-deployed agent can trigger a tool question.
 	contentFn := s.buildContent(module, agentByKey, models, customTools, skippedTools, workflowBlocks, nil, scope, deployedReader, toolMappingsVersion, protocol, bundle, nil)
@@ -328,7 +344,7 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	execReq := deploy.ExecRequest{
 		Plan:          p,
 		MosaicRoot:    s.deps.MosaicRoot,
-		Content:       contentFn,
+		Content:       newDeployedBytes(workspace, nil).withMigratedAgents(p).keepingUnchangedMigrations(p, contentFn),
 		Conflicts:     conflicts,
 		VersionStamps: versionStamps,
 		Hooks:         nil, // no hook artifacts written in this mode
@@ -384,5 +400,5 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 		}
 	}
 
-	return withConflictReport(s.buildSummary(domain.ModeUpdateWorkflows, harnessRef, workspace, result), report), nil
+	return withDryRunPlan(withConflictReport(s.buildSummary(domain.ModeUpdateWorkflows, harnessRef, workspace, result), report), req.DryRun, p), nil
 }

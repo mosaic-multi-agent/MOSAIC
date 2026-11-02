@@ -30,6 +30,10 @@ type Request struct {
 	// deployed region. Zero value keeps the existing replace/preserve/clear behaviour.
 	InfrastructureMerge InfrastructureMergeMode
 
+	// ClearInfrastructureAgents makes an empty InfrastructureAgents list clear the region even when
+	// deployed bytes exist, instead of keeping the deployed declarations.
+	ClearInfrastructureAgents bool
+
 	// PreserveDeployedWorkflows lifts the deployed AvailableWorkflows region when Workflows is empty.
 	PreserveDeployedWorkflows bool
 	// ToolMappingsVersion is the hash of the effective tool-destination mapping set for this

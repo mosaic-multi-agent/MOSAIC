@@ -106,4 +106,8 @@ type TodoItem struct {
 	Owner    string
 	Detail   string
 	Fragment string
+
+	// Kind is the gap kind the item came from (set by Collector.AddGap); empty for items added
+	// with Collector.Add. Not serialised: RunSummary JSON and the TODO file are unchanged.
+	Kind GapKind `json:"-"`
 }

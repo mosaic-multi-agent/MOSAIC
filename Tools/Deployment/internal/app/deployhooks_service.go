@@ -179,7 +179,7 @@ func deployHooks(ctx context.Context, s *service, req DeployHooksRequest) (domai
 	if rerr != nil {
 		return domain.RunSummary{}, rerr
 	}
-	if !req.AutoConfirmPlan && (ans.Status == domain.Cancelled || !ans.Confirm) {
+	if !req.AutoConfirmPlan && !req.DryRun && (ans.Status == domain.Cancelled || !ans.Confirm) {
 		return domain.RunSummary{ConflictReport: report}, ErrPlanNotConfirmed
 	}
 
@@ -213,5 +213,5 @@ func deployHooks(ctx context.Context, s *service, req DeployHooksRequest) (domai
 		return domain.RunSummary{}, err
 	}
 
-	return withConflictReport(s.buildSummary(domain.ModeDeployHooks, harnessRef, workspace, result), report), nil
+	return withDryRunPlan(withConflictReport(s.buildSummary(domain.ModeDeployHooks, harnessRef, workspace, result), report), req.DryRun, p), nil
 }

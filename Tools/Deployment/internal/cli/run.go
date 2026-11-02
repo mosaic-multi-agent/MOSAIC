@@ -44,7 +44,7 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 		SilenceUsage:  true,
 		// RunE on root handles the case where no subcommand is provided.
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return fmt.Errorf("a subcommand is required: deploy, update, or workflows")
+			return fmt.Errorf("a subcommand is required: agents, check-index, deploy, hooks, promote, render, transform, update, workflows")
 		},
 	}
 	// Redirect cobra's own output (help, usage, errors) to errOut so it does not
@@ -163,7 +163,7 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 	deployCmd.Flags().StringVar(&deployWorkspace, "workspace", "", "Workspace path")
 	deployCmd.Flags().StringVar(&deploySelections, "selections", "", "Path to selections YAML file")
 	deployCmd.Flags().StringVar(&deployOutput, "output", "", "Output format (json)")
-	deployCmd.Flags().StringVar(&deployConflict, "conflict", "", "How to handle locally-modified files (skip|overwrite|backup)")
+	deployCmd.Flags().StringVar(&deployConflict, "conflict", "", "How to handle files the tool cannot confirm as its own (skip|overwrite|backup)")
 	deployCmd.Flags().StringVar(&deployWorkflowsStr, "workflows", "", "Comma-separated workflow ids; absent = not specified (nil), empty string = explicitly none")
 	deployCmd.Flags().StringVar(&deployInfrastructureStr, "infrastructure", "", "Comma-separated infrastructure agent ids; absent = ask interactively, empty = explicitly none")
 	deployCmd.Flags().BoolVar(&deployDryRun, "dry-run", false, "Dry run mode; no files are written")
@@ -225,7 +225,7 @@ hand-added declarations are never touched.`,
 
 	updateCmd.Flags().StringVar(&updateHarness, "harness", "", "Harness ID")
 	updateCmd.Flags().StringVar(&updateWorkspace, "workspace", "", "Workspace path")
-	updateCmd.Flags().StringVar(&updateConflict, "conflict", "", "How to handle locally-modified files (skip|overwrite|backup)")
+	updateCmd.Flags().StringVar(&updateConflict, "conflict", "", "How to handle files the tool cannot confirm as its own (skip|overwrite|backup)")
 	updateCmd.Flags().StringVar(&updateOutput, "output", "", "Output format (json)")
 	updateCmd.Flags().BoolVar(&updateDryRun, "dry-run", false, "Dry run mode; no files are written")
 	updateCmd.Flags().BoolVar(&updateAutoConfirm, "auto-confirm", false, "Auto-confirm the deployment plan without prompting")
@@ -298,7 +298,7 @@ hand-added declarations are never touched.`,
 	workflowsCmd.Flags().StringVar(&workflowsHarness, "harness", "", "Harness ID")
 	workflowsCmd.Flags().StringVar(&workflowsWorkspace, "workspace", "", "Workspace path")
 	workflowsCmd.Flags().StringVar(&workflowsWorkflows, "workflows", "", "Comma-separated workflow IDs to deploy (replaces the current set)")
-	workflowsCmd.Flags().StringVar(&workflowsConflict, "conflict", "", "How to handle locally-modified files (skip|overwrite|backup)")
+	workflowsCmd.Flags().StringVar(&workflowsConflict, "conflict", "", "How to handle files the tool cannot confirm as its own (skip|overwrite|backup)")
 	workflowsCmd.Flags().StringVar(&workflowsOutput, "output", "", "Output format (json)")
 	workflowsCmd.Flags().BoolVar(&workflowsDryRun, "dry-run", false, "Dry run mode; no files are written")
 	workflowsCmd.Flags().BoolVar(&workflowsAutoConfirm, "auto-confirm", false, "Auto-confirm the deployment plan without prompting")
@@ -520,7 +520,7 @@ agents. No workflow or hook work is performed.
 If an orchestrator file (orchestrator.md, orchestrator-script.md) is already present,
 declarations for newly deployed infrastructure agents are added to it. Existing
 declarations, including hand-added ones, are kept, and a re-deployed agent is refreshed in
-place. A locally modified orchestrator follows --conflict; when skipped, a TODO entry
+place. An orchestrator the tool cannot confirm as its own follows --conflict; when skipped, a TODO entry
 explains the manual step. No orchestrator is created, and its workflows are not changed.
 
 The four per-class flags (--subagents, --utility, --infra, --standalone) pre-answer the
@@ -611,7 +611,7 @@ entirely and the unspecified classes are treated as explicitly empty.`,
 	agentsCmd.Flags().StringVar(&agentsUtility, "utility", "", "Comma-separated utility agent ids (absent = ask; empty = none)")
 	agentsCmd.Flags().StringVar(&agentsInfra, "infra", "", "Comma-separated infrastructure agent ids (absent = ask; empty = none)")
 	agentsCmd.Flags().StringVar(&agentsStandalone, "standalone", "", "Comma-separated standalone agent ids (absent = ask; empty = none)")
-	agentsCmd.Flags().StringVar(&agentsConflict, "conflict", "", "Default decision for locally-modified files (skip|overwrite|backup)")
+	agentsCmd.Flags().StringVar(&agentsConflict, "conflict", "", "Default decision for files the tool cannot confirm as its own (skip|overwrite|backup)")
 	agentsCmd.Flags().StringVar(&agentsOutput, "output", "", "Output format (json)")
 	agentsCmd.Flags().BoolVar(&agentsDryRun, "dry-run", false, "Compute and report without writing any file")
 	agentsCmd.Flags().BoolVar(&agentsAutoConfirm, "yes", false, "Auto-confirm the deployment plan without prompting")
@@ -694,7 +694,7 @@ configuration, or orchestrator rewriting is performed.`,
 	hooksCmd.Flags().StringVar(&hooksHarness, "harness", "", "Harness ID (required)")
 	hooksCmd.Flags().StringVar(&hooksWorkspace, "workspace", "", "Workspace directory (required)")
 	hooksCmd.Flags().StringVar(&hooksHooks, "hooks", "", "Comma-separated hook bundle ids (absent = ask; empty = none)")
-	hooksCmd.Flags().StringVar(&hooksConflict, "conflict", "", "Default decision for locally-modified files (skip|overwrite|backup)")
+	hooksCmd.Flags().StringVar(&hooksConflict, "conflict", "", "Default decision for files the tool cannot confirm as its own (skip|overwrite|backup)")
 	hooksCmd.Flags().StringVar(&hooksOutput, "output", "", "Output format (json)")
 	hooksCmd.Flags().BoolVar(&hooksDryRun, "dry-run", false, "Compute and report without writing any file")
 	hooksCmd.Flags().BoolVar(&hooksAutoConfirm, "yes", false, "Auto-confirm the deployment plan without prompting")
@@ -704,6 +704,7 @@ configuration, or orchestrator rewriting is performed.`,
 
 	if err := root.Execute(); err != nil {
 		// cobra failed to parse flags or find a subcommand (including root.RunE error).
+		fmt.Fprintln(errOut, "error:", err)
 		return ExitUsage
 	}
 	return exitCode

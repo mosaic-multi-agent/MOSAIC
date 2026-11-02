@@ -32,7 +32,7 @@ This guide is for **project authors** who want to get MOSAIC running in their AI
 
 ### GHCP agent file names
 
-Both GHCP targets write agents as `.github/agents/X.agent.md`, with content specific to each target. A workspace deployed earlier with `X.md` agents is migrated by the next full deploy, deploy agents, Update or workflow update for its target: each old file is backed up under `.mosaic/backups/` and replaced by `X.agent.md`, and an existing `X.agent.md` for the same agent is backed up and replaced too. Only agents recorded as `X.md` in the manifest are migrated.
+Both GHCP targets write agents as `.github/agents/X.agent.md`, with content specific to each target. A workspace deployed earlier with `X.md` agents is migrated by the next full deploy, deploy agents, Update or workflow update for its target, for the agents that run writes: each old file is backed up under `.mosaic/backups/` and replaced by `X.agent.md`, and an existing `X.agent.md` for the same agent is backed up and replaced too. A migrated agent keeps its project and custom regions, model, tool choices and declarations. A run that writes only some agents leaves the rest as `X.md`, and the next Update migrates them. Only agents recorded as `X.md` in the manifest are migrated.
 
 **Catalog stacks:** every subcommand and the TUI can deploy from several catalogs layered on top of each other (`--catalog-folder`, `--include-default-catalog`). See [Catalog Stacks](#catalog-stacks).
 
@@ -75,6 +75,8 @@ tier_models:
 
 Add `--dry-run` to preview the plan without writing anything.
 
+Re-running Deploy on an existing workspace rewrites stale agents and keeps their `project` and `custom` regions and tool choices. A model the run supplies replaces the deployed one; otherwise the deployed model is kept. The selected workflows replace the deployed set. With no infrastructure selection, existing declarations are kept.
+
 ---
 
 ## Update — Existing Workspace
@@ -98,19 +100,21 @@ Update also refreshes catalog-backed infrastructure agent declarations in the or
 
 ### Conflict resolution
 
-When a file was locally modified since the last deploy:
+When the tool cannot confirm a file as its own, because it cannot be parsed or has no manifest record:
 
 | `--conflict` value | What happens |
 |-------------------|-------------|
 | `skip` (default) | File untouched; added to TODO checklist |
-| `overwrite` | Replaced with latest (local edits lost) |
-| `backup` | Local file copied to `<name>.backup`, then overwritten |
+| `overwrite` | Replaced with latest |
+| `backup` | Copied to `.mosaic/backups/<path>.<timestamp>.bak`, then overwritten |
+
+**What an update keeps.** Only project and custom regions, models and tool choices survive an update. Edits elsewhere in an agent or skill file are replaced the next time the file is rewritten, and `--conflict` does not protect them. Keep your own content in project and custom regions.
 
 ---
 
 ## Update Workflows — Replace the Workflow Set
 
-Rewrites only the orchestrator file with a new set of workflows. No agent, skill, or hook file is touched, even if stale. The selected workflow set **fully replaces** the currently deployed set — workflows you don't reselect are removed.
+Rewrites the orchestrator files (`orchestrator.md`, and `orchestrator-script.md` when it is deployed) with a new set of workflows. No other agent, skill, or hook file is touched, even if stale. The selected workflow set **fully replaces** the currently deployed set — workflows you don't reselect are removed.
 
 Use this to add, remove, or swap workflows without disturbing the rest of the deployment. If the new workflows require agents that aren't deployed yet, those agents are deployed automatically in the same run.
 
@@ -140,7 +144,7 @@ The TUI marks currently deployed workflows so you can see what you're keeping.
 | `--harness <id>` | string | — | Harness ID |
 | `--workspace <path>` | string | — | Absolute path to the existing workspace |
 | `--workflows <ids>` | string | — | Comma-separated workflow IDs (replaces the current set); absent = ask interactively |
-| `--conflict <skip\|overwrite\|backup>` | string | `skip` | How to handle a locally-modified orchestrator file |
+| `--conflict <skip\|overwrite\|backup>` | string | `skip` | How to handle an orchestrator file the tool cannot confirm as its own |
 | `--dry-run` | bool | false | Plan without writing any files |
 | `--auto-confirm` | bool | false | Skip plan review |
 | `--output <json>` | string | — | Machine-readable output format |
@@ -151,7 +155,7 @@ The TUI marks currently deployed workflows so you can see what you're keeping.
 
 Deploys a chosen mix of subagents, utility agents, infrastructure agents, and standalone agents plus the skills they require. No workflow or hook work is performed.
 
-If an orchestrator file (`orchestrator.md`, `orchestrator-script.md`) is already present, declarations for newly deployed infrastructure agents are added to it. Existing declarations, including hand-added ones, are kept, and a re-deployed agent is refreshed in place. No extra question is asked. A locally modified orchestrator goes through the normal conflict choice (`--conflict` in the CLI); if skipped, a TODO entry explains the manual step. No orchestrator is created when none is present, and its workflows are not changed.
+If an orchestrator file (`orchestrator.md`, `orchestrator-script.md`) is already present, declarations for newly deployed infrastructure agents are added to it. Existing declarations, including hand-added ones, are kept, and a re-deployed agent is refreshed in place, keeping its project and custom regions, models and tool choices. No extra question is asked. An orchestrator the tool cannot confirm as its own goes through the normal conflict choice (`--conflict` in the CLI); if skipped, a TODO entry explains the manual step. No orchestrator is created when none is present, and its workflows are not changed.
 
 Use this to add or update individual agents across any catalog category without disturbing workflows or hooks.
 
@@ -184,7 +188,7 @@ The TUI presents a browsable list grouped by catalog category (Subagents, Utilit
 | `--utility <ids>` | string | — | Comma-separated utility agent IDs; absent = ask; empty = none |
 | `--infra <ids>` | string | — | Comma-separated infrastructure agent IDs; absent = ask; empty = none |
 | `--standalone <ids>` | string | — | Comma-separated standalone agent IDs; absent = ask; empty = none |
-| `--conflict <skip\|overwrite\|backup>` | string | `skip` | How to handle locally-modified files |
+| `--conflict <skip\|overwrite\|backup>` | string | `skip` | How to handle files the tool cannot confirm as its own |
 | `--dry-run` | bool | false | Plan without writing any files |
 | `--yes` | bool | false | Auto-confirm the deployment plan |
 | `--output <json>` | string | — | Machine-readable output format |
@@ -219,7 +223,7 @@ Deploys hook bundles alone. No agent, model, workflow, or orchestrator work is p
 | `--harness <id>` | string | — | Harness ID (required) |
 | `--workspace <path>` | string | — | Workspace directory (required) |
 | `--hooks <ids>` | string | — | Comma-separated hook bundle IDs; absent = ask; empty = none |
-| `--conflict <skip\|overwrite\|backup>` | string | `skip` | How to handle locally-modified files |
+| `--conflict <skip\|overwrite\|backup>` | string | `skip` | How to handle files the tool cannot confirm as its own |
 | `--dry-run` | bool | false | Plan without writing any files |
 | `--yes` | bool | false | Auto-confirm the deployment plan |
 | `--output <json>` | string | — | Machine-readable output format |
@@ -501,7 +505,7 @@ Until now `--catalog-folder` replaced the default catalog's agents and workflows
 
 ## Configuration
 
-On first run, the tool creates a `MosaicDeploy/` directory next to the binary with default config files, logs, and an optional external harnesses folder. Two config files live in `MosaicDeploy/config/`:
+The tool keeps its files in a `MosaicDeploy/` directory next to the binary. A run creates `logs/` there. Config is optional: with no file, defaults apply, and `user-config.yaml` is written when the TUI saves your choices. External harnesses, if any, go in `harnesses/`. Two config files can live in `MosaicDeploy/config/`:
 
 ### tool-config.yaml — Project-level (commit this)
 
@@ -549,9 +553,11 @@ Neither config file holds the catalog stack. It is stored per workspace in `.mos
 After every deploy or update, the tool writes `MOSAIC-DEPLOYMENT-TODO-<timestamp>.md` to the workspace root. It lists:
 
 - **Unfilled project regions** — slots you should fill for best agent performance
-- **Skipped files** — locally modified files left unchanged
+- **Skipped files** — files the tool could not confirm as its own, left unchanged
 - **Unmapped tools** — generic tools without harness equivalents
 - **Hook registration steps** — manual steps to complete
+
+Deploy and Update also print two warnings on the console: orchestrator content with no region to go into, and a region a role may not carry.
 
 Work through this checklist before using the workspace. Filling project regions is the single highest-impact post-deployment action. See the [Agent Customization Guide](AgentCustomizationGuide.md) for how.
 
@@ -606,7 +612,7 @@ Work through this checklist before using the workspace. Filling project regions 
 | Add specific agents (declarations added to an existing orchestrator) | `mosaic-deploy agents --harness claude-code --workspace /path` |
 | Add hook bundles only | `mosaic-deploy hooks --harness claude-code --workspace /path` |
 | Preview without writing files | Add `--dry-run` to any command |
-| Keep my local edits as backups during update | `--conflict backup` |
+| Back up files the tool cannot confirm as its own before replacing them | `--conflict backup` |
 | Move a deployment to a different harness | `mosaic-deploy transform --harness X --target-harness Y --workspace /path` |
 | Turn a one-off agent into a reusable generic | `mosaic-deploy promote --file /path/to/agent.md --category Category` |
 | Deploy from my catalog on top of the default one | Add `--catalog-folder /my/catalog --include-default-catalog` |

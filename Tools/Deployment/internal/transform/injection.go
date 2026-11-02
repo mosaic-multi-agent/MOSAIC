@@ -633,7 +633,7 @@ func applyInfrastructureRegion(node *docformat.Node, name string, class domain.I
 	}
 	if len(req.InfrastructureAgents) == 0 {
 		// Update scenario: preserve whatever was in the deployed file.
-		if req.Deployed != nil {
+		if req.Deployed != nil && !req.ClearInfrastructureAgents {
 			if deployedDoc, err := docformat.Parse(req.Deployed); err == nil {
 				if deployedNode, ok := deployedDoc.Body().Deployed("InfrastructureAgents"); ok {
 					preservedContent := ConvertLineEndings(deployedNode.Content(), sourceLineEnding(req))

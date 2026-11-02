@@ -257,17 +257,13 @@ func withPreservedWorkflows(paths []string) buildContentOption {
 	return func(o *buildContentOptions) { o.preserveWorkflows = set }
 }
 
-// deployedReaderFor returns a deployed-bytes reader that serves only the affected
-// orchestrator-role files. Every other item is rendered without deployed bytes, as before.
-func (o orchestratorInfra) deployedReaderFor(workspace string) func(domain.PlanItem) []byte {
-	if len(o.targets) == 0 {
-		return nil
+// readPaths names, per target path, the file an affected orchestrator-role file is read from
+// (its recorded legacy file when that is where it is deployed). The shared deployed-bytes rule
+// applies it; every other item is read from its own target path.
+func (o orchestratorInfra) readPaths() map[string]string {
+	paths := make(map[string]string, len(o.targets))
+	for _, t := range o.targets {
+		paths[t.TargetPath] = t.ReadPath
 	}
-	return func(item domain.PlanItem) []byte {
-		t, ok := o.targetFor(item.TargetPath)
-		if !ok {
-			return nil
-		}
-		return readDeployedFile(workspace, t.ReadPath)
-	}
+	return paths
 }
