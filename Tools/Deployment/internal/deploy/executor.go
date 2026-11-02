@@ -146,6 +146,10 @@ type ExecResult struct {
 	// state and the listed paths need manual recovery; the reversal always attempts every
 	// entry rather than aborting at the first error.
 	RevertFailures []RevertFailure
+	// Removals reports every Plan.Removals entry in request order.
+	Removals []domain.RemovalRecord
+	// Replacements reports every Plan.Replacements entry in request order.
+	Replacements []domain.ReplacementRecord
 }
 
 // NewExecutor constructs the production Executor.
@@ -167,6 +171,9 @@ type executor struct {
 // the workspace — the user's intended target — was not writable. No manifest entries are
 // produced for fallback writes; the manifest tracks only what reached the workspace.
 func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, error) {
+	if err := validateMoves(req.Plan); err != nil {
+		return ExecResult{}, err
+	}
 	// Validate that every ActionConflict item has a decision. A missing decision is a
 	// programming error in the caller that must be surfaced immediately.
 	for _, item := range req.Plan.Items {
@@ -205,6 +212,11 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 	if req.Atomic && !req.DryRun {
 		journal = &writeJournal{}
 	}
+
+	// Back up files that requested replacements overwrite before anything is written; the
+	// workspace probe below may overwrite a plan item's target.
+	moves := newMoveRun(req)
+	moves.backupReplacements(req.DryRun)
 
 	// Resolve the deployment root once before any content write (CD-12, AC17.2).
 	// The journal is passed through so resolveDeploymentRoot can record the probe path
@@ -260,6 +272,12 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 	entryMap := buildEntryMap(prior) // carries prior entries; updated for successful workspace writes
 	var partialErr error
 
+	// Remove requested files (after backup) and drop their manifest entries; a failure is
+	// the run's first error. Items whose replacement backup failed are not written.
+	moves.removeFiles(req, fallback, journal, entryMap)
+	partialErr = moves.err
+	req.Plan.Items = moves.unblockedItems(req.Plan.Items, &actions, deployRoot)
+
 	// Surface content-render failures from the probe phase as TakenFailed action records.
 	// Build a set of their TargetPaths to exclude them from the main execution loop so they
 	// are not double-processed.
@@ -280,6 +298,9 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 	}
 
 	for _, item := range req.Plan.Items {
+		if atomicMode && partialErr != nil {
+			break
+		}
 		// Skip items that already have a TakenFailed record from the probe phase; executing
 		// them again would produce a duplicate action record for the same TargetPath.
 		if contentErrorPaths[item.TargetPath] {
@@ -344,13 +365,23 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 			Partial:        partialErr,
 			Reverted:       true,
 			RevertFailures: revertFailures,
+			Removals:       moves.removals,
+			Replacements:   moves.replacements,
 		}, nil
 	}
 
 	// Deploy hook bundles and apply registration steps. The journal is passed through so that
 	// hook file writes are covered by atomic reversal: if the manifest save below then fails,
 	// the hook files written here are reversed along with the plan item files.
-	hookGaps := e.deployHooks(deployRoot, req.Plan.WorkspacePath, req.Hooks, req.DryRun, journal)
+	hookGaps, hookErr := e.deployHooks(deployRoot, req.Plan.WorkspacePath, req.Hooks, req.DryRun, journal, moves.hookOpts())
+	if hookErr != nil {
+		if partialErr == nil {
+			partialErr = hookErr
+		}
+		if atomicMode {
+			return e.revertedResult(journal, deployRoot, fallback, actions, prior, partialErr, moves), nil
+		}
+	}
 	for _, g := range hookGaps {
 		addGap(g)
 	}
@@ -419,6 +450,8 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 				Partial:        partialErr,
 				Reverted:       true,
 				RevertFailures: revertFailures,
+				Removals:       moves.removals,
+				Replacements:   moves.replacements,
 			}, nil
 		}
 
@@ -445,6 +478,8 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 		Manifest:       finalManifest,
 		TodoFilePath:   todoFilePath,
 		Partial:        partialErr,
+		Removals:       moves.removals,
+		Replacements:   moves.replacements,
 	}, nil
 }
 
@@ -611,8 +646,9 @@ func (e *executor) executeConflict(
 	switch decision {
 	case domain.DecisionSkip:
 		ar.Taken = domain.TakenSkipped
-		// Return the prior entry unchanged so entryMap preserves it.
-		if entry, ok := prior.Lookup(item.Ref); ok {
+		// Return the prior entry recorded at this item's own target path, unchanged, so
+		// entryMap preserves it. An entry for the same ref at another path is not this file's.
+		if entry, ok := prior.LookupAt(item.Ref, item.TargetPath); ok {
 			return ar, &entry
 		}
 		return ar, nil

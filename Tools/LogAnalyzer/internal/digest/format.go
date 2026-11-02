@@ -1,6 +1,7 @@
 package digest
 
 import (
+	"encoding/json"
 	"regexp"
 	"strconv"
 	"strings"
@@ -8,7 +9,7 @@ import (
 )
 
 // Version is the digest_version this package writes. MAJOR.MINOR.PATCH.
-const Version = "1.0.0"
+const Version = "1.5.0"
 
 // formatName is the value of the top-level "format" key.
 const formatName = "mosaic-run-digest"
@@ -24,6 +25,18 @@ func majorOf(version string) (int, bool) {
 	return major, err == nil
 }
 
+// storesCompactionShape reports whether digests of this version record each
+// compaction's span and shape (1.2.0 and later). Older digests hold one entry
+// per logged event and are paired on load.
+func storesCompactionShape(version string) bool {
+	parts := strings.Split(version, ".")
+	if len(parts) != 3 {
+		return true
+	}
+	minor, err := strconv.Atoi(parts[1])
+	return err != nil || minor >= 2
+}
+
 // Wire values of closed vocabularies.
 const (
 	stateOpen   = "open"
@@ -32,6 +45,11 @@ const (
 	pairingPaired    = "paired"
 	pairingStartOnly = "start_only"
 	pairingEndOnly   = "end_only"
+
+	shapeSingle   = "single"
+	shapePaired   = "paired"
+	shapePreOnly  = "pre_only"
+	shapePostOnly = "post_only"
 
 	severityInfo    = "info"
 	severityWarning = "warning"
@@ -71,6 +89,7 @@ type runDoc struct {
 	Sessions             []sessionDoc      `json:"sessions,omitempty"`
 	Orchestrator         orchestratorDoc   `json:"orchestrator"`
 	Agents               []agentDoc        `json:"agents,omitempty"`
+	Unattributed         *unattributedDoc  `json:"unattributed,omitempty"`
 	Invocations          []invocationDoc   `json:"invocations,omitempty"`
 	Turns                []turnDoc         `json:"turns,omitempty"`
 	Notifications        []notificationDoc `json:"notifications,omitempty"`
@@ -90,6 +109,11 @@ type sessionDoc struct {
 type orchestratorDoc struct {
 	Usage     []usageDoc    `json:"usage,omitempty"`
 	ToolCalls []toolCallDoc `json:"tool_calls,omitempty"`
+}
+
+// unattributedDoc is the run-level usage no actor could be assigned to.
+type unattributedDoc struct {
+	Usage []usageDoc `json:"usage,omitempty"`
 }
 
 type agentDoc struct {
@@ -119,7 +143,12 @@ type usageDoc struct {
 	Effort      string     `json:"effort,omitempty"`
 	ServiceTier string     `json:"service_tier,omitempty"`
 	Harness     string     `json:"harness,omitempty"`
+	CallKind    string     `json:"call_kind,omitempty"` // non-main calls only
+	CallLabel   string     `json:"call_label,omitempty"`
+	SessionID   string     `json:"session_id,omitempty"`
 	Tokens      *tokensDoc `json:"tokens,omitempty"`
+
+	RequestedTools json.RawMessage `json:"requested_tools,omitempty"` // key omitted when not provided
 }
 
 type tokensDoc struct {
@@ -162,6 +191,8 @@ type compactionDoc struct {
 	Trigger      string    `json:"trigger,omitempty"`
 	TokensBefore *int64    `json:"tokens_before,omitempty"`
 	TokensAfter  *int64    `json:"tokens_after,omitempty"`
+	EndedAt      string    `json:"ended_at,omitempty"`
+	Shape        string    `json:"shape,omitempty"`
 }
 
 type actorDoc struct {

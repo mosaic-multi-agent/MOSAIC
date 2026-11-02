@@ -33,6 +33,7 @@ func validateDocumentRules(d *Document, opts ValidateOptions) []Issue {
 	// Rules 8b and 8c: Role-specific conduct regions. Skipped when Role is not set.
 	if opts.Role != "" {
 		issues = append(issues, checkConductRegions(body, opts.Role)...)
+		issues = append(issues, checkOrchestratorHarnessRegion(body, opts.Role)...)
 	}
 
 	// Rule 12: In a source file, every managed region must be empty (or hold only
@@ -536,4 +537,3 @@ func stringSet(ss []string) map[string]bool {
 	}
 	return m
 }
-

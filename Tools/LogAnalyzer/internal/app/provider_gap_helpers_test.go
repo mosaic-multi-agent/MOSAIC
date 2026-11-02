@@ -29,6 +29,19 @@ func providerGapAnalysis(
 	preloaded ...domain.ModelPricing,
 ) (*app.Service, app.Result, *fakePricingStore) {
 	t.Helper()
+	return providerGapAnalysisWith(t, ia, providers, nil, preloaded...)
+}
+
+// providerGapAnalysisWith is providerGapAnalysis with a setup hook that configures
+// the pricing store (currencies, table) before the analysis loads it.
+func providerGapAnalysisWith(
+	t *testing.T,
+	ia domain.Interaction,
+	providers []domain.ProviderID,
+	setup func(*fakePricingStore),
+	preloaded ...domain.ModelPricing,
+) (*app.Service, app.Result, *fakePricingStore) {
+	t.Helper()
 
 	src := domain.Source{Kind: domain.SourceLogsRoot, Path: "/test-logs"}
 	runDir := "/test-logs/20260101T000000Z-abcd"
@@ -60,6 +73,9 @@ func providerGapAnalysis(
 	}
 
 	store := newFakePricingStore()
+	if setup != nil {
+		setup(store)
+	}
 	for _, e := range preloaded {
 		store.table = store.table.With(e)
 	}

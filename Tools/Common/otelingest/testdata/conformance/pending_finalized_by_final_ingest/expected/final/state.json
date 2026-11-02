@@ -1,0 +1,13 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 543,
+    "head_len": 543,
+    "head_sha256": "0f4e1ca567da31b2ecece19e27448dc986fbb3b8d7b255f9ceacb99d177f8c22"
+  },
+  "placements": {
+    "chat-sub-1": "unattributed"
+  },
+  "pending": [],
+  "links": {}
+}

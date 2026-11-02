@@ -97,14 +97,17 @@ func readRunFlags(cmd *cobra.Command) runFlags {
 // mutual-exclusivity guards, in the same order the original monolithic Run
 // applied them.
 func validateRunFlags(f runFlags, errOut io.Writer) (exitCode int, ok bool) {
-	// Validate required flags.
-	if f.workflowID == "" {
-		fmt.Fprintf(errOut, "error: --workflow is required\n")
-		return ExitUsage, false
-	}
-	if f.task == "" {
-		fmt.Fprintf(errOut, "error: --task is required\n")
-		return ExitUsage, false
+	// Validate required flags. A resume by --run takes the workflow and task
+	// from the run's record, so neither flag is required there.
+	if f.runID == "" {
+		if f.workflowID == "" {
+			fmt.Fprintf(errOut, "error: --workflow is required\n")
+			return ExitUsage, false
+		}
+		if f.task == "" {
+			fmt.Fprintf(errOut, "error: --task is required\n")
+			return ExitUsage, false
+		}
 	}
 
 	// Check --run and --new-run mutual exclusivity.

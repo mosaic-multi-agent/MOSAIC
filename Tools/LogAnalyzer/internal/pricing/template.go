@@ -32,8 +32,17 @@ const pricingTemplate = `# MosaicLogAnalyzer pricing configuration
 #   cache_write_1h  tokens written to the 1-hour cache tier
 #   output          output tokens
 #
-# All rates are USD per million tokens (1,000,000 tokens). Write each rate as a
-# quoted string, for example "3.00", so YAML does not parse it as a float.
+# All rates are amounts per million tokens (1,000,000 tokens) in the file's
+# currency. Write each rate as a quoted string, for example "3.00", so YAML does
+# not parse it as a float.
+#
+# An optional top-level "currency" key states the currency of every rate in the
+# file. Allowed values are USD and EUR; there is no conversion. Without the key
+# the rates are read in the effective currency (the project file's currency, else
+# the global file's, else USD). If the global and project files state different
+# currencies, the global entries are ignored. Example:
+#
+#   currency: EUR
 #
 # A model may also have one optional "long_context" block: a "threshold" (tokens
 # per request) plus its own full rate set with the same five rates. A model has at

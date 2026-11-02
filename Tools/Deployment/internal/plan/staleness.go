@@ -46,11 +46,15 @@ func AgentStaleness(deployed domain.DeployedArtifactState, agent domain.Agent, s
 			Source:   stamps.InjectionsVersion,
 		})
 	}
-	// Orchestrator-only: compare orchestrator_injections_version only when the agent is an
-	// orchestrator. Non-orchestrator agents never populate this field on either side, so the
-	// comparison is skipped to prevent false positives.
-	if agent.Role == domain.RoleOrchestrator {
-		if deployed.OrchestratorInjectionsVersion != stamps.OrchestratorInjectionsVersion {
+	// Orchestrator-only: compare orchestrator_injections_version for orchestrator-role agents
+	// that carry some harness injection region. An orchestrator lacking the second region reads
+	// "" and is stale whenever the source has an orchestrator version; when the shared delta
+	// already marks it, that one delta covers the legacy single-region layout. Once the update
+	// writes the region (tagged, or untagged when the source has no version) it compares clean.
+	if agent.Role == domain.RoleOrchestrator && (deployed.HasInjectionRegion || deployed.HasOrchestratorInjectionRegion) {
+		sharedStale := deployed.HasInjectionRegion && deployed.InjectionsVersion != stamps.InjectionsVersion
+		legacyLayoutCovered := !deployed.HasOrchestratorInjectionRegion && sharedStale
+		if deployed.OrchestratorInjectionsVersion != stamps.OrchestratorInjectionsVersion && !legacyLayoutCovered {
 			deltas = append(deltas, domain.VersionDelta{
 				Field:    "orchestrator_injections_version",
 				Deployed: deployed.OrchestratorInjectionsVersion,

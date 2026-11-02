@@ -217,7 +217,7 @@ func TestAcrossRuns_OrchestratorOnlyRun_IsListedWithoutSubagentsAndCountsForNoTy
 	in := arInput()
 	in.Streams = append(in.Streams, arOrchestrator(domain.NamedRun(runD), 50))
 
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	d := arSummary(t, report.AcrossRuns, runD)
 	assertMoneyKnown(t, "run d total", d.Totals.Money.Total, 50_000)
@@ -238,7 +238,7 @@ func TestAcrossRuns_NoNamedRuns_IsEmpty(t *testing.T) {
 	in := arInput()
 	in.Streams = in.Streams[len(in.Streams)-1:] // the unattributable stream only
 
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	if len(report.AcrossRuns.Runs) != 0 || len(report.AcrossRuns.ByAgentType) != 0 {
 		t.Errorf("across-runs = %+v, want empty when only the unattributable bucket exists", report.AcrossRuns)

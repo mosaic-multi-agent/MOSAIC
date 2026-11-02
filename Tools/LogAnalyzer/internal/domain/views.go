@@ -56,6 +56,13 @@ type RunOverview struct {
 	SubagentShare     Ratio        // sum of agents' Money.Total nanos / run Money.Total nanos
 	ByModel           []ModelFigures
 	CacheHitRatio     Ratio // CacheRead / TotalContext() of the run tokens
+	Outcomes          OutcomeSplit
+
+	// Unattributed is the run-level unattributed usage; nil when the run has none.
+	Unattributed *Totals
+	// UnattributedShare is unattributed Money.Total nanos / run Money.Total nanos;
+	// the zero Ratio when Unattributed is nil.
+	UnattributedShare Ratio
 }
 
 // Dispatch is one subagent invocation with its priced usage.
@@ -63,9 +70,13 @@ type Dispatch struct {
 	Invocation     Invocation
 	Models         []ModelID // distinct, sorted, from Invocation.Usage
 	UnpricedModels []PricingKey
-	Totals         Totals       // priced sum of Invocation.Usage; all NoData when none
-	MissingUsage   bool         // no entry in Invocation.Usage carries any token count
-	Effort         EffortLevels // effort levels of Invocation.Usage
+	Totals         Totals        // priced sum of Invocation.Usage; all NoData when none
+	MissingUsage   bool          // no entry in Invocation.Usage carries any token count
+	Effort         EffortLevels  // effort levels of Invocation.Usage
+	PeakContext    ContextFigure // equals the matching ActorContext.Peak
+	Cache          CacheFigures
+	Repeat         bool
+	LikelyRework   bool
 }
 
 // AgentTypeGroup is one agent type's dispatches (V2).
@@ -74,6 +85,9 @@ type AgentTypeGroup struct {
 	Figures       GroupFigures
 	PerInvocation MoneyStats // over the members' Totals.Money.Total
 	Dispatches    []Dispatch // sorted by instance id
+	PeakContext   PeakContextStats
+	Cache         CacheFigures
+	Rework        ReworkFigures
 }
 
 // StatusKind separates reported status codes from the two groups without one.
@@ -111,6 +125,11 @@ type ToolFigures struct {
 	Errors    int           // Status == ToolCallError
 	Unpaired  int           // Pairing != ToolCallPaired
 	Durations DurationStats // over calls whose Duration() is ok
+	// Harnesses are the distinct non-empty harnesses (actor attribution) of the
+	// calls in this row, sorted.
+	Harnesses []Harness
+	// Growth is the context growth of the singular calls that requested only this tool.
+	Growth ToolGrowth
 }
 
 // AgentTypeTools is one agent type's tool figures.

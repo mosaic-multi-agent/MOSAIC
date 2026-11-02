@@ -26,7 +26,7 @@ func ratioReport(t *testing.T, reasoning domain.TokenCount) domain.RunReport {
 		rmInvStart("coder#1", "coder", rmAt(1)),
 		usageRecordEvent("coder#1", "r1", "model-a", usage),
 	)
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 	return requireRunReport(t, report, testRunID)
 }
 
@@ -49,7 +49,7 @@ func TestAcrossRuns_PerRunTokens_IgnoreReasoningTokens(t *testing.T) {
 				Reasoning: reasoning,
 			}),
 		)
-		report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+		report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 		for _, g := range report.AcrossRuns.ByAgentType {
 			if g.AgentType == "coder" {
 				return g.PerRunTokens

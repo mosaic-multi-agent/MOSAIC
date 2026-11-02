@@ -60,7 +60,7 @@ func PricingGaps(r domain.Report) []PricingGap {
 //
 // Binding rules:
 //   - Entered prices are persisted AUTOMATICALLY via PricingStore.Put, with no
-//     separate confirmation step, and the written path is reported back through
+//     separate confirmation step, and the file actually written is reported back through
 //     Interaction.Notify.
 //   - Declining, skipping or cancelling is a normal outcome: token totals remain
 //     complete and money stays explicitly MoneyUnpriced.
@@ -68,9 +68,16 @@ func PricingGaps(r domain.Report) []PricingGap {
 //   - This function must complete without blocking when given a skipping
 //     Interaction implementation.
 func (s *Service) ResolvePricingGaps(ctx context.Context, sess *Session, r domain.Report) (domain.Report, error) {
+	report, _, err := s.resolvePricingGapsWritten(ctx, sess, r)
+	return report, err
+}
+
+// resolvePricingGapsWritten is ResolvePricingGaps that also returns the path of
+// the last file the flow wrote ("" when it saved nothing).
+func (s *Service) resolvePricingGapsWritten(ctx context.Context, sess *Session, r domain.Report) (domain.Report, string, error) {
 	gaps := PricingGaps(r)
 	if len(gaps) == 0 {
-		return r, nil
+		return r, "", nil
 	}
 
 	// Ask the user what to do about unpriced models.
@@ -87,13 +94,13 @@ func (s *Service) ResolvePricingGaps(ctx context.Context, sess *Session, r domai
 		},
 	})
 	if err != nil {
-		return r, err
+		return r, "", err
 	}
 
-	// Skipped or cancelled — return the original report unchanged (complete tokens,
+	// Skipped or cancelled - return the original report unchanged (complete tokens,
 	// explicit MoneyUnpriced money cells).
 	if actionAns.Status != interaction.Answered {
-		return r, nil
+		return r, "", nil
 	}
 
 	switch actionAns.OptionID {
@@ -103,51 +110,58 @@ func (s *Service) ResolvePricingGaps(ctx context.Context, sess *Session, r domai
 			Title:   "Pricing config",
 			Message: "Edit this file to add model prices: " + s.deps.Pricing.Path(),
 		})
-		return r, nil
+		return r, "", nil
 
 	case PricingActionEnter:
-		anyPersisted := false
-		for _, gap := range gaps {
-			entry, ok, err := s.collectPricingEntry(ctx, gap.Key)
-			if err != nil {
-				return r, err
-			}
-			if !ok {
-				continue
-			}
-			if err := s.SavePricing(ctx, sess, entry); err != nil {
-				return r, err
-			}
-			s.deps.Interaction.Notify(ctx, interaction.Notice{
-				Level:   interaction.NoticeInfo,
-				Title:   "Saved",
-				Message: "Pricing for " + gap.Key.String() + " saved to " + s.deps.Pricing.Path(),
-			})
-			anyPersisted = true
-		}
-		if !anyPersisted {
-			return r, nil
-		}
-		// Re-price from the cached aggregate in the session — logs are not re-read.
-		repriced := sess.Reprice()
-		repriced.Quality = r.Quality // preserve the quality summary from the original analysis
-		return repriced, nil
+		return s.enterGapPrices(ctx, sess, r, gaps)
 
 	default: // PricingActionSkip or any unrecognised option
-		return r, nil
+		return r, "", nil
 	}
+}
+
+// enterGapPrices asks the level once, then the rates of every gap, saving each
+// valid entry at that level. It returns the re-priced report and the file written.
+func (s *Service) enterGapPrices(ctx context.Context, sess *Session, r domain.Report, gaps []PricingGap) (domain.Report, string, error) {
+	level, ok, err := s.askConfigLevel(ctx, s.deps.Pricing.Paths())
+	if err != nil || !ok {
+		return r, "", err
+	}
+	written := ""
+	for _, gap := range gaps {
+		entry, ok, err := s.collectPricingEntry(ctx, gap.Key, s.fileCurrency(level, sess.Table().Currency()))
+		if err != nil {
+			return r, written, err
+		}
+		if !ok {
+			continue
+		}
+		file, err := s.SavePricing(ctx, sess, level, entry)
+		if err != nil {
+			return r, written, err
+		}
+		s.notifySaved(ctx, gap.Key, level, file, sess.Table().Currency())
+		written = file.Path
+	}
+	if written == "" {
+		return r, "", nil
+	}
+	// Re-price from the cached aggregate in the session - logs are not re-read.
+	repriced := sess.Reprice()
+	repriced.Quality = r.Quality // preserve the quality summary from the original analysis
+	return repriced, written, nil
 }
 
 // collectPricingEntry asks the user for pricing rates for a single (provider,
 // model) key via
-// the Interaction port: the five standard rates, then an optional threshold that
+// the Interaction port, naming the currency cur of the rates: the five standard rates, then an optional threshold that
 // opens a long-context block with its own five rates. Returns (entry, true, nil)
 // when the answers form a valid ModelPricing; returns (zero, false, nil) when the
 // user skipped all standard rate questions or the resulting entry fails validation.
-func (s *Service) collectPricingEntry(ctx context.Context, key domain.PricingKey) (domain.ModelPricing, bool, error) {
+func (s *Service) collectPricingEntry(ctx context.Context, key domain.PricingKey, cur domain.CurrencyCode) (domain.ModelPricing, bool, error) {
 	entry := domain.ModelPricing{Provider: key.Provider, Model: key.Model}
 
-	answered, err := s.askRateSet(ctx, key, "", &entry.Standard)
+	answered, err := s.askRateSet(ctx, key, cur, "", &entry.Standard)
 	if err != nil {
 		return domain.ModelPricing{}, false, err
 	}
@@ -169,7 +183,7 @@ func (s *Service) collectPricingEntry(ctx context.Context, key domain.PricingKey
 		if parseErr == nil && threshold > 0 {
 			entry.LongContext.Threshold = threshold
 			entry.HasLongContext = true
-			if _, err := s.askRateSet(ctx, key, LongContextFieldPrefix, &entry.LongContext.Rates); err != nil {
+			if _, err := s.askRateSet(ctx, key, cur, LongContextFieldPrefix, &entry.LongContext.Rates); err != nil {
 				return domain.ModelPricing{}, false, err
 			}
 		}
@@ -190,7 +204,7 @@ func (s *Service) collectPricingEntry(ctx context.Context, key domain.PricingKey
 // askRateSet asks the five rate questions of one rate set, storing each answered
 // rate into dst, and returns how many were answered. The prefix is empty for the
 // standard set and LongContextFieldPrefix for the long-context set.
-func (s *Service) askRateSet(ctx context.Context, key domain.PricingKey, prefix string, dst *domain.RateSet) (int, error) {
+func (s *Service) askRateSet(ctx context.Context, key domain.PricingKey, cur domain.CurrencyCode, prefix string, dst *domain.RateSet) (int, error) {
 	fields := []struct {
 		name string
 		set  *domain.Rate
@@ -210,7 +224,7 @@ func (s *Service) askRateSet(ctx context.Context, key domain.PricingKey, prefix 
 				ID:      QuestionPricingRate,
 				Subject: key.String() + ":" + name,
 				Title:   name,
-				Prompt:  "USD per million tokens for " + key.String() + " " + name + ":",
+				Prompt:  string(cur) + " per million tokens for " + key.String() + " " + name + ":",
 			},
 			Validate: func(v string) error {
 				_, verr := domain.ParseRate(v)
@@ -233,13 +247,19 @@ func (s *Service) askRateSet(ctx context.Context, key domain.PricingKey, prefix 
 	return answered, nil
 }
 
-// SavePricing persists one entry via the PricingStore and folds it into the
-// session's pricing table so a subsequent Reprice call reflects the new entry
-// without reloading the file.
-func (s *Service) SavePricing(ctx context.Context, sess *Session, entry domain.ModelPricing) error {
-	if err := s.deps.Pricing.Put(ctx, entry); err != nil {
-		return err
+// SavePricing persists one entry at level via the PricingStore and folds it into
+// the session's pricing table so a subsequent Reprice call reflects the new entry
+// without reloading the file. A global entry never replaces a project entry for
+// the same key, matching the merged table a reload would produce. It returns the
+// file written.
+func (s *Service) SavePricing(ctx context.Context, sess *Session, level domain.ConfigLevel, entry domain.ModelPricing) (domain.ConfigFile, error) {
+	file, err := s.deps.Pricing.Put(ctx, level, entry)
+	if err != nil {
+		return domain.ConfigFile{}, err
 	}
-	sess.table = sess.table.With(entry)
-	return nil
+	entry.Source = level
+	if existing, found := sess.table.LookupFor(entry.Provider, entry.Model); !(found && existing.Source == domain.LevelProject && level == domain.LevelGlobal) {
+		sess.table = sess.table.With(entry)
+	}
+	return file, nil
 }

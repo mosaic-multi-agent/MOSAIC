@@ -226,48 +226,6 @@ def get_session_run_id(paths: "core.LogPaths",
 
 
 # ---------------------------------------------------------------------------
-# Run-id extraction from tool arguments
-# ---------------------------------------------------------------------------
-
-RUN_ID_TOOL_ARG_FIELDS: tuple = (
-    "filePath", "file_path", "filepath", "path",
-    "targetFile", "target_file",
-    "notebookPath", "notebook_path",
-    "dirPath", "dir_path", "directory", "cwd",
-)
-
-# Path-specific bare regex: no lookbehind restriction on '-' because path fields
-# commonly contain patterns like "Orchestration-{run_id}/..." where '-' precedes
-# the run_id. The allowlist provides discrimination against content-bearing fields.
-_RUN_ID_PATH_RE = re.compile(r'([0-9]{8}T[0-9]{6}Z-[0-9a-f]{4})')
-
-
-def extract_run_id_from_tool_args(tool_args) -> "str | None":
-    """Extract a run_id from the allowlisted path-bearing fields of tool arguments.
-
-    Returns None immediately when tool_args is not a dict. Inspects only the
-    top-level keys in RUN_ID_TOOL_ARG_FIELDS, in the order listed, and only when
-    the value is a string. The first field whose string value contains a run_id
-    pattern wins. Content-bearing fields (content, newString, prompt, etc.) are
-    excluded by construction via the allowlist. Never raises. Returns None (not
-    empty string) when nothing matches.
-    """
-    try:
-        if not isinstance(tool_args, dict):
-            return None
-        for field in RUN_ID_TOOL_ARG_FIELDS:
-            value = tool_args.get(field)
-            if not isinstance(value, str):
-                continue
-            m = _RUN_ID_PATH_RE.search(value)
-            if m:
-                return m.group(1)
-        return None
-    except Exception:
-        return None
-
-
-# ---------------------------------------------------------------------------
 # Agent-to-run association (workspace-level)
 # ---------------------------------------------------------------------------
 

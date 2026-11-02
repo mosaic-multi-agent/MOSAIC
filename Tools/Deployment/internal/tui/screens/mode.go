@@ -78,7 +78,7 @@ var modeItems = []widgets.ListItem{
 		ID:          string(domain.ModePromoteToGeneric),
 		Label:       "Promote to generic",
 		Description: "Generate a generic agent source file from an already-transformed harness-only agent.",
-		Detail: "Reads a harness-only agent file (one with transform_version and canonical\n" +
+		Detail: "Reads a harness-only agent file (one with a harness_version or transform_version stamp and canonical\n" +
 			"boundary tags) and generates a generic source file under the catalog root.\n\n" +
 			"After promotion the new agent is immediately available to the Deploy/Update\n" +
 			"flow. The original harness-only source file is left untouched.\n\n" +
@@ -88,16 +88,15 @@ var modeItems = []widgets.ListItem{
 	{
 		ID:          string(domain.ModeTransformHarness),
 		Label:       "Transform harness",
-		Description: "Convert one or more deployed agent files from one harness to another.",
-		Detail: "Reads an agent file (or a folder of agent files) that was deployed for\n" +
-			"a source harness and rewrites each one for a target harness.\n\n" +
-			"Input can be a single agent file or a directory. Directory enumeration is\n" +
-			"non-recursive — only files directly under the given folder are processed;\n" +
-			"subdirectories are skipped.\n\n" +
-			"Only files whose name ends with the source harness's extension are included.\n" +
-			"Files that belong to a different harness are skipped with a per-file note.\n\n" +
-			"Use this to migrate agents between harnesses without losing tool mappings\n" +
-			"or injected content.",
+		Description: "Move a workspace's whole deployment from one harness to another.",
+		Detail: "Moves the whole deployment of a\n" +
+			"workspace root (agents, skills,\n" +
+			"hooks) to a target harness.\n\n" +
+			"The plan is shown before anything is written, and you confirm it first.\n" +
+			"Items that cannot be carried over are listed with the reason, and agents\n" +
+			"left without a model are reported so you can set one.\n\n" +
+			"Use this to migrate a deployment between harnesses without losing tool\n" +
+			"mappings or injected content.",
 	},
 }
 

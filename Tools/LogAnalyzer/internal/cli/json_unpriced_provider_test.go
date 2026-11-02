@@ -53,7 +53,7 @@ func providerGapReport(table domain.PricingTable) domain.Report {
 			providerGapRecord("a#1", "r2", "alpha", "p1"),
 			providerGapRecord("a#1", "r3", "gamma", "")),
 	}}
-	return analysis.Analyze(in, table, domain.Source{Kind: domain.SourceLogsRoot, Path: "/logs"}, nil)
+	return analysis.Analyze(in, table, domain.DefaultAnalysisSettings(), domain.Source{Kind: domain.SourceLogsRoot, Path: "/logs"}, nil)
 }
 
 func decodeObject(t *testing.T, raw []byte) map[string]any {

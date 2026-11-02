@@ -21,6 +21,9 @@ type Totals struct {
 	// were priced at the 5m rate because their request reported no tier split.
 	// Never counts tokens of unpriced models or tokens with a reported split.
 	AssumedTierCacheWrite int64
+	// AssumedTiers lists the distinct tiers behind AssumedTierCacheWrite, in
+	// CacheWriteTiers() order; only tiers with assumed tokens.
+	AssumedTiers []CacheWriteTier
 }
 
 // ActorReport is one actor's priced breakdown within a run.
@@ -49,6 +52,24 @@ type RunReport struct {
 	ByStatus    StatusBreakdown  // V3
 	Tools       ToolsBreakdown   // V4
 	Timeline    Timeline         // V5
+	Context     RunContext       // per-actor context figures
+	Rework      ReworkFigures    // run-level repeat and likely-rework figures
+	Cache       CacheFigures     // run-level cache figures, orchestrator included
+	// OrchestratorCache is the orchestrator's own cache figures (its usage records
+	// only). Not part of the JSON report.
+	OrchestratorCache CacheFigures
+	WallTime          WallTimeSplit // wall-time split over the run's logged span
+
+	// ActorSessions are the Session screen figures: orchestrator first, then one per
+	// invocation sorted by instance id. Not part of the JSON report.
+	ActorSessions []ActorSession
+
+	// Unattributed is the run-level unattributed usage; nil when the run has none.
+	Unattributed *ActorReport
+
+	// UsageIngest says whether usage of this run is still pending in its ingest
+	// state; the zero value means there is nothing to report.
+	UsageIngest UsageIngestState
 }
 
 // Report is the complete analysis output rendered by both frontends.
@@ -61,8 +82,10 @@ type Report struct {
 	UnpricedModels []PricingKey // distinct, sorted, across the whole report
 	AcrossRuns     AcrossRuns   // V6; named runs only, never the unattributable bucket
 	Quality        QualitySummary
-	// Currency is always domain.Currency; emitted so machine consumers need not assume.
-	Currency string
+	// UnpricedReasons lists, sorted by key, the unpriced models excluded by a currency mismatch.
+	UnpricedReasons []UnpricedReason
+	// Currency is the effective currency of the pricing table behind the report.
+	Currency CurrencyCode
 }
 
 // IsEmpty reports whether the report contains no named runs and no unattributable bucket.

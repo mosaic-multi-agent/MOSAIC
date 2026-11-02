@@ -448,7 +448,6 @@ const conformanceDescriptor = `schema_version: "1"
 id: "conformance-test"
 display_name: "Conformance Test Harness"
 transform_version: "1.0.0"
-injections_version: "1.0.0"
 
 extensions:
   agent: ".md"

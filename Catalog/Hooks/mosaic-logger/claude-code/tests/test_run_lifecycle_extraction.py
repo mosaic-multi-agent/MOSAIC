@@ -1,9 +1,9 @@
 """Tests for the extraction-based run lifecycle without marker files.
 
 Covers:
-- resolve_run_identity: per-event extraction from event-specific prompt fields
-  (SubagentStart from agent_prompt, UserPromptSubmit from user_prompt, Stop and
-  SubagentStop from last_assistant_message, Notification from message)
+- resolve_run_identity: a run id is taken only from a SubagentStart dispatch prompt
+  (agent_prompt carrying an agent instance id); user_prompt, last_assistant_message
+  and Notification message are never binding sources
 - Events with no prompt-bearing field (SessionStart, SessionEnd, PreToolUse,
   PostToolUse, PostToolUseFailure, PreCompact, PostCompact) yield ctx.run_id = None
 - End-to-end: SubagentStart with run_id in agent_prompt writes logs to
@@ -105,8 +105,8 @@ class TestResolveRunIdentityPerEvent(unittest.TestCase):
         mosaic_logger.resolve_run_identity(ctx)
         self.assertEqual(VALID_RUN_ID, ctx.run_id)
 
-    def test_subagent_stop_extracts_from_last_assistant_message(self):
-        """SubagentStop: run_id is extracted from the last_assistant_message field."""
+    def test_subagent_stop_does_not_extract_from_last_assistant_message(self):
+        """SubagentStop: a run id in the reply text is not a binding source."""
         ctx = self._make_ctx(
             "SubagentStop", "per-event-subagent-stop",
             last_assistant_message=(
@@ -116,19 +116,19 @@ class TestResolveRunIdentityPerEvent(unittest.TestCase):
             ),
         )
         mosaic_logger.resolve_run_identity(ctx)
-        self.assertEqual(VALID_RUN_ID, ctx.run_id)
+        self.assertIsNone(ctx.run_id)
 
-    def test_user_prompt_submit_extracts_from_user_prompt(self):
-        """UserPromptSubmit: run_id is extracted from the user_prompt field."""
+    def test_user_prompt_submit_does_not_extract_from_user_prompt(self):
+        """UserPromptSubmit: a run id in the user prompt is not a binding source."""
         ctx = self._make_ctx(
             "UserPromptSubmit", "per-event-user-prompt-submit",
             user_prompt=f'"run_id": "{VALID_RUN_ID}" — process this please',
         )
         mosaic_logger.resolve_run_identity(ctx)
-        self.assertEqual(VALID_RUN_ID, ctx.run_id)
+        self.assertIsNone(ctx.run_id)
 
-    def test_stop_extracts_from_last_assistant_message(self):
-        """Stop: run_id is extracted from the last_assistant_message field."""
+    def test_stop_does_not_extract_from_last_assistant_message(self):
+        """Stop: a run id in the reply text is not a binding source."""
         ctx = self._make_ctx(
             "Stop", "per-event-stop",
             last_assistant_message=(
@@ -137,17 +137,17 @@ class TestResolveRunIdentityPerEvent(unittest.TestCase):
             ),
         )
         mosaic_logger.resolve_run_identity(ctx)
-        self.assertEqual(VALID_RUN_ID, ctx.run_id)
+        self.assertIsNone(ctx.run_id)
 
-    def test_notification_extracts_from_message_field(self):
-        """Notification: run_id is extracted from the message field."""
+    def test_notification_does_not_extract_from_message_field(self):
+        """Notification: a run id in the message text is not a binding source."""
         ctx = self._make_ctx(
             "Notification", "per-event-notification",
             notification_type="info",
             message=f"Dispatch complete for run_id: {VALID_RUN_ID}",
         )
         mosaic_logger.resolve_run_identity(ctx)
-        self.assertEqual(VALID_RUN_ID, ctx.run_id)
+        self.assertIsNone(ctx.run_id)
 
     def test_session_start_yields_none_no_prompt_bearing_field(self):
         """SessionStart has no prompt-bearing field; ctx.run_id stays None after
@@ -302,9 +302,9 @@ class TestExtractionBasedDispatch(unittest.TestCase):
             "run_id in invocation_start event does not match the extracted run_id"
         )
 
-    def test_user_prompt_submit_with_run_id_writes_to_extracted_folder(self):
-        """UserPromptSubmit where user_prompt contains a valid run_id writes to the
-        extracted run_id's orchestrator events file."""
+    def test_user_prompt_submit_quoting_run_id_does_not_write_to_that_run_folder(self):
+        """UserPromptSubmit where user_prompt merely contains a valid run_id does not
+        bind the session: nothing is written under that run's folder."""
         payload = {
             "hook_event_name": "UserPromptSubmit",
             "session_id": "extraction-sess-003",
@@ -312,13 +312,10 @@ class TestExtractionBasedDispatch(unittest.TestCase):
         }
         _dispatch_with_env(payload, self.tmp_path)
 
-        events_file = (
-            self.tmp_path / "OrchestrationLogs" / VALID_RUN_ID /
-            "00_orchestrator_events.jsonl"
-        )
-        self.assertTrue(
-            events_file.exists(),
-            f"00_orchestrator_events.jsonl not found in OrchestrationLogs/{VALID_RUN_ID}/"
+        run_folder = self.tmp_path / "OrchestrationLogs" / VALID_RUN_ID
+        self.assertFalse(
+            run_folder.exists(),
+            f"A quoted run id created OrchestrationLogs/{VALID_RUN_ID}/"
         )
 
     def test_logs_go_only_to_extracted_run_id_folder_not_to_other_folders(self):
@@ -774,7 +771,7 @@ class TestResolveRunIdentityEstablishesBinding(unittest.TestCase):
         )
         self.assertEqual(VALID_RUN_ID, bound)
 
-    def test_user_prompt_submit_extraction_establishes_binding(self):
+    def test_user_prompt_submit_quoting_run_id_does_not_establish_binding(self):
         session_id = "establish-sess-user-prompt"
         ctx = self._ctx(
             "UserPromptSubmit", session_id, "2026-07-27T17:00:00.000Z",
@@ -784,7 +781,7 @@ class TestResolveRunIdentityEstablishesBinding(unittest.TestCase):
         bound = runstate.get_session_run_binding(
             self.paths, session_id, at="2026-07-27T17:00:01.000Z"
         )
-        self.assertEqual(VALID_RUN_ID, bound)
+        self.assertIsNone(bound)
 
     def test_later_event_with_no_prompt_field_resolves_from_established_binding(self):
         """End-to-end within resolve_run_identity: a SubagentStart establishes
@@ -833,8 +830,10 @@ class TestResolveRunIdentityRefinementOverride(unittest.TestCase):
         )
         new_run_id = "20260727T180000Z-bbbb"
         ctx = self._ctx(
-            "UserPromptSubmit", session_id, "2026-07-27T18:00:00.000Z",
-            user_prompt=f'"run_id": "{new_run_id}"',
+            "SubagentStart", session_id, "2026-07-27T18:00:00.000Z",
+            agent_prompt=(
+                f'{{"agent_instance_id": "TestAgent#2", "run_id": "{new_run_id}"}}'
+            ),
         )
         mosaic_logger.resolve_run_identity(ctx)
         self.assertEqual(
@@ -850,8 +849,10 @@ class TestResolveRunIdentityRefinementOverride(unittest.TestCase):
         )
         new_run_id = "20260727T180000Z-bbbb"
         ctx1 = self._ctx(
-            "UserPromptSubmit", session_id, "2026-07-27T18:00:00.000Z",
-            user_prompt=f'"run_id": "{new_run_id}"',
+            "SubagentStart", session_id, "2026-07-27T18:00:00.000Z",
+            agent_prompt=(
+                f'{{"agent_instance_id": "TestAgent#2", "run_id": "{new_run_id}"}}'
+            ),
         )
         mosaic_logger.resolve_run_identity(ctx1)
 

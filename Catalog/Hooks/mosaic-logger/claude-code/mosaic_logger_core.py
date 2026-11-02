@@ -14,13 +14,14 @@ import re
 import sys
 import tempfile
 
+import mosaic_logger_locked_append
 import mosaic_logger_provider
+import mosaic_logger_schema
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.3.0"
 HARNESS = "claude-code"
 LOGS_DIRNAME = "OrchestrationLogs"
 AGENT_MAP_DIRNAME = ".agent-map"
@@ -124,7 +125,7 @@ def build_event(event: str, ctx: "HookContext", **fields) -> dict:
     pruned recursively; a dict empty after pruning is itself dropped.
     """
     result: dict = {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": mosaic_logger_schema.schema_version_for(event),
         "event": event,
         "timestamp": ctx.timestamp,
         "harness": HARNESS,
@@ -172,13 +173,13 @@ def effective_run_id(ctx: "HookContext") -> str:
 def append_event(path: pathlib.Path, event: dict) -> None:
     """Append one JSON object as one line to a JSONL file, creating parent dirs.
 
-    Opens in append mode, writes one line, closes. No size cap. Swallows errors.
+    Appends the whole line under the file's exclusive lock. No size cap. Swallows errors; a
+    writer that cannot get the lock in time drops the event and writes a debug message.
     """
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(event, ensure_ascii=False) + "\n"
-        with open(path, "a", encoding="utf-8") as fh:
-            fh.write(line)
+        line = (json.dumps(event, ensure_ascii=False) + "\n").encode("utf-8")
+        mosaic_logger_locked_append.locked_append(path, line, lambda _m, e: debug_log(
+            f"append_event {'dropped (lock wait limit)' if e is None else 'failed'} for {path}", e))
     except Exception as exc:
         debug_log(f"append_event failed for {path}", exc)
 
@@ -427,49 +428,6 @@ def event_sink_for(ctx: "HookContext", agent_instance_id: "str | None") -> pathl
     if agent_instance_id is None:
         return ctx.paths.orchestrator_events(run_id)
     return ctx.paths.invocation_events(run_id, agent_instance_id)
-
-
-# ---------------------------------------------------------------------------
-# Adapter version
-# ---------------------------------------------------------------------------
-
-_VERSION_RE = re.compile(r"^version:\s*(.+?)\s*$")
-
-
-def read_adapter_version(hook_yaml_path: pathlib.Path) -> "str | None":
-    """Extract the top-level version value from hook.yaml without a YAML parser.
-
-    Matches only zero-indented lines. Returns None on any ambiguity. Never raises.
-    """
-    try:
-        matches = []
-        with open(hook_yaml_path, "r", encoding="utf-8", errors="replace") as fh:
-            for line in fh:
-                # Skip blank lines, comments, and indented lines
-                if not line or line[0] in ("#", " ", "\t"):
-                    continue
-                m = _VERSION_RE.match(line.rstrip("\r\n"))
-                if m:
-                    value = m.group(1)
-                    # Strip one layer of surrounding single or double quotes
-                    if len(value) >= 2 and (
-                        (value[0] == '"' and value[-1] == '"') or
-                        (value[0] == "'" and value[-1] == "'")
-                    ):
-                        value = value[1:-1]
-                    if value:
-                        matches.append(value)
-        if len(matches) == 1:
-            return matches[0]
-        return None
-    except Exception:
-        return None
-
-
-def adapter_version(ctx: "HookContext") -> "str | None":
-    """Read version from the hook.yaml deployed alongside the adapter scripts."""
-    hook_yaml = pathlib.Path(__file__).parent / "hook.yaml"
-    return read_adapter_version(hook_yaml)
 
 
 # ---------------------------------------------------------------------------

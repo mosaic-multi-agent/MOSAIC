@@ -1,0 +1,15 @@
+{
+  "description": "VS Code: the start of the failed call is in an invocation stream (its call_id has no __vscode suffix and equals the span call id). The end is written to that invocation's stream only; the other invocation and the orchestrator stream get nothing.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

@@ -38,7 +38,7 @@ type TextInput struct {
 // NewTextInput creates a TextInput with the given label and optional placeholder.
 func NewTextInput(label, placeholder string, width int, styles TextInputStyles) *TextInput {
 	return &TextInput{
-		field:  pastesafe.NewField(pastesafe.WithPlaceholder(placeholder)),
+		field:  pastesafe.NewField(pastesafe.WithPlaceholder(placeholder), pastesafe.WithWidth(width)),
 		label:  label,
 		styles: styles,
 		width:  width,
@@ -84,8 +84,11 @@ func (t *TextInput) Back() bool { return t.field.Back() }
 // Reset clears the done, back, and error flags without clearing the text value.
 func (t *TextInput) Reset() { t.field.Reset() }
 
-// Resize updates the render width.
-func (t *TextInput) Resize(width int) { t.width = width }
+// Resize updates the render width of the label, the error and the input field.
+func (t *TextInput) Resize(width int) {
+	t.width = width
+	t.field.SetWidth(width)
+}
 
 // SetClock sets the paste-detection clock of this input (nil = process-wide clock).
 func (t *TextInput) SetClock(c pastesafe.Clock) { t.field.SetClock(c) }

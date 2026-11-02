@@ -82,7 +82,7 @@ func gapInput() analysis.Input {
 
 func analyzeGaps(t *testing.T, table domain.PricingTable) domain.Report {
 	t.Helper()
-	return analysis.Analyze(gapInput(), table, testSource(), nil)
+	return analysis.Analyze(gapInput(), table, domain.DefaultAnalysisSettings(), testSource(), nil)
 }
 
 func pricedUnder(t *testing.T, provider domain.ProviderID) domain.ModelPricing {

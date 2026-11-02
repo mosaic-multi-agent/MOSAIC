@@ -470,7 +470,7 @@ func TestHooksCmd_ServiceSuccess_ReturnsExitSuccess(t *testing.T) {
 func TestHooksCmd_ServiceError_ReturnsExitFailure(t *testing.T) {
 	workspace := t.TempDir()
 	svc := &spyService{
-		deployHooksErr: app.ErrRetargetMissingAgentKey,
+		deployHooksErr: app.ErrTransformSameHarness,
 	}
 
 	code := cli.Run(context.Background(),

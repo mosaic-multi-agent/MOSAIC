@@ -1,6 +1,6 @@
 schema_version: "1"
 id: mosaic-logger
-version: 1.7.0
+version: 1.11.0
 # description is user-facing: the Deploy tool shows it in the hook picker.
 # Keep it short and actionable; maintainer detail belongs in the comments below.
 description: >-
@@ -8,7 +8,9 @@ description: >-
   transcripts) to OrchestrationLogs/ for review and debugging. Works with
   Claude Code, GitHub Copilot CLI, VS Code Copilot Chat and OpenCode. Needs
   Python 3 (not for OpenCode). Copilot CLI runs hooks only in trusted folders
-  (trustedFolders in ~/.copilot/config.json).
+  (trustedFolders in ~/.copilot/config.json); it needs no other setup. For the
+  VS Code GHCP Local target only, set COPILOT_OTEL_FILE_EXPORTER_PATH to the
+  Copilot OTel export file so token usage is added to the logs.
 
 # Maintainer notes (formerly in description):
 # - Events captured: Claude Code 12, GHCP CLI 14, VS Code Chat Extension 8,
@@ -45,10 +47,7 @@ description: >-
 # flag, so the whole-bundle key is omitted rather than mislabelling any deployable
 # adapter as unauthored.
 
-# content_hash is absent: the claude-code variant lists ../hook.yaml in its file
-# set so the deployed adapter can read its own version at runtime (adapter_version
-# in run_start events). Listing hook.yaml in the hash input makes the hash
-# unstable by construction (the hash value changes the file, changing the hash).
+# content_hash is absent: not used; the bundle does not declare one.
 # validateContentHash performs no check when this field is empty.
 
 variants:
@@ -59,6 +58,10 @@ variants:
         target: mosaic_logger.py
       - source: mosaic_logger_core.py
         target: mosaic_logger_core.py
+      - source: mosaic_logger_manifest_version.py
+        target: mosaic_logger_manifest_version.py
+      - source: mosaic_logger_locked_append.py
+        target: mosaic_logger_locked_append.py
       - source: mosaic_logger_provider.py
         target: mosaic_logger_provider.py
       - source: mosaic_logger_runstate.py
@@ -81,8 +84,8 @@ variants:
         target: mosaic_logger_runner_mode.py
       - source: mosaic_logger_handlers_runner.py
         target: mosaic_logger_handlers_runner.py
-      - source: ../hook.yaml
-        target: hook.yaml
+      - source: mosaic_logger_schema.py
+        target: mosaic_logger_schema.py
     # Stop and SessionEnd are synchronous so that the Runner, which waits for
     # the harness process to exit, finds the session's final events written
     # when the process ends; an async hook can be cut off by process exit.
@@ -277,6 +280,10 @@ variants:
         target: mosaic-logger.ts
       - source: lib/core.ts
         target: lib/core.ts
+      - source: lib/locked_append.ts
+        target: lib/locked_append.ts
+      - source: lib/run_binding.ts
+        target: lib/run_binding.ts
       - source: lib/runstate.ts
         target: lib/runstate.ts
       - source: lib/correlation.ts
@@ -293,6 +300,8 @@ variants:
         target: lib/handlers_tools.ts
       - source: lib/handlers_tool_parts.ts
         target: lib/handlers_tool_parts.ts
+      - source: lib/requested_tools.ts
+        target: lib/requested_tools.ts
       - source: lib/failed_calls.ts
         target: lib/failed_calls.ts
       - source: lib/handlers_messages.ts
@@ -313,8 +322,10 @@ variants:
         target: lib/runner_transcript.ts
       - source: lib/sync_append.ts
         target: lib/sync_append.ts
-      - source: ../hook.yaml
-        target: hook.yaml
+      - source: lib/schema_versions.ts
+        target: lib/schema_versions.ts
+      - source: lib/manifest_version.ts
+        target: lib/manifest_version.ts
     registration: []
 
   vscode-ghcp:
@@ -324,6 +335,8 @@ variants:
         target: mosaic_logger.py
       - source: mosaic_logger_core.py
         target: mosaic_logger_core.py
+      - source: mosaic_logger_manifest_version.py
+        target: mosaic_logger_manifest_version.py
       - source: mosaic_logger_runstate.py
         target: mosaic_logger_runstate.py
       - source: mosaic_logger_export.py
@@ -338,8 +351,40 @@ variants:
         target: mosaic_logger_handlers_tools.py
       - source: mosaic_logger_artifacts.py
         target: mosaic_logger_artifacts.py
-      - source: ../hook.yaml
-        target: hook.yaml
+      - source: mosaic_logger_diagnostics.py
+        target: mosaic_logger_diagnostics.py
+      - source: mosaic_logger_subagent_state.py
+        target: mosaic_logger_subagent_state.py
+      - source: mosaic_logger_session_run.py
+        target: mosaic_logger_session_run.py
+      - source: mosaic_logger_otel_hook.py
+        target: mosaic_logger_otel_hook.py
+      - source: ../copilot-shared/mosaic_logger_otel.py
+        target: mosaic_logger_otel.py
+      - source: ../copilot-shared/mosaic_logger_otel_contract.py
+        target: mosaic_logger_otel_contract.py
+      - source: ../copilot-shared/mosaic_logger_otel_keys.py
+        target: mosaic_logger_otel_keys.py
+      - source: ../copilot-shared/mosaic_logger_otel_lock.py
+        target: mosaic_logger_otel_lock.py
+      - source: ../copilot-shared/mosaic_logger_otel_notices.py
+        target: mosaic_logger_otel_notices.py
+      - source: ../copilot-shared/mosaic_logger_otel_parse.py
+        target: mosaic_logger_otel_parse.py
+      - source: ../copilot-shared/mosaic_logger_otel_place.py
+        target: mosaic_logger_otel_place.py
+      - source: ../copilot-shared/mosaic_logger_otel_scan.py
+        target: mosaic_logger_otel_scan.py
+      - source: ../copilot-shared/mosaic_logger_otel_toolend.py
+        target: mosaic_logger_otel_toolend.py
+      - source: ../copilot-shared/mosaic_logger_otel_toolevents.py
+        target: mosaic_logger_otel_toolevents.py
+      - source: ../copilot-shared/mosaic_logger_otel_state.py
+        target: mosaic_logger_otel_state.py
+      - source: ../copilot-shared/mosaic_logger_locked_append.py
+        target: mosaic_logger_locked_append.py
+      - source: ../copilot-shared/mosaic_logger_otel_write.py
+        target: mosaic_logger_otel_write.py
     # Registration covers the 8 supported VS Code Chat Extension hook events.
     # VS Code hooks are enabled by default; no user-level setting controls this.
     # The enterprise ChatHooks policy (surfacing as chat.useHooks) can disable
@@ -374,12 +419,24 @@ variants:
         target: mosaic_logger.py
       - source: mosaic_logger_core.py
         target: mosaic_logger_core.py
+      - source: mosaic_logger_manifest_version.py
+        target: mosaic_logger_manifest_version.py
       - source: mosaic_logger_runstate.py
         target: mosaic_logger_runstate.py
       - source: mosaic_logger_export.py
         target: mosaic_logger_export.py
       - source: mosaic_logger_transcript.py
         target: mosaic_logger_transcript.py
+      - source: mosaic_logger_transcript_usage.py
+        target: mosaic_logger_transcript_usage.py
+      - source: mosaic_logger_transcript_logging.py
+        target: mosaic_logger_transcript_logging.py
+      - source: mosaic_logger_transcript_events.py
+        target: mosaic_logger_transcript_events.py
+      - source: mosaic_logger_transcript_state.py
+        target: mosaic_logger_transcript_state.py
+      - source: mosaic_logger_diagnostics.py
+        target: mosaic_logger_diagnostics.py
       - source: mosaic_logger_handlers_session.py
         target: mosaic_logger_handlers_session.py
       - source: mosaic_logger_handlers_invocation.py
@@ -392,8 +449,10 @@ variants:
         target: mosaic_logger_runner_mode.py
       - source: mosaic_logger_handlers_runner.py
         target: mosaic_logger_handlers_runner.py
-      - source: ../hook.yaml
-        target: hook.yaml
+      - source: mosaic_logger_spawn_key.py
+        target: mosaic_logger_spawn_key.py
+      - source: ../copilot-shared/mosaic_logger_locked_append.py
+        target: mosaic_logger_locked_append.py
     # Registration covers all 14 GHCP CLI hook events. subagentStart is
     # synchronous so the agent_id mapping is written before the subagent's first
     # tool call. Other events carry async: true for forward-compatibility; GHCP

@@ -19,6 +19,7 @@ import (
 type orchestratorTarget struct {
 	Agent      domain.Agent
 	TargetPath string
+	ReadPath   string // file the deployed bytes are read from: TargetPath, or its recorded legacy X.md
 	State      domain.DeployedArtifactState
 	Drift      plan.InfrastructureDrift
 }
@@ -48,6 +49,7 @@ func (s *service) probeOrchestratorInfra(module domain.HarnessModule, workspace 
 		candidates = append(candidates, script)
 	}
 
+	snap, _ := s.deps.Manifest.Load(workspace)
 	result := orchestratorInfra{keys: keys, blocks: blocks}
 	for _, agent := range candidates {
 		if agent.Key == "" {
@@ -59,14 +61,14 @@ func (s *service) probeOrchestratorInfra(module domain.HarnessModule, workspace 
 		path, err := module.TargetPath(domain.TargetPathRequest{
 			Kind:     domain.ArtifactAgent,
 			Key:      agent.Key,
-			FileName: filepath.Base(agent.SourcePath),
+			FileName: plan.AgentFileName(module, agent),
 			Scope:    scope,
 			GOOS:     s.deps.GOOS,
 		})
 		if err != nil {
 			continue
 		}
-		state := probeDeployedArtifact(workspace, path, module.Descriptor().Frontmatter.ModelKey)
+		state := probeAgentWithRecordedLegacy(workspace, module, snap, agent.Key, path)
 		if !state.Present {
 			continue
 		}
@@ -74,7 +76,11 @@ func (s *service) probeOrchestratorInfra(module domain.HarnessModule, workspace 
 		if !drift.IsStale() {
 			continue
 		}
-		result.targets = append(result.targets, orchestratorTarget{Agent: agent, TargetPath: path, State: state, Drift: drift})
+		readPath := path
+		if legacy := recordedLegacyPath(module, snap, agent.Key, path); legacy != "" && !pathExists(filepath.Join(workspace, filepath.FromSlash(path))) {
+			readPath = legacy
+		}
+		result.targets = append(result.targets, orchestratorTarget{Agent: agent, TargetPath: path, ReadPath: readPath, State: state, Drift: drift})
 	}
 	return result
 }
@@ -251,16 +257,13 @@ func withPreservedWorkflows(paths []string) buildContentOption {
 	return func(o *buildContentOptions) { o.preserveWorkflows = set }
 }
 
-// deployedReaderFor returns a deployed-bytes reader that serves only the affected
-// orchestrator-role files. Every other item is rendered without deployed bytes, as before.
-func (o orchestratorInfra) deployedReaderFor(workspace string) func(domain.PlanItem) []byte {
-	if len(o.targets) == 0 {
-		return nil
+// readPaths names, per target path, the file an affected orchestrator-role file is read from
+// (its recorded legacy file when that is where it is deployed). The shared deployed-bytes rule
+// applies it; every other item is read from its own target path.
+func (o orchestratorInfra) readPaths() map[string]string {
+	paths := make(map[string]string, len(o.targets))
+	for _, t := range o.targets {
+		paths[t.TargetPath] = t.ReadPath
 	}
-	return func(item domain.PlanItem) []byte {
-		if _, ok := o.targetFor(item.TargetPath); !ok {
-			return nil
-		}
-		return readDeployedFile(workspace, item.TargetPath)
-	}
+	return paths
 }

@@ -12,7 +12,8 @@
 
 import { currentTimestamp } from "./core.js";
 import { isCallFailed, markCallFailed } from "./failed_calls.js";
-import { extractInstanceId, extractRunId } from "./runstate.js";
+import { extractInstanceId } from "./runstate.js";
+import { dispatchRunId } from "./run_binding.js";
 import type {
   HandlerDependencies,
   ToolBeforeInput,
@@ -163,7 +164,7 @@ export function createToolHandlers(deps: HandlerDependencies): {
         parentSessionId: sessionId,
         agentInstanceId: extractInstanceId(promptText),
         agentType: subagentType,
-        runId: extractRunId(promptText),
+        runId: dispatchRunId(promptText),
         prompt: promptText,
         dispatchedAt: ts,
       });
@@ -241,6 +242,7 @@ export function createToolHandlers(deps: HandlerDependencies): {
         { sessionId, runId, timestamp: ts },
         {
           call_id: callId,
+          tool_name: toolName || undefined,  // undefined → omitted by buildEvent
           status: outcome.status,      // undefined → omitted by buildEvent
           error: outcome.error,        // undefined → omitted by buildEvent
           tool_output: toolOutput,
@@ -283,6 +285,7 @@ export function createToolHandlers(deps: HandlerDependencies): {
         { sessionId: parentSessionId, runId, timestamp: ts },
         {
           call_id: entry.callId,
+          tool_name: entry.toolName || undefined,
           // Unmarked dispatch closure carries no status; a failed subtask is an error.
           status: isCallFailed(store, entry.callId) ? "error" : undefined,
           // No tool_output — synthetic closure has no output payload

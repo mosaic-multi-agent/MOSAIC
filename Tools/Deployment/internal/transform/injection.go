@@ -180,6 +180,12 @@ func processRegions(doc *docformat.Document, req Request) (outcomes []RegionOutc
 			infraAgentKeys = ids
 
 		case domain.InjectionProtocol:
+			if req.PreserveDeployedManaged {
+				if outcome, ok := preserveDeployedManagedRegion(node, name, class, RegionProtocolFilled, req, depDoc); ok {
+					outcomes = append(outcomes, outcome)
+					break
+				}
+			}
 			outcome, protoErr := applyProtocolRegion(node, name, req)
 			if protoErr != nil {
 				return nil, nil, nil, nil, protoErr
@@ -187,6 +193,12 @@ func processRegions(doc *docformat.Document, req Request) (outcomes []RegionOutc
 			outcomes = append(outcomes, outcome)
 
 		case domain.InjectionBundle:
+			if req.PreserveDeployedManaged {
+				if outcome, ok := preserveDeployedManagedRegion(node, name, class, RegionBundleFilled, req, depDoc); ok {
+					outcomes = append(outcomes, outcome)
+					break
+				}
+			}
 			outcome, bundleErr := applyBundleRegion(node, name, req)
 			if bundleErr != nil {
 				return nil, nil, nil, nil, bundleErr
@@ -464,69 +476,9 @@ func processRegions(doc *docformat.Document, req Request) (outcomes []RegionOutc
 		}
 	}
 
+	gaps = append(gaps, undeliveredOrchestratorGaps(sourceRegions, req)...)
+
 	return outcomes, gaps, workflowIDs, infraAgentKeys, nil
-}
-
-// applyHarnessRegion fills a tool-managed harness region from the module's declared content.
-// Harness content is refreshed on every transform; the deployed file's content is never
-// consulted for tool-managed regions.
-func applyHarnessRegion(node *docformat.Node, name string, class domain.InjectionClass, req Request) RegionOutcome {
-	// Resolve the injection version once, shared by both the RegionFilled and RegionEmptied
-	// paths. For orchestrator agents the orchestrator-specific version is selected; for all
-	// other agents the regular injections version is used. This follows the same
-	// role-conditional pattern as build.go's stamp construction.
-	injVersion := req.InjectionsVersion
-	if req.Role == domain.RoleOrchestrator {
-		injVersion = req.OrchestratorInjectionsVersion
-	}
-
-	content, ok := req.Module.Injection(domain.InjectionRequest{Name: name, AgentKey: req.Key, Role: req.Role})
-	if ok && content != "" {
-		// Ensure the content ends with a newline so the closing tag appears on its own line
-		// when the document is serialised. Descriptor YAML strings do not always carry a
-		// trailing newline; without one, the closing </Name> tag is concatenated onto the
-		// last line of content rather than appearing on a line by itself.
-		//
-		// Harness injection content is normalised to LF by the harness loader so that content
-		// read from CRLF-checked-out files on Windows matches what LF-checked-out files
-		// produce. Adapt the LF content to the source document's prevailing line ending so the
-		// injected lines are consistent with the surrounding document.
-		lineEnding := sourceLineEnding(req)
-		contentBytes := ConvertLineEndings([]byte(content), lineEnding)
-		if len(contentBytes) == 0 || contentBytes[len(contentBytes)-1] != '\n' {
-			contentBytes = append(contentBytes, []byte(lineEnding)...)
-		}
-		node.SetContent(contentBytes) //nolint:errcheck // Node.SetContent always returns nil; forward-compatible error return.
-		// Stamp the injection version on the region tag. The guard skips SetVersion when the
-		// version is empty so that agents without a configured injection version produce no
-		// attribute.
-		if injVersion != "" {
-			node.SetVersion(injVersion) //nolint:errcheck // Node.SetVersion always returns nil; forward-compatible error return.
-		}
-		return RegionOutcome{
-			Name:   name,
-			Marker: node.Kind(),
-			Class:  class,
-			Action: RegionFilled,
-			Bytes:  len(contentBytes),
-		}
-	}
-	// No harness content for this region: clear it so any nested source markers are removed
-	// and the capture-regenerate-reemit sequence can re-add them cleanly. This mirrors the
-	// explicit Clear() call on the RegionEmptied path of every other deployed-region generator.
-	// Clear() unconditionally strips any existing version attribute, so SetVersion must be
-	// called after it to stamp the version on the emptied region tag.
-	node.Clear() //nolint:errcheck // Node.Clear always returns nil; forward-compatible error return.
-	if injVersion != "" {
-		node.SetVersion(injVersion) //nolint:errcheck // Node.SetVersion always returns nil; forward-compatible error return.
-	}
-	return RegionOutcome{
-		Name:   name,
-		Marker: node.Kind(),
-		Class:  class,
-		Action: RegionEmptied,
-		Bytes:  0,
-	}
 }
 
 // applyProjectRegion handles a user-owned injection region.
@@ -681,7 +633,7 @@ func applyInfrastructureRegion(node *docformat.Node, name string, class domain.I
 	}
 	if len(req.InfrastructureAgents) == 0 {
 		// Update scenario: preserve whatever was in the deployed file.
-		if req.Deployed != nil {
+		if req.Deployed != nil && !req.ClearInfrastructureAgents {
 			if deployedDoc, err := docformat.Parse(req.Deployed); err == nil {
 				if deployedNode, ok := deployedDoc.Body().Deployed("InfrastructureAgents"); ok {
 					preservedContent := ConvertLineEndings(deployedNode.Content(), sourceLineEnding(req))

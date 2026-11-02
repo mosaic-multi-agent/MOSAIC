@@ -30,6 +30,7 @@ HarnessKnowledge/
 └── KnownIssues/                       # Harness issue knowledge base (bugs, limitations, quirks)
     ├── CaptureGuide.md                # Agent-facing format specs
     ├── CrossHarnessComparison.md      # Side-by-side comparison across all harnesses (mode-split rankings)
+    ├── GhcpCrossHarness.md            # GHCP CLI, VS Code Copilot and VS Code Local in one workspace
     └── {Harness}/                     # Per-harness issue tracking
         ├── index.md                   # Quick-reference index
         ├── active-issues.md           # Currently active issues

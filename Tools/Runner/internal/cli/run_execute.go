@@ -63,11 +63,29 @@ func executeRun(ctx context.Context, cmd *cobra.Command, store domain.ArtifactSt
 		return code
 	}
 
+	// A resume is checked against its artifact and the deployed files before
+	// anything is announced, and takes the workflow and task from the record.
+	var resume resumePreflight
+	if !resolvedIsNewRun {
+		resume, code, ok = runResumePreflight(resolvedRunID, resolvedRunFolder, f.harness,
+			parseInfrastructureFlag(f.infrastructure, f.infrastructureChanged), errOut)
+		if !ok {
+			return code
+		}
+		if f.workflowID == "" {
+			f.workflowID = string(resume.state.Workflow)
+		}
+		if f.task == "" {
+			f.task = resume.state.Task
+		}
+	}
+
 	// State the chosen run before any dispatch (AC2.7): which run, whether
 	// new or resumed, and for a resumed run its recorded position.
 	fmt.Fprintln(out, runselect.Announce(announceIdentity(resolvedRunID, resolvedRunFolder, resolvedIsNewRun, resolvedPosition)))
 
-	parsedMode, code, ok := parseModeForRun(f, resolvedIsNewRun, needsRunnerAdoption(resolvedRunFolder, resolvedIsNewRun), errOut)
+	needsAdoption := needsRunnerAdoption(resolvedRunFolder, resolvedIsNewRun)
+	parsedMode, code, ok := parseModeForRun(f, resolvedIsNewRun, needsAdoption, errOut)
 	if !ok {
 		return code
 	}
@@ -99,9 +117,12 @@ func executeRun(ctx context.Context, cmd *cobra.Command, store domain.ArtifactSt
 
 	infrastructureFilter := parseInfrastructureFlag(f.infrastructure, f.infrastructureChanged)
 
-	discoveredOrchPath, code, ok := discoverOrchestratorPath(f.harness, errOut)
-	if !ok {
-		return code
+	discoveredOrchPath := resume.orchPath
+	if resolvedIsNewRun {
+		discoveredOrchPath, code, ok = discoverOrchestratorPath(f.harness, errOut)
+		if !ok {
+			return code
+		}
 	}
 
 	config := buildRunConfig(f, runConfigInputs{
@@ -125,6 +146,10 @@ func executeRun(ctx context.Context, cmd *cobra.Command, store domain.ArtifactSt
 			CommitBranchVariant:  f.commitBranchChanged,
 		},
 	})
+
+	if !resolvedIsNewRun {
+		printResumeSummary(out, resume, needsAdoption, config.RunSettings)
+	}
 
 	return runSessionAndReport(ctx, config, store, sess, out, errOut, resolvedRunFolder)
 }

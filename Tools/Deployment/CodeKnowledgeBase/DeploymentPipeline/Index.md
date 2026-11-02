@@ -87,7 +87,10 @@ to make anything happen on disk.
    `GapUnmappedTool`; a hook registration step whose target file already exists in the
    workspace produces `GapHookRegistration`.
 5. The returned `domain.Plan` is fully renderable — both frontends show it to the user for
-   review before anything is written (`--dry-run` on the CLI stops here).
+   review before anything is written. `--dry-run` needs no plan confirmation on any write
+   command: the write flows skip the refusal for an unconfirmed review, stop before writing,
+   and carry the reviewed plan on `RunSummary.DryRunPlan` (not serialised to JSON). A real
+   non-interactive run without `--auto-confirm` still returns `ErrPlanNotConfirmed`.
 
 ### Staleness Model
 
@@ -106,6 +109,16 @@ Staleness is evaluated per-field, never as a single "is this stale" boolean:
   carry the bare `role` key, which is accepted as a legacy fallback at every read site. A file
   carrying only the bare `role` key is **not** classified as stale on that basis alone —
   key-name migration is not a staleness input, only version-stamp and content comparisons are.
+- **Orchestrator harness region.** Orchestrator-role agents also compare
+  `orchestrator_injections_version`, read from the deployed `OrchestratorHarnessConstraints`
+  region. When the source has no such marker and the harness supplies no (or blank)
+  orchestrator content, the region can never be written, so the app layer
+  (`orchestratorRegionUndeliverable`) lists that agent key in
+  `plan.Input.OrchestratorRegionUndeliverable` and the planner expects an empty orchestrator
+  version for it (`descriptorForAgent`): the file compares clean after one write. A markerless
+  source on a harness that does have orchestrator content is unchanged: it stays stale and the
+  undelivered-content warning repeats on every update. With the marker, a deployed file lacking
+  the region is stale once, then clean. Nothing injects the region forcefully.
 - **Skills** and **hook bundles** compare a single `version` field each.
 - **Catalog change.** Every agent, skill file and hook bundle with a manifest entry is also
   stale when the catalog id recorded in its entry and the id of the catalog that supplies it
@@ -122,6 +135,34 @@ TODO/summary views and the log explain *why* something is stale, not just *that*
 `transform.Apply` is invoked once per Create/Update/conflict-overwrite plan item, always as
 a pure function: source bytes + harness module + request context in, output bytes + audit
 `Report` out.
+
+**Deployed bytes (`internal/app/deployed_bytes.go`).** All four flows (`update`, `workflows`,
+`deploy`, `agents`) hand the content step the bytes of the file being rewritten through one
+rule, `deployedBytes`; `readPathFor` is the single place that decides which file an item is read
+from (its target path, or a flow-supplied override such as a recorded legacy file). With
+deployed bytes, project regions, custom regions and tool choices are kept; without them an item
+is rendered as a create. `deploy` and `agents` also keep a rewritten agent's deployed model
+unless the run resolved one for it (`keepDeployedModels`, `rerun_models.go`; `deploy` counts persisted tier mappings as run-supplied, `agents` does not). `deploy` keeps the
+deployed `InfrastructureAgents` declarations only when the request made no infrastructure
+selection; any selection, including an empty one, replaces them (`Request.ClearInfrastructureAgents`).
+
+**GHCP legacy agents in plan and review (`ghcp_agent_legacy_paths.go`, `plan/build_legacy_agent.go`).**
+Workspaces from earlier releases hold agents as `X.md`; the current build writes `X.agent.md`.
+In all four flows `applyRecordedLegacyAgents` runs right after the deployed-state probe (and, in
+`deploy` and `agents`, before model resolution): an agent whose `X.agent.md` is absent while the
+manifest records its `X.md` and that file exists gets the `X.md` state as its deployed state, and
+its target path -> legacy path lands in `plan.Input.LegacyAgentPaths`. It works from planned paths,
+so agents without a `NumericID` are covered; an `X.md` without a manifest record is ignored.
+`classifyAgentItemLegacyAware` then classifies such an agent against the manifest record of the
+legacy path and plans it as an update with `PlanItem.RenamedFrom` set and the reason
+`renamed from <X.md>` (plus `; stale: ...` when stale), never as a create or conflict.
+`migrateLegacyGhcpAgents` keeps the planner's action and reason for these items and only adds the
+`X.md` removal. `deploy` and `agents` ask no agent model question for a migrating agent and ask a
+tier only when a non-migrating agent uses it (`splitMigratingAgents`, `resolveMigratingModels`); the
+legacy file's model is kept unless the run supplied one. The content step receives the legacy `X.md` bytes for these items: `deployedBytes.withMigratedAgents`
+(`deployed_bytes_migration.go`) captures them read-only when the rule is built (after review, before the
+executor removes `X.md`), never from `.mosaic/backups/`; a rename with nothing stale keeps the legacy bytes
+verbatim (`keepingUnchangedMigrations`).
 
 1. **Frontmatter shaping** — the harness module's `Frontmatter` method returns a plan of
    field removals, field sets, and key order; `Apply` executes it in a fixed order (remove →
@@ -173,12 +214,20 @@ a pure function: source bytes + harness module + request context in, output byte
      `Overwrite` / `BackupThenOverwrite`); a missing decision for any conflict item is a
      programming error (`ErrUndecidedConflict`) — the app layer must resolve every conflict
      before calling `Execute`.
+   - `Plan.Removals` and `Plan.Replacements` are handled before the per-item writes: each
+     removed file (and its manifest entry, when `DropEntry` is set) and each replaced file
+     is first backed up under `.mosaic/backups/`, and the result reports both lists. They
+     are used for the GHCP agent migration from `X.md` to `X.agent.md` in the deploy flows
+     and for the GHCP-pair Transform, which replaces the source deployment; every other
+     run leaves them empty. In atomic mode a failure reverses the journaled writes.
    - `BackupThenOverwrite` copies the current on-disk file to
      `<workspace>/.mosaic/backups/<relative-path>.<RFC3339-compact-with-nanoseconds>.bak`
      before writing the new content, so repeated backups of the same file in the same run
      never collide.
 3. **Hook deployment and registration** — hook bundle files are copied to the harness's
-   declared target directory; claude-code and vscode-ghcp share `.claude/hooks/`. In Update,
+   declared target directory; claude-code uses `.claude/hooks/`, while ghcp-cli and
+   vscode-ghcp both use `.github/hooks/` (a workspace holds only one of the two GHCP
+   targets, decided by the manifest `harness_id`). In Update,
    hook membership is not a selection: a Catalog hook is included when at least one file of
    the harness's hook variant is on disk (`deployedHookIDs` in update_hooks.go, using the
    layout-aware `probeHookPlanPresence`), and its deployed version comes from the manifest.
@@ -263,6 +312,16 @@ recorded is a real, detectable local modification, not noise to be smoothed over
   the orchestrator, no manifest entries) get provenance per resolved item in the stack.
 - Every gap raised anywhere in the pipeline (plan, transform, deploy) flows into exactly one
   `todo.Collector`, so the TODO file and on-screen summary are always in agreement.
+- The collector stores a gap once per identity until `Reset` (`internal/todo/gap_identity.go`).
+  `AddGap` copies the gap kind into `TodoItem.Kind` (not serialised), which lets the CLI pick
+  out the undelivered-orchestrator-content and role-forbidden-region warnings for console output.
+  The planner and the transform both report a missing model and an unmapped tool, so for
+  `GapNoModel` the identity is the agent (Subject) and for `GapUnmappedTool` it is agent (Owner)
+  plus tool (Subject); wording, detail and fragment do not matter and the first report wins.
+  Every other kind is identified by all fields, so gaps that differ in detail or fragment are
+  all kept. Both sources set Owner = agent and Subject = tool for unmapped tools; a skipped
+  custom tool is reported only by the transform and still gets its entry. `--strict-models`
+  reads the plan's own gaps and is unaffected.
 
 ## Known Complexity
 
@@ -275,3 +334,8 @@ consumers working directly on document mutation logic, that would be the next ca
 deeper tier — it was not split out here because no flow in this pipeline requires understanding
 its internal parsing algorithm, only its documented guarantees (byte-exact round-trip,
 section/injection boundary recognition).
+
+## Input validation notes
+
+- An unknown hook id in the selection makes `plan.ResolveArtifactsFrom` return `*plan.UnknownHookError` (matches `plan.ErrUnknownHook`, names the searched catalogs), like unknown workflow and agent ids, before any write. A known hook the harness has no target for is still skipped silently in `Build`.
+- `update` and `workflows` call `requireExistingWorkspace` (app/workspace_exists.go) before any write: a missing or non-directory path returns `app.ErrWorkspaceNotFound` (exit 1). `deploy` still creates a new folder.

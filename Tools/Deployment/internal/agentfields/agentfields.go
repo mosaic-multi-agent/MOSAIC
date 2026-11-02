@@ -136,3 +136,33 @@ func PromoteDropKeys() []string {
 	keys = append(keys, "model")
 	return keys
 }
+
+// VersionStampKeys returns every frontmatter key whose non-empty scalar value marks a file
+// as MOSAIC-stamped, most-preferred first: ReadOrder of the harness_version entry, then
+// ReadOrder of the transform_version entry. Returns a new slice on every call.
+func VersionStampKeys() []string {
+	var keys []string
+	for _, name := range []string{"harness_version", "transform_version"} {
+		if f, ok := ByDeployedName(name); ok {
+			keys = append(keys, ReadOrder(f)...)
+		}
+	}
+	return keys
+}
+
+// ReadVersionStamp reports whether a file's frontmatter carries a MOSAIC version stamp and
+// returns its value. scalar(key) must return the key's scalar value, or "" when the key is
+// absent or its value is not a scalar. The first key of VersionStampKeys() for which scalar
+// returns a non-empty string wins; stamp is that value and ok is true. When every key yields
+// "", stamp is "" and ok is false.
+func ReadVersionStamp(scalar func(key string) string) (stamp string, ok bool) {
+	if scalar == nil {
+		return "", false
+	}
+	for _, key := range VersionStampKeys() {
+		if v := scalar(key); v != "" {
+			return v, true
+		}
+	}
+	return "", false
+}

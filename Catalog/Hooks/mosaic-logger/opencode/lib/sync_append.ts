@@ -6,9 +6,8 @@
  * synchronously.
  */
 
-import * as nodeFs from "node:fs";
-import * as nodePath from "node:path";
 import { debugLog } from "./core.js";
+import { lockedAppendSync } from "./locked_append.js";
 
 /** Synchronously append one JSON line, creating parent dirs. Returns false on any failure. Never throws. */
 export function appendEventSync(
@@ -16,9 +15,7 @@ export function appendEventSync(
   event: Record<string, unknown>,
 ): boolean {
   try {
-    nodeFs.mkdirSync(nodePath.dirname(filePath), { recursive: true });
-    nodeFs.appendFileSync(filePath, JSON.stringify(event) + "\n", "utf-8");
-    return true;
+    return lockedAppendSync(filePath, JSON.stringify(event) + "\n", debugLog);
   } catch (err) {
     debugLog(`appendEventSync failed for ${filePath}`, err);
     return false;

@@ -16,7 +16,7 @@ func TestStore_Load_EntryWithoutLongContext_LoadsFiveStandardRates(t *testing.T)
 	root, path := makeRootWithConfigDir(t)
 	writePricingYAML(t, path, wellFormedOneModel)
 
-	table, findings, err := pricing.NewStore(root).Load(context.Background())
+	table, findings, err := pricing.NewStore(t.TempDir(), root).Load(context.Background())
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -27,7 +27,7 @@ func TestStore_Load_EntryWithoutLongContext_LoadsFiveStandardRates(t *testing.T)
 	if !found {
 		t.Fatal("test-model-a must be found")
 	}
-	want := newMinimalEntry(t, "test-model-a")
+	want := asProject(newMinimalEntry(t, "test-model-a"))
 	if got != want {
 		t.Errorf("loaded entry = %+v, want %+v", got, want)
 	}
@@ -40,7 +40,7 @@ func TestStore_Load_EntryWithLongContext_LoadsThresholdAndSecondRateSet(t *testi
 	root, path := makeRootWithConfigDir(t)
 	writePricingYAML(t, path, wellFormedTwoModels)
 
-	table, findings, err := pricing.NewStore(root).Load(context.Background())
+	table, findings, err := pricing.NewStore(t.TempDir(), root).Load(context.Background())
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestStore_Load_EntryWithLongContext_LoadsThresholdAndSecondRateSet(t *testi
 		t.Fatal("test-model-b must be found")
 	}
 	want := domain.ModelPricing{
-		Model: "test-model-b",
+		Model: "test-model-b", Source: domain.LevelProject,
 		Standard: domain.RateSet{
 			Input: mustRate(t, "1.00"), CacheRead: mustRate(t, "0.10"),
 			CacheWrite5m: mustRate(t, "1.25"), CacheWrite1h: mustRate(t, "2.00"),
@@ -77,7 +77,7 @@ func TestStore_Load_EntryWithLongContext_LoadsThresholdAndSecondRateSet(t *testi
 }
 
 func TestStore_Load_AbsentFile_ReturnsEmptyTableAndNoError(t *testing.T) {
-	store := pricing.NewStore(t.TempDir())
+	store := pricing.NewStore(t.TempDir(), t.TempDir())
 
 	table, findings, err := store.Load(context.Background())
 	if err != nil {
@@ -92,7 +92,7 @@ func TestStore_Load_AbsentFile_ReturnsEmptyTableAndNoError(t *testing.T) {
 }
 
 func TestStore_Load_AbsentFile_DoesNotCreateTheFile(t *testing.T) {
-	store := pricing.NewStore(t.TempDir())
+	store := pricing.NewStore(t.TempDir(), t.TempDir())
 
 	if _, _, err := store.Load(context.Background()); err != nil {
 		t.Fatalf("Load: %v", err)
@@ -106,7 +106,7 @@ func TestStore_Load_CommentsOnlyFile_ReturnsEmptyTable(t *testing.T) {
 	root, path := makeRootWithConfigDir(t)
 	writePricingYAML(t, path, commentsOnlyYAML)
 
-	table, findings, err := pricing.NewStore(root).Load(context.Background())
+	table, findings, err := pricing.NewStore(t.TempDir(), root).Load(context.Background())
 	if err != nil {
 		t.Fatalf("Load of a comments-only file must not return an error: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestStore_Load_MalformedYAML_ReturnsErrorAndEmptyTable(t *testing.T) {
 	root, path := makeRootWithConfigDir(t)
 	writePricingYAML(t, path, malformedYAML)
 
-	table, _, err := pricing.NewStore(root).Load(context.Background())
+	table, _, err := pricing.NewStore(t.TempDir(), root).Load(context.Background())
 	if err == nil {
 		t.Fatal("Load of a malformed YAML document must return a non-nil error")
 	}
@@ -135,7 +135,7 @@ func TestStore_Load_UnconfiguredModel_ReturnsNotConfiguredOutcome(t *testing.T) 
 	root, path := makeRootWithConfigDir(t)
 	writePricingYAML(t, path, wellFormedOneModel)
 
-	table, _, err := pricing.NewStore(root).Load(context.Background())
+	table, _, err := pricing.NewStore(t.TempDir(), root).Load(context.Background())
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestStore_Load_LookupByModelIDOnly_HarnessNotPartOfKey(t *testing.T) {
 	root, path := makeRootWithConfigDir(t)
 	writePricingYAML(t, path, wellFormedOneModel)
 
-	table, _, err := pricing.NewStore(root).Load(context.Background())
+	table, _, err := pricing.NewStore(t.TempDir(), root).Load(context.Background())
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

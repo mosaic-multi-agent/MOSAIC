@@ -88,7 +88,7 @@ func needsRunnerAdoption(runFolder string, isNewRun bool) bool {
 	if err != nil {
 		return false
 	}
-	state, err := artifact.Parse(data)
+	state, err := artifact.ParseAt(filepath.Join(runFolder, "Orchestration.md"), data)
 	if err != nil {
 		return false
 	}
@@ -106,7 +106,7 @@ func commitSetupPending(runFolder string, isNewRun bool) bool {
 	if err != nil {
 		return false
 	}
-	state, err := artifact.Parse(data)
+	state, err := artifact.ParseAt(filepath.Join(runFolder, "Orchestration.md"), data)
 	if err != nil {
 		return false
 	}

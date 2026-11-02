@@ -32,12 +32,13 @@ id: "my-harness"
 display_name: "My Harness"
 
 # --------------------------------------------------------------------------
-# OPTIONAL: version strings stamped into every deployed agent frontmatter.
-# Bump transform_version when the transform logic changes; bump
-# injections_version when harness injection content changes.
+# OPTIONAL: version string stamped into every deployed agent frontmatter.
+# Bump transform_version when the transform logic changes. Injection versions
+# are not declared here: they come from the frontmatter `version` of the
+# injection files (HarnessInjections.md and HarnessInjectionsOrchestrator.md).
+# A descriptor that still declares injections_version loads; the value is ignored.
 # --------------------------------------------------------------------------
 transform_version: "1.0.0"
-injections_version: "1.0.0"
 
 # --------------------------------------------------------------------------
 # Field group 2 — OPTIONAL: model catalog
@@ -263,7 +264,7 @@ hooks:
 | Field | Type | Description |
 |-------|------|-------------|
 | `transform_version` | string | Stamped into every deployed agent's frontmatter as `transform_version`. Bump when the transform logic changes so stale agents can be detected. |
-| `injections_version` | string | Stamped into every deployed agent's frontmatter as `injections_version`. Bump when any injection content changes. |
+| `injections_version` | string | Removed. A descriptor that still declares it loads, and the value is ignored. Injection versions come from the frontmatter `version` of `HarnessInjections.md` (the subagent and shared-region version) and of `HarnessInjectionsOrchestrator.md` (the orchestrator-region version). A present injection file without a `version` fails loading. |
 
 ---
 
@@ -427,8 +428,14 @@ in the Go structs for backward compatibility), but the content is silently ignor
 `<Name type="project">...</Name>` boundary-tag format. Omit the `injections:`
 YAML field entirely.
 
-**Injection source precedence:** `HarnessInjections.md` is the sole authoritative source.
-If `HarnessInjections.md` is absent for a descriptor-only harness, all injections return
+**Injection source precedence:** the injection files are the sole authoritative source of
+content and versions. `HarnessInjections.md` fills the `HarnessConstraints` region of every
+agent; `HarnessInjectionsOrchestrator.md` fills the second orchestrator region
+(`OrchestratorHarnessConstraints`), which only orchestrators carry, so an orchestrator has two
+harness regions and a subagent one. The frontmatter `version` of `HarnessInjections.md` is the
+subagent and shared-region version; that of `HarnessInjectionsOrchestrator.md` is the
+orchestrator-region version. A present file without a `version` fails loading. If
+`HarnessInjections.md` is absent for a descriptor-only harness, all injections return
 `ok=false` (no harness-level content is injected).
 
 ---
@@ -477,8 +484,9 @@ future descriptor authors recognise when a built-in module is required.
   filename collisions when multiple skills share the same entry filename (`SKILL.md`). Module
   code composes this path; the descriptor provides only the base directory.
 
-- **Runtime version stamps:** `transform_version` and `injections_version` are declared in the
-  descriptor as static source values. Stamping them into deployed agent frontmatter alongside
+- **Runtime version stamps:** `transform_version` is declared in the
+  descriptor as a static source value; injection versions come from the injection files.
+  Stamping them into deployed agent frontmatter alongside
   the resolved model identifier is a pipeline concern — the descriptor's `add` list cannot
   reference the active request. The deployment transform applies these as dedicated Steps 3 and
   4 of `applyFrontmatter`, after the descriptor's static `add` list is applied.

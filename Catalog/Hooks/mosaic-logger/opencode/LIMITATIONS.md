@@ -48,6 +48,42 @@ documented at the time of implementation. All field accesses use optional
 chaining and fallback cascades so that field-name drift degrades to absent data
 rather than a crash.
 
+## `usage_record` start time assumes epoch milliseconds
+
+A `usage_record` is timestamped with the message's `info.time.created`, read as
+epoch milliseconds (OpenCode's public SDK convention; not verified against a
+live install). It is usable when it is a finite number greater than zero and
+before the year 10000; otherwise the observation time is used. If the unit
+differs, or `created` marks message creation rather than the start of the
+request, the logged start time is shifted accordingly. It is the earliest
+per-message time available and does not change across observations.
+
+## Run binding: first binding wins; history carries only dispatches
+
+A native session is bound to a run only by a MOSAIC dispatch (a Task prompt, or
+a subagent session's first user text, carrying an agent instance id as well as
+a run id) or by Runner mode. User prompts, assistant replies and other text
+never bind, bare or in `run_id: <id>` form.
+
+On `session.created` for an orchestrator session, only Task tool-call inputs in
+the session history that carry an agent instance id bind it (the last one
+wins), so a resumed session regains its run while one that merely quoted a run
+id does not. A resumed session with no dispatch in its history stays unbound
+until its next dispatch.
+
+Unlike the Python adapters, a dispatch for run B does not switch an
+orchestrator session already bound to run A: chain-head adoption
+(`SessionCorrelationStore.adoptRunId`) never overwrites, because switching the
+chain head would re-route every session in the chain, including running
+subagents of the earlier run.
+
+## Orchestrator transcript export is session-guarded
+
+The sidecar of `00_orchestrator_session.raw` records the exporting session
+(`session_id`). A target whose sidecar names a different session is kept and
+the other session's transcript is not exported; the same session's re-export
+replaces it; a target with no sidecar or no recorded session is replaced.
+
 ## No runtime verification against a live install
 
 No verification against a running OpenCode instance was performed, by explicit
@@ -123,3 +159,13 @@ raw/sidecar mismatch, or a `.tmp_*` file, implement a Runner-side repair that ru
 Known Runner-mode field gaps for this adapter are listed in
 `Development/Designs/MosaicLogFormat.md` section 4.6 and in the header of
 `lib/handlers_runner.ts`.
+
+## Compaction events (log format 1.5.0), unverified
+
+The adapter observes compaction only through the experimental `experimental.session.compacting` hook, which fires at the start of a compaction. No separate completion hook is known (the plugin package is not installed here, so its types could not be checked), so each compaction is one self-contained `compaction` event without `phase`. `trigger`, `tokens_before` and `tokens_after` are emitted only when the hook payload carries them as genuine values; none is estimated.
+
+Unverified pending a live run: whether the hook fires for a subagent session own compaction, and which field identifies that session. The event is routed to the subagent invocation stream when the payload `sessionID` is a registered subagent session, otherwise to the orchestrator stream.
+
+## Adapter version comes from the workspace manifest
+
+`adapter_version` is read from the `version` of the `kind: hook`, `key: mosaic-logger` entry in `<workspace root>/.mosaic/manifest.yaml` (written by the Deploy tool). When the manifest or entry is missing, unreadable or ambiguous, the field is omitted and a debug line is written; logging continues.

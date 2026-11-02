@@ -114,6 +114,13 @@ type jsonRunTotalWire struct {
 	// UnknownRunResidual is the count of unknown-run records that could
 	// not be attributed after merging. Absent (omitempty) when zero.
 	UnknownRunResidual int `json:"unknown_run_residual,omitempty"`
+
+	// UsageNotFullyIngested is true when usage of the run is pending in its
+	// ingest state or that state is unreadable. Absent otherwise.
+	UsageNotFullyIngested bool `json:"usage_not_fully_ingested,omitempty"`
+
+	// PendingUsageRecords is the number of pending usage spans. Absent when zero.
+	PendingUsageRecords int `json:"pending_usage_records,omitempty"`
 }
 
 // EncodeRunTotal writes the stable basic total-per-run contract to w.
@@ -138,7 +145,7 @@ func EncodeRunTotal(w io.Writer, t app.RunTotal) error {
 		SchemaVersion:      "1",
 		RunID:              t.RunID,
 		Provisional:        t.Provisional,
-		Currency:           domain.Currency,
+		Currency:           string(jsonCurrency(t.Currency)),
 		Tokens:             encodeTokenUsage(t.Tokens),
 		Money:              encodeMoneyValue(t.Money),
 		Complete:           t.Complete,
@@ -146,6 +153,9 @@ func EncodeRunTotal(w io.Writer, t app.RunTotal) error {
 		PartialMoney:       partialMoney,
 		UnknownRunMerged:   t.UnknownRunMerged,
 		UnknownRunResidual: t.UnknownRunResidual,
+
+		UsageNotFullyIngested: t.PendingUsageRecords > 0 || t.UsageStateUnreadable,
+		PendingUsageRecords:   t.PendingUsageRecords,
 	}
 	return json.NewEncoder(w).Encode(wire)
 }
@@ -179,16 +189,20 @@ func encodeCategoryMoney(cm domain.CategoryMoney) jsonCategoryMoney {
 type jsonTotals struct {
 	Tokens jsonReportTokenUsage `json:"tokens"`
 	Money  jsonCategoryMoney    `json:"money"`
-	// AssumedTierCacheWrite counts cache-write tokens priced at the assumed 5m
+	// AssumedTierCacheWrite counts cache-write tokens priced at the assumed
 	// tier; absent when zero.
 	AssumedTierCacheWrite int64 `json:"assumed_tier_cache_write_tokens,omitempty"`
+	// AssumedCacheWriteTiers names the tiers behind that count, in log-format
+	// order; absent when no tier was assumed.
+	AssumedCacheWriteTiers []string `json:"assumed_cache_write_tiers,omitempty"`
 }
 
 func encodeTotals(t domain.Totals) jsonTotals {
 	return jsonTotals{
-		Tokens:                encodeReportTokenUsage(t.Tokens),
-		Money:                 encodeCategoryMoney(t.Money),
-		AssumedTierCacheWrite: t.AssumedTierCacheWrite,
+		Tokens:                 encodeReportTokenUsage(t.Tokens),
+		Money:                  encodeCategoryMoney(t.Money),
+		AssumedTierCacheWrite:  t.AssumedTierCacheWrite,
+		AssumedCacheWriteTiers: tierNames(t.AssumedTiers),
 	}
 }
 
@@ -205,6 +219,9 @@ type jsonActorReport struct {
 	UnpricedModels       []string     `json:"unpriced_models"`
 	Totals               jsonTotals   `json:"totals"`
 	Effort               []jsonEffort `json:"effort"`
+
+	// Context is set for the orchestrator and agents of a run report only.
+	Context *jsonActorContext `json:"context,omitempty"`
 }
 
 // jsonModelKey is one provider/model pair as logged.
@@ -253,19 +270,41 @@ type jsonRunReport struct {
 	ByStatus    jsonStatusBreakdown  `json:"by_status"`
 	Tools       jsonToolsBreakdown   `json:"tools"`
 	Timeline    jsonTimeline         `json:"timeline"`
+
+	OutcomeSplit jsonOutcomeSplit `json:"outcome_split"`
+	Rework       jsonRework       `json:"rework"`
+	Cache        jsonCache        `json:"cache"`
+	WallTime     jsonWallTime     `json:"wall_time"`
+
+	// Unattributed is the run-level usage of no orchestrator or agent; absent when the run has none.
+	Unattributed *jsonActorReport `json:"unattributed,omitempty"`
+
+	// UsageIngest is present only when usage of the run is still pending or its
+	// ingest state is unreadable.
+	UsageIngest *jsonUsageIngest `json:"usage_ingest,omitempty"`
+}
+
+// jsonUsageIngest is the wire shape of a run's pending-usage state.
+type jsonUsageIngest struct {
+	PendingRecords  int  `json:"pending_records,omitempty"`
+	StateUnreadable bool `json:"state_unreadable,omitempty"`
 }
 
 func encodeRunReport(r domain.RunReport) jsonRunReport {
 	agents := make([]jsonActorReport, 0, len(r.Agents))
 	for _, a := range r.Agents {
-		agents = append(agents, encodeActorReport(a))
+		enc := encodeActorReport(a)
+		enc.Context = encodeRunActorContext(r.Context, a)
+		agents = append(agents, enc)
 	}
+	orchestrator := encodeActorReport(r.Orchestrator)
+	orchestrator.Context = encodeRunActorContext(r.Context, r.Orchestrator)
 	unpriced := encodeUnpricedModels(r.UnpricedModels)
-	return jsonRunReport{
+	out := jsonRunReport{
 		RunID:          r.Run.Label(),
 		Provisional:    r.Provisional,
 		Totals:         encodeTotals(r.Totals),
-		Orchestrator:   encodeActorReport(r.Orchestrator),
+		Orchestrator:   orchestrator,
 		Agents:         agents,
 		UnpricedModels: unpriced,
 
@@ -274,7 +313,20 @@ func encodeRunReport(r domain.RunReport) jsonRunReport {
 		ByStatus:    encodeStatusBreakdown(r.ByStatus),
 		Tools:       encodeToolsBreakdown(r.Tools),
 		Timeline:    encodeTimeline(r.Timeline),
+
+		OutcomeSplit: encodeOutcomeSplit(r.Overview.Outcomes),
+		Rework:       encodeRework(r.Rework),
+		Cache:        encodeCache(r.Cache),
+		WallTime:     encodeWallTime(r.WallTime),
 	}
+	if r.Unattributed != nil {
+		u := encodeActorReport(*r.Unattributed)
+		out.Unattributed = &u
+	}
+	if st := r.UsageIngest; st != (domain.UsageIngestState{}) {
+		out.UsageIngest = &jsonUsageIngest{PendingRecords: st.PendingRecords, StateUnreadable: st.StateUnreadable}
+	}
+	return out
 }
 
 // jsonFinding is the JSON wire shape for a data-quality finding.
@@ -348,15 +400,16 @@ func encodeSource(s domain.Source) jsonSource {
 
 // jsonReportWire is the full report JSON wire shape.
 type jsonReportWire struct {
-	SchemaVersion  string          `json:"schema_version"`
-	Currency       string          `json:"currency"`
-	Source         jsonSource      `json:"source"`
-	AllRuns        jsonTotals      `json:"all_runs"`
-	Runs           []jsonRunReport `json:"runs"`
-	Unattributable *jsonRunReport  `json:"unattributable,omitempty"`
-	UnpricedModels []string        `json:"unpriced_models"`
-	AcrossRuns     jsonAcrossRuns  `json:"across_runs"`
-	Quality        jsonQuality     `json:"quality"`
+	SchemaVersion   string               `json:"schema_version"`
+	Currency        string               `json:"currency"`
+	Source          jsonSource           `json:"source"`
+	AllRuns         jsonTotals           `json:"all_runs"`
+	Runs            []jsonRunReport      `json:"runs"`
+	Unattributable  *jsonRunReport       `json:"unattributable,omitempty"`
+	UnpricedModels  []string             `json:"unpriced_models"`
+	AcrossRuns      jsonAcrossRuns       `json:"across_runs"`
+	Quality         jsonQuality          `json:"quality"`
+	UnpricedReasons []jsonUnpricedReason `json:"unpriced_reasons,omitempty"`
 }
 
 // EncodeReport writes the full report JSON to w, preserving absent-vs-zero
@@ -381,15 +434,25 @@ func EncodeReport(w io.Writer, r domain.Report) error {
 	unpriced := encodeUnpricedModels(r.UnpricedModels)
 
 	wire := jsonReportWire{
-		SchemaVersion:  "1",
-		Currency:       r.Currency,
-		Source:         encodeSource(r.Source),
-		AllRuns:        encodeTotals(r.AllRuns),
-		Runs:           runs,
-		Unattributable: unattributable,
-		UnpricedModels: unpriced,
-		AcrossRuns:     encodeAcrossRuns(r.AcrossRuns),
-		Quality:        encodeQuality(r.Quality),
+		SchemaVersion:   "1",
+		Currency:        string(jsonCurrency(r.Currency)),
+		Source:          encodeSource(r.Source),
+		AllRuns:         encodeTotals(r.AllRuns),
+		Runs:            runs,
+		Unattributable:  unattributable,
+		UnpricedModels:  unpriced,
+		AcrossRuns:      encodeAcrossRuns(r.AcrossRuns),
+		Quality:         encodeQuality(r.Quality),
+		UnpricedReasons: encodeUnpricedReasons(r.UnpricedReasons),
 	}
 	return json.NewEncoder(w).Encode(wire)
+}
+
+// tierNames renders cache-write tiers as their log-format names.
+func tierNames(tiers []domain.CacheWriteTier) []string {
+	var out []string
+	for _, t := range tiers {
+		out = append(out, string(t))
+	}
+	return out
 }

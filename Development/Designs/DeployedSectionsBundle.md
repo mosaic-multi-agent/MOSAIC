@@ -60,7 +60,7 @@ That is why `bundle_version` is never a compatibility number, and why an agent a
 
 Mixing it into the bundle would make every wording fix in an unrelated block look like a contract change. That is not a cosmetic problem: everything downstream that reasons about protocol compatibility would be reasoning about noise, and a contract version that moves without the contract moving is worse than no version at all.
 
-**Per-deployment assembled regions.** `AvailableWorkflows`, `InfrastructureAgents`, and `HarnessConstraints` are managed-type regions too, but their content comes from a deployment's own selections. There is no canonical text for the bundle to hold. The full list of deployed names and their sources is in `AgentTemplateArchitecture.md` §2.5.
+**Per-deployment assembled regions.** `AvailableWorkflows`, `InfrastructureAgents`, `HarnessConstraints`, and `OrchestratorHarnessConstraints` are managed-type regions too, but their content comes from a deployment's own selections. There is no canonical text for the bundle to hold. The full list of deployed names and their sources is in `AgentTemplateArchitecture.md` §2.5.
 
 ---
 

@@ -25,15 +25,19 @@ func (m Money) Nanos() int64 { return int64(m) }
 // trimmed (e.g. "3", "1.23", "0.00000001"). Used for JSON, where exactness matters.
 func (m Money) String() string {
 	n := int64(m)
+	sign := ""
+	if n < 0 {
+		sign, n = "-", -n
+	}
 	whole := n / nanosPerDollar
 	frac := n % nanosPerDollar
 	if frac == 0 {
-		return strconv.FormatInt(whole, 10)
+		return sign + strconv.FormatInt(whole, 10)
 	}
 	// Format fractional part as 9-digit string with leading zeros, then trim trailing zeros.
 	fracStr := fmt.Sprintf("%09d", frac)
 	fracStr = strings.TrimRight(fracStr, "0")
-	return strconv.FormatInt(whole, 10) + "." + fracStr
+	return sign + strconv.FormatInt(whole, 10) + "." + fracStr
 }
 
 // StringFixed renders the value rounded half-up to n decimal places (e.g.

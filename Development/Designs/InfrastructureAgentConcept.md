@@ -2,7 +2,7 @@
 
 > **Status:** Draft for review — consolidated against the concrete agent designs
 > **Created:** 2026-07-31
-> **Last Updated:** 2026-10-22
+> **Last Updated:** 2026-10-26
 > **Scope:** Defines the infrastructure agent class — agents that belong to no workflow but are executed on triggers during orchestration. Covers how they are declared, discovered, triggered, invoked, recorded, and how their failures are handled. Does not specify any concrete infrastructure agent; those have their own designs.
 
 > **Authoring note.** This document was first drafted ahead of the concrete infrastructure agents, then revised against them. That order mattered: designing the instances removed a trigger (`PRE_ROLLBACK`) that had no consumer, changed the justification for another (`PHASE_END`) from anticipated need to deliberate framework generality, and moved three misplaced schema amendments out of §10 and into the design that actually owns them. Sections that generalise beyond what the instances demonstrate now say so explicitly rather than presenting themselves as established.
@@ -274,7 +274,9 @@ Each infrastructure agent declares `on_failure` as either `halt` or `continue`. 
 | Policy | Behaviour |
 |---|---|
 | `halt` | Stop the run and escalate to the user. The Execution Log row is written first, so the failure is on the record before the run stops. |
-| `continue` | Record the row and proceed to the next workflow agent as though the trigger had not fired. |
+| `continue` | Record the row, report the failure to the user, and proceed to the next workflow agent as though the trigger had not fired. |
+
+**`continue` is not silent.** The run's routing ignores the failure; the user must not. A failure recorded only in the Execution Log goes unseen until someone reads the log, and that is how dispatch defects have hidden behind this policy (§12). How the failure is reported is up to each executor, but it must reach the user during the run and again when the run ends.
 
 The policy is per-agent because the correct answer genuinely differs by agent, and a uniform rule is wrong in one direction or the other for every agent it is applied to.
 

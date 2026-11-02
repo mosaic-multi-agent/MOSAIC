@@ -103,8 +103,8 @@ The following harnesses are compiled into the `mosaic-deploy` binary:
 |------------|--------------|-------|
 | `claude-code` | Claude Code | Tools emitted as a comma-separated scalar |
 | `opencode` | OpenCode | Permission-shape tool mapping; reference external module available |
-| `ghcp-cli` | GitHub Copilot CLI | List-shape tool mapping |
-| `vscode-ghcp` | VS Code GitHub Copilot | List-shape tool mapping |
+| `ghcp-cli` | GHCP CLI / VS Code GHCP Copilot | List-shape tool mapping |
+| `vscode-ghcp` | VS Code GHCP Local | List-shape tool mapping |
 
 Third-party harnesses use the descriptor-only or external module tier. See the
 [Harness Contributor Guide](harness-contributor-guide.md).

@@ -5,8 +5,12 @@
 package screens
 
 import (
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+
+	tuicommon "mosaic-common/tui"
+
+	"mosaic-log-analyzer/internal/domain"
 )
 
 // ScreenID names each screen for navigation and testing.
@@ -25,6 +29,10 @@ const (
 	ScreenTools      ScreenID = "run-tools"       // V4 tools
 	ScreenTimeline   ScreenID = "run-timeline"    // V5 timeline
 	ScreenAcrossRuns ScreenID = "across-runs"     // V6 across runs
+	ScreenContext    ScreenID = "run-context"     // V7 context
+	ScreenSession    ScreenID = "run-session"     // one actor's session, opened from Dispatches, By type or Context
+
+	ScreenCompare ScreenID = "compare" // run comparison (not a per-run view)
 )
 
 // Screen is the contract every screen satisfies so the top-level model can
@@ -53,4 +61,11 @@ type Styles struct {
 	Error    lipgloss.Style
 	Help     lipgloss.Style
 	Border   lipgloss.Style
+
+	// Theme is the palette theme passed to kit widgets.
+	Theme tuicommon.Theme
+
+	// Currency is the effective currency every money figure is shown in; empty
+	// reads as USD.
+	Currency domain.CurrencyCode
 }

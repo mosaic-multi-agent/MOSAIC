@@ -60,6 +60,14 @@ func runTUIMode(args []string, devMode bool) {
 	// reason: the TUI sets requests that every rebuilt session must read.
 	requests := session.NewInRunRequests()
 
+	// The anti-loop guard waiver is shared the same way: the TUI switches it,
+	// every rebuilt session reads it. The CLI path never builds one.
+	guardWaiver := session.NewGuardWaiver()
+
+	// The standing-guidance holder is shared the same way: every rebuilt session
+	// publishes its guidance through it.
+	standingGuidance := session.NewStandingGuidance()
+
 	// minter mints run identity for new runs created from inside the TUI (run-select
 	// screen's "new run" choice). It is also used as the defensive fallback inside
 	// the session factory when an unresolved run folder is encountered.
@@ -97,6 +105,8 @@ func runTUIMode(args []string, devMode bool) {
 		Identity:       identity,
 		StopSignal:     stopSignal,
 		Requests:       requests,
+		GuardWaiver:    guardWaiver,
+		Guidance:       standingGuidance,
 		Debug:          logger,
 		DispatchLog:    dispLogger,
 		Clock:          &realClock{},

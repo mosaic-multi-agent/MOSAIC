@@ -104,20 +104,19 @@ func TestStatusAndToolsViews_IdentifyThemselves(t *testing.T) {
 	}
 }
 
-func TestRunViews_HelpListsEveryOtherViewKeyAndBack(t *testing.T) {
+func TestRunViews_HelpHintsAtTheOverviewListingEveryOtherViewKeyAndBack(t *testing.T) {
 	for _, from := range allPerRunViews() {
-		help := from.make(statusRun()).Help()
-
+		s := from.make(statusRun())
+		var others []string
 		for _, to := range allPerRunViews() {
-			if to.id == from.id {
-				continue
-			}
-			if !strings.Contains(help, to.key+" ") {
-				t.Errorf("%s: help %q must list key %q for the %s view", from.id, help, to.key, to.id)
+			if to.id != from.id {
+				others = append(others, to.key)
 			}
 		}
-		if !strings.Contains(help, "esc") {
-			t.Errorf("%s: help %q must list esc", from.id, help)
+
+		if help := s.Help(); !strings.Contains(help, screens.KeyHelp) {
+			t.Errorf("%s: help %q must hint at the ? overlay", from.id, help)
 		}
+		assertOverlayListsViewKeys(t, s, others...)
 	}
 }

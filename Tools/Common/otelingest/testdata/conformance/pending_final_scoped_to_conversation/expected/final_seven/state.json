@@ -1,0 +1,30 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 968,
+    "head_len": 968,
+    "head_sha256": "232eace51e636444eec1acc4a8d63f4aba607b00d85d231b8bc92d0117fb261d"
+  },
+  "placements": {
+    "s7": "unattributed"
+  },
+  "pending": [
+    {
+      "record": {
+        "record_id": "s6",
+        "record_index": 0,
+        "model": "m",
+        "provider": "github-copilot",
+        "token_usage": {
+          "input_tokens": 60,
+          "output_tokens": 1
+        },
+        "timestamp": "2026-10-28T09:00:00.000Z"
+      },
+      "parent_span_id": "missing-6",
+      "conversation_id": "vsc-session-6",
+      "chat_session_id": "toolu_missing-6"
+    }
+  ],
+  "links": {}
+}

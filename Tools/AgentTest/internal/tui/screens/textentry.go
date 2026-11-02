@@ -4,6 +4,7 @@ import (
 	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"mosaic-common/tui/pastesafe"
 )
@@ -17,14 +18,42 @@ type draftEntry struct {
 	edited bool // a character was accepted or Backspace pressed since the last reset
 }
 
-// newDraftEntry returns an entry accepting every rune.
-func newDraftEntry() *draftEntry {
-	return &draftEntry{field: pastesafe.NewField()}
+// entryIndent is the width of the margin the screens put before the value line.
+const entryIndent = 2
+
+// newDraftEntry returns an entry accepting every rune, sized for a screen of
+// the given width.
+func newDraftEntry(screenWidth int) *draftEntry {
+	d := &draftEntry{field: pastesafe.NewField()}
+	d.setWidth(screenWidth)
+	return d
 }
 
-// newDigitEntry returns an entry accepting only digit runes.
-func newDigitEntry() *draftEntry {
-	return &draftEntry{field: pastesafe.NewField(pastesafe.WithRuneFilter(unicode.IsDigit))}
+// newDigitEntry returns an entry accepting only digit runes, sized for a screen
+// of the given width.
+func newDigitEntry(screenWidth int) *draftEntry {
+	d := &draftEntry{field: pastesafe.NewField(pastesafe.WithRuneFilter(unicode.IsDigit))}
+	d.setWidth(screenWidth)
+	return d
+}
+
+// setWidth bounds the input line to the screen width minus the value margin.
+// A screen width <= 0 leaves the line unbounded.
+func (d *draftEntry) setWidth(screenWidth int) {
+	if screenWidth <= 0 {
+		d.field.SetWidth(0)
+		return
+	}
+	d.field.SetWidth(max(screenWidth-entryIndent, 1))
+}
+
+// render returns the value line: the fallback in the selected style while no
+// draft is typed, otherwise the field with its cursor.
+func (d *draftEntry) render(fallback string, selected lipgloss.Style) string {
+	if d.field.Value() == "" {
+		return selected.Render(fallback)
+	}
+	return d.field.View()
 }
 
 // entryResult reports what a key message did to the entry.

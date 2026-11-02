@@ -86,6 +86,10 @@ type jsonOverview struct {
 	SubagentShare     jsonRatio          `json:"subagent_share"`
 	ByModel           []jsonModelFigures `json:"by_model"`
 	CacheHitRatio     jsonRatio          `json:"cache_hit_ratio"`
+
+	// Both are absent for a run without unattributed usage.
+	Unattributed      *jsonTotals `json:"unattributed,omitempty"`
+	UnattributedShare *jsonRatio  `json:"unattributed_share,omitempty"`
 }
 
 func encodeOverview(o domain.RunOverview) jsonOverview {
@@ -95,7 +99,7 @@ func encodeOverview(o domain.RunOverview) jsonOverview {
 			Model: string(m.Model), Provider: string(m.Provider), Priced: m.Priced, Requests: m.Requests, Totals: encodeTotals(m.Totals),
 		}
 	}
-	return jsonOverview{
+	ov := jsonOverview{
 		Totals:            encodeTotals(o.Totals),
 		Orchestrator:      encodeTotals(o.Orchestrator),
 		Subagents:         encodeGroupFigures(o.Subagents),
@@ -104,6 +108,11 @@ func encodeOverview(o domain.RunOverview) jsonOverview {
 		ByModel:           models,
 		CacheHitRatio:     encodeRatio(o.CacheHitRatio),
 	}
+	if o.Unattributed != nil {
+		u, share := encodeTotals(*o.Unattributed), encodeRatio(o.UnattributedShare)
+		ov.Unattributed, ov.UnattributedShare = &u, &share
+	}
+	return ov
 }
 
 // jsonMoneyStats marks partial statistics with complete=false.
@@ -131,6 +140,11 @@ type jsonDispatch struct {
 	UnpricedModels []string     `json:"unpriced_models"`
 	Totals         jsonTotals   `json:"totals"`
 	Effort         []jsonEffort `json:"effort"`
+
+	PeakContext  *jsonContextFigure `json:"peak_context"`
+	Cache        jsonCache          `json:"cache"`
+	Repeat       bool               `json:"repeat"`
+	LikelyRework bool               `json:"likely_rework"`
 }
 
 func stringOrNull(s string) *string {
@@ -166,6 +180,10 @@ func encodeDispatch(d domain.Dispatch) jsonDispatch {
 		UnpricedModels: encodeUnpricedModels(d.UnpricedModels),
 		Totals:         encodeTotals(d.Totals),
 		Effort:         encodeEffort(d.Effort),
+		PeakContext:    encodeContextFigure(d.PeakContext),
+		Cache:          encodeCache(d.Cache),
+		Repeat:         d.Repeat,
+		LikelyRework:   d.LikelyRework,
 	}
 }
 
@@ -174,6 +192,9 @@ type jsonAgentTypeGroup struct {
 	Figures       jsonGroupFigures `json:"figures"`
 	PerInvocation jsonMoneyStats   `json:"per_invocation"`
 	Dispatches    []jsonDispatch   `json:"dispatches"`
+	PeakContext   jsonPeakContext  `json:"peak_context"`
+	Rework        jsonRework       `json:"rework"`
+	Cache         jsonCache        `json:"cache"`
 }
 
 func encodeAgentTypeGroups(groups []domain.AgentTypeGroup) []jsonAgentTypeGroup {
@@ -193,7 +214,10 @@ func encodeAgentTypeGroups(groups []domain.AgentTypeGroup) []jsonAgentTypeGroup 
 				Average:  encodeMoneyValue(g.PerInvocation.Average),
 				Complete: g.PerInvocation.Complete,
 			},
-			Dispatches: dispatches,
+			Dispatches:  dispatches,
+			PeakContext: encodePeakContext(g.PeakContext),
+			Rework:      encodeRework(g.Rework),
+			Cache:       encodeCache(g.Cache),
 		}
 	}
 	return out
@@ -251,11 +275,12 @@ type jsonDurations struct {
 
 // jsonToolFigures are exact figures only: no token or money attribution.
 type jsonToolFigures struct {
-	Tool      string        `json:"tool"`
-	Calls     int           `json:"calls"`
-	Errors    int           `json:"errors"`
-	Unpaired  int           `json:"unpaired"`
-	Durations jsonDurations `json:"durations"`
+	Tool      string         `json:"tool"`
+	Calls     int            `json:"calls"`
+	Errors    int            `json:"errors"`
+	Unpaired  int            `json:"unpaired"`
+	Durations jsonDurations  `json:"durations"`
+	Growth    jsonToolGrowth `json:"context_growth"`
 }
 
 type jsonAgentTypeTools struct {
@@ -279,7 +304,7 @@ func encodeToolFigures(tools []domain.ToolFigures) []jsonToolFigures {
 			d.MaxMS = durationMillis(f.Durations.Max)
 			d.AverageMS = durationMillis(f.Durations.Average)
 		}
-		out[i] = jsonToolFigures{Tool: f.Tool, Calls: f.Calls, Errors: f.Errors, Unpaired: f.Unpaired, Durations: d}
+		out[i] = jsonToolFigures{Tool: f.Tool, Calls: f.Calls, Errors: f.Errors, Unpaired: f.Unpaired, Durations: d, Growth: encodeToolGrowth(f.Growth)}
 	}
 	return out
 }

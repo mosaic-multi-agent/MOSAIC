@@ -4,12 +4,12 @@ package domain
 type SourceKind uint8
 
 const (
-	SourceNotFound  SourceKind = iota // nothing at the probed/supplied location
-	SourceLogsRoot                    // a tree of run folders
-	SourceSingleRun                   // the path is itself one run folder
-	SourceUnusable                    // exists but is not a logs tree
-	SourceDigestFile                  // the path is one digest file
-	SourceDigestDir                   // a directory holding digests and no log structure
+	SourceNotFound   SourceKind = iota // nothing at the probed/supplied location
+	SourceLogsRoot                     // a tree of run folders
+	SourceSingleRun                    // the path is itself one run folder
+	SourceUnusable                     // exists but is not a logs tree
+	SourceDigestFile                   // the path is one digest file
+	SourceDigestDir                    // a directory holding digests and no log structure
 )
 
 // Source describes a resolved (or unresolved) log source. It is never an error.
@@ -41,6 +41,7 @@ type RunEntry struct {
 	Run              RunRef
 	Dir              string
 	OrchestratorFile string       // "" when 00_orchestrator_events.jsonl is absent
+	UnattributedFile string       // "" when 00_unattributed_events.jsonl is absent
 	Agents           []AgentEntry // sorted by Dir
 }
 
@@ -64,6 +65,7 @@ type StreamKind uint8
 const (
 	StreamOrchestrator StreamKind = iota
 	StreamAgentInstance
+	StreamUnattributed // run-root 00_unattributed_events.jsonl
 )
 
 // StreamRef is the provenance the reader/app attaches to every event handed to

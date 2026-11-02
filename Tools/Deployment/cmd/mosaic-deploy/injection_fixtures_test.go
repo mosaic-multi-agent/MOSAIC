@@ -86,13 +86,17 @@ func addInjectionRegions(t *testing.T, catalogRoot string, agentKeys ...string) 
 	for _, key := range agentKeys {
 		files = append(files, filepath.Join("Subagents", "Test", key+".md"))
 	}
-	for _, rel := range files {
+	const orchestratorFileCount = 2
+	for i, rel := range files {
 		p := filepath.Join(catalogRoot, rel)
 		src, err := os.ReadFile(p)
 		if err != nil {
 			t.Fatalf("read %q: %v", p, err)
 		}
 		region := "\n<HarnessConstraints type=\"managed\">\n</HarnessConstraints>\n"
+		if i < orchestratorFileCount {
+			region += "\n<OrchestratorHarnessConstraints type=\"managed\">\n</OrchestratorHarnessConstraints>\n"
+		}
 		if err := os.WriteFile(p, append(src, []byte(region)...), 0o644); err != nil {
 			t.Fatalf("write %q: %v", p, err)
 		}

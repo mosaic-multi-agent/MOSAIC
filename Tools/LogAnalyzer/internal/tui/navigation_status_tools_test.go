@@ -100,7 +100,7 @@ func TestStatusTools_PerDispatchListStillListsOrchestratorAndDispatches(t *testi
 
 		assertOn(t, m, screens.ScreenRunDetail)
 		view := m.View()
-		if !strings.Contains(view, "builder#1") || !strings.Contains(view, "Orchestrator") {
+		if !strings.Contains(view, "builder#1") || !strings.Contains(strings.ToLower(view), "orchestrator") {
 			t.Errorf("per-dispatch list must list the orchestrator and builder#1\n%s", view)
 		}
 	}
@@ -121,14 +121,16 @@ func TestStatusTools_BackReturnsToRunsList(t *testing.T) {
 }
 
 func TestStatusTools_ShowTheSelectedRunNotTheFirst(t *testing.T) {
-	report := navViewsReport(statusToolsRun(runA, 300, "ToolA"), statusToolsRun(runB, 700, "ToolB"))
+	report := navViewsReport(statusToolsRun(runA, 700, "ToolA"), statusToolsRun(runB, 300, "ToolB"))
 
 	status := send(onRunsList(report), "down", "enter", screens.KeyViewStatus)
 	tools := send(onRunsList(report), "down", "enter", screens.KeyViewTools)
 
 	assertOn(t, status, screens.ScreenStatus)
-	if view := status.View(); !strings.Contains(view, "$7.00") || strings.Contains(view, "$3.00") {
-		t.Errorf("status view must show the second run ($7.00) and not the first ($3.00)\n%s", view)
+	// The runs list is sorted by cost, most expensive first: the second row is the
+	// cheaper run, runB ($3.00), and the first row is runA ($7.00).
+	if view := status.View(); !strings.Contains(view, "$3.00") || strings.Contains(view, "$7.00") {
+		t.Errorf("status view must show the second row's run ($3.00) and not the first's ($7.00)\n%s", view)
 	}
 	assertOn(t, tools, screens.ScreenTools)
 	if view := tools.View(); !strings.Contains(view, "ToolB") || strings.Contains(view, "ToolA") {
@@ -137,14 +139,14 @@ func TestStatusTools_ShowTheSelectedRunNotTheFirst(t *testing.T) {
 }
 
 func TestStatusTools_ReopeningAfterBackShowsTheSameRunAgain(t *testing.T) {
-	report := navViewsReport(statusToolsRun(runA, 300, "ToolA"), statusToolsRun(runB, 700, "ToolB"))
+	report := navViewsReport(statusToolsRun(runA, 700, "ToolA"), statusToolsRun(runB, 300, "ToolB"))
 
 	m := send(onRunsList(report), "down", "enter", screens.KeyViewStatus, "esc")
 	assertOn(t, m, screens.ScreenRuns)
 	m = send(m, "enter", screens.KeyViewStatus)
 
 	assertOn(t, m, screens.ScreenStatus)
-	if !strings.Contains(m.View(), "$7.00") {
+	if !strings.Contains(m.View(), "$3.00") {
 		t.Errorf("runs cursor must survive the round trip\n%s", m.View())
 	}
 }
@@ -164,6 +166,10 @@ func TestStatusTools_AfterRepricingStatusShowsTheNewFigures(t *testing.T) {
 	}
 }
 
+// shortTerminalH is short enough to scroll 30 rows, yet tall enough for the Tools
+// three-line header group, a row and the content-capture note.
+const shortTerminalH = 14
+
 func TestStatusTools_ScrollOnAShortTerminal(t *testing.T) {
 	run := statusToolsRun(runA, 1000, "ToolA")
 	for i := 1; i <= 30; i++ {
@@ -178,12 +184,12 @@ func TestStatusTools_ScrollOnAShortTerminal(t *testing.T) {
 	cases := map[string]string{screens.KeyViewStatus: "type-30", screens.KeyViewTools: "tool-30"}
 	for key, last := range cases {
 		m := onRunDetail(t, navViewsReport(run))
-		updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 8})
+		updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: shortTerminalH})
 		m = send(asModel(updated), key)
 
 		view := m.View()
-		if n := strings.Count(view, "\n") + 1; n > 8 {
-			t.Errorf("key %q: view has %d lines on an 8-line terminal\n%s", key, n, view)
+		if n := strings.Count(view, "\n") + 1; n > shortTerminalH {
+			t.Errorf("key %q: view has %d lines on a %d-line terminal\n%s", key, n, shortTerminalH, view)
 		}
 		if strings.Contains(view, last) {
 			t.Errorf("key %q: %s must be scrolled out of view\n%s", key, last, view)

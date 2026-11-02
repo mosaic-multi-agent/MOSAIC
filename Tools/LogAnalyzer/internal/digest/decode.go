@@ -108,7 +108,7 @@ func convertDigest(doc digestDoc, path string) (domain.Digest, []domain.Finding,
 		if rd.RunID == "" {
 			return domain.Digest{}, nil, invalidf("a runs entry has no run_id")
 		}
-		run, err := convertRun(rd, domain.NamedRun(rd.RunID))
+		run, err := convertRun(rd, domain.NamedRun(rd.RunID), doc.DigestVersion)
 		if err != nil {
 			return domain.Digest{}, nil, err
 		}
@@ -129,7 +129,7 @@ func convertDigest(doc digestDoc, path string) (domain.Digest, []domain.Finding,
 		return d.Aggregate.Runs[i].Run.ID < d.Aggregate.Runs[j].Run.ID
 	})
 	if doc.Unattributable != nil {
-		bucket, err := convertRun(*doc.Unattributable, domain.UnattributableRun())
+		bucket, err := convertRun(*doc.Unattributable, domain.UnattributableRun(), doc.DigestVersion)
 		if err != nil {
 			return domain.Digest{}, nil, err
 		}

@@ -20,6 +20,9 @@ import (
 	"mosaic-deploy/internal/harness/registry"
 )
 
+// sharedFixtureVersion is the frontmatter version writeInjectionContent gives HarnessInjections.md.
+const sharedFixtureVersion = "6.1.0"
+
 type contentDirCase struct {
 	name    string
 	dirName string
@@ -44,8 +47,8 @@ func writeInjectionContent(t *testing.T, dir, tag, orchVersion string) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", dir, err)
 	}
-	shared := "<HarnessConstraints type=\"managed\">\nSHARED_" + tag + "\n</HarnessConstraints>\n"
-	orch := "---\nversion: \"" + orchVersion + "\"\n---\n<HarnessConstraints type=\"managed\">\nORCH_" + tag + "\n</HarnessConstraints>\n"
+	shared := "---\nversion: \"" + sharedFixtureVersion + "\"\n---\n<HarnessConstraints type=\"managed\">\nSHARED_" + tag + "\n</HarnessConstraints>\n"
+	orch := "---\nversion: \"" + orchVersion + "\"\n---\n<OrchestratorHarnessConstraints type=\"managed\">\nORCH_" + tag + "\n</OrchestratorHarnessConstraints>\n"
 	for name, src := range map[string]string{"HarnessInjections.md": shared, "HarnessInjectionsOrchestrator.md": orch} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644); err != nil {
 			t.Fatalf("write %s: %v", name, err)
@@ -55,6 +58,10 @@ func writeInjectionContent(t *testing.T, dir, tag, orchVersion string) {
 
 func injectionFor(m domain.HarnessModule, role domain.AgentRole) (string, bool) {
 	return m.Injection(domain.InjectionRequest{Name: "HarnessConstraints", AgentKey: "agent", Role: role})
+}
+
+func orchestratorInjectionFor(m domain.HarnessModule, role domain.AgentRole) (string, bool) {
+	return m.Injection(domain.InjectionRequest{Name: "OrchestratorHarnessConstraints", AgentKey: "agent", Role: role})
 }
 
 func TestBuiltinConstruction_UsesGivenContentDir_NotMosaicRoot(t *testing.T) {
@@ -83,12 +90,19 @@ func TestBuiltinConstruction_UsesGivenContentDir_NotMosaicRoot(t *testing.T) {
 			if !ok || !strings.Contains(shared, "SHARED_GIVEN") || strings.Contains(shared, "_ROOT") {
 				t.Errorf("shared injection = %q (ok=%v); want content of the given directory only", shared, ok)
 			}
-			orch, ok := injectionFor(mod, domain.RoleOrchestrator)
-			if !ok || !strings.Contains(orch, "SHARED_GIVEN") || !strings.Contains(orch, "ORCH_GIVEN") || strings.Contains(orch, "_ROOT") {
-				t.Errorf("orchestrator injection = %q (ok=%v); want shared and orchestrator content of the given directory only", orch, ok)
+			orchShared, ok := injectionFor(mod, domain.RoleOrchestrator)
+			if !ok || !strings.Contains(orchShared, "SHARED_GIVEN") || strings.Contains(orchShared, "_ROOT") {
+				t.Errorf("orchestrator shared injection = %q (ok=%v); want shared content of the given directory only", orchShared, ok)
+			}
+			orch, ok := orchestratorInjectionFor(mod, domain.RoleOrchestrator)
+			if !ok || !strings.Contains(orch, "ORCH_GIVEN") || strings.Contains(orch, "_ROOT") {
+				t.Errorf("orchestrator region injection = %q (ok=%v); want orchestrator content of the given directory only", orch, ok)
 			}
 			if got := mod.Descriptor().OrchestratorInjectionsVersion; got != "9.4.2" {
 				t.Errorf("OrchestratorInjectionsVersion = %q, want %q from the given directory", got, "9.4.2")
+			}
+			if got := mod.Descriptor().InjectionsVersion; got != sharedFixtureVersion {
+				t.Errorf("InjectionsVersion = %q, want %q from the given directory", got, sharedFixtureVersion)
 			}
 			if len(asked) != 1 || asked[0] != tc.dirName {
 				t.Errorf("resolver asked for %v, want exactly [%q]", asked, tc.dirName)
@@ -108,7 +122,7 @@ func TestBuiltinConstruction_EmptyMosaicRoot_StillLoadsGivenContentDir(t *testin
 			if err != nil {
 				t.Fatalf("construct without MosaicRoot: %v", err)
 			}
-			if got, ok := injectionFor(mod, domain.RoleOrchestrator); !ok || !strings.Contains(got, "ORCH_GIVEN") {
+			if got, ok := orchestratorInjectionFor(mod, domain.RoleOrchestrator); !ok || !strings.Contains(got, "ORCH_GIVEN") {
 				t.Errorf("orchestrator injection = %q (ok=%v), want given directory content", got, ok)
 			}
 		})

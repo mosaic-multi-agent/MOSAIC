@@ -1,5 +1,15 @@
 package docformat
 
+// The two harness-class region names, defined once. Later code reads these constants
+// instead of repeating the literals.
+const (
+	// HarnessRegionName is the harness region that holds HarnessInjections.md content.
+	HarnessRegionName = "HarnessConstraints"
+	// OrchestratorHarnessRegionName is the harness region that holds
+	// HarnessInjectionsOrchestrator.md content. Orchestrator-role agents only.
+	OrchestratorHarnessRegionName = "OrchestratorHarnessConstraints"
+)
+
 func init() {
 	// CanonicalSections lists the five canonical MOSAIC section names in their required
 	// document order, mirroring boundary_constants.py. CommunicationProtocol is NOT a
@@ -26,7 +36,7 @@ func init() {
 		"ExecutionPhilosophy",
 	}
 
-	// CanonicalDeployed lists the eight tool-managed boundary names, a closed set.
+	// CanonicalDeployed lists the nine tool-managed boundary names, a closed set.
 	// Every name here must be declared with type="managed" in any document that uses it.
 	// ArtifactProvenance, LanguagePatterns, and CustomConstraints are removed;
 	// AuthorityHierarchy, ClosingProcedure, ErrorHandlingCommon,
@@ -37,7 +47,8 @@ func init() {
 		"ClosingProcedure",
 		"AvailableWorkflows",
 		"InfrastructureAgents",
-		"HarnessConstraints",
+		HarnessRegionName,
+		OrchestratorHarnessRegionName,
 		"ErrorHandlingCommon",
 		"ExecutionPhilosophyCommon",
 	}
@@ -46,14 +57,15 @@ func init() {
 	// An entry whose value is "" means the boundary must appear at body top level
 	// (for example, CommunicationProtocol). Eight entries, mirroring boundary_constants.py.
 	DeployedParent = map[string]string{
-		"CommunicationProtocol":     "", // top level — must not be nested inside any section
-		"AuthorityHierarchy":        "Identity",
-		"ClosingProcedure":          "Identity",
-		"AvailableWorkflows":        "Identity",
-		"InfrastructureAgents":      "Identity",
-		"HarnessConstraints":        "Constraints",
-		"ErrorHandlingCommon":       "ErrorHandling",
-		"ExecutionPhilosophyCommon": "ExecutionPhilosophy",
+		"CommunicationProtocol":       "", // top level — must not be nested inside any section
+		"AuthorityHierarchy":          "Identity",
+		"ClosingProcedure":            "Identity",
+		"AvailableWorkflows":          "Identity",
+		"InfrastructureAgents":        "Identity",
+		HarnessRegionName:             "Constraints",
+		OrchestratorHarnessRegionName: "Constraints",
+		"ErrorHandlingCommon":         "ErrorHandling",
+		"ExecutionPhilosophyCommon":   "ExecutionPhilosophy",
 	}
 
 	// CanonicalManagedBlocks lists the tool-managed block names — managed regions the tool

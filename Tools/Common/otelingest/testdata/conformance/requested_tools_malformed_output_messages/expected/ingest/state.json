@@ -1,0 +1,15 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 1626,
+    "head_len": 1626,
+    "head_sha256": "358a4a09ff23fae03b5d7bfeff2c8e69c800ff0dd26b19a0c5b9be6c3951b9fb"
+  },
+  "placements": {
+    "bad-1": "orchestrator",
+    "bad-2": "orchestrator",
+    "bad-3": "orchestrator"
+  },
+  "pending": [],
+  "links": {}
+}

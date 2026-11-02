@@ -7,13 +7,14 @@ import (
 	"strings"
 	"testing"
 
+	"mosaic-log-analyzer/internal/domain"
 	"mosaic-log-analyzer/internal/pricing"
 )
 
 func TestPut_ProviderEntry_GoesUnderProviderSectionNotTopLevel(t *testing.T) {
 	root, path := makeRootWithConfigDir(t)
 	writePricingYAML(t, path, wellFormedOneModel)
-	store := pricing.NewStore(root)
+	store := pricing.NewStore(t.TempDir(), root)
 
 	got := putAndReload(t, store, withInput(t, "github-copilot", "claude-sonnet-5.5", "7.00"))
 
@@ -28,7 +29,7 @@ func TestPut_ProviderEntry_GoesUnderProviderSectionNotTopLevel(t *testing.T) {
 func TestPut_EntryWithoutProvider_GoesUnderTopLevelModelsAndKeepsProviders(t *testing.T) {
 	root, path := makeRootWithConfigDir(t)
 	writePricingYAML(t, path, bothSectionsYAML)
-	store := pricing.NewStore(root)
+	store := pricing.NewStore(t.TempDir(), root)
 
 	got := putAndReload(t, store, withInput(t, "", "new-plain", "2.00"))
 
@@ -42,7 +43,7 @@ func TestPut_EntryWithoutProvider_GoesUnderTopLevelModelsAndKeepsProviders(t *te
 func TestPut_ProviderEntry_ReplacesOnlyEntryAtThatPath(t *testing.T) {
 	root, path := makeRootWithConfigDir(t)
 	writePricingYAML(t, path, bothSectionsYAML)
-	store := pricing.NewStore(root)
+	store := pricing.NewStore(t.TempDir(), root)
 
 	got := putAndReload(t, store, withInput(t, "github-copilot", "plain-model", "11.00"))
 
@@ -58,7 +59,7 @@ func TestPut_ProviderEntry_ReplacesOnlyEntryAtThatPath(t *testing.T) {
 func TestPut_NewProviderEntry_KeepsOtherProvidersAndTopLevel(t *testing.T) {
 	root, path := makeRootWithConfigDir(t)
 	writePricingYAML(t, path, bothSectionsYAML)
-	store := pricing.NewStore(root)
+	store := pricing.NewStore(t.TempDir(), root)
 
 	got := putAndReload(t, store, withInput(t, "amazon-bedrock", "claude-sonnet-5-5", "6.00"))
 
@@ -76,9 +77,9 @@ func TestPut_NewProviderEntry_KeepsOtherProvidersAndTopLevel(t *testing.T) {
 func TestPut_RewriteKeepsLeadingCommentBlockWithBothSections(t *testing.T) {
 	root, path := makeRootWithConfigDir(t)
 	writePricingYAML(t, path, "# my own notes\n# keep this line\n\n"+bothSectionsYAML)
-	store := pricing.NewStore(root)
+	store := pricing.NewStore(t.TempDir(), root)
 
-	if err := store.Put(context.Background(), withInput(t, "anthropic", "another-model", "4.00")); err != nil {
+	if _, err := store.Put(context.Background(), domain.LevelProject, withInput(t, "anthropic", "another-model", "4.00")); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 
@@ -92,7 +93,7 @@ func TestPut_RewriteKeepsLeadingCommentBlockWithBothSections(t *testing.T) {
 }
 
 func TestPut_ProviderEntryWithLongContext_RoundTrips(t *testing.T) {
-	store := pricing.NewStore(t.TempDir())
+	store := pricing.NewStore(t.TempDir(), t.TempDir())
 	entry := newEntryWithLongContext(t, "lc-model")
 	entry.Provider = "anthropic"
 
@@ -112,7 +113,7 @@ func TestPut_ProviderEntryWithLongContext_RoundTrips(t *testing.T) {
 }
 
 func TestPut_ProviderEntryOnAbsentFile_StartsFromTemplateAndLoads(t *testing.T) {
-	store := pricing.NewStore(t.TempDir())
+	store := pricing.NewStore(t.TempDir(), t.TempDir())
 
 	got := putAndReload(t, store, withInput(t, "anthropic", "first-model", "5.00"))
 

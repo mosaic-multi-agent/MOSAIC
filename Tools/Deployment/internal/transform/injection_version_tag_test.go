@@ -8,9 +8,10 @@ package transform_test
 //     (e.g. HarnessConstraints) carry a version attribute matching req.InjectionsVersion.
 //     Verified via docformat.Parse + Node.Version() on the output.
 //
-//   T2.2 — Orchestrator harness injection region version tag (role-conditional):
-//     After transform.Apply when req.Key == "orchestrator", harness-class regions carry
-//     a version attribute matching req.OrchestratorInjectionsVersion (not InjectionsVersion).
+//   T2.2 — Orchestrator harness injection region version tag (selected by region name):
+//     After transform.Apply for an orchestrator-role agent, the HarnessConstraints region
+//     still carries req.InjectionsVersion; req.OrchestratorInjectionsVersion tags only the
+//     OrchestratorHarnessConstraints region.
 //
 //   T2.3 — Injection version fields absent from frontmatter:
 //     mosaic_injections_version and mosaic_orchestrator_injections_version are absent from
@@ -223,69 +224,49 @@ func TestHarnessRegionVersion_NonOrchestrator_VersionRoundTrips(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// T2.2 — Orchestrator: harness region carries OrchestratorInjectionsVersion on tag
+// T2.2 — Orchestrator: the HarnessConstraints region is tagged by region name, not by role
 // ---------------------------------------------------------------------------
 
-// TestHarnessRegionVersion_Orchestrator_CarriesOrchestratorVersionAttribute verifies that
-// after transform.Apply when req.Key == "orchestrator" and req.Role == domain.RoleOrchestrator,
-// the HarnessConstraints region's opening tag carries a version attribute matching
-// req.OrchestratorInjectionsVersion.
-//
-// This test FAILS until I2.1 implements the role-based branch in applyHarnessRegion.
-// Updated to use applyWithHarnessRegionAndRole so it continues to pass after the
-// implementation switches from req.Key == "orchestrator" to req.Role == domain.RoleOrchestrator.
-func TestHarnessRegionVersion_Orchestrator_CarriesOrchestratorVersionAttribute(t *testing.T) {
+// TestHarnessRegionVersion_Orchestrator_HarnessConstraintsCarriesInjectionsVersion verifies
+// that for an orchestrator-role agent the HarnessConstraints region's opening tag carries
+// req.InjectionsVersion (the HarnessInjections.md version), as it does for every role.
+func TestHarnessRegionVersion_Orchestrator_HarnessConstraintsCarriesInjectionsVersion(t *testing.T) {
 	const injectionsVersion = "1.2.0"
 	const orchestratorVersion = "2.7.0"
 	doc, _ := applyWithHarnessRegionAndRole(t, "orchestrator", domain.RoleOrchestrator, injectionsVersion, orchestratorVersion, nil)
 
 	node := findHarnessConstraintsNode(t, doc)
-	if got := node.Version(); got != orchestratorVersion {
-		t.Errorf("HarnessConstraints version attribute for orchestrator: want %q (OrchestratorInjectionsVersion), got %q; "+
-			"applyHarnessRegion must call node.SetVersion(req.OrchestratorInjectionsVersion) when req.Role == domain.RoleOrchestrator",
-			orchestratorVersion, got)
+	if got := node.Version(); got != injectionsVersion {
+		t.Errorf("HarnessConstraints version attribute for orchestrator: want %q (InjectionsVersion), got %q; "+
+			"the version is selected by region name, not by role",
+			injectionsVersion, got)
 	}
 }
 
-// TestHarnessRegionVersion_Orchestrator_DoesNotUseInjectionsVersion verifies that for an
-// orchestrator-role agent, the harness region tag version does NOT match InjectionsVersion
-// and DOES match OrchestratorInjectionsVersion. Both assertions are required: the negative
-// assertion alone is trivially satisfied before implementation because node.Version()
-// returns "" which != InjectionsVersion; the positive assertion ensures the test fails
-// in the RED phase and only passes once the role-conditional branch is implemented.
-//
-// Updated to use applyWithHarnessRegionAndRole so it continues to pass after the
-// implementation switches from req.Key == "orchestrator" to req.Role == domain.RoleOrchestrator.
-// This test FAILS until I2.1 implements the role-conditional selection.
-func TestHarnessRegionVersion_Orchestrator_DoesNotUseInjectionsVersion(t *testing.T) {
+// TestHarnessRegionVersion_Orchestrator_HarnessConstraintsDoesNotUseOrchestratorVersion
+// verifies that the HarnessConstraints tag of an orchestrator-role agent never takes
+// OrchestratorInjectionsVersion, which belongs to the orchestrator harness region.
+func TestHarnessRegionVersion_Orchestrator_HarnessConstraintsDoesNotUseOrchestratorVersion(t *testing.T) {
 	const injectionsVersion = "1.2.0"
 	const orchestratorVersion = "2.7.0"
 	doc, _ := applyWithHarnessRegionAndRole(t, "orchestrator", domain.RoleOrchestrator, injectionsVersion, orchestratorVersion, nil)
 
 	node := findHarnessConstraintsNode(t, doc)
 	got := node.Version()
-	if got == injectionsVersion {
-		t.Errorf("HarnessConstraints version attribute for orchestrator = %q (InjectionsVersion); "+
-			"orchestrator agents must use OrchestratorInjectionsVersion (%q), not InjectionsVersion",
-			got, orchestratorVersion)
+	if got == orchestratorVersion {
+		t.Errorf("HarnessConstraints version attribute for orchestrator = %q (OrchestratorInjectionsVersion); "+
+			"want %q (InjectionsVersion)", got, injectionsVersion)
 	}
-	if got != orchestratorVersion {
-		t.Errorf("HarnessConstraints version attribute for orchestrator: want %q (OrchestratorInjectionsVersion), got %q; "+
-			"applyHarnessRegion must call node.SetVersion(req.OrchestratorInjectionsVersion) when req.Role == domain.RoleOrchestrator",
-			orchestratorVersion, got)
+	if got != injectionsVersion {
+		t.Errorf("HarnessConstraints version attribute for orchestrator: want %q (InjectionsVersion), got %q",
+			injectionsVersion, got)
 	}
 }
 
-// TestHarnessRegionVersion_OrchestratorVsNonOrchestratorDiffer verifies that the same source
-// document applied with req.Role == domain.RoleOrchestrator vs a non-orchestrator role
-// produces different version attributes on the harness region. This is the cross-contamination
-// guard: distinct InjectionsVersion and OrchestratorInjectionsVersion values must remain
-// isolated to their respective agent roles.
-//
-// Updated to use applyWithHarnessRegionAndRole so it continues to pass after the
-// implementation switches from req.Key == "orchestrator" to req.Role == domain.RoleOrchestrator.
-// This test FAILS until I2.1 implements the role-conditional version selection.
-func TestHarnessRegionVersion_OrchestratorVsNonOrchestratorDiffer(t *testing.T) {
+// TestHarnessRegionVersion_OrchestratorAndNonOrchestratorAgree verifies that the same source
+// applied with an orchestrator role and with a subagent role produces the same
+// HarnessConstraints version attribute: the tag follows the region name, never the role.
+func TestHarnessRegionVersion_OrchestratorAndNonOrchestratorAgree(t *testing.T) {
 	const injectionsVersion = "1.2.0"
 	const orchestratorVersion = "2.7.0"
 
@@ -295,10 +276,9 @@ func TestHarnessRegionVersion_OrchestratorVsNonOrchestratorDiffer(t *testing.T) 
 	orchNode := findHarnessConstraintsNode(t, orchDoc)
 	workerNode := findHarnessConstraintsNode(t, workerDoc)
 
-	if orchNode.Version() == workerNode.Version() {
-		t.Errorf("orchestrator and worker produced identical HarnessConstraints version attribute %q; "+
-			"they must differ when InjectionsVersion (%q) != OrchestratorInjectionsVersion (%q)",
-			orchNode.Version(), injectionsVersion, orchestratorVersion)
+	if orchNode.Version() != injectionsVersion || workerNode.Version() != injectionsVersion {
+		t.Errorf("HarnessConstraints version attributes: orchestrator %q, worker %q; both must be %q",
+			orchNode.Version(), workerNode.Version(), injectionsVersion)
 	}
 }
 
@@ -432,22 +412,19 @@ func TestMigration_TagRelocation_VersionAppearsOnTag_NonOrchestrator(t *testing.
 	}
 }
 
-// TestMigration_TagRelocation_VersionAppearsOnTag_Orchestrator verifies the complete
-// relocation contract for orchestrator agents: after Update of a pre-Stage 2 orchestrator
-// file (which has mosaic_orchestrator_injections_version in frontmatter), the output must
-// carry the orchestrator version on the HarnessConstraints tag instead.
-//
-// This test FAILS until I2.1 adds the SetVersion call for the orchestrator branch.
+// TestMigration_TagRelocation_VersionAppearsOnTag_Orchestrator verifies the relocation
+// contract for orchestrator agents: after Update of a pre-tag orchestrator file (which has
+// injection versions in frontmatter), the HarnessConstraints tag carries the shared
+// injections version, not the legacy frontmatter values and not the orchestrator version.
 func TestMigration_TagRelocation_VersionAppearsOnTag_Orchestrator(t *testing.T) {
-	const injectionsVersion = "1.2.0"
-	const wantVersion = "2.7.0"
+	const wantVersion = "1.2.0"
+	const orchestratorVersion = "2.7.0"
 	doc, _ := applyWithHarnessRegionAndRole(t,
-		"orchestrator", domain.RoleOrchestrator, injectionsVersion, wantVersion, []byte(preTagMigrationDeployed))
+		"orchestrator", domain.RoleOrchestrator, wantVersion, orchestratorVersion, []byte(preTagMigrationDeployed))
 
 	node := findHarnessConstraintsNode(t, doc)
 	if got := node.Version(); got != wantVersion {
-		t.Errorf("HarnessConstraints version attribute for orchestrator after migration: want %q (OrchestratorInjectionsVersion), got %q; "+
-			"the orchestrator version must be relocated from frontmatter to the region tag attribute",
+		t.Errorf("HarnessConstraints version attribute for orchestrator after migration: want %q (InjectionsVersion), got %q",
 			wantVersion, got)
 	}
 }
@@ -602,23 +579,17 @@ func TestEmptyContentRegion_NonOrchestrator_CarriesVersionAttribute(t *testing.T
 	}
 }
 
-// TestEmptyContentRegion_Orchestrator_CarriesOrchestratorVersionAttribute verifies that when
-// a harness injection returns ("", true) and req.Key == "orchestrator", the HarnessConstraints
-// region's opening tag carries a version attribute matching req.OrchestratorInjectionsVersion.
-// The role-conditional injVersion selection (InjectionsVersion vs OrchestratorInjectionsVersion)
-// must apply on the RegionEmptied path in the same way it applies on the RegionFilled path.
-//
-// This test FAILS against the pre-fix code because no SetVersion call exists on the
-// RegionEmptied path for either role.
-func TestEmptyContentRegion_Orchestrator_CarriesOrchestratorVersionAttribute(t *testing.T) {
-	const injectionsVersion = "1.2.0"
-	const wantVersion = "2.7.0"
-	doc, _ := applyWithEmptyContentRegionAndRole(t, "orchestrator", domain.RoleOrchestrator, injectionsVersion, wantVersion)
+// TestEmptyContentRegion_Orchestrator_HarnessConstraintsCarriesInjectionsVersion verifies
+// that an emptied HarnessConstraints region of an orchestrator-role agent is tagged with
+// req.InjectionsVersion, the same value every other role gets on the RegionEmptied path.
+func TestEmptyContentRegion_Orchestrator_HarnessConstraintsCarriesInjectionsVersion(t *testing.T) {
+	const wantVersion = "1.2.0"
+	const orchestratorVersion = "2.7.0"
+	doc, _ := applyWithEmptyContentRegionAndRole(t, "orchestrator", domain.RoleOrchestrator, wantVersion, orchestratorVersion)
 
 	node := findHarnessConstraintsNode(t, doc)
 	if got := node.Version(); got != wantVersion {
-		t.Errorf("HarnessConstraints version attribute on emptied region for orchestrator: want %q (OrchestratorInjectionsVersion), got %q; "+
-			"applyHarnessRegion must use OrchestratorInjectionsVersion when req.Role == domain.RoleOrchestrator on the RegionEmptied path",
+		t.Errorf("HarnessConstraints version attribute on emptied region for orchestrator: want %q (InjectionsVersion), got %q",
 			wantVersion, got)
 	}
 }
@@ -646,54 +617,18 @@ func TestEmptyContentRegion_EmptyInjVersion_NoVersionAttribute(t *testing.T) {
 // Role-based version selection: orchestrator-role agent with non-"orchestrator" key
 // ---------------------------------------------------------------------------
 
-// TestHarnessRegionVersion_OrchestratorRole_NonOrchestratorKey_CarriesOrchestratorVersion
-// verifies that when req.Key is NOT "orchestrator" but req.Role == domain.RoleOrchestrator,
-// the HarnessConstraints region's version attribute is req.OrchestratorInjectionsVersion.
-//
-// This is the primary RED test for the role-based version selection fix in applyHarnessRegion.
-// The current (buggy) implementation checks req.Key == "orchestrator"; "orchestrator-script"
-// does not match, so it falls through to InjectionsVersion. The fixed implementation checks
-// req.Role == domain.RoleOrchestrator, which correctly selects OrchestratorInjectionsVersion.
-//
-// RED: FAILS until I1.4 changes `req.Key == "orchestrator"` to `req.Role == domain.RoleOrchestrator`
-// in applyHarnessRegion.
-func TestHarnessRegionVersion_OrchestratorRole_NonOrchestratorKey_CarriesOrchestratorVersion(t *testing.T) {
+// TestHarnessRegionVersion_OrchestratorRole_NonOrchestratorKey_CarriesInjectionsVersion
+// verifies that an orchestrator-role agent under a non-literal key (for example
+// "orchestrator-script") gets req.InjectionsVersion on its HarnessConstraints region.
+func TestHarnessRegionVersion_OrchestratorRole_NonOrchestratorKey_CarriesInjectionsVersion(t *testing.T) {
 	const injectionsVersion = "1.2.0"
 	const orchestratorVersion = "3.5.0"
 	doc, _ := applyWithHarnessRegionAndRole(t, "orchestrator-script", domain.RoleOrchestrator, injectionsVersion, orchestratorVersion, nil)
 
 	node := findHarnessConstraintsNode(t, doc)
-	if got := node.Version(); got != orchestratorVersion {
-		t.Errorf("HarnessConstraints version attribute for orchestrator-role agent with key=%q: "+
-			"want %q (OrchestratorInjectionsVersion), got %q; "+
-			"applyHarnessRegion must select OrchestratorInjectionsVersion when req.Role == domain.RoleOrchestrator, "+
-			"not only when req.Key == \"orchestrator\"",
-			"orchestrator-script", orchestratorVersion, got)
-	}
-}
-
-// TestHarnessRegionVersion_OrchestratorRole_NonOrchestratorKey_DoesNotUseInjectionsVersion
-// verifies that when req.Role == domain.RoleOrchestrator and req.Key is not "orchestrator",
-// the version attribute is NOT InjectionsVersion.
-//
-// RED: FAILS until I1.4 switches applyHarnessRegion to role-based version selection.
-func TestHarnessRegionVersion_OrchestratorRole_NonOrchestratorKey_DoesNotUseInjectionsVersion(t *testing.T) {
-	const injectionsVersion = "1.2.0"
-	const orchestratorVersion = "3.5.0"
-	doc, _ := applyWithHarnessRegionAndRole(t, "orchestrator-script", domain.RoleOrchestrator, injectionsVersion, orchestratorVersion, nil)
-
-	node := findHarnessConstraintsNode(t, doc)
-	got := node.Version()
-	if got == injectionsVersion {
-		t.Errorf("HarnessConstraints version attribute for orchestrator-role agent with key=%q = %q (InjectionsVersion); "+
-			"an orchestrator-role agent must use OrchestratorInjectionsVersion (%q), not InjectionsVersion; "+
-			"applyHarnessRegion must gate on req.Role == domain.RoleOrchestrator",
-			"orchestrator-script", got, orchestratorVersion)
-	}
-	if got != orchestratorVersion {
-		t.Errorf("HarnessConstraints version attribute for orchestrator-role agent with key=%q: "+
-			"want %q (OrchestratorInjectionsVersion), got %q",
-			"orchestrator-script", orchestratorVersion, got)
+	if got := node.Version(); got != injectionsVersion {
+		t.Errorf("HarnessConstraints version attribute for orchestrator-role agent with key=%q: want %q (InjectionsVersion), got %q",
+			"orchestrator-script", injectionsVersion, got)
 	}
 }
 

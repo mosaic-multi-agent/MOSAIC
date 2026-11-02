@@ -23,6 +23,7 @@
 import type { HandlerDependencies, MessageInfo, OpenCodeEvent } from "./handlers_session.js";
 import { currentTimestamp } from "./core.js";
 import { extractTextFromParts } from "./handlers_invocation.js";
+import { RequestedToolsTracker } from "./requested_tools.js";
 
 // ---------------------------------------------------------------------------
 // Public factory
@@ -37,6 +38,7 @@ export function createMessageHandlers(deps: HandlerDependencies): {
   handleMessageEvent: (event: OpenCodeEvent) => Promise<void>;
 } {
   const { store, paths, buildEvent, appendEvent } = deps;
+  const requestedTools = deps.requestedTools ?? new RequestedToolsTracker();
 
   async function handleMessageEvent(event: OpenCodeEvent): Promise<void> {
     try {
@@ -135,9 +137,17 @@ export function createMessageHandlers(deps: HandlerDependencies): {
         // Token usage object — omitted entirely when nothing is resolvable.
         const tokenUsage = buildTokenUsage(info);
 
+        // Tools requested by this message so far, from message.part.updated and
+        // from this observation's parts; absent when the message has no id.
+        let requested: Record<string, number> | undefined;
+        if (messageId) {
+          requestedTools.recordParts(sessionId, messageId, partsRaw);
+          requested = requestedTools.snapshot(sessionId, messageId);
+        }
+
         const usageEvent = buildEvent(
           "usage_record",
-          { sessionId, runId, timestamp: ts },
+          { sessionId, runId, timestamp: callStartTimestamp(createdAt) ?? ts },
           {
             record_id: recordId,
             record_index: recordIndex,
@@ -148,6 +158,9 @@ export function createMessageHandlers(deps: HandlerDependencies): {
             token_usage: tokenUsage,             // undefined → omitted by buildEvent
           },
         );
+        // Set after buildEvent: its pruning would drop an empty object, but an
+        // empty requested_tools is meaningful (the message requested no tools).
+        if (requested) usageEvent["requested_tools"] = requested;
         await appendEvent(sink, usageEvent);
       }
     } catch {
@@ -161,6 +174,21 @@ export function createMessageHandlers(deps: HandlerDependencies): {
 // ---------------------------------------------------------------------------
 // Exported pure helper (directly testable)
 // ---------------------------------------------------------------------------
+
+/**
+ * ISO 8601 UTC timestamp (ms precision, `Z`) for a message's start time, or
+ * `undefined` when it is not usable.
+ *
+ * `info.time.created` is read as epoch milliseconds (OpenCode's SDK convention;
+ * not verified against the host here). It is usable when it is a finite number
+ * greater than zero and before the year 10000. The value is fixed at message
+ * creation, so every re-observation of a message yields the same timestamp.
+ */
+export function callStartTimestamp(createdAt: number | undefined): string | undefined {
+  if (createdAt === undefined || !Number.isFinite(createdAt)) return undefined;
+  if (createdAt <= 0 || createdAt >= 253402300800000) return undefined;
+  return new Date(createdAt).toISOString();
+}
 
 /**
  * Build the `token_usage` object from an assistant message's `info.tokens` field.

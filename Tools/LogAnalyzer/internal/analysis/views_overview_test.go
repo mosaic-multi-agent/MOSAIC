@@ -69,7 +69,7 @@ func TestOverview_CacheHitRatio_IsCacheReadOverTotalContext(t *testing.T) {
 
 func TestOverview_CacheHitRatio_UndefinedWithoutLoggedTokens(t *testing.T) {
 	in := oneAgentStream(testRunRef, "coder#1", rmInvStart("coder#1", "coder", rmAt(1)))
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	run := requireRunReport(t, report, testRunID)
 
@@ -105,7 +105,7 @@ func TestOverview_ByModel_RequestWithoutModelIsListedLast(t *testing.T) {
 	in := oneAgentStream(testRunRef, "coder#1",
 		usageRecordEvent("coder#1", "r1", "", viewsUsage(10, 0, 0, 0)),
 		usageRecordEvent("coder#1", "r2", viewsModel, viewsUsage(20, 0, 0, 0)))
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	models := requireRunReport(t, report, testRunID).Overview.ByModel
 
@@ -153,8 +153,8 @@ func TestOverview_AssumedTier_RunCountIncludesOrchestratorAndSubagents(t *testin
 func TestOverview_Repricing_RecomputesFromTheSameAggregate(t *testing.T) {
 	agg, _ := analysis.Aggregate(viewsScenarioInput())
 
-	unpriced, _ := analysis.Price(agg, domain.EmptyPricingTable(), testSource())
-	priced, _ := analysis.Price(agg, viewsPricing(t), testSource())
+	unpriced, _ := analysis.Price(agg, domain.EmptyPricingTable(), domain.DefaultAnalysisSettings(), testSource())
+	priced, _ := analysis.Price(agg, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource())
 
 	before := requireRunReport(t, unpriced, testRunID).Overview
 	after := requireRunReport(t, priced, testRunID).Overview
@@ -168,7 +168,7 @@ func TestOverview_UnattributableBucket_CarriesItsOwnOverview(t *testing.T) {
 		Events: []domain.Event{usageRecordEvent("Unknown#1", "r1", viewsModel, viewsUsage(100, 0, 0, 0))},
 	}}}
 
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	if report.Unattributable == nil {
 		t.Fatal("no unattributable report")

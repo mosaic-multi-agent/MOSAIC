@@ -60,6 +60,9 @@ func encodeRun(r domain.RunAggregate) runDoc {
 	for _, s := range r.Sessions {
 		doc.Sessions = append(doc.Sessions, encodeSession(s))
 	}
+	if r.Unattributed != nil {
+		doc.Unattributed = &unattributedDoc{Usage: encodeUsages(r.Unattributed.Invocations)}
+	}
 	for _, a := range r.Agents {
 		doc.Agents = append(doc.Agents, agentDoc{
 			InstanceID: string(a.Actor.Instance),
@@ -90,6 +93,8 @@ func encodeRun(r domain.RunAggregate) runDoc {
 			Trigger:      c.Trigger,
 			TokensBefore: encodeCount(c.TokensBefore),
 			TokensAfter:  encodeCount(c.TokensAfter),
+			EndedAt:      formatTime(c.EndedAt),
+			Shape:        encodeShape(c.Shape),
 		})
 	}
 	return doc
@@ -152,14 +157,18 @@ func encodeUsages(usages []domain.InvocationUsage) []usageDoc {
 	var docs []usageDoc
 	for _, u := range usages {
 		docs = append(docs, usageDoc{
-			RecordID:    u.RecordID,
-			At:          formatTime(u.At),
-			Model:       string(u.Model),
-			Provider:    string(u.Provider),
-			Effort:      u.Effort,
-			ServiceTier: u.ServiceTier,
-			Harness:     string(u.Harness),
-			Tokens:      encodeTokens(u.Usage),
+			RecordID:       u.RecordID,
+			At:             formatTime(u.At),
+			Model:          string(u.Model),
+			Provider:       string(u.Provider),
+			Effort:         u.Effort,
+			ServiceTier:    u.ServiceTier,
+			Harness:        string(u.Harness),
+			CallKind:       encodeCallKind(u.Kind),
+			CallLabel:      u.Label,
+			SessionID:      u.SessionID,
+			Tokens:         encodeTokens(u.Usage),
+			RequestedTools: encodeRequestedTools(u.RequestedTools),
 		})
 	}
 	return docs
@@ -224,4 +233,37 @@ func encodeFinding(f domain.Finding) findingDoc {
 		doc.RunID = f.Run.ID
 	}
 	return doc
+}
+
+// encodeShape returns the wire shape of a compaction; single is omitted.
+func encodeShape(s domain.CompactionShape) string {
+	switch s {
+	case domain.CompactionPaired:
+		return shapePaired
+	case domain.CompactionPreOnly:
+		return shapePreOnly
+	case domain.CompactionPostOnly:
+		return shapePostOnly
+	}
+	return ""
+}
+
+// encodeCallKind returns "" for a main call, which a digest stores as no kind.
+func encodeCallKind(k domain.CallKind) string {
+	if k == domain.CallCompaction || k == domain.CallAuxiliary {
+		return string(k)
+	}
+	return ""
+}
+
+// encodeRequestedTools returns nil when the value is not provided, so the key is omitted.
+func encodeRequestedTools(r domain.RequestedTools) json.RawMessage {
+	if !r.IsProvided() {
+		return nil
+	}
+	raw, err := json.Marshal(r)
+	if err != nil {
+		return nil
+	}
+	return raw
 }

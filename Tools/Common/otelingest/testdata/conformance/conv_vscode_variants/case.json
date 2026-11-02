@@ -1,0 +1,15 @@
+{
+  "description": "VS Code dialect: model falls back from response to request model, effort is read from copilot_chat.request.options (output_config.effort before reasoning.effort, unparsable or non-string values omitted), negative input difference omits input_tokens, output-only usage is a record, non-integral token values are not usage, absent values are omitted.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

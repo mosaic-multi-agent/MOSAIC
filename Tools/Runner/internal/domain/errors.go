@@ -57,6 +57,9 @@ type RefusalError struct {
 	Rule  string      // WorkflowFormat sec. 10 rule ID; "" when none is defined
 	Row   WorkflowRow // 1-based routing row; NoWorkflowRow when not about a row
 	Token string      // offending token, cell or heading; "" when none
+
+	Section string // document section the refusal concerns ("frontmatter", "ExecutionLog", "Artifacts", "WorkflowNotes"); "" when none
+	Line    int    // 1-based line in the examined file; 0 when not known
 }
 
 // Unwrap returns the optional underlying cause.
@@ -94,6 +97,12 @@ func (e *RefusalError) Error() string {
 	}
 	if e.Token != "" {
 		msg += fmt.Sprintf(" [token %q]", e.Token)
+	}
+	if e.Section != "" {
+		msg += " [section " + e.Section + "]"
+	}
+	if e.Line != 0 {
+		msg += fmt.Sprintf(" [line %d]", e.Line)
 	}
 	return msg
 }

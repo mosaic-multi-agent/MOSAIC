@@ -4,7 +4,7 @@ import (
 	"mosaic-log-analyzer/internal/domain"
 )
 
-func convertRun(rd runDoc, ref domain.RunRef) (domain.RunAggregate, error) {
+func convertRun(rd runDoc, ref domain.RunRef, version string) (domain.RunAggregate, error) {
 	run := domain.RunAggregate{
 		Run:         ref,
 		Provisional: rd.Provisional,
@@ -34,6 +34,13 @@ func convertRun(rd runDoc, ref domain.RunRef) (domain.RunAggregate, error) {
 	}
 	run.Activity.OrchestratorToolCalls = calls
 
+	if rd.Unattributed != nil {
+		run.Unattributed = &domain.ActorAggregate{
+			Actor:       domain.Unattributed(),
+			Invocations: decodeUsages(rd.Unattributed.Usage),
+		}
+	}
+
 	agents := make(map[string]domain.ActorAggregate, len(rd.Agents))
 	for _, a := range rd.Agents {
 		agg := domain.ActorAggregate{
@@ -56,11 +63,11 @@ func convertRun(rd runDoc, ref domain.RunRef) (domain.RunAggregate, error) {
 		}
 		run.Activity.Invocations = append(run.Activity.Invocations, inv)
 	}
-	return run, decodeEvents(rd, &run)
+	return run, decodeEvents(rd, &run, version)
 }
 
 // decodeEvents fills turns, notifications and compactions.
-func decodeEvents(rd runDoc, run *domain.RunAggregate) error {
+func decodeEvents(rd runDoc, run *domain.RunAggregate, version string) error {
 	for _, t := range rd.Turns {
 		actor, err := decodeActor(t.Actor)
 		if err != nil {
@@ -87,15 +94,83 @@ func decodeEvents(rd runDoc, run *domain.RunAggregate) error {
 		if err != nil {
 			return err
 		}
+		shape, err := decodeShape(c.Shape)
+		if err != nil {
+			return err
+		}
 		run.Activity.Compactions = append(run.Activity.Compactions, domain.Compaction{
 			Actor:        actor,
 			At:           parseTime(c.At),
 			Trigger:      c.Trigger,
 			TokensBefore: decodeCount(c.TokensBefore),
 			TokensAfter:  decodeCount(c.TokensAfter),
+			EndedAt:      parseTime(c.EndedAt),
+			Shape:        shape,
 		})
 	}
+	if !storesCompactionShape(version) {
+		run.Activity.Compactions = pairStoredCompactions(run.Activity.Compactions)
+	}
 	return nil
+}
+
+// decodeShape maps a wire shape; absent decodes as single.
+func decodeShape(s string) (domain.CompactionShape, error) {
+	switch s {
+	case "", shapeSingle:
+		return domain.CompactionSingle, nil
+	case shapePaired:
+		return domain.CompactionPaired, nil
+	case shapePreOnly:
+		return domain.CompactionPreOnly, nil
+	case shapePostOnly:
+		return domain.CompactionPostOnly, nil
+	}
+	return domain.CompactionSingle, invalidf("a compaction has an unknown shape")
+}
+
+// pairStoredCompactions applies the legacy pairing rule to compactions of a
+// digest written before shapes were stored. Each actor's entries, in stored
+// order, are treated as legacy events of one stream; a pair replaces its first
+// entry and drops its second.
+func pairStoredCompactions(stored []domain.Compaction) []domain.Compaction {
+	byActor := make(map[domain.ActorRef][]int)
+	for i, c := range stored {
+		byActor[c.Actor] = append(byActor[c.Actor], i)
+	}
+	drop := make(map[int]bool)
+	replace := make(map[int]domain.Compaction)
+	for actor, idx := range byActor {
+		evs := make([]domain.CompactionEvent, len(idx))
+		for k, i := range idx {
+			c := stored[i]
+			evs[k] = domain.CompactionEvent{
+				SchemaVersion: "1.0.0",
+				At:            c.At,
+				Fields:        domain.CompactionFields{Trigger: c.Trigger, TokensBefore: c.TokensBefore, TokensAfter: c.TokensAfter},
+			}
+		}
+		for _, pc := range domain.PairCompactionEvents(evs) {
+			if pc.Second < 0 {
+				continue
+			}
+			c := pc.Compaction
+			c.Actor = actor
+			replace[idx[pc.First]] = c
+			drop[idx[pc.Second]] = true
+		}
+	}
+	out := make([]domain.Compaction, 0, len(stored))
+	for i, c := range stored {
+		if drop[i] {
+			continue
+		}
+		if p, ok := replace[i]; ok {
+			c = p
+		}
+		out = append(out, c)
+	}
+	return out
 }
 
 func decodeSession(s sessionDoc) domain.RunSession {
@@ -175,13 +250,17 @@ func decodeUsages(docs []usageDoc) []domain.InvocationUsage {
 	var usages []domain.InvocationUsage
 	for _, u := range docs {
 		entry := domain.InvocationUsage{
-			Model:       domain.ModelID(u.Model),
-			Provider:    domain.ProviderID(u.Provider),
-			Effort:      u.Effort,
-			Harness:     domain.Harness(u.Harness),
-			RecordID:    u.RecordID,
-			At:          parseTime(u.At),
-			ServiceTier: u.ServiceTier,
+			Model:          domain.ModelID(u.Model),
+			Provider:       domain.ProviderID(u.Provider),
+			Effort:         u.Effort,
+			Harness:        domain.Harness(u.Harness),
+			RecordID:       u.RecordID,
+			At:             parseTime(u.At),
+			ServiceTier:    u.ServiceTier,
+			Kind:           decodeCallKind(u.CallKind),
+			Label:          u.CallLabel,
+			RequestedTools: domain.ParseRequestedTools(u.RequestedTools),
+			SessionID:      u.SessionID,
 		}
 		if t := u.Tokens; t != nil {
 			entry.Usage = domain.TokenUsage{
@@ -211,4 +290,13 @@ func decodeBool(p *bool) domain.OptionalBool {
 		return domain.BoolAbsent
 	}
 	return domain.BoolOf(*p)
+}
+
+// decodeCallKind reads a stored call kind; absent or unknown reads as main.
+func decodeCallKind(s string) domain.CallKind {
+	switch k := domain.CallKind(s); k {
+	case domain.CallCompaction, domain.CallAuxiliary:
+		return k
+	}
+	return domain.CallMain
 }

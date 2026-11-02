@@ -178,31 +178,19 @@ func TestPersistedStart_Promote_FileWithoutWorkspace_StartsFromLaunchOrDefault(t
 	}
 }
 
-func TestPersistedStart_Transform_StartsFromTheDirectoryOrFileWorkspace(t *testing.T) {
+func TestPersistedStart_Transform_StartsFromTheWorkspaceRoot(t *testing.T) {
 	store := newPersistStore()
 	persisted := t.TempDir()
 	ws := newWorkspaceDir(t, store, storedOf(false, persisted))
-	inner := subDir(t, ws, "nested")
-	paths := map[string]string{
-		"the workspace directory":      ws,
-		"a directory inside it":        inner,
-		"a file inside it":             createAgentFile(t, inner),
-		"a file directly in it":        createAgentFile(t, ws),
-		"a directory deeper inside it": subDir(t, inner, "deeper"),
-	}
-	for name, path := range paths {
-		t.Run(name, func(t *testing.T) {
-			f := newPersistedFlow(t, domain.ModeTransformHarness, store, path, persistFlowOpts{})
+	f := newPersistedFlow(t, domain.ModeTransformHarness, store, ws, persistFlowOpts{})
 
-			f.toStack(t)
-			requireInView(t, f, persisted)
-			f.confirmStack(t)
+	f.toStack(t)
+	requireInView(t, f, persisted)
+	f.confirmStack(t)
 
-			call := requireOneReload(t, f)
-			if call.origin != stackconfig.OriginPersisted {
-				t.Errorf("origin = %q, want %q", call.origin, stackconfig.OriginPersisted)
-			}
-		})
+	call := requireOneReload(t, f)
+	if call.origin != stackconfig.OriginPersisted {
+		t.Errorf("origin = %q, want %q", call.origin, stackconfig.OriginPersisted)
 	}
 }
 

@@ -17,7 +17,7 @@ import (
 // putAndLoad writes entry through a store and loads the table back.
 func putAndLoad(t *testing.T, store *pricing.Store, entry domain.ModelPricing) (domain.PricingTable, []domain.Finding) {
 	t.Helper()
-	if err := store.Put(context.Background(), entry); err != nil {
+	if _, err := store.Put(context.Background(), domain.LevelProject, entry); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 	table, findings, err := store.Load(context.Background())
@@ -28,7 +28,7 @@ func putAndLoad(t *testing.T, store *pricing.Store, entry domain.ModelPricing) (
 }
 
 func TestStore_Put_EntryWithoutLongContext_RoundTripsUnchanged(t *testing.T) {
-	store := pricing.NewStore(t.TempDir())
+	store := pricing.NewStore(t.TempDir(), t.TempDir())
 	entry := newMinimalEntry(t, "round-trip-model")
 
 	table, findings := putAndLoad(t, store, entry)
@@ -37,7 +37,7 @@ func TestStore_Put_EntryWithoutLongContext_RoundTripsUnchanged(t *testing.T) {
 	if !found {
 		t.Fatal("entry must be found after Put then Load")
 	}
-	if got != entry {
+	if got != asProject(entry) {
 		t.Errorf("round trip = %+v, want %+v", got, entry)
 	}
 	if len(findings) != 0 {
@@ -46,7 +46,7 @@ func TestStore_Put_EntryWithoutLongContext_RoundTripsUnchanged(t *testing.T) {
 }
 
 func TestStore_Put_EntryWithLongContext_RoundTripsUnchanged(t *testing.T) {
-	store := pricing.NewStore(t.TempDir())
+	store := pricing.NewStore(t.TempDir(), t.TempDir())
 	entry := newEntryWithLongContext(t, "round-trip-lc")
 
 	table, findings := putAndLoad(t, store, entry)
@@ -55,7 +55,7 @@ func TestStore_Put_EntryWithLongContext_RoundTripsUnchanged(t *testing.T) {
 	if !found {
 		t.Fatal("entry must be found after Put then Load")
 	}
-	if got != entry {
+	if got != asProject(entry) {
 		t.Errorf("round trip = %+v, want %+v", got, entry)
 	}
 	if len(findings) != 0 {
@@ -64,7 +64,7 @@ func TestStore_Put_EntryWithLongContext_RoundTripsUnchanged(t *testing.T) {
 }
 
 func TestStore_Put_EntryWithoutLongContext_WritesNoActiveLongContextBlock(t *testing.T) {
-	store := pricing.NewStore(t.TempDir())
+	store := pricing.NewStore(t.TempDir(), t.TempDir())
 
 	putAndLoad(t, store, newMinimalEntry(t, "plain-model"))
 
@@ -80,7 +80,7 @@ func TestStore_Put_EntryWithoutLongContext_WritesNoActiveLongContextBlock(t *tes
 }
 
 func TestStore_Put_WritesNewKeysOnly(t *testing.T) {
-	store := pricing.NewStore(t.TempDir())
+	store := pricing.NewStore(t.TempDir(), t.TempDir())
 
 	putAndLoad(t, store, newEntryWithLongContext(t, "keys-model"))
 
@@ -98,7 +98,7 @@ func TestStore_Put_WritesNewKeysOnly(t *testing.T) {
 }
 
 func TestStore_Put_RatesPrecisionPreservedInRoundTrip(t *testing.T) {
-	store := pricing.NewStore(t.TempDir())
+	store := pricing.NewStore(t.TempDir(), t.TempDir())
 	entry := newEntryWithLongContext(t, "precision-model")
 	entry.Standard.CacheRead = mustRate(t, "0.375")
 	entry.LongContext.Rates.CacheWrite1h = mustRate(t, "12.125")
@@ -118,7 +118,7 @@ func TestStore_Put_RatesPrecisionPreservedInRoundTrip(t *testing.T) {
 func TestStore_Put_ExistingFileWithEntries_PreservesExistingEntries(t *testing.T) {
 	root, path := makeRootWithConfigDir(t)
 	writePricingYAML(t, path, wellFormedTwoModels)
-	store := pricing.NewStore(root)
+	store := pricing.NewStore(t.TempDir(), root)
 
 	table, findings := putAndLoad(t, store, newMinimalEntry(t, "test-model-new"))
 
@@ -149,14 +149,14 @@ func TestStore_Put_KeepsOtherOldFormatEntriesAndTheirFindings(t *testing.T) {
     cache_write_1h: "6.00"
     output: "15.00"
 `)
-	store := pricing.NewStore(root)
+	store := pricing.NewStore(t.TempDir(), root)
 
 	table, findings := putAndLoad(t, store, newMinimalEntry(t, "added-model"))
 
 	if _, found := table.Lookup("added-model"); !found {
 		t.Error("the new entry must be present")
 	}
-	if got, _ := table.Lookup("test-model-a"); got != newMinimalEntry(t, "test-model-a") {
+	if got, _ := table.Lookup("test-model-a"); got != asProject(newMinimalEntry(t, "test-model-a")) {
 		t.Errorf("the valid existing entry must be unchanged; got %+v", got)
 	}
 	f, ok := findingFor(findings, "old-model")
@@ -180,12 +180,12 @@ func TestStore_Put_ReplacesAnInvalidEntryOfTheSameModelEntirely(t *testing.T) {
     cache_write: "3.75"
     output_under_threshold: "15.00"
 `)
-	store := pricing.NewStore(root)
+	store := pricing.NewStore(t.TempDir(), root)
 	entry := newMinimalEntry(t, "old-model")
 
 	table, findings := putAndLoad(t, store, entry)
 
-	if got, found := table.Lookup("old-model"); !found || got != entry {
+	if got, found := table.Lookup("old-model"); !found || got != asProject(entry) {
 		t.Errorf("replaced entry must load as written; found=%v got=%+v", found, got)
 	}
 	if len(findings) != 0 {
@@ -203,19 +203,19 @@ func TestStore_Put_ReplacesAnInvalidEntryOfTheSameModelEntirely(t *testing.T) {
 func TestStore_Put_ReplacingLongContextEntryWithPlainEntry_DropsTheBlock(t *testing.T) {
 	root, path := makeRootWithConfigDir(t)
 	writePricingYAML(t, path, wellFormedTwoModels)
-	store := pricing.NewStore(root)
+	store := pricing.NewStore(t.TempDir(), root)
 	plain := newMinimalEntry(t, "test-model-b")
 
 	table, _ := putAndLoad(t, store, plain)
 
 	got, _ := table.Lookup("test-model-b")
-	if got != plain {
+	if got != asProject(plain) {
 		t.Errorf("replacement = %+v, want %+v (no long-context tier)", got, plain)
 	}
 }
 
 func TestStore_Put_AbsentFile_CreatesFileAndParentDirectories(t *testing.T) {
-	store := pricing.NewStore(t.TempDir())
+	store := pricing.NewStore(t.TempDir(), t.TempDir())
 
 	table, _ := putAndLoad(t, store, newMinimalEntry(t, "create-test-model"))
 
@@ -230,7 +230,7 @@ func TestStore_Put_AbsentFile_CreatesFileAndParentDirectories(t *testing.T) {
 func TestStore_Put_ExistingFileWithComments_RawFileRetainsLeadingComments(t *testing.T) {
 	root, path := makeRootWithConfigDir(t)
 	writePricingYAML(t, path, "# user note: these are our production prices\n"+wellFormedOneModel)
-	store := pricing.NewStore(root)
+	store := pricing.NewStore(t.TempDir(), root)
 
 	putAndLoad(t, store, newMinimalEntry(t, "new-model"))
 
@@ -243,9 +243,9 @@ func TestStore_Put_ExistingFileWithComments_RawFileRetainsLeadingComments(t *tes
 func TestStore_Put_UnparseableDocument_ReturnsErrorAndLeavesFileUnchanged(t *testing.T) {
 	root, path := makeRootWithConfigDir(t)
 	writePricingYAML(t, path, malformedYAML)
-	store := pricing.NewStore(root)
+	store := pricing.NewStore(t.TempDir(), root)
 
-	err := store.Put(context.Background(), newMinimalEntry(t, "any-model"))
+	_, err := store.Put(context.Background(), domain.LevelProject, newMinimalEntry(t, "any-model"))
 
 	if err == nil {
 		t.Fatal("Put into an unparseable document must return an error")
@@ -257,7 +257,7 @@ func TestStore_Put_UnparseableDocument_ReturnsErrorAndLeavesFileUnchanged(t *tes
 
 func TestStore_Path_EndsWithConfigRelPathUnderRoot(t *testing.T) {
 	root := t.TempDir()
-	store := pricing.NewStore(root)
+	store := pricing.NewStore(t.TempDir(), root)
 
 	got := strings.ReplaceAll(store.Path(), "\\", "/")
 	if !strings.HasSuffix(got, pricing.ConfigRelPath) {

@@ -24,8 +24,8 @@ var (
 // the raw file content.
 func createdByPut(t *testing.T, entry domain.ModelPricing) (*pricing.Store, string) {
 	t.Helper()
-	store := pricing.NewStore(t.TempDir())
-	if err := store.Put(context.Background(), entry); err != nil {
+	store := pricing.NewStore(t.TempDir(), t.TempDir())
+	if _, err := store.Put(context.Background(), domain.LevelProject, entry); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 	return store, readFile(t, store.Path())
@@ -131,7 +131,7 @@ func TestTemplate_LoadingTheTemplateAlone_YieldsEmptyTableAndNoFindings(t *testi
 	root, path := makeRootWithConfigDir(t)
 	writePricingYAML(t, path, templateOnly)
 
-	table, findings, err := pricing.NewStore(root).Load(context.Background())
+	table, findings, err := pricing.NewStore(t.TempDir(), root).Load(context.Background())
 	if err != nil {
 		t.Fatalf("Load of the template alone: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestTemplate_LoadingTheTemplateAlone_YieldsEmptyTableAndNoFindings(t *testi
 func TestTemplate_WrittenFileLoadsBackToExactlyTheEnteredEntries(t *testing.T) {
 	store, _ := createdByPut(t, newMinimalEntry(t, "first-model"))
 	second := newEntryWithLongContext(t, "second-model")
-	if err := store.Put(context.Background(), second); err != nil {
+	if _, err := store.Put(context.Background(), domain.LevelProject, second); err != nil {
 		t.Fatalf("second Put: %v", err)
 	}
 
@@ -158,10 +158,10 @@ func TestTemplate_WrittenFileLoadsBackToExactlyTheEnteredEntries(t *testing.T) {
 	if len(models) != 2 || models[0] != "first-model" || models[1] != "second-model" {
 		t.Fatalf("table must hold exactly the entered entries; got %v", models)
 	}
-	if got, _ := table.Lookup("first-model"); got != newMinimalEntry(t, "first-model") {
+	if got, _ := table.Lookup("first-model"); got != asProject(newMinimalEntry(t, "first-model")) {
 		t.Errorf("first-model = %+v", got)
 	}
-	if got, _ := table.Lookup("second-model"); got != second {
+	if got, _ := table.Lookup("second-model"); got != asProject(second) {
 		t.Errorf("second-model = %+v, want %+v", got, second)
 	}
 }
@@ -170,10 +170,10 @@ func TestTemplate_SurvivesLaterPuts(t *testing.T) {
 	store, raw := createdByPut(t, newMinimalEntry(t, "first-model"))
 	before := leadingCommentBlock(raw)
 
-	if err := store.Put(context.Background(), newEntryWithLongContext(t, "second-model")); err != nil {
+	if _, err := store.Put(context.Background(), domain.LevelProject, newEntryWithLongContext(t, "second-model")); err != nil {
 		t.Fatalf("second Put: %v", err)
 	}
-	if err := store.Put(context.Background(), newMinimalEntry(t, "first-model")); err != nil {
+	if _, err := store.Put(context.Background(), domain.LevelProject, newMinimalEntry(t, "first-model")); err != nil {
 		t.Fatalf("replacing Put: %v", err)
 	}
 
@@ -189,9 +189,9 @@ func TestTemplate_SurvivesLaterPuts(t *testing.T) {
 func TestTemplate_NotAddedToAnExistingFile(t *testing.T) {
 	root, path := makeRootWithConfigDir(t)
 	writePricingYAML(t, path, wellFormedOneModel)
-	store := pricing.NewStore(root)
+	store := pricing.NewStore(t.TempDir(), root)
 
-	if err := store.Put(context.Background(), newMinimalEntry(t, "added-model")); err != nil {
+	if _, err := store.Put(context.Background(), domain.LevelProject, newMinimalEntry(t, "added-model")); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 
@@ -202,9 +202,9 @@ func TestTemplate_NotAddedToAnExistingFile(t *testing.T) {
 
 func TestTemplate_WrittenWhenOnlyTheParentDirectoryIsMissing(t *testing.T) {
 	root := t.TempDir()
-	store := pricing.NewStore(root)
+	store := pricing.NewStore(t.TempDir(), root)
 
-	if err := store.Put(context.Background(), newMinimalEntry(t, "first-model")); err != nil {
+	if _, err := store.Put(context.Background(), domain.LevelProject, newMinimalEntry(t, "first-model")); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 

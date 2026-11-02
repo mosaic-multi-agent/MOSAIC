@@ -277,7 +277,7 @@ func TestCatalogFolderFlag_Transform_SpaceForm_Accepted(t *testing.T) {
 			"--catalog-folder", catalogDir,
 			"--harness", "stub-harness",
 			"--target-harness", "other-harness",
-			"--path", "/nonexistent/agent.md",
+			"--workspace", "/nonexistent/agent.md",
 		},
 		svc, &bytes.Buffer{}, &errBufWith)
 
@@ -285,7 +285,7 @@ func TestCatalogFolderFlag_Transform_SpaceForm_Accepted(t *testing.T) {
 		[]string{"transform",
 			"--harness", "stub-harness",
 			"--target-harness", "other-harness",
-			"--path", "/nonexistent/agent.md",
+			"--workspace", "/nonexistent/agent.md",
 		},
 		svc, &bytes.Buffer{}, &errBufWithout)
 
@@ -307,7 +307,7 @@ func TestCatalogFolderFlag_Transform_EqualsForm_Accepted(t *testing.T) {
 			"--catalog-folder=" + catalogDir,
 			"--harness", "stub-harness",
 			"--target-harness", "other-harness",
-			"--path", "/nonexistent/agent.md",
+			"--workspace", "/nonexistent/agent.md",
 		},
 		svc, &bytes.Buffer{}, &errBufWith)
 
@@ -315,7 +315,7 @@ func TestCatalogFolderFlag_Transform_EqualsForm_Accepted(t *testing.T) {
 		[]string{"transform",
 			"--harness", "stub-harness",
 			"--target-harness", "other-harness",
-			"--path", "/nonexistent/agent.md",
+			"--workspace", "/nonexistent/agent.md",
 		},
 		svc, &bytes.Buffer{}, &errBufWithout)
 

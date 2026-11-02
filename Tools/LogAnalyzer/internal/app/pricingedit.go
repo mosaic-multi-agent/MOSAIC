@@ -54,8 +54,10 @@ type PricingEditResult struct {
 	// ConfigPath is the pricing config file the entry was written to.
 	// Set only when Outcome is PricingEditSaved.
 	ConfigPath string
+	// ConfigLevel is the level of that file. Set only when Outcome is
+	// PricingEditSaved.
+	ConfigLevel domain.ConfigLevel
 }
-
 
 // ReportModels returns every distinct (provider, model) that appears anywhere
 // in the report, sorted by model id then provider ("" first). An actor report
@@ -107,7 +109,6 @@ func ModelPricingStates(r domain.Report, t domain.PricingTable) []ModelPricingSt
 	return states
 }
 
-
 // EditModelPricing sets or overwrites the price of one already-chosen
 // (provider, model): the entry is saved under key.Provider, or in the top-level
 // models section when the key has no provider. An empty key.Model or a nil
@@ -117,7 +118,7 @@ func (s *Service) EditModelPricing(ctx context.Context, sess *Session, r domain.
 		return PricingEditResult{Outcome: PricingEditCancelled, Report: r}, nil
 	}
 
-	entry, ok, err := s.collectPricingEntry(ctx, key)
+	level, ok, err := s.askConfigLevel(ctx, s.deps.Pricing.Paths())
 	if err != nil {
 		return PricingEditResult{}, err
 	}
@@ -125,25 +126,30 @@ func (s *Service) EditModelPricing(ctx context.Context, sess *Session, r domain.
 		return PricingEditResult{Outcome: PricingEditNoChange, Report: r}, nil
 	}
 
-	if err := s.SavePricing(ctx, sess, entry); err != nil {
+	entry, ok, err := s.collectPricingEntry(ctx, key, s.fileCurrency(level, sess.Table().Currency()))
+	if err != nil {
 		return PricingEditResult{}, err
 	}
+	if !ok {
+		return PricingEditResult{Outcome: PricingEditNoChange, Report: r}, nil
+	}
 
-	s.deps.Interaction.Notify(ctx, interaction.Notice{
-		Level:   interaction.NoticeInfo,
-		Title:   "Saved",
-		Message: "Pricing for " + key.String() + " saved to " + s.deps.Pricing.Path(),
-	})
+	file, err := s.SavePricing(ctx, sess, level, entry)
+	if err != nil {
+		return PricingEditResult{}, err
+	}
+	s.notifySaved(ctx, key, level, file, sess.Table().Currency())
 
 	repriced := sess.Reprice()
 	repriced.Quality = r.Quality
 
 	return PricingEditResult{
-		Outcome:    PricingEditSaved,
-		Key:        key,
-		Model:      key.Model,
-		Report:     repriced,
-		ConfigPath: s.deps.Pricing.Path(),
+		Outcome:     PricingEditSaved,
+		Key:         key,
+		Model:       key.Model,
+		Report:      repriced,
+		ConfigPath:  file.Path,
+		ConfigLevel: level,
 	}, nil
 }
 

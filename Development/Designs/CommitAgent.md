@@ -2,7 +2,7 @@
 
 > **Status:** Draft for review
 > **Created:** 2026-08-01
-> **Last Updated:** 2026-10-22
+> **Last Updated:** 2026-10-26
 > **Scope:** Design for the agent that commits completed iteration work into the user's own branch. Covers why this is a distinct class rather than a checkpoint variant, what it commits and where, how its commit message is derived without reading orchestration state, the preconditions that make writing to someone's history safe, what a rollback of committed work costs, and how a MOSAIC-owned branch is integrated afterwards.
 
 ---
@@ -138,14 +138,40 @@ An alternative was considered and rejected: leaving the user on their own branch
 
 ### 4.4 What it commits
 
-**Everything in the working tree, excluding every folder MOSAIC itself writes into the workspace:**
+**Everything in the working tree, excluding everything MOSAIC deploys into the workspace or creates during runs.** That one rule defines the **MOSAIC exclusion set**, which has two parts:
+
+| Part | Paths | Source |
+|---|---|---|
+| Created during runs, and deploy's own state | `Orchestration-*/`, `OrchestrationLogs/`, `RunnerLogs/`, `.mosaic/`, `**/.agents-backup/`, `**/agents-runner-*/` | Fixed here |
+| Deployed | Every `target_path` in `.mosaic/manifest.yaml` | Read at each commit |
 
 ```
 git add -A -- .
-git reset -q -- ':(glob)Orchestration-*/**' ':(glob)OrchestrationLogs/**' ':(glob)RunnerLogs/**'
+git reset -q -- ':(glob)Orchestration-*/**' ':(glob)OrchestrationLogs/**' ':(glob)RunnerLogs/**' \
+                ':(glob).mosaic/**' ':(glob)**/.agents-backup/**' ':(glob)**/agents-runner-*/**' \
+                ':(literal){target_path}' ...
 ```
 
-The three are MOSAIC's own bookkeeping at the workspace root: every run folder `Orchestration-*/` (`CommunicationProtocol.md` §3.4), the session log tree `OrchestrationLogs/` (`MosaicLogFormat.md` §4.3), and the script runner's debug and dispatch logs `RunnerLogs/`. The list is closed and fixed here; a new folder MOSAIC writes into the workspace is added to it in the same change that introduces the folder.
+The fixed part is MOSAIC's own state:
+- every run folder `Orchestration-*/` (`CommunicationProtocol.md` §3.4);
+- the session log tree `OrchestrationLogs/` (`MosaicLogFormat.md` §4.3);
+- the script runner's debug and dispatch logs `RunnerLogs/`;
+- deploy's manifest and backups `.mosaic/`;
+- the working copies of an agents folder that an executor keeps while a run is in progress, `.agents-backup/` next to the agents folder and `agents-runner-{run_id}/` (`Tools/Runner/docs/Design.md` §6).
+
+The fixed part is a closed list. A new folder MOSAIC creates in the workspace is added to it in the same change that introduces the folder.
+
+**The deployed part is read from the manifest rather than listed here,** because the manifest is the authoritative record of what deploy wrote. It covers agents, skills and hooks for every harness, and any kind deploy adds later, without this document having to track them. Each `target_path` is excluded as a literal path. The agent reads the manifest as an ordinary project file, so no strict-access exception is involved (`InfrastructureAgentConcept.md` §8).
+- **A missing or unreadable manifest** does not block the commit. The agent excludes the fixed part only and says so in `status_message`. A deployment made without the deploy tool has no manifest, and committing its agent files is a cosmetic cost; blocking every commit of such a run would not be.
+- **Files deploy only merges into are not excluded.** A user-owned configuration file that deploy edits in place (hook registration in `.claude/settings.json`) has no manifest entry. It is the user's file, and their own changes to it belong in their history.
+
+**Why deployed files are excluded at all.** They are not the run's work. An orchestrated run never edits the agents that execute it; doing so would change the system while it is running, and is not a supported use. Excluding them costs a run nothing. Including them puts two kinds of noise into the user's history:
+- a redeploy the user ran before or during the run;
+- worse, the executor's temporary in-run rewrite of the agent files. Some harnesses load agents by name from a fixed folder, so the Runner transforms those files in place for the length of a session (`Tools/Runner/docs/Design.md` §6.2). An iteration commit taken during the session would record that transient form as if it were the project's state.
+
+This was found from a run whose commit swept the executor's `.opencode/.agents-backup/`, the rewritten `.opencode/agents/` and `.mosaic/manifest.yaml` into the user's branch.
+
+**The exclusion forms were checked** against an ignored `.mosaic/`, untracked working-copy folders at any depth, a tracked and modified deployed file, and a manifest path that does not exist. In every case the reset exits 0 and leaves only project content staged.
 
 This is a **deliberate divergence** from `CheckpointAgents.md` §4.2, which excludes only the agent's own run folder and captures other runs' folders as ordinary project content. That is correct for a snapshot — those files existed on disk, and a restore point must correspond to a tree state that really occurred. It is wrong here. Orchestration bookkeeping and logs are not the user's project history, and committing a run's transcript or logs into their branch permanently is a worse outcome than any tidiness it might buy. The log folders were missing from an earlier version of this pathspec, which excluded only `Orchestration-*`; a run with commits enabled would have committed its own logs at every iteration end.
 
@@ -428,11 +454,12 @@ Applies to the MOSAIC-owned variant only. In the user's-own variant the work is 
 | `OrchestrationArtifactFormat.md` | §4 | `dispatch` frontmatter field. | `commits: enabled` requires `dispatch: sequential` (§6); the commits question precedes the dispatch question and fixes it. |
 | `InfrastructureAgentConcept.md` | §8 | No executor specifies what an infrastructure dispatch carries. | A `commit`-class `ITERATION_END` dispatch carries the ended iteration's own artifacts in `input_artifacts` and names the iteration and the recorded `commit_branch` in `task_description`; every other trigger dispatch carries none (§4.5). |
 | `CheckpointAgents.md` | §5.2 | Case 1's content match and case 3's revert commit use the commit pathspec `':!Orchestration-*'`. | Both follow §4.4's exclusion set, which now also covers `OrchestrationLogs/` and `RunnerLogs/`, and case 3 stages with §4.4's add-then-reset form. Case 1 must exclude the log folders too: a checkpoint captures them and a run commit does not, so a match test that compared them would never find a match. |
+| `CheckpointAgents.md` | §5.2, §5.3 | Rule 1's content match and case 3's revert exclude MOSAIC's folders; restore writes everything except run folders. | Rule 1 and case 3 use the full MOSAIC exclusion set, deployed paths included. Restore never writes or deletes any path of that set. Capture is unchanged. |
 
 ## 10. Non-Goals
 
 - **Rolling back committed work *by this agent*.** The reconciliation is performed, but by `checkpoint-restore-git`, in the same invocation as the restore itself (§7, and `CheckpointAgents.md` §5.2). This agent is never dispatched as part of a rollback — its message comes from an iteration's plan, and a rollback has none.
-- **Curating what goes into a commit.** The agent commits the whole tree minus run folders. Selecting hunks, splitting an iteration into several commits, or separating the user's edits from MOSAIC's is not attempted, and §4.4 explains why it cannot be done reliably.
+- **Curating what goes into a commit.** The agent commits the whole tree minus the MOSAIC exclusion set (§4.4). Selecting hunks, splitting an iteration into several commits, or separating the user's edits from MOSAIC's is not attempted, and §4.4 explains why it cannot be done reliably.
 - **Pushing.** Nothing here runs `git push`. Whether and when commits leave the machine is the user's decision — and in the MOSAIC-owned variant it is the decision that ends clean rollback (§4.3).
 - **Branch creation and switching on any trigger-driven invocation.** A commit-mode invocation never creates a branch or switches: it commits to the branch recorded in `commit_branch` and refuses if `HEAD` is not there (§4.6). Branch creation happens exactly once per run, in the setup dispatch (§4.9), which makes no commit. The two modes are disjoint, and neither ever does the other's job.
 - **Merging, rebasing, and branch deletion, in either mode.** Integration is the user's own operation — §8 states the choices available to them and what each costs, without any of them being performed by anything here.
@@ -451,6 +478,8 @@ Applies to the MOSAIC-owned variant only. In the user's-own variant the work is 
 **Resolved:** how the agent learns which iteration ended and what it was for, once blocks replaced stages. The dispatch supplies the iteration's artifacts and names the iteration (`InfrastructureAgentConcept.md` §8), and the trailer became `Mosaic-Iteration` (§4.5). Previously the agent parsed a stage number from a `Stage-{N}/` path, and the Runner supplied no artifacts at all, so every Runner-driven commit returned `BLOCKED` unnoticed behind `on_failure: continue`.
 
 **Resolved:** how a commit-mode dispatch learns the recorded branch. It is named in `task_description` (§4.5, `InfrastructureAgentConcept.md` §8). The agent's §4.6 check required the recorded branch from the start, but no dispatch carried it and the agent may not read `Orchestration.md`, so the check could only fail. Found from a Runner run in which every commit dispatch blocked on exactly that.
+
+**Resolved:** whether deployed files and executor working copies are excluded. They are. The rule is "everything MOSAIC deploys or creates during runs" (§4.4): deployed paths are read from `.mosaic/manifest.yaml`, and `.mosaic/` and the agents-folder working copies were added to the fixed list. Committing only the paths an iteration changed was considered and rejected. It needs a working-tree snapshot carried from commit to commit, it still sweeps in the user's edits made during the window, and its commits match no tree that ever existed. That is a large, fragile mechanism for a problem the exclusion set already solves.
 
 **Resolved:** which folders a commit excludes. Every folder MOSAIC writes into the workspace — run folders and both log trees — staged out with add-then-reset (§4.4). Found from a run whose commit agent listed `RunnerLogs/` among the paths it would have committed.
 

@@ -213,10 +213,10 @@ func TestCanonicalDeployed_Stage2_ContainsEightNames(t *testing.T) {
 	// The vocabulary correction removes LanguagePatterns and CustomConstraints from
 	// the tool-managed closed set (on top of the ArtifactProvenance removal and five
 	// bundle-name additions from the earlier Stage 2 work). The closed set is now
-	// 8 names.
+	// 9 names (the orchestrator harness region joins the closed set).
 	got := docformat.CanonicalDeployed
-	if len(got) != 8 {
-		t.Fatalf("CanonicalDeployed length: want 8, got %d: %v", len(got), got)
+	if len(got) != 9 {
+		t.Fatalf("CanonicalDeployed length: want 9, got %d: %v", len(got), got)
 	}
 }
 
@@ -228,6 +228,7 @@ func TestCanonicalDeployed_Stage2_IncludesAllExpectedNames(t *testing.T) {
 		"AvailableWorkflows",
 		"InfrastructureAgents",
 		"HarnessConstraints",
+		"OrchestratorHarnessConstraints",
 		"ErrorHandlingCommon",
 		"ExecutionPhilosophyCommon",
 	}
@@ -288,14 +289,15 @@ func TestDeployedParent_Stage2_IsNotNil(t *testing.T) {
 func TestDeployedParent_Stage2_MapsAllEightNames(t *testing.T) {
 	// An empty string value means the boundary must appear at body top level.
 	wantMap := map[string]string{
-		"CommunicationProtocol":     "", // top level
-		"AuthorityHierarchy":        "Identity",
-		"ClosingProcedure":          "Identity",
-		"AvailableWorkflows":        "Identity",
-		"InfrastructureAgents":      "Identity",
-		"HarnessConstraints":        "Constraints",
-		"ErrorHandlingCommon":       "ErrorHandling",
-		"ExecutionPhilosophyCommon": "ExecutionPhilosophy",
+		"CommunicationProtocol":          "", // top level
+		"AuthorityHierarchy":             "Identity",
+		"ClosingProcedure":               "Identity",
+		"AvailableWorkflows":             "Identity",
+		"InfrastructureAgents":           "Identity",
+		"HarnessConstraints":             "Constraints",
+		"OrchestratorHarnessConstraints": "Constraints",
+		"ErrorHandlingCommon":            "ErrorHandling",
+		"ExecutionPhilosophyCommon":      "ExecutionPhilosophy",
 	}
 	got := docformat.DeployedParent
 	if got == nil {
@@ -325,8 +327,8 @@ func TestDeployedParent_Stage2_ContainsExactlyEightEntries(t *testing.T) {
 	if got == nil {
 		t.Fatal("DeployedParent is nil")
 	}
-	if len(got) != 8 {
-		t.Fatalf("DeployedParent length: want 8, got %d: %v", len(got), got)
+	if len(got) != 9 {
+		t.Fatalf("DeployedParent length: want 9, got %d: %v", len(got), got)
 	}
 }
 
@@ -439,6 +441,7 @@ func TestInjectionParent_Stage2_DoesNotContainToolManagedNames(t *testing.T) {
 		"AvailableWorkflows",
 		"InfrastructureAgents",
 		"HarnessConstraints",
+		"OrchestratorHarnessConstraints",
 		"ErrorHandlingCommon",
 		"ExecutionPhilosophyCommon",
 	}
@@ -572,6 +575,27 @@ func TestClassifyRegion_Stage2_HarnessConstraints_ReturnsHarnessClass(t *testing
 	}
 	if class != domain.InjectionHarness {
 		t.Errorf("ClassifyRegion(NodeDeployed, \"HarnessConstraints\"): want InjectionHarness, got %q", class)
+	}
+}
+
+func TestClassifyRegion_OrchestratorHarnessConstraints_ReturnsHarnessClass(t *testing.T) {
+	// The orchestrator-only harness region is the same class as HarnessConstraints.
+	class, err := docformat.ClassifyRegion(docformat.NodeDeployed, "OrchestratorHarnessConstraints")
+	if err != nil {
+		t.Fatalf("ClassifyRegion(NodeDeployed, \"OrchestratorHarnessConstraints\"): unexpected error: %v", err)
+	}
+	if class != domain.InjectionHarness {
+		t.Errorf("ClassifyRegion(NodeDeployed, \"OrchestratorHarnessConstraints\"): want InjectionHarness, got %q", class)
+	}
+}
+
+func TestExpectedMarker_OrchestratorHarnessConstraints_IsDeployedAndKnown(t *testing.T) {
+	kind, known := docformat.ExpectedMarker("OrchestratorHarnessConstraints")
+	if !known {
+		t.Fatal("ExpectedMarker(\"OrchestratorHarnessConstraints\"): known=false, want true")
+	}
+	if kind != docformat.NodeDeployed {
+		t.Errorf("ExpectedMarker(\"OrchestratorHarnessConstraints\"): kind=%q, want NodeDeployed", kind)
 	}
 }
 

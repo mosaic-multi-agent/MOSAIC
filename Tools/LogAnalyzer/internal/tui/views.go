@@ -3,6 +3,8 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
+	"mosaic-log-analyzer/internal/app"
+	"mosaic-log-analyzer/internal/domain"
 	"mosaic-log-analyzer/internal/tui/screens"
 )
 
@@ -14,6 +16,9 @@ const (
 	screenTools      screenName = screenName(screens.ScreenTools)
 	screenTimeline   screenName = screenName(screens.ScreenTimeline)
 	screenAcrossRuns screenName = screenName(screens.ScreenAcrossRuns)
+	screenContext    screenName = screenName(screens.ScreenContext)
+	screenSession    screenName = screenName(screens.ScreenSession)
+	screenCompare    screenName = screenName(screens.ScreenCompare)
 )
 
 // openRunView shows the per-run view id for the run with the given id, built
@@ -23,7 +28,7 @@ func (m Model) openRunView(runID string, id screens.ScreenID) Model {
 	if !ok {
 		return m
 	}
-	style := stylesFromTheme(m.theme)
+	style := m.screenStyles()
 	switch id {
 	case screens.ScreenOverview:
 		m.runView = screens.NewOverviewScreen(run, m.width, m.height, style)
@@ -33,11 +38,19 @@ func (m Model) openRunView(runID string, id screens.ScreenID) Model {
 		m.runView = screens.NewStatusScreen(run, m.width, m.height, style)
 	case screens.ScreenTools:
 		m.runView = screens.NewToolsScreen(run, m.width, m.height, style)
+	case screens.ScreenContext:
+		m.runView = screens.NewContextScreen(run, m.width, m.height, style)
 	case screens.ScreenTimeline:
 		m.runView = screens.NewTimelineScreen(run, m.width, m.height, style)
 	default:
 		m.runDetailScreen = screens.NewRunDetailScreen(run, m.width, m.height, style)
 		m.runView = m.runDetailScreen
+	}
+	if q, ok := m.runView.(interface{ SetRunQuality(screens.RunQuality) }); ok {
+		q.SetRunQuality(screens.RunQualityOf(m.report.Quality, run.Run))
+	}
+	if r, ok := m.runView.(interface{ SetUnpricedReasons([]domain.UnpricedReason) }); ok {
+		r.SetUnpricedReasons(m.report.UnpricedReasons)
 	}
 	m.viewRunID = runID
 	m.screen = screenName(id)
@@ -54,12 +67,22 @@ func (m Model) updateRunView(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.runView = updated.(screens.RunView)
 	if m.runView.Back() {
 		m.runView.Reset()
+		if m.screen == screenSession {
+			return m.closeSession(), nil
+		}
 		m.screen = screenRuns
 		return m, nil
 	}
 	if id, ok := m.runView.Requested(); ok {
 		m.runView.Reset()
+		m.sessionOpener = nil
 		return m.openRunView(m.viewRunID, id), nil
+	}
+	if opened, ok := m.openSessionIfRequested(); ok {
+		return opened, nil
+	}
+	if markCmd := m.markToolCmd(); markCmd != nil {
+		return m, markCmd
 	}
 	return m, cmd
 }
@@ -74,7 +97,19 @@ func (m Model) viewRunView() string {
 
 // openAcrossRuns shows the across-runs view built from the model's current report.
 func (m Model) openAcrossRuns() Model {
-	m.runView = screens.NewAcrossRunsScreen(m.report, m.width, m.height, stylesFromTheme(m.theme))
+	m.runView = screens.NewAcrossRunsScreen(m.report, m.width, m.height, m.screenStyles())
 	m.screen = screenAcrossRuns
+	return m
+}
+
+// openCompare shows the comparison of run idA (A) with run idB (B), computed from
+// the model's current report; the screen stays where it is when either run is gone.
+func (m Model) openCompare(idA, idB string) Model {
+	cmp, ok := app.CompareRuns(m.report, idA, idB)
+	if !ok {
+		return m
+	}
+	m.runView = screens.NewCompareScreen(cmp, m.width, m.height, m.screenStyles())
+	m.screen = screenCompare
 	return m
 }

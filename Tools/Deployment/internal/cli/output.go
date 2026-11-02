@@ -39,6 +39,9 @@ func renderJSON(out io.Writer, summary domain.RunSummary) {
 // renderHuman writes a human-readable one-paragraph summary of the run to out.
 // The output always includes the workspace path and an outcome word (success / fail / skip).
 func renderHuman(out io.Writer, summary domain.RunSummary) {
+	if writeDryRunReport(out, summary) {
+		return
+	}
 	switch summary.Outcome {
 	case domain.OutcomeSuccess:
 		fmt.Fprintf(out, "success: deployment complete\nworkspace: %s\n", summary.WorkspacePath)
@@ -50,6 +53,7 @@ func renderHuman(out io.Writer, summary domain.RunSummary) {
 		fmt.Fprintf(out, "outcome: %s\nworkspace: %s\n", string(summary.Outcome), summary.WorkspacePath)
 	}
 	writeFormatChanges(out, summary)
+	writeRegionWarnings(out, summary)
 }
 
 // writeFormatChanges lists each rewritten file whose BOM or line-ending style changed.
@@ -100,68 +104,6 @@ func renderPromoteJSON(out io.Writer, result app.PromoteResult) {
 	_ = enc.Encode(result)
 }
 
-// renderTransformOutput writes the transform result and returns the appropriate exit code.
-// When format is "json", a TransformHarnessResult JSON document is written to out; otherwise
-// a human-readable summary is written to out. When svcErr is non-nil the error is written
-// to errOut and ExitFailure is returned.
-func renderTransformOutput(out, errOut io.Writer, format string, result app.TransformHarnessResult, svcErr error) int {
-	if svcErr != nil {
-		fmt.Fprintf(errOut, "error: %v\n", svcErr)
-		return ExitFailure
-	}
-	if strings.EqualFold(format, "json") {
-		enc := json.NewEncoder(out)
-		_ = enc.Encode(result)
-	} else {
-		renderTransformHuman(out, result)
-	}
-	return ExitSuccess
-}
-
-// renderTransformHuman writes a human-readable summary of the transform run to out.
-func renderTransformHuman(out io.Writer, result app.TransformHarnessResult) {
-	dryPrefix := ""
-	if result.DryRun {
-		dryPrefix = "dry run: "
-	}
-	fmt.Fprintf(out, "%stransform complete\nsource: %s → %s\ninput: %s\n",
-		dryPrefix, result.SourceHarnessID, result.TargetHarnessID, result.InputPath)
-	fmt.Fprintf(out, "transformed: %d  skipped-mismatch: %d  skipped-not-agent: %d  failed: %d\n",
-		result.Transformed, result.SkippedMismatch, result.SkippedNotAgent, result.Failed)
-	for _, f := range result.Files {
-		switch f.Status {
-		case app.StatusTransformed:
-			if result.DryRun {
-				fmt.Fprintf(out, "  [dry-run] %s → %s\n", f.SourcePath, f.DestinationPath)
-			} else {
-				fmt.Fprintf(out, "  transformed: %s → %s\n", f.SourcePath, f.DestinationPath)
-			}
-			if f.Warning != "" {
-				fmt.Fprintf(out, "    warning: %s\n", f.Warning)
-			}
-			if len(f.Tools) > 0 {
-				fmt.Fprintf(out, "    tools: %s\n", strings.Join(f.Tools, ", "))
-			}
-			if len(f.CarriedVerbatimTools) > 0 {
-				fmt.Fprintf(out, "    carried verbatim tools: %s\n", strings.Join(f.CarriedVerbatimTools, ", "))
-			}
-			for _, sf := range f.StrippedFields {
-				if len(sf.Values) > 0 {
-					fmt.Fprintf(out, "    stripped field: %s (%s): %s\n", sf.Key, string(sf.Reason), strings.Join(sf.Values, ", "))
-				} else {
-					fmt.Fprintf(out, "    stripped field: %s (%s)\n", sf.Key, string(sf.Reason))
-				}
-			}
-		case app.StatusSkippedMismatch:
-			fmt.Fprintf(out, "  skipped (mismatch): %s — %s\n", f.SourcePath, f.Reason)
-		case app.StatusSkippedNotAgent:
-			fmt.Fprintf(out, "  skipped (not agent): %s — %s\n", f.SourcePath, f.Reason)
-		case app.StatusFailed:
-			fmt.Fprintf(out, "  failed: %s — %s\n", f.SourcePath, f.Reason)
-		}
-	}
-}
-
 // renderAgentsOutput writes the deploy-agents run summary and returns the exit code.
 // The contract mirrors renderStandaloneOutput: svcErr → error on errOut + ExitFailure;
 // json → domain.RunSummary document; otherwise the human summary with optional dry-run prefix.
@@ -181,6 +123,9 @@ func renderAgentsOutput(out, errOut io.Writer, format string, dryRun bool, summa
 
 // renderAgentsHuman writes a human-readable summary of a deploy-agents run.
 func renderAgentsHuman(out io.Writer, dryRun bool, summary domain.RunSummary) {
+	if writeDryRunReport(out, summary) {
+		return
+	}
 	prefix := ""
 	if dryRun {
 		prefix = "dry run: "
@@ -216,6 +161,9 @@ func renderHooksOutput(out, errOut io.Writer, format string, dryRun bool, summar
 
 // renderHooksHuman writes a human-readable summary of a deploy-hooks run.
 func renderHooksHuman(out io.Writer, dryRun bool, summary domain.RunSummary) {
+	if writeDryRunReport(out, summary) {
+		return
+	}
 	prefix := ""
 	if dryRun {
 		prefix = "dry run: "

@@ -36,7 +36,7 @@ func TestByAgentType_Average_RoundsHalfUpToTheNanodollar(t *testing.T) {
 		coderInvocation("coder#2", "SUCCESS", 5, usageRecordEvent("coder#2", "b", viewsModel, viewsUsage(1_000_002, 0, 0, 0))),
 	}}
 
-	report := analysis.Analyze(in, oneNanoPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, oneNanoPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	stats := requireGroup(t, requireRunReport(t, report, testRunID), "coder").PerInvocation
 	assertMoneyKnown(t, "min", stats.Min, 1_000_001)
@@ -52,7 +52,7 @@ func TestByAgentType_Average_RoundsFractionalMeanToNearest(t *testing.T) {
 		coderInvocation("coder#3", "SUCCESS", 9, usageRecordEvent("coder#3", "c", viewsModel, viewsUsage(2, 0, 0, 0))),
 	}}
 
-	report := analysis.Analyze(in, oneNanoPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, oneNanoPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	// Exact mean 5/3 = 1.67 nanodollars: nearest is 2, truncation would give 1.
 	assertMoneyKnown(t, "average", requireGroup(t, requireRunReport(t, report, testRunID), "coder").PerInvocation.Average, 2)
@@ -69,7 +69,7 @@ func TestByStatus_Run_FullEnumOrderThenOtherCodesAscending(t *testing.T) {
 		streams = append(streams, coderInvocation(id, code, 1+i*3))
 	}
 
-	report := analysis.Analyze(analysis.Input{Streams: streams}, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(analysis.Input{Streams: streams}, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	run := requireRunReport(t, report, testRunID)
 	want := []wantGroup{
@@ -95,7 +95,7 @@ func TestOverview_Shares_NumeratorIsZeroForAnOrchestratorTotalThatIsNotKnown(t *
 		coderInvocation("coder#1", "SUCCESS", 1, usageRecordEvent("coder#1", "a", viewsModel, viewsUsage(1000, 0, 0, 0))),
 	}}
 
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	ov := requireRunReport(t, report, testRunID).Overview
 	assertMoneyState(t, "orchestrator total", ov.Orchestrator.Money.Total, domain.MoneyUnpriced)
@@ -108,7 +108,7 @@ func TestOverview_CacheHitRatio_AbsentCacheReadCountsAsZeroOverLoggedContext(t *
 		coderInvocation("coder#1", "SUCCESS", 1, usageRecordEvent("coder#1", "a", viewsModel, viewsUsage(100, 0, 0, 10))),
 	}}
 
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	assertRatio(t, "cache hit ratio", requireRunReport(t, report, testRunID).Overview.CacheHitRatio, 0, 100)
 }
@@ -121,7 +121,7 @@ func TestByAgentType_Dispatch_ModelsAreDistinctSortedAndUnpricedOnesListed(t *te
 			usageRecordEvent("coder#1", "c", viewsModel, viewsUsage(20, 0, 0, 0))),
 	}}
 
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	d := requireDispatch(t, requireGroup(t, requireRunReport(t, report, testRunID), "coder"), "coder#1")
 	if len(d.Models) != 2 || d.Models[0] != viewsModel || d.Models[1] != viewsUnpriced {
@@ -136,7 +136,7 @@ func TestTools_Orchestrator_ErrorsAreCounted(t *testing.T) {
 		rmToolStart("o2", "Read", rmAt(3)), rmToolEnd("o2", domain.ToolCallSuccess, rmAt(4)),
 	}}}}
 
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	read := requireTool(t, requireRunReport(t, report, testRunID).Tools.Orchestrator, "Read")
 	if read.Calls != 2 || read.Errors != 1 {
@@ -155,7 +155,7 @@ func TestTools_PerAgentType_UnknownTypeIsListedLast(t *testing.T) {
 			rmToolStart("c1", "Read", rmAt(11)), rmToolEnd("c1", domain.ToolCallSuccess, rmAt(12))),
 	}}
 
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	byType := requireRunReport(t, report, testRunID).Tools.ByAgentType
 	if len(byType) != 2 || byType[0].AgentType != "coder" || byType[1].AgentType != "" {
@@ -175,7 +175,7 @@ func TestUnattributableBucket_CarriesAllRunViews(t *testing.T) {
 		rmInvEnd("Unknown#1", "SUCCESS", viewsModel, rmAt(4)),
 	}}}}
 
-	report := analysis.Analyze(in, viewsPricing(t), testSource(), nil)
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
 	if report.Unattributable == nil {
 		t.Fatal("no unattributable report")

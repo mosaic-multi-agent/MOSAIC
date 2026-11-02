@@ -23,7 +23,7 @@ type MaxConcurrentRunsScreen struct {
 // NewMaxConcurrentRunsScreen creates a MaxConcurrentRunsScreen initialized to initial.
 func NewMaxConcurrentRunsScreen(initial int, width int, styles Styles) *MaxConcurrentRunsScreen {
 	return &MaxConcurrentRunsScreen{
-		entry:  newDigitEntry(),
+		entry:  newDigitEntry(width),
 		value:  initial,
 		width:  width,
 		styles: styles,
@@ -59,7 +59,7 @@ func (s *MaxConcurrentRunsScreen) View() string {
 		display = fmt.Sprintf("%d", s.value)
 	}
 	title := s.styles.Title.Render("Max Concurrent Runs")
-	value := s.styles.Selected.Render(display)
+	value := s.entry.render(display, s.styles.Selected)
 	help := s.styles.Help.Render("type digits  backspace delete  enter confirm  esc back")
 	content := title + "\n\n  " + value + "\n\n" + help
 	if s.width > 0 {
@@ -93,6 +93,7 @@ func (s *MaxConcurrentRunsScreen) WasEdited() bool { return s.entry.edited }
 // current value.
 func (s *MaxConcurrentRunsScreen) Resize(width int) {
 	s.width = width
+	s.entry.setWidth(width)
 }
 
 // Value returns the currently confirmed concurrency bound.

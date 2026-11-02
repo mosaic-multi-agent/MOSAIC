@@ -32,6 +32,12 @@ type runLogConfig struct {
 	Clock     domain.Clock       // timestamp source
 }
 
+// newRunLogConfig builds the runLogConfig that both production call sites
+// (main.go and wiring_stub.go) pass to newRunLifecycleSession.
+func newRunLogConfig(runFolder, harnessID string, logger domain.DebugLogger, clock domain.Clock) runLogConfig {
+	return runLogConfig{RunFolder: runFolder, HarnessID: harnessID, Debug: logger, Clock: clock}
+}
+
 // runIDReporter is the narrow assertion target for the run id an adapter was bound to.
 type runIDReporter interface {
 	RunID() string

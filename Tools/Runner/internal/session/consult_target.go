@@ -37,7 +37,7 @@ func (s *sessionImpl) resolveConsultTarget(
 	if err != nil {
 		s.deps.Debug.Log(domain.EventSessionConsultFailed, "consultation dispatch target invalid: "+err.Error(),
 			domain.F("agent", dispInstr.Agent),
-			domain.F("row", strconv.Itoa(dispInstr.RowIndex)),
+			domain.F("row", strconv.Itoa(int(domain.WorkflowRowFromIndex(dispInstr.RowIndex)))),
 			domain.F("stage", string(dispInstr.Iteration)),
 		)
 		return row, "", true, domain.RunOutcome{

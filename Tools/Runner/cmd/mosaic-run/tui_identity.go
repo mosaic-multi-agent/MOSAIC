@@ -154,7 +154,7 @@ func recordedWorkflowOf(runFolder string) string {
 	if err != nil {
 		return ""
 	}
-	state, err := artifact.Parse(data)
+	state, err := artifact.ParseAt(artifactPath, data)
 	if err != nil {
 		return ""
 	}

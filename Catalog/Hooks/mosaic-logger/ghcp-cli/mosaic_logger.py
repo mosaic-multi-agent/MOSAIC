@@ -32,16 +32,11 @@ for _mod in [_session, _invocation, _tools]:
 # Dispatcher functions
 # ---------------------------------------------------------------------------
 
-# Events with prompt-bearing fields from which run_id may be extracted.
-# Keys are GHCP CLI camelCase event names; values are camelCase payload field names.
-_RUN_ID_PROMPT_FIELDS: dict = {
-    "subagentStart": "agentPrompt",
-    "subagentStop": "response",
-    "userPromptSubmitted": "prompt",
-    "notification": "message",
-}
-# agentStop is intentionally absent: GHCP CLI's agentStop payload does not carry
-# a last_assistant_message or equivalent text field for run_id extraction.
+# Only a subagentStart prompt that carries an agent instance id (a MOSAIC
+# dispatch) can bind a session to a run. User prompts, subagent replies and
+# notification text never do, even when they quote a run id.
+_DISPATCH_PROMPT_EVENT = "subagentStart"
+_DISPATCH_PROMPT_FIELD = "agentPrompt"
 
 
 def build_context(event: str, payload: dict) -> core.HookContext:
@@ -62,20 +57,20 @@ def build_context(event: str, payload: dict) -> core.HookContext:
 
 
 def resolve_run_identity(ctx: core.HookContext) -> None:
-    """Set ctx.run_id using the following precedence, then persist what was resolved.
+    """Set ctx.run_id using the following precedence.
 
-    1. Prompt-field extraction (highest). Extract run_id from the event-specific
-       prompt-bearing field listed in _RUN_ID_PROMPT_FIELDS. Unchanged from before.
-    2. Session cache (fallback). Only when step 1 yielded nothing: consult the
-       workspace-level session run-id cache keyed by ctx.session_id.
-    3. Write-back. When step 1 produced a run_id and ctx.session_id is present,
-       the value is written to the cache for this session. A value that came from
-       step 2 is not written back (it is already the cached value).
-    4. Miss. When both steps yield nothing, ctx.run_id stays None and
-       core.effective_run_id continues to produce 'unknown-run'.
+    1. Runner mode: a valid MOSAIC_RUN_ID is the run identity; nothing else
+       overrides it and nothing is cached.
+    2. Dispatch prompt: on subagentStart, an agentPrompt carrying an agent
+       instance id and a run id binds the session to that run (cached; a run
+       differing from the current binding wins from then on). The preToolUse
+       subagent-launch dispatch binds in the tool handler.
+    3. Session binding: the run cached for ctx.session_id.
+    4. Miss: ctx.run_id stays None and core.effective_run_id yields
+       'unknown-run'.
 
-    In Runner mode a valid MOSAIC_RUN_ID is the run identity and is used before
-    any of the above; no other source overrides it and nothing is cached.
+    User prompts, subagent replies, notification text, tool-argument paths and
+    prompts without an agent instance id never bind, quoted run ids included.
 
     Never raises. Reports unexpected failures through core.debug_log.
     """
@@ -85,36 +80,29 @@ def resolve_run_identity(ctx: core.HookContext) -> None:
             ctx.run_id = mode.run_id
             return
 
-        # Step 1: prompt-field extraction (highest priority, unchanged)
-        prompt_run_id = None
-        field_name = _RUN_ID_PROMPT_FIELDS.get(ctx.event)
-        if field_name is not None:
-            prompt = ctx.field(field_name)
-            prompt_run_id = runstate.extract_run_id(prompt)
-            ctx.run_id = prompt_run_id
+        dispatched = None
+        if ctx.event == _DISPATCH_PROMPT_EVENT:
+            prompt = ctx.field(_DISPATCH_PROMPT_FIELD)
+            if runstate.extract_instance_id(prompt):
+                dispatched = runstate.extract_run_id(prompt)
 
-        # Step 3: write-back when step 1 found a run_id.
-        # Use ctx.timestamp (the hook-firing time) as created_at so staleness is
-        # evaluated relative to when the run_id was observed, not the write instant.
-        if prompt_run_id and ctx.session_id:
-            try:
-                runstate.put_session_run_id(
-                    ctx.paths, ctx.session_id, prompt_run_id,
-                    created_at=ctx.timestamp,
-                )
-            except Exception as wb_exc:
-                core.debug_log("resolve_run_identity write-back failed", wb_exc)
-            # Return early: prompt extraction is authoritative, no cache fallback needed
+        if dispatched:
+            ctx.run_id = dispatched
+            if ctx.session_id:
+                try:
+                    runstate.put_session_run_id(
+                        ctx.paths, ctx.session_id, dispatched,
+                        created_at=ctx.timestamp)
+                except Exception as wb_exc:
+                    core.debug_log("resolve_run_identity write-back failed", wb_exc)
             return
 
-        # Step 2: session cache fallback (only when step 1 yielded nothing)
-        if not ctx.run_id:
-            try:
-                cached = runstate.get_session_run_id(ctx.paths, ctx.session_id)
-                if cached:
-                    ctx.run_id = cached
-            except Exception as cache_exc:
-                core.debug_log("resolve_run_identity cache lookup failed", cache_exc)
+        try:
+            cached = runstate.get_session_run_id(ctx.paths, ctx.session_id)
+            if cached:
+                ctx.run_id = cached
+        except Exception as cache_exc:
+            core.debug_log("resolve_run_identity cache lookup failed", cache_exc)
 
     except Exception as exc:
         core.debug_log("resolve_run_identity failed", exc)
@@ -126,7 +114,7 @@ def dispatch(event: str, raw_input: str) -> None:
     Steps:
       1. Parse raw_input as JSON; abort silently if not a dict.
       2. Build HookContext from event name and parsed payload.
-      3. resolve_run_identity -- extracts run_id from prompt content when present.
+      3. resolve_run_identity -- binds the run from a dispatch prompt or Runner env.
       4. Emit run_start on sessionStart.
       5. Invoke registered handler for ctx.event, if any.
       6. Emit run_end on sessionEnd -- always runs even if step 5 raised.

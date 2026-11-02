@@ -35,9 +35,18 @@ func (m *rootModel) View() string {
 		if m.ghcpModeScreen != nil {
 			return m.ghcpModeScreen.View()
 		}
+	case screenSetupSummary:
+		if m.summaryScreen != nil {
+			return m.summaryScreen.View()
+		}
 	case screenProgress:
 		if m.progressScreen != nil {
+			m.syncGuidanceAvailable()
 			return m.progressScreen.View()
+		}
+	case screenGuidance:
+		if m.guidanceScreen != nil {
+			return m.guidanceScreen.View()
 		}
 	case screenArtifact:
 		if m.artifactScreen != nil {

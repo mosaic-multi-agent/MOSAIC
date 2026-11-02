@@ -96,7 +96,7 @@ func arPricingBoth(t *testing.T) domain.PricingTable {
 
 func arReport(t *testing.T, table domain.PricingTable) domain.Report {
 	t.Helper()
-	return analysis.Analyze(arInput(), table, testSource(), nil)
+	return analysis.Analyze(arInput(), table, domain.DefaultAnalysisSettings(), testSource(), nil)
 }
 
 func arSummary(t *testing.T, ac domain.AcrossRuns, id string) domain.RunSummary {

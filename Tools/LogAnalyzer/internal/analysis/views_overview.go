@@ -8,23 +8,24 @@ import (
 
 // buildOverview builds the run overview from the already priced run figures and
 // the priced dispatches.
-func buildOverview(run domain.RunAggregate, rr domain.RunReport, dispatches []domain.Dispatch, table domain.PricingTable) domain.RunOverview {
+func buildOverview(run domain.RunAggregate, rr domain.RunReport, dispatches []domain.Dispatch, table domain.PricingTable, settings domain.AnalysisSettings) domain.RunOverview {
 	subagents := groupFigures(dispatches)
 
-	var cacheHit domain.Ratio
-	if denom, ok := rr.Totals.Tokens.TotalContext().Value(); ok && denom > 0 {
-		cacheHit = domain.Ratio{Numerator: rr.Totals.Tokens.CacheRead.ValueOr(0), Denominator: denom}
-	}
-
-	return domain.RunOverview{
+	ov := domain.RunOverview{
 		Totals:            rr.Totals,
 		Orchestrator:      rr.Orchestrator.Totals,
 		Subagents:         subagents,
 		OrchestratorShare: share(rr.Orchestrator.Totals.Money.Total, rr.Totals.Money.Total),
 		SubagentShare:     share(subagents.Totals.Money.Total, rr.Totals.Money.Total),
-		ByModel:           buildByModel(run, table),
-		CacheHitRatio:     cacheHit,
+		ByModel:           buildByModel(run, table, settings),
+		CacheHitRatio:     cacheHitRatio(rr.Totals.Tokens),
+		Outcomes:          buildOutcomeSplit(dispatches),
 	}
+	if rr.Unattributed != nil {
+		ov.Unattributed = &rr.Unattributed.Totals
+		ov.UnattributedShare = share(rr.Unattributed.Totals.Money.Total, rr.Totals.Money.Total)
+	}
+	return ov
 }
 
 // share is part/whole in nanodollars; undefined unless whole is a positive known amount.
@@ -43,7 +44,7 @@ func share(part, whole domain.MoneyValue) domain.Ratio {
 // model): models ascending, requests without a model last, and within a model
 // the providers ascending with "" first. A row is priced only when the strict
 // lookup of its own provider finds an entry.
-func buildByModel(run domain.RunAggregate, table domain.PricingTable) []domain.ModelFigures {
+func buildByModel(run domain.RunAggregate, table domain.PricingTable, settings domain.AnalysisSettings) []domain.ModelFigures {
 	byKey := make(map[domain.PricingKey][]domain.InvocationUsage)
 	collect := func(a domain.ActorAggregate) {
 		for _, u := range withTokens(a.Invocations) {
@@ -52,6 +53,9 @@ func buildByModel(run domain.RunAggregate, table domain.PricingTable) []domain.M
 		}
 	}
 	collect(run.Orchestrator)
+	if run.Unattributed != nil {
+		collect(*run.Unattributed)
+	}
 	for _, a := range run.Agents {
 		collect(a)
 	}
@@ -71,7 +75,7 @@ func buildByModel(run domain.RunAggregate, table domain.PricingTable) []domain.M
 	out := make([]domain.ModelFigures, len(keys))
 	for i, k := range keys {
 		usages := byKey[k]
-		costs, totals := priceUsages(usages, table)
+		costs, totals := priceUsages(usages, table, settings)
 		priced := len(costs) > 0
 		for _, c := range costs {
 			priced = priced && c.Priced

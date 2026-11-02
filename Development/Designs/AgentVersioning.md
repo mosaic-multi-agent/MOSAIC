@@ -76,13 +76,19 @@ Version stamps for content that is physically injected into the agent body live 
 <HarnessConstraints type="managed" version="1.1.0">
 ...platform injection content...
 </HarnessConstraints>
+
+<OrchestratorHarnessConstraints type="managed" version="1.3.0">
+...orchestrator-only injection content...
+</OrchestratorHarnessConstraints>
 ```
+
+An orchestrator carries both harness regions; a subagent carries only `HarnessConstraints`.
 
 | Region | What it tracks |
 |--------|----------------|
 | `<CommunicationProtocol>` | Protocol version. Special status: defines the subagent-orchestrator compatibility contract. |
-| Harness injection regions | Platform injection content version. Read from the harness's `HarnessInjections.md` version. |
-| Orchestrator injection regions | Orchestrator-specific injection content version (orchestrator only). Read from `HarnessInjectionsOrchestrator.md` version. |
+| `<HarnessConstraints>` | Subagent and shared injection content version. Read from the frontmatter `version` of the harness's `HarnessInjections.md`. |
+| `<OrchestratorHarnessConstraints>` | Orchestrator-region injection content version (orchestrator only). Read from the frontmatter `version` of `HarnessInjectionsOrchestrator.md`. A present injection file without a `version` fails loading; a harness descriptor never supplies an injection version. |
 
 ### Where Versions Live — Design Rationale
 

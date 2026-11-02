@@ -74,7 +74,7 @@ func TestTemplate_FileHoldingOnlyTemplate_LoadsEmptyWithoutFindings(t *testing.T
 		t.Fatalf("write template file: %v", err)
 	}
 
-	table, findings, err := pricing.NewStore(root).Load(context.Background())
+	table, findings, err := pricing.NewStore(t.TempDir(), root).Load(context.Background())
 
 	if err != nil {
 		t.Fatalf("Load: %v", err)

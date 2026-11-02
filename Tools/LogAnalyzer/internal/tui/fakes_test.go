@@ -13,15 +13,53 @@ import (
 )
 
 // tuiFakePricingStore is a minimal in-memory PricingStore for TUI tests.
-type tuiFakePricingStore struct{ path string }
+type tuiFakePricingStore struct {
+	path string
+	// global is the global file ("" = tuiFakeGlobalPricingPath); the Exists fields
+	// say which files exist; globalUnavailable makes the global level unusable.
+	global            string
+	globalExists      bool
+	projectExists     bool
+	globalUnavailable bool
+	// puts lists the level of every save.
+	puts []domain.ConfigLevel
+	// globalCurrency and projectCurrency are the currencies the files state ("" = none).
+	globalCurrency  domain.CurrencyCode
+	projectCurrency domain.CurrencyCode
+}
+
+// tuiFakeGlobalPricingPath is the global pricing file of tuiFakePricingStore.
+const tuiFakeGlobalPricingPath = "/test/global/pricing.yaml"
 
 func (f *tuiFakePricingStore) Path() string { return f.path }
+
+func (f *tuiFakePricingStore) Paths() domain.ConfigPaths {
+	global := domain.ConfigFile{Level: domain.LevelGlobal, Path: f.global, Exists: f.globalExists, Currency: f.globalCurrency}
+	if global.Path == "" {
+		global.Path = tuiFakeGlobalPricingPath
+	}
+	if f.globalUnavailable {
+		global = domain.ConfigFile{Level: domain.LevelGlobal, Unavailable: "user config folder not found"}
+	}
+	return domain.ConfigPaths{
+		Global:  global,
+		Project: domain.ConfigFile{Level: domain.LevelProject, Path: f.path, Exists: f.projectExists, Currency: f.projectCurrency},
+	}
+}
 
 func (f *tuiFakePricingStore) Load(_ context.Context) (domain.PricingTable, []domain.Finding, error) {
 	return domain.EmptyPricingTable(), nil, nil
 }
 
-func (f *tuiFakePricingStore) Put(_ context.Context, _ domain.ModelPricing) error { return nil }
+func (f *tuiFakePricingStore) Put(_ context.Context, level domain.ConfigLevel, _ domain.ModelPricing) (domain.ConfigFile, error) {
+	f.puts = append(f.puts, level)
+	file := f.Paths().Project
+	if level == domain.LevelGlobal {
+		file = f.Paths().Global
+	}
+	file.Exists = true
+	return file, nil
+}
 
 // tuiFakeLogSource is a minimal LogSource that always reports SourceNotFound.
 type tuiFakeLogSource struct{}
@@ -53,10 +91,28 @@ func (f *tuiFakeClock) Now() time.Time {
 }
 
 // tuiFakeInteraction is a minimal Interaction that always skips without blocking.
-type tuiFakeInteraction struct{}
+//
+// It answers the configuration-level question with levelOption ("" = the project
+// option) or skips it when skipLevel is set, and records the question.
+type tuiFakeInteraction struct {
+	levelOption    string
+	skipLevel      bool
+	levelQuestions []interaction.ChoiceQuestion
+}
 
-func (f *tuiFakeInteraction) SelectOne(_ context.Context, _ interaction.ChoiceQuestion) (interaction.ChoiceAnswer, error) {
-	return interaction.ChoiceAnswer{Status: interaction.SkippedOne}, nil
+func (f *tuiFakeInteraction) SelectOne(_ context.Context, q interaction.ChoiceQuestion) (interaction.ChoiceAnswer, error) {
+	if q.ID != app.QuestionConfigLevel {
+		return interaction.ChoiceAnswer{Status: interaction.SkippedOne}, nil
+	}
+	f.levelQuestions = append(f.levelQuestions, q)
+	if f.skipLevel {
+		return interaction.ChoiceAnswer{Status: interaction.SkippedOne}, nil
+	}
+	option := f.levelOption
+	if option == "" {
+		option = "project"
+	}
+	return interaction.ChoiceAnswer{Status: interaction.Answered, OptionID: option}, nil
 }
 
 func (f *tuiFakeInteraction) SelectMany(_ context.Context, _ interaction.ChoiceQuestion) (interaction.MultiChoiceAnswer, error) {

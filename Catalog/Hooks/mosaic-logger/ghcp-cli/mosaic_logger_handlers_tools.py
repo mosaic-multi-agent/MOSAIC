@@ -10,28 +10,23 @@ import pathlib
 
 import mosaic_logger_core as core
 import mosaic_logger_runstate as runstate
+import mosaic_logger_spawn_key as spawn_key
 
 
-def capture_run_id_from_tool_args(ctx: "core.HookContext") -> "str | None":
-    """Extract a run_id from preToolUse tool arguments and persist it to the session cache.
+def bind_session_to_dispatch(ctx: "core.HookContext", run_id: "str | None") -> None:
+    """Bind the session to the run named by a MOSAIC dispatch prompt.
 
-    On a hit: persists the run_id via put_session_run_id and assigns ctx.run_id when
-    currently unset, so the triggering preToolUse event routes to the correct run folder.
-    Returns the run_id string on a hit, None on a miss. Never raises.
+    Persists the binding (a dispatch for another run switches it) and sets
+    ctx.run_id so the dispatching event and its pending dispatch land in the
+    dispatched run. The Runner-declared run id is never overridden. Never raises.
     """
     try:
-        if ctx.runner_mode is not None and ctx.runner_mode.run_id:
-            return None  # the Runner-declared run id is never overridden
-        tool_args = ctx.field("toolArgs")
-        run_id = runstate.extract_run_id_from_tool_args(tool_args)
-        if run_id:
-            runstate.put_session_run_id(ctx.paths, ctx.session_id, run_id)
-            if not ctx.run_id:
-                ctx.run_id = run_id
-            return run_id
-        return None
+        if not run_id or (ctx.runner_mode is not None and ctx.runner_mode.run_id):
+            return
+        runstate.put_session_run_id(ctx.paths, ctx.session_id, run_id)
+        ctx.run_id = run_id
     except Exception:
-        return None
+        pass
 
 
 def resolve_destination(ctx: "core.HookContext") -> pathlib.Path:
@@ -68,16 +63,10 @@ def resolve_call_id(ctx: "core.HookContext") -> str:
 
 def handle_pre_tool_use(ctx: "core.HookContext") -> None:
     """Emit tool_call_start. When toolName is 'agent' or 'task' (GHCP CLI native names),
-    extract agent_instance_id from toolArgs.prompt and persist a pending dispatch.
+    extract agent_instance_id from toolArgs.prompt, bind the session to the
+    dispatched run and persist a pending dispatch.
     NEVER writes to stdout. NEVER emits permissionDecision. Never raises."""
     tool_name = ctx.field("toolName")
-
-    # Capture run_id from tool arguments BEFORE resolve_destination so the
-    # triggering preToolUse event itself routes to the correct run folder.
-    try:
-        capture_run_id_from_tool_args(ctx)
-    except Exception:
-        pass
 
     # Capture pending dispatch for agent/task tool invocations (GHCP CLI uses lowercase)
     if tool_name in ("agent", "task"):
@@ -90,6 +79,9 @@ def handle_pre_tool_use(ctx: "core.HookContext") -> None:
                 agent_instance_id = runstate.extract_instance_id(prompt)
                 if agent_instance_id:
                     extracted_run_id = runstate.extract_run_id(prompt)
+                    # Bind before anything is written so the pending dispatch and
+                    # the dispatching tool_call_start use the dispatched run.
+                    bind_session_to_dispatch(ctx, extracted_run_id)
                     runstate.put_pending_dispatch(
                         ctx.paths,
                         core.effective_run_id(ctx),
@@ -98,6 +90,12 @@ def handle_pre_tool_use(ctx: "core.HookContext") -> None:
                         extracted_run_id,
                         prompt=prompt,
                     )
+                    if ctx.runner_mode is None:
+                        spawn_id = spawn_key.spawn_call_id_from(ctx)
+                        if spawn_id:
+                            spawn_key.remember_spawn_call(
+                                ctx.paths, core.effective_run_id(ctx),
+                                ctx.session_id, agent_instance_id, spawn_id)
         except Exception:
             pass
 
@@ -129,6 +127,7 @@ def handle_post_tool_use(ctx: "core.HookContext") -> None:
         "tool_call_end", ctx,
         call_id=resolve_call_id(ctx),
         status="success",
+        tool_name=ctx.field("toolName"),
         tool_output=text,
     )
     core.append_event(resolve_destination(ctx), event)
@@ -141,6 +140,7 @@ def handle_post_tool_use_failure(ctx: "core.HookContext") -> None:
         "tool_call_end", ctx,
         call_id=resolve_call_id(ctx),
         status="error",
+        tool_name=ctx.field("toolName"),
         error=error,
     )
     core.append_event(resolve_destination(ctx), event)

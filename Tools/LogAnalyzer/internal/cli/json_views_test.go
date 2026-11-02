@@ -332,7 +332,7 @@ func TestEncodeReport_Tools_UnpairedCallHasNullDurationsAndNoOtherAttribution(t 
 			t.Errorf("durations.%s = %v (present %v), want an explicit null", key, v, present)
 		}
 	}
-	assertKeySet(t, "tool figures", sortedKeys(unnamed), []string{"tool", "calls", "errors", "unpaired", "durations"})
+	assertKeySet(t, "tool figures", sortedKeys(unnamed), []string{"tool", "calls", "errors", "unpaired", "durations", "context_growth"})
 	if len(vwList(t, tools, "orchestrator")) != 1 {
 		t.Errorf("tools.orchestrator = %v, want the one orchestrator tool", tools["orchestrator"])
 	}

@@ -30,6 +30,11 @@
 //
 //  4. tui and cli must not import each other. They are sibling frontend adapters.
 //
+//  5. settings is an adapter like pricing: it must not import app, cli or tui,
+//     nor the sibling adapters logscan, logread, pricing, digest and otelusage.
+//
+//  6. tui/screens must not import cli or its parent internal/tui package.
+//
 // # Scope
 //
 // Only non-test source files are checked. Test files may import test helpers from
@@ -75,7 +80,7 @@ type rule struct {
 //	app                  → domain, analysis, adapters via ports (not tui or cli)
 //	analysis, cost       → domain only, no I/O packages
 //	logscan, logread,    → domain, permitted stdlib (adapters)
-//	  pricing
+//	  pricing, settings
 //	domain               → nothing in this module
 //
 // Adding a violation means the architecture has drifted; fix the code, not this list.
@@ -168,6 +173,20 @@ var rules = []rule{
 		},
 	},
 	{
+		dir:  "internal/settings",
+		desc: "settings is an I/O adapter: must not import frontend or use-case packages, nor sibling adapters",
+		forbidPrefix: []string{
+			modulePrefix + "internal/app",
+			modulePrefix + "internal/cli",
+			modulePrefix + "internal/tui",
+			modulePrefix + "internal/logscan",
+			modulePrefix + "internal/logread",
+			modulePrefix + "internal/pricing",
+			modulePrefix + "internal/digest",
+			modulePrefix + "internal/otelusage",
+		},
+	},
+	{
 		dir:  "internal/digest",
 		desc: "digest is an I/O adapter: must not import frontend or use-case packages",
 		forbidPrefix: []string{
@@ -195,9 +214,13 @@ var rules = []rule{
 	},
 	{
 		dir:  "internal/tui/screens",
-		desc: "tui/screens is an adapter frontend sub-package: must not import the cli sibling frontend",
+		desc: "tui/screens is an adapter frontend sub-package: must not import the cli sibling frontend or its parent tui package",
 		forbidPrefix: []string{
 			modulePrefix + "internal/cli",
+		},
+		// Exact, because a prefix ban on internal/tui would also match screens' own siblings below it.
+		forbidExact: []string{
+			modulePrefix + "internal/tui",
 		},
 	},
 }

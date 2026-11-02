@@ -8,16 +8,12 @@ Key vscode-ghcp dispatcher properties:
   - emit_run_start is called for SessionStart (outside the handler registry)
   - emit_run_end is called for Stop (outside the registry), always, even when
     the Stop handler raised
-  - RUN_ID_PROMPT_FIELDS maps UserPromptSubmit->prompt, SubagentStop->
-    last_assistant_message, Stop->last_assistant_message; SubagentStart absent
   - The process exits 0 and writes zero bytes to stdout for every input
 
 Covers:
   dispatch(): unknown event name, malformed JSON, non-object JSON, empty input,
     missing hook_event_name, handler exception — all silent no-ops
   HANDLERS: exactly 8 keys, 4 absent keys confirmed, all callable
-  RUN_ID_PROMPT_FIELDS: correct field mappings, SubagentStart absent,
-    'prompt' (not 'user_prompt') for UserPromptSubmit
   run lifecycle: emit_run_start on SessionStart, emit_run_end on Stop even
     when Stop handler raises
   main(): exits 0 and produces zero bytes stdout for every input type
@@ -305,69 +301,6 @@ class TestMosaicLoggerHandlersRegistry(unittest.TestCase):
 
     def test_unknown_event_not_in_registry(self):
         self.assertNotIn("NonExistentEventXYZ", mosaic_logger.HANDLERS)
-
-
-# ---------------------------------------------------------------------------
-# RUN_ID_PROMPT_FIELDS mapping
-# ---------------------------------------------------------------------------
-
-class TestRunIdPromptFields(unittest.TestCase):
-    """RUN_ID_PROMPT_FIELDS is public and directly assertable.
-
-    VS Code field name divergence: UserPromptSubmit uses 'prompt', not 'user_prompt'.
-    SubagentStart is deliberately absent because it carries no prompt text;
-    its run_id comes from the popped pending dispatch.
-    """
-
-    def test_run_id_prompt_fields_is_a_dict(self):
-        self.assertIsInstance(mosaic_logger.RUN_ID_PROMPT_FIELDS, dict)
-
-    def test_user_prompt_submit_maps_to_prompt(self):
-        """VS Code uses 'prompt'; 'user_prompt' is the claude-code field name."""
-        self.assertIn("UserPromptSubmit", mosaic_logger.RUN_ID_PROMPT_FIELDS)
-        self.assertEqual(
-            "prompt",
-            mosaic_logger.RUN_ID_PROMPT_FIELDS["UserPromptSubmit"],
-            "UserPromptSubmit must map to 'prompt', not 'user_prompt' (VS Code field name)"
-        )
-
-    def test_user_prompt_submit_does_not_map_to_user_prompt(self):
-        """Explicitly assert the claude-code field name is NOT used here."""
-        field = mosaic_logger.RUN_ID_PROMPT_FIELDS.get("UserPromptSubmit")
-        self.assertNotEqual(
-            "user_prompt", field,
-            "'user_prompt' is the claude-code field; VS Code uses 'prompt'"
-        )
-
-    def test_subagent_stop_maps_to_last_assistant_message(self):
-        self.assertIn("SubagentStop", mosaic_logger.RUN_ID_PROMPT_FIELDS)
-        self.assertEqual(
-            "last_assistant_message",
-            mosaic_logger.RUN_ID_PROMPT_FIELDS["SubagentStop"]
-        )
-
-    def test_stop_maps_to_last_assistant_message(self):
-        self.assertIn("Stop", mosaic_logger.RUN_ID_PROMPT_FIELDS)
-        self.assertEqual(
-            "last_assistant_message",
-            mosaic_logger.RUN_ID_PROMPT_FIELDS["Stop"]
-        )
-
-    def test_subagent_start_is_absent(self):
-        """SubagentStart carries no prompt text; run_id comes from the pending dispatch."""
-        self.assertNotIn(
-            "SubagentStart", mosaic_logger.RUN_ID_PROMPT_FIELDS,
-            "SubagentStart must not be in RUN_ID_PROMPT_FIELDS — "
-            "its run_id comes from the popped pending dispatch, not from the payload"
-        )
-
-    def test_session_start_is_absent(self):
-        """SessionStart has no prompt-bearing field."""
-        self.assertNotIn("SessionStart", mosaic_logger.RUN_ID_PROMPT_FIELDS)
-
-    def test_pre_tool_use_is_absent(self):
-        """PreToolUse has no prompt-bearing field for run_id extraction."""
-        self.assertNotIn("PreToolUse", mosaic_logger.RUN_ID_PROMPT_FIELDS)
 
 
 # ---------------------------------------------------------------------------

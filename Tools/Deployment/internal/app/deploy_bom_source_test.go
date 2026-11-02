@@ -61,6 +61,7 @@ func newBOMFixtureModule(t *testing.T) *bomFixtureModule {
 	if err != nil {
 		t.Fatalf("parse fixture descriptor: %v", err)
 	}
+	desc.InjectionsVersion = "1.2.0" // the fixture descriptor declares no injections version
 	return &bomFixtureModule{desc: desc}
 }
 

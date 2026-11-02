@@ -36,7 +36,7 @@ type instanceActivity struct {
 type runActivityState struct {
 	orchestrator instanceActivity
 	instances    map[domain.AgentInstanceID]*instanceActivity
-	compactions  []domain.Compaction // feed order
+	compactions  []compactionFeedEntry // feed order
 }
 
 // activityState returns the run's activity state, creating it on first use.
@@ -98,16 +98,10 @@ func (a *Aggregator) recordToolOrCompaction(rs *runState, ref domain.StreamRef, 
 		})
 	case ev.ToolCallEnd != nil:
 		target.tools = append(target.tools, toolEvent{
-			callID: ev.ToolCallEnd.CallID, isEnd: true, status: ev.ToolCallEnd.Status, at: ev.Timestamp,
+			callID: ev.ToolCallEnd.CallID, name: ev.ToolCallEnd.ToolName, isEnd: true, status: ev.ToolCallEnd.Status, at: ev.Timestamp,
 		})
 	case ev.Compaction != nil:
-		ra.compactions = append(ra.compactions, domain.Compaction{
-			Actor:        actor,
-			At:           ev.Timestamp,
-			Trigger:      ev.Compaction.Trigger,
-			TokensBefore: ev.Compaction.TokensBefore,
-			TokensAfter:  ev.Compaction.TokensAfter,
-		})
+		ra.compactions = append(ra.compactions, newCompactionFeedEntry(ref, actor, ev))
 	}
 	return true
 }
@@ -149,7 +143,7 @@ func buildActivity(rs *runState) domain.RunActivity {
 			ids[id] = true
 		}
 		out.OrchestratorToolCalls = pairToolCalls(ra.orchestrator.tools)
-		out.Compactions = sortedCompactions(ra.compactions)
+		out.Compactions = sortedCompactions(pairCompactionFeed(ra.compactions))
 	}
 
 	sorted := make([]domain.AgentInstanceID, 0, len(ids))
@@ -239,7 +233,7 @@ func pairedCall(start, end toolEvent) domain.ToolCall {
 
 func unpairedCall(e toolEvent) domain.ToolCall {
 	if e.isEnd {
-		return domain.ToolCall{CallID: e.callID, Status: e.status, EndedAt: e.at, Pairing: domain.ToolCallEndOnly}
+		return domain.ToolCall{CallID: e.callID, ToolName: e.name, Status: e.status, EndedAt: e.at, Pairing: domain.ToolCallEndOnly}
 	}
 	return domain.ToolCall{CallID: e.callID, ToolName: e.name, StartedAt: e.at, Pairing: domain.ToolCallStartOnly}
 }

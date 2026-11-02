@@ -68,7 +68,7 @@ func pricingForTurnModel() domain.PricingTable {
 func priceOrchestrator(t *testing.T, in analysis.Input) (domain.RunAggregate, domain.RunReport) {
 	t.Helper()
 	agg, _ := analysis.Aggregate(in)
-	report, _ := analysis.Price(agg, pricingForTurnModel(), domain.Source{})
+	report, _ := analysis.Price(agg, pricingForTurnModel(), domain.DefaultAnalysisSettings(), domain.Source{})
 	if len(report.Runs) != 1 {
 		t.Fatalf("got %d priced runs, want 1", len(report.Runs))
 	}

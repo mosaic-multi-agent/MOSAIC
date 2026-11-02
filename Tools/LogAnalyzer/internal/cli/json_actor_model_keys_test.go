@@ -139,7 +139,7 @@ func TestEncodeReport_Actor_KeepsExistingKeysAndReplacesModelProvidersWithModelK
 
 	got := sortedKeys(orch)
 
-	want := []string{"actor", "effort", "model_keys", "models", "requests_without_model", "totals", "unpriced_models"}
+	want := []string{"actor", "context", "effort", "model_keys", "models", "requests_without_model", "totals", "unpriced_models"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("orchestrator keys = %q, want %q", got, want)
 	}
@@ -186,5 +186,5 @@ func providerGapReportFrom(orch []domain.Event, agents map[domain.AgentInstanceI
 		})
 	}
 	return analysis.Analyze(analysis.Input{Streams: streams}, domain.EmptyPricingTable(),
-		domain.Source{Kind: domain.SourceLogsRoot, Path: "/logs"}, nil)
+		domain.DefaultAnalysisSettings(), domain.Source{Kind: domain.SourceLogsRoot, Path: "/logs"}, nil)
 }

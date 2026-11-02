@@ -13,8 +13,10 @@ import (
 type RunTotal struct {
 	RunID       string
 	Provisional bool
-	Tokens      domain.TokenUsage
-	Money       domain.MoneyValue
+	// Currency is the effective currency of the report the total came from.
+	Currency domain.CurrencyCode
+	Tokens   domain.TokenUsage
+	Money    domain.MoneyValue
 	// Complete is false when any model contributing to this run was unpriced.
 	Complete bool
 
@@ -46,6 +48,11 @@ type RunTotal struct {
 	// (after any unknown-run merge). Go-side only: never encoded by
 	// cli.EncodeRunTotal.
 	Activity domain.RunActivity
+
+	// PendingUsageRecords is the number of usage spans still pending in the run's
+	// ingest state; UsageStateUnreadable is true when that state is not readable.
+	PendingUsageRecords  int
+	UsageStateUnreadable bool
 }
 
 // RunTotalFor extracts the basic total for one named run from a report.
@@ -61,13 +68,16 @@ func RunTotalFor(r domain.Report, runID string) (RunTotal, bool) {
 	}
 
 	return RunTotal{
-		RunID:          run.Run.ID,
-		Provisional:    run.Provisional,
-		Tokens:         run.Totals.Tokens,
-		Money:          run.Totals.Money.Total,
-		Complete:       run.Totals.Money.Complete,
-		UnpricedModels: domain.DistinctModelIDs(run.UnpricedModels),
-		PartialAmount:  partial,
+		RunID:                run.Run.ID,
+		Provisional:          run.Provisional,
+		Currency:             r.Currency,
+		Tokens:               run.Totals.Tokens,
+		Money:                run.Totals.Money.Total,
+		Complete:             run.Totals.Money.Complete,
+		UnpricedModels:       domain.DistinctModelIDs(run.UnpricedModels),
+		PartialAmount:        partial,
+		PendingUsageRecords:  run.UsageIngest.PendingRecords,
+		UsageStateUnreadable: run.UsageIngest.StateUnreadable,
 	}, true
 }
 
@@ -102,12 +112,19 @@ func (s *Service) TotalForRun(ctx context.Context, req Request, runID string) (R
 		return RunTotal{}, OutcomeReport, err
 	}
 
+	// Load analysis settings; an unparseable document is an error like pricing.
+	settings, settingsFindings, err := s.loadSettings(ctx)
+	if err != nil {
+		return RunTotal{}, OutcomeReport, err
+	}
+
 	// Step 3: Enumerate the source.
 	inv, enumFindings := s.deps.Source.Enumerate(src)
 
 	// Collect findings from infrastructure phases.
-	carried := make([]domain.Finding, 0, len(pricingFindings)+len(enumFindings))
+	carried := make([]domain.Finding, 0, len(pricingFindings)+len(settingsFindings)+len(enumFindings))
 	carried = append(carried, pricingFindings...)
+	carried = append(carried, settingsFindings...)
 	carried = append(carried, enumFindings...)
 
 	// Step 4: A structurally valid source with no run data is a named no-data outcome.
@@ -140,10 +157,12 @@ func (s *Service) TotalForRun(ctx context.Context, req Request, runID string) (R
 	in := analysis.Input{Streams: streams}
 	agg, aggFindings := analysis.Aggregate(in)
 	carried = append(carried, aggFindings...)
+	carried = append(carried, s.alarmFindings(ctx, src, agg)...)
 
 	// Step 8: Price.
-	report, priceFindings := analysis.Price(agg, table, src)
+	report, priceFindings := analysis.Price(agg, table, settings, src)
 	carried = append(carried, priceFindings...)
+	applyUsageIngest(&report, s.probeUsageIngest(inv))
 
 	// Step 9: Attach quality summary.
 	report.Quality = domain.NewQualitySummary(carried)

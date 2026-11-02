@@ -13,6 +13,8 @@ const (
 	LoadErrorRead LoadErrorKind = iota + 1
 	// LoadErrorParse: the file was read but its content cannot be parsed.
 	LoadErrorParse
+	// LoadErrorMissingVersion: the file exists but has no scalar frontmatter `version`.
+	LoadErrorMissingVersion
 )
 
 // LoadError is the error LoadDir returns for one harness content file.
@@ -27,10 +29,19 @@ type LoadError struct {
 // "injectionfile: parse <Path>: <Err>" (LoadErrorParse).
 func (e *LoadError) Error() string {
 	verb := "read"
-	if e.Kind == LoadErrorParse {
+	switch e.Kind {
+	case LoadErrorParse:
 		verb = "parse"
+	case LoadErrorMissingVersion:
+		return fmt.Sprintf("injectionfile: %s: missing frontmatter version", e.Path)
 	}
 	return fmt.Sprintf("injectionfile: %s %s: %v", verb, e.Path, e.Err)
+}
+
+// NewMissingVersionError builds the LoadErrorMissingVersion error for a content file that
+// exists but carries no scalar frontmatter `version`.
+func NewMissingVersionError(file, path string) *LoadError {
+	return &LoadError{File: file, Path: path, Kind: LoadErrorMissingVersion, Err: fmt.Errorf("no frontmatter version")}
 }
 
 // Unwrap returns Err.

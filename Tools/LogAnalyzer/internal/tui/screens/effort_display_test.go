@@ -58,7 +58,7 @@ func TestAgentTypesDrill_AbsentEffort_ShowsTheNotProvidedMarker(t *testing.T) {
 func effortDetailView(orch domain.EffortLevels) string {
 	run := overviewRun()
 	run.Orchestrator.Effort = orch
-	return screens.NewRunDetailScreen(run, wideW, tallH, plain()).View(wideW, tallH)
+	return screens.NewRunDetailScreen(run, tableW, tallH, plain()).View(tableW, tallH)
 }
 
 func TestRunDetail_OrchestratorRow_ShowsItsEffort(t *testing.T) {

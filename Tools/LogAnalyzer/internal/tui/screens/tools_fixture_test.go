@@ -40,6 +40,34 @@ func toolsRun() domain.RunReport {
 	return run
 }
 
+// longMCPTool is an MCP tool name of exactly 41 characters.
+const longMCPTool = "mcp__contact-user__ask_user_questions_ext"
+
+// runWithTools is a run whose only tool section is the given run-level list.
+func runWithTools(tools ...domain.ToolFigures) domain.RunReport {
+	run := overviewRun()
+	run.Tools = domain.ToolsBreakdown{Run: tools}
+	return run
+}
+
+// shareRun has a chatty tool with little total time and a quiet one with much
+// total time, so a calls share and a duration share rank them oppositely.
+func shareRun() domain.RunReport {
+	return runWithTools(
+		domain.ToolFigures{Tool: "ToolA", Calls: 10, Durations: durationStats(10, time.Second, ms(100), ms(100), ms(100))},
+		domain.ToolFigures{Tool: "ToolB", Calls: 2, Durations: durationStats(2, 20*time.Second, 10*time.Second, 10*time.Second, 10*time.Second)},
+	)
+}
+
+// errorsRun has a first row (most calls) without errors and a second row with errors.
+func errorsRun() domain.RunReport {
+	return runWithTools(
+		domain.ToolFigures{Tool: "Alpha", Calls: 20, Durations: durationStats(20, 20*time.Second, time.Second, time.Second, time.Second)},
+		domain.ToolFigures{Tool: "Beta", Calls: 5, Errors: 4, Durations: durationStats(5, 5*time.Second, time.Second, time.Second, time.Second)},
+		domain.ToolFigures{Tool: "Gamma", Calls: 3, Durations: durationStats(3, 3*time.Second, time.Second, time.Second, time.Second)},
+	)
+}
+
 // manyToolsRun has n run-level tools tool-01 ...
 func manyToolsRun(n int) domain.RunReport {
 	run := overviewRun()

@@ -23,30 +23,10 @@ const (
 )
 
 // SchemaVersionCurrent is the version this tool is written against.
-const SchemaVersionCurrent = "1.3.0"
+const SchemaVersionCurrent = "1.7.0"
 
-// supportedSchemaVersions is the backing slice for SupportedSchemaVersions,
-// newest first. Prior versions remain supported so older logs keep working.
-var supportedSchemaVersions = []string{"1.3.0", "1.2.0", "1.1.0", "1.0.0"}
-
-// SupportedSchemaVersions returns every schema version this tool reads without
-// a finding, newest first. Prior versions remain supported so older logs keep
-// working; a version outside this set still yields exactly one finding per file.
-func SupportedSchemaVersions() []string {
-	out := make([]string, len(supportedSchemaVersions))
-	copy(out, supportedSchemaVersions)
-	return out
-}
-
-// IsSupportedSchemaVersion reports whether v is in the supported set.
-func IsSupportedSchemaVersion(v string) bool {
-	for _, s := range supportedSchemaVersions {
-		if s == v {
-			return true
-		}
-	}
-	return false
-}
+// SupportedSchemaMajor is the only major version read without a finding.
+const SupportedSchemaMajor = 1
 
 // Event is one decoded log line. Only the envelope and the field blocks this tool
 // consumes are modelled. Large payload bodies (prompt, response, content,
@@ -95,15 +75,35 @@ type ToolCallStartFields struct {
 // ToolCallEndFields holds the fields from a tool_call_end event. The
 // tool_output and error payloads are deliberately not decoded.
 type ToolCallEndFields struct {
-	CallID string
-	Status ToolCallStatus
+	CallID   string
+	Status   ToolCallStatus
+	ToolName string // "" when absent (schema 1.6.0)
 }
+
+// CallKind says what a usage_record call was for (schema 1.6.0).
+type CallKind string
+
+const (
+	CallMain       CallKind = "main"
+	CallCompaction CallKind = "compaction"
+	CallAuxiliary  CallKind = "auxiliary"
+)
+
+// CompactionPhase is the phase of a compaction event (schema 1.5.0).
+type CompactionPhase string
+
+const (
+	CompactionPhaseNone CompactionPhase = "" // absent, or any value other than pre/post
+	CompactionPhasePre  CompactionPhase = "pre"
+	CompactionPhasePost CompactionPhase = "post"
+)
 
 // CompactionFields holds the fields from a compaction event.
 type CompactionFields struct {
 	Trigger      string // "auto" | "manual" | other verbatim | "" absent
 	TokensBefore TokenCount
 	TokensAfter  TokenCount
+	Phase        CompactionPhase // decoded from "phase"; unknown values decode as CompactionPhaseNone
 }
 
 // InvocationStartFields holds the fields from an invocation_start event.
@@ -139,7 +139,10 @@ type UsageRecordFields struct {
 	Provider        ProviderID // "" when absent
 	Effort          string     // verbatim; "" when absent
 	Usage           TokenUsage
-	HasUsage        bool // false when the token_usage key was absent entirely
+	HasUsage        bool           // false when the token_usage key was absent entirely
+	CallKind        CallKind       // CallMain when absent or unknown
+	CallLabel       string         // verbatim; "" when absent
+	RequestedTools  RequestedTools // zero = not provided
 }
 
 // TurnRole is the role (user or assistant) of a turn event.

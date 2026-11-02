@@ -1,0 +1,9 @@
+{
+  "timestamp": "2026-10-27T11:02:31.000Z",
+  "hook_event_name": "SubagentStart",
+  "session_id": "ece89a93-a783-49b8-80be-08407e3e1ce2",
+  "transcript_path": "/nonexistent/GitHub.copilot-chat/transcripts/ece89a93-a783-49b8-80be-08407e3e1ce2.jsonl",
+  "agent_id": "toolu_017pWWTUCtf17bR6MDKoNcMw",
+  "agent_type": "requirements-refinement",
+  "cwd": "<workspace>"
+}

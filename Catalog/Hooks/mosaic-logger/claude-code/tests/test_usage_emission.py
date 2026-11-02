@@ -495,7 +495,7 @@ class TestEmitUsageRecordsSchemaAndPruning(unittest.TestCase):
         )
         events = _read_jsonl(self.ctx.paths.orchestrator_events(_RUN_ID))
         usage_event = next(e for e in events if e["event"] == usage.USAGE_EVENT)
-        self.assertEqual("1.3.0", usage_event["schema_version"])
+        self.assertEqual("1.7.0", usage_event["schema_version"])
 
     def test_genuinely_zero_usage_field_survives(self):
         transcript_path = self.tmp_path / "transcript.jsonl"
@@ -1237,9 +1237,9 @@ class TestStateStoreNeverRaises(unittest.TestCase):
                 )
             except Exception as exc:
                 self.fail(f"emit_usage_records raised on state-load failure: {exc}")
-        # Degraded to emitting all records (missing state = emit everything):
-        # exactly the one record in the transcript, not zero (dropped) or more.
-        self.assertEqual(1, count)
+        # A firing never emits without having loaded the state: a raising
+        # state load is treated like a read error and emits nothing.
+        self.assertEqual(0, count)
 
     def test_emit_usage_records_never_raises_when_state_save_fails(self):
         transcript_path = self.tmp_path / "t2.jsonl"

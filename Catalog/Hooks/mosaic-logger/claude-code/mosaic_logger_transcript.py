@@ -12,7 +12,9 @@ Has no bundle dependencies (stdlib only).
 import hashlib
 import json
 import os
+import re
 import sys
+from datetime import datetime
 
 
 # ---------------------------------------------------------------------------
@@ -94,10 +96,21 @@ class RecordFacts:
                       message.usage.speed.
       effort        - str | None, the record's top-level effort field, verbatim;
                       None when absent or not a non-empty string.
+      requested_tools - dict | None, tool name -> count over the tool_use blocks
+                      of every record sharing this record's message.id; {} when
+                      the call requested none; None when no record of the group
+                      carried a content list.
+      call_time     - str | None, the call time of this record's API message in
+                      envelope format (UTC, ms, Z): the timestamp of the first
+                      line of the message with a usable one, identical for
+                      every record of the message; None when none is usable.
     """
 
     def __init__(self, record_id, record_index,
-                 model=None, token_usage=None, service_tier=None, effort=None):
+                 model=None, token_usage=None, service_tier=None, effort=None,
+                 requested_tools=None, call_time=None):
+        self.requested_tools = requested_tools
+        self.call_time = call_time
         self.record_id = record_id
         self.record_index = record_index
         self.model = model
@@ -319,6 +332,80 @@ def _resolve_record_id(record, record_index, record_line_bytes):
     return "pos:{}:{}".format(record_index, digest)
 
 
+_TIME_SHAPE = re.compile(
+    r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(?:Z|\+00:00)\Z")
+
+
+def _normalise_timestamp(value):
+    """The envelope-format time (UTC, ms, Z) of a transcript timestamp, or None.
+
+    Usable only as YYYY-MM-DDTHH:MM:SS[.f{1,9}] followed by Z or +00:00 and a
+    valid calendar time; anything else is None."""
+    if not isinstance(value, str):
+        return None
+    match = _TIME_SHAPE.match(value)
+    if not match:
+        return None
+    whole, fraction = match.group(1), match.group(2) or ""
+    try:
+        datetime.strptime(whole, "%Y-%m-%dT%H:%M:%S")
+    except ValueError:
+        return None
+    return "{}.{}Z".format(whole, (fraction + "000")[:3])
+
+
+def _group_key(message, record_index):
+    """Key of the API message a record belongs to: its message.id, or the
+    record's own position when it has none (a group of its own)."""
+    if isinstance(message, dict):
+        msg_id = message.get("id")
+        if isinstance(msg_id, str) and msg_id:
+            return ("id", msg_id)
+    return ("pos", record_index)
+
+
+class _ToolGroup:
+    """Tool_use blocks gathered across all records of one API message."""
+
+    def __init__(self):
+        self.known = False
+        self._by_id = {}
+        self._anonymous = []
+
+    def add_block(self, block):
+        name = block.get("name")
+        if not isinstance(name, str) or not name:
+            return
+        block_id = block.get("id")
+        if isinstance(block_id, str) and block_id:
+            self._by_id[block_id] = name
+        else:
+            self._anonymous.append(name)
+
+    def tools(self):
+        """Tool name -> count; {} when none requested; None when no record of
+        the group carried a content list."""
+        if not self.known:
+            return None
+        counts = {}
+        for name in list(self._by_id.values()) + self._anonymous:
+            counts[name] = counts.get(name, 0) + 1
+        return counts
+
+
+def _collect_tool_blocks(message, group):
+    """Add the tool_use blocks of one record's content to its group."""
+    if not isinstance(message, dict):
+        return
+    content = message.get("content")
+    if not isinstance(content, list):
+        return
+    group.known = True
+    for block in content:
+        if isinstance(block, dict) and block.get("type") == "tool_use":
+            group.add_block(block)
+
+
 def read_assistant_records(transcript_path):
     """Return RecordFacts for EVERY assistant record, in file order.
 
@@ -340,6 +427,9 @@ def read_assistant_records(transcript_path):
             return []
 
         results = []
+        group_keys = []
+        groups = {}
+        call_times = {}
 
         try:
             with open(_long_path_safe(transcript_path), "r", encoding="utf-8", errors="replace") as f:
@@ -376,11 +466,21 @@ def read_assistant_records(transcript_path):
                         service_tier=service_tier,
                         effort=_resolve_record_effort(record),
                     ))
+                    group_keys.append(_group_key(message, record_index))
+                    _collect_tool_blocks(
+                        message, groups.setdefault(group_keys[-1], _ToolGroup()))
+                    if call_times.get(group_keys[-1]) is None:
+                        call_times[group_keys[-1]] = _normalise_timestamp(
+                            record.get("timestamp"))
                     record_index += 1
 
         except Exception:
             # Any I/O or unexpected error degrades to an empty list
             return []
+
+        for facts, key in zip(results, group_keys):
+            facts.requested_tools = groups[key].tools()
+            facts.call_time = call_times.get(key)
 
         return results
 

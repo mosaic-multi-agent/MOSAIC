@@ -29,6 +29,7 @@ type ModelPricing struct {
 	Standard       RateSet
 	LongContext    LongContextPricing // meaningful only when HasLongContext
 	HasLongContext bool
+	Source         ConfigLevel // level the entry was loaded from
 }
 
 // HasLongContextTier reports whether tier selection applies to this model.
@@ -80,7 +81,9 @@ func (r RateSet) firstMissing(prefix string) string {
 // PricingTable is an immutable lookup keyed by (provider, model). Lookup is strict:
 // a provider never falls back to the provider-less entries, nor the reverse.
 type PricingTable struct {
-	entries map[PricingKey]ModelPricing
+	entries  map[PricingKey]ModelPricing
+	currency CurrencyCode // "" reads as DefaultCurrency
+	excluded map[PricingKey]ExcludedPrice
 }
 
 // NewPricingTable builds a PricingTable from a slice of entries.
@@ -139,6 +142,16 @@ func (t PricingTable) With(entry ModelPricing) PricingTable {
 	for k, e := range t.entries {
 		m[k] = e
 	}
-	m[PricingKey{entry.Provider, entry.Model}] = entry
-	return PricingTable{entries: m}
+	key := PricingKey{entry.Provider, entry.Model}
+	m[key] = entry
+	out := PricingTable{entries: m, currency: t.currency}
+	if len(t.excluded) > 0 {
+		out.excluded = make(map[PricingKey]ExcludedPrice, len(t.excluded))
+		for k, e := range t.excluded {
+			if k != key {
+				out.excluded[k] = e
+			}
+		}
+	}
+	return out
 }

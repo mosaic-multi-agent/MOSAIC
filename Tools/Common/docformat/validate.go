@@ -391,4 +391,3 @@ func canonicalOrderIndex(name string) int {
 	}
 	return -1
 }
-

@@ -21,12 +21,12 @@ func withTokens(usages []domain.InvocationUsage) []domain.InvocationUsage {
 }
 
 // priceUsages prices each request and sums the results into one Totals.
-func priceUsages(usages []domain.InvocationUsage, table domain.PricingTable) ([]cost.InvocationCost, domain.Totals) {
+func priceUsages(usages []domain.InvocationUsage, table domain.PricingTable, settings domain.AnalysisSettings) ([]cost.InvocationCost, domain.Totals) {
 	costs := make([]cost.InvocationCost, len(usages))
 	tokens := make([]domain.TokenUsage, len(usages))
 	var assumed int64
 	for i, u := range usages {
-		costs[i] = cost.PriceInvocation(u, table)
+		costs[i] = priceUsage(u, table, settings)
 		tokens[i] = u.Usage
 		assumed += costs[i].AssumedTierCacheWrite
 	}
@@ -34,15 +34,16 @@ func priceUsages(usages []domain.InvocationUsage, table domain.PricingTable) ([]
 		Tokens:                domain.SumUsage(tokens...),
 		Money:                 cost.SumCosts(costs...),
 		AssumedTierCacheWrite: assumed,
+		AssumedTiers:          assumedTiersOf(costs),
 	}
 }
 
 // buildDispatches prices every subagent invocation of the run.
-func buildDispatches(invocations []domain.Invocation, table domain.PricingTable) []domain.Dispatch {
+func buildDispatches(invocations []domain.Invocation, table domain.PricingTable, settings domain.AnalysisSettings) []domain.Dispatch {
 	out := make([]domain.Dispatch, len(invocations))
 	for i, inv := range invocations {
 		usages := withTokens(inv.Usage)
-		costs, totals := priceUsages(usages, table)
+		costs, totals := priceUsages(usages, table, settings)
 		models := make(map[domain.ModelID]bool)
 		unpriced := make(map[domain.PricingKey]bool)
 		for _, c := range costs {
@@ -72,10 +73,12 @@ func groupFigures(members []domain.Dispatch) domain.GroupFigures {
 	tokens := make([]domain.TokenUsage, len(members))
 	unpriced := make(map[domain.PricingKey]bool)
 	f := domain.GroupFigures{Invocations: len(members)}
+	var tiers [][]domain.CacheWriteTier
 	for i, d := range members {
 		moneys[i] = d.Totals.Money
 		tokens[i] = d.Totals.Tokens
 		f.Totals.AssumedTierCacheWrite += d.Totals.AssumedTierCacheWrite
+		tiers = append(tiers, d.Totals.AssumedTiers)
 		for _, m := range d.UnpricedModels {
 			unpriced[m] = true
 		}
@@ -87,6 +90,7 @@ func groupFigures(members []domain.Dispatch) domain.GroupFigures {
 		}
 	}
 	f.Totals.Tokens = domain.SumUsage(tokens...)
+	f.Totals.AssumedTiers = domain.MergeCacheWriteTiers(tiers...)
 	f.Totals.Money = sumCategoryMoneys(moneys...)
 	f.UnpricedModels = domain.SortedPricingKeys(unpriced)
 	return f
@@ -127,6 +131,29 @@ func moneyStats(members []domain.Dispatch) domain.MoneyStats {
 	return stats
 }
 
+// peakContextStats averages and maximises the members' peak context; members
+// without a peak are excluded, never counted as 0.
+func peakContextStats(members []domain.Dispatch) domain.PeakContextStats {
+	var stats domain.PeakContextStats
+	var sum int64
+	for _, d := range members {
+		v, ok := d.PeakContext.Tokens.Value()
+		if !ok {
+			continue
+		}
+		if stats.Basis == 0 || v > stats.Max.Tokens.ValueOr(0) {
+			stats.Max = d.PeakContext
+		}
+		sum += v
+		stats.Basis++
+	}
+	if stats.Basis > 0 {
+		b := int64(stats.Basis)
+		stats.Average = domain.Tokens((sum + b/2) / b)
+	}
+	return stats
+}
+
 // typeGroup is the dispatches of one agent type.
 type typeGroup struct {
 	agentType  string
@@ -159,7 +186,7 @@ func groupByType(dispatches []domain.Dispatch) []typeGroup {
 }
 
 // buildAgentTypeGroups builds the by-agent-type view.
-func buildAgentTypeGroups(groups []typeGroup) []domain.AgentTypeGroup {
+func buildAgentTypeGroups(groups []typeGroup, table domain.PricingTable, settings domain.AnalysisSettings) []domain.AgentTypeGroup {
 	out := make([]domain.AgentTypeGroup, len(groups))
 	for i, g := range groups {
 		out[i] = domain.AgentTypeGroup{
@@ -167,6 +194,9 @@ func buildAgentTypeGroups(groups []typeGroup) []domain.AgentTypeGroup {
 			Figures:       groupFigures(g.dispatches),
 			PerInvocation: moneyStats(g.dispatches),
 			Dispatches:    g.dispatches,
+			PeakContext:   peakContextStats(g.dispatches),
+			Cache:         buildGroupCache(g, table, settings),
+			Rework:        buildReworkFigures(g.dispatches),
 		}
 	}
 	return out

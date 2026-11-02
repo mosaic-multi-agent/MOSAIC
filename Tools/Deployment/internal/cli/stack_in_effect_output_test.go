@@ -87,7 +87,7 @@ func sieCommands() []sieCommand {
 			s.promoteResp = app.PromoteResult{}
 		}, "stackInEffect"},
 		{"transform", func(string) []string {
-			return []string{"transform", "--harness", "claude-code", "--target-harness", "opencode", "--path", "/agents/agent.md"}
+			return []string{"transform", "--harness", "claude-code", "--target-harness", "opencode", "--workspace", "/ws"}
 		}, func(s *spyService, _ string) {
 			s.transformResp = app.TransformHarnessResult{SourceHarnessID: "claude-code", TargetHarnessID: "opencode"}
 		}, "stackInEffect"},

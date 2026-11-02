@@ -12,12 +12,13 @@
 import * as nodePath from "node:path";
 import * as nodeFs from "node:fs";
 import * as nodeFsPromises from "node:fs/promises";
-
+import { lockedAppend } from "./locked_append.js";
+import { DEFAULT_SCHEMA_VERSION, schemaVersionFor } from "./schema_versions.js";
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION: string = "1.3.0";
+export const SCHEMA_VERSION: string = DEFAULT_SCHEMA_VERSION;
 export const HARNESS: string = "opencode";
 export const LOGS_DIRNAME: string = "OrchestrationLogs";
 
@@ -120,7 +121,7 @@ export function buildEvent(
   fields: Record<string, unknown>,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {
-    schema_version: SCHEMA_VERSION,
+    schema_version: schemaVersionFor(event),
     event,
     timestamp: envelope.timestamp,
     harness: HARNESS,
@@ -298,10 +299,7 @@ export async function appendEvent(
   event: Record<string, unknown>,
 ): Promise<void> {
   try {
-    const dir = nodePath.dirname(filePath);
-    await nodeFsPromises.mkdir(dir, { recursive: true });
-    const line = JSON.stringify(event) + "\n";
-    await nodeFsPromises.appendFile(filePath, line, "utf-8");
+    await lockedAppend(filePath, JSON.stringify(event) + "\n", debugLog);
   } catch (err) {
     debugLog(`appendEvent failed for ${filePath}`, err);
   }
@@ -438,63 +436,4 @@ export function safeHandler<T extends (...args: any[]) => Promise<void>>(
       debugLog(`safeHandler: error in "${name}" handler`, err);
     }
   }) as T;
-}
-
-// ---------------------------------------------------------------------------
-// Adapter version
-// ---------------------------------------------------------------------------
-
-const VERSION_RE = /^version:\s*(.+?)\s*$/;
-
-/**
- * Extract the top-level version value from hook.yaml without a YAML parser.
- * Matches only zero-indented lines. Returns undefined on any ambiguity.
- * Never throws.
- */
-export async function readAdapterVersion(
-  hookYamlPath: string,
-): Promise<string | undefined> {
-  try {
-    const content = await nodeFsPromises.readFile(hookYamlPath, "utf-8");
-    const matches: string[] = [];
-
-    for (const rawLine of content.split("\n")) {
-      const line = rawLine.replace(/\r$/, "");
-
-      // Skip blank lines, comments, and indented lines
-      if (!line || line[0] === "#" || line[0] === " " || line[0] === "\t") {
-        continue;
-      }
-
-      const m = VERSION_RE.exec(line);
-      if (!m) continue;
-
-      let value = m[1];
-
-      // Strip one layer of surrounding single or double quotes
-      if (
-        value.length >= 2 &&
-        ((value[0] === '"' && value[value.length - 1] === '"') ||
-          (value[0] === "'" && value[value.length - 1] === "'"))
-      ) {
-        value = value.slice(1, -1);
-      }
-
-      // Reject complex YAML types (objects, sequences) — ambiguous without a
-      // real YAML parser
-      if (!value || value.includes("{") || value.includes("[")) {
-        continue;
-      }
-
-      matches.push(value);
-    }
-
-    // Ambiguous if more than one match
-    if (matches.length === 1) {
-      return matches[0];
-    }
-    return undefined;
-  } catch {
-    return undefined;
-  }
 }

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -87,15 +89,27 @@ func TestBuildDeps_PreConsultation_AdviceAppliedToDispatch_ViaBuildDeps(t *testi
 		StatusMessage:   "done",
 	}})
 
+	// The guidance file lives in the run folder; give the run one inside the
+	// temp dir so nothing is written to (or read from) the package directory.
+	runFolder := filepath.Join(dir, domain.RunScopedFolder(resumeTestRunID))
+	if err := os.MkdirAll(runFolder, 0o755); err != nil {
+		t.Fatalf("setup: create run folder: %v", err)
+	}
+
 	cfg := domain.RunConfig{
 		OrchestratorFilePath: orchPath,
 		WorkflowID:           "linear",
 		Task:                 "test task",
 		IsNewRun:             true,
+		RunFolder:            runFolder,
 		RunSettings:          settings,
 	}
 
 	startSessionGuarded(t, ses, cfg)
+
+	if fakeInvoker.callCount != 1 {
+		t.Errorf("want exactly one pre-consultation invoker call, got %d", fakeInvoker.callCount)
+	}
 
 	invs := f.Invocations()
 	if len(invs) < 1 {

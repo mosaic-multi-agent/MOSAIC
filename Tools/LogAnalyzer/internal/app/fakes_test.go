@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"mosaic-common/interaction"
+	"mosaic-log-analyzer/internal/app"
 	"mosaic-log-analyzer/internal/domain"
 )
 
@@ -116,31 +117,62 @@ type fakePricingStore struct {
 	putErr   error
 	filePath string
 
-	// putCalls records every ModelPricing handed to Put.
-	putCalls []domain.ModelPricing
+	// putCalls records every ModelPricing handed to Put; putLevels the level of each.
+	putCalls  []domain.ModelPricing
+	putLevels []domain.ConfigLevel
+
+	// globalPath is the global file; globalUnavailable makes the global level unusable.
+	globalPath        string
+	globalUnavailable bool
+
+	// globalCurrency and projectCurrency are the currencies the two files state ("" = none).
+	globalCurrency  domain.CurrencyCode
+	projectCurrency domain.CurrencyCode
 }
+
+// fakeGlobalPricingPath is the global pricing file of newFakePricingStore.
+const fakeGlobalPricingPath = "/test/global/pricing.yaml"
 
 func newFakePricingStore() *fakePricingStore {
 	return &fakePricingStore{
-		table:    domain.EmptyPricingTable(),
-		filePath: "/test/pricing.yaml",
+		table:      domain.EmptyPricingTable(),
+		filePath:   "/test/pricing.yaml",
+		globalPath: fakeGlobalPricingPath,
 	}
 }
 
 func (s *fakePricingStore) Path() string { return s.filePath }
 
+func (s *fakePricingStore) Paths() domain.ConfigPaths {
+	global := domain.ConfigFile{Level: domain.LevelGlobal, Path: s.globalPath, Currency: s.globalCurrency}
+	if s.globalUnavailable {
+		global = domain.ConfigFile{Level: domain.LevelGlobal, Unavailable: "user config folder not found"}
+	}
+	return domain.ConfigPaths{
+		Global:  global,
+		Project: domain.ConfigFile{Level: domain.LevelProject, Path: s.filePath, Currency: s.projectCurrency},
+	}
+}
+
 func (s *fakePricingStore) Load(ctx context.Context) (domain.PricingTable, []domain.Finding, error) {
 	return s.table, s.findings, s.loadErr
 }
 
-func (s *fakePricingStore) Put(ctx context.Context, entry domain.ModelPricing) error {
+func (s *fakePricingStore) Put(ctx context.Context, level domain.ConfigLevel, entry domain.ModelPricing) (domain.ConfigFile, error) {
 	s.putCalls = append(s.putCalls, entry)
+	s.putLevels = append(s.putLevels, level)
 	if s.putErr != nil {
-		return s.putErr
+		return domain.ConfigFile{}, s.putErr
+	}
+	paths := s.Paths()
+	file := paths.Project
+	if level == domain.LevelGlobal {
+		file = paths.Global
 	}
 	// Persist to in-memory table so subsequent Load reflects the new entry.
 	s.table = s.table.With(entry)
-	return nil
+	file.Exists = true
+	return file, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -199,14 +231,33 @@ type scriptedInteraction struct {
 	// onAskText handles AskText calls. If nil, returns SkippedOne.
 	onAskText func(q interaction.TextQuestion) interaction.TextAnswer
 
+	// levelOption answers QuestionConfigLevel ("" = the project option); skipLevel
+	// skips that question instead. Tests that do not care about the level get a
+	// project-level save without scripting the question.
+	levelOption string
+	skipLevel   bool
+
 	// Call recordings (tests inspect these after the service call).
 	selectOneCalls []interaction.ChoiceQuestion
 	askTextCalls   []interaction.TextQuestion
 	notifyCalls    []interaction.Notice
+	// asked lists the question ids of every SelectOne and AskText call in call order.
+	asked []interaction.QuestionID
 }
 
 func (s *scriptedInteraction) SelectOne(_ context.Context, q interaction.ChoiceQuestion) (interaction.ChoiceAnswer, error) {
 	s.selectOneCalls = append(s.selectOneCalls, q)
+	s.asked = append(s.asked, q.ID)
+	if q.ID == app.QuestionConfigLevel {
+		if s.skipLevel {
+			return interaction.ChoiceAnswer{Status: interaction.SkippedOne}, nil
+		}
+		option := s.levelOption
+		if option == "" {
+			option = "project"
+		}
+		return interaction.ChoiceAnswer{Status: interaction.Answered, OptionID: option}, nil
+	}
 	if s.onSelectOne != nil {
 		return s.onSelectOne(q), nil
 	}
@@ -219,6 +270,7 @@ func (s *scriptedInteraction) SelectMany(_ context.Context, q interaction.Choice
 
 func (s *scriptedInteraction) AskText(_ context.Context, q interaction.TextQuestion) (interaction.TextAnswer, error) {
 	s.askTextCalls = append(s.askTextCalls, q)
+	s.asked = append(s.asked, q.ID)
 	if s.onAskText != nil {
 		return s.onAskText(q), nil
 	}

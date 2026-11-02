@@ -6,20 +6,16 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	tuicommon "mosaic-common/tui"
+
 	"mosaic-log-analyzer/internal/domain"
 )
 
-// pageChromeLines is the number of lines a per-run view spends on its title,
-// run label, separator and help bar; the rest of the terminal is body.
-const pageChromeLines = 4
+// scrollKeys are the short help keys of the views that only scroll.
+var scrollKeys = []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "scroll"}, exportKeyEntry, {Key: "esc", Desc: "back"}}
 
 // bodyBudget returns how many body lines fit on a terminal of the given height.
-func bodyBudget(height int) int {
-	if b := height - pageChromeLines; b > 0 {
-		return b
-	}
-	return 0
-}
+func bodyBudget(height int) int { return FrameBodyHeight(height) }
 
 // clip renders text in the style, truncated to the width so a row never wraps
 // and the view's line count stays predictable.
@@ -30,8 +26,8 @@ func clip(style lipgloss.Style, width int, text string) string {
 	return style.MaxWidth(width).Render(text)
 }
 
-// renderPage assembles a per-run view: title, run label, the visible body
-// lines, a separator and the help bar with the scroll hint.
+// renderPage assembles the plain page of the across-runs screen: title, label,
+// the visible body lines, a separator and the help bar with the scroll hint.
 func renderPage(st Styles, width int, title, label string, visible []string, w Window, total int, help string) string {
 	var sb strings.Builder
 	sb.WriteString(clip(st.Title, width, title))
@@ -80,6 +76,8 @@ func (n *viewNav) request(key string) {
 		id = ScreenStatus
 	case KeyViewTools:
 		id = ScreenTools
+	case KeyViewContext:
+		id = ScreenContext
 	case KeyViewTimeline:
 		id = ScreenTimeline
 	default:
@@ -94,43 +92,18 @@ func (n *viewNav) requested() (ScreenID, bool) { return n.req, n.req != "" }
 
 func (n *viewNav) reset() { n.req = "" }
 
-// viewKeysHelp lists the keys that switch to the per-run views other than self,
-// followed by the export keys.
-func viewKeysHelp(self ScreenID) string {
-	entries := []struct {
-		id   ScreenID
-		key  string
-		name string
-	}{
-		{ScreenRunDetail, KeyViewDispatches, "dispatches"},
-		{ScreenOverview, KeyViewOverview, "overview"},
-		{ScreenAgentTypes, KeyViewAgentTypes, "types"},
-		{ScreenStatus, KeyViewStatus, "status"},
-		{ScreenTools, KeyViewTools, "tools"},
-		{ScreenTimeline, KeyViewTimeline, "timeline"},
-	}
-	var parts []string
-	for _, e := range entries {
-		if e.id != self {
-			parts = append(parts, e.key+" "+e.name)
-		}
-	}
-	parts = append(parts, exportKeysHelp)
-	return strings.Join(parts, "  ")
-}
-
 // formatMoneyTotal renders a CategoryMoney total; the partial marker is added
 // only to a known amount, never to an unpriced or absent one.
-func formatMoneyTotal(c domain.CategoryMoney) string {
+func formatMoneyTotal(cur domain.CurrencyCode, c domain.CategoryMoney) string {
 	if c.Total.State == domain.MoneyKnown {
-		return FormatTotal(c)
+		return FormatTotal(cur, c)
 	}
-	return FormatMoney(c.Total)
+	return FormatMoney(cur, c.Total)
 }
 
 // incompleteness lists the labels for unpriced models, assumed cache-write tier,
 // missing token usage and open invocations that apply to a figure.
-func incompleteness(unpriced []domain.PricingKey, assumed int64, missing, open int) []string {
+func incompleteness(unpriced []domain.PricingKey, assumed int64, tiers []domain.CacheWriteTier, missing, open int) []string {
 	var out []string
 	if len(unpriced) > 0 {
 		names := make([]string, len(unpriced))
@@ -139,7 +112,7 @@ func incompleteness(unpriced []domain.PricingKey, assumed int64, missing, open i
 		}
 		out = append(out, UnpricedMarker+": "+strings.Join(names, ", "))
 	}
-	if s := FormatAssumedTier(assumed); s != "" {
+	if s := FormatAssumedTier(assumed, tiers); s != "" {
 		out = append(out, s)
 	}
 	if missing > 0 {
@@ -149,6 +122,14 @@ func incompleteness(unpriced []domain.PricingKey, assumed int64, missing, open i
 		out = append(out, fmt.Sprintf("%d %s", open, OpenLabel))
 	}
 	return out
+}
+
+// appendLabels adds bracketed incompleteness labels to a row.
+func appendLabels(row string, labels []string) string {
+	if len(labels) == 0 {
+		return row
+	}
+	return row + "  [" + strings.Join(labels, "; ") + "]"
 }
 
 // pageScroller keeps a plain line offset for views without a cursor.

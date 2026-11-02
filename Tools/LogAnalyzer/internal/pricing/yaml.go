@@ -34,9 +34,14 @@ import (
 //	    models:
 //	      <model-id>: { same fields as above }
 //
-// All rate values are decimal USD per 1,000,000 tokens stored as quoted strings
+// An optional top-level currency key ("USD" or "EUR") states the currency of all
+// rates in the file; without it the rates are read in the effective currency.
+//
+// All rate values are decimal amounts per 1,000,000 tokens stored as quoted strings
 // so YAML float parsing cannot silently lose precision.
 type pricingFileYAML struct {
+	// Currency is the optional currency of every rate in the file ("USD" or "EUR").
+	Currency  *string                   `yaml:"currency,omitempty"`
 	Models    map[string]modelEntryYAML `yaml:"models"`
 	Providers map[string]providerYAML   `yaml:"providers,omitempty"`
 }

@@ -23,6 +23,15 @@ type infraContentInput struct {
 type buildContentOptions struct {
 	infraByPath       map[string]infraContentInput
 	preserveWorkflows map[string]bool
+	// replaceInfrastructure makes an empty infrastructure block list clear the deployed
+	// declarations of every orchestrator-role file instead of keeping them.
+	replaceInfrastructure bool
+}
+
+// withInfrastructureReplaced makes the infrastructure blocks passed to buildContent the whole
+// declaration set of each orchestrator-role file, including when they are empty.
+func withInfrastructureReplaced() buildContentOption {
+	return func(o *buildContentOptions) { o.replaceInfrastructure = true }
 }
 
 // buildContentOption adjusts buildContentOptions.
@@ -46,6 +55,7 @@ func newBuildContentOptions(opts []buildContentOption) buildContentOptions {
 // applyTo sets the per-file infrastructure and workflow fields of req for the file at
 // targetPath. Paths without options leave req untouched.
 func (o buildContentOptions) applyTo(targetPath string, req *transform.Request) {
+	req.ClearInfrastructureAgents = o.replaceInfrastructure
 	if in, ok := o.infraByPath[targetPath]; ok {
 		req.InfrastructureAgents = in.Blocks
 		req.InfrastructureMerge = in.Mode

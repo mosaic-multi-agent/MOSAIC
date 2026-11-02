@@ -3,15 +3,10 @@ package claudecode_test
 // injection_role_test.go: Tests verifying that Injection respects req.Role for
 // orchestrator-specific content selection, not req.AgentKey literal matching.
 //
-// The core bug: when an orchestrator-role agent has a non-"orchestrator" AgentKey
-// (e.g. "orchestrator-script"), the current implementation (AgentKey != "orchestrator"
-// check) incorrectly returns subagent-only shared content instead of the
-// orchestrator-merged content.
-//
-// RED: TestInjection_OrchestratorRole_NonOrchestratorKey_ReturnsMergedContent FAILS
-// until the implementation switches from AgentKey-based to Role-based gating.
-// All tests in this file fail to compile until domain.InjectionRequest gains a Role
-// field (implementation task I1.1).
+// An orchestrator-role agent under a non-"orchestrator" AgentKey (e.g. "orchestrator-script")
+// must receive the orchestrator region content exactly as the literal "orchestrator" key
+// does; the gate is the role, never the key. The shared HarnessConstraints region is the
+// same for every role.
 
 import (
 	"strings"
@@ -20,23 +15,11 @@ import (
 	"mosaic-deploy/internal/domain"
 )
 
-// TestInjection_OrchestratorRole_NonOrchestratorKey_ReturnsMergedContent verifies that
+// TestInjection_OrchestratorRole_NonOrchestratorKey_ServesOrchestratorRegion verifies that
 // when an agent has Role == domain.RoleOrchestrator but AgentKey is not "orchestrator"
-// (e.g. "orchestrator-script"), Injection returns orchestrator-merged content, not
-// shared-only content.
-//
-// This is the exact bug scenario: orchestrators deployed under a non-literal key
-// silently receive subagent-level injection content because the gate checks
-// AgentKey == "orchestrator" rather than Role == domain.RoleOrchestrator.
-//
-// For Claude Code HarnessConstraints:
-//   - Shared content: the output-artifacts constraint
-//   - Orchestrator content: non-empty (skills-path and security-warning instructions)
-//   - Merged result for orchestrator role: shared content + "\n\n" + orchestrator content
-//
-// RED: FAILS until I1.1 (add Role field to InjectionRequest) and I1.2 (switch
-// Injection gate from AgentKey to Role) are both complete.
-func TestInjection_OrchestratorRole_NonOrchestratorKey_ReturnsMergedContent(t *testing.T) {
+// (e.g. "orchestrator-script"), the OrchestratorHarnessConstraints region is served and the
+// HarnessConstraints region equals what a subagent receives.
+func TestInjection_OrchestratorRole_NonOrchestratorKey_ServesOrchestratorRegion(t *testing.T) {
 	mod := newModule(t)
 
 	// Baseline: what a genuine subagent receives (shared content only).
@@ -50,60 +33,55 @@ func TestInjection_OrchestratorRole_NonOrchestratorKey_ReturnsMergedContent(t *t
 	}
 
 	// Subject under test: orchestrator-role agent with a non-literal key.
-	orchContent, orchOK := mod.Injection(domain.InjectionRequest{
+	orchShared, orchSharedOK := mod.Injection(domain.InjectionRequest{
 		Name:     "HarnessConstraints",
-		AgentKey: "orchestrator-script", // not "orchestrator" -- the bug scenario
+		AgentKey: "orchestrator-script",
+		Role:     domain.RoleOrchestrator,
+	})
+	orchContent, orchOK := mod.Injection(domain.InjectionRequest{
+		Name:     "OrchestratorHarnessConstraints",
+		AgentKey: "orchestrator-script", // not "orchestrator"
 		Role:     domain.RoleOrchestrator,
 	})
 	if !orchOK {
-		t.Fatal("Injection(HarnessConstraints, orchestrator-script, RoleOrchestrator) returned ok=false; " +
-			"orchestrator-role agents must receive content (ok=true) for HarnessConstraints")
+		t.Fatal("Injection(OrchestratorHarnessConstraints, orchestrator-script, RoleOrchestrator) returned ok=false; " +
+			"orchestrator-role agents must receive the orchestrator region whatever their key")
 	}
 
-	// An orchestrator-role agent must receive more than the subagent receives: the
-	// orchestrator-only content is non-empty, so the merged result must differ from the
-	// shared-only subagent content.
-	if orchContent == subagentContent {
-		t.Errorf("orchestrator-role agent with AgentKey=%q received identical content to subagent (%q); "+
-			"role-based gating must return orchestrator-merged content when Role == domain.RoleOrchestrator, "+
-			"regardless of AgentKey value",
-			"orchestrator-script", subagentContent)
+	// The shared region is identical for the orchestrator role and the subagent.
+	if !orchSharedOK || orchShared != subagentContent {
+		t.Errorf("orchestrator-role HarnessConstraints = %q (ok=%v), want the same shared content as a subagent %q",
+			orchShared, orchSharedOK, subagentContent)
 	}
-
-	// The merged content must include the skills-path instruction that distinguishes
+	// The orchestrator region carries the skills-path instruction that distinguishes
 	// orchestrator content from shared content for Claude Code.
 	if !strings.Contains(orchContent, ".claude/skills/ in the workspace root") {
-		t.Errorf("orchestrator-role HarnessConstraints content is missing the skills-path instruction\n"+
-			"got:  %q\n"+
-			"want: content containing \".claude/skills/ in the workspace root\"\n\n"+
-			"The orchestrator injection must be served to any agent with Role == domain.RoleOrchestrator, "+
-			"not only to agents with AgentKey == \"orchestrator\"",
-			orchContent)
+		t.Errorf("orchestrator-role OrchestratorHarnessConstraints content is missing the skills-path instruction\n"+
+			"got:  %q\nwant: content containing \".claude/skills/ in the workspace root\"", orchContent)
+	}
+	// A subagent gets no orchestrator region.
+	if _, ok := mod.Injection(domain.InjectionRequest{Name: "OrchestratorHarnessConstraints", AgentKey: "some-subagent"}); ok {
+		t.Error("a subagent received the OrchestratorHarnessConstraints region, want ok=false")
 	}
 }
 
-// TestInjection_OrchestratorRole_WithOrchestratorKey_StillReturnsMergedContent is a
-// regression guard: after the role-based fix, agents with the literal "orchestrator"
-// AgentKey AND Role == domain.RoleOrchestrator must continue to receive orchestrator
-// content. The fix must not accidentally break the existing-key case.
-//
-// This test is a GREEN-phase regression guard. It passes in RED phase only if
-// Role: domain.RoleOrchestrator is added to the request -- which requires I1.1 to
-// add the Role field (compile RED until then).
-func TestInjection_OrchestratorRole_WithOrchestratorKey_StillReturnsMergedContent(t *testing.T) {
+// TestInjection_OrchestratorRole_WithOrchestratorKey_StillServesOrchestratorRegion is a
+// regression guard: agents with the literal "orchestrator" AgentKey and
+// Role == domain.RoleOrchestrator receive the orchestrator region content.
+func TestInjection_OrchestratorRole_WithOrchestratorKey_StillServesOrchestratorRegion(t *testing.T) {
 	mod := newModule(t)
 
 	content, ok := mod.Injection(domain.InjectionRequest{
-		Name:     "HarnessConstraints",
+		Name:     "OrchestratorHarnessConstraints",
 		AgentKey: "orchestrator",
 		Role:     domain.RoleOrchestrator,
 	})
 	if !ok {
-		t.Fatal("Injection(HarnessConstraints, orchestrator, RoleOrchestrator) returned ok=false; " +
-			"orchestrator must receive content (ok=true) for HarnessConstraints")
+		t.Fatal("Injection(OrchestratorHarnessConstraints, orchestrator, RoleOrchestrator) returned ok=false; " +
+			"orchestrator must receive its region")
 	}
 	if !strings.Contains(content, ".claude/skills/ in the workspace root") {
-		t.Errorf("Injection(HarnessConstraints, orchestrator, RoleOrchestrator) missing skills-path instruction\n"+
+		t.Errorf("Injection(OrchestratorHarnessConstraints, orchestrator, RoleOrchestrator) missing skills-path instruction\n"+
 			"got: %q\nwant: content containing \".claude/skills/ in the workspace root\"", content)
 	}
 }

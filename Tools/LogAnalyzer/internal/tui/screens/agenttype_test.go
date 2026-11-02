@@ -13,7 +13,7 @@ import (
 )
 
 func typesView(run domain.RunReport, h int) string {
-	return screens.NewAgentTypesScreen(run, wideW, h, plain()).View(wideW, h)
+	return screens.NewAgentTypesScreen(run, tableW, h, plain()).View(tableW, h)
 }
 
 func TestAgentTypes_ShowsFiguresPerType(t *testing.T) {
@@ -41,7 +41,7 @@ func TestAgentTypes_ListsTypesInGivenOrderWithUnknownTypeLabelled(t *testing.T) 
 func TestAgentTypes_CompleteRunHasNoIncompletenessLabels(t *testing.T) {
 	view := typesView(agentTypesRun(), tallH)
 
-	assertNotContains(t, view, "(partial)", screens.UnpricedMarker, screens.AssumedTierLabel,
+	assertNotContains(t, view, "(partial)", screens.UnpricedMarker, screens.AssumedTierLabel(nil),
 		screens.MissingUsageLabel, screens.OpenLabel)
 }
 
@@ -73,8 +73,8 @@ func TestAgentTypes_LabelsAssumedTierCacheWrites(t *testing.T) {
 
 	view := typesView(run, tallH)
 
-	if line := lineWith(view, "4,321"); !strings.Contains(line, screens.AssumedTierLabel) {
-		t.Errorf("assumed-tier count line %q must carry %q", line, screens.AssumedTierLabel)
+	if line := lineWith(view, "4,321"); !strings.Contains(line, screens.AssumedTierLabel(nil)) {
+		t.Errorf("assumed-tier count line %q must carry %q", line, screens.AssumedTierLabel(nil))
 	}
 }
 
@@ -89,10 +89,10 @@ func TestAgentTypes_LabelsMissingUsageAndOpenInvocations(t *testing.T) {
 }
 
 func TestAgentTypes_ShortTerminalScrollsAndShowsHint(t *testing.T) {
-	s := screens.NewAgentTypesScreen(manyTypesRun(25), wideW, shortH, plain())
+	s := screens.NewAgentTypesScreen(manyTypesRun(25), wideW, shortTableH, plain())
 
-	first := s.View(wideW, shortH)
-	assertFits(t, first, shortH)
+	first := s.View(wideW, shortTableH)
+	assertFits(t, first, shortTableH)
 	assertContains(t, first, "type-01")
 	assertNotContains(t, first, "type-25")
 	if !scrollHintRE.MatchString(first) {
@@ -101,8 +101,8 @@ func TestAgentTypes_ShortTerminalScrollsAndShowsHint(t *testing.T) {
 
 	var cur screens.Screen = s
 	cur = press(cur, repeat("down", 30)...)
-	last := cur.View(wideW, shortH)
-	assertFits(t, last, shortH)
+	last := cur.View(wideW, shortTableH)
+	assertFits(t, last, shortTableH)
 	assertContains(t, last, "type-25")
 	assertNotContains(t, last, "type-01")
 }
@@ -161,10 +161,11 @@ func TestAgentTypes_EscAndQAskToLeave(t *testing.T) {
 	}
 }
 
-func TestAgentTypes_HelpListsViewKeysAndBack(t *testing.T) {
-	help := screens.NewAgentTypesScreen(agentTypesRun(), wideW, tallH, plain()).Help()
+func TestAgentTypes_HelpHintsAtTheOverviewListingViewKeysAndBack(t *testing.T) {
+	s := screens.NewAgentTypesScreen(agentTypesRun(), wideW, tallH, plain())
 
-	assertContains(t, help, screens.KeyViewDispatches, screens.KeyViewOverview, "esc")
+	assertContains(t, s.Help(), screens.KeyHelp)
+	assertOverlayListsViewKeys(t, s, screens.KeyViewDispatches, screens.KeyViewOverview)
 }
 
 func TestAgentTypes_RunWithoutSubagentsRendersAndCannotDrillDown(t *testing.T) {
@@ -214,8 +215,9 @@ func TestRunDetail_OwnViewKeyRequestsNothing(t *testing.T) {
 	}
 }
 
-func TestRunDetail_HelpListsViewKeys(t *testing.T) {
-	help := screens.NewRunDetailScreen(overviewRun(), wideW, tallH, plain()).Help()
+func TestRunDetail_HelpHintsAtTheOverviewListingViewKeys(t *testing.T) {
+	s := screens.NewRunDetailScreen(overviewRun(), wideW, tallH, plain())
 
-	assertContains(t, help, screens.KeyViewOverview, screens.KeyViewAgentTypes, "esc")
+	assertContains(t, s.Help(), screens.KeyHelp)
+	assertOverlayListsViewKeys(t, s, screens.KeyViewOverview, screens.KeyViewAgentTypes)
 }

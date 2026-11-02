@@ -9,7 +9,10 @@ Also exposes emit_run_start and emit_run_end, called by the dispatcher.
 
 import mosaic_logger_core as core
 import mosaic_logger_export as export
+import mosaic_logger_manifest_version as manifest_version
+import mosaic_logger_handlers_tools as tools
 import mosaic_logger_transcript as transcript
+import mosaic_logger_transcript_logging as transcript_logging
 
 
 # ---------------------------------------------------------------------------
@@ -23,7 +26,7 @@ def emit_run_start(ctx: "core.HookContext") -> None:
         "run_start", ctx,
         run_id=ctx.run_id,
         cwd=ctx.field("cwd"),
-        adapter_version=core.adapter_version(ctx),
+        adapter_version=manifest_version.adapter_version(ctx),
     )
     core.append_event(ctx.paths.orchestrator_events(run_id), event)
 
@@ -58,7 +61,8 @@ def handle_session_start(ctx: "core.HookContext") -> None:
 
 
 def handle_session_end(ctx: "core.HookContext") -> None:
-    """Emit session_end with reason."""
+    """Log the transcript's remaining usage, then emit session_end with reason."""
+    transcript_logging.log_transcript_usage(ctx)
     run_id = core.effective_run_id(ctx)
     event = core.build_event(
         "session_end", ctx,
@@ -106,11 +110,14 @@ def handle_agent_stop(ctx: "core.HookContext") -> None:
     )
     core.append_event(ctx.paths.orchestrator_events(run_id), event)
 
+    transcript_logging.log_transcript_usage(ctx)
+
     # Export orchestrator transcript (best-effort)
     export.export_transcript(
         ctx.transcript_path,
         ctx.paths.orchestrator_raw(run_id, ctx.session_id),
         "transcript_path",
+        owner_session_id=ctx.session_id,
     )
 
 
@@ -130,13 +137,11 @@ def handle_notification(ctx: "core.HookContext") -> None:
 
 
 def handle_pre_compact(ctx: "core.HookContext") -> None:
-    """Emit compaction with trigger and token counts."""
-    run_id = core.effective_run_id(ctx)
-    event = core.build_event(
-        "compaction", ctx,
-        trigger=ctx.field("trigger"),
-    )
-    core.append_event(ctx.paths.orchestrator_events(run_id), event)
+    """Write nothing: compactions are logged from the session transcript.
+
+    The transcript's compaction_complete event carries the compacting actor, the outcome
+    and the cost; a compaction event written here too would count the compaction twice.
+    """
 
 
 def handle_user_prompt_transformed(ctx: "core.HookContext") -> None:

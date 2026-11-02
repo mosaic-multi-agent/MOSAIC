@@ -83,7 +83,7 @@ func resolveRunIdentityForCLI(args []string, workDirs ...string) (*cli.RunIdenti
 		// confirm the run is completed. A successful parse also yields the
 		// recorded position directly, so cli.Run's announcement need not read
 		// the artifact a second time.
-		if state, parseErr := artifact.Parse(data); parseErr == nil {
+		if state, parseErr := artifact.ParseAt(artifactPath, data); parseErr == nil {
 			if strings.EqualFold(state.CurrentState.Phase, "COMPLETED") {
 				return nil, nil, fmt.Errorf("run %s is completed and cannot be resumed", runIDFlag)
 			}

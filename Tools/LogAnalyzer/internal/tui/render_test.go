@@ -54,10 +54,10 @@ func TestFormatTokens_AbsentVsPresentZero(t *testing.T) {
 // TestFormatMoney_NoDataVsKnownZeroVsUnpriced verifies the three MoneyValue
 // states render distinctly and correctly.
 func TestFormatMoney_NoDataVsKnownZeroVsUnpriced(t *testing.T) {
-	noData := FormatMoney(domain.NoMoneyData())
-	unpriced := FormatMoney(domain.UnpricedMoney())
-	knownZero := FormatMoney(domain.KnownMoney(domain.Money(0)))
-	knownOne := FormatMoney(domain.KnownMoney(domain.Money(1_000_000_000))) // $1.00
+	noData := FormatMoney(domain.CurrencyUSD, domain.NoMoneyData())
+	unpriced := FormatMoney(domain.CurrencyUSD, domain.UnpricedMoney())
+	knownZero := FormatMoney(domain.CurrencyUSD, domain.KnownMoney(domain.Money(0)))
+	knownOne := FormatMoney(domain.CurrencyUSD, domain.KnownMoney(domain.Money(1_000_000_000))) // $1.00
 
 	// No-data must not equal "$0.00".
 	if noData == "$0.00" {
@@ -109,8 +109,8 @@ func TestFormatTotal_PartialIndicator(t *testing.T) {
 		Complete: false,
 	}
 
-	completeStr := FormatTotal(complete)
-	partialStr := FormatTotal(partial)
+	completeStr := FormatTotal(domain.CurrencyUSD, complete)
+	partialStr := FormatTotal(domain.CurrencyUSD, partial)
 
 	if completeStr == partialStr {
 		t.Errorf("complete %q == partial %q — must be distinguishable", completeStr, partialStr)
@@ -151,7 +151,8 @@ func TestRunsScreen_ProvisionalLabel(t *testing.T) {
 
 	styles := plainStyles()
 	s := screens.NewRunsScreen(report, 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	if !strings.Contains(view, ProvisionalLabel) {
 		t.Errorf("runs screen view does not contain ProvisionalLabel %q", ProvisionalLabel)
@@ -183,7 +184,8 @@ func TestRunsScreen_UnattributableSection(t *testing.T) {
 
 	styles := plainStyles()
 	s := screens.NewRunsScreen(report, 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	if !strings.Contains(view, UnattributableLabel) {
 		t.Errorf("runs screen view does not contain UnattributableLabel %q", UnattributableLabel)
@@ -215,31 +217,29 @@ func TestRunsScreen_QualityFindingsVisible(t *testing.T) {
 
 	styles := plainStyles()
 	s := screens.NewRunsScreen(report, 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	if !strings.Contains(view, "finding") {
 		t.Errorf("runs screen view does not mention data-quality findings; got:\n%s", view)
 	}
 }
 
-// TestRunsScreen_AbsentTokensShowMarker verifies absent token categories
-// render as AbsentMarker and not as "0" in the run list.
-func TestRunsScreen_AbsentTokensShowMarker(t *testing.T) {
+// TestRunsScreen_AbsentCostShowsMarker verifies that a run whose cost has no
+// data renders AbsentMarker in its row, never "$0.00", and that a run with a
+// known cost shows its amount.
+func TestRunsScreen_AbsentCostShowsMarker(t *testing.T) {
 	report := domain.Report{
 		Runs: []domain.RunReport{
 			{
-				Run: domain.NamedRun("20260101T120000Z-abcd"),
+				Run:          domain.NamedRun("20260101T120000Z-abcd"),
+				Totals:       domain.Totals{Money: domain.CategoryMoney{Total: domain.NoMoneyData()}},
+				Orchestrator: domain.ActorReport{Actor: domain.Orchestrator()},
+			},
+			{
+				Run: domain.NamedRun("20260102T120000Z-bcde"),
 				Totals: domain.Totals{
-					Tokens: domain.TokenUsage{
-						Input:         domain.Tokens(100),
-						CacheRead:     domain.AbsentTokens(), // absent — no cache reads
-						CacheCreation: domain.AbsentTokens(),
-						Output:        domain.Tokens(50),
-					},
-					Money: domain.CategoryMoney{
-						Total:    domain.KnownMoney(domain.Money(1_000_000_000)),
-						Complete: true,
-					},
+					Money: domain.CategoryMoney{Total: domain.KnownMoney(domain.Money(1_000_000_000)), Complete: true},
 				},
 				Orchestrator: domain.ActorReport{Actor: domain.Orchestrator()},
 			},
@@ -251,11 +251,20 @@ func TestRunsScreen_AbsentTokensShowMarker(t *testing.T) {
 
 	styles := plainStyles()
 	s := screens.NewRunsScreen(report, 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
-	if !strings.Contains(view, AbsentMarker) {
-		t.Errorf("runs screen view does not contain AbsentMarker %q for absent token categories; got:\n%s",
-			AbsentMarker, view)
+	var absentRow string
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, "20260101T120000Z-abcd") {
+			absentRow = line
+		}
+	}
+	if !strings.Contains(absentRow, AbsentMarker) || strings.Contains(absentRow, "$0.00") {
+		t.Errorf("a run without cost data must show %q and never $0.00 in its row; got:\n%s", AbsentMarker, view)
+	}
+	if !strings.Contains(view, "$1.00") {
+		t.Errorf("the run with a known cost must show it; got:\n%s", view)
 	}
 }
 
@@ -311,9 +320,24 @@ func TestSourceScreen_RendersWithoutError(t *testing.T) {
 // T10.3 continued: RunDetailScreen rendering
 // ---------------------------------------------------------------------------
 
+// scrollDispatchesOf lists the given agent actors as the dispatches of one agent
+// type, as the analysis delivers them next to the actor reports.
+func scrollDispatchesOf(agents []domain.ActorReport) []domain.AgentTypeGroup {
+	group := domain.AgentTypeGroup{AgentType: "worker", Figures: domain.GroupFigures{Invocations: len(agents)}}
+	for _, a := range agents {
+		actor := a.Actor
+		actor.Type = "worker"
+		group.Dispatches = append(group.Dispatches, domain.Dispatch{
+			Invocation: domain.Invocation{Actor: actor, State: domain.InvocationClosed, StatusCode: "SUCCESS", EndEvents: 1},
+			Totals:     a.Totals,
+		})
+	}
+	return []domain.AgentTypeGroup{group}
+}
+
 // TestRunDetailScreen_OrchestratorLineIsDistinctFromAgentLines verifies that
-// the orchestrator has its own labelled section and appears separately from
-// the per-agent breakdown, per the binding display requirement.
+// the orchestrator has its own row and appears separately from the per-agent
+// rows, per the binding display requirement.
 func TestRunDetailScreen_OrchestratorLineIsDistinctFromAgentLines(t *testing.T) {
 	run := domain.RunReport{
 		Run: domain.NamedRun("20260101T120000Z-abcd"),
@@ -339,30 +363,35 @@ func TestRunDetailScreen_OrchestratorLineIsDistinctFromAgentLines(t *testing.T) 
 		},
 	}
 
+	run.ByAgentType = scrollDispatchesOf(run.Agents)
+
 	styles := plainStyles()
 	s := screens.NewRunDetailScreen(run, 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
-	// The orchestrator section header must appear.
-	if !strings.Contains(view, "Orchestrator") {
-		t.Errorf("run-detail view missing orchestrator section header; got:\n%s", view)
+	var orchestratorRow, agentRow string
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, "orchestrator") && orchestratorRow == "" {
+			orchestratorRow = line
+		}
+		if strings.Contains(line, "TestAgent#1") && agentRow == "" {
+			agentRow = line
+		}
 	}
-	// The orchestrator actor label ("orchestrator") must appear as a detail line.
-	if !strings.Contains(view, "orchestrator") {
-		t.Errorf("run-detail view missing orchestrator actor label; got:\n%s", view)
+	if orchestratorRow == "" || !strings.Contains(orchestratorRow, "$2.00") {
+		t.Errorf("run-detail view missing the orchestrator row with its $2.00; got:\n%s", view)
 	}
-	// The agent label must appear separately under its own section.
-	if !strings.Contains(view, "TestAgent#1") {
-		t.Errorf("run-detail view missing agent label 'TestAgent#1'; got:\n%s", view)
+	if agentRow == "" || !strings.Contains(agentRow, "$3.00") {
+		t.Errorf("run-detail view missing the agent row 'TestAgent#1' with its $3.00; got:\n%s", view)
 	}
-	// The agents section header must appear when agents are present.
-	if !strings.Contains(view, "Agents") {
-		t.Errorf("run-detail view missing 'Agents' section header; got:\n%s", view)
+	if orchestratorRow == agentRow {
+		t.Errorf("the orchestrator and the agent must have separate rows; got:\n%s", view)
 	}
 }
 
-// TestRunDetailScreen_PerAgentTotalsAppear verifies that each agent in run.Agents
-// has its label visible in the rendered output.
+// TestRunDetailScreen_PerAgentTotalsAppear verifies that each agent of the run
+// has a row with its label and its own total in the rendered output.
 func TestRunDetailScreen_PerAgentTotalsAppear(t *testing.T) {
 	run := domain.RunReport{
 		Run: domain.NamedRun("20260101T120000Z-abcd"),
@@ -389,15 +418,24 @@ func TestRunDetailScreen_PerAgentTotalsAppear(t *testing.T) {
 		},
 	}
 
+	run.ByAgentType = scrollDispatchesOf(run.Agents)
+
 	styles := plainStyles()
 	s := screens.NewRunDetailScreen(run, 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
-	if !strings.Contains(view, "Alpha#1") {
-		t.Errorf("run-detail view missing agent label 'Alpha#1'; got:\n%s", view)
-	}
-	if !strings.Contains(view, "Beta#2") {
-		t.Errorf("run-detail view missing agent label 'Beta#2'; got:\n%s", view)
+	for _, want := range []struct{ label, cost string }{{"Alpha#1", "$4.00"}, {"Beta#2", "$6.00"}} {
+		row := ""
+		for _, line := range strings.Split(view, "\n") {
+			if strings.Contains(line, want.label) {
+				row = line
+				break
+			}
+		}
+		if row == "" || !strings.Contains(row, want.cost) {
+			t.Errorf("run-detail view missing the row of %s with its %s; got:\n%s", want.label, want.cost, view)
+		}
 	}
 }
 
@@ -416,7 +454,8 @@ func TestRunDetailScreen_UnpricedModelsListed(t *testing.T) {
 
 	styles := plainStyles()
 	s := screens.NewRunDetailScreen(run, 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	if !strings.Contains(view, "claude-mystery-model") {
 		t.Errorf("run-detail view does not list unpriced model 'claude-mystery-model'; got:\n%s", view)
@@ -441,7 +480,8 @@ func TestPricingScreen_ShowsAllModelsInReport(t *testing.T) {
 	}
 	styles := plainStyles()
 	s := screens.NewPricingScreen(models, "/config/pricing.yaml", 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	for _, m := range models {
 		if !strings.Contains(view, string(m.Model)) {
@@ -458,7 +498,8 @@ func TestPricingScreen_ShowsConfigFilePath(t *testing.T) {
 	configPath := "/home/user/.mosaic/MosaicLogAnalyzer/config/pricing.yaml"
 	styles := plainStyles()
 	s := screens.NewPricingScreen(models, configPath, 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	if !strings.Contains(view, configPath) {
 		t.Errorf("pricing screen view does not contain config path %q; got:\n%s", configPath, view)
@@ -470,7 +511,8 @@ func TestPricingScreen_ShowsConfigFilePath(t *testing.T) {
 func TestPricingScreen_EmptyModelListRendersWithoutPanic(t *testing.T) {
 	styles := plainStyles()
 	s := screens.NewPricingScreen(nil, "/config/pricing.yaml", 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	if view == "" {
 		t.Error("PricingScreen.View() returned empty string for nil model list")
@@ -494,7 +536,8 @@ func TestPricingScreen_DistinguishesPricedFromUnpriced(t *testing.T) {
 	}
 	styles := plainStyles()
 	s := screens.NewPricingScreen(models, "/config/pricing.yaml", 100, 30, styles)
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	lines := strings.Split(view, "\n")
 
@@ -548,7 +591,8 @@ func TestPricingScreen_CursorMovement_SelectsCorrectModel(t *testing.T) {
 	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 
 	// Verify the rendered view highlights "model-third" (cursor at index 2).
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 	if !strings.Contains(view, "model-third") {
 		t.Errorf("after moving cursor to index 2, view does not contain 'model-third'; got:\n%s", view)
 	}
@@ -583,7 +627,7 @@ func TestFormatTotalsLine_UsesFullWordCategoryLabels(t *testing.T) {
 			Complete: true,
 		},
 	}
-	line := screens.FormatTotalsLine(totals)
+	line := screens.FormatTotalsLine(domain.CurrencyUSD, totals)
 
 	// All four full-word labels (with colon separator) must appear.
 	for _, want := range []string{"input:", "cache read:", "cache write:", "output:"} {
@@ -605,7 +649,7 @@ func TestFormatTotalsLine_DoesNotUseAbbreviatedLabels(t *testing.T) {
 		},
 		Money: domain.CategoryMoney{Total: domain.NoMoneyData()},
 	}
-	line := screens.FormatTotalsLine(totals)
+	line := screens.FormatTotalsLine(domain.CurrencyUSD, totals)
 
 	for _, old := range []string{"in:", "cr:", "cw:", "out:"} {
 		if strings.Contains(line, old) {
@@ -626,7 +670,7 @@ func TestFormatTotalsLine_AbsentCategoryRendersAbsentMarker(t *testing.T) {
 		},
 		Money: domain.CategoryMoney{Total: domain.NoMoneyData()},
 	}
-	line := screens.FormatTotalsLine(totals)
+	line := screens.FormatTotalsLine(domain.CurrencyUSD, totals)
 
 	if !strings.Contains(line, screens.AbsentMarker) {
 		t.Errorf("FormatTotalsLine did not render AbsentMarker %q for absent categories; got %q",
@@ -649,7 +693,7 @@ func TestFormatTotalsLine_PresentZeroRendersAsZero(t *testing.T) {
 		},
 		Money: domain.CategoryMoney{Total: domain.UnpricedMoney()},
 	}
-	line := screens.FormatTotalsLine(totals)
+	line := screens.FormatTotalsLine(domain.CurrencyUSD, totals)
 
 	if !strings.Contains(line, "0") {
 		t.Errorf("FormatTotalsLine did not render '0' for present-zero categories; got %q", line)
@@ -668,7 +712,7 @@ func TestFormatTotalsLine_IsSingleLine(t *testing.T) {
 		Tokens: domain.TokenUsage{Input: domain.Tokens(1)},
 		Money:  domain.CategoryMoney{Total: domain.NoMoneyData()},
 	}
-	line := screens.FormatTotalsLine(totals)
+	line := screens.FormatTotalsLine(domain.CurrencyUSD, totals)
 
 	if strings.Contains(line, "\n") {
 		t.Errorf("FormatTotalsLine returned a multi-line string; got %q", line)
@@ -682,7 +726,7 @@ func TestFormatTotalsLine_UnpricedMoneyPreserved(t *testing.T) {
 		Tokens: domain.TokenUsage{Input: domain.Tokens(1)},
 		Money:  domain.CategoryMoney{Total: domain.UnpricedMoney()},
 	}
-	line := screens.FormatTotalsLine(totals)
+	line := screens.FormatTotalsLine(domain.CurrencyUSD, totals)
 
 	if !strings.Contains(line, screens.UnpricedMarker) {
 		t.Errorf("FormatTotalsLine with UnpricedMoney does not contain UnpricedMarker %q; got %q",
@@ -700,7 +744,7 @@ func TestFormatTotalsLine_PartialMoneyPreserved(t *testing.T) {
 			Complete: false,
 		},
 	}
-	line := screens.FormatTotalsLine(totals)
+	line := screens.FormatTotalsLine(domain.CurrencyUSD, totals)
 
 	if !strings.Contains(line, "partial") {
 		t.Errorf("FormatTotalsLine with incomplete money does not contain 'partial'; got %q", line)
@@ -730,7 +774,8 @@ func TestRunsScreen_HelpAndView_AdvertiseSourceSwitchKey(t *testing.T) {
 	s := screens.NewRunsScreen(report, 100, 30, styles)
 
 	help := s.Help()
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	// Help() must advertise 's' as a standalone key binding.
 	// "s " (s followed by its description word) distinguishes the 's' key from
@@ -771,7 +816,8 @@ func TestRunsScreen_HelpBar_AdvertisesPricingUnconditionally(t *testing.T) {
 	s := screens.NewRunsScreen(report, 100, 30, styles)
 
 	help := s.Help()
-	view := s.View(100, 30)
+	// Wide enough that the short help bar is not truncated.
+	view := s.View(240, 30)
 
 	// Help() must advertise 'p' as a standalone key binding.
 	// "p " (p followed by its description word) distinguishes the 'p' key from

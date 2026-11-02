@@ -155,7 +155,7 @@ func TestViews_PerDispatchListStaysReachableFromTheNewViews(t *testing.T) {
 
 		assertOn(t, m, screens.ScreenRunDetail)
 		view := m.View()
-		if !strings.Contains(view, "builder#1") || !strings.Contains(view, "Orchestrator") {
+		if !strings.Contains(view, "builder#1") || !strings.Contains(strings.ToLower(view), "orchestrator") {
 			t.Errorf("per-dispatch list must list the orchestrator and builder#1\n%s", view)
 		}
 	}
@@ -197,26 +197,28 @@ func TestViews_AgentTypesDrillDownBackReturnsToTypeListThenRuns(t *testing.T) {
 }
 
 func TestViews_ShowTheSelectedRunNotTheFirst(t *testing.T) {
-	report := navViewsReport(navViewsRun(runA, 300), navViewsRun(runB, 700))
+	report := navViewsReport(navViewsRun(runA, 700), navViewsRun(runB, 300))
 
 	m := send(onRunsList(report), "down", "enter", screens.KeyViewOverview)
 
 	assertOn(t, m, screens.ScreenOverview)
 	view := m.View()
-	if !strings.Contains(view, "$7.00") || strings.Contains(view, "$3.00") {
-		t.Errorf("overview must show the second run ($7.00) and not the first ($3.00)\n%s", view)
+	// The runs list is sorted by cost, most expensive first: the second row is the
+	// cheaper run, runB ($3.00), and the first row is runA ($7.00).
+	if !strings.Contains(view, "$3.00") || strings.Contains(view, "$7.00") {
+		t.Errorf("overview must show the second row's run ($3.00) and not the first's ($7.00)\n%s", view)
 	}
 }
 
 func TestViews_ReopeningAfterBackShowsTheSameRunAgain(t *testing.T) {
-	report := navViewsReport(navViewsRun(runA, 300), navViewsRun(runB, 700))
+	report := navViewsReport(navViewsRun(runA, 700), navViewsRun(runB, 300))
 
 	m := send(onRunsList(report), "down", "enter", screens.KeyViewOverview, "esc")
 	assertOn(t, m, screens.ScreenRuns)
 	m = send(m, "enter", screens.KeyViewOverview)
 
 	assertOn(t, m, screens.ScreenOverview)
-	if !strings.Contains(m.View(), "$7.00") {
+	if !strings.Contains(m.View(), "$3.00") {
 		t.Errorf("runs cursor must survive the round trip\n%s", m.View())
 	}
 }

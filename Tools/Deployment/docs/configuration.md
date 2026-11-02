@@ -542,8 +542,8 @@ Built-in harness IDs, for use as `tool_destinations` keys:
 |----|--------------|-----------|
 | `claude-code` | Claude Code | list; emitted as a comma-separated scalar |
 | `opencode` | OpenCode | permission (allow/deny map) |
-| `ghcp-cli` | GitHub Copilot CLI | list |
-| `vscode-ghcp` | VS Code GitHub Copilot | list |
+| `ghcp-cli` | GHCP CLI / VS Code GHCP Copilot | list |
+| `vscode-ghcp` | VS Code GHCP Local | list |
 
 A descriptor-only or external harness uses the `id:` declared in its
 `harness.yaml`.

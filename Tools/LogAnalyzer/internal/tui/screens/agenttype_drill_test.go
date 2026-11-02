@@ -12,9 +12,9 @@ import (
 )
 
 func drilled(run domain.RunReport, h int, keys ...string) (*screens.AgentTypesScreen, string) {
-	s := screens.NewAgentTypesScreen(run, wideW, h, plain())
+	s := screens.NewAgentTypesScreen(run, tableW, h, plain())
 	press(s, keys...)
-	return s, s.View(wideW, h)
+	return s, s.View(tableW, h)
 }
 
 func TestAgentTypesDrill_ShowsTheDispatchesOfTheSelectedType(t *testing.T) {
@@ -59,7 +59,7 @@ func TestAgentTypesDrill_EscReturnsToTypeListThenLeaves(t *testing.T) {
 	if s.Back() {
 		t.Error("first esc must not leave the per-run views")
 	}
-	view := s.View(wideW, tallH)
+	view := s.View(tableW, tallH)
 	assertContains(t, view, "builder", "reviewer")
 	assertNotContains(t, view, "builder#1")
 
@@ -125,15 +125,15 @@ func TestAgentTypesDrill_LabelsAssumedTierCacheWrites(t *testing.T) {
 
 	_, view := drilled(run, tallH, "enter")
 
-	if line := lineWith(view, "999"); !strings.Contains(line, screens.AssumedTierLabel) {
-		t.Errorf("assumed-tier count line %q must carry %q", line, screens.AssumedTierLabel)
+	if line := lineWith(view, "999"); !strings.Contains(line, screens.AssumedTierLabel(nil)) {
+		t.Errorf("assumed-tier count line %q must carry %q", line, screens.AssumedTierLabel(nil))
 	}
 }
 
 func TestAgentTypesDrill_ShortTerminalScrollsAndShowsHint(t *testing.T) {
-	s, first := drilled(manyDispatchesRun(30), shortH, "enter")
+	s, first := drilled(manyDispatchesRun(30), shortTableH, "enter")
 
-	assertFits(t, first, shortH)
+	assertFits(t, first, shortTableH)
 	assertContains(t, first, "builder#01")
 	assertNotContains(t, first, "builder#30")
 	if !scrollHintRE.MatchString(first) {
@@ -141,8 +141,8 @@ func TestAgentTypesDrill_ShortTerminalScrollsAndShowsHint(t *testing.T) {
 	}
 
 	press(s, repeat("down", 40)...)
-	last := s.View(wideW, shortH)
-	assertFits(t, last, shortH)
+	last := s.View(tableW, shortTableH)
+	assertFits(t, last, shortTableH)
 	assertContains(t, last, "builder#30")
 	assertNotContains(t, last, "builder#01")
 	if got, ok := s.DrilledType(); !ok || got != "builder" {

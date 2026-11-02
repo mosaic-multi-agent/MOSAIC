@@ -63,22 +63,25 @@ func agentTypesRun() domain.RunReport {
 	return run
 }
 
-// manyTypesRun has n groups type-01 ... each with one dispatch type-NN#1.
+// manyTypesRun has n groups type-01 ... each with one dispatch type-NN#1. The
+// first group costs the most, so the default cost order lists them as numbered.
 func manyTypesRun(n int) domain.RunReport {
 	run := overviewRun()
 	for i := 1; i <= n; i++ {
 		name := fmt.Sprintf("type-%02d", i)
+		cents := int64(n - i + 1)
 		run.ByAgentType = append(run.ByAgentType, domain.AgentTypeGroup{
 			AgentType:     name,
-			Figures:       domain.GroupFigures{Invocations: 1, Totals: moneyTotals(int64(i))},
-			PerInvocation: stats(1, int64(i), int64(i), int64(i)),
-			Dispatches:    []domain.Dispatch{closedDispatch(name+"#1", "SUCCESS", int64(i))},
+			Figures:       domain.GroupFigures{Invocations: 1, Totals: moneyTotals(cents)},
+			PerInvocation: stats(1, cents, cents, cents),
+			Dispatches:    []domain.Dispatch{closedDispatch(name+"#1", "SUCCESS", cents)},
 		})
 	}
 	return run
 }
 
-// manyDispatchesRun has one type "builder" with n dispatches builder#01 ...
+// manyDispatchesRun has one type "builder" with n dispatches builder#01 ... The
+// first dispatch costs the most, so the default cost order lists them as numbered.
 func manyDispatchesRun(n int) domain.RunReport {
 	run := overviewRun()
 	g := domain.AgentTypeGroup{
@@ -87,7 +90,7 @@ func manyDispatchesRun(n int) domain.RunReport {
 		PerInvocation: stats(n, 1, 1, 1),
 	}
 	for i := 1; i <= n; i++ {
-		g.Dispatches = append(g.Dispatches, closedDispatch(fmt.Sprintf("builder#%02d", i), "SUCCESS", int64(i)))
+		g.Dispatches = append(g.Dispatches, closedDispatch(fmt.Sprintf("builder#%02d", i), "SUCCESS", int64(n-i+1)))
 	}
 	run.ByAgentType = []domain.AgentTypeGroup{g}
 	return run

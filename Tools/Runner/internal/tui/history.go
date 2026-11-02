@@ -2,26 +2,52 @@ package tui
 
 import (
 	"mosaic-run/internal/domain"
+	"mosaic-run/internal/orchfile"
 	"mosaic-run/internal/tui/screens"
 	"mosaic-run/internal/tui/screens/runflow"
 )
 
-// historyRows maps Execution Log entries, in log order, to progress rows.
+// historyRows maps Execution Log entries, in log order, to progress rows,
+// without telling infrastructure steps apart from workflow steps.
 func historyRows(log []domain.ExecutionLogEntry) []runflow.ProgressRow {
+	return historyRowsFor(log, nil)
+}
+
+// historyRowsFor maps Execution Log entries, in log order, to progress rows.
+// Entries of agents in infra are flagged as infrastructure rows. Every row is
+// built from persisted data only, so a live row and a rebuilt row for the same
+// entry are equal.
+func historyRowsFor(log []domain.ExecutionLogEntry, infra domain.InfraAgentSet) []runflow.ProgressRow {
 	rows := make([]runflow.ProgressRow, 0, len(log))
 	for _, e := range log {
 		rows = append(rows, runflow.ProgressRow{
-			AgentInstance: e.Agent,
-			Phase:         e.Phase,
-			Stage:         e.Stage,
-			Status:        string(e.Status),
+			AgentInstance:  e.Agent,
+			Phase:          e.Phase,
+			Stage:          e.Stage,
+			Status:         string(e.Status),
+			Infrastructure: infra != nil && infra.IsInfrastructureAgent(e.Agent),
+			ErrorCode:      string(e.ErrorCode),
+			Reason:         e.Summary,
 		})
 	}
 	return rows
 }
 
-// loadHistory reads the run's artifact and returns historyRows of its
-// Execution Log; any read error yields nil.
+// declaredInfraSet returns the infrastructure agents declared by the run's
+// orchestrator file; an empty set when the file is unknown or unreadable.
+func (m *rootModel) declaredInfraSet() domain.InfraAgentSet {
+	if m.selections.orchestratorFile == "" {
+		return nil
+	}
+	declared, err := orchfile.EnumerateInfrastructureAgents(m.selections.orchestratorFile)
+	if err != nil {
+		return nil
+	}
+	return domain.NewInfraAgentSet(declared)
+}
+
+// loadHistory reads the run's artifact and returns the rows of its Execution
+// Log; any read error yields nil.
 func (m *rootModel) loadHistory() []runflow.ProgressRow {
 	if m.selections.runFolder == "" {
 		return nil
@@ -30,7 +56,7 @@ func (m *rootModel) loadHistory() []runflow.ProgressRow {
 	if err != nil {
 		return nil
 	}
-	return historyRows(state.ExecutionLog)
+	return historyRowsFor(state.ExecutionLog, m.declaredInfraSet())
 }
 
 // newProgressScreenWithHistory returns a new progress screen; for a resumed

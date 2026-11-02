@@ -21,7 +21,7 @@ type ReportPathScreen struct {
 // NewReportPathScreen creates a ReportPathScreen initialized to initial.
 func NewReportPathScreen(initial string, width int, styles Styles) *ReportPathScreen {
 	return &ReportPathScreen{
-		entry:     newDraftEntry(),
+		entry:     newDraftEntry(width),
 		confirmed: initial,
 		width:     width,
 		styles:    styles,
@@ -55,7 +55,7 @@ func (s *ReportPathScreen) View() string {
 		display = s.confirmed
 	}
 	title := s.styles.Title.Render("Report Path")
-	value := s.styles.Selected.Render(display)
+	value := s.entry.render(display, s.styles.Selected)
 	help := s.styles.Help.Render("type path  backspace delete  enter confirm  esc back")
 	content := title + "\n\n  " + value + "\n\n" + help
 	if s.width > 0 {
@@ -82,6 +82,7 @@ func (s *ReportPathScreen) Reset() {
 // current path.
 func (s *ReportPathScreen) Resize(width int) {
 	s.width = width
+	s.entry.setWidth(width)
 }
 
 // Path returns the currently confirmed report file path, normalized.

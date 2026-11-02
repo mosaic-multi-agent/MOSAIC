@@ -12,6 +12,7 @@ import (
 
 	"mosaic-run/internal/artifact"
 	"mosaic-run/internal/domain"
+	"mosaic-run/internal/resumecheck"
 )
 
 // resumeLayoutRefusal returns the refusal of a resumed run whose artifact could
@@ -24,8 +25,7 @@ func resumeLayoutRefusal(readErr error, runID string) *domain.RefusalError {
 	return &domain.RefusalError{
 		Component: "session",
 		Resource:  runID,
-		Reason: fmt.Sprintf("run %s was written in the pre-3.0 run artifact layout (Stage column or "+
-			"current_state.stage) and cannot be resumed", runID),
+		Reason:    resumecheck.Pre30LayoutReason(runID),
 		Cause: readErr,
 	}
 }

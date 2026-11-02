@@ -1,5 +1,5 @@
 ---
-version: 3.3.0
+version: 3.4.0
 name: orchestrator-script
 description: Makes one routing decision per Runner invocation by reading the orchestration artifact and returning a dispatch or stop instruction
 role: orchestrator
@@ -272,6 +272,8 @@ Reading artifacts and files to understand the run's state is legitimate and expe
 
 <HarnessConstraints type="managed">
 </HarnessConstraints>
+<OrchestratorHarnessConstraints type="managed">
+</OrchestratorHarnessConstraints>
 
 </Constraints>
 ---

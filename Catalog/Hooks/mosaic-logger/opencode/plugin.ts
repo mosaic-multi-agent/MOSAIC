@@ -9,12 +9,11 @@
  *   - Resolve workspace root from ctx.directory
  *   - Initialize LogPaths, SessionCorrelationStore
  *   - Capture the SDK client reference
- *   - Read adapter version from hook.yaml
+ *   - Read adapter version from the workspace manifest (.mosaic/manifest.yaml)
  *   - Wire all handlers into the hook registration map
  *   - Wrap every hook handler in safeHandler
  */
 
-import * as nodePath from "node:path";
 import {
   LogPaths,
   buildEvent,
@@ -22,12 +21,13 @@ import {
   setDebugLogger,
   debugLog,
   safeHandler,
-  readAdapterVersion,
 } from "./lib/core.js";
+import { readManifestAdapterVersion } from "./lib/manifest_version.js";
 import { SessionCorrelationStore, FileClosedSessionRegistry } from "./lib/correlation.js";
 import { fallbackCallId } from "./lib/runstate.js";
 import {
   createSessionHandlers,
+  extractSessionId,
   type HandlerDependencies,
   type OpenCodeEvent,
   type PermissionAskInput,
@@ -45,6 +45,7 @@ import { createNotificationHandlers } from "./lib/handlers_notifications.js";
 import { createMessageHandlers } from "./lib/handlers_messages.js";
 import { createRunnerHandlers } from "./lib/handlers_runner.js";
 import { readRunnerMode } from "./lib/runner_mode.js";
+import { RequestedToolsTracker } from "./lib/requested_tools.js";
 
 // ---------------------------------------------------------------------------
 // Plugin factory
@@ -90,12 +91,13 @@ export const MosaicLogger = async (ctx: {
         });
     });
 
-    // Read adapter version from hook.yaml (best-effort)
-    const hookYamlPath = nodePath.join(workspaceRoot, ".opencode", "plugins", "hook.yaml");
-    const adapterVersion = await readAdapterVersion(hookYamlPath);
+    // Read adapter version from the workspace manifest (best-effort)
+    const adapterVersion = await readManifestAdapterVersion(workspaceRoot);
 
     // Build shared dependency bundle
+    const requestedTools = new RequestedToolsTracker();
     const handlerDeps: HandlerDependencies = {
+      requestedTools,
       store,
       paths,
       sdkClient,
@@ -152,6 +154,11 @@ export const MosaicLogger = async (ctx: {
         async (input: { event: OpenCodeEvent }) => {
           const event = input.event;
           if (!event) return;
+          // A deleted session (top-level or subagent) releases its tracked tools.
+          if (event.type === "session.deleted") {
+            const deletedId = extractSessionId(event);
+            if (deletedId) requestedTools.releaseSession(deletedId);
+          }
           // Runner mode: exit-critical writes happen synchronously inside
           // handleEvent, before the first await of this handler.
           const runnerResult = runner?.handleEvent(event);

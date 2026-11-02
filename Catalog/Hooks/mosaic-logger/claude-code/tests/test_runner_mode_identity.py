@@ -100,10 +100,17 @@ class TestRunIdPrecedence(WorkspaceTestCase):
         self.assertEqual([RUN_ID], self.run_folders())
         self.assertTrue(self.invocation_events())
 
-    def test_native_mode_prompt_text_still_beats_env_run_id(self):
+    def test_native_mode_user_prompt_text_never_overrides_env_run_id(self):
         with runner_env(self.workspace, run_id=RUN_ID):
             fire(self.workspace, "UserPromptSubmit",
                  user_prompt=_prompt_naming(OTHER_RUN_ID))
+        self.assertEqual([RUN_ID], self.run_folders())
+        self.assertNotIn(OTHER_RUN_ID, self.run_folders())
+
+    def test_native_mode_dispatch_prompt_beats_env_run_id(self):
+        with runner_env(self.workspace, run_id=RUN_ID):
+            fire(self.workspace, "SubagentStart", agent_id="agt-1",
+                 agent_type="X", agent_prompt=_prompt_naming(OTHER_RUN_ID))
         self.assertIn(OTHER_RUN_ID, self.run_folders())
 
     def test_native_mode_env_run_id_is_fallback_when_prompt_has_none(self):
