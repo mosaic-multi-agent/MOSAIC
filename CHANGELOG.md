@@ -1,3 +1,12 @@
+# Unreleased
+
+## Catalog
+- **brownfield-pr-audit** (v4.1): a new **pr-response-dedup** agent (v1.0.0) reads the consolidated PR comment queue as a whole and drops comments that repeat another comment's point, per-file copies of systemic findings and comments already covered by open PR threads. Its decision log is reviewed at the single human gate before posting; `audit-response-merger` and the poster now run without a gate
+- **audit-to-pull-request** (v5.3.0): one point per comment, in a plain-English Context/Problem/Suggestion layout, one comment per in-scope file
+- **audit-response-merger** (v3.0.0): deduplicates whole entries only (full duplicates and cross-file systemic copies), keeping the best version verbatim, and records the pairs it could not decide
+- **architecture-audit** (v3.4.0), **contracts-audit** (v3.4.0), **implementation-audit** (v4.3.0), **tests-audit** (v4.3.0): when `Requirements.md` gives a path to a specification, audits also check the code against it and mark findings that rest on it with a `Spec basis` line
+- **audit-review** (v3.3.0): verifies `Spec basis` citations and their level (`Requirement` or `Design`)
+
 # 0.7.3 (2026-11-02)
 
 > **To upgrade:** run `Update workspace` to get the new orchestrator region, the updated agents and the updated `mosaic-logger` hook.

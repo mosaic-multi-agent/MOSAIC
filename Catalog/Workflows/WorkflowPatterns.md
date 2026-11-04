@@ -175,7 +175,7 @@ dispatcher ─────┼─ track-B → ...  ──→ merger (Waits For: a
 ```
 
 **Where it appears:**
-- `brownfield-pr-audit` — 4 audit types fan out, each producing partial PR response artifacts; `audit-response-merger` consolidates all into final `PullRequestResponses.md`
+- `brownfield-pr-audit` — 4 audit types fan out, each producing partial PR response artifacts; `audit-response-merger` consolidates all into `PullRequestResponses.md`, and `pr-response-dedup` then reads the whole consolidated queue in one window to drop the duplicates the merger's scripts could not link
 - `product-comparison` — per-product research fans out across 9 dimensions; `topic-analyst` synthesizes per-dimension; `comparison-analyst` synthesizes across all dimensions
 - `kb-generation` — per-tier KB generation stages fan out in parallel; `knowledge-base-flag-sorter` consolidates all flags
 
@@ -200,7 +200,7 @@ producer-N ─→ partial-N.md (schema-conformant JSON)       scripts the rest
 ```
 
 **Where it appears:**
-- `brownfield-pr-audit` — `audit-to-pull-request` instances produce schema-conformant partial response queues; `audit-response-merger` scripts the consolidation
+- `brownfield-pr-audit` — `audit-to-pull-request` instances produce schema-conformant partial response queues; `audit-response-merger` scripts the consolidation. Because scripts only link candidates they can detect, a follow-up `pr-response-dedup` pass reads the (now single, reduced) queue in full for the semantic judgments scripting misses
 
 **Critical dependency:** Both producer and consumer must be aware of the artifact format up front. The schema lives in a template artifact both sides read, not implicit in whatever the producer writes. Skipping this — letting producers freelance their output shape — forces the consumer back into per-file manual reading, defeating the pattern.
 
@@ -358,7 +358,7 @@ Recurring structural motifs observed in the catalog. These are not full patterns
 
 The same interface agent appears twice in a workflow — once at the start to retrieve external context, once at the end to post results back. Parenthetical suffixes disambiguate: `(retrieve)` and `(post)`.
 
-Appears in `brownfield-pr-audit` and `brownfield-pr-fix` for PR comment retrieval/posting. The posting step typically needs a separate HITL gate for timing control (the human decides *when* to post, independent of approving *what* to post). External system state may change between retrieval and posting — the workflow operates on a snapshot.
+Appears in `brownfield-pr-audit` and `brownfield-pr-fix` for PR comment retrieval/posting. Whether the posting step needs its own HITL gate depends on whether *when* to post matters independently of *what* to post. `brownfield-pr-fix` gates the poster separately, so posting replies can be timed with the user's own code push. `brownfield-pr-audit` (4.1) has nothing to synchronise: it gates the queue once at `pr-response-dedup` and posts that approved queue unattended. External system state may change between retrieval and posting — the workflow operates on a snapshot.
 
 Worth watching: currently appears only in PR-integrated workflows. If more external system integrations emerge, this may graduate to a full pattern. For now it's an observation about a structural shape two workflows share.
 
@@ -403,3 +403,4 @@ Most workflows combine multiple patterns. This section maps which patterns each 
 |---------|------|--------|---------|
 | 0.1 | 2026-08-30 | MOSAIC | Initial draft — patterns extracted from analysis of all 16 catalog workflows |
 | 0.2 | 2026-10-03 | MOSAIC | Documented the nearest-preceding On Findings rule, deploy-added `Row` column and version bump on table edits |
+| 0.3 | 2026-11-04 | MOSAIC | Aligned with `brownfield-pr-audit` 4.1: Interface Bookends no longer implies a separate poster gate; Patterns 5 and 6 mention the `pr-response-dedup` pass |
