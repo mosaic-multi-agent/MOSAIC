@@ -150,7 +150,7 @@ Each `new_thread` entry states exactly one point. Consumers of the PR response q
 - **Several files:** When a finding names several files, with or without line ranges, map each file to its exact lines and check each location against the changed hunks (see Scope Filtering). Write one entry per in-scope file, describing the issue in that file only; do not name the other files that get their own entry. List each out-of-scope location in the transform report's `processing_notes` as file, lines, and reason.
 - **Both:** A finding with several points across several in-scope files yields one entry per point per in-scope file.
 - **Length:** The three-sentence layout is the length limit for each entry, not for the finding. Keep every point of the finding; never drop a point to meet the limit.
-- **Counted once:** The finding is still classified once and counted once in the transform report's `summary`, however many entries it yields.
+- **Counted once:** The finding is still classified once and counted once in the transform report's `summary` finding counts, however many entries it yields. The entries it yields are counted separately in `entries_written`.
 
 ### Plain Language
 
@@ -243,7 +243,8 @@ The transform report uses structured JSON embedded in a markdown code block — 
     "duplicates": 0,
     "out_of_scope": 0,
     "context_irrelevant": 0,
-    "total": 8
+    "total": 8,
+    "entries_written": 11
   },
   "filtered_entries": [
     {
@@ -253,7 +254,7 @@ The transform report uses structured JSON embedded in a markdown code block — 
       "file": "/path/to/file.ext",
       "start_line": 42,
       "end_line": 58,
-      "condensed_finding": "1-3 sentence condensed version for reference",
+      "condensed_finding": "Three-line Context/Problem/Suggestion text, as it would have been posted",
       "duplicate_of": "Brief description of the existing PR comment it matches"
     },
     {
@@ -263,7 +264,7 @@ The transform report uses structured JSON embedded in a markdown code block — 
       "file": "/path/to/file.ext",
       "start_line": 100,
       "end_line": 115,
-      "condensed_finding": "1-3 sentence condensed version for human review",
+      "condensed_finding": "Three-line Context/Problem/Suggestion text, as it would have been posted",
       "reason": "File not in PR / Pure rename (R100) / Lines not in any changed hunk (nearest hunk: lines X-Y)"
     },
     {
@@ -273,7 +274,7 @@ The transform report uses structured JSON embedded in a markdown code block — 
       "file": "/path/to/file.ext",
       "start_line": 48,
       "end_line": 50,
-      "condensed_finding": "1-3 sentence condensed version for human review",
+      "condensed_finding": "Three-line Context/Problem/Suggestion text, as it would have been posted",
       "nearest_change": "Lines X-Y in same hunk",
       "reason": "Finding targets a separate method/property adjacent to the change, not semantically related"
     }
@@ -285,6 +286,8 @@ The transform report uses structured JSON embedded in a markdown code block — 
 }
 ```
 ````
+
+**Summary units:** `forwarded`, `duplicates`, `out_of_scope`, `context_irrelevant` and `total` count findings: `total` is the number of findings in the audit artifact and equals the sum of the other four. `entries_written` counts the `new_thread` entries in the partial PR response queue; it is at least `forwarded`, and higher when forwarded findings were split by point or by file.
 
 **Entry fields by classification:**
 
@@ -349,7 +352,7 @@ Each audit artifact contains `AgentId` and `Model` in its document metadata, ide
 - **Return CAPABILITY_EXCEEDED** if the audit artifact, PR scope, attribution metadata, and response schema are available and clear, but specialized finding notation or semantics prevent you from faithfully condensing or classifying the findings
 - **Return NEEDS_CLARIFICATION** if branch information is insufficient to determine PR scope, the source audit report omits the original auditor identity or model required for PR attribution, or the report structure leaves the finding set ambiguous
 - **Do not return COMPLETED_NEEDS_ACTION** because duplicate, out-of-scope, and context-irrelevant findings are normal completed transform classifications recorded for review; use SUCCESS when the complete classification is written
-- **Return SUCCESS** when every finding in the audit artifact has been classified exactly once, every unique or expansion finding is represented in the partial response queue by one entry per point per in-scope file, every filtered finding is represented in the transform report, summary counts reconcile to the source finding count, and both output artifacts are complete
+- **Return SUCCESS** when every finding in the audit artifact has been classified exactly once, every unique or expansion finding is represented in the partial response queue by one entry per point per in-scope file, every filtered finding is represented in the transform report, the summary's finding counts reconcile to the source finding count, `entries_written` equals the number of entries in the partial response queue, and both output artifacts are complete
 - **Return PARTIALLY_DONE** when a coherent subset of findings has been classified and more remain; preserve every completed queue entry and filtered report entry, mark the transform report incomplete, and record the processed finding identifiers or source positions and every remaining finding range in `processing_notes`
 - **Missing PR comments artifact:** If the existing PR comments artifact is not in input_artifacts, proceed without deduplication — all in-scope findings are written to the response queue. Note this in the transform report's Processing Notes.
 
