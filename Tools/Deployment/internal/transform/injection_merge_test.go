@@ -43,6 +43,7 @@ func newInjectionFixtureModule(t *testing.T) domain.HarnessModule {
 	if err != nil {
 		t.Fatalf("parse injection fixture descriptor: %v", err)
 	}
+	desc.InjectionsVersion = fixtureInjectionsVersion
 	return &fixtureModule{desc: desc}
 }
 

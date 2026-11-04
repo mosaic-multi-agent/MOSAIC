@@ -130,7 +130,7 @@ func TestRunTotalFor_UnpricedModel_CompleteFalse(t *testing.T) {
 		Runs: []domain.RunReport{
 			{
 				Run:            appTestRunRef,
-				UnpricedModels: []domain.ModelID{"unknown-model"},
+				UnpricedModels: []domain.PricingKey{{Model: "unknown-model"}},
 				Totals: domain.Totals{
 					Tokens: domain.TokenUsage{Input: domain.Tokens(1_000_000)},
 					Money: domain.CategoryMoney{
@@ -420,7 +420,7 @@ func TestRunTotalFor_UnpricedModel_UnpricedModelsCarried(t *testing.T) {
 		Runs: []domain.RunReport{
 			{
 				Run:            appTestRunRef,
-				UnpricedModels: []domain.ModelID{unpricedModel},
+				UnpricedModels: []domain.PricingKey{{Model: unpricedModel}},
 				Totals: domain.Totals{
 					Tokens: domain.TokenUsage{Input: domain.Tokens(1_000_000)},
 					Money: domain.CategoryMoney{
@@ -446,7 +446,7 @@ func TestRunTotalFor_UnpricedModel_UnpricedModelsCarried(t *testing.T) {
 func TestRunTotalFor_MultipleUnpricedModels_AllNamed(t *testing.T) {
 	// When a run has two distinct unpriced models, both must appear in
 	// total.UnpricedModels so the consumer can report every model by name.
-	unpriced := []domain.ModelID{"model-x", "model-y"}
+	unpriced := []domain.PricingKey{{Model: "model-x"}, {Model: "model-y"}}
 	report := domain.Report{
 		Runs: []domain.RunReport{
 			{
@@ -527,7 +527,7 @@ func TestRunTotalFor_PartiallyPricedRun_PartialAmountCarriesKnownPortion(t *test
 		Runs: []domain.RunReport{
 			{
 				Run:            appTestRunRef,
-				UnpricedModels: []domain.ModelID{"unknown-model"},
+				UnpricedModels: []domain.PricingKey{{Model: "unknown-model"}},
 				Totals: domain.Totals{
 					Money: domain.CategoryMoney{
 						// The run total reflects only the priced actor's contribution
@@ -549,7 +549,7 @@ func TestRunTotalFor_PartiallyPricedRun_PartialAmountCarriesKnownPortion(t *test
 				Agents: []domain.ActorReport{
 					{
 						Actor:          domain.AgentInstance("TestAgent#1"),
-						UnpricedModels: []domain.ModelID{"unknown-model"},
+						UnpricedModels: []domain.PricingKey{{Model: "unknown-model"}},
 						Totals: domain.Totals{
 							Money: domain.CategoryMoney{
 								Total:    domain.UnpricedMoney(),
@@ -583,7 +583,7 @@ func TestRunTotalFor_AllModelsUnpriced_PartialAmountZero(t *testing.T) {
 		Runs: []domain.RunReport{
 			{
 				Run:            appTestRunRef,
-				UnpricedModels: []domain.ModelID{"unknown-model"},
+				UnpricedModels: []domain.PricingKey{{Model: "unknown-model"}},
 				Totals: domain.Totals{
 					Money: domain.CategoryMoney{
 						Total:    domain.UnpricedMoney(),
@@ -592,7 +592,7 @@ func TestRunTotalFor_AllModelsUnpriced_PartialAmountZero(t *testing.T) {
 				},
 				Orchestrator: domain.ActorReport{
 					Actor:          domain.Orchestrator(),
-					UnpricedModels: []domain.ModelID{"unknown-model"},
+					UnpricedModels: []domain.PricingKey{{Model: "unknown-model"}},
 					Totals: domain.Totals{
 						Money: domain.CategoryMoney{
 							Total:    domain.UnpricedMoney(),

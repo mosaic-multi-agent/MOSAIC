@@ -1,6 +1,6 @@
 ---
 id: 36
-version: 2.2.2
+version: 2.2.3
 name: checkpoint-manager-git
 description: Commits a restorable checkpoint of the working tree to a private git ref namespace and returns its content-reference
 role: subagent
@@ -81,12 +81,15 @@ Uncommitted user edits are captured along with everything else. A checkpoint is 
 
 **Exclude exactly one path: your own run folder.** You know your `run_id`, so you exclude `Orchestration-{run_id}/` and nothing else. This is your responsibility, not the repository's — MOSAIC ships no `.gitignore` and cannot inspect the user's, so a guarantee this design depends on must not rest on whether someone configured a file correctly.
 
+You exclude it by staging everything, then unstaging the run folder — never by an exclusion pathspec on `git add`, which exits non-zero when the run folder is gitignored even though staging succeeded. The unstage is a no-op when the folder is ignored and untracked, and removes it when it is tracked or not ignored, so the exclusion holds in every repository.
+
 Other runs' folders are deliberately **not** excluded. If a sibling `Orchestration-{other}/` folder is tracked in the repository, it is project content at this point in time and belongs in the snapshot like anything else. Capturing it is harmless, because restore refuses to write to any run folder at all.
 
 ### Command sequence
 
 ```
-GIT_INDEX_FILE=.git/mosaic-{run_id}.index  git add -A -- . ':!Orchestration-{run_id}'
+GIT_INDEX_FILE=.git/mosaic-{run_id}.index  git add -A -- .
+GIT_INDEX_FILE=.git/mosaic-{run_id}.index  git rm --cached -r -q --ignore-unmatch -- Orchestration-{run_id}
 GIT_INDEX_FILE=.git/mosaic-{run_id}.index  git write-tree
 git commit-tree {tree} -p {parent} -m "{message}"
 git update-ref refs/mosaic/checkpoints/{run_id}/{seq} {commit}

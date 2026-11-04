@@ -1,0 +1,15 @@
+{
+  "format": "mosaic-run-digest",
+  "digest_version": "1.4.0",
+  "runs": [
+    {
+      "run_id": "20261031T100000Z-a001",
+      "provisional": false,
+      "orchestrator": {
+        "usage": [
+          {"record_id": "r1", "at": "2026-10-31T10:00:01Z", "model": "m", "tokens": {"input_tokens": 5, "output_tokens": 3}}
+        ]
+      }
+    }
+  ]
+}

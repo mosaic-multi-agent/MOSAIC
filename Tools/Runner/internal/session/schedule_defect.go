@@ -152,7 +152,7 @@ func (s *sessionImpl) handleScheduleDefect(ctx context.Context, rs *runStartCtx)
 	s.scheduleDefect = nil
 	row, ok := rowAtIndex(rs.admitted.Table, p.rowIndex)
 	if !ok {
-		msg := fmt.Sprintf("schedule defect names routing row %d, which the table does not have", p.rowIndex)
+		msg := fmt.Sprintf("schedule defect names routing row %d, which the table does not have", domain.WorkflowRowFromIndex(p.rowIndex))
 		return domain.RunOutcome{Status: domain.RunFailed, Message: msg}, true, nil
 	}
 	attempts := engine.ScheduleDefectAttempts(rs.state.ExecutionLog, row, p.stage)
@@ -165,7 +165,7 @@ func (s *sessionImpl) handleScheduleDefect(ctx context.Context, rs *runStartCtx)
 	}
 	s.deps.Debug.Log(domain.EventSessionDeviation, "block schedule defective; re-dispatching its producer",
 		domain.F("agent", step.Agent.Identifier),
-		domain.F("row", fmt.Sprint(row.Index)),
+		domain.F("row", fmt.Sprint(int(domain.WorkflowRowFromIndex(row.Index)))),
 		domain.F("attempts", fmt.Sprint(attempts)),
 	)
 	out, done, _, err := s.handleEngineDispatch(ctx, rs, domain.EngineDecision{
@@ -182,7 +182,7 @@ func (s *sessionImpl) scheduleDefectStep(rs *runStartCtx, p *pendingScheduleDefe
 	if _, inBlock := row.Block(); inBlock {
 		value, readErr := domain.ReadIterationValue(p.stage, row)
 		if readErr != nil {
-			return domain.DispatchStep{}, fmt.Errorf("schedule defect: recorded stage %q of row %d names no iteration", p.stage, row.Index)
+			return domain.DispatchStep{}, fmt.Errorf("schedule defect: recorded stage %q of row %d names no iteration", p.stage, domain.WorkflowRowFromIndex(row.Index))
 		}
 		iteration = value.ID
 	}

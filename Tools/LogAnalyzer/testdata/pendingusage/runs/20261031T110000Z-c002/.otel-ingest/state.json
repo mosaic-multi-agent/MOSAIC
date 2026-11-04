@@ -1,0 +1,7 @@
+{
+  "state_version": 1,
+  "cursor": {"offset": 346, "head_len": 346, "head_sha256": "00"},
+  "placements": {"chat-p-1": "unattributed"},
+  "pending": [],
+  "links": {}
+}

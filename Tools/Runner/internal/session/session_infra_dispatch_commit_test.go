@@ -14,6 +14,7 @@ import (
 
 func TestSession_Start_CommitOnIterationEnd_StageBlock_CarriesOnlyExistingIterationFiles(t *testing.T) {
 	rig := newStageGroupedRig(t, "2")
+	rig.queueCommitSetup()
 	rig.writeRunFile(t, "Stage-2/Plan.md", "# Plan\n")
 	queueStageRows(rig, map[string]string{
 		"test-writer":  "Stage-2/PlanProgress.md",
@@ -21,7 +22,7 @@ func TestSession_Start_CommitOnIterationEnd_StageBlock_CarriesOnlyExistingIterat
 	})
 	rig.queueOK(infraCommitAgent)
 
-	got, err := rig.ses.Start(context.Background(), rig.config("stage-grouped", domain.ExecutionModeAuto))
+	got, err := rig.ses.Start(context.Background(), rig.commitsConfig("stage-grouped", domain.ExecutionModeAuto))
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
 	req := rig.onlyRequestOf(t, infraCommitAgent)
@@ -33,6 +34,7 @@ func TestSession_Start_CommitOnIterationEnd_StageBlock_CarriesOnlyExistingIterat
 
 func TestSession_Start_CommitOnIterationEnd_StageBlock_AllFilesExist_FollowTableOrderWithoutShared(t *testing.T) {
 	rig := newStageGroupedRig(t, "2")
+	rig.queueCommitSetup()
 	rig.writeRunFile(t, "Stage-2/Plan.md", "# Plan\n")
 	queueStageRows(rig, map[string]string{
 		"test-writer":  "Stage-2/PlanProgress.md",
@@ -41,7 +43,7 @@ func TestSession_Start_CommitOnIterationEnd_StageBlock_AllFilesExist_FollowTable
 	})
 	rig.queueOK(infraCommitAgent)
 
-	got, err := rig.ses.Start(context.Background(), rig.config("stage-grouped", domain.ExecutionModeAuto))
+	got, err := rig.ses.Start(context.Background(), rig.commitsConfig("stage-grouped", domain.ExecutionModeAuto))
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
 	req := rig.onlyRequestOf(t, infraCommitAgent)
@@ -51,10 +53,11 @@ func TestSession_Start_CommitOnIterationEnd_StageBlock_AllFilesExist_FollowTable
 
 func TestSession_Start_CommitOnIterationEnd_TaskDescriptionNamesBlockAndIterationWithoutGroup(t *testing.T) {
 	rig := newStageGroupedRig(t, "2")
+	rig.queueCommitSetup()
 	queueStageRows(rig, nil)
 	rig.queueOK(infraCommitAgent)
 
-	got, err := rig.ses.Start(context.Background(), rig.config("stage-grouped", domain.ExecutionModeAuto))
+	got, err := rig.ses.Start(context.Background(), rig.commitsConfig("stage-grouped", domain.ExecutionModeAuto))
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
 	req := rig.onlyRequestOf(t, infraCommitAgent)
@@ -68,11 +71,12 @@ func TestSession_Start_CommitOnIterationEnd_TaskDescriptionNamesBlockAndIteratio
 
 func TestSession_Start_CommitOnIterationEnd_CarriesNoOutputsAndNoHITL(t *testing.T) {
 	rig := newStageGroupedRig(t, "2")
+	rig.queueCommitSetup()
 	rig.writeRunFile(t, "Stage-2/Plan.md", "# Plan\n")
 	queueStageRows(rig, nil)
 	rig.queueOK(infraCommitAgent)
 
-	got, err := rig.ses.Start(context.Background(), rig.config("stage-grouped", domain.ExecutionModeAuto))
+	got, err := rig.ses.Start(context.Background(), rig.commitsConfig("stage-grouped", domain.ExecutionModeAuto))
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
 	req := rig.onlyRequestOf(t, infraCommitAgent)
@@ -84,11 +88,12 @@ func TestSession_Start_CommitOnIterationEnd_CarriesNoOutputsAndNoHITL(t *testing
 
 func TestSession_Start_CommitOnIterationEnd_RecordsSentInputsOnTheInfrastructureRow(t *testing.T) {
 	rig := newStageGroupedRig(t, "2")
+	rig.queueCommitSetup()
 	rig.writeRunFile(t, "Stage-2/Plan.md", "# Plan\n")
 	queueStageRows(rig, map[string]string{"test-writer": "Stage-2/PlanProgress.md"})
 	rig.queueOK(infraCommitAgent)
 
-	got, err := rig.ses.Start(context.Background(), rig.config("stage-grouped", domain.ExecutionModeAuto))
+	got, err := rig.ses.Start(context.Background(), rig.commitsConfig("stage-grouped", domain.ExecutionModeAuto))
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
 	rows := infraRowsOf(rig.store, infraCommitAgent)
@@ -103,10 +108,11 @@ func TestSession_Start_CommitOnIterationEnd_RecordsSentInputsOnTheInfrastructure
 
 func TestSession_Start_CommitOnIterationEnd_NoIterationFileExists_StillDispatchedWithEmptyInputs(t *testing.T) {
 	rig := newStageGroupedRig(t, "2")
+	rig.queueCommitSetup()
 	queueStageRows(rig, nil)
 	rig.queueOK(infraCommitAgent)
 
-	got, err := rig.ses.Start(context.Background(), rig.config("stage-grouped", domain.ExecutionModeAuto))
+	got, err := rig.ses.Start(context.Background(), rig.commitsConfig("stage-grouped", domain.ExecutionModeAuto))
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
 	req := rig.onlyRequestOf(t, infraCommitAgent)
@@ -123,12 +129,13 @@ func TestSession_Start_CommitOnIterationEnd_NoIterationFileExists_StillDispatche
 
 func TestSession_Start_CommitOnIterationEnd_NonStageBlock_CarriesEachIterationsOwnFiles(t *testing.T) {
 	rig := newProductRig(t, "iteration-end-product-block-orch.md", infraCommitAgent, "A", "B")
+	rig.queueCommitSetup()
 	queueProductIteration(rig, "A")
 	rig.queueOK(infraCommitAgent)
 	queueProductIteration(rig, "B")
 	rig.queueOK(infraCommitAgent)
 
-	got, err := rig.ses.Start(context.Background(), rig.config("product-block", domain.ExecutionModeAuto))
+	got, err := rig.ses.Start(context.Background(), rig.commitsConfig("product-block", domain.ExecutionModeAuto))
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
 	reqs := rig.requestsOf(infraCommitAgent)
@@ -146,6 +153,7 @@ func TestSession_Start_CommitOnIterationEnd_NonStageBlock_CarriesEachIterationsO
 func TestSession_Start_CommitOnIterationEnd_FillInWildcard_CarriesOnlyTheEndedIterationsMatches(t *testing.T) {
 	rig := newBlockRig(t, "infra-contents-topic-wildcard-orch.md", nil,
 		"planner", "researcher", "synthesizer", infraCommitAgent)
+	rig.queueCommitSetup()
 	rig.queueOK("planner", runFileWrite("TopicPlan.md", scheduleDoc("Topic", "Topics", ids("Pricing", "Support"))))
 	rig.writeRunFiles(t,
 		"A-Pricing-Findings.md", "B-Pricing-Findings.md", "A-Support-Findings.md", "X-ProductMap.md")
@@ -156,7 +164,7 @@ func TestSession_Start_CommitOnIterationEnd_FillInWildcard_CarriesOnlyTheEndedIt
 	rig.queueOK("synthesizer")
 	rig.queueOK(infraCommitAgent)
 
-	got, err := rig.ses.Start(context.Background(), rig.config("topic-wildcard", domain.ExecutionModeAuto))
+	got, err := rig.ses.Start(context.Background(), rig.commitsConfig("topic-wildcard", domain.ExecutionModeAuto))
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
 	reqs := rig.requestsOf(infraCommitAgent)

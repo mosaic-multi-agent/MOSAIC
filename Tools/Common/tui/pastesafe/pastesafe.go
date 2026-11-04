@@ -63,6 +63,7 @@ type Field struct {
 	filter     func(rune) bool
 	clock      Clock
 	errMsg     string
+	width      int // display width of View; <= 0 is unbounded
 	done       bool
 	back       bool
 
@@ -95,6 +96,17 @@ func WithClock(c Clock) Option { return func(f *Field) { f.clock = c } }
 
 // WithRuneFilter keeps only runes for which accept returns true.
 func WithRuneFilter(accept func(rune) bool) Option { return func(f *Field) { f.filter = accept } }
+
+// WithPrompt sets the text shown before the value (default "> "). The width of the
+// prompt counts toward the width set by SetWidth.
+func WithPrompt(p string) Option { return func(f *Field) { f.model.Prompt = p } }
+
+// WithWidth sets the field's display width at construction (see SetWidth).
+func WithWidth(w int) Option { return func(f *Field) { f.SetWidth(w) } }
+
+// SetWidth sets the maximum display width of View, in terminal cells, prompt and
+// cursor included. w <= 0 means unbounded.
+func (f *Field) SetWidth(w int) { f.width = w }
 
 // Init returns the blink command.
 func (f *Field) Init() tea.Cmd { return textinput.Blink }
@@ -213,7 +225,12 @@ func hasLineBreak(rs []rune) bool {
 }
 
 // View renders the input line.
-func (f *Field) View() string { return f.model.View() }
+func (f *Field) View() string {
+	if f.width <= 0 {
+		return f.model.View()
+	}
+	return f.boundedView()
+}
 
 // Value returns the current text.
 func (f *Field) Value() string { return f.model.Value() }

@@ -83,6 +83,11 @@ func sendKey(m *rootModel, keyType tea.KeyType) (tea.Model, tea.Cmd) {
 	return m.Update(tea.KeyMsg{Type: keyType})
 }
 
+// resizeTerminal delivers a terminal resize to the root model.
+func resizeTerminal(m *rootModel, w, h int) {
+	m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+}
+
 func newProgressScreen(m *rootModel) *runflow.ProgressScreen {
 	style := stylesFromTheme(m.theme)
 	return runflow.NewProgressScreen(m.width, m.height, style)

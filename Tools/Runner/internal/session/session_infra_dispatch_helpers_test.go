@@ -60,11 +60,12 @@ func queueProductIteration(rig *blockRig, id string) {
 	rig.queueOK("checker", runFileWrite("checked-"+id+".md", "# checked\n"))
 }
 
-// requestsOf returns, in dispatch order, the request of every dispatch of agent.
+// requestsOf returns, in dispatch order, the request of every dispatch of agent,
+// except the commit setup dispatch of a commits-enabled run.
 func (r *blockRig) requestsOf(agent string) []domain.ProtocolRequest {
 	var out []domain.ProtocolRequest
 	for _, inv := range r.adapter.Invocations() {
-		if inv.Agent.Identifier == agent {
+		if inv.Agent.Identifier == agent && !isCommitSetup(inv.Request) {
 			out = append(out, inv.Request)
 		}
 	}
@@ -83,11 +84,12 @@ func (r *blockRig) onlyRequestOf(t *testing.T, agent string) domain.ProtocolRequ
 }
 
 // infraRowsOf returns, in order, the applied infrastructure rows of agent that
-// record a dispatch (HITL rejection rows are not part of them).
+// record a dispatch (HITL rejection rows and the commit setup row are not part
+// of them).
 func infraRowsOf(store *memStore, agent string) []domain.CompletedStep {
 	var out []domain.CompletedStep
 	for _, s := range store.Applied {
-		if s.IsInfrastructure && !s.HITLRejected && strings.HasPrefix(s.AgentInstance, agent+"#") {
+		if s.IsInfrastructure && !s.HITLRejected && s.Summary != commitSetupSummary && strings.HasPrefix(s.AgentInstance, agent+"#") {
 			out = append(out, s)
 		}
 	}

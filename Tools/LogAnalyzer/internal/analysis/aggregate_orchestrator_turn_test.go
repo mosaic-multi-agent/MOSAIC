@@ -53,11 +53,14 @@ func orchestratorOnlyInput(events ...domain.Event) analysis.Input {
 // pricingForTurnModel prices only pricedTurnModel.
 func pricingForTurnModel() domain.PricingTable {
 	return domain.NewPricingTable([]domain.ModelPricing{{
-		Model:                pricedTurnModel,
-		Input:                domain.Rate(3_000_000_000),
-		CachedInput:          domain.Rate(300_000_000),
-		CacheWrite:           domain.Rate(3_750_000_000),
-		OutputUnderThreshold: domain.Rate(15_000_000_000),
+		Model: pricedTurnModel,
+		Standard: domain.RateSet{
+			Input:        domain.Rate(3_000_000_000),
+			CacheRead:    domain.Rate(300_000_000),
+			CacheWrite5m: domain.Rate(3_750_000_000),
+			CacheWrite1h: domain.Rate(6_000_000_000),
+			Output:       domain.Rate(15_000_000_000),
+		},
 	}})
 }
 
@@ -65,7 +68,7 @@ func pricingForTurnModel() domain.PricingTable {
 func priceOrchestrator(t *testing.T, in analysis.Input) (domain.RunAggregate, domain.RunReport) {
 	t.Helper()
 	agg, _ := analysis.Aggregate(in)
-	report, _ := analysis.Price(agg, pricingForTurnModel(), domain.Source{})
+	report, _ := analysis.Price(agg, pricingForTurnModel(), domain.DefaultAnalysisSettings(), domain.Source{})
 	if len(report.Runs) != 1 {
 		t.Fatalf("got %d priced runs, want 1", len(report.Runs))
 	}

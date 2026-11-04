@@ -209,10 +209,12 @@ func TestValidate_SubjectWithoutAgentField_ReportsMissingSubjectAgent(t *testing
 	})
 
 	_, report := preflight.Validate(preflight.Input{
-		SuitePath:   filepath.Join(root, "suite.suite.yaml"),
-		FixtureRoot: filepath.Join(root, "fixtures"),
-		HarnessID:   "claude-code",
-		Deploy:      &fakeDeployer{}, // succeeds for anything that reaches it
+		SuitePath:     filepath.Join(root, "suite.suite.yaml"),
+		FixtureRoot:   filepath.Join(root, "fixtures"),
+		HarnessID:     "claude-code",
+		Deploy:        &fakeDeployer{}, // succeeds for anything that reaches it
+		Overrides:     selectedModels(),
+		CatalogFolder: catalogWith(t, nil),
 	})
 
 	if !hasDiagnosticCode(report, "missing-subject-agent") {
@@ -235,10 +237,12 @@ func TestValidate_SubjectAgentNotInCatalogue_ReportsUnknownSubjectAgent(t *testi
 	})
 
 	_, report := preflight.Validate(preflight.Input{
-		SuitePath:   filepath.Join(root, "suite.suite.yaml"),
-		FixtureRoot: filepath.Join(root, "fixtures"),
-		HarnessID:   "claude-code",
-		Deploy:      returningRenderError("agent-not-in-catalog", "orchestrator"),
+		SuitePath:     filepath.Join(root, "suite.suite.yaml"),
+		FixtureRoot:   filepath.Join(root, "fixtures"),
+		HarnessID:     "claude-code",
+		Deploy:        returningRenderError("agent-not-in-catalog", "orchestrator"),
+		Overrides:     selectedModels(),
+		CatalogFolder: catalogWith(t, nil),
 	})
 
 	if !hasDiagnosticCode(report, "unknown-subject-agent") {
@@ -262,10 +266,12 @@ func TestValidate_UnknownWorkflowId_ReportsUnknownWorkflowNamingTheId(t *testing
 	})
 
 	_, report := preflight.Validate(preflight.Input{
-		SuitePath:   filepath.Join(root, "suite.suite.yaml"),
-		FixtureRoot: filepath.Join(root, "fixtures"),
-		HarnessID:   "claude-code",
-		Deploy:      returningRenderError("unknown-workflow", "nonexistent-workflow"),
+		SuitePath:     filepath.Join(root, "suite.suite.yaml"),
+		FixtureRoot:   filepath.Join(root, "fixtures"),
+		HarnessID:     "claude-code",
+		Deploy:        returningRenderError("unknown-workflow", "nonexistent-workflow"),
+		Overrides:     selectedModels(),
+		CatalogFolder: catalogWith(t, nil),
 	})
 
 	if !hasDiagnosticCode(report, "unknown-workflow") {
@@ -300,10 +306,12 @@ func TestValidate_SubjectDeclarationOtherRenderFailure_ReportsUnrenderableSubjec
 	})
 
 	_, report := preflight.Validate(preflight.Input{
-		SuitePath:   filepath.Join(root, "suite.suite.yaml"),
-		FixtureRoot: filepath.Join(root, "fixtures"),
-		HarnessID:   "claude-code",
-		Deploy:      returningRenderError("internal", ""),
+		SuitePath:     filepath.Join(root, "suite.suite.yaml"),
+		FixtureRoot:   filepath.Join(root, "fixtures"),
+		HarnessID:     "claude-code",
+		Deploy:        returningRenderError("internal", ""),
+		Overrides:     selectedModels(),
+		CatalogFolder: catalogWith(t, nil),
 	})
 
 	if !hasDiagnosticCode(report, "unrenderable-subject-declaration") {
@@ -325,10 +333,12 @@ func TestValidate_SubjectFutureReasonCode_TreatedAsUnrenderableSubject(t *testin
 	})
 
 	_, report := preflight.Validate(preflight.Input{
-		SuitePath:   filepath.Join(root, "suite.suite.yaml"),
-		FixtureRoot: filepath.Join(root, "fixtures"),
-		HarnessID:   "claude-code",
-		Deploy:      returningRenderError("some-reason-code-from-a-future-version", ""),
+		SuitePath:     filepath.Join(root, "suite.suite.yaml"),
+		FixtureRoot:   filepath.Join(root, "fixtures"),
+		HarnessID:     "claude-code",
+		Deploy:        returningRenderError("some-reason-code-from-a-future-version", ""),
+		Overrides:     selectedModels(),
+		CatalogFolder: catalogWith(t, nil),
 	})
 
 	if !hasDiagnosticCode(report, "unrenderable-subject-declaration") {
@@ -375,10 +385,12 @@ func TestValidate_ReasonCodesToDiagnostics(t *testing.T) {
 			})
 
 			_, report := preflight.Validate(preflight.Input{
-				SuitePath:   filepath.Join(root, "suite.suite.yaml"),
-				FixtureRoot: filepath.Join(root, "fixtures"),
-				HarnessID:   "claude-code",
-				Deploy:      returningRenderError(tc.reason, tc.detail),
+				SuitePath:     filepath.Join(root, "suite.suite.yaml"),
+				FixtureRoot:   filepath.Join(root, "fixtures"),
+				HarnessID:     "claude-code",
+				Deploy:        returningRenderError(tc.reason, tc.detail),
+				Overrides:     selectedModels(),
+				CatalogFolder: catalogWith(t, nil),
 			})
 
 			if !hasDiagnosticCode(report, tc.wantCode) {
@@ -424,10 +436,12 @@ stub_agents:
 	})
 
 	_, report := preflight.Validate(preflight.Input{
-		SuitePath:   filepath.Join(root, "suite.suite.yaml"),
-		FixtureRoot: filepath.Join(root, "fixtures"),
-		HarnessID:   "claude-code",
-		Deploy:      &fakeDeployer{}, // source file missing, so render should not be reached
+		SuitePath:     filepath.Join(root, "suite.suite.yaml"),
+		FixtureRoot:   filepath.Join(root, "fixtures"),
+		HarnessID:     "claude-code",
+		Deploy:        &fakeDeployer{}, // source file missing, so render should not be reached
+		Overrides:     selectedModels(),
+		CatalogFolder: catalogWith(t, nil),
 	})
 
 	if !hasDiagnosticCode(report, "missing-stub-definition") {
@@ -487,10 +501,12 @@ stub_agents:
 	}
 
 	_, report := preflight.Validate(preflight.Input{
-		SuitePath:   filepath.Join(root, "suite.suite.yaml"),
-		FixtureRoot: filepath.Join(root, "fixtures"),
-		HarnessID:   "claude-code",
-		Deploy:      deploy,
+		SuitePath:     filepath.Join(root, "suite.suite.yaml"),
+		FixtureRoot:   filepath.Join(root, "fixtures"),
+		HarnessID:     "claude-code",
+		Deploy:        deploy,
+		Overrides:     selectedModels(),
+		CatalogFolder: catalogWith(t, nil),
 	})
 
 	if !hasDiagnosticCode(report, "unrenderable-stub-definition") {
@@ -515,10 +531,12 @@ func TestValidate_ToolUnavailable_ReportedAsEnvironmentProblem(t *testing.T) {
 	})
 
 	_, report := preflight.Validate(preflight.Input{
-		SuitePath:   filepath.Join(root, "suite.suite.yaml"),
-		FixtureRoot: filepath.Join(root, "fixtures"),
-		HarnessID:   "claude-code",
-		Deploy:      returningToolUnavailable(),
+		SuitePath:     filepath.Join(root, "suite.suite.yaml"),
+		FixtureRoot:   filepath.Join(root, "fixtures"),
+		HarnessID:     "claude-code",
+		Deploy:        returningToolUnavailable(),
+		Overrides:     selectedModels(),
+		CatalogFolder: catalogWith(t, nil),
 	})
 
 	// Must NOT produce declaration diagnostics when the tool itself is broken.
@@ -549,10 +567,12 @@ func TestValidate_TimedOut_ReportedAsEnvironmentProblem(t *testing.T) {
 	})
 
 	_, report := preflight.Validate(preflight.Input{
-		SuitePath:   filepath.Join(root, "suite.suite.yaml"),
-		FixtureRoot: filepath.Join(root, "fixtures"),
-		HarnessID:   "claude-code",
-		Deploy:      returningTimedOut(),
+		SuitePath:     filepath.Join(root, "suite.suite.yaml"),
+		FixtureRoot:   filepath.Join(root, "fixtures"),
+		HarnessID:     "claude-code",
+		Deploy:        returningTimedOut(),
+		Overrides:     selectedModels(),
+		CatalogFolder: catalogWith(t, nil),
 	})
 
 	if hasDiagnosticCode(report, "unrenderable-subject-declaration") {
@@ -601,10 +621,12 @@ stub_agents:
 	})
 
 	_, report := preflight.Validate(preflight.Input{
-		SuitePath:   filepath.Join(root, "suite.suite.yaml"),
-		FixtureRoot: filepath.Join(root, "fixtures"),
-		HarnessID:   "claude-code",
-		Deploy:      &fakeDeployer{},
+		SuitePath:     filepath.Join(root, "suite.suite.yaml"),
+		FixtureRoot:   filepath.Join(root, "fixtures"),
+		HarnessID:     "claude-code",
+		Deploy:        &fakeDeployer{},
+		Overrides:     selectedModels(),
+		CatalogFolder: catalogWith(t, nil),
 	})
 
 	missingAgent := hasDiagnosticCode(report, "missing-subject-agent")
@@ -637,10 +659,12 @@ func TestValidate_DeployNil_SkipsRenderBasedChecks(t *testing.T) {
 	})
 
 	_, report := preflight.Validate(preflight.Input{
-		SuitePath:   filepath.Join(root, "suite.suite.yaml"),
-		FixtureRoot: filepath.Join(root, "fixtures"),
-		HarnessID:   "claude-code",
-		Deploy:      nil, // no deployer supplied
+		SuitePath:     filepath.Join(root, "suite.suite.yaml"),
+		FixtureRoot:   filepath.Join(root, "fixtures"),
+		HarnessID:     "claude-code",
+		Deploy:        nil, // no deployer supplied
+		Overrides:     selectedModels(),
+		CatalogFolder: catalogWith(t, nil),
 	})
 
 	// Render-based checks must be absent when Deploy is nil.
@@ -667,10 +691,12 @@ func TestValidate_DeployNil_FieldInspectionCheckStillFires(t *testing.T) {
 	})
 
 	_, report := preflight.Validate(preflight.Input{
-		SuitePath:   filepath.Join(root, "suite.suite.yaml"),
-		FixtureRoot: filepath.Join(root, "fixtures"),
-		HarnessID:   "claude-code",
-		Deploy:      nil, // no deployer supplied
+		SuitePath:     filepath.Join(root, "suite.suite.yaml"),
+		FixtureRoot:   filepath.Join(root, "fixtures"),
+		HarnessID:     "claude-code",
+		Deploy:        nil, // no deployer supplied
+		Overrides:     selectedModels(),
+		CatalogFolder: catalogWith(t, nil),
 	})
 
 	// missing-subject-agent is a field inspection: it must fire regardless of
@@ -727,10 +753,12 @@ stub_registry: subject.stubs.json
 	})
 
 	_, report := preflight.Validate(preflight.Input{
-		SuitePath:   filepath.Join(root, "suite.suite.yaml"),
-		FixtureRoot: filepath.Join(root, "fixtures"),
-		HarnessID:   "claude-code",
-		Deploy:      nil, // registry inspection — no render needed
+		SuitePath:     filepath.Join(root, "suite.suite.yaml"),
+		FixtureRoot:   filepath.Join(root, "fixtures"),
+		HarnessID:     "claude-code",
+		Deploy:        nil, // registry inspection — no render needed
+		Overrides:     selectedModels(),
+		CatalogFolder: catalogWith(t, nil),
 	})
 
 	if !hasDiagnosticCode(report, "undeclared-stub-agent") {
@@ -778,10 +806,12 @@ stub_registry: subject.stubs.json
 	deployer := &fakeDeployer{}
 
 	preflight.Validate(preflight.Input{
-		SuitePath:   filepath.Join(root, "suite.suite.yaml"),
-		FixtureRoot: filepath.Join(root, "fixtures"),
-		HarnessID:   "claude-code",
-		Deploy:      deployer,
+		SuitePath:     filepath.Join(root, "suite.suite.yaml"),
+		FixtureRoot:   filepath.Join(root, "fixtures"),
+		HarnessID:     "claude-code",
+		Deploy:        deployer,
+		Overrides:     selectedModels(),
+		CatalogFolder: catalogWith(t, nil),
 	})
 
 	if len(deployer.deployCalls) == 0 {
@@ -892,10 +922,12 @@ func TestValidate_CataloguePathWithDeployPresent_SuppressesUndeclaredStubAgent(t
 	})
 
 	_, report := preflight.Validate(preflight.Input{
-		SuitePath:   filepath.Join(root, "suite.suite.yaml"),
-		FixtureRoot: filepath.Join(root, "fixtures"),
-		HarnessID:   "claude-code",
-		Deploy:      &fakeDeployer{},
+		SuitePath:     filepath.Join(root, "suite.suite.yaml"),
+		FixtureRoot:   filepath.Join(root, "fixtures"),
+		HarnessID:     "claude-code",
+		Deploy:        &fakeDeployer{},
+		Overrides:     selectedModels(),
+		CatalogFolder: catalogWith(t, nil),
 	})
 
 	if hasDiagnosticCode(report, "undeclared-stub-agent") {
@@ -925,10 +957,12 @@ func TestValidate_NonCataloguePathNoDeployPresent_EmitsUndeclaredStubAgent(t *te
 	})
 
 	_, report := preflight.Validate(preflight.Input{
-		SuitePath:   filepath.Join(root, "suite.suite.yaml"),
-		FixtureRoot: filepath.Join(root, "fixtures"),
-		HarnessID:   "claude-code",
-		Deploy:      nil,
+		SuitePath:     filepath.Join(root, "suite.suite.yaml"),
+		FixtureRoot:   filepath.Join(root, "fixtures"),
+		HarnessID:     "claude-code",
+		Deploy:        nil,
+		Overrides:     selectedModels(),
+		CatalogFolder: catalogWith(t, nil),
 	})
 
 	if !hasDiagnosticCode(report, "undeclared-stub-agent") {
@@ -953,10 +987,12 @@ func TestValidate_NonCataloguePathWithDeployPresent_EmitsUndeclaredStubAgent(t *
 	})
 
 	_, report := preflight.Validate(preflight.Input{
-		SuitePath:   filepath.Join(root, "suite.suite.yaml"),
-		FixtureRoot: filepath.Join(root, "fixtures"),
-		HarnessID:   "claude-code",
-		Deploy:      &fakeDeployer{},
+		SuitePath:     filepath.Join(root, "suite.suite.yaml"),
+		FixtureRoot:   filepath.Join(root, "fixtures"),
+		HarnessID:     "claude-code",
+		Deploy:        &fakeDeployer{},
+		Overrides:     selectedModels(),
+		CatalogFolder: catalogWith(t, nil),
 	})
 
 	if !hasDiagnosticCode(report, "undeclared-stub-agent") {

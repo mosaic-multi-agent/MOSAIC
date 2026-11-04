@@ -25,7 +25,7 @@ type HarnessOnlyAgent struct {
 	// Version is the frontmatter `version` scalar, or "" when absent. Harness-only
 	// agents commonly have none; see the staleness contract in the Update flow design.
 	Version string
-	// TransformVersion is the frontmatter `transform_version` scalar. Never empty for
+	// TransformVersion is the MOSAIC version stamp value (harness_version preferred, else transform_version), as read by agentfields.ReadVersionStamp. Never empty for
 	// an eligible agent — its presence is signal one of the eligibility rule.
 	TransformVersion string
 	// Role is the frontmatter `role` scalar parsed through domain.ParseAgentRole.

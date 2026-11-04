@@ -41,6 +41,7 @@ func TestValidate_DeclaredIdentityUnproducibleByHarness_ReportsError(t *testing.
 		Capabilities: domain.HarnessCapabilities{
 			ProducibleToolNames: []string{domain.DispatchToolName},
 		},
+		Overrides: selectedModels(),
 	})
 
 	if !report.HasErrors() {
@@ -85,6 +86,7 @@ func TestValidate_DeclaredIdentityProducibleByHarness_ValidatesCleanly(t *testin
 		Capabilities: domain.HarnessCapabilities{
 			ProducibleToolNames: []string{"Task"},
 		},
+		Overrides: selectedModels(),
 	})
 
 	for _, d := range report.Diagnostics {

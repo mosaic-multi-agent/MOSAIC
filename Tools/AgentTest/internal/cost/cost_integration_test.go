@@ -254,9 +254,10 @@ func stageTestPricingConfig(t *testing.T) string {
 models:
   claude-sonnet-4-6:
     input: "3.00"
-    cached_input: "0.30"
-    cache_write: "3.75"
-    output_under_threshold: "15.00"
+    cache_read: "0.30"
+    cache_write_5m: "3.75"
+    cache_write_1h: "6.00"
+    output: "15.00"
 `
 	pricingPath := filepath.Join(configDir, "pricing.yaml")
 	if err := os.WriteFile(pricingPath, []byte(pricingYAML), 0o644); err != nil {

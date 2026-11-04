@@ -64,6 +64,18 @@ type Deps struct {
 	// through from the adapter without interpreting it.
 	Deploy domain.AgentDeployer
 
+	// CatalogFolder is the test catalog folder the Deploy port was built
+	// with. The pre-spawn check reads each deployed agent's declared tier
+	// from this folder's agent files, never from Deploy's output. Empty means
+	// Deploy reads the product catalogue: on the catalogue path every
+	// deployed agent then fails the check with "no catalog entry". Unused on
+	// the stub_agents path.
+	CatalogFolder string
+
+	// ObservedModels supplies the subject's observed model(s). nil yields
+	// NoEvidencePortUnavailable for every run (fail closed).
+	ObservedModels domain.ObservedModelProvider
+
 	// SandboxDiagnostics, when true, instructs the runner to set
 	// SpawnPlan.DiagnosticLog to the sandbox's diagnostic log path before
 	// handing the plan to the launcher. False leaves DiagnosticLog empty,
@@ -97,6 +109,10 @@ type Request struct {
 // is returned, and the result reflects what eval produced for that attempt.
 func Run(ctx context.Context, d Deps, req Request, eval domain.AttemptEvaluator) (result domain.TestResult, runErr error) {
 	start := d.Clock.Now()
+
+	// The subject always runs the selected subject model: the authored
+	// Subject.Model is legacy and never reaches provisioning or the launch.
+	req.Test.Definition.Subject.Model = req.Test.Models.Subject
 
 	var (
 		sb           domain.Sandbox
@@ -161,7 +177,7 @@ func Run(ctx context.Context, d Deps, req Request, eval domain.AttemptEvaluator)
 
 	// Resolve the runtime model pair: subject tier is taken directly from the
 	// runtime selection; stub tier falls back to the subject tier when absent,
-	// mirroring the stub-tier fallback in buildTierModelMap. Only the runtime
+	// mirroring ModelSelection.TierModels. Only the runtime
 	// values are recorded — not the authored subject.Model / subject.StubModel
 	// fields, which are legacy scaffolding and inert in normal operation —
 	// so the evidence reflects the model the frontend chose, not a definition
@@ -175,6 +191,8 @@ func Run(ctx context.Context, d Deps, req Request, eval domain.AttemptEvaluator)
 	if vr, ok := d.Adapter.(domain.HarnessVersionReporter); ok {
 		snap.HarnessVersion = vr.HarnessVersion(ctx)
 	}
+
+	snap.ObservedSubjectModels = queryObservedModels(ctx, d, snap, req.Key.RunID)
 
 	costReport, costErr := d.Cost.Cost(ctx, domain.CostQuery{
 		LogRoot:  snap.LogRoot,
@@ -203,6 +221,7 @@ func Run(ctx context.Context, d Deps, req Request, eval domain.AttemptEvaluator)
 		result.SubjectVersion = evidence.SubjectVersion
 		result.SubjectModel = evidence.SubjectModel
 		result.StubModel = evidence.StubModel
+		result.ObservedSubjectModels = append([]string(nil), evidence.ObservedSubjectModels.Models...)
 		result.HarnessVersion = evidence.HarnessVersion
 	}
 
@@ -223,6 +242,7 @@ func Run(ctx context.Context, d Deps, req Request, eval domain.AttemptEvaluator)
 // the ledger describing what exists.
 func setup(ctx context.Context, d Deps, req Request) (domain.Sandbox, SetupLedger, error) {
 	var ledger SetupLedger
+	var targets []definitionTarget
 
 	// 1. Create the sandbox.
 	sb, err := d.Workspaces.Create(req.Key)
@@ -256,7 +276,7 @@ func setup(ctx context.Context, d Deps, req Request) (domain.Sandbox, SetupLedge
 			WorkspaceRoot:          sb.SubjectDir,
 			Workflows:              req.Test.Definition.Subject.Workflows,
 			InfrastructureAgentIDs: req.Test.Definition.Subject.InfrastructureAgentIDs,
-			TierModels:             buildTierModelMap(req.Test.Definition.Subject, req.Test.Models),
+			TierModels:             req.Test.Models.TierModels(),
 			// LogDir routes the deployment tool's per-run log files into the
 			// run's own sandbox directory. The deploy logs are per-run evidence
 			// and coupling their lifetime to the sandbox is intentional: the
@@ -274,6 +294,11 @@ func setup(ctx context.Context, d Deps, req Request) (domain.Sandbox, SetupLedge
 			ledger.Provisioning.Files = append(ledger.Provisioning.Files, agent.DestinationPath)
 		}
 		ledger.Provisioning.Dirs = append(ledger.Provisioning.Dirs, result.CreatedDirectories...)
+		var targetsErr error
+		targets, targetsErr = catalogueTargets(result.Agents, d.CatalogFolder, req.Test.Models)
+		if targetsErr != nil {
+			return sb, ledger, targetsErr
+		}
 
 		// Derive the subject's definition path from the DeployedAgent entry
 		// whose Key matches the declared catalogue agent key. No positional
@@ -310,7 +335,7 @@ func setup(ctx context.Context, d Deps, req Request) (domain.Sandbox, SetupLedge
 				CatalogAgentKey: req.Test.Definition.Subject.CatalogAgentKey,
 				HarnessID:       d.Adapter.ID(),
 				WorkspaceRoot:   sb.SubjectDir,
-				Model:           req.Test.Definition.Subject.Model,
+				Model:           req.Test.Models.Subject,
 				Workflows:       req.Test.Definition.Subject.Workflows,
 			})
 			if renderErr != nil {
@@ -320,6 +345,10 @@ func setup(ctx context.Context, d Deps, req Request) (domain.Sandbox, SetupLedge
 			// Record before using so teardown sees the path even if a later step fails.
 			ledger.Provisioning.Files = append(ledger.Provisioning.Files, result.DestinationPath)
 			ledger.Provisioning.Dirs = append(ledger.Provisioning.Dirs, result.CreatedDirectories...)
+			targets = append(targets, definitionTarget{
+				agent: firstNonEmpty(result.AgentKey, req.Test.Definition.Subject.CatalogAgentKey),
+				path:  result.DestinationPath, tier: domain.TierTestSubject, expected: req.Test.Models.Subject,
+			})
 
 			// Capture the subject's source version at render time.
 			ledger.SubjectVersion = result.SourceVersion
@@ -342,6 +371,7 @@ func setup(ctx context.Context, d Deps, req Request) (domain.Sandbox, SetupLedge
 				SourcePath:    stub.SourcePath,
 				HarnessID:     d.Adapter.ID(),
 				WorkspaceRoot: sb.SubjectDir,
+				Model:         req.Test.Models.TierModels()[domain.TierTestStub],
 			})
 			if renderErr != nil {
 				return sb, ledger, fmt.Errorf("runner: rendering stub %q: %w",
@@ -350,7 +380,18 @@ func setup(ctx context.Context, d Deps, req Request) (domain.Sandbox, SetupLedge
 			// Record before moving to the next stub.
 			ledger.Provisioning.Files = append(ledger.Provisioning.Files, result.DestinationPath)
 			ledger.Provisioning.Dirs = append(ledger.Provisioning.Dirs, result.CreatedDirectories...)
+			targets = append(targets, definitionTarget{
+				agent: firstNonEmpty(result.AgentKey, stub.Identity.AgentIdentity),
+				path:  result.DestinationPath, tier: domain.TierTestStub,
+				expected: req.Test.Models.TierModels()[domain.TierTestStub],
+			})
 		}
+	}
+
+	// Pre-spawn check: what was deployed must carry the selected models,
+	// whatever the deployment tool reported.
+	if err := checkDefinitionModels(d.Adapter, targets); err != nil {
+		return sb, ledger, err
 	}
 
 	// 3. Seed declared files, resolving $ref through the fixture resolver,
@@ -423,40 +464,6 @@ func setup(ctx context.Context, d Deps, req Request) (domain.Sandbox, SetupLedge
 	_ = SaveSetupLedger(sb.SetupLedgerPath(), ledger)
 
 	return sb, ledger, nil
-}
-
-// buildTierModelMap constructs the two-entry tier-model map the catalogue path
-// sends on both the setup Deploy and the preflight dry-run Deploy. Both entries
-// are always present.
-//
-// Precedence, per tier, highest first:
-//
-//	subject tier: sel.Subject, then subject.Model
-//	stub tier:    sel.Stub, then subject.StubModel, then the resolved
-//	              subject-tier value above
-//
-// The final fallback is deliberate: an absent stub model yields a working run
-// that costs more (the subject's model is used for every stub too) rather than
-// a broken one. Once the authoring fields are retired the chain collapses to
-// sel.Stub, then sel.Subject.
-func buildTierModelMap(subject domain.SubjectUnderTest, sel domain.ModelSelection) map[string]string {
-	subjectTier := sel.Subject
-	if subjectTier == "" {
-		subjectTier = subject.Model
-	}
-
-	stubTier := sel.Stub
-	if stubTier == "" {
-		stubTier = subject.StubModel
-	}
-	if stubTier == "" {
-		stubTier = subjectTier
-	}
-
-	return map[string]string{
-		domain.TierTestSubject: subjectTier,
-		domain.TierTestStub:    stubTier,
-	}
 }
 
 // subjectWithRunIDPrelude returns a copy of subject whose opening message
@@ -861,11 +868,15 @@ type Snapshot struct {
 
 	// SubjectModel and StubModel are the resolved tier-model map values that
 	// were passed to the deployment port. They are populated in Run from
-	// buildTierModelMap so BuildEvidence reads the same values the deployer
+	// the selection's tier derivation so BuildEvidence reads the same values the deployer
 	// received — not the raw ModelSelection fields, which do not include the
 	// stub-tier fallback to the subject model when no stub model was selected.
 	SubjectModel string
 	StubModel    string
+
+	// ObservedSubjectModels is the observed-model port's answer for this run,
+	// carried unchanged into RunEvidence.
+	ObservedSubjectModels domain.ObservedModelEvidence
 
 	// HarnessID is the stable identifier of the harness adapter that served
 	// this run, set from d.Adapter.ID() at the same point SubjectModel is
@@ -993,12 +1004,15 @@ func BuildEvidence(req Request, snap Snapshot, cost domain.CostReport, dur time.
 
 		// Record the resolved tier-model map values — the same values the
 		// deployment port received — so the report reflects what was actually
-		// deployed. When no stub model was selected, buildTierModelMap falls back
+		// deployed. When no stub model was selected, ModelSelection.TierModels falls back
 		// to the subject tier, so snap.StubModel matches what ran rather than
 		// reporting an empty string. The "" → "unknown" display mapping is the
 		// report layer's responsibility; the runner carries the resolved string.
-		SubjectModel:   snap.SubjectModel,
-		StubModel:      snap.StubModel,
+		SubjectModel: snap.SubjectModel,
+		StubModel:    snap.StubModel,
+
+		ObservedSubjectModels: snap.ObservedSubjectModels,
+
 		HarnessID:      snap.HarnessID,
 		HarnessVersion: snap.HarnessVersion,
 	}

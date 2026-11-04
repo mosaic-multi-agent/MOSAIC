@@ -12,25 +12,27 @@ import (
 	"mosaic-log-analyzer/internal/domain"
 )
 
-// Put persists one model entry to the pricing YAML file.
+// putAt persists one model entry to the pricing YAML file at path.
 //
 // If the file does not exist it is created, including any missing parent
-// directories. If the file exists the entry is added or the existing entry for
+// directories, and the built-in template documentation is written ahead of the
+// entries. If the file exists the entry is added or the existing entry for
 // that model is replaced; all other entries are preserved.
 //
 // Comment preservation: leading comments in the existing file (lines before the
 // first non-comment, non-blank content) are written back to the head of the file
 // so user annotations and the shipped file's documentation survive a round-trip.
-func (s *Store) Put(_ context.Context, entry domain.ModelPricing) error {
+func (s *Store) putAt(path string, entry domain.ModelPricing) error {
 	var file pricingFileYAML
 	var headerComments string
 
-	raw, readErr := os.ReadFile(s.path)
+	raw, readErr := os.ReadFile(path)
 	if readErr != nil {
 		if !os.IsNotExist(readErr) {
 			return fmt.Errorf("read pricing file: %w", readErr)
 		}
-		// File absent: start with an empty models map.
+		// File absent: start with the built-in template and an empty models map.
+		headerComments = pricingTemplate
 		file.Models = make(map[string]modelEntryYAML)
 	} else {
 		// Extract comment lines that precede the first non-comment content so they
@@ -45,8 +47,9 @@ func (s *Store) Put(_ context.Context, entry domain.ModelPricing) error {
 		}
 	}
 
-	// Add or replace the entry.
-	file.Models[string(entry.Model)] = fromDomain(entry)
+	// Add or replace the entry in its provider section, or in top-level models
+	// when it carries no provider.
+	file.set(entry)
 
 	// Marshal the updated models map back to YAML.
 	data, err := yaml.Marshal(&file)
@@ -62,15 +65,36 @@ func (s *Store) Put(_ context.Context, entry domain.ModelPricing) error {
 	buf.Write(data)
 
 	// Ensure the parent directory exists before writing.
-	if mkdirErr := os.MkdirAll(filepath.Dir(s.path), 0o755); mkdirErr != nil {
+	if mkdirErr := os.MkdirAll(filepath.Dir(path), 0o755); mkdirErr != nil {
 		return fmt.Errorf("create pricing config directory: %w", mkdirErr)
 	}
 
-	if writeErr := os.WriteFile(s.path, buf.Bytes(), 0o644); writeErr != nil {
+	if writeErr := os.WriteFile(path, buf.Bytes(), 0o644); writeErr != nil {
 		return fmt.Errorf("write pricing file: %w", writeErr)
 	}
 
 	return nil
+}
+
+// set adds or replaces the entry at (provider, model); an entry without a
+// provider goes to the top-level models section.
+func (f *pricingFileYAML) set(entry domain.ModelPricing) {
+	if entry.Provider == "" {
+		if f.Models == nil {
+			f.Models = make(map[string]modelEntryYAML)
+		}
+		f.Models[string(entry.Model)] = fromDomain(entry)
+		return
+	}
+	if f.Providers == nil {
+		f.Providers = make(map[string]providerYAML)
+	}
+	section := f.Providers[string(entry.Provider)]
+	if section.Models == nil {
+		section.Models = make(map[string]modelEntryYAML)
+	}
+	section.Models[string(entry.Model)] = fromDomain(entry)
+	f.Providers[string(entry.Provider)] = section
 }
 
 // extractHeaderComments returns the leading comment and blank lines from a YAML
@@ -88,4 +112,31 @@ func extractHeaderComments(content string) string {
 		}
 	}
 	return sb.String()
+}
+
+// Put persists one model entry to the file of level and returns the file written.
+func (s *Store) Put(_ context.Context, level domain.ConfigLevel, entry domain.ModelPricing) (domain.ConfigFile, error) {
+	path, err := s.targetPath(level)
+	if err != nil {
+		return domain.ConfigFile{}, err
+	}
+	if err := s.putAt(path, entry); err != nil {
+		return domain.ConfigFile{}, err
+	}
+	return domain.ConfigFile{Level: level, Path: path, Exists: true}, nil
+}
+
+// targetPath resolves the file a save at level writes.
+func (s *Store) targetPath(level domain.ConfigLevel) (string, error) {
+	switch level {
+	case domain.LevelProject:
+		return s.path, nil
+	case domain.LevelGlobal:
+		if p := s.globalPath(); p != "" {
+			return p, nil
+		}
+		return "", fmt.Errorf("%w: global pricing file: user config folder not found", domain.ErrConfigLevelUnavailable)
+	default:
+		return "", fmt.Errorf("%w: %s", domain.ErrInvalidConfigLevel, level)
+	}
 }

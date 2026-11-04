@@ -13,6 +13,7 @@ import (
 	"time"
 
 	commonharness "mosaic-common/harness"
+	"mosaic-common/logappend"
 
 	"mosaic-run/internal/domain"
 )
@@ -211,20 +212,7 @@ func (w *Writer) append(path, runID string, ev event) bool {
 		w.fail(path, err)
 		return false
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		w.fail(path, err)
-		return false
-	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		w.fail(path, err)
-		return false
-	}
-	_, err = f.Write(buf.Bytes())
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
+	if err := logappend.Append(path, buf.Bytes()); err != nil {
 		w.fail(path, err)
 		return false
 	}

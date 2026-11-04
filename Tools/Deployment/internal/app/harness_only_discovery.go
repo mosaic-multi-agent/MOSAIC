@@ -13,6 +13,7 @@ import (
 	"mosaic-common/docformat"
 	"mosaic-deploy/internal/agentfields"
 	"mosaic-deploy/internal/catalog"
+	"mosaic-deploy/internal/agentkey"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -50,8 +51,9 @@ var blockingValidationCodes = map[string]bool{
 
 // eligibleHarnessOnly applies the two-signal harness-only detection rule to file bytes.
 //
-// Signal one: parsed frontmatter is present and carries a non-empty `transform_version`
-// scalar — the marker Tools/OldAgentsTransform stamps onto any file it boundary-tags.
+// Signal one: parsed frontmatter is present and carries a non-empty scalar for any key of
+// agentfields.VersionStampKeys() - the current harness version stamp or the legacy
+// transform version stamp.
 //
 // Signal two: the body carries a structurally valid set of canonical MOSAIC boundary
 // tags. Concretely, ALL of:
@@ -80,21 +82,19 @@ func eligibleHarnessOnly(src []byte) EligibilityVerdict {
 		}
 	}
 
-	// Signal one: non-empty transform_version scalar in frontmatter. Both the prefixed
-	// (mosaic_-prefixed) and legacy (unprefixed) names are accepted via agentfields.ReadOrder,
-	// with the prefixed name preferred when both are present.
-	tvField, _ := agentfields.ByDeployedName("transform_version")
-	var transformVersion string
-	for _, key := range agentfields.ReadOrder(tvField) {
-		if v, ok := fm.Get(key); ok && v.Kind == domain.KindScalar && v.Scalar != "" {
-			transformVersion = v.Scalar
-			break
+	// Signal one: a non-empty scalar for any key of agentfields.VersionStampKeys() (the
+	// current harness version stamp or the legacy transform version stamp).
+	transformVersion, stamped := agentfields.ReadVersionStamp(func(key string) string {
+		if v, ok := fm.Get(key); ok && v.Kind == domain.KindScalar {
+			return v.Scalar
 		}
-	}
-	if transformVersion == "" {
+		return ""
+	})
+	if !stamped {
 		return EligibilityVerdict{
 			Eligible: false,
-			Reason:   "frontmatter does not carry a non-empty transform_version scalar",
+			Reason: "frontmatter does not carry a non-empty MOSAIC version stamp scalar (checked: " +
+				strings.Join(agentfields.VersionStampKeys(), ", ") + ")",
 		}
 	}
 
@@ -187,16 +187,6 @@ func isOrchestratorFileName(name string) bool {
 		lower == "orchestrator-script.agent.md"
 }
 
-// agentKeyFromFileName derives an agent key from a deployed file name by stripping the
-// trailing ".agent.md" or ".md" suffix, matching how the catalog derives a key from a
-// generic source file name.
-func agentKeyFromFileName(name string) string {
-	if strings.HasSuffix(name, ".agent.md") {
-		return strings.TrimSuffix(name, ".agent.md")
-	}
-	return strings.TrimSuffix(name, ".md")
-}
-
 // catalogAgentKeys returns the set of every agent key the generic catalog knows about:
 // worker agents (Agents), utility agents (UtilityAgents), the orchestrator (Orchestrator),
 // and the script orchestrator (OrchestratorScript). A deployed file whose derived key is in
@@ -274,7 +264,7 @@ func scanHarnessOnlyAgents(workspace, agentsDir string, catalogKeys map[string]b
 		}
 
 		// Derive agent key and check against catalog.
-		key := agentKeyFromFileName(name)
+		key := agentkey.FromFileName(name)
 		if catalogKeys[key] {
 			// This file has a generic catalog counterpart; not harness-only.
 			continue

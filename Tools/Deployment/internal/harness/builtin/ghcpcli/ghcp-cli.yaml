@@ -1,8 +1,7 @@
 schema_version: "1"
 id: "ghcp-cli"
-display_name: "GitHub Copilot CLI"
+display_name: "GHCP CLI / VS Code GHCP Copilot"
 transform_version: "3.0.0"
-injections_version: "1.2.0"
 
 tools:
   shape: list

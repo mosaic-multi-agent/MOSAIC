@@ -18,18 +18,20 @@ import (
 // file-existence check because the run's Orchestration.md is written before
 // triggers are evaluated. A commit-class agent whose matched triggers include
 // ITERATION_END receives the ended iteration's own artifacts that exist in the
-// run folder, and a task description naming the block and iteration ID. Every
-// other dispatch carries no input artifacts and a description naming the
-// matched triggers. Output artifacts stay empty and the human is never in the
-// loop. Resolution never fails the dispatch: when the iteration or its
-// artifacts cannot be determined, the request is built as for any other
-// dispatch.
+// run folder, and a task description naming the block and iteration ID. Its
+// description always ends with "; commit branch: {commitBranch}", the recorded
+// branch verbatim, also when the iteration or its artifacts cannot be
+// determined and the description falls back to the default form. Every other
+// dispatch carries no input artifacts and a description naming the matched
+// triggers. Output artifacts stay empty and the human is never in the loop.
+// Resolution never fails the dispatch.
 func buildInfraRequest(
 	agent domain.DeclaredInfraAgent,
 	matched []string,
 	instanceID string,
 	runID string,
 	runFolder string,
+	commitBranch string,
 	completedStep domain.CompletedStep,
 	boundaries triggerBoundaries,
 ) domain.ProtocolRequest {
@@ -46,6 +48,7 @@ func buildInfraRequest(
 	if agent.Class != "commit" || !containsTrigger(matched, domain.InfraTriggerIterationEnd) {
 		return req
 	}
+	req.TaskDescription += "; commit branch: " + commitBranch
 	block, iteration, ok := endedIteration(completedStep, boundaries)
 	if !ok {
 		return req
@@ -55,8 +58,8 @@ func buildInfraRequest(
 		return req
 	}
 	req.InputArtifacts = existingIterationArtifacts(runFolder, runID, candidates)
-	req.TaskDescription = fmt.Sprintf("infrastructure agent dispatch: %s, commit the artifacts of %s %s (triggered by %s)",
-		agent.Name, block.Name, iteration, strings.Join(matched, ", "))
+	req.TaskDescription = fmt.Sprintf("infrastructure agent dispatch: %s, commit the artifacts of %s %s (triggered by %s); commit branch: %s",
+		agent.Name, block.Name, iteration, strings.Join(matched, ", "), commitBranch)
 	return req
 }
 

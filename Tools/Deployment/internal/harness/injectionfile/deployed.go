@@ -27,6 +27,9 @@ type HarnessContent struct {
 	// Orchestrator is the region map from HarnessInjectionsOrchestrator.md, overlaid for
 	// the orchestrator agent only.
 	Orchestrator map[string]string
+	// SharedVersion is the HarnessInjections.md frontmatter `version`, the only source of the
+	// descriptor's InjectionsVersion.
+	SharedVersion string
 	// OrchestratorVersion is the HarnessInjectionsOrchestrator.md frontmatter `version`,
 	// the authoritative source of the descriptor's OrchestratorInjectionsVersion.
 	OrchestratorVersion string
@@ -90,9 +93,12 @@ func LoadDir(dir string) (HarnessContent, error) {
 		return HarnessContent{}, &LoadError{File: SharedFileName, Path: sharedPath, Kind: LoadErrorRead, Err: err}
 	}
 
-	shared, err := ParseDeployedRegions(sharedBytes)
+	shared, sharedVersion, err := ParseDeployedRegionsWithVersion(sharedBytes)
 	if err != nil {
 		return HarnessContent{}, &LoadError{File: SharedFileName, Path: sharedPath, Kind: LoadErrorParse, Err: err}
+	}
+	if sharedVersion == "" {
+		return HarnessContent{}, NewMissingVersionError(SharedFileName, sharedPath)
 	}
 
 	orchPath := filepath.Join(dir, OrchestratorFileName)
@@ -106,8 +112,13 @@ func LoadDir(dir string) (HarnessContent, error) {
 		return HarnessContent{}, &LoadError{File: OrchestratorFileName, Path: orchPath, Kind: LoadErrorParse, Err: err}
 	}
 
+	if orchVersion == "" {
+		return HarnessContent{}, NewMissingVersionError(OrchestratorFileName, orchPath)
+	}
+
 	return HarnessContent{
 		Shared:              shared,
+		SharedVersion:       sharedVersion,
 		Orchestrator:        orch,
 		OrchestratorVersion: orchVersion,
 	}, nil

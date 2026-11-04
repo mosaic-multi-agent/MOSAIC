@@ -96,9 +96,41 @@ type stubAdapter struct {
 	// recently called with, so a test can assert on the full merged ledger
 	// (rendered paths plus adapter-installed paths) after a run.
 	lastDeprovisionedProv domain.Provisioning
+
+	// deployedModel reports the model value the deployment double wrote into
+	// the definition at a path (see stubDeployer); DefinitionModel answers
+	// from it, so by default a deployed definition carries exactly the model
+	// the runner asked the deployer for. nil means nothing was deployed.
+	deployedModel func(path string) (string, bool)
+
+	// definitionOverrides replaces what DefinitionModel reports for the
+	// definition whose file name (base name) is the key, so a test can
+	// simulate a definition that lost, emptied or changed its model line, or
+	// that cannot be read.
+	definitionOverrides map[string]definitionModelResult
+}
+
+// definitionModelResult is one scripted DefinitionModel answer.
+type definitionModelResult struct {
+	field domain.DefinitionModelField
+	err   error
 }
 
 var _ domain.HarnessAdapter = (*stubAdapter)(nil)
+var _ domain.DefinitionModelReader = (*stubAdapter)(nil)
+
+// DefinitionModel implements domain.DefinitionModelReader.
+func (a *stubAdapter) DefinitionModel(path string) (domain.DefinitionModelField, error) {
+	if o, ok := a.definitionOverrides[filepath.Base(path)]; ok {
+		return o.field, o.err
+	}
+	if a.deployedModel != nil {
+		if v, ok := a.deployedModel(path); ok && v != "" {
+			return domain.DefinitionModelField{Present: true, Value: v}, nil
+		}
+	}
+	return domain.DefinitionModelField{}, nil
+}
 
 func (a *stubAdapter) ID() string { return "stub-harness" }
 
@@ -239,6 +271,18 @@ type stubDeployer struct {
 	calls       []domain.RenderAgentRequest
 	deployCalls []domain.DeployRequest
 
+	// written maps a reported definition path to the model value the double
+	// "wrote" into it, mirroring a faithful deployment tool: Deploy writes the
+	// request's model for the tier the agent's file in catalogFolder declares;
+	// Render writes the request's Model. An empty value means the definition
+	// has no model field.
+	written map[string]string
+
+	// catalogFolder is the test catalog the double reads each deployed
+	// agent's declared tier from (see test_catalog_test.go). An agent with no
+	// catalog entry or no declared tier gets an empty model.
+	catalogFolder string
+
 	// renderFn, when set, is called for every Render invocation; its return
 	// value replaces the default. Tests that need to control the reported path
 	// or inject failures set this field.
@@ -256,19 +300,45 @@ func (d *stubDeployer) Render(ctx context.Context, req domain.RenderAgentRequest
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.calls = append(d.calls, req)
+	var res domain.RenderAgentResult
 	if d.renderFn != nil {
-		return d.renderFn(req)
+		var err error
+		res, err = d.renderFn(req)
+		if err != nil {
+			return res, err
+		}
+	} else {
+		// Default: a plausible destination path rooted in the workspace, so
+		// tests that do not need to inspect exact paths still get a non-empty
+		// result.
+		key := req.CatalogAgentKey
+		if key == "" {
+			key = "stub"
+		}
+		res = domain.RenderAgentResult{
+			DestinationPath: filepath.Join(req.WorkspaceRoot, key+".md"),
+			AgentKey:        key,
+		}
 	}
-	// Default: a plausible destination path rooted in the workspace, so tests
-	// that do not need to inspect exact paths still get a non-empty result.
-	key := req.CatalogAgentKey
-	if key == "" {
-		key = "stub"
+	d.recordWritten(res.DestinationPath, req.Model)
+	return res, nil
+}
+
+// recordWritten notes the model value written into the definition at path.
+// The caller holds d.mu.
+func (d *stubDeployer) recordWritten(path, model string) {
+	if d.written == nil {
+		d.written = map[string]string{}
 	}
-	return domain.RenderAgentResult{
-		DestinationPath: filepath.Join(req.WorkspaceRoot, key+".md"),
-		AgentKey:        key,
-	}, nil
+	d.written[path] = model
+}
+
+// writtenModel reports the model the double wrote into the definition at path.
+func (d *stubDeployer) writtenModel(path string) (string, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	v, ok := d.written[path]
+	return v, ok
 }
 
 // Deploy records the call and returns a configurable result. When deployFn is
@@ -279,19 +349,30 @@ func (d *stubDeployer) Deploy(_ context.Context, req domain.DeployRequest) (doma
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.deployCalls = append(d.deployCalls, req)
+	var res domain.DeployResult
 	if d.deployFn != nil {
-		return d.deployFn(req)
-	}
-	// Default: report the subject agent at a plausible path so the runner can
-	// derive a definition path without a custom deployFn.
-	return domain.DeployResult{
-		Agents: []domain.DeployedAgent{
-			{
-				Key:             "orchestrator",
-				DestinationPath: filepath.Join(req.WorkspaceRoot, ".claude", "agents", "orchestrator.md"),
+		var err error
+		res, err = d.deployFn(req)
+		if err != nil {
+			return res, err
+		}
+	} else {
+		// Default: report the subject agent at a plausible path so the runner
+		// can derive a definition path without a custom deployFn.
+		res = domain.DeployResult{
+			Agents: []domain.DeployedAgent{
+				{
+					Key:             "orchestrator",
+					DestinationPath: filepath.Join(req.WorkspaceRoot, ".claude", "agents", "orchestrator.md"),
+				},
 			},
-		},
-	}, nil
+		}
+	}
+	for _, a := range res.Agents {
+		tier, _ := catalogTierFor(d.catalogFolder, a.Key)
+		d.recordWritten(a.DestinationPath, req.TierModels[tier])
+	}
+	return res, nil
 }
 
 // allCalls returns all recorded Render invocations in order.

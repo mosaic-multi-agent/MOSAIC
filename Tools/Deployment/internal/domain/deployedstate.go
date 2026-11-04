@@ -15,7 +15,7 @@ type DeployedArtifactState struct {
 	Version                       string            // frontmatter `version` scalar, verbatim; "" when absent or unparseable
 	HarnessVersion                string            // frontmatter `mosaic_harness_version` scalar (or legacy `mosaic_transform_version` fallback), verbatim
 	InjectionsVersion             string            // injection version from InjectionHarness-class region tag attribute (or legacy frontmatter fallback)
-	OrchestratorInjectionsVersion string            // reserved; always empty after Stage 3 — role-conditional comparison is in AgentStaleness
+	OrchestratorInjectionsVersion string            // version tag of the OrchestratorHarnessConstraints region; "" when the region is absent or untagged
 	ToolMappingsVersion           string            // frontmatter `tool_mappings_version` scalar, verbatim; "" when absent
 	ModelID                       string            // frontmatter model scalar under the harness's ModelKey, verbatim; "" when absent, unparseable, or the harness emits no model
 	Workflows                     DeployedWorkflows // non-nil only when the file carries workflow section markers
@@ -34,6 +34,11 @@ type DeployedArtifactState struct {
 	// Populated by the probe layer (app/deployedstate.go) during extraction.
 	// The zero value (false) means "no injection region found or file absent."
 	HasInjectionRegion bool
+
+	// HasOrchestratorInjectionRegion reports whether the deployed file's body contains an
+	// OrchestratorHarnessConstraints managed region. It gates the orchestrator injection
+	// version comparison in AgentStaleness.
+	HasOrchestratorInjectionRegion bool
 
 	// ParseProblem describes why a present file at the planned target path could not be
 	// used: the parse error text (for docformat format errors: "frontmatter: line N: ...: \"excerpt\""),

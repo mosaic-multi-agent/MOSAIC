@@ -59,10 +59,10 @@ func TestFormatEvent_Grammar(t *testing.T) {
 				Duration:    1500 * time.Millisecond,
 				Cost:        domain.CostReport{TotalUSD: 0.42, Attribution: domain.AttributionAttributed},
 			},
-			want: "test happy-path [1/1] PASS (1.5s, $0.42)",
+			want: "test happy-path [1/1] PASS (1.5s)",
 		},
 		{
-			name: "test finished, cost not attributed",
+			name: "test finished, cost unavailable",
 			ev: domain.ProgressEvent{
 				Kind:        domain.ProgressTestFinished,
 				TestID:      "happy-path",
@@ -72,7 +72,7 @@ func TestFormatEvent_Grammar(t *testing.T) {
 				Duration:    time.Second,
 				Cost:        domain.CostReport{Attribution: domain.AttributionUnavailable},
 			},
-			want: "test happy-path [1/1] FAIL (1s, unavailable)",
+			want: "test happy-path [1/1] FAIL (1s)",
 		},
 		{
 			name: "suite finished",
@@ -81,7 +81,7 @@ func TestFormatEvent_Grammar(t *testing.T) {
 				Counts:    map[domain.Verdict]int{domain.VerdictPass: 3, domain.VerdictFail: 1},
 				TotalCost: domain.CostReport{TotalUSD: 1.23, Attribution: domain.AttributionAttributed},
 			},
-			want: "suite finished: FAIL=1 PASS=3 ($1.23)",
+			want: "suite finished: FAIL=1 PASS=3",
 		},
 	}
 
@@ -98,23 +98,24 @@ func TestFormatEvent_Grammar(t *testing.T) {
 	}
 }
 
-// TestFormatEvent_CostNeverPrintsCurrencyForUnattributed guards the specific
-// claim: an unattributed cost renders as its attribution word, never as a
-// dollar amount that would read as a genuine (and misleadingly free) zero.
-func TestFormatEvent_CostNeverPrintsCurrencyForUnattributed(t *testing.T) {
-	for _, attribution := range []domain.CostAttribution{domain.AttributionUnavailable, domain.AttributionUnknownBucket} {
-		ev := domain.ProgressEvent{
-			Kind:    domain.ProgressTestFinished,
-			TestID:  "t",
-			Verdict: domain.VerdictPass,
-			Cost:    domain.CostReport{TotalUSD: 0, Attribution: attribution},
+// TestFormatEvent_NeverShowsCost guards that no progress line shows a cost
+// amount or an attribution word, whatever the event's cost data holds.
+func TestFormatEvent_NeverShowsCost(t *testing.T) {
+	costs := []domain.CostReport{
+		{TotalUSD: 0.42, Attribution: domain.AttributionAttributed},
+		{TotalUSD: 0, Attribution: domain.AttributionUnavailable},
+		{TotalUSD: 0, Attribution: domain.AttributionUnknownBucket},
+	}
+	for _, cost := range costs {
+		events := []domain.ProgressEvent{
+			{Kind: domain.ProgressTestFinished, TestID: "t", Verdict: domain.VerdictPass, Cost: cost},
+			{Kind: domain.ProgressSuiteFinished, Counts: map[domain.Verdict]int{domain.VerdictPass: 1}, TotalCost: cost},
 		}
-		got := cli.FormatEvent(ev)
-		if strings.Contains(got, "$") {
-			t.Errorf("FormatEvent(%s) = %q, must not contain a currency amount", attribution, got)
-		}
-		if !strings.Contains(got, string(attribution)) {
-			t.Errorf("FormatEvent(%s) = %q, must name the attribution", attribution, got)
+		for _, ev := range events {
+			got := cli.FormatEvent(ev)
+			if strings.Contains(got, "$") || strings.Contains(got, string(cost.Attribution)) {
+				t.Errorf("FormatEvent(kind %v, %s) = %q, must not show cost", ev.Kind, cost.Attribution, got)
+			}
 		}
 	}
 }
@@ -217,7 +218,7 @@ func TestFormatEvent_AttributedGrammar(t *testing.T) {
 				Cost:        domain.CostReport{TotalUSD: 0.05, Attribution: domain.AttributionAttributed},
 				Run:         run,
 			},
-			want: "[20260807T120000Z-0001] test happy-path [1/3] PASS (500ms, $0.05)",
+			want: "[20260807T120000Z-0001] test happy-path [1/3] PASS (500ms)",
 		},
 		{
 			name: "suite started has no run attribution prefix",
@@ -236,7 +237,7 @@ func TestFormatEvent_AttributedGrammar(t *testing.T) {
 				Counts:    map[domain.Verdict]int{domain.VerdictPass: 2},
 				TotalCost: domain.CostReport{TotalUSD: 0.10, Attribution: domain.AttributionAttributed},
 			},
-			want: "suite finished: PASS=2 ($0.10)",
+			want: "suite finished: PASS=2",
 		},
 	}
 

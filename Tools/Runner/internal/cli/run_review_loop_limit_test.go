@@ -46,7 +46,7 @@ func writeRunnerRecordedRunArtifact(t *testing.T, rootDir, runID, extraLines str
 	if err != nil {
 		t.Fatalf("read artifact: %v", err)
 	}
-	recorded := "runner_mode: auto\nrunner_pre_consultation: true\nrunner_manual_resolution: false\n" + extraLines
+	recorded := "runner_mode: auto\nrunner_pre_consultation: enabled\nrunner_manual_resolution: disabled\n" + extraLines
 	edited := strings.Replace(string(data), "current_state:", recorded+"current_state:", 1)
 	if edited == string(data) {
 		t.Fatal("current_state key not found in the artifact fixture")

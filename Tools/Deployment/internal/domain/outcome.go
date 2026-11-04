@@ -85,4 +85,8 @@ type RunSummary struct {
 	// It is a value field on purpose (this struct has no omitempty fields), unlike the pointer
 	// on app.RenderAgentResult. Do not unify the two.
 	ConflictReport ConflictReport
+
+	// DryRunPlan is the plan a dry run reviewed; nil for every run that is not a dry run.
+	// Not serialised: the JSON document keeps its shape.
+	DryRunPlan *Plan `json:"-"`
 }

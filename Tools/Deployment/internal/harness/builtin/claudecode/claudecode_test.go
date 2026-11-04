@@ -461,14 +461,14 @@ func TestInjection_ClaudeCode_ProjectInjectionsNotFilled(t *testing.T) {
 }
 
 // TestInjection_ClaudeCode_InjectionsVersion verifies that the module's descriptor carries
-// the correct injections_version "1.1.0" for Claude Code.
+// the frontmatter version of the frozen catalog's HarnessInjections.md ("1.2.0") for Claude Code.
 func TestInjection_ClaudeCode_InjectionsVersion(t *testing.T) {
 	mod := newModule(t)
 	d := mod.Descriptor()
 	if d == nil {
 		t.Fatal("Descriptor() returned nil")
 	}
-	want := "1.1.0"
+	want := "1.2.0"
 	if d.InjectionsVersion != want {
 		t.Errorf("Descriptor().InjectionsVersion = %q, want %q", d.InjectionsVersion, want)
 	}

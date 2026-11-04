@@ -107,9 +107,11 @@ var adapterPackages = map[string]bool{
 	"internal/harness/fake":       true,
 	"internal/harness/claudecode": true,
 	"internal/harness/opencode":   true,
+	"internal/harness/defmodel":   true, // definition model-field reader shared by the real adapters
 	"internal/launch":             true,
 	"internal/orchstate":          true,
 	"internal/cost":               true,
+	"internal/modelevidence":      true, // observed subject model evidence via the log-analysis report
 	"internal/agentdeploy":        true,
 	"internal/report":             true,
 	"internal/sideeffects":        true,
@@ -145,6 +147,8 @@ var frontendPackages = map[string]bool{
 // stub's $ref file effects through internal/fixtures for the same reason:
 // that composition is its contract, named in the Integration Points table.
 var adapterImportExceptions = map[string]map[string]bool{
+	"internal/harness/claudecode": {"internal/harness/defmodel": true},
+	"internal/harness/opencode":   {"internal/harness/defmodel": true},
 	"internal/preflight": {
 		"internal/authoring":  true,
 		"internal/fixtures":   true,

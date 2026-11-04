@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"errors"
 	"fmt"
 
 	"mosaic-deploy/internal/catalog"
@@ -50,4 +51,23 @@ func (e *RequestedAgentNotFoundError) Is(target error) bool {
 // requestedAgentNotFound builds the error for an unknown directly requested agent of the given kind.
 func requestedAgentNotFound(c catalog.Catalog, kind, id string) error {
 	return &RequestedAgentNotFoundError{Kind: kind, ID: id, Searched: searchedCatalogs(c)}
+}
+
+// ErrUnknownHook is matched (errors.Is) by every UnknownHookError.
+var ErrUnknownHook = errors.New("hook bundle not found")
+
+// UnknownHookError reports a requested hook id that none of the searched catalogs provides.
+type UnknownHookError struct {
+	HookID   string
+	Searched string // same text as UnknownWorkflowError.Searched
+}
+
+// Error describes the hook id and where it was sought.
+func (e *UnknownHookError) Error() string {
+	return fmt.Sprintf("%s: %q (%s)", ErrUnknownHook.Error(), e.HookID, e.Searched)
+}
+
+// Is reports a match for ErrUnknownHook.
+func (e *UnknownHookError) Is(target error) bool {
+	return target == ErrUnknownHook
 }

@@ -294,7 +294,7 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if errMsg, ok := msg.(runErrorMsg); ok {
-		if errors.Is(errMsg.err, app.ErrPlanNotConfirmed) {
+		if errors.Is(errMsg.err, app.ErrPlanNotConfirmed) && m.selections.mode != domain.ModeTransformHarness {
 			// The user declined or cancelled the plan review; restart the selection flow
 			// in the same session rather than showing the done/error state.
 			m.screen = screenHarness
@@ -306,7 +306,7 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.screen = screenDone
-		if errors.Is(errMsg.err, app.ErrSelectionCancelled) || errors.Is(errMsg.err, app.ErrModelSelectionCancelled) {
+		if isRunCancellation(errMsg.err) {
 			// A deliberate user abort via Esc — show the cancelled outcome, not the
 			// failure outcome. The error is intentionally not assigned to m.errMsg so
 			// that viewDone's failure branch is not entered.
@@ -438,7 +438,7 @@ func (m *rootModel) updateMode(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case domain.ModePromoteToGeneric:
 			m.wsScreen.SetPathKind(screens.PathKindFile)
 		case domain.ModeTransformHarness:
-			m.wsScreen.SetPathKind(screens.PathKindFileOrDirectory)
+			m.wsScreen.SetPathKind(screens.PathKindTransformWorkspace)
 		default:
 			m.wsScreen.SetPathKind(screens.PathKindDirectory)
 		}
@@ -845,10 +845,10 @@ func (m *rootModel) startService() tea.Cmd {
 		case domain.ModeTransformHarness:
 			// TargetHarnessID is left empty so QTransformTargetHarness is asked interactively.
 			// SourceHarnessID comes from the harness screen selection.
-			// Path is the file or folder path collected by the file-or-directory path screen.
+			// Workspace is the workspace root collected by the path screen.
 			result, err := svc.TransformHarness(ctx, app.TransformHarnessRequest{
 				SourceHarnessID: sel.harnessID,
-				Path:            sel.workspacePath,
+				Workspace:       sel.workspacePath,
 			})
 			if err != nil {
 				return runErrorMsg{err: err}
@@ -983,6 +983,9 @@ func (m *rootModel) viewDone() string {
 	}
 	if m.summaryScreen != nil {
 		return m.summaryScreen.View()
+	}
+	if m.runCancelled && m.selections.mode == domain.ModeTransformHarness {
+		return m.transformCancelledView()
 	}
 	if m.runCancelled {
 		return m.theme.Style(RoleWarning).Width(m.width).Render("Deployment cancelled.") +

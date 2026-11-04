@@ -84,7 +84,9 @@ func echoMismatchEvidence() domain.RunEvidence {
   "status_message": "Run completed."
 }`
 
-	return domain.RunEvidence{
+	// The run's observed subject model equals its selection, so the echo
+	// mismatch is the only reason the run is excluded.
+	return withVerifiedModel(domain.RunEvidence{
 		Definition: domain.TestDefinition{
 			SchemaVersion: 1,
 			Name:          "echo-mismatch-test",
@@ -115,7 +117,7 @@ func echoMismatchEvidence() domain.RunEvidence {
 		Cost:                      domain.CostReport{TotalUSD: 0.05, Attribution: domain.AttributionAttributed},
 		Duration:                  5 * time.Second,
 		LogsProduced:              true,
-	}
+	})
 }
 
 // ---------------------------------------------------------------------------

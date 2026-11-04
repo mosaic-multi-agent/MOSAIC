@@ -135,31 +135,27 @@ func TestRun_StubModelFallsBackToSubjectModelInEvidence(t *testing.T) {
 	}
 }
 
-// TestRun_AbsentSubjectModelCarriedAsEmptyInEvidence asserts that when
-// ResolvedTest.Models.Subject is empty — no model was chosen at run time —
-// RunEvidence.SubjectModel is also empty when the evaluator is called.
-// The "" → "unknown" display mapping is the report layer's responsibility;
-// the runner carries what the tier-model map resolved without transforming it.
-func TestRun_AbsentSubjectModelCarriedAsEmptyInEvidence(t *testing.T) {
+// TestRun_AbsentSubjectModelAbortsBeforeSpawn asserts that when
+// ResolvedTest.Models.Subject is empty — no model was selected — the run
+// never falls back to a harness default: the deployed definitions carry no
+// selected model, so the run aborts with an error before the harness is
+// spawned or launched.
+func TestRun_AbsentSubjectModelAbortsBeforeSpawn(t *testing.T) {
 	// Arrange — no runtime model selection
 	h := newHarness(t)
 	req := catalogueRequest("model-evidence-absent-subject-model")
 	req.Test.Models = domain.ModelSelection{} // neither model supplied
 
-	var ev domain.RunEvidence
-	_, err := runner.Run(context.Background(), h.Deps, req, captureEvaluator(&ev))
+	// Act
+	_, err := runner.Run(context.Background(), h.Deps, req, nil)
 
 	// Assert
-	if err != nil {
-		t.Fatalf("Run returned unexpected error: %v", err)
+	if err == nil {
+		t.Fatal("Run returned nil error with no subject model selected; want an abort before the harness starts")
 	}
-
-	if ev.SubjectModel != "" {
-		t.Errorf("RunEvidence.SubjectModel = %q, want empty string; "+
-			"when no runtime subject model is supplied, RunEvidence.SubjectModel "+
-			"must be empty — the '' → 'unknown' mapping belongs to the report layer, "+
-			"not to the runner; the runner must carry what the tier-model map holds "+
-			"without inventing a value",
-			ev.SubjectModel)
+	for _, c := range h.Rec.all() {
+		if c == "adapter.SpawnPlan" || c == "launcher.Launch" {
+			t.Errorf("%s was called although no subject model was selected; the run must abort before spawn", c)
+		}
 	}
 }

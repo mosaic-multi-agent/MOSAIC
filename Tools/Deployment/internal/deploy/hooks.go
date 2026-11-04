@@ -3,7 +3,9 @@ package deploy
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"mosaic-deploy/internal/domain"
@@ -25,7 +27,13 @@ import (
 // later fails (e.g. a manifest save failure). If the journal record itself fails (e.g. an
 // existing hook file at the destination is unreadable), the write is skipped and a gap is
 // emitted — hook problems are gaps, not reversal triggers.
-func (e *executor) deployHooks(deployRoot, workspace string, hooks []domain.HookPlan, dryRun bool, journal *writeJournal) []domain.Gap {
+//
+// opts carries the opt-in behaviour of a request with removals or replacements: strict makes
+// an unreadable source, a failed journal record or a failed write an error instead of a gap;
+// replace lists registration targets (workspace-relative) that are overwritten even when they
+// exist; blocked lists paths whose backup failed and which must not be written. With the zero
+// opts the behaviour is the policy described above.
+func (e *executor) deployHooks(deployRoot, workspace string, hooks []domain.HookPlan, dryRun bool, journal *writeJournal, opts hookOpts) ([]domain.Gap, error) {
 	var gaps []domain.Gap
 
 	for _, hp := range hooks {
@@ -37,8 +45,14 @@ func (e *executor) deployHooks(deployRoot, workspace string, hooks []domain.Hook
 			// Copy hook files to the target directory under the deployment root.
 			targetDir := filepath.Join(deployRoot, hp.TargetDir)
 			for _, hf := range hp.Files {
+				if opts.blocked[normRel(path.Join(strings.ReplaceAll(hp.TargetDir, "\\", "/"), hf.TargetName))] {
+					continue
+				}
 				content, err := os.ReadFile(hf.SourcePath)
 				if err != nil {
+					if opts.strict {
+						return gaps, fmt.Errorf("hook source file %q could not be read: %w", hf.SourcePath, err)
+					}
 					// Source file unreadable: this indicates a catalog integrity problem.
 					// Log the error and emit a manual-step gap so the user is informed and
 					// the hook file does not silently disappear from the deployment (AC17.6).
@@ -62,6 +76,9 @@ func (e *executor) deployHooks(deployRoot, workspace string, hooks []domain.Hook
 				// skip the write and emit a gap rather than proceeding with an un-journaled write.
 				if journal != nil {
 					if recErr := journal.record(dest); recErr != nil {
+						if opts.strict {
+							return gaps, fmt.Errorf("hook file %q could not be journaled for atomic reversal: %w", dest, recErr)
+						}
 						e.log.Event(logging.Event{
 							Time:    time.Now(),
 							Level:   logging.LevelError,
@@ -77,19 +94,32 @@ func (e *executor) deployHooks(deployRoot, workspace string, hooks []domain.Hook
 						continue
 					}
 				}
-				_ = mkdirAndWrite(dest, content)
+				if werr := mkdirAndWrite(dest, content); werr != nil && opts.strict {
+					return gaps, fmt.Errorf("hook file %q could not be written: %w", dest, werr)
+				}
 			}
 
 			// Apply registration steps.
 			for _, step := range hp.Registration {
-				if g := applyRegistrationStep(step, workspace, journal); g != nil {
+				g, err := applyRegistrationStep(step, workspace, journal, opts)
+				if err != nil {
+					return gaps, err
+				}
+				if g != nil {
 					gaps = append(gaps, *g)
 				}
 			}
 		}
 	}
 
-	return gaps
+	return gaps, nil
+}
+
+// hookOpts are the opt-in options of deployHooks; the zero value keeps the default policy.
+type hookOpts struct {
+	strict  bool
+	replace map[string]bool
+	blocked map[string]bool
 }
 
 // applyRegistrationStep enforces the hook registration policy for one step.
@@ -99,7 +129,11 @@ func (e *executor) deployHooks(deployRoot, workspace string, hooks []domain.Hook
 // journal is non-nil in atomic mode. When non-nil and the target is absent (so a write will
 // occur), the target path is recorded in the journal before the write. Recording a
 // non-existent path always succeeds (it captures existed=false), so this is a no-error path.
-func applyRegistrationStep(step domain.RegistrationStep, workspace string, journal *writeJournal) *domain.Gap {
+//
+// When opts.replace lists the step's target, an existing file is overwritten by the fragment
+// (the caller has already backed it up) and no gap is emitted; a journal or write failure is
+// then returned as an error. A target in opts.blocked is left alone.
+func applyRegistrationStep(step domain.RegistrationStep, workspace string, journal *writeJournal, opts hookOpts) (*domain.Gap, error) {
 	if !step.Performable {
 		// Tool cannot perform this step at all (e.g. a user-level editor setting).
 		// Always emit a manual-step gap.
@@ -108,12 +142,17 @@ func applyRegistrationStep(step domain.RegistrationStep, workspace string, journ
 			Subject:  step.ID,
 			Detail:   step.Instruction,
 			Fragment: step.Fragment,
-		}
+		}, nil
 	}
 
 	// Performable: check whether the target file already exists.
 	targetPath := filepath.Join(workspace, step.TargetPath)
-	if _, err := os.Stat(targetPath); err == nil {
+	rel := normRel(step.TargetPath)
+	if opts.blocked[rel] {
+		return nil, nil
+	}
+	replace := opts.replace[rel]
+	if _, err := os.Stat(targetPath); err == nil && !replace {
 		// Target exists: never modify; emit a hook-registration gap so the user
 		// can paste the fragment manually (AC17.5).
 		return &domain.Gap{
@@ -121,15 +160,19 @@ func applyRegistrationStep(step domain.RegistrationStep, workspace string, journ
 			Subject:  step.ID,
 			Detail:   step.Instruction,
 			Fragment: step.Fragment,
-		}
+		}, nil
 	}
 
-	// Target absent: journal then write the fragment (AC17.5). Recording a non-existent path
-	// always succeeds (it captures existed=false so reversal will delete the file), making
-	// this a safe best-effort call with no error to handle.
+	// Target absent (or replacement requested): journal then write the fragment (AC17.5).
+	// Recording a non-existent path always succeeds (it captures existed=false so reversal
+	// will delete the file); recording an existing file can fail if it is unreadable.
 	if journal != nil {
-		_ = journal.record(targetPath)
+		if err := journal.record(targetPath); err != nil && replace {
+			return nil, fmt.Errorf("registration file %q could not be journaled for atomic reversal: %w", targetPath, err)
+		}
 	}
-	_ = mkdirAndWrite(targetPath, []byte(step.Fragment))
-	return nil
+	if err := mkdirAndWrite(targetPath, []byte(step.Fragment)); err != nil && replace {
+		return nil, fmt.Errorf("registration file %q could not be written: %w", targetPath, err)
+	}
+	return nil, nil
 }

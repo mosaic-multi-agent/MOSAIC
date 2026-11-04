@@ -259,7 +259,7 @@ func TestModel_RunsScreen_P_GoesToPricingWhenUnpricedModels(t *testing.T) {
 	m.result = &app.Result{Outcome: app.OutcomeReport, Session: new(app.Session)}
 
 	report := makeReport("20260101T120000Z-abcd")
-	report.UnpricedModels = []domain.ModelID{"claude-test-model"}
+	report.UnpricedModels = []domain.PricingKey{{Model: "claude-test-model"}}
 
 	style := stylesFromTheme(m.theme)
 	m.runsScreen = screens.NewRunsScreen(report, m.width, m.height, style)
@@ -395,6 +395,7 @@ func TestModel_Pending_PricingAction_BackgroundPricingScreenReflectsModelPricing
 			Orchestrator: domain.ActorReport{
 				Actor:  domain.Orchestrator(),
 				Models: []domain.ModelID{"background-model"},
+				Keys:   []domain.PricingKey{{Model: "background-model"}},
 			},
 		}},
 		Currency: domain.Currency,
@@ -1194,7 +1195,7 @@ func TestModel_RunsScreen_P_NoSession_StaysOnRunsScreen(t *testing.T) {
 	// Report has unpriced models so the OLD guard would have triggered navigation;
 	// the new session guard must block it instead.
 	report := makeReport("20260101T120000Z-abcd")
-	report.UnpricedModels = []domain.ModelID{"claude-test-model"}
+	report.UnpricedModels = []domain.PricingKey{{Model: "claude-test-model"}}
 
 	style := stylesFromTheme(m.theme)
 	m.runsScreen = screens.NewRunsScreen(report, m.width, m.height, style)

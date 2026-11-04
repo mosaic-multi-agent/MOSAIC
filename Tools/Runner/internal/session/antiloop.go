@@ -1,5 +1,7 @@
 package session
 
+import "mosaic-run/internal/domain"
+
 // maxConsecutiveSameAgentDispatches is the upper bound on consecutive
 // dispatches of the same agent for the same workflow step. When the count
 // reaches this value, the next would-be dispatch is blocked and the session
@@ -21,6 +23,10 @@ type antiLoopState struct {
 	count       int    // consecutive same-agent dispatch count for current step
 	lastAgent   string // identifier of the last dispatched agent
 	escalations int    // consecutive guard escalations since the last allowed dispatch
+
+	waiver     func() bool        // nil = the guard is always on
+	waivedSeen bool               // waiver value seen at the previous guard check
+	log        domain.DebugLogger // receives guard switch entries; nil = none
 }
 
 // recordDispatch updates the anti-loop state for a dispatch of agentID at
@@ -30,6 +36,9 @@ type antiLoopState struct {
 // or agent identifier resets the counter and always permits the dispatch. An
 // allowed dispatch also resets the consecutive guard escalation count.
 func (a *antiLoopState) recordDispatch(rowIndex int, agentID string) bool {
+	if a.observeWaiver() {
+		return true // the user switched the guard off for this session
+	}
 	if rowIndex != a.rowIndex || agentID != a.lastAgent {
 		// New step or different agent: reset counter.
 		a.rowIndex = rowIndex

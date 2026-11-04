@@ -8,7 +8,6 @@ package app
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"mosaic-deploy/internal/app/conflictreport"
@@ -96,7 +95,7 @@ func (s *service) orchestratorTargetPaths(module domain.HarnessModule, scope dom
 	var paths []string
 	for _, a := range agents {
 		p, err := module.TargetPath(domain.TargetPathRequest{
-			Kind: domain.ArtifactAgent, Key: a.Key, FileName: filepath.Base(a.SourcePath), Scope: scope, GOOS: s.deps.GOOS,
+			Kind: domain.ArtifactAgent, Key: a.Key, FileName: plan.AgentFileName(module, a), Scope: scope, GOOS: s.deps.GOOS,
 		})
 		if err == nil {
 			paths = append(paths, p)

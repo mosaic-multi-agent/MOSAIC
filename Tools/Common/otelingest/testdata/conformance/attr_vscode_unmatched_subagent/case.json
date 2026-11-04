@@ -1,0 +1,15 @@
+{
+  "description": "VS Code subagent whose spawning tool call matches no invocation_start.spawn_call_id: the usage is tied to the run by the parent conversation but to no actor, so it goes to the unattributed stream, never to the orchestrator.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

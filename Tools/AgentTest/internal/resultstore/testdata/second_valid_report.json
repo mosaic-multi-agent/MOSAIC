@@ -21,6 +21,8 @@
         {
           "subject_version": "v1.2.3",
           "subject_model": "openai/gpt-4o",
+          "observed_subject_models": ["openai/gpt-4o"],
+          "model_verification": "verified",
           "harness_id": "open-code",
           "verdict": "fail",
           "duration_ms": 8000,

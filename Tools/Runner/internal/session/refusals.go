@@ -9,6 +9,7 @@ import (
 
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/orchfile"
+	"mosaic-run/internal/resumecheck"
 )
 
 // refusal logs the refusal reason and constructs a RunOutcome with RunRefused
@@ -78,8 +79,7 @@ func isWorkflowNotFound(err error, workflowID string) bool {
 // user who has just mistyped that flag to go inspect the run's history sends
 // them away from the mistake rather than towards it.
 func (s *sessionImpl) resumeWorkflowGoneRefusal(runID, workflowID string) domain.RunOutcome {
-	reason := fmt.Sprintf("workflow %q for run %s is not declared in the current "+
-		"orchestrator file; it may have been renamed or removed", workflowID, runID)
+	reason := resumecheck.WorkflowGoneReason(runID, workflowID)
 	return s.refusalCaused(reason, &domain.RefusalError{
 		Component: "workflow",
 		Resource:  runID,
@@ -96,8 +96,7 @@ func (s *sessionImpl) resumeWorkflowGoneRefusal(runID, workflowID string) domain
 // well-formed while recording no workflow, and the caller does not tell the
 // three apart.
 func (s *sessionImpl) resumeRecordedNoWorkflowRefusal(runID string) domain.RunOutcome {
-	reason := fmt.Sprintf("run %s records no workflow, so there is nothing to resume it as; "+
-		"its artifact may be missing, unreadable, or may record no workflow", runID)
+	reason := resumecheck.NoWorkflowReason(runID)
 	return s.refusalCaused(reason, &domain.RefusalError{
 		Component: "workflow",
 		Resource:  runID,

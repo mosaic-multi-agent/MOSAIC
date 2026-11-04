@@ -31,7 +31,7 @@ func runMode1Phase(t *testing.T, fixture, workflowID string, steps []mode1Dispat
 		names = append(names, s.agent)
 	}
 	consultant.queueStop("done")
-	ses, f, orchPath := routeSession(t, fixture, "", consultant, names...)
+	ses, f, orchPath := routeSession(t, fixture, "", routePhaseAgent, consultant, names...)
 	for _, s := range steps {
 		queueCond(f, s.agent, domain.StatusSUCCESS)
 	}

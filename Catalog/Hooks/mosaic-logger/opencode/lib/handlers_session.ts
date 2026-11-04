@@ -12,9 +12,10 @@
  */
 
 import { currentTimestamp, effectiveRunId } from "./core.js";
-import { extractRunId } from "./runstate.js";
+import { historyDispatchRunId } from "./run_binding.js";
 import type { LogPaths } from "./core.js";
 import type { SessionCorrelationStore, ClosedSessionRegistry } from "./correlation.js";
+import type { RequestedToolsTracker } from "./requested_tools.js";
 
 // ---------------------------------------------------------------------------
 // Shared OpenCode hook-input types
@@ -194,7 +195,7 @@ export interface HandlerDependencies {
   paths: LogPaths;
   /** OpenCode SDK client for session data retrieval */
   sdkClient: SdkClient;
-  /** Adapter version read from hook.yaml at init time */
+  /** Adapter version read from the workspace manifest at init time */
   adapterVersion: string | undefined;
   /** Build a complete event object (envelope + per-event fields). */
   buildEvent: (
@@ -206,6 +207,13 @@ export interface HandlerDependencies {
   appendEvent: (filePath: string, event: Record<string, unknown>) => Promise<void>;
   /** Generate a fallback tool call_id. */
   fallbackCallId: (toolName?: string) => string;
+
+  /**
+   * Per-message requested tool tracking shared by the message and tool-part
+   * handlers. Optional so tests that build dependencies by hand keep working;
+   * the message handler falls back to its own tracker when absent.
+   */
+  requestedTools?: RequestedToolsTracker;
 
   /**
    * NEW — durable closed-session record. Consulted on every session close to
@@ -383,14 +391,15 @@ export function createSessionHandlers(deps: HandlerDependencies): {
    * Session is already registered in the correlation store by handleEvent.
    */
   async function handleOrchestratorSessionCreated(sessionId: string): Promise<void> {
-    // Try to extract run_id from initial session messages (best-effort).
+    // Regain the run from Task dispatch inputs in the session history (best-effort);
+    // message text never binds.
     // This will usually return nothing for a brand-new session, but handles
     // resumed sessions that already have message history.
     let extractedRunId: string | undefined;
     try {
       const messages = await sdkClient.session.messages({ path: { id: sessionId } });
       if (messages !== null && messages !== undefined) {
-        extractedRunId = extractRunId(JSON.stringify(messages));
+        extractedRunId = historyDispatchRunId(messages);
       }
     } catch {
       // SDK failure is non-fatal — run_id will be updated when subagents are dispatched

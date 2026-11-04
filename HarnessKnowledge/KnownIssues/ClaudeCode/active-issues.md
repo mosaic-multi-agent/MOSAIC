@@ -1,6 +1,6 @@
 # Claude Code — Active Issues
 
-> Last updated: 2026-09-12 (run 18)
+> Last updated: 2026-10-25 (run 20)
 
 ---
 
@@ -11,13 +11,13 @@
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/85408 |
 | **Reported** | 2026-08-10 |
-| **Last Activity** | 2026-08-27 |
+| **Last Activity** | 2026-10-24 |
 | **Confidence** | Likely |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | Confirmed on CLI 2.1.224 (macOS), 2.1.231 (Windows), and on Linux/Ubuntu builds (exact version not stated by that reporter) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | Confirmed on CLI 2.1.224 (macOS), 2.1.231 (Windows), and on Linux/Ubuntu builds (exact version not stated by that reporter); a further "+1, seeing this as well" on 2026-10-24 (version not stated) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | area:core |
 
 **Summary:**
@@ -49,13 +49,13 @@ Confidence kept at Likely — multi-platform independent reproduction with stron
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/83166 (original, stale-bot closed `not_planned`), with active follow-ups https://github.com/anthropics/claude-code/issues/86915, https://github.com/anthropics/claude-code/issues/92797, https://github.com/anthropics/claude-code/issues/89632, and https://github.com/anthropics/claude-code/issues/78487 (Workflow-tool-spawned variant, stale-bot closed `not_planned`) |
 | **Reported** | 2026-08-01 (original #83166); follow-ups filed 2026-08-15 (#86915), 2026-08-25 (#89632), 2026-09-08 (#92797); Workflow-tool variant filed 2026-07-17 (#78487) |
-| **Last Activity** | 2026-09-08 |
+| **Last Activity** | 2026-09-19 (comments); #89632 gained the `stale` label by 2026-10-20 |
 | **Confidence** | Likely |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | Confirmed on desktop app (macOS, claude-code 2.1.246 build) and CLI/scheduled-routines on Linux (Ubuntu Server, CLI 2.1.263); also reported on Windows desktop |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | Confirmed on desktop app (macOS, claude-code 2.1.246 build; also Claude Code Desktop 2.1.266 on 2026-09-14) and CLI/scheduled-routines on Linux (Ubuntu Server, CLI 2.1.263); also reported on Windows desktop |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, stale (on #83166); bug, platform:macos, area:permissions, area:desktop (on #86915); bug, platform:linux, area:permissions, area:routines (on #92797) |
 
 **Summary:**
@@ -75,15 +75,19 @@ Directly threatens MOSAIC's unattended/headless background and scheduled dispatc
 - #89632 (2026-08-25, local scheduled tasks via `mcp__scheduled-tasks__*`, distinct from the cloud CCR routines in #83166/#92797) adds a concrete root-cause mechanism with process-level (`ps`/`Get-CimInstance`) evidence from three independent hosts (Windows, two macOS): the scheduled-task launcher's settings resolution honors `permissions.defaultMode` only when set at **user level** (`~/.claude/settings.json`); a `defaultMode`/`allow` policy set at project or `.claude/settings.local.json` level is silently dropped for the launched scheduled session even though `--setting-sources` claims to include `project`/`local` — the scheduled session then launches with `--permission-mode default` instead of the configured `bypassPermissions`, and with `--permission-prompt-tool stdio` + `--disallowedTools AskUserQuestion` and nobody attached to stdin, the session doesn't get an interactive prompt at all — it wedges silently on the first tool call not covered by an `allow` rule. One reporter ran a controlled before/after (moved the same `defaultMode` key from project to user level on the same host, same task, consecutive firings): the `default`-mode run wedged 6h50m on an uncovered `Bash` call with no further transcript records; the `bypassPermissions` run (after the move) completed normally. This is the same underlying "unattended session cannot reliably get a standing permission policy" failure class as #83166/#86915/#92797, with the specific config-resolution trigger identified for at least the local-scheduled-task launch path.
 - A separate leak noted in the #89632 thread (a completed scheduled run's process not exiting for ~2 hours afterward, still holding a concurrency slot) is tracked upstream as #88982 — not folded in here, as it's a distinct process-lifecycle defect rather than a permission-hang.
 - #78487 (2026-07-17, Windows, stale-bot closed `not_planned`): independent corroboration on the **Workflow-tool** surface specifically — a `.claude/workflows/*.mjs` `agent()`-spawned background agent hit a permission-gated Bash call with nobody present to answer, and idled 55+ minutes with zero output before a human noticed via the `/workflows` UI's idle timer; a second occurrence in the same report showed a sibling agent in a 6-way fan-out idle 58 minutes with no pending tool call at all (a possibly-distinct scheduling stall landing on the same symptom). One commenter ties the root cause to the same 2.1.186 design change referenced in #70143 (a docs-only report, not itself an operational bug): background subagents used to auto-deny any tool call that would otherwise prompt, but since 2.1.186 the prompt instead routes to the main session — when nobody is attached to answer that routed prompt (the unattended/scheduled case), there is no longer any fail-fast fallback, only an indefinite wait. This confirms the hang mechanism generalizes across the desktop scheduled-task, cloud routine, local-scheduled-task, *and* Workflow-tool surfaces.
+- New on #86915 (2026-09-14/09-18/09-19, 3 further comments, still no maintainer reply): (a) Independent macOS repro on Claude Code Desktop 2.1.266 with a one-time `fireAt` task: a Bash call dispatched 13:00:33Z got `AbortError: Tool permission stream closed before response received` 3h47m later, and `mcp__scheduled-tasks__list_task_runs` still reported the run `status: "succeeded"` (its `last_activity_at` predates the tool dispatch) — i.e. the run-status API itself misreports the stall as success. (b) `create_scheduled_task`/`update_scheduled_task` schemas expose no permission-mode field, so allowlisting is the only mitigation, and it must cover the WHOLE compound command (an allowed `git status` did not cover an unlisted `git log` chained with `&&`). (c) A commenter observed in an unattended scheduled desktop session that a `PreToolUse` hook that DENIES a Bash call returns inline immediately and the session continues — only the interactive-approval (`ask`) path hangs.
 
 **Workaround(s):**
 1. ⭐ Never let unattended/scheduled sessions call approval-gated tools at all — pre-approve every tool the background/scheduled task needs via `permissions.allow` rules in `.claude/settings.json` (confirmed effective by the #86915 reporter) or, for CLI-driven headless runs, use `claude -p --permission-mode <mode>` with `settings.json` allow/deny rules and a `PreToolUse` hook (confirmed working on CLI 2.1.263 per #92797 — the gap is specific to the scheduled-routines/desktop scheduled-task surface, not the CLI's own headless mode).
 2. ⭐ Set `permissions.defaultMode` (e.g. `bypassPermissions`) at **user level** (`~/.claude/settings.json`), not project or `.claude/settings.local.json` — confirmed via a controlled before/after on the same host/task in #89632; a project/local-level `defaultMode` is silently dropped by the local scheduled-task launcher's settings resolution even though `--setting-sources` claims to include those sources.
 3. Route any action that might need approval through a file-queue handoff to an interactive session instead (a `SessionStart` hook drains a JSON-seeded queue written by the unattended routine) — reported as eliminating prompts entirely for the scheduled-task use case (#86915 comment).
-4. From a #78487 commenter: add a `PreToolUse` hook that auto-denies any permission-gated tool call when an "unattended" env var (e.g. `CLAUDE_UNATTENDED=1`) is set on the session, so an unanswerable prompt becomes a fast, loud failure with an actionable deny message instead of an indefinite hang — a deliberate fail-closed override for the Workflow-tool/background surface specifically, not independently confirmed by a second reporter but consistent with the mechanism.
+4. From a #78487 commenter: add a `PreToolUse` hook that auto-denies any permission-gated tool call when an "unattended" env var (e.g. `CLAUDE_UNATTENDED=1`) is set on the session, so an unanswerable prompt becomes a fast, loud failure with an actionable deny message instead of an indefinite hang — a deliberate fail-closed override for the Workflow-tool/background surface specifically, not independently confirmed by a second reporter but consistent with the mechanism; a #86915 commenter (2026-09-19) independently observed that a hook-issued DENY returns immediately in an unattended scheduled session (only `ask` hangs), supporting this approach.
+5. From #89632 thread: wrap the task command in `timeout -k 30 20m` (not available by default on macOS; use `gtimeout` via coreutils) and have the task's first step log its own `--permission-mode` from the process list, exiting non-zero if it prints `default`.
 
 **Notes:**
 Confidence raised from Unverified to Likely — now five independent reports (macOS desktop, Windows desktop, Linux CLI/routines, multi-host local-scheduled-task reproduction, and the Workflow-tool-spawned variant in #78487) of the same underlying "unattended session cannot express a standing permission policy, stalls forever, and fails silently" defect, spanning nearly two months of activity. This is squarely in-scope for MOSAIC's headless/CLI-driven background dispatch pattern. #83166 and #78487 are stale-bot closed (`not_planned`) — genuinely NOT fixed; #86915, #92797, and #89632 remain open as of 2026-08-31/09-08/09 with no maintainer response. Re-verify periodically for a maintainer response or fix, and note the CLI's own `-p --permission-mode` headless flow is reported to work correctly — the defect is specific to the desktop scheduled-task, cloud scheduled-routine, local-scheduled-task, and Workflow-tool surfaces, which MOSAIC should avoid relying on for standing permission grants without the user-level-`defaultMode` workaround above. #70143 (docs-only, closed `not_planned`, no operational impact on its own — discarded as a standalone entry) provides useful context: the removal of the old "background subagents auto-deny" behavior in 2.1.186 is the design change that turned an unanswered prompt from a fast auto-deny into an indefinite hang.
+Run 20: #86915 and #89632 still open (#89632 now `stale`-labeled), #92797 open; no maintainer response on any of them. Release notes through v2.1.310 show only narrow, adjacent bounded-wait fixes for unattended prompts: v2.1.304/v2.1.305 ("scheduled Cowork cloud sessions waiting five minutes for each subagent whose WebFetch needed a URL approval that nobody was there to give") and a v2.1.309 Desktop/VS Code change making the dangerous-`rm` prompt in bypass mode deny immediately "so unattended sessions keep going" -- evidence Anthropic is patching individual unattended-prompt cases, but none touches the scheduled-task launcher's `defaultMode` resolution or the false `succeeded` run status. v2.1.302 also fixed cloud routine runs showing Completed after their session stopped unexpectedly (now Failed), and v2.1.286 fixed routine runs whose cloud session never started showing as Succeeded -- cloud-routine surface only; the local scheduled-task `list_task_runs` false `succeeded` (#86915 comment, 2.1.266) is not covered.
+Run 20 cross-refs: #103865 (open, 2.1.274, macOS) reports headless `--permission-mode bypassPermissions --permission-prompts none` sessions (`--bg` and `-p`) intermittently hanging on an unanswerable prompt for `ToolSearch` (29), `Bash` (14), MCP connector tools (9), `Read`, `Monitor`, with `claude agents --json` showing `waitingFor: "permission prompt"`; single reporter, no repro, not tracked separately (Unverified) but relevant to the headless-hang pattern here. Built-in dangerous-`rm` prompt variant tracked as CC-106.
 
 ---
 
@@ -94,13 +98,13 @@ Confidence raised from Unverified to Likely — now five independent reports (ma
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/82829 |
 | **Reported** | 2026-07-31 |
-| **Last Activity** | 2026-09-06 |
+| **Last Activity** | 2026-10-21 (promotional comment only; no maintainer response, no new reproductions since 2026-09-06) |
 | **Confidence** | Likely |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | Confirmed on 2.1.220; reporter notes surrounding behavior changed in v2.1.199/v2.1.200, so this may be an edge case introduced by that earlier fix |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | Confirmed on 2.1.220; reporter notes surrounding behavior changed in v2.1.199/v2.1.200, so this may be an edge case introduced by that earlier fix. Needs re-verification on current builds (no confirmation since 2.1.220; latest is 2.1.310; release notes through 2.1.310 show no fix) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | area:agents |
 
 **Summary:**
@@ -120,7 +124,9 @@ The orchestrator has no reliable way to detect that a subagent's output is incom
 2. Where feasible, track account usage/spend headroom before dispatching long-running fan-outs, to reduce the chance of hitting the limit mid-run.
 
 **Notes:**
-#83412 is a broader companion report (lack of partial-result handoff, no wait-for-reset/auto-resume, repeat failures on retry after reset) and is stale-bot closed `not_planned` — not fixed. Both issues describe the same underlying failure-status-reporting gap; #82829 remains the primary tracked source here. Needs periodic re-verification given no maintainer response on either issue as of this pass.
+#83412 is a broader companion report (lack of partial-result handoff, no wait-for-reset/auto-resume, repeat failures on retry after reset) and is stale-bot closed `not_planned` — not fixed. Both issues describe the same underlying failure-status-reporting gap; #82829 remains the primary tracked source here. Run 20: release notes show adjacent improvements only -- v2.1.299 "background agent notifications now say when an agent ... was stopped by a usage limit" and v2.1.292 de-duplicated the usage-limit alert for background agents -- these cover BACKGROUND agent notifications, not the foreground-subagent `status: "completed"` result reported here; no fix for the foreground case found through v2.1.310. Needs periodic re-verification given no maintainer response on either issue as of this pass.
+
+Cross-reference (run 20, discovery pass): see also CC-100 for Windows tool-call teardown leaking descendants. Headless variant #104343 (open, single reporter, 2.1.306, Linux): `claude -p --output-format json` after the account usage limit is hit exits 1 with EMPTY stderr; the usage-limit `api_error` is only inside the stdout JSON, so a harness that logs stderr on failure sees no reason (a benchmark silently averaged over the runs that got through). Workaround: parse stdout JSON for the error and flag failed runs. Not standalone-worthy (single reporter, no repro beyond "reach the limit"); relevant to any Runner that classifies `-p` failures from exit code + stderr.
 
 ---
 
@@ -131,13 +137,13 @@ The orchestrator has no reliable way to detect that a subagent's output is incom
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/90218 (primary, open), with maintainer-confirmed root cause on https://github.com/anthropics/claude-code/issues/70543 (closed `not_planned`/stale, not fixed) |
 | **Reported** | 2026-08-27 (#90218); root-cause report #70543 filed 2026-06-24 |
-| **Last Activity** | 2026-09-08 |
+| **Last Activity** | 2026-09-08 (no activity for 7 weeks as of 2026-10-25; still open, no fix referenced in release notes through v2.1.310 -- Needs re-verification) |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | Confirmed on claude-sonnet-5 via the VS Code native extension (2026-08-06 through 2026-09-08, at least 5 occurrences across 3 project directories); root-cause report on CLI 2.1.186 with Opus 4.8 |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, area:core, area:security, platform:vscode (on #90218); bug, platform:macos, area:core, needs-repro, stale (on #70543) |
 
 **Summary:**
@@ -169,13 +175,13 @@ No fix has shipped as of 2026-09-08 (last observed occurrence) despite an explic
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/67500 |
 | **Reported** | 2026-06-11 |
-| **Last Activity** | 2026-09-07 |
+| **Last Activity** | 2026-09-07 (last comment; issue metadata touched 2026-09-24; no activity for 6+ weeks, still open -- Needs re-verification) |
 | **Confidence** | Likely |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | Reported on claude-sonnet-4-6, macOS CLI; ongoing discussion through 2026-09-07 with no indication of a version-specific fix |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, platform:macos, area:core |
 
 **Summary:**
@@ -207,13 +213,13 @@ This is a well-corroborated, long-running community-diagnosed defect (open since
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/88049 (HTTP transport, primary); https://github.com/anthropics/claude-code/issues/92900 (stdio transport twin); https://github.com/anthropics/claude-code/issues/82949 (Claude Desktop, stale-closed but not fixed; re-filing of the even older #50194) |
 | **Reported** | 2026-08-19 (#88049); 2026-09-08 (#92900); 2026-07-31 (#82949); original #50194 dates to April 2026 |
-| **Last Activity** | 2026-09-08 |
+| **Last Activity** | 2026-09-23 (#88049, promotional comment only); #92900 last substantive comment 2026-09-12; both still open, no maintainer response (4+ weeks quiet -- not yet re-verified against v2.1.310) |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | Reproduced on CLI 2.1.234 (HTTP transport, Windows) and CLI 2.1.220 / Claude Desktop 1.24012.9 (macOS); the Desktop variant has reproduced since at least April 2026 (#50194) despite an earlier attempted fix |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | Reproduced on CLI 2.1.234 (HTTP transport, Windows), Agent SDK 0.1.77 bundled CLI (stdio, Linux) and CLI 2.1.220 / Claude Desktop 1.24012.9 (macOS); the Desktop variant has reproduced since at least April 2026 (#50194) despite an earlier attempted fix |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:windows, area:mcp (on #88049); stale (on #82949, closed `not_planned`) |
 
 **Summary:**
@@ -234,7 +240,7 @@ Any MCP server MOSAIC depends on can be entirely and silently disabled by a sing
 2. If a third-party/uncontrolled MCP server exhibits this, there is no client-side workaround beyond removing/patching the offending tool server-side — the client gives no diagnostic to locate the offending tool short of bisecting the catalog by hand (remove tools one at a time until the rest reappear).
 
 **Notes:**
-This is a genuine "silent total tool-loss" hazard for any MOSAIC-controlled MCP server, and the fix is entirely within MOSAIC's control (schema hygiene on servers MOSAIC authors). For third-party servers, this is a standing risk with no detection mechanism other than noticing a server's tools are unexpectedly all missing. Given the recurrence pattern (#50194 → #82949 → #88049/#92900 across ~5 months with an intervening incomplete fix), treat as an ongoing, not-fully-resolved defect class rather than a one-off bug; re-verify if a future Claude Code release changelog mentions per-tool MCP schema isolation or JSON Schema boolean/union handling.
+This is a genuine "silent total tool-loss" hazard for any MOSAIC-controlled MCP server, and the fix is entirely within MOSAIC's control (schema hygiene on servers MOSAIC authors). For third-party servers, this is a standing risk with no detection mechanism other than noticing a server's tools are unexpectedly all missing. Given the recurrence pattern (#50194 → #82949 → #88049/#92900 across ~5 months with an intervening incomplete fix), treat as an ongoing, not-fully-resolved defect class rather than a one-off bug; re-verify if a future Claude Code release changelog mentions per-tool MCP schema isolation or JSON Schema boolean/union handling. Run 20: release notes through v2.1.310 mention no such fix. Same "silently dropped" family seen in search (open, not investigated in depth): #95504 (root-level `allOf`/`if`/`then` inputSchema drops MCP tools) and #92648 (property names containing `[]` rejected by API schema validation drop the tool). One #92900 commenter suggests diffing raw `tools/list` JSON (MCP Inspector) against what the host shows to isolate the offending property.
 
 ---
 
@@ -250,8 +256,8 @@ This is a genuine "silent total tool-loss" hazard for any MOSAIC-controlled MCP 
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 2.1.263 |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | 2.1.263 (Windows; no re-test on later builds -- Needs re-verification: 0 comments and no maintainer activity in 7 weeks, latest is 2.1.310) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, platform:windows, area:agents |
 
 **Summary:**
@@ -280,13 +286,13 @@ Flagged as high-priority for corroboration by a second independent report — no
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/86696 |
 | **Reported** | 2026-08-14 |
-| **Last Activity** | 2026-09-05 |
+| **Last Activity** | 2026-09-19 (closed by stale-bot as `not_planned`; last substantive comment 2026-08-17) |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 2.1.229 - 2.1.233+ (root cause confirmed present through at least 2.1.233) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | 2.1.229 - 2.1.233+ (root cause confirmed present through at least 2.1.233); no fix found in release notes through 2.1.310 |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:linux, area:tools, area:bash, area:agents, regression, stale |
 
 **Summary:**
@@ -306,6 +312,7 @@ Any hook-based permission gating that returns (or accidentally emits) `permissio
 
 **Notes:**
 The issue carries a `stale` label — GitHub Actions auto-commented asking for repro before the reporter's follow-up landed; the thread stayed open after the reporter's detailed isolation comment, but no maintainer has confirmed a fix or closed it as of 2026-09-05. Treat as "Needs re-verification" on current versions (v2.1.267) in a future pass.
+Run 20: #86696 was closed by github-actions[bot] on 2026-09-19 as `not_planned` ("inactive for too long") -- an inactivity closure, NOT a fix; the maintainer-acknowledged false-success reporting (`subtype: success`, `is_error: false` with `terminal_reason: tool_deferred`) has no fix entry in release notes through v2.1.310, so the entry stays active. The reporter additionally noted in-thread that the `hook_deferred_tool` attachment marker stopped being written on the subagent path from ~2026-08-14 (coincides with 2.1.232 making non-teammate agent spawns in interactive sessions background by default), removing the one durable transcript trace of a deferred subagent call, and suggested `defer` be ignored with a warning in subagent sidechains.
 Reporter also noted this is distinct from two nearby issues initially suspected as related — #86471 (background subagents reporting `completed` with empty/partial results, proposed context-size cliff) and #86673 (safety-classifier unavailability blocking tool calls) — and stated this one should not be merged with #86673.
 
 ---
@@ -317,13 +324,13 @@ Reporter also noted this is distinct from two nearby issues initially suspected 
 | **Classification** | Limitation |
 | **Source** | https://github.com/anthropics/claude-code/issues/78063 |
 | **Reported** | 2026-07-16 |
-| **Last Activity** | 2026-08-23 |
+| **Last Activity** | 2026-09-25 (bystander comment warning the issue is at risk of stale-bot auto-close; last technical comment 2026-08-23) |
 | **Confidence** | Confirmed (maintainer confirmed behavior and intent; disputed as "not a bug" but explicitly kept open) |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 2.1.209 - 2.1.241 (confirmed reproducible through 2.1.241, the most recent test in-thread) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | 2.1.209 - 2.1.241 (confirmed reproducible through 2.1.241, the most recent test in-thread); no change found in release notes through 2.1.310 (needs re-verification on current builds) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, documentation, has repro, platform:linux, area:agents, area:permissions, reproduced |
 
 **Summary:**
@@ -354,13 +361,13 @@ RECONCILIATION (vs CC-031, done in a later pass): re-read both full issues — t
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/78485 |
 | **Reported** | 2026-08-18 (approx., inferred from corroborating comment dates — original report date not directly captured) |
-| **Last Activity** | 2026-09-08 |
+| **Last Activity** | 2026-09-22 (closed by stale-bot as `not_planned`, an inactivity closure -- not a fix); same failure signature independently re-filed as #97616 on 2026-09-27 (see Notes) |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 2.1.206, 2.1.226 (still present, per corroborating comments) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | 2.1.206, 2.1.226 (still present, per corroborating comments); the same 400 symptom via a different trigger (#97616) reproduced on 2.1.246-2.1.283; no fix found in release notes through 2.1.310 |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:macos, area:tools, platform:vscode, area:plugins, stale |
 
 **Summary:**
@@ -381,7 +388,8 @@ A session using deferred/`ToolSearch`-loaded tools can be permanently killed mid
 4. Precautionary: avoid mid-session model switches when deferred (`ToolSearch`-loaded) tools are in play, since a model switch can silently withdraw built-in tools from the roster and trigger this.
 
 **Notes:**
-No fix PR linked yet; issue is `stale`-labeled with no maintainer engagement — flag for re-verification against v2.1.267 in a future pass. The client is documented as already doing partial cleanup for some withdrawn-tool cases (rewriting `tool_result` blocks to `"[Tool references removed - tools no longer available]"`) but this does not extend to `tool_search_tool_result` blocks, which is the actual failure surface here.
+Run 20 cross-references (same permanent-400 "bricked session" outcome, different triggers, not yet deeply investigated): #97616 (open, `regression`, Windows, filed 2026-09-27, reproducible without auth) -- ToolSearch loading any MCP tool whose full name `mcp__<server>__<tool>` exceeds 64 characters (plugin-provided servers get a long `mcp__plugin_<plugin>_<server>__` prefix) 400s on the next request and the `tool_reference` stays in history; reporter workarounds: re-declare the endpoint in project `.mcp.json` under a short name, or a `PreToolUse` hook on `ToolSearch` that denies `select:` queries for names over 64 chars. Also #102389 (open, ToolSearch loads an MCP tool larger than the context window so auto-compact keeps it and the session is permanently dead). Suggest the primary consider whether #97616 deserves its own entry.
+No fix PR linked yet; #78485 itself was stale-bot closed `not_planned` on 2026-09-22 with no maintainer engagement; release notes through v2.1.310 show no fix -- flag for re-verification against v2.1.310 in a future pass. The client is documented as already doing partial cleanup for some withdrawn-tool cases (rewriting `tool_result` blocks to `"[Tool references removed - tools no longer available]"`) but this does not extend to `tool_search_tool_result` blocks, which is the actual failure surface here.
 
 ---
 
@@ -392,13 +400,13 @@ No fix PR linked yet; issue is `stale`-labeled with no maintainer engagement —
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/83421 (primary), corroborated by https://github.com/anthropics/claude-code/issues/73633 (Workflow subagents don't inherit `permissions.allow`, stale-bot closed `not_planned`) |
 | **Reported** | 2026-08-02 (#83421); #73633 reported 2026-07-02 |
-| **Last Activity** | 2026-09-02 (#73633's last comment) |
+| **Last Activity** | 2026-09-02 (#73633's last comment; #83421 has had no new comments since 2026-08-02, metadata touched 2026-09-27 -- Needs re-verification, still open) |
 | **Confidence** | Likely |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 2.1.200 - 2.1.220+ (#83421 on 2.1.220; #73633 reproduced independently on 2.1.200, 2.1.204, and macOS Darwin 25.5.0) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | 2.1.200 - 2.1.220+ (#83421 on 2.1.220; #73633 reproduced independently on 2.1.200, 2.1.204, and macOS Darwin 25.5.0); not re-tested on later builds (latest 2.1.310) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | area:agents, area:permissions |
 
 **Summary:**
@@ -419,7 +427,7 @@ If MOSAIC uses nested subagent dispatch (a subagent that itself dispatches furth
 3. No preventive fix exists for the general Workflow-subagent allow-rule non-inheritance in #73633 short of avoiding Plan Mode or pre-approving via a broader `bypassPermissions`/`dontAsk` mode, which several commenters note defeats the purpose of scoped allow-listing for unattended fan-out.
 
 **Notes:**
-Confidence raised from Unverified to Likely this pass: while #83421's own narrow claim remains single-reporter, #73633 independently and robustly corroborates the broader class ("subagent-issued tool calls do not reliably inherit the parent session's resolved permission state") with 4 independent reporters, a controlled A/B isolating a concrete trigger (Plan Mode), and reproduction spanning at least 3 CLI versions. Still capped below Confirmed because no maintainer has acknowledged either issue, and the two reports manifest in opposite directions (under- vs. over-prompting) rather than pointing at one identical code path. Kept active — this threatens a core MOSAIC pattern (subagent dispatch, including via Workflow-style fan-out, under an allowlisted or bypass permission policy) with concrete, reproducible evidence. Needs re-verification and, ideally, a maintainer response in a future pass. #70143 and #78487 were checked this pass: #70143 is a docs-only report with no operational impact of its own (discarded as a standalone entry); #78487 is a strong corroboration of CC-002's indefinite-hang mechanism (Workflow-tool surface) and has been folded into that entry rather than this one, since its symptom (prompt fires but nobody answers) is distinct from this entry's claim (permission state not reaching the subagent's tool-call context at all).
+Confidence raised from Unverified to Likely this pass: while #83421's own narrow claim remains single-reporter, #73633 independently and robustly corroborates the broader class ("subagent-issued tool calls do not reliably inherit the parent session's resolved permission state") with 4 independent reporters, a controlled A/B isolating a concrete trigger (Plan Mode), and reproduction spanning at least 3 CLI versions. Still capped below Confirmed because no maintainer has acknowledged either issue, and the two reports manifest in opposite directions (under- vs. over-prompting) rather than pointing at one identical code path. Kept active — this threatens a core MOSAIC pattern (subagent dispatch, including via Workflow-style fan-out, under an allowlisted or bypass permission policy) with concrete, reproducible evidence. Needs re-verification and, ideally, a maintainer response in a future pass. Run 20: release notes show only adjacent permission-inheritance fixes (v2.1.285: fork subagents now keep the session's plan mode / `dontAsk` mode; v2.1.292: subagent definitions with `permissionMode: auto` no longer enter auto mode when it is unavailable) -- neither addresses the nested-subagent mid-run degradation or the Workflow/Plan-Mode allow-rule non-inheritance. #70143 and #78487 were checked this pass: #70143 is a docs-only report with no operational impact of its own (discarded as a standalone entry); #78487 is a strong corroboration of CC-002's indefinite-hang mechanism (Workflow-tool surface) and has been folded into that entry rather than this one, since its symptom (prompt fires but nobody answers) is distinct from this entry's claim (permission state not reaching the subagent's tool-call context at all).
 
 ---
 
@@ -430,13 +438,13 @@ Confidence raised from Unverified to Likely this pass: while #83421's own narrow
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/87639 |
 | **Reported** | 2026-08-18 |
-| **Last Activity** | 2026-08-26 |
+| **Last Activity** | 2026-10-23 (closed by stale-bot as `not_planned` -- inactivity closure, not a fix; last substantive comment 2026-08-22) |
 | **Confidence** | Likely |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 2.1.228 - 2.1.234 |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | 2.1.228 - 2.1.234; no fix or mention found in release notes through 2.1.310 (not re-tested on later builds) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:linux, area:hooks, area:permissions |
 
 **Summary:**
@@ -454,7 +462,7 @@ In an **interactive session running in auto mode** (`--permission-mode auto` or 
 2. Avoid `--permission-mode auto` / `defaultMode: "auto"` for interactive sessions where an `ask` checkpoint is safety-relevant; use `-p`/print mode (where `ask` rules were confirmed to work) or Manual mode instead.
 
 **Notes:**
-Needs re-verification against current version (v2.1.267) in a future pass — no confirmation either way since 2026-08-26.
+Needs re-verification against current version (v2.1.310) in a future pass — no confirmation either way since 2026-08-22. Run 20: #87639 was closed by github-actions[bot] on 2026-10-23 as `not_planned` ("inactive for too long") with no maintainer engagement; this is NOT a fix, and release notes through v2.1.310 contain no entry addressing interactive auto mode skipping `ask` rules/hooks, so the entry stays active. Anyone still hitting it must re-file a new issue per the bot.
 
 ---
 
@@ -465,13 +473,13 @@ Needs re-verification against current version (v2.1.267) in a future pass — no
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/84302 (closed, not_planned, stale-bot auto-close) |
 | **Reported** | 2026-08-05 |
-| **Last Activity** | 2026-09-07 (auto-closed by stale-bot) |
+| **Last Activity** | 2026-09-07 (auto-closed by stale-bot); related PR #84364 closed unmerged 2026-10-09 |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | Unknown — not stated in issue |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | Unknown — not stated in issue. Default (fail-open on hook timeout/crash) presumed still current; v2.1.295 added an opt-in `onFailure: "block"` hook setting (see Workaround 1) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | stale (only label; issue has no `bug` label) |
 
 **Summary:**
@@ -486,11 +494,12 @@ Any safety/permission gate implemented via `PreToolUse` hooks — including ones
 - Related, complementary issue #82323 ("A PreToolUse hook can be inert with no signal anywhere") independently documents a related but distinct fail-open path — a missing/unrunnable hook script exits non-zero-but-not-2 and the tool call proceeds silently, with no signal in `/doctor` or `/hooks` — corroborating that fail-open-on-hook-malfunction is a real, broader pattern in the hooks subsystem, even though it doesn't directly confirm the killed/timed-out-hook variant.
 
 **Workaround(s):**
-1. From the reporter: move approval/permission-gating logic inside MCP tools themselves (fail-closed by ordering) rather than relying on a `PreToolUse` hook's `permissionDecision` protocol for long-running or out-of-band approvals.
-2. From the related issue #82323: monitor hook execution independently — e.g., have the hook itself write a receipt on every invocation (including no-op decisions) rather than trusting `/hooks`' "configured" view, since configured and effective are different properties and nothing in the product surfaces a killed/inert hook.
+1. ⭐ NEW (run 20, from Claude Code release notes v2.1.295, not from the issue thread): set `onFailure: "block"` on command and HTTP hooks -- "a hook that can't start, times out, or exits with an unexpected code blocks the action instead of letting it through". This is the first-party fail-closed switch for exactly this failure class; requires Claude Code >= 2.1.295 and is opt-in per hook, so MOSAIC-deployed `PreToolUse` gates need it set explicitly. Not tested by us or confirmed by an issue reporter. Also in the same period: v2.1.288 fixed PreToolUse/PermissionRequest hooks being skipped (now blocked) when matching failed or the tool input could not be serialized; v2.1.299 and v2.1.309 fixed Windows hooks failing open when Git for Windows/Git Bash is missing (relevant to a Windows MOSAIC host).
+2. From the reporter: move approval/permission-gating logic inside MCP tools themselves (fail-closed by ordering) rather than relying on a `PreToolUse` hook's `permissionDecision` protocol for long-running or out-of-band approvals.
+3. From the related issue #82323: monitor hook execution independently — e.g., have the hook itself write a receipt on every invocation (including no-op decisions) rather than trusting `/hooks`' "configured" view, since configured and effective are different properties and nothing in the product surfaces a killed/inert hook.
 
 **Notes:**
-Confidence downgraded from the reconstructed guess's "Confirmed" to "Unverified": the reconstructed entry's confidence rested on a "linked open fix PR", which on inspection targets a different (plugin-level) bug, not this one — and the actual underlying issue (#84302) has zero maintainer engagement and was closed by stale-bot. Kept active despite Unverified confidence because it threatens a core MOSAIC pattern (hook-based permission gating fail-open under a plausible, ordinary trigger — a slow/unanswered approval) with concrete reproduction steps on stock Anthropic infrastructure. Re-verify in a future pass whether this reproduces on current versions, and whether PR #84364 (still open/unmerged as of this backfill) ever gets connected to a genuine CLI-level fix.
+Confidence downgraded from the reconstructed guess's "Confirmed" to "Unverified": the reconstructed entry's confidence rested on a "linked open fix PR", which on inspection targets a different (plugin-level) bug, not this one — and the actual underlying issue (#84302) has zero maintainer engagement and was closed by stale-bot. Kept active despite Unverified confidence because it threatens a core MOSAIC pattern (hook-based permission gating fail-open under a plausible, ordinary trigger — a slow/unanswered approval) with concrete reproduction steps on stock Anthropic infrastructure. Re-verify in a future pass whether this reproduces on current versions, and whether PR #84364 ever gets connected to a genuine CLI-level fix. Run 20: PR #84364 was closed UNMERGED on 2026-10-09 (it only ever targeted the third-party hookify plugin). Separately, v2.1.295's opt-in `onFailure: "block"` shows Anthropic recognizes the fail-open-on-hook-failure class and provides a fix path, but the default remains fail-open; a verification pass should test whether a timed-out hook with `onFailure: "block"` actually blocks.
 
 ---
 
@@ -501,13 +510,13 @@ Confidence downgraded from the reconstructed guess's "Confirmed" to "Unverified"
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/87994 |
 | **Reported** | 2026-08-19 |
-| **Last Activity** | 2026-09-08 |
+| **Last Activity** | 2026-09-23 (closed upstream) |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 2.1.232+ (regression introduced by the "non-teammate agent spawns in interactive sessions now run in background by default" change); confirmed on 2.1.234, Windows |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:windows, area:agents, area:permissions, stale |
 
 **Summary:**
@@ -529,6 +538,8 @@ Background/unattended subagent dispatch — a core MOSAIC pattern — cannot rel
 **Notes:**
 No maintainer engagement to date; issue auto-labeled `stale`. Confidence set to Unverified (not Confirmed as originally reconstructed) since there is no maintainer acknowledgment and only a single reporter, despite that reporter's unusually thorough two-path self-verification. Related: #36042 (closed, not planned — narrower precedent); #83421 (investigated, but determined to be a different, nested-subagent-specific mid-run degradation, not the same mechanism — see CC entry there if added). Should be re-verified on a current Claude Code version given staleness.
 
+**Run 20 note (2026-10-25) — Needs re-verification:** Closed upstream 2026-09-23 as `not_planned` by the stale bot, with no maintainer response and no linked fix. A stale-bot closure is not a resolution, so the entry stays active. Auto-closed by the stale bot on 2026-09-23 ("inactive for too long") after 2 comments, both from the bot/none substantive; never acknowledged by a maintainer. Not a verified fix. Related changelog items since: v2.1.285 fixed `claude -p --permission-prompt-tool` so a background subagent's permission request goes to the prompt tool instead of being auto-denied; v2.1.290 fixed background subagents losing write/Bash access in their worktree after the main session enters/exits another worktree. Interactive-session behavior on current versions (v2.1.310) is unverified; if it recurs it should be re-filed and re-added.
+
 ---
 
 ### CC-018: A self-backgrounding Bash command under `run_in_background` reports false-complete, orphans the process, can cause silent double-dispatch
@@ -544,7 +555,7 @@ No maintainer engagement to date; issue auto-labeled `stale`. Confidence set to 
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 2.1.266 (confirmed); reporter notes the underlying mechanism is deterministic and reproducible |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:linux, area:bash |
 
 **Summary:**
@@ -568,6 +579,8 @@ Background Bash-based orchestration steps (a core MOSAIC pattern for long-runnin
 **Notes:**
 Issue is brand new (filed 2026-09-09) — no maintainer engagement yet, needs re-verification in a future pass once it has had time to accrue confirmations or a maintainer response. Related: #93127 (secondary/correlated issue by the same reporter, not tracked separately here as it's about session interruption diagnostics rather than orchestration risk; the 2026-09-09 follow-up comment on this issue formally retracts the earlier cross-reference between the two symptoms while reaffirming the orphaning mechanism itself). Re-verified 2026-09-10 (run 15 batch 4): still single-reporter, still Unverified, still open, no maintainer response.
 
+Re-verified 2026-10-25 (run 20): #93126 still open, 1 comment total (the reporter's 2026-09-09 follow-up), no maintainer response, no activity in ~6.5 weeks. **Needs re-verification** on a current version; no changelog entry through v2.1.310 addresses self-backgrounding commands under `run_in_background`.
+
 ---
 
 ### CC-019: A background Bash task gets killed ~17-20 seconds after arming when armed as the turn's last tool call
@@ -577,13 +590,13 @@ Issue is brand new (filed 2026-09-09) — no maintainer engagement yet, needs re
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/87948 |
 | **Reported** | 2026-08-19 |
-| **Last Activity** | 2026-09-08 |
+| **Last Activity** | 2026-09-23 (closed upstream) |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 2.1.231 (Linux, terminal CLI entrypoint, git worktree session) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:linux, area:core, area:bash, stale |
 
 **Summary:**
@@ -605,6 +618,8 @@ Long-running background Bash steps dispatched as the final action of a turn risk
 **Notes:**
 No maintainer engagement to date; confidence capped at Unverified per validation rules (single reporter, no confirmations). Labeled `stale` by the tracker — flagged here as "Needs re-verification" on a more current Claude Code version before treating this as still-current. Related but distinct issues on the tracker: #72851, #68625 (Desktop idle/lock teardown, longer timescale), #25188 (closed, session-end cleanup). Re-verified 2026-09-10 (run 15 batch 4): issue remains open with zero comments and no maintainer response — over 3 weeks since filing with no corroboration. Not yet past the 6-week stale threshold, but trending toward it; worth checking again in a future pass for either a second reporter or continued silence.
 
+**Run 20 note (2026-10-25) — Needs re-verification:** Closed upstream 2026-09-23 as `not_planned` by the stale bot, with no maintainer response and no linked fix. A stale-bot closure is not a resolution, so the entry stays active. Auto-closed by the stale bot on 2026-09-23 with no maintainer engagement and no second reporter. Not a verified fix. Changelog since: v2.1.285 added a time limit for background Bash (default 30 min) and v2.1.274 narrowed the idle-reap policy (see CC-051), but nothing addresses this specific turn-finalization race. Still-open background-kill reports remain tracked as CC-051 and CC-052's related evidence; re-add if reproduced on a current build.
+
 ---
 
 ### CC-050: `SubagentStop` hook never fires when a background subagent is killed via `TaskStop` or session exit ("Exit and stop tasks")
@@ -620,7 +635,7 @@ No maintainer engagement to date; confidence capped at Unverified per validation
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 2.1.261 (macOS, Anthropic API/claude.ai login) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:macos, area:hooks, area:agents |
 
 **Summary:**
@@ -642,6 +657,8 @@ Any MOSAIC hook-based bookkeeping (e.g. an audit/logging hook, or an orchestrato
 **Notes:**
 Brand new report (filed 2026-09-07, 2 days before this pass) with zero comments and no maintainer engagement yet — needs re-verification once it has had time to accrue corroboration or a maintainer response. Cross-reference CC-005 (`PostToolUse` not firing for `Agent` tool completions at the parent level) and #82249/#78463/#44971 (cited in this issue as related-but-distinct prior reports) — together these describe a recurring pattern of subagent-lifecycle hook events being unreliable across several different termination paths, though each has a distinct trigger and none has been consolidated by a maintainer into a single root cause.
 
+Re-verified 2026-10-25 (run 20): #92716 still open, 0 comments, no maintainer response, no activity in ~7 weeks. **Needs re-verification** on a current version; no changelog entry through v2.1.310 mentions `SubagentStop` firing on `TaskStop`/exit kill paths (v2.1.275 only fixed `matcher` handling for empty agent types).
+
 ---
 
 ### CC-051: Idle tracked background shells reaped under macOS memory pressure on a ~30-minute timer, mislabeled "was stopped by the user"
@@ -651,13 +668,13 @@ Brand new report (filed 2026-09-07, 2 days before this pass) with zero comments 
 | **Classification** | Limitation |
 | **Source** | https://github.com/anthropics/claude-code/issues/84981 (primary), with corroborating reports https://github.com/anthropics/claude-code/issues/83258, https://github.com/anthropics/claude-code/issues/89779, and https://github.com/anthropics/claude-code/issues/83814 |
 | **Reported** | 2026-08-08 (#84981); corroborating reports filed 2026-08-02 (#83258), 2026-08-04 (#83814), 2026-08-26 (#89779) |
-| **Last Activity** | 2026-08-31 |
+| **Last Activity** | 2026-10-20 |
 | **Confidence** | Confirmed |
-| **Orchestration Impact** | HIGH |
+| **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 2.1.193+ (feature introduced), confirmed still present/reproducing through 2.1.220, 2.1.221, 2.1.226, 2.1.233, 2.1.241, 2.1.246, 2.1.251 |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | 2.1.193+ (feature introduced), confirmed still present/reproducing through 2.1.220, 2.1.221, 2.1.226, 2.1.233, 2.1.241, 2.1.246, 2.1.251; PARTIALLY CHANGED in v2.1.274 (2026-09-17), which narrowed the reap to critically low memory only -- post-2.1.274 behavior not yet re-verified by any reporter |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | area:tools (on #84981); bug, stale (on #83258); area:tools (on #83814); bug, has repro, platform:macos, area:core, area:bash (on #89779) |
 
 **Summary:**
@@ -682,6 +699,8 @@ Directly threatens MOSAIC's macOS-hosted background dispatch pattern — any lon
 **Notes:**
 Classified as Limitation (not Bug) because the reap itself is a documented, intentional feature introduced in v2.1.193 with a supported opt-out — MOSAIC should treat this as a permanent macOS-specific constraint on long-idle background Bash tasks under memory pressure, not something to wait on a fix for. The misleading "was stopped by the user" attribution and the lack of any in-session signal that a pressure policy (versus a real user/external actor) caused the kill remain unaddressed defects worth tracking within this same entry. Distinct from CC-019 — see Impact on Orchestration for the differentiation; do not merge these two entries. Distinct from CC-052 (cross-platform, non-memory-pressure "killed with no TaskStop" mechanism observed on Windows/Linux) — that entry's mechanism is explicitly ruled out as memory-pressure-related since Darwin memorystatus doesn't apply there. Needs periodic re-verification given the timer's anchoring mechanism has already changed once across versions (2.1.23x → 2.1.24x) even though the core behavior persisted, and given #83258/#89779 show the documented "≥30 min idle + real pressure" precondition is looser in practice than advertised (fires on routine/non-escalating memorystatus event arrival while merely momentarily idle).
 
+Update 2026-10-25 (run 20): the v2.1.274 release (2026-09-17) changelog states "Fixed background commands being stopped after 30 idle minutes on machines under mild memory pressure; they're now stopped only when memory is critically low, and the debug log says why." This is a direct vendor-side narrowing of the mechanism: the idle ~30-minute reap should no longer fire under mild/routine memory pressure (the #83258/#89779 pattern). It confirms the reaper was real and over-eager, and means the exposure on v2.1.274+ is limited to genuinely critical memory conditions, hence Orchestration Impact lowered from HIGH to MEDIUM. Remaining: (a) the "was stopped by the user" mislabel and lack of in-session signal were not mentioned as fixed (debug log now says why), (b) `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` remains the opt-out, (c) no reporter has re-tested on >=2.1.274; #84981 and #89779 remain open (last activity 2026-10-20) while the corroborating reports #83258 (closed 2026-09-14) and #83814 (closed 2026-10-06) were auto-closed by the stale bot as not_planned with no maintainer response. Keep as Limitation (documented, intentional reaper with opt-out); recheck once a post-2.1.274 reproduction or an explicit confirmation of the new policy appears. Platform-scope note: macOS-only; Windows/Linux unaffected.
+
 ---
 
 ### CC-052: Background Bash tasks killed by the harness's own stop path with no `TaskStop`, no memory pressure, and no crash — cross-platform (Windows, Linux)
@@ -691,13 +710,13 @@ Classified as Limitation (not Bug) because the reap itself is a documented, inte
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/76249 |
 | **Reported** | 2026-07-10 |
-| **Last Activity** | 2026-08-20 |
+| **Last Activity** | 2026-10-03 (closed upstream) |
 | **Confidence** | Likely |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 2.1.206 (Windows, original + Linux corroboration) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:windows, area:core, area:agent-view |
 
 **Summary:**
@@ -717,7 +736,9 @@ This directly threatens MOSAIC's background Bash dispatch pattern on both Window
 2. Independently verify actual task completion (e.g. checking the process/output file directly) rather than trusting a `killed`/"was stopped" notification's implied cause — this classification is used both for real user/agent-issued stops and for these unexplained harness-internal kills, so it cannot on its own distinguish "someone meant to stop this."
 
 **Notes:**
-Kept distinct from CC-019 and CC-051 given differing platform scope, timing signature, and (for CC-051) an identified root-cause mechanism that doesn't apply on Windows/Linux. Needs re-verification on a current Claude Code version (v2.1.267) — last direct evidence is from 2.1.206, over two months and several releases behind. Worth a future pass reviewing #88071 (cited in-thread) to see if it further explains or narrows this mechanism.
+Kept distinct from CC-019 and CC-051 given differing platform scope, timing signature, and (for CC-051) an identified root-cause mechanism that doesn't apply on Windows/Linux. Needs re-verification on a current Claude Code version (v2.1.267) — last direct evidence is from 2.1.206, over two months and several releases behind. Worth a future pass reviewing #88071 (cited in-thread) to see if it further explains or narrows this mechanism. Run 20 update: #88071 reviewed and tracked as CC-104 (idle-session sweep, SIGTERM from the harness itself, setsid mitigation, same-turn blocking-wait control).
+
+**Run 20 note (2026-10-25) — Needs re-verification:** Closed upstream 2026-10-03 as `not_planned` by the stale bot, with no maintainer response and no linked fix. A stale-bot closure is not a resolution, so the entry stays active. Auto-closed by the stale bot on 2026-10-03 (6 comments) with no maintainer response. Not a verified fix; the unexplained-kill symptom class may persist on current versions (v2.1.310), where the Monitor tool's availability was extended. Caveat for MOSAIC: treat any `killed`/"was stopped" background-task notification as ambiguous and verify completion independently; the detached tmux + Monitor pattern remains the community-validated mitigation. Re-add if reproduced on a current build.
 
 ---
 
@@ -728,13 +749,13 @@ Kept distinct from CC-019 and CC-051 given differing platform scope, timing sign
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/79744 |
 | **Reported** | 2026-07-21 |
-| **Last Activity** | 2026-09-09 |
+| **Last Activity** | 2026-09-23 (closed upstream) |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 2.1.216 (Ubuntu/Debian Linux, WSL); no fix confirmed on current version |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, area:tools, area:plugins, stale |
 
 **Summary:**
@@ -756,6 +777,8 @@ The prior version of this entry justified keeping it as relevant on the claim th
 **Notes:**
 The previous "AUDIT NOTE" claiming headless `-p` reachability was incorrect and has been removed — this backfill pass found the source issue explicitly contradicts it. The entry is kept active, but for a different and narrower reason: MOSAIC's interactive/harness-native execution mode (not its headless Runner pipeline) can reach this bug. Reclassified from Quirk to Bug (the behavior clearly contradicts the harness's own headless-mode behavior on the identical scenario, so it reads as an unintended defect rather than model-level or by-design). No maintainer engagement to date; labeled `stale` — needs re-verification on a current Claude Code version. Re-verified 2026-09-10 (run 15 batch 4): issue still open, still zero comments, no maintainer response, no second reporter — classification, confidence, and impact all still hold as recorded.
 
+**Run 20 note (2026-10-25) — Needs re-verification:** Closed upstream 2026-09-23 as `not_planned` by the stale bot, with no maintainer response and no linked fix. A stale-bot closure is not a resolution, so the entry stays active. Auto-closed by the stale bot on 2026-09-23 with zero maintainer engagement. Not a verified fix. Only affected MOSAIC's interactive/harness-native mode with a plugin LSP server. Changelog since (v2.1.288 LSP request timeouts, v2.1.280 background-subagent LSP access) does not address the missing didChange. Low materiality given no confirmation; re-add if reproduced.
+
 ---
 
 ### CC-022: Mid-session `/model` switch doesn't actually apply to the running session
@@ -765,14 +788,14 @@ The previous "AUDIT NOTE" claiming headless `-p` reachability was incorrect and 
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/73881 |
 | **Reported** | 2026-07-03 |
-| **Last Activity** | 2026-09-06 |
+| **Last Activity** | 2026-09-16 |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | v2.1.191 through at least v2.1.201, confirmed across VS Code extension, Claude desktop app, and iTerm2/terminal CLI — three independent users, no fix confirmed on current version |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
-| **Labels** | bug, platform:macos, area:model, platform:vscode, stale |
+| **Version(s) Affected** | v2.1.191 through at least v2.1.201, confirmed across VS Code extension, Claude desktop app, and iTerm2/terminal CLI — three independent users, a 4th reporter confirms it still happens on v2.1.270 (Claude desktop app model selector); no fix confirmed on current version |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | bug, platform:macos, area:model, platform:vscode |
 
 **Summary:**
 Switching models mid-session via `/model` updates the UI (status line, model picker checkmark) and even the persisted `model` field in settings, but the already-running session keeps generating on — and billing against — the previous model. There is no reliable in-session way to confirm which model is actually serving requests (`/status` is not a recognized command; model self-report is unreliable). One corroborating report traced this at the `message.model` field across an entire 478-turn session: 100% of turns ran the old (expensive/rationed) model despite the picker showing the new one for the whole span, silently burning ~915K tokens of a capped weekly allowance. A changed model only reliably takes effect as the default for brand-new sessions — an existing/resumed session does not adopt it.
@@ -792,6 +815,8 @@ Any orchestration step that switches models mid-session (e.g. downgrading/upgrad
 **Notes:**
 No maintainer engagement to date; issue auto-labeled `stale` — needs re-verification on a current Claude Code version. For MOSAIC: any workflow depending on switching models mid-session should instead dispatch a fresh subagent/session configured with the target model from the start, per Workaround 1. Re-verified 2026-09-10 (run 15 batch 4): both corroborating comments are unchanged from the prior pass (no new comments since 2026-08-18), issue still open, still no maintainer response — Confirmed confidence continues to rest on the three independent user reproductions, not on maintainer acknowledgment.
 
+Update 2026-10-25 (run 20): new 2026-09-16 comment reports the identical symptom on v2.1.270 in the Claude desktop app's own model selector (already-running sessions kept executing and billing the previously selected tier, with no in-session indication), emphasizing the silent-billing consequence. `stale` label removed; issue still open with no maintainer response. Changelog through v2.1.310 has no fix for running sessions adopting a mid-session `/model` change.
+
 ---
 
 ### CC-023: Subagent Bash `cwd` reset can land in a SIBLING subagent's worktree, with no spawn-time `cwd` parameter available to pin it
@@ -801,13 +826,13 @@ No maintainer engagement to date; issue auto-labeled `stale` — needs re-verifi
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/87953; corroborating independent report at https://github.com/anthropics/claude-code/issues/85026 |
 | **Reported** | 2026-08-19 (#87953); 2026-08-08 (#85026) |
-| **Last Activity** | 2026-09-06 |
+| **Last Activity** | 2026-09-30 |
 | **Confidence** | Likely |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 2.1.235 (Windows 11 Pro, Git Bash); also reported on macOS (darwin 25.6.0) with no version given; no fix confirmed on current version |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, platform:windows, area:bash, area:agents |
 
 **Summary:**
@@ -836,6 +861,8 @@ Triaged this run: #12748 (the cwd spawn-parameter feature request cross-referenc
 
 Re-verified 2026-09-10 (run 15 batch 4): #87953 and #85026 both still open with no maintainer response. #87953's two comments (michaelmanly offering an isolated-worktree test, webby-box's "silent retry multiplier" cost observation) are unchanged from the prior pass — neither is an independent reproduction of the underlying cwd-drift mechanism, so confidence stays at Likely (resting on #85026's independent corroboration, not on these comments). #85026 still has zero comments. No new evidence either strengthens or weakens this entry; classification, confidence, and impact all still hold as recorded.
 
+Update 2026-10-25 (run 20): #85026 gained a 2026-09-30 comment (independent reporter) reproducing a related aliasing: a session bound to worktree A was told its worktree had been "deleted" while it was still registered and present; after `EnterWorktree(path: A)` reported success, a `Read` of a file in A returned content authored by a concurrent session bound to sibling worktree B. This extends the entry in two ways: a concrete trigger (spurious "worktree deleted" reminder followed by `EnterWorktree` re-entry) and reach into the `Read`/file-content layer, not only Bash cwd. The commenter cross-references #95389 (a different, non-nested-path mechanism; not investigated here). #87953 unchanged since 2026-09-06 (still open, no maintainer response). v2.1.290 fixed an adjacent issue (background subagents losing write/Bash access in their worktree after the main session enters/exits a different worktree) but not this drift. Confidence stays Likely.
+
 ---
 
 ### CC-024: `SessionStart`-hook environment (`CLAUDE_ENV_FILE`) grows unboundedly across compact/resume/clear cycles, eventually wedging the Bash tool
@@ -845,13 +872,13 @@ Re-verified 2026-09-10 (run 15 batch 4): #87953 and #85026 both still open with 
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/78146 |
 | **Reported** | 2026-07-16 |
-| **Last Activity** | 2026-09-07 |
-| **Confidence** | Likely |
+| **Last Activity** | 2026-10-17 |
+| **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 2.1.211 (VS Code extension, Windows, original report); second reporter confirmed same mechanism on the CLI (Windows 11, Git Bash MSYS2) with no version given, activity as recent as 2026-09-07 |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | 2.1.211 (VS Code extension, Windows, original report); second reporter confirmed same mechanism on the CLI (Windows 11, Git Bash MSYS2) with no version given; further independent reproductions on 2.1.269 (native install, Windows 11, Git Bash) and 2.1.299 (CLI native, Windows 10, Git Bash) through 2026-10-17 |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:windows, platform:vscode, area:bash, area:hooks |
 
 **Summary:**
@@ -875,6 +902,8 @@ Long-lived sessions that go through repeated compact/resume/clear cycles — a r
 **Notes:**
 No maintainer engagement to date on either report. Confidence held at Likely (not Confirmed) since neither report has a maintainer acknowledgment or linked fix PR against the harness itself — the second reporter's PR (`openai/codex-plugin-cc#748`) fixes only one plugin-side trigger, not the underlying harness-side lack of validation/dedup/truncation that the original reporter's three suggested fixes target. Worth periodic re-verification given the harness-side root cause remains unaddressed as of the latest comment (2026-09-07).
 
+Update 2026-10-25 (run 20): two additional independent reporters since the last pass raise this to Confirmed (four independent reproductions on different installs/triggers, per the CaptureGuide's multiple-reproduction criterion; still no maintainer response). (1) 2026-09-11/12, v2.1.269 native Windows: a SessionStart hook exporting ~90 variables with no locking produced a 7,739-byte env block; the assembled `bash -c` string neared a ~8,175-byte truncation threshold (separate truncation defects reported as #93618 and #85111), so growth shows up as shifting errors (`unexpected EOF while looking for matching '`, `Is a directory`) even though the on-disk files are intact and pass `bash -n`. That reporter fixed it hook-side (buffer exports, dedupe last-value-wins, merge with the existing file, keep only lines that match `export NAME=` and parse with `shlex.split`) and confirmed that deduplicating an already-poisoned live block on a wedged session restored Bash without a restart. (2) 2026-10-17, v2.1.299 Windows 10: with `openai-codex` and `impeccable` plugins, 27 copies of one plugin's exports (7,851 bytes) wedged Bash after many resume/compact cycles; cleaning the transcript did not help but removing duplicate lines from `~/.claude/session-env/<id>/sessionstart-hook-*.sh` did, and the next resume immediately re-appended another copy, confirming the harness never resets or dedupes the file. Harness-side lack of validation/dedup remains unaddressed through v2.1.310 (v2.1.295 changes to `CLAUDE_ENV_FILE` handling only affect propagation after `/resume`/`/branch`).
+
 ---
 
 ### CC-025: Plugin-native `PreToolUse` hooks unenforced in interactive sessions; plugin JSON `deny` decisions unenforced in either mode
@@ -890,7 +919,7 @@ No maintainer engagement to date on either report. Confidence held at Likely (no
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 2.1.263 (Windows 11, Git Bash) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:windows, area:hooks, area:plugins, area:permissions |
 
 **Summary:**
@@ -914,6 +943,8 @@ Any security/permission gating implemented as a plugin-sourced `PreToolUse` hook
 **Notes:**
 Issue is very recent (filed 2026-09-07) with no maintainer engagement yet — recommend re-checking in a future pass for maintainer response or fix. Related but distinct open/closed issues referenced in the report: #10875 (closed, plugin hook stdout parse gap), #52822 (open, JSON `permissionDecision:"allow"` not honored interactively), #31250 (closed/stale, general PreToolUse not firing).
 
+Re-verified 2026-10-25 (run 20): #92675 still open, 0 comments, no maintainer response, no activity in ~7 weeks. **Needs re-verification** on a current version (reported on 2.1.263; v2.1.310 is latest). Changelog items since mention plugin-hook blocking hardening (e.g. actions a plugin hook can block are refused when the hook cannot answer) but nothing explicitly addressing this three-axis enforcement gap.
+
 ---
 
 ### CC-026: A second `/compact` within one process re-appends prior history with duplicate UUIDs, breaks `/rewind` session-wide
@@ -923,13 +954,13 @@ Issue is very recent (filed 2026-09-07) with no maintainer engagement yet — re
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/92089 |
 | **Reported** | 2026-09-04 |
-| **Last Activity** | 2026-09-08 |
-| **Confidence** | Unverified |
+| **Last Activity** | 2026-10-11 |
+| **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 2.1.260, also seen on 2.1.255, 2.1.247, 2.1.246, 2.1.237 (macOS, Anthropic API) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | 2.1.260, also seen on 2.1.255, 2.1.247, 2.1.246, 2.1.237 (macOS, Anthropic API); replay confirmed to persist on 2.1.271, 2.1.275, 2.1.280, 2.1.284, 2.1.286, 2.1.296 across macOS, Windows (desktop app and VS Code extension) and Linux/WSL2 |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:macos, area:core |
 
 **Summary:**
@@ -955,6 +986,10 @@ Long orchestration runs that trigger multiple compactions in a single process ri
 **Notes:**
 No maintainer response yet; re-check in a future pass. Reporter opened a near-duplicate issue #92849 for the `/rewind` session-wide breakage before finding this thread — #92849 was closed as a duplicate of this one, so #92089 is the canonical issue for both symptoms.
 
+Update 2026-10-25 (run 20): confidence raised to Confirmed -- at least four additional independent reporters across macOS, Windows (desktop app, VS Code extension) and Linux/WSL2 reproduced the duplicate-UUID replay on versions up to 2.1.296 (still no maintainer response). Narrowing and partial fix: on 2.1.271 the reporter found the misparented `stop_hook_summary` / broken-chain symptom fixed for the main-thread path (boundary `logicalParentUuid`/`preservedSegment.tailUuid` now point at the correct row), so the `/rewind`-breakage mechanism described above may no longer reproduce there (not re-tested); what remains is the replay itself (quadratic transcript growth). Remaining defects reported since: (a) a background subagent's own auto-compaction triggers the replay at the next main-thread message (2.1.271/2.1.275, Windows desktop app), with the broken parent link still present on 2.1.275; (b) occurs on auto as well as manual compaction and even on the first compaction of a fresh process (2.1.280/2.1.284, Linux/WSL2, VS Code); one transcript reached 1.2 GB (53% duplicates) and another 2.26 GB, after which opening the session crash-loops the VS Code extension host (>2 GiB file); (c) 2.1.286: copies can hide turns in the desktop app's conversation view while the chain is intact; (d) 2.1.296 root-cause analysis from the bundled JS: in SDK mode a manual `/compact` boundary is only appended (not trimmed from memory), and the post-compaction cache clear plus the >5 MiB pre-compact-skip loader means the next compaction re-writes the whole in-memory conversation; a copy appeared in 14 of 15 manual-then-same-process-then->5-MiB cases and 0 of 5 after an automatic compaction (`CLAUDE_CODE_DISABLE_PRECOMPACT_SKIP` offered but untested). Additional mitigation: resuming in a new process resets the replay block to a small size. Classification stays Bug.
+
+Cross-reference (run 20, discovery pass): the >2 GiB consequence is tracked separately as #99088 and #97229 (both open, VS Code extension only: opening/restoring a session whose transcript exceeds 2 GiB crash-loops the extension host / OOMs all tabs, Windows, 2.1.282) and #97230 (post-compact skip ignored when boundaries carry `preservedSegment`, so every VS Code tab parses the whole transcript). These are IDE-host failures, not headless CLI/`-p` behaviour, so not tracked as separate entries; the relevant MOSAIC point is that the duplicate-uuid growth can reach multi-GB transcripts in long-lived sessions. Reader-side advice from the thread: dedupe transcript rows by uuid (first occurrence wins) and take max timestamps, otherwise hooks/tools reading the transcript double-count.
+
 ---
 
 ### CC-027: Leading whitespace before a slash command causes it to be sent to the model as plain text instead of being dispatched as a command
@@ -964,13 +999,13 @@ No maintainer response yet; re-check in a future pass. Reporter opened a near-du
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/82846 |
 | **Reported** | 2026-07-31 |
-| **Last Activity** | 2026-09-07 |
+| **Last Activity** | 2026-09-14 |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 2.1.220 through at least 2.1.234; regression first observed at v2.1.119 (2026-04-24, per the original report this refiles) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:linux, area:tui, stale, reproduced |
 
 **Summary:**
@@ -992,6 +1027,8 @@ Any programmatically-generated prompt/command text that accidentally includes le
 **Notes:**
 Related/contributing issue: #18170 (copy/paste from the CLI's own terminal output retains leading indentation, a common real-world source of this trigger). Deliberately distinct from #77868 and #70656 (mid-message slash mentions — different, unresolved ambiguity, intentionally not addressed by this report). Issue currently carries a `stale` label alongside `reproduced` — worth re-checking status in a future pass since it has a collaborator confirmation but no visible fix/PR yet.
 
+Re-verified 2026-10-25 (run 20): #82846 still open; the `stale` label has been removed. New 2026-09-14 comment confirms "still live in 2.1.270". No fix or PR visible and no changelog entry through v2.1.310 addresses leading-whitespace slash dispatch. Confidence stays Confirmed.
+
 ---
 
 ### CC-028: `--continue` is directory-scoped, not invocation-scoped — can silently co-write into another live session's transcript
@@ -1001,14 +1038,14 @@ Related/contributing issue: #18170 (copy/paste from the CLI's own terminal outpu
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/87902 (see also https://github.com/anthropics/claude-code/issues/69364, the more heavily-corroborated companion report) |
 | **Reported** | 2026-08-19 (87902); 2026-06-18 (69364, earlier and more active) |
-| **Last Activity** | 2026-09-08 (87902); 2026-09-09 (69364) |
+| **Last Activity** | 2026-09-22 (87902, closed not_planned by stale bot); 2026-10-25 (69364, open) |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | Reproduced from 2.1.181 through at least 2.1.247, and again on unspecified current version as of 2026-09-09 — long-standing, not version-specific |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
-| **Labels** | bug, area:core, area:cli, stale (87902); enhancement, area:core, area:cli (69364) |
+| **Version(s) Affected** | Reproduced from 2.1.181 through at least 2.1.295 (terminal `--continue`/`--resume`, re-confirmed 2026-10-09). VS Code extension case fixed in 2.1.285 (now asks first). |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | bug, area:core, area:cli, stale (87902, closed); enhancement, area:core, area:cli (69364) |
 
 **Summary:**
 `--continue`/`--resume` resolves and re-opens a session by directory (or by session id with no liveness check) rather than by invocation, and does not consult Claude Code's own live-session registry (`~/.claude/sessions/<PID>.json`, shipped since v2.1.181) before attaching. A second `--continue`/`--resume` targeting a directory or session id already live in another process silently attaches to that live session, and both processes append to the same transcript `.jsonl` — with no warning surfaced anywhere. Multiple independent users reproduced this across versions 2.1.181 through 2.1.247 and again as of 2026-09-09, via distinct trigger paths (CLI `--continue`, CLI `--resume <uuid>`, the VS Code extension's session picker, and scheduler/bridge-spawned sessions), so this is a stable, long-standing property of the resume path rather than a narrow race.
@@ -1030,7 +1067,9 @@ Any automation that launches multiple concurrent Claude Code invocations against
 3. For MOSAIC specifically: ensure each concurrent Claude Code invocation uses a distinct working directory/worktree rather than sharing one directory with `--continue`/`--resume` — avoids the trigger condition entirely, though it does not address every case reported (e.g. deliberate cross-surface session-picker resumes in #69364).
 
 **Notes:**
-Treat #69364 as the primary, best-evidenced tracking issue for this underlying defect; #87902 is a specific, well-documented instance report matching this entry's original title. Given the strength and recency (2026-09-09) of #69364's evidence and the shared-task-store corroboration, this is a high-priority candidate for MOSAIC mitigation given the system's multi-agent, worktree-based parallel dispatch model.
+Update run 20 (2026-10-25): #87902 was auto-closed not_planned by the stale bot on 2026-09-22 (no fix; bot closure only) -- #69364 (open, 11 comments) is the sole tracker and received a stale-bot warning on 2026-10-25 (needs 10 thumbs-up or periodic comments to avoid auto-close). New findings: a 2026-09-23 binary re-check of 2.1.280 shows resume paths (`--continue`, `--resume <id>`, picker, `/resume`, `-p --resume`) now consult the live-session registry but only for holders with `kind != "interactive"`, so a background session blocks the resume ("Add --fork-session") while a session open in another terminal (kind interactive) is still silently attached. 2.1.285 fixed the VS Code case ("asks first"). 2026-10-09 re-check on 2.1.295 (Windows, native): terminal `claude` + second-terminal `claude --continue` still attaches with no warning. Partial fix only; terminal CLI path (MOSAIC-relevant) remains open. Original note: Treat #69364 as the primary, best-evidenced tracking issue for this underlying defect; #87902 was a specific, well-documented instance report matching this entry's original title. Given the strength and recency (2026-09-09) of #69364's evidence and the shared-task-store corroboration, this is a high-priority candidate for MOSAIC mitigation given the system's multi-agent, worktree-based parallel dispatch model.
+
+Cross-reference (run 20, discovery pass): #87525 (2026-08-18, v2.1.227, Linux; closed as duplicate of #69364 by maintainer `bcherny` on 2026-08-18, then locked) is a genuine variant of the same missing-liveness-lock defect: after repeated freezes/crashes of a long multi-`/compact` session with background tasks/subagents, repeated `/resume` of the same transcript produced up to seven concurrent live processes with identical auto-names, ghost roster entries whose registrations were never cleaned up (so `SendMessage` by name and `ListAgents` became unreliable), and divergent parallel git work on one repo. The extra elements beyond #69364 are the stale ghost-registration accumulation after a crash and the orphaned "no completion record" background tasks being re-driven by several forks; no maintainer fix noted (closure is a dedupe, not a fix). Kept as a note rather than a separate entry.
 
 ---
 
@@ -1047,7 +1086,7 @@ Treat #69364 as the primary, best-evidenced tracking issue for this underlying d
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 2.1.237, 2.1.241 (macOS, claude-opus-5 with 1M-token context window); one comment reports a corpus check finding no confirmed cases prior, so no established earlier onset |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:macos, area:core |
 
 **Summary:**
@@ -1069,7 +1108,7 @@ A session believed to have been compacted (freeing context budget) may not actua
 2. Do not trust the transcript's `<local-command-stdout>Compacted</local-command-stdout>` string, transcript-scanning for `/compact` command counts, or the UI's reported success as evidence of an applied compaction — both the reporter and `tonydzi` independently concluded post-hoc transcript forensics are unreliable in both directions (successful compactions can scrub prior failed-attempt records, and echoed post-boundary `/compact` records are easily miscounted as new orphans). Only the presence of a `compact_boundary` record (or the hook-based marker above) is reliable.
 
 **Notes:**
-No maintainer response yet — recommend re-checking in a future pass. The retracted corroboration attempt (`tonydzi`) is worth revisiting if that party or others post updated corpus data; their forensic script (shared in the thread) is a candidate reference implementation for anyone instrumenting this in MOSAIC. Re-verified 2026-09-10 (batch 6, run 15): still open, no maintainer engagement, confidence unchanged at Unverified; a third independent reporter (`samvallad33`) briefly confirmed the same symptom on 2026-09-06 but without reproduction detail, so this doesn't move confidence to Likely on its own — worth a future check for whether that reporter (or their linked tool "vestige," which appears to pre-ingest transcripts specifically to guard against this failure) posts anything more substantive.
+Run 20 (2026-10-25): NEEDS RE-VERIFICATION -- still open, 3 comments, no new discussion since 2026-09-06 (7 weeks; 09-24 timestamp is metadata only), no maintainer response, no linked PR. Changelog 2.1.268-2.1.310 contains no fix naming silent /compact no-op (only unrelated "Prompt is too long"/compaction fixes: 2.1.302, 2.1.310). Confidence stays Unverified. Earlier note: No maintainer response yet — recommend re-checking in a future pass. The retracted corroboration attempt (`tonydzi`) is worth revisiting if that party or others post updated corpus data; their forensic script (shared in the thread) is a candidate reference implementation for anyone instrumenting this in MOSAIC. Re-verified 2026-09-10 (batch 6, run 15): still open, no maintainer engagement, confidence unchanged at Unverified; a third independent reporter (`samvallad33`) briefly confirmed the same symptom on 2026-09-06 but without reproduction detail, so this doesn't move confidence to Likely on its own — worth a future check for whether that reporter (or their linked tool "vestige," which appears to pre-ingest transcripts specifically to guard against this failure) posts anything more substantive.
 
 ---
 
@@ -1086,8 +1125,8 @@ No maintainer response yet — recommend re-checking in a future pass. The retra
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 92457: 2.1.259 (Windows, plugin skills). 78759 and its many corroborating comments: 2.1.220 through 2.1.233, confirmed present across that whole range, on Windows/macOS/Linux/WSL2 — long-standing, not version-specific. |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
-| **Labels** | 92457: bug, has repro, platform:windows, area:skills, area:plugins. 78759: bug, documentation, has repro, area:skills, stale, reproduced |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | 92457: bug, has repro, platform:windows, area:skills, area:plugins. 78759 (closed not_planned by stale bot 2026-09-13): bug, documentation, has repro, area:skills, reproduced |
 
 **Summary:**
 Two related but distinct behaviors are in play, and the current understood state differs meaningfully from the original title:
@@ -1111,7 +1150,7 @@ Any MOSAIC skill/command relying on positional arguments beyond the first, or co
 **Notes:**
 This entry originally conflated a by-design Limitation (literal-text substitution, confirmed intentional and escapable) with a possibly-genuine Bug (the `$2`+ non-substitution and off-by-one framing, unconfirmed). Kept as one entry since they share the same substitution mechanism and the same practical mitigation guidance, but MOSAIC should treat the escape-based mitigation (workaround #1) as a permanent adaptation rather than a stopgap pending a fix. Related closed issues referenced within #92457: #23585 (forked-skill `$1`/`$2` not resolving at all, closed as completed — a different failure mode than resolving-to-the-wrong-index) and #46922 (`$ARGUMENTS` substitution request, closed not-planned, though contradicted by #92457's own follow-up finding that `$ARGUMENTS` does substitute correctly on 2.1.259).
 
-Re-verified 2026-09-10 (batch 6, run 15): both #92457 and #78759 unchanged since last capture — no new comments beyond what's already reflected above, no maintainer response to the indexing/`$2`+ half, both issues still open. Confidence, classification, and impact all remain as recorded. One additional detail surfaced worth flagging for MOSAIC's own skill authoring: plugin/skill content is snapshotted at session start, so a mid-session edit (including one applying the backslash-escape mitigation) requires a full application restart to take effect — testing a fix in the same session that authored it gives a false negative.
+Run 20 (2026-10-25): #78759 (literal-corruption half, with the maintainer-confirmed by-design + `\$N` escape) was auto-closed not_planned by the stale bot on 2026-09-13 -- bot closure only, behavior unchanged and escape remains the documented mitigation, so the Limitation stays active. #92457 (indexing/`$2`+ half) still open, 2 comments, no activity since 2026-09-06 (NEEDS RE-VERIFICATION, 7 weeks idle), no maintainer response. Changelog 2.1.268-2.1.310 has no fix for $N substitution (only 2.1.301: argument-name stall/memory fixes, first 64 names filled). Unchanged otherwise. Earlier: Re-verified 2026-09-10 (batch 6, run 15): both #92457 and #78759 unchanged since last capture — no new comments beyond what's already reflected above, no maintainer response to the indexing/`$2`+ half, both issues still open. Confidence, classification, and impact all remain as recorded. One additional detail surfaced worth flagging for MOSAIC's own skill authoring: plugin/skill content is snapshotted at session start, so a mid-session edit (including one applying the backslash-escape mitigation) requires a full application restart to take effect — testing a fix in the same session that authored it gives a false negative.
 
 ---
 
@@ -1128,7 +1167,7 @@ Re-verified 2026-09-10 (batch 6, run 15): both #92457 and #78759 unchanged since
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 2.1.263 (macOS 26.6.2) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:macos, area:agents |
 
 **Summary:**
@@ -1151,7 +1190,7 @@ If confirmed, this is a fundamental breach of subagent isolation/scoping for MOS
 **Notes:**
 RECONCILIATION (see CC-011): confirmed distinct from CC-011 — CC-011's evidence (all reproduced with unnamed/default `subagent_type`) can neither confirm nor refute this claim about explicitly-named dispatch. Kept as a separate entry, stays Unverified pending corroboration. The single comment on the issue (from `webby-box`) is a general remark about the cost implications of prompt/tool inheritance, not a reproduction or maintainer response — does not move the confidence needle. Related-but-distinct existing issues per the reporter: #30280 and #80036 (MCP tool inheritance gaps — narrower symptom of the same underlying defect, per the reporter's framing). Given severity if true, this is a high-priority candidate for re-verification and corroboration in a future pass — recommend checking for maintainer response or independent reproduction, since this is one of the most consequential unconfirmed claims in the current knowledge base.
 
-Re-verified 2026-09-10 (batch 6, run 15): no change — still open, still exactly one comment (the same `webby-box` remark, not a reproduction), no maintainer response, no independent corroboration. Only 4 days since last activity, so not yet stale enough for a "needs re-verification" flag, but remains the highest-priority unconfirmed entry in the KB for a future corroboration pass given the severity if true.
+Run 20 (2026-10-25): NEEDS RE-VERIFICATION -- still open, still 1 comment, no maintainer response, no corroboration, 7 weeks idle (last 2026-09-06). Changelog 2.1.268-2.1.310 has no fix for this; nearby changes: 2.1.299 "agent `tools:` lists now take only the named MCP server's tools" (may relate to the MCP-leak half; unconfirmed whether it addresses dispatch-path inheritance), 2.1.302 fork subagents on by default in `claude -p`. Confidence stays Unverified. Earlier: Re-verified 2026-09-10 (batch 6, run 15): no change — still open, still exactly one comment (the same `webby-box` remark, not a reproduction), no maintainer response, no independent corroboration. Only 4 days since last activity, so not yet stale enough for a "needs re-verification" flag, but remains the highest-priority unconfirmed entry in the KB for a future corroboration pass given the severity if true.
 
 ---
 
@@ -1162,14 +1201,14 @@ Re-verified 2026-09-10 (batch 6, run 15): no change — still open, still exactl
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/86255 |
 | **Reported** | 2026-08-13 |
-| **Last Activity** | 2026-09-07 |
+| **Last Activity** | 2026-09-21 (closed not_planned by stale bot) |
 | **Confidence** | Confirmed (independent collaborator reproduction on a different OS/terminal) |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 2.1.229 (reporter), reproduced again on 2.1.233 |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
-| **Labels** | bug, has repro, platform:macos, area:agents, stale, reproduced |
+| **Version(s) Affected** | 2.1.229 (reporter), reproduced again on 2.1.233; no later confirmation |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | bug, has repro, platform:macos, area:agents, stale, reproduced (issue closed not_planned) |
 
 **Summary:**
 When a parent session holding an open EnterPlanMode window dispatches a plan-mode (`permissionMode: plan`) subagent via the Agent tool, the "Ready to code?" approval dialog can appear labeled as coming from the subagent but actually display, edit, and gate the PARENT session's own plan content/state. Approving it silently exits the parent's plan mode as a side effect while the subagent is unaffected and its own later `ExitPlanMode` call then fails with "You are not in plan mode." A follow-up report also shows an unprompted "Exited Plan Mode" system event firing in a subagent's transcript with zero prior `ExitPlanMode` calls.
@@ -1188,7 +1227,7 @@ Any MOSAIC pattern that runs a plan-mode subagent while the parent/orchestrator 
 **Notes:**
 Issue carries a `stale` label (bot-applied) but had a maintainer/collaborator comment as recently as 2026-08-17 and reporter follow-up 2026-08-18; still open and unresolved as of last activity 2026-09-07. No fix PR linked yet — recommend re-checking on a future pass.
 
-Re-verified 2026-09-10 (batch 6, run 15): no new comments since the 2026-08-18 reporter follow-up (comment count still 2); the 2026-09-07 `updated_at` timestamp reflects a metadata/label event, not new discussion content. Still open, no fix PR, confidence/classification/impact/workaround all unchanged.
+Update pass run 20 (2026-10-25): issue was closed 2026-09-21 by the stale bot as `not_planned` with NO fix PR and no maintainer resolution; the collaborator-confirmed bug stands -- a stale-bot closure is not evidence the behavior is gone. Changelog 2.1.268-2.1.310 contains no matching fix (nearest: 2.1.285 "fork subagents now keep the session's plan mode and cannot exit plan mode" -- applies to `subagent_type: "fork"`, not the reported plan-mode Agent dispatch; unconfirmed whether it affects this). Kept active; Needs re-verification on v2.1.310. Earlier: Re-verified 2026-09-10 (batch 6, run 15): no new comments since the 2026-08-18 reporter follow-up (comment count still 2); the 2026-09-07 `updated_at` timestamp reflects a metadata/label event, not new discussion content. Still open, no fix PR, confidence/classification/impact/workaround all unchanged.
 
 ---
 
@@ -1199,13 +1238,13 @@ Re-verified 2026-09-10 (batch 6, run 15): no new comments since the 2026-08-18 r
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/87613 (canonical/hub issue; duplicates: #87835, closely related: #92750) |
 | **Reported** | 2026-08-18 |
-| **Last Activity** | 2026-09-10 |
+| **Last Activity** | 2026-09-25 |
 | **Confidence** | Likely (three independent reporters, each with rigorous HTTP-proxy/transcript-capture reproduction measuring byte-identical payload injection; no explicit maintainer bug-confirmation comment, but a collaborator closed #87835 as a duplicate of #87613, implicitly treating it as one real, tracked behavior) |
 | **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 2.1.234–2.1.263 (reproduced across this range by three separate reporters) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | 2.1.234–2.1.281 (reproduced across this range by four separate reporters) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:macos, area:cost, area:agents, stale |
 
 **Summary:**
@@ -1226,6 +1265,8 @@ Subagents intended to be scoped/isolated (e.g. for context-budget or focus reaso
 **Notes:**
 #87613 carries a `stale` bot label but had a fresh independent reproduction as recently as 2026-09-07 (via #92750) — still an open, current issue. No fix PR linked yet. Re-verified 2026-09-10 (batch 6, run 15): one new comment on #87613 (`stonianua`, 2026-09-10) — a non-maintainer community suggestion (workaround #2 above and a product-fix suggestion matching what's already requested), not a new reproduction or maintainer response; confidence, classification, and impact unchanged. #92750 unchanged (still 0 comments).
 
+Update pass run 20 (2026-10-25): #87613 still open (1 comment, no maintainer response, no PR). #92750 still open and gained a 4th independent reproduction (`rschuetze1`, 2026-09-25): still reproducible on 2.1.281 (desktop app, Windows 11) -- so not macOS-only and not fixed since 2.1.263; checked 8 recent subagents (`code-reviewer`, `quality-checker`, `auto-planner`, Workflow agents), all received full MEMORY.md (~19.4k chars, ~9.7k tokens). New finding: `omitClaudeMd: true` on the agent definition drops MEMORY.md but also drops ALL CLAUDE.md files (no memory-only opt-out; see #77261). Also notes the memory/CLAUDE.md snapshot is taken at parent-session start (#88886). Changelog 2.1.268-2.1.310 has no fix. Confidence stays Likely (4 independent reports across macOS/Windows, no maintainer confirmation). Version range now 2.1.234-2.1.281.
+
 ---
 
 ### CC-034: `CLAUDE.md` and path-scoped rules in `--add-dir`-added directories are silently skipped
@@ -1235,14 +1276,14 @@ Subagents intended to be scoped/isolated (e.g. for context-budget or focus reaso
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/79489 |
 | **Reported** | 2026-07-20 |
-| **Last Activity** | 2026-09-09 |
+| **Last Activity** | 2026-09-23 (closed not_planned by stale bot) |
 | **Confidence** | Likely (original reporter plus a second, independent reporter using a rigorous `InstructionsLoaded` hook to measure actual load behavior rather than relying on model self-report; no maintainer confirmation yet) |
 | **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | Confirmed present on 2.1.232; original report undated version, VS Code extension on Windows |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
-| **Labels** | bug, platform:windows, area:core, platform:vscode, stale |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | bug, platform:windows, area:core, platform:vscode, stale (issue closed not_planned) |
 
 **Summary:**
 `CLAUDE.md` files and `.claude/rules/*.md` (with or without `paths:` frontmatter) located in directories added via `--add-dir` are silently skipped unless `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1` is set — and even with that variable set, path-scoped rules with `paths:` frontmatter and nested `CLAUDE.md` in subdirectories of the added directory still never load, even when Claude reads/edits a file whose glob matches. A control test (same files copied into the primary working repo) loaded correctly, confirming the added-directory boundary itself is the cause. No warning is surfaced to the user when this happens.
@@ -1261,6 +1302,8 @@ Any MOSAIC configuration that uses `--add-dir` to bring in additional directorie
 **Notes:**
 Issue carries a `stale` bot label but had fresh independent-reporter activity as recently as today (2026-09-09) and a second reproduction on 2026-08-16 — still open, current, and unresolved. No fix PR linked yet.
 
+Update pass run 20 (2026-10-25): issue was closed 2026-09-23 by the stale bot as `not_planned` with NO fix PR and no maintainer resolution (2 comments total, no new ones); a stale-bot closure is not evidence the behavior is gone. Changelog 2.1.268-2.1.310 has no fix for skipped `--add-dir` CLAUDE.md/path-scoped rules (adjacent: 2.1.281 fixed `--add-dir` CLAUDE.md/rules inside the working directory being sent twice in headless/SDK sessions; 2.1.286 skill in `--add-dir` folder offered as `<folder>:<name>`). Kept active; Needs re-verification on v2.1.310.
+
 ---
 
 ### CC-035: Project skills beyond an undocumented per-session cap become fully non-invocable ("Unknown skill")
@@ -1276,7 +1319,7 @@ Issue carries a `stale` bot label but had fresh independent-reporter activity as
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | Observed March 2026 through current (2.1.267-era, reported 2026-09-09); persists across at least two major version eras |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:web, area:skills (current #93044); bug, platform:macos, area:skills, stale (original #31505) |
 
 **Summary:**
@@ -1298,6 +1341,8 @@ Any MOSAIC deployment registering a large number of project skills (a plausible 
 **Notes:**
 No documented cap exists in Claude Code's skills documentation as of this writing. No fix PR linked on either issue. Given the recurrence across two version eras and roughly 6 months, this should be treated as a persistent, systemic limitation rather than a one-off bug — flag for re-verification on future passes if a maintainer ever comments.
 
+Update pass run 20 (2026-10-25): #93044 still open, now 2 comments (+1 reaction on issue); new comment (`tonydzi`, 2026-09-20) corroborates the cap on a second machine (255 skills on disk, only 28 got description text at session start) and offers a hypothesis that survivors are ranked by `skillUsage` in `~/.claude.json` (all skills with usageCount>=2 present; usageCount==1 present only if used since 2026-09-03; no boundary interleaving; recency alone falsified) -- implying the failure is self-reinforcing (an uninvoked skill never gains usage, so stays outside the cap). One skill had text with no usage record, so the rule is not airtight; unconfirmed by maintainers. Changelog 2.1.268-2.1.310: only 2.1.300 "Unknown skill" error now suggests the skill's listed name (diagnostic improvement, no cap change). No maintainer response; idle since 2026-09-20 (5 weeks). Workaround addendum: skills you need guaranteed should be used/invoked regularly or kept under ~28 total; unverified hypothesis.
+
 ---
 
 ### CC-036: `CLAUDE.md` at the directory holding a git repo never gets loaded into sessions started in that repo's own worktrees
@@ -1313,7 +1358,7 @@ No documented cap exists in Claude Code's skills documentation as of this writin
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | Reproduced on 2.1.266 and 2.1.251 (macOS); reporter confirmed it predates 2.1.251, the oldest build tested |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:macos, area:core |
 
 **Summary:**
@@ -1334,6 +1379,8 @@ This is exactly MOSAIC's own multi-worktree fan-out layout — one directory hol
 **Notes:**
 Filed the same day as this backfill pass (2026-09-09); no maintainer response yet — flag for follow-up confirmation on a future pass. No fix PR linked.
 
+Update pass run 20 (2026-10-25): NEEDS RE-VERIFICATION -- #93010 still open, 0 comments, no maintainer response, no activity since 2026-09-09 (6.5 weeks). Changelog 2.1.268-2.1.310 has no matching fix (2.1.286: subagent worktrees no longer load project CLAUDE.md a second time -- different symptom; worktree handling otherwise changed in many places, so the repro should be re-run on 2.1.310). Confidence stays Unverified.
+
 ---
 
 ### CC-037: Hard-coded "Exited Plan Mode" / "Auto Mode Active" notice text is injected at the prompt-assembly layer, never written to the visible transcript
@@ -1343,13 +1390,13 @@ Filed the same day as this backfill pass (2026-09-09); no maintainer response ye
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/80818 (duplicate merged in: #92659) |
 | **Reported** | 2026-07-24 |
-| **Last Activity** | 2026-09-07 |
+| **Last Activity** | 2026-10-21 |
 | **Confidence** | Confirmed (root-caused by a reporter grepping the strings directly out of the compiled Claude Code Mach-O binary; independently reproduced by at least 3 separate reporters across 5+ CLI versions with structured-attachment-level and binary-level evidence) |
 | **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | Observed 2.1.186 through 2.1.228, and again on 2.1.198 (per most recent comment, 2026-09-07) — long-standing across many releases, not a regression |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | Observed 2.1.186 through 2.1.228, and again on 2.1.198 (per most recent comment, 2026-09-07) — long-standing across many releases, not a regression; mode-cycling trigger reported 2026-10-21 (version not stated) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | area:core |
 
 **Summary:**
@@ -1370,76 +1417,7 @@ Any transcript-based auditing/logging that MOSAIC relies on to reconstruct exact
 **Notes:**
 No maintainer acknowledgment or fix PR yet, but the finding is self-confirming (verbatim strings present in the shipped binary) and independently corroborated three times. Reclassified from the original reconstructed "Quirk" label to **Bug** on this backfill pass — this is not model-dependent behavior but a harness-side template/logging defect (spurious firing under the wrong conditions, plus the transcript-recording gap), which fits the Bug definition more precisely than Quirk.
 
----
-
-### CC-038: Every Bash dispatch in a large or `--resume`d session can freeze the ENTIRE process for ~80-90 seconds
-
-| Field | Value |
-|-------|-------|
-| **Classification** | Bug |
-| **Source** | https://github.com/anthropics/claude-code/issues/89772 |
-| **Reported** | 2026-08-26 |
-| **Last Activity** | 2026-09-08 |
-| **Confidence** | Likely (detailed kernel-level forensic evidence from the original reporter — `/proc` sampling, event-loop stall instrumentation, ruled-out alternative causes — plus one independent confirming reporter with a different sandboxing setup; no maintainer acknowledgment yet) |
-| **Orchestration Impact** | HIGH |
-| **Reproduced at MOSAIC** | No |
-| **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 2.1.231; stall duration grows with session/context size (observed 80.2s → 86.6s within one session) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
-| **Labels** | bug, has repro, platform:linux, area:core, area:bash, perf:cpu, api:anthropic |
-
-**Summary:**
-In a `--resume`d session with a very large context (observed on a 1M-context-window model with several hundred-k tokens used), every `Bash` tool dispatch synchronously blocks the entire process for ~80-90 seconds as an active 100%-CPU spin (not an idle wait — near-zero voluntary context switches throughout, ~2/3 kernel time) before the shell is even spawned; the actual command then completes in under a second. During the block the TUI is fully unresponsive, the API SSE stream and any MCP SSE connections go unserviced/drop, and the block recovers every time (not a permanent hang). Only `Bash` dispatches trigger it — 36 of 40 in one session, 0 of 53 non-Bash (Read/Edit/Grep/WebFetch) dispatches in the same session. A later commenter identified a likely contributing/root cause on Linux: a `Read(~/**/.ssh)`-style managed permission rule combined with a sandboxing tool (bubblewrap) triggers a recursive regex-tested walk of the entire home directory on every Bash dispatch; cleaning up the home directory reduced (but did not eliminate) the freeze.
-
-**Impact on Orchestration:**
-Long-running or resumed orchestration sessions that make repeated Bash calls (a routine MOSAIC pattern — orchestrators and subagents both use Bash heavily) risk a large cumulative time cost from repeated ~80-90 second full-process freezes that also stall MCP tool availability during the window; one reporter's session accumulated 44 stalls totaling ~61 minutes of frozen UI. This directly threatens throughput and responsiveness of Bash-heavy, `--resume`d MOSAIC sessions and subagents.
-
-**Evidence:**
-- Original reporter (BobMali): rigorous kernel-level forensics — debug-log stall instrumentation showing `cpu ≈ wall` for every stall, live `/proc` sampling during a stall showing the main thread in state `R` at 100% CPU with frozen `voluntary_ctxt_switches`, ruled out endpoint-security software, memory pressure, network/VPN, and hooks as causes, and attached a full sanitized debug log.
-- Independent reporter (radcliffkey): confirmed on Ubuntu 24.04 with bubblewrap sandboxing — different environment/setup than the original reporter's.
-- Same original reporter later found a workaround/mitigation: a managed-settings `Read(~/**/.ssh)`-style permission rule combined with bubblewrap sandboxing triggers a recursive home-directory walk with per-path regex testing on every Bash dispatch; cleaning up the home directory reduced (not eliminated) the stall by ~30s, pointing at permission-pattern evaluation as at least a contributing cause.
-
-**Workaround(s):**
-1. ⭐ Reduce the size/depth of the home directory (or wherever broad glob-based permission rules like `Read(~/**/.ssh)` apply) to shrink the recursive walk the permission-pattern matcher performs on every Bash dispatch — reduced one reporter's stall by ~30s, though did not eliminate it entirely. (Source: original reporter BobMali, self-discovered.)
-2. Prefer fresh (non-`--resume`d), smaller-context sessions for Bash-heavy workloads where feasible, since the stall duration and frequency scale with session/context size and does not manifest in small/fresh sessions in either report.
-
-**Notes:**
-No maintainer acknowledgment or fix PR yet. Reporter cross-referenced two related-but-distinct open issues (#88257, #89062) covering different CPU-spin symptoms on the same or nearby versions — worth checking in a future pass for a possible shared root cause, but not conflated with this entry since their symptoms (permanent hang, first-prompt-only) differ from this one's (recoverable, scales with Bash dispatch count).
-
----
-
-### CC-039: `.claude/settings.json` is written via a non-atomic, unlocked read-modify-write — concurrent sessions can tear or clobber it
-
-| Field | Value |
-|-------|-------|
-| **Classification** | Bug |
-| **Source** | https://github.com/anthropics/claude-code/issues/91520 |
-| **Reported** | 2026-09-02 |
-| **Last Activity** | 2026-09-02 |
-| **Confidence** | Likely |
-| **Orchestration Impact** | HIGH |
-| **Reproduced at MOSAIC** | No |
-| **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 2.1.246 – 2.1.258 (CLI and VS Code extension) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
-| **Labels** | bug, has repro, area:core, platform:vscode, platform:wsl |
-
-**Summary:**
-`~/.claude/settings.json` (and by the same code path, project-level `.claude/settings.json`) is persisted with a plain truncating `writeFile` — no advisory lock, no tmp-file+`rename(2)`. With more than one session live, interleaved writes can leave a torn/invalid JSON file (Claude Code then reports "Settings file failed to parse" and silently falls back to defaults, dropping permissions/hooks), or a "lost update" where one session's write silently discards another session's keys. No maintainer response yet; single reporter, but with a deterministic, quantified reproduction (1.3% of reads torn under 6-writer load in isolation) plus 9 banked real-world occurrences over 4 weeks, and the reporter traced the exact non-atomic code path (`writeUserSettingsAndPush` in `extension.js`).
-
-**Impact on Orchestration:**
-MOSAIC's multi-agent/multi-session concurrent operation is exactly the kind of scenario that can trigger this — concurrent sessions writing settings (e.g. permission updates) risk corrupting the shared settings file or silently losing each other's writes, changing the effective permission/hook posture of subsequent sessions without warning.
-
-**Evidence:**
-- Single reporter (no maintainer acknowledgment, no comments yet as of 2026-09-02), but confidence raised to Likely on the strength of: a deterministic, isolated reproduction harness with quantified failure rate (1.3% torn reads), 9 banked real-world corrupted-file artifacts with matching byte-for-byte shapes, exact code-path identification (decompiled `writeUserSettingsAndPush`), and cross-referencing to several other open/closed issues describing the same underlying symptom class from independent reporters (#79403 VS Code model toggle corrupts settings.json; #82167 settings file corrupted to `{}`; #76749 stale in-memory config re-persisted; #2810).
-- `has repro` label applied.
-
-**Workaround(s):**
-1. ⭐ Avoid running multiple concurrent Claude Code sessions/windows that write to the same `settings.json` (same user-level or same project-level file) — serialize settings-mutating operations (e.g. `/model`, permission updates) across sessions where possible. (Reporter's own workaround — `chattr +i` plus an inotify auto-repair watcher — is explicitly called out by the reporter as fragile/not recommended; it breaks on extension updates.)
-2. No accepted maintainer-provided workaround exists yet; the reporter's suggested real fix (write to a temp file + `fsync` + `rename(2)`, plus an advisory lock across the read-modify-write) is unimplemented as of the report date.
-
-**Notes:**
-Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropics/claude-code. No maintainer comments yet — flag for re-check in a future run to see if this receives a triage response or fix PR. Related/possibly-same-root-cause issues worth cross-referencing if investigated separately: #79403, #82167, #76749, #2810.
+Update pass run 20 (2026-10-25): #80818 still open (5 comments), no maintainer response, no fix PR. New comment 2026-10-21 (`sjrct`, version not stated): a spurious "Exited Plan Mode" marker appears when the user Shift+Tab-cycles through permission modes past plan mode, even with no prompt submitted in plan mode -- a third trigger (mode cycling) alongside subagent dispatch and post-tool-result timing; the model confirmed the marker appeared in its context right before the next message. Changelog 2.1.268-2.1.310 has no matching fix; it was still reported ~2 weeks ago, so the behavior appears current. Relevance for MOSAIC's headless/Runner path is lower for the mode-cycling trigger (interactive only); subagent-dispatch trigger remains the MOSAIC-relevant one.
 
 ---
 
@@ -1455,8 +1433,8 @@ Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropi
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 2.1.181 through at least 2.1.260 (root cause present in every version scanned; not a recent regression) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | 2.1.181 through at least 2.1.260 (root cause present in every version scanned; not a recent regression). Advisor-turn path fixed in 2.1.273; non-advisor multi-iteration path unverified after that. |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | area:core |
 
 **Summary:**
@@ -1485,6 +1463,10 @@ The #85483 finding is a materially worse variant for MOSAIC's own worktree-based
 **Notes:**
 Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropics/claude-code. Related issue: #81029 (main-session manifestation of the same root cause, referenced by the reporter as confirming its own "suspected cause"). #82863 and #85483 investigated in a follow-up pass (2026-09-09) and folded in here as corroborating evidence rather than tracked as separate entries — both describe the same inflated-usage-counter mechanism (not a distinct defect), with #85483 additionally documenting a more severe net-negative-compaction consequence of that same counter bug. Flag for re-verification once/if a maintainer responds or a fix ships.
 
+Update pass run 20 (2026-10-25): PARTIAL FIX SHIPPED. Changelog 2.1.273: "Fixed the context meter and auto-compact counting advisor-tool turns at roughly twice their real context size, which made auto-compact fire at about half the real window" -- this matches the advisor path of #84738 (that line is the harness team's implicit acknowledgment; confidence stays Confirmed). However #84738's own 2026-08-13 finding is that ANY multi-iteration turn (no advisor) is summed (~Nx for N `message` iterations, 96 non-advisor inflated turns observed), plus a separate pre-flight "Prompt is too long" check (2026-09-08 comment) reading the summed usage with `autoCompactEnabled:false`; the 2.1.273 changelog wording only names advisor turns, so whether the non-advisor multi-iteration and pre-flight-check paths are fixed is UNVERIFIED. #84738 remains open (2 comments, no maintainer reply, idle since 2026-09-08 = 7 weeks); corroborating #82863 and #85483 were both auto-closed not_planned by the stale bot (2026-10-08 and 2026-10-03) with no fix. Net-negative-compaction hazard from #85483 (compaction below rebuild floor grows context, mostly subagents) has no changelog fix. Needs re-verification on >= 2.1.273: re-test a non-advisor multi-iteration turn; if inflation is gone, move to resolved (fixed 2.1.273). Workarounds #1-#4 for the advisor path are obsolete on >= 2.1.273; MOSAIC does not use the advisor tool by default, so exposure now hinges on the non-advisor path.
+
+Cross-reference (run 20, discovery pass): fresh reports of unexplained EARLY auto-compaction on stock Anthropic infrastructure with no user config -- #101430 (2.1.296 macOS: three auto compactions at 24-45% of the 1M window; a second reporter on 2.1.309 in a claude.ai cloud session: compaction at 394,707 tokens, ~39%, with an unset `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80` in the environment; no repro, no maintainer reply). Cause unknown (possible server-side feature flag or the non-advisor inflation above); not enough evidence for a standalone entry. #103901 (early compact when a gateway returns `message_delta.input_tokens: 0`) is third-party-gateway-only and was skipped; its Related list also points at #101951 (usage double counting after a mid-stream retry).
+
 ---
 
 ### CC-041: `.claude/settings.json` in an ANCESTOR directory above the project root is silently never loaded
@@ -1494,13 +1476,13 @@ Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropi
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/85613 (GitHub's "closes" link to PR #85716 is a mismatch — see Notes) |
 | **Reported** | 2026-08-10 |
-| **Last Activity** | 2026-08-20 |
+| **Last Activity** | 2026-10-04 |
 | **Confidence** | Unverified (downgraded from the reconstructed guess of Likely/Confirmed — see Notes) |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | Unknown — reporter did not state a specific version (CLI, Linux) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | area:core |
 
 **Summary:**
@@ -1521,7 +1503,7 @@ MOSAIC configurations that place shared/organizational settings (hooks, deny rul
 3. Per the second commenter's independent (but broader) advice: don't trust "hook is registered" as proof "hook is enforcing" — add an explicit fired-log line at the top of guard scripts and separately verify the guard's actual side effect, since a hook can be registered, fire, and still silently no-op.
 
 **Notes:**
-Backfilled 2026-09-09 by relocating the issue via GitHub search and independently verifying PR #85716's diff via `pull_request_read`. The PR-mismatch finding from the reconstructed session summary is confirmed correct: GitHub's automatic "closed by pull request" link is misleading here — the linked PR fixes an unrelated plugin's ancestor-scan, not the core settings resolution path. Downgraded confidence to Unverified per the CaptureGuide criteria (single reporter, no maintainer confirmation, no independent reproduction of this specific behavior) — kept active given HIGH materiality (silent security-enforcement gap is exactly the kind of orchestration-relevant defect the Unverified inclusion bar calls for) and concrete reproduction steps provided.
+Backfilled 2026-09-09 by relocating the issue via GitHub search and independently verifying PR #85716's diff via `pull_request_read`. The PR-mismatch finding from the reconstructed session summary is confirmed correct: GitHub's automatic "closed by pull request" link is misleading here — the linked PR fixes an unrelated plugin's ancestor-scan, not the core settings resolution path. Downgraded confidence to Unverified per the CaptureGuide criteria (single reporter, no maintainer confirmation, no independent reproduction of this specific behavior) — kept active given HIGH materiality (silent security-enforcement gap is exactly the kind of orchestration-relevant defect the Unverified inclusion bar calls for) and concrete reproduction steps provided. Update pass run 20 (2026-10-25): issue was closed 2026-10-04 by the stale bot as `not_planned` ("inactive for too long") with NO fix PR and no maintainer resolution; a stale-bot closure is not evidence the behavior is gone. Changelog 2.1.268-2.1.310 contains no matching fix. Kept active; Needs re-verification on v2.1.310. PR #85716 (hookify plugin only) is also closed.
 
 ---
 
@@ -1532,14 +1514,14 @@ Backfilled 2026-09-09 by relocating the issue via GitHub search and independentl
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/91733 |
 | **Reported** | 2026-09-03 |
-| **Last Activity** | 2026-09-03 |
+| **Last Activity** | 2026-10-24 (stale label added; no comments) |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 2.1.236 (macOS) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
-| **Labels** | bug, has repro, platform:macos, area:tui, area:core |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | bug, has repro, platform:macos, area:tui, area:core, stale |
 
 **Summary:**
 `/rewind` can silently fail to restore file content for a file that was newly created via the Write tool during the session and never git-tracked. Per repro: create a new untracked file, edit it (v1→v2, both via Claude's own tools), then `/rewind` to the prompt before the edit — no restore-type menu (conversation/code/both) appears at all, the conversation is simply rewound and the selected prompt is dropped back into the input as a draft, while the file on disk is left unchanged at the post-edit state. Per Claude Code's own docs (`checkpointing.md`), a code-restore option should appear regardless of git-tracking status whenever the checkpoint has file changes to revert — that contract is violated here.
@@ -1555,7 +1537,7 @@ Any rollback of a session using `/rewind` may leave newly-created, never-git-tra
 2. Independently verify file content on disk after any `/rewind` operation rather than trusting the absence of an error as proof the restore was complete.
 
 **Notes:**
-Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropics/claude-code. No maintainer confirmation yet; flag for re-check in a future run. #87575 (auto-mode system prompt causes `/rewind` to silently fail on Bash-edited files) was investigated this pass and folded into CC-060 rather than tracked here or separately — it shares CC-060's root mechanism (Auto Mode's Bash-first steering instruction) and casualty list (also `PostToolUse` hooks and Edit/Write-scoped permission rules), and this entry's specific mechanism (never-git-tracked file, no Bash involvement in the reporter's repro) is distinct from it. Other `/rewind` reliability issues surfaced in the same search, still worth a follow-up pass if not already tracked elsewhere in this KB: #14002 (`/rewind` restore option shows intermittently or fails), #93045 (`/rewind` doesn't restore deleted tracked git files).
+Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropics/claude-code. No maintainer confirmation yet; flag for re-check in a future run. #87575 (auto-mode system prompt causes `/rewind` to silently fail on Bash-edited files) was investigated this pass and folded into CC-060 rather than tracked here or separately — it shares CC-060's root mechanism (Auto Mode's Bash-first steering instruction) and casualty list (also `PostToolUse` hooks and Edit/Write-scoped permission rules), and this entry's specific mechanism (never-git-tracked file, no Bash involvement in the reporter's repro) is distinct from it. Other `/rewind` reliability issues surfaced in the same search, still worth a follow-up pass if not already tracked elsewhere in this KB: #14002 (`/rewind` restore option shows intermittently or fails), #93045 (`/rewind` doesn't restore deleted tracked git files). Update pass run 20 (2026-10-25): still open, still zero comments and no maintainer response (7+ weeks since filing); now carries the `stale` label and may be auto-closed. Changelog up to 2.1.310 has only adjacent /rewind fixes (2.1.309: /rewind list 'No code changes' for turns that changed files via subagent/shell/`/code-review --fix`; 2.1.309: `sed -i` Bash edits are no longer restored by /rewind) - none addresses this untracked-new-file case. Needs re-verification on v2.1.310.
 
 ---
 
@@ -1566,14 +1548,14 @@ Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropi
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/84124 |
 | **Reported** | 2026-08-05 |
-| **Last Activity** | 2026-08-25 |
+| **Last Activity** | 2026-10-21 |
 | **Confidence** | Confirmed (maintainer reproduction) |
 | **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | Confirmed present on 2.1.233 (Linux) and the original report's Windows 11 build; docs claim event-driven refresh cancels the in-flight script, which does not hold in practice |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
-| **Labels** | reproduced |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | stale, reproduced |
 
 **Summary:**
 The statusLine feature's event-driven refresh has no coalescing/debouncing, and contrary to the documented behavior (a new update trigger should cancel the in-flight script), cancellation does not keep up — if the configured statusline command runs slowly (e.g. ~10s), new refresh invocations start every ~2 seconds regardless, producing up to 5 concurrent copies running simultaneously. The slower the command, the worse the overlap — a self-amplifying rather than self-limiting failure. `refreshInterval` (the only user-facing knob) only governs the periodic timer and does nothing to bound event-driven refresh overlap.
@@ -1591,7 +1573,7 @@ Kept active despite an initial instinct to dismiss it as "cosmetic" (statusline 
 2. No accepted code-level fix exists yet (single-flight/coalescing, an exposed debounce setting, or using `refreshInterval` as a floor for event-driven refreshes were all proposed by the reporter but none implemented as of last activity).
 
 **Notes:**
-Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropics/claude-code. Related, worth cross-referencing if investigated separately: #57186 (closed `not planned` — requested a configurable debounce), #73785 (Windows statusline cancellation via `taskkill /T` overloading WMI), #82537 (statusline stops being invoked for a session and never recovers), #86551 (Windows: statusline `pwsh.exe` processes never exit, hundreds of orphans/hour under multi-session use — likely the same resource-exhaustion family, worth a follow-up pass).
+Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropics/claude-code. Related, worth cross-referencing if investigated separately: #57186 (closed `not planned` — requested a configurable debounce), #73785 (Windows statusline cancellation via `taskkill /T` overloading WMI), #82537 (statusline stops being invoked for a session and never recovers), #86551 (Windows: statusline `pwsh.exe` processes never exit, hundreds of orphans/hour under multi-session use — likely the same resource-exhaustion family, worth a follow-up pass). Update pass run 20 (2026-10-25): issue was closed 2026-10-21 by the stale bot as `not_planned` ("inactive for too long") with NO fix PR and no maintainer resolution; a stale-bot closure is not evidence the behavior is gone. Changelog 2.1.268-2.1.310 contains no matching fix. Kept active; Needs re-verification on v2.1.310. Maintainer reproduction (2026-08-25) stands.
 
 ---
 
@@ -1602,14 +1584,14 @@ Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropi
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/80175 |
 | **Reported** | 2026-07-22 |
-| **Last Activity** | 2026-08-25 |
+| **Last Activity** | 2026-10-21 |
 | **Confidence** | Confirmed (maintainer reproduction) |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | Reported on 2.1.215/2.1.217; maintainer confirmed the duplication and unclamped-render-cost mechanism still present on 2.1.233. Current releases downscale large image reads (reducing but not eliminating per-line size), per maintainer note. |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
-| **Labels** | reproduced |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | stale, reproduced |
 
 **Summary:**
 An image `tool_result` stores its base64 payload TWICE on the same transcript (`.jsonl`) line — once in the tool result's image content block, once in a `toolUseResult.file.base64` mirror field. The TUI's render layout path (Ink reconciler width-measurement) re-measures the full transcript string on every render frame, so multi-MB lines make each frame cost seconds; the render loop keeps scheduling the next frame immediately, starving the event loop entirely (no input, no API request dispatch, SIGINT/SIGTERM ineffective — only SIGKILL recovers). A second, related trigger: an `Edit` on a file containing one multi-MB single line (e.g. minified HTML with an embedded data blob) similarly floods the render tree because `structuredPatch` carries the changed line twice (old and new).
@@ -1628,42 +1610,7 @@ Any orchestration workflow involving large image reads/edits (e.g. screenshot-ba
 3. Current releases (per maintainer, as of 2.1.233) downscale large image reads before storage, which reduces but does not eliminate the per-line size and thus the risk — not a full fix.
 
 **Notes:**
-Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropics/claude-code. Related issues cross-referenced by the original reporter, worth a follow-up pass if not already covered elsewhere in this KB: #16251 (closed not planned — same class at 50-100KB lines), #19036 (closed as duplicate of #16251), #21567 (open — terminal renderer full-rewrite 100% CPU spin), #51560 (main thread tight loop, 100% CPU, API connections lost).
-
----
-
-### CC-046: `.claude/settings.json` created mid-session never gets its hooks armed until the session is restarted
-
-| Field | Value |
-|-------|-------|
-| **Classification** | Bug |
-| **Source** | https://github.com/anthropics/claude-code/issues/77357 |
-| **Reported** | 2026-07-14 |
-| **Last Activity** | 2026-08-21 |
-| **Confidence** | Confirmed (maintainer reproduction) |
-| **Orchestration Impact** | HIGH |
-| **Reproduced at MOSAIC** | No |
-| **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | Reported on 2.1.208 (macOS); maintainer confirmed reproduction on 2.1.233 (Linux) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
-| **Labels** | bug, has repro, platform:macos, area:hooks, reproduced |
-
-**Summary:**
-If a Claude Code session starts in a directory with NO `.claude/` directory present, then `.claude/settings.json` (with hooks) is created later in that same session — including when Claude Code itself lazily creates the project `.claude/` directory as part of its own atomic-write staging — the hooks never arm until the session is restarted (`--continue` picks them up immediately). The failure is completely silent: no error, no log line, the hook simply never fires. Root cause: the settings-file watcher computes its watch targets once at startup and permanently skips any settings directory that does not yet exist at that instant; nothing watches the project root for a `.claude/` being created afterward. Contrast case confirms this exactly: pre-creating an empty `.claude/` before session start causes hooks written mid-session to hot-reload and fire immediately, with no restart needed.
-
-**Impact on Orchestration:**
-Any workflow that provisions `.claude/settings.json` dynamically during a running session (e.g. a setup step that writes hook config before later steps need enforcement, or any orchestration pattern that starts a session before a `.claude/` directory exists and only creates settings/hooks afterward) cannot rely on those hooks being active without a restart — and gets no warning that enforcement is not yet live.
-
-**Evidence:**
-- Maintainer (`bcherny`, COLLABORATOR) independently reproduced on 2.1.233 (Linux), confirmed both the failing case and the contrast case (pre-created empty `.claude/` hot-reloads fine), confirmed via debug logs that the project settings file is missing from the watched-files set, and explicitly marked it "a bug."
-- `reproduced` label applied by the maintainer; `has repro` label from the original report, which included exact, minimal repro steps.
-
-**Workaround(s):**
-1. ⭐ Pre-create an empty `.claude/` directory in the project root BEFORE starting the session (even with no `settings.json` inside it yet) — confirmed by both the reporter and the maintainer to make subsequently-created `.claude/settings.json` hooks hot-reload normally, with no restart required.
-2. If `.claude/` was not pre-created and hooks are written mid-session, restart the session (`claude --continue` in the same directory) to pick them up — confirmed to work but breaks in-session continuity.
-
-**Notes:**
-Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropics/claude-code. No fix PR linked yet as of last activity — flag for re-check in a future run.
+Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropics/claude-code. Related issues cross-referenced by the original reporter, worth a follow-up pass if not already covered elsewhere in this KB: #16251 (closed not planned — same class at 50-100KB lines), #19036 (closed as duplicate of #16251), #21567 (open — terminal renderer full-rewrite 100% CPU spin), #51560 (main thread tight loop, 100% CPU, API connections lost). Update pass run 20 (2026-10-25): issue was closed 2026-10-21 by the stale bot as `not_planned` ("inactive for too long") with NO fix PR and no maintainer resolution; a stale-bot closure is not evidence the behavior is gone. Changelog 2.1.268-2.1.310 contains no matching fix. Kept active; Needs re-verification on v2.1.310. Maintainer-confirmed duplication/unclamped-render mechanism stands. Related 2.1.310 fix (compaction after 'Prompt is too long' keeping too much dense base64/SVG text) is adjacent but does not change the transcript duplication.
 
 ---
 
@@ -1674,14 +1621,14 @@ Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropi
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/82618 |
 | **Reported** | 2026-07-30 |
-| **Last Activity** | 2026-08-25 |
+| **Last Activity** | 2026-10-22 |
 | **Confidence** | Confirmed (maintainer reproduction) |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | Reported on Claude Code engine 2.1.217-2.1.219 (desktop app); maintainer confirmed reproduction on 2.1.233 (Linux) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
-| **Labels** | reproduced |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | stale, reproduced |
 
 **Summary:**
 One structurally malformed entry appended to a hook event's array (e.g. a hook object placed directly in `hooks.UserPromptSubmit` without the required `{"matcher": "", "hooks": [...]}` wrapper) silently disables ALL hooks for that event — including previously-working sibling entries — with zero feedback (exit code 0, empty stderr, session otherwise normal). The outage persists across app restarts and even a full machine reboot, because the settings file is presumably re-parsed and fails the same way every time; only hand-fixing the malformed entry's structure restores all hooks for that event on the very next message, with no restart needed.
@@ -1699,7 +1646,7 @@ One bad hook entry in the config — from a script's non-atomic write, a hand ed
 2. If hooks for an event stop firing unexpectedly, inspect `settings.json` for a malformed sibling entry in that event's array rather than assuming a transient failure — restarting/rebooting will not resolve it; only fixing the entry's structure does.
 
 **Notes:**
-Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropics/claude-code. Distinct from a different, unrelated malformed-hook-shape issue (#75071) referenced in the original migration note — that report is not this one and is not re-investigated here. Follow-up pass (2026-09-09) investigated the three cross-referenced reports (#56631, #49989, #8810) in full, including all comments: none share this entry's root cause (a malformed array-entry shape silently killing an entire event's hooks). All three describe unrelated hook-reliability mechanisms — #56631 is mid-session hook-script-edit-triggered re-registration drop (stale-closed, single reporter, no corroboration, weak evidence — discarded, does not meet the Unverified inclusion bar); #49989 is `UserPromptSubmit` non-firing specifically in git worktree sessions (stale-closed, single reporter — see CC-063, which tracks the broader/confirmed worktree-hook-environment defect class this may be a historical instance of); #8810 is `UserPromptSubmit` non-firing when started from a subdirectory, reported on v2.0.5 and explicitly confirmed FIXED by the reporter in-thread — stale and resolved, correctly not tracked. None warrant folding into this entry or a new entry beyond what CC-063 already covers.
+Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropics/claude-code. Distinct from a different, unrelated malformed-hook-shape issue (#75071) referenced in the original migration note — that report is not this one and is not re-investigated here. Follow-up pass (2026-09-09) investigated the three cross-referenced reports (#56631, #49989, #8810) in full, including all comments: none share this entry's root cause (a malformed array-entry shape silently killing an entire event's hooks). All three describe unrelated hook-reliability mechanisms — #56631 is mid-session hook-script-edit-triggered re-registration drop (stale-closed, single reporter, no corroboration, weak evidence — discarded, does not meet the Unverified inclusion bar); #49989 is `UserPromptSubmit` non-firing specifically in git worktree sessions (stale-closed, single reporter — see CC-063, which tracks the broader/confirmed worktree-hook-environment defect class this may be a historical instance of); #8810 is `UserPromptSubmit` non-firing when started from a subdirectory, reported on v2.0.5 and explicitly confirmed FIXED by the reporter in-thread — stale and resolved, correctly not tracked. None warrant folding into this entry or a new entry beyond what CC-063 already covers. Update pass run 20 (2026-10-25): issue was closed 2026-10-22 by the stale bot as `not_planned` ("inactive for too long") with NO fix PR and no maintainer resolution; a stale-bot closure is not evidence the behavior is gone. Changelog 2.1.268-2.1.310 contains no matching fix. Kept active; Needs re-verification on v2.1.310. Maintainer reproduction (2026-08-25) stands.
 
 ---
 
@@ -1716,7 +1663,7 @@ Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropi
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | Present since v2.0.41 (per maintainer bisect); confirmed still present on 2.1.233. Original report on 2.1.198. |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, documentation, has repro, platform:macos, area:tools, reproduced |
 
 **Summary:**
@@ -1736,7 +1683,7 @@ The hazard is a hidden token-cost blowout: full raw page content (up to ~25K tok
 3. A third-party session-file editor (`cozempic`, mentioned in the thread) can retroactively trim oversized tool-result blocks from an already-bloated session — explicitly called out by both the reporter and its own author as a post-hoc symptom workaround, not a fix, and it carries its own risks (auto-updates from PyPI by default, telemetry on by default, edits files that may contain secrets) that a commenter raised and the author confirmed. Not recommended as a primary mitigation; noted for completeness only.
 
 **Notes:**
-Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropics/claude-code. Confidence upgraded from the reconstructed guess of "Likely" to "Confirmed" — the CaptureGuide states that for Limitations, Confirmed means a maintainer explicitly stated the behavior is intentional, which is exactly what happened here (with a detailed mechanism explanation and a version bisect). Kept ACTIVE (not moved to resolved) on this review — same reasoning as the original migration note and consistent with CC-011: maintainer-intended does not mean it's not an operational hazard. Title should be understood as "for pre-approved documentation domains where the page is under ~100KB," not a blanket claim about all pre-approved domains.
+Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropics/claude-code. Confidence upgraded from the reconstructed guess of "Likely" to "Confirmed" — the CaptureGuide states that for Limitations, Confirmed means a maintainer explicitly stated the behavior is intentional, which is exactly what happened here (with a detailed mechanism explanation and a version bisect). Kept ACTIVE (not moved to resolved) on this review — same reasoning as the original migration note and consistent with CC-011: maintainer-intended does not mean it's not an operational hazard. Title should be understood as "for pre-approved documentation domains where the page is under ~100KB," not a blanket claim about all pre-approved domains. Update pass run 20 (2026-10-25): still open, no activity since 2026-09-05 (7+ weeks); no maintainer follow-up on documenting/opt-in extraction. Changelog 2.1.268-2.1.310 has only an unrelated WebFetch change (2.1.290: text past 100,000 chars is no longer silently dropped; `offset` param added). Needs re-verification on v2.1.310.
 
 ---
 
@@ -1747,13 +1694,13 @@ Backfilled 2026-09-09 by relocating the issue via GitHub search on repo:anthropi
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/89102 (primary); maintainer-confirmed twin mechanism at https://github.com/anthropics/claude-code/issues/84704; corroborating reports at https://github.com/anthropics/claude-code/issues/89254, https://github.com/anthropics/claude-code/issues/86243, and https://github.com/anthropics/claude-code/issues/84493 |
 | **Reported** | 2026-07-29 (#84704, earliest); 2026-08-06 (#84493); 2026-08-13 (#86243); 2026-08-24 (#89102, #89254) |
-| **Last Activity** | 2026-09-06 |
+| **Last Activity** | 2026-10-22 (four satellite issues stale-closed `not_planned`; #89102 still open) |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | Reproduced on 2.1.233-2.1.247 across macOS, Windows, and Linux; maintainer confirmed on 2.1.233 (Linux) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | Reproduced on 2.1.233-2.1.247 across macOS, Windows, and Linux; maintainer confirmed on 2.1.233 (Linux). PARTIAL FIX in 2.1.290 for the parent-enters-worktree-after-subagent-dispatch case (#89102/#89254); the subagent-self-`EnterWorktree` (#84704) and concurrent-teammate (#84493/#86243) mechanisms have no fix in the changelog through 2.1.310. |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, area:agents, area:sandbox, area:bash, platform:macos |
 
 **Summary:**
@@ -1777,7 +1724,7 @@ This is a direct hit on MOSAIC's multi-worktree fan-out pattern specifically whe
 4. Treat a subagent's own success message from `EnterWorktree` as unverified — have it immediately confirm with a bare `pwd`/`git branch --show-current` before proceeding, and have the orchestrator treat a subagent that suddenly loses Bash mid-task as a signal to abort and retry rather than trust its final "completed" report, since it can complete with a quietly degraded (Bash-less) result with no explicit failure signal.
 
 **Notes:**
-Five issues folded into one entry because they share the same root mechanism (session-wide-but-live isolation root vs. per-agent-but-static launch-time cwd expectation), independently identified by three different reporters using nearly identical language ("latch"/"shared pointer" vs. "pinned at launch"). #84493 was investigated separately (cross-referenced from CC-023's original notes) and folded in here rather than tracked standalone, since its "in-process teammate" angle (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, agents spawned with a `name` param and no `cwd`/`isolation`) reaches the identical session-wide-latch defect as #84704/#89102/#89254/#86243, just via a different spawn shape — its own comment thread explicitly distinguishes it from the `isolation:"worktree"`-Write/Edit-pinning defect (that's CC-056, #84704/#85266) and from this entry's core mechanism. Distinct from CC-023 (source #87953, plain cwd drift/reset with no `EnterWorktree` call involved) and CC-036 (`CLAUDE.md` loading into worktrees) — kept separate. Also distinct from CC-056 (Write/Edit tools specifically lagging behind a subagent's own later `EnterWorktree` switch, while Bash correctly follows) and CC-055 (`isolation: "worktree"`-specific Edit/git-guard/auto-reap defects) — related theme, different concrete mechanisms, tracked separately per the guide's grouping instruction. High-priority for MOSAIC-side re-verification given the direct hit on MOSAIC's own worktree fan-out pattern, the presence of maintainer confirmation, and now a documented false-green test-verification failure mode (#84493) that undermines any test-then-commit automation.
+Five issues folded into one entry because they share the same root mechanism (session-wide-but-live isolation root vs. per-agent-but-static launch-time cwd expectation), independently identified by three different reporters using nearly identical language ("latch"/"shared pointer" vs. "pinned at launch"). #84493 was investigated separately (cross-referenced from CC-023's original notes) and folded in here rather than tracked standalone, since its "in-process teammate" angle (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, agents spawned with a `name` param and no `cwd`/`isolation`) reaches the identical session-wide-latch defect as #84704/#89102/#89254/#86243, just via a different spawn shape — its own comment thread explicitly distinguishes it from the `isolation:"worktree"`-Write/Edit-pinning defect (that's CC-056, #84704/#85266) and from this entry's core mechanism. Distinct from CC-023 (source #87953, plain cwd drift/reset with no `EnterWorktree` call involved) and CC-036 (`CLAUDE.md` loading into worktrees) — kept separate. Also distinct from CC-056 (Write/Edit tools specifically lagging behind a subagent's own later `EnterWorktree` switch, while Bash correctly follows) and CC-055 (`isolation: "worktree"`-specific Edit/git-guard/auto-reap defects) — related theme, different concrete mechanisms, tracked separately per the guide's grouping instruction. High-priority for MOSAIC-side re-verification given the direct hit on MOSAIC's own worktree fan-out pattern, the presence of maintainer confirmation, and now a documented false-green test-verification failure mode (#84493) that undermines any test-then-commit automation. Update pass run 20 (2026-10-25): CHANGELOG 2.1.290 states "Fixed background subagents losing write and Bash access in their worktree after the main session enters or exits a different worktree" - this matches the core repro of #89102 and #89254 (parent `EnterWorktree` after a subagent is already running breaks/redirects that subagent). Treat those two sub-cases as fixed on >= 2.1.290 (not re-verified by us; #89102 itself remains open with a `stale` label, last comment 2026-08-31, with no closing comment confirming the fix; #89254 was closed 2026-10-18 by the stale bot as `not_planned` ("inactive for too long") with no fix PR or maintainer resolution). STILL UNFIXED per changelog through 2.1.310: (a) a subagent's own `EnterWorktree` reporting success while Bash stays pinned to the parent's worktree (#84704, maintainer-confirmed bug 2026-08-25, then closed 2026-10-22 by the stale bot as `not_planned` ("inactive for too long") with no fix PR or maintainer resolution); (b) in-process teammates / concurrent sibling subagents sharing one last-writer-wins binding, including false-green test runs (#84493 closed 2026-10-05 by the stale bot as `not_planned` ("inactive for too long") with no fix PR or maintainer resolution; #86243 closed 2026-09-11 by the stale bot as `not_planned` ("inactive for too long") with no fix PR or maintainer resolution). A stale-bot closure is not evidence of a fix. Related 2.1.295 fix (subagents in their own linked worktree no longer shown the parent's git branch/status) is adjacent. Workaround 2 (avoid parent EnterWorktree/ExitWorktree while subagents run) is now only needed on < 2.1.290; workarounds 1, 3 and 4 still apply. Needs re-verification on v2.1.310 for mechanisms (a)/(b).
 
 ---
 
@@ -1788,13 +1735,13 @@ Five issues folded into one entry because they share the same root mechanism (se
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/87643 |
 | **Reported** | 2026-08-18 |
-| **Last Activity** | 2026-09-06 |
+| **Last Activity** | 2026-09-06 (no activity since; Needs re-verification) |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | 2.1.234 (CLI, WSL2/Ubuntu 24.04) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, area:tools, area:agents, platform:wsl, area:sandbox |
 
 **Summary:**
@@ -1814,7 +1761,7 @@ Each of the three sub-defects independently threatens MOSAIC's use of the harnes
 3. From the reporter: do not assume a `isolation: "worktree"` subagent's worktree survives across a pause/resume cycle just because the agent itself remains resumable — after any resume, have the subagent verify `pwd`/`git rev-parse --show-toplevel` before any write, since a reaped-and-orphaned agent's cwd can silently fall back into the parent's tree.
 
 **Notes:**
-Distinct from CC-054 (session-wide `EnterWorktree` latch desync) — this entry is specific to the harness-provisioned `isolation: "worktree"` dispatch path itself (no subagent-initiated `EnterWorktree` call in the repro), covering three separate concrete defects (Edit misroute, git-guard misattribution/bypass, auto-reap orphaning) rather than the live-vs-pinned isolation-root desync. Single-reporter but included per the Unverified inclusion bar: directly threatens a core MOSAIC pattern (worktree-isolated subagent dispatch), reported on stock Anthropic infrastructure (WSL2/Ubuntu, standard CLI), and backed by concrete, cross-verified reproduction steps. Needs re-verification and, ideally, independent corroboration or maintainer response in a future pass.
+Distinct from CC-054 (session-wide `EnterWorktree` latch desync) — this entry is specific to the harness-provisioned `isolation: "worktree"` dispatch path itself (no subagent-initiated `EnterWorktree` call in the repro), covering three separate concrete defects (Edit misroute, git-guard misattribution/bypass, auto-reap orphaning) rather than the live-vs-pinned isolation-root desync. Single-reporter but included per the Unverified inclusion bar: directly threatens a core MOSAIC pattern (worktree-isolated subagent dispatch), reported on stock Anthropic infrastructure (WSL2/Ubuntu, standard CLI), and backed by concrete, cross-verified reproduction steps. Needs re-verification and, ideally, independent corroboration or maintainer response in a future pass. Update pass run 20 (2026-10-25): still open, 1 comment total, no maintainer response, no activity for 7+ weeks. Changelog 2.1.268-2.1.310 contains no fix for the Edit misroute, git-guard root misattribution/bypass, or reap-orphans-cwd defects (2.1.305 only fixes unchanged subagent worktrees sometimes NOT being cleaned up; 2.1.309 hardens the worktree isolation guard against locale-prefixed/zsh-arithmetic commands). Needs re-verification on v2.1.310.
 
 ---
 
@@ -1825,14 +1772,14 @@ Distinct from CC-054 (session-wide `EnterWorktree` latch desync) — this entry 
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/82354 |
 | **Reported** | 2026-07-29 |
-| **Last Activity** | 2026-08-20 |
+| **Last Activity** | 2026-10-08 |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | Unspecified CLI build, reported 2026-07-29; no fix confirmed on current version |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
-| **Labels** | area:tools |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | area:tools, stale |
 
 **Summary:**
 When a background subagent calls `EnterWorktree` mid-task (with no `name`/`path` collision — creating a brand-new worktree, not re-entering an existing one), the `Bash` tool's cwd correctly follows the switch to the new worktree, but `Write`/`Edit` continue resolving paths against the subagent's original launch-time worktree — apparently a static permission/path boundary fixed once at subagent launch that ignores the subagent's own subsequent `EnterWorktree` call. The reporter reproduced this identically across 3 independent subagents in one session, each isolating into a distinct new worktree in the same repository; all three subagents' `Write`/`Edit` calls on paths relative to their new worktree failed or resolved against the old one, while their `Bash pwd` calls correctly showed the new worktree.
@@ -1849,7 +1796,7 @@ This is the inverse of CC-054's failure direction: rather than Bash being refuse
 2. Prefer harness-provisioned `isolation: "worktree"` dispatch (worktree fixed at launch, no subagent-initiated `EnterWorktree` call needed) over instructing a subagent to self-provision its own worktree mid-task, to avoid this class of tool-level cwd-tracking desync entirely.
 
 **Notes:**
-Distinct from CC-054 (session-wide isolation-root-vs-launch-cwd desync causing Bash refusals or misdirection) and CC-055 (`isolation: "worktree"`-specific Edit misroute into the PARENT's tree, plus git-guard and auto-reap defects) — this entry's mechanism is specifically that `Write`/`Edit` and `Bash` track worktree location through two different, inconsistent code paths, with `Write`/`Edit` being the one that fails to update on a subagent's own self-initiated switch. Single-reporter, kept active per the Unverified inclusion bar given direct relevance to MOSAIC's worktree-fan-out pattern and concrete, internally-reproduced repro steps on stock infrastructure. Needs corroboration in a future pass.
+Distinct from CC-054 (session-wide isolation-root-vs-launch-cwd desync causing Bash refusals or misdirection) and CC-055 (`isolation: "worktree"`-specific Edit misroute into the PARENT's tree, plus git-guard and auto-reap defects) — this entry's mechanism is specifically that `Write`/`Edit` and `Bash` track worktree location through two different, inconsistent code paths, with `Write`/`Edit` being the one that fails to update on a subagent's own self-initiated switch. Single-reporter, kept active per the Unverified inclusion bar given direct relevance to MOSAIC's worktree-fan-out pattern and concrete, internally-reproduced repro steps on stock infrastructure. Needs corroboration in a future pass. Update pass run 20 (2026-10-25): issue was closed 2026-10-08 by the stale bot as `not_planned` ("inactive for too long") with no fix PR or maintainer resolution (1 comment total, 1 thumbs-up; never corroborated or maintainer-engaged). No fix in changelog through 2.1.310 (2.1.290's background-subagent worktree fix concerns a parent switching worktrees, not a subagent's own switch). Retained as Unverified; low evidence and a candidate for retirement if still unreproduced next pass. Needs re-verification on v2.1.310.
 
 ---
 
@@ -1860,14 +1807,14 @@ Distinct from CC-054 (session-wide isolation-root-vs-launch-cwd desync causing B
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/88082 |
 | **Reported** | 2026-08-19 |
-| **Last Activity** | 2026-08-31 |
+| **Last Activity** | 2026-10-20 (label-only; last human comment 2026-08-31) |
 | **Confidence** | Likely |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | macOS, Claude Code CLI running as a background job; version unspecified by any of the three reporters; last corroborating report 2026-08-31 |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
-| **Labels** | bug, has repro, platform:macos, area:tools, area:bash |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | bug, has repro, platform:macos, area:tools, area:bash, stale |
 
 **Summary:**
 After using `EnterWorktree` (as a background job) and working normally in the resulting worktree for a while, Bash commands — even a bare `echo` — begin failing with a message that the working directory "is spelled in a form that cannot be safely resolved," Read/Write calls on the same paths fail with `EPERM: operation not permitted`, and `/bin/pwd` itself fails with `Operation not permitted` while `stat` on the identical path succeeds normally. `ExitWorktree` reports success returning to the original directory, but the next Bash command's cwd unpromptedly snaps back to the worktree path. The built-in `/cd` slash command reproduces related breakage, resolving against a stale worktree path and then failing to reach directories that verifiably exist. None of this clears on a full restart of the terminal app and Claude Code. Two independent commenters confirmed hitting the identical symptom set (one after "subagent-driven development," recurring 3 times over 4-6 weeks); the original reporter and one commenter both narrowed the correlation to working inside macOS TCC-protected directories (`~/Desktop`, `~/Documents`) — moving projects to a non-TCC-protected path (e.g. under `~` directly, or a plain `~/dev/...` tree) is reported to stop the recurrence, though this is reporter-observed correlation, not a maintainer-confirmed root cause.
@@ -1887,24 +1834,24 @@ Once triggered, the session becomes unable to reliably run any shell command or 
 3. No in-session recovery is known once triggered; the only confirmed remedy is starting a fresh session in a new working directory outside the affected path.
 
 **Notes:**
-Confidence set to Likely (not Confirmed) — three independent reports of the same detailed symptom set with a converging, plausible (TCC/sandboxing) root-cause theory, but no maintainer acknowledgment or confirmed root cause. Thematically adjacent to CC-054/CC-055/CC-056 (all triggered by `EnterWorktree`/`ExitWorktree` usage) but mechanistically distinct — this is a filesystem-permission/path-resolution wedge rather than an isolation-scope desync, and is macOS/TCC-specific rather than a cross-platform race. Needs re-verification and, ideally, a maintainer response identifying the true root cause in a future pass.
+Confidence set to Likely (not Confirmed) — three independent reports of the same detailed symptom set with a converging, plausible (TCC/sandboxing) root-cause theory, but no maintainer acknowledgment or confirmed root cause. Thematically adjacent to CC-054/CC-055/CC-056 (all triggered by `EnterWorktree`/`ExitWorktree` usage) but mechanistically distinct — this is a filesystem-permission/path-resolution wedge rather than an isolation-scope desync, and is macOS/TCC-specific rather than a cross-platform race. Needs re-verification and, ideally, a maintainer response identifying the true root cause in a future pass. Update pass run 20 (2026-10-25): still open (5 comments, no maintainer response); no new reports since 2026-08-31 and the `stale` label has been added, so it may be auto-closed. Changelog 2.1.268-2.1.310 has no fix for the cwd-unresolvable/EPERM wedge. Needs re-verification on v2.1.310.
 
 ---
 
-### CC-059: Project-level `.claude/rules/` symlinks pointing outside the project are silently dropped — root cause is an unraised external-includes approval gate
+### CC-059: Project-level `.claude/rules/` symlinks pointing outside the project: the silent drop was fixed in 2.1.284 (approval prompt now raised), but `paths:`-scoped symlinked rules still never inject
 
 | Field | Value |
 |-------|-------|
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/88405 (primary, most detailed root-cause investigation); https://github.com/anthropics/claude-code/issues/90523 and https://github.com/anthropics/claude-code/issues/90525 (same root cause, independently filed by a different reporter; #90525 is GitHub-labeled `duplicate` of #90523, filed by the same reporter minutes apart) |
 | **Reported** | 2026-08-20 (#88405); 2026-08-29 (#90523, #90525) |
-| **Last Activity** | 2026-09-09 |
-| **Confidence** | Confirmed (no maintainer acknowledgment, but the "multiple independent reproductions with strong evidence" bar is clearly met — at least 10 independent reporters across macOS/Windows/Linux, with a hook-instrumented (`InstructionsLoaded`) bisection pinpointing the exact regression version and a source-level mechanism explanation) |
+| **Last Activity** | 2026-10-17 |
+| **Confidence** | Likely (core silent-drop FIXED in 2.1.284; the residual `paths:`-scoped defect has multiple independent reports but no maintainer acknowledgment) |
 | **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | Introduced in 2.1.232 (last known good: 2.1.223/2.1.231); still present through 2.1.266, the most recent version tested as of this pass |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | Core symptom (symlink dropped without ever raising the approval prompt) introduced in 2.1.232, FIXED in 2.1.284. Residual: `paths:`-scoped symlinked rules still never inject on 2.1.272-2.1.301 (project scope, #88405/#90523; user scope, new issue #102983). |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, area:core, platform:macos (varies by issue); #90525 additionally carries `duplicate` |
 
 **Summary:**
@@ -1926,7 +1873,7 @@ This breaks a documented, officially-recommended mechanism for sharing standing 
 3. Alternative trigger for the same flag: temporarily add an external (`@/absolute/path/...`) import to the project's `CLAUDE.md`, open a session, accept the resulting approval dialog, then remove the import line — has the same effect as workaround 2 without hand-editing `~/.claude.json`.
 
 **Notes:**
-Distinct from CC-034 (`--add-dir`-added directories skip their own `CLAUDE.md`/rules entirely — a different trigger and code path from the project's own `.claude/rules/` symlink-resolution gate covered here) and CC-036 (a `CLAUDE.md` above a repo root not loading into that repo's worktrees — an ancestor-directory path-resolution gap, not a symlink-approval gate). Not a duplicate of CC-041 either (that entry is about `.claude/settings.json`, not `.claude/rules/`). If Confirmed-by-evidence classification proves too generous on a future re-check (e.g. if a maintainer disputes the community's mechanism theory), downgrade to Likely. Re-verify against the current version (v2.1.267) on a future pass, and watch for a CHANGELOG entry mentioning rules-symlink external-includes handling.
+Distinct from CC-034 (`--add-dir`-added directories skip their own `CLAUDE.md`/rules entirely — a different trigger and code path from the project's own `.claude/rules/` symlink-resolution gate covered here) and CC-036 (a `CLAUDE.md` above a repo root not loading into that repo's worktrees — an ancestor-directory path-resolution gap, not a symlink-approval gate). Not a duplicate of CC-041 either (that entry is about `.claude/settings.json`, not `.claude/rules/`). If Confirmed-by-evidence classification proves too generous on a future re-check (e.g. if a maintainer disputes the community's mechanism theory), downgrade to Likely. Re-verify against the current version (v2.1.267) on a future pass, and watch for a CHANGELOG entry mentioning rules-symlink external-includes handling. Update pass run 20 (2026-10-25): #88405 was closed `completed` on 2026-09-25 (by an Anthropic account, no closing comment). CHANGELOG 2.1.284: "Fixed rules symlinked into `.claude/rules` from outside the project being skipped without ever showing the external-imports approval prompt; a `.claude` directory symlinked from outside the project now asks for the same approval" - confirmed by a commenter on 2.1.284 (2026-09-28): a symlinked rule now raises the approval prompt itself (no `@`-import trick needed), and with approval granted (or both `hasClaudeMdExternalIncludesApproved` and `hasClaudeMdExternalIncludesWarningShown` set true) unconditional symlinked rules load. 2.1.290 additionally fixed a symlinked project CLAUDE.md/rule/AGENTS.md loading under `blockReadsOutsideWorkingDirectories`/Read deny. REMAINING DEFECT: symlinked rules with `paths:` frontmatter still never fire (no `path_glob_match` InstructionsLoaded event) even after approval (ARivottiC 2026-09-15 and 2026-09-28 on 2.1.272/2.1.284; #90523 still open); a user-scope variant still reproduces on 2.1.301 (josesuntw, filed as new issue #102983 on 2026-10-17). Also noted: a git worktree inherits its main checkout's external-include approval (csemrau 2026-09-17), which can make a test falsely pass. Entry re-scoped to the residual `paths:` case; workaround 1 (copy files instead of symlinking) remains the reliable one for `paths:`-scoped rules; workarounds 2/3 (flag / `@`-import trick) are only needed on < 2.1.284 and do NOT help `paths:`-scoped rules. Re-verify #102983 and #90523 next pass; if only the `paths:` residual remains unacknowledged, consider tracking #102983 as its own entry.
 
 ---
 
@@ -1937,13 +1884,13 @@ Distinct from CC-034 (`--add-dir`-added directories skip their own `CLAUDE.md`/r
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/90450 (primary, CLAUDE.md/rules-loading casualty), corroborated by https://github.com/anthropics/claude-code/issues/87575 (same root mechanism, different casualty set: `/rewind`, `PostToolUse` hooks, Edit/Write-scoped permission rules) |
 | **Reported** | 2026-08-28 (#90450); #87575 reported 2026-08-18 |
-| **Last Activity** | 2026-09-08 (#90450); #87575 last activity 2026-09-07 |
+| **Last Activity** | 2026-10-19 (#90450); #87575 unchanged since 2026-09-07 |
 | **Confidence** | Confirmed (no maintainer acknowledgment, but at least 7 independent reporters across macOS/Windows/Linux reproduced the same mechanism with strong evidence, including an independently-verified undocumented kill-switch environment variable) |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | Regression tied to the Auto Mode rollout (~2026-08-14); confirmed present on 2.1.247 through 2.1.263, the most recent version tested as of this pass |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | Regression tied to the Auto Mode rollout (~2026-08-14; one comment says shipped in 2.1.221). Nested-memory-loading half PARTIALLY FIXED: 2.1.288 (Write/Edit now load path-scoped rules/nested CLAUDE.md) and 2.1.293 (plain single-file Bash cat/head/tail/sed -n/grep now load). Bash-write casualties (/rewind, Edit|Write hooks, Edit/Write-scoped permissions) still present through 2.1.310. |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:windows, area:tools, area:core |
 
 **Summary:**
@@ -1970,7 +1917,7 @@ Per #87575's independent investigation of the same root mechanism, the blast rad
 4. From #87575: if a repo's own quality gates are hook-driven and scoped to `Edit|Write`, treat a hook-derived "0 files changed, all clean" result under Auto Mode with suspicion rather than as a trustworthy pass — cross-check against `git diff --stat` directly, since a Bash-routed edit makes the hook's "nothing to grade" indistinguishable from "nothing changed."
 
 **Notes:**
-This is an unusually well-evidenced Unverified→Confirmed jump for a single-issue report: no maintainer has engaged on either #90450 or #87575, but the combined volume (7+ independent reporters on #90450, plus #87575's 39 reactions and 15 comments including a second, entirely independent discovery of the same kill-switch env var), rigor (within-subject controls, mechanism isolation, independently-discovered and cross-verified kill-switch variable, controlled reversal tests on both issues), and severity (silent, sticky loss of a documented memory feature, plus silent defeat of rollback/hooks/permission-scoping — all under a headline harness feature) meet the "multiple independent reproductions with strong evidence" bar for Confirmed. Directly compounds CC-006/CC-007 (compaction-related conversation-stability hazards), CC-034/CC-036 (other CLAUDE.md-loading gaps), and CC-042 (`/rewind` reliability) — durable-rules-in-files as a mitigation strategy is undermined if the files never load in the first place under Auto Mode, and `/rewind` as a rollback safety net is undermined if Auto Mode's own steering routes edits around it. Re-verify on a future pass for a maintainer response, a fix, or documentation of the Bash-first/`CLAUDE_CODE_THRIFTY_SONIC` interaction. Title expanded this pass to reflect the wider blast radius found in #87575.
+This is an unusually well-evidenced Unverified→Confirmed jump for a single-issue report: no maintainer has engaged on either #90450 or #87575, but the combined volume (7+ independent reporters on #90450, plus #87575's 39 reactions and 15 comments including a second, entirely independent discovery of the same kill-switch env var), rigor (within-subject controls, mechanism isolation, independently-discovered and cross-verified kill-switch variable, controlled reversal tests on both issues), and severity (silent, sticky loss of a documented memory feature, plus silent defeat of rollback/hooks/permission-scoping — all under a headline harness feature) meet the "multiple independent reproductions with strong evidence" bar for Confirmed. Directly compounds CC-006/CC-007 (compaction-related conversation-stability hazards), CC-034/CC-036 (other CLAUDE.md-loading gaps), and CC-042 (`/rewind` reliability) — durable-rules-in-files as a mitigation strategy is undermined if the files never load in the first place under Auto Mode, and `/rewind` as a rollback safety net is undermined if Auto Mode's own steering routes edits around it. Re-verify on a future pass for a maintainer response, a fix, or documentation of the Bash-first/`CLAUDE_CODE_THRIFTY_SONIC` interaction. Title expanded this pass to reflect the wider blast radius found in #87575. Update pass run 20 (2026-10-25): PARTIAL FIX landed. CHANGELOG 2.1.288: "Fixed path-scoped `.claude/rules` and nested CLAUDE.md files not loading when Write or Edit creates or changes a file in their scope (previously only Read loaded them)". CHANGELOG 2.1.293: "Fixed path-scoped rules and nested CLAUDE.md files not loading when Claude views a file with a single-file cat, head, tail, sed -n or grep command in the Bash tool instead of the Read tool". Community re-verification on #90450 (2.1.294-2.1.302): plain single-file reads and Write now load (rulereceipt on 2.1.302; yishait-tailor on 2.1.296), but anything that is not a plain single-file Bash view still loads NOTHING - pipes (`cat f | head`), `||`, redirects, extra flags, `cd dir && cat f`, `grep -r`, a grep with no match, and EVERY Bash write (`sed -i`, `>`, heredoc, `python -c`, `cp`) (him0 2026-10-08, yishait-tailor 2026-10-13 on 2.1.296). A search-first test on 2.1.286 (drDramen) showed `CLAUDE_CODE_THRIFTY_SONIC=false` only partly helps because the model still finds and views files via Bash. The other casualties are unchanged: 2.1.309 made explicit that `sed -i` Bash edits now "run as written" and are "no longer restored by `/rewind`" (effectively by-design for Bash edits), and nothing in the changelog makes `PostToolUse` `Edit|Write` matchers or Edit/Write-scoped permission rules cover Bash-routed writes. #90450 (open, 49 thumbs-up, 25 comments) and #87575 (open, 43 thumbs-up) have no maintainer response. Additional community workaround from the thread: a root CLAUDE.md brief asking for one plain Read per folder before working there (15/15 rule loads in a small test, yishait-tailor, 2.1.296); a hook-based reinjection plugin (`claude-bash-bridge`) and `UserPromptSubmit`/`SessionStart(compact)` hook-delivered rule distillates are third-party and untested by us. Impact kept HIGH because the hook/rewind/permission-scope casualties (relevant to MOSAIC's PostToolUse logging and rollback) remain; the nested-memory-loading casualty alone is MEDIUM at most on >= 2.1.293. Needs re-verification that THRIFTY_SONIC is still honored on v2.1.310.
 
 ---
 
@@ -1987,7 +1934,7 @@ This is an unusually well-evidenced Unverified→Confirmed jump for a single-iss
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | Confirmed on 2.1.233 (Linux, maintainer repro) and reported on Windows 11; a second manifestation confirmed on the macOS desktop app (Code tab), version not stated |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, documentation, has repro, platform:windows, area:hooks, reproduced |
 
 **Summary:**
@@ -2009,7 +1956,7 @@ Directly threatens MOSAIC's own `EnterWorktree`/`ExitWorktree`-based subagent is
 3. If a hook launcher command itself is built from `${CLAUDE_PROJECT_DIR:-$PWD}` (the pattern the harness's own docs demonstrate for referencing scripts by path), be aware this resolves once per session and will not follow either a worktree switch or a project switch — prefer an absolute path fixed at hook-authoring time, or resolve the script path via `cwd` from stdin at hook-execution time instead of via the launcher command string.
 
 **Notes:**
-Classification is mixed: the maintainer explicitly called the primary `EnterWorktree`-into-same-repo-worktree behavior "intended" (a Limitation, in this KB's terms — `CLAUDE_PROJECT_DIR` is deliberately a stable root), but the second reporter's project-to-project crash manifestation was NOT addressed by that response and remains an active, unaddressed Bug with no workaround — kept classified as Bug overall since that unresolved half is the more severe orchestration hazard. The maintainer also acknowledged the worktree-interaction gap is undocumented and under consideration for a docs update and/or a new "current session directory" environment variable — watch for either shipping in a future release, which would materially improve this entry's Workaround options. #49989 was investigated as a possible earlier report of the same defect but is NOT folded in as confirmed-identical — it describes complete non-firing of `UserPromptSubmit` in worktrees (a different specific symptom, never reproduced by anyone else, closed `not_planned` with zero maintainer engagement) rather than the wrong-directory-execution mechanism #87890 actually proves; retained here only as historical context that worktree+hook interaction has been reported as broken since April 2026. Separately, a broad current search surfaced a large cluster of freshly-filed (Aug–Sep 2026), still-open `UserPromptSubmit`/`PreToolUse` non-firing reports (#92353, #92652, #90784, #90296, #92074, #85669, #90176, #87657) that were NOT investigated in this pass — flagged as a high-value area for a dedicated follow-up pass, since several appear platform/surface-specific (VS Code extension, desktop app "Cowork") rather than obviously duplicative of CC-047 or this entry.
+Classification is mixed: the maintainer explicitly called the primary `EnterWorktree`-into-same-repo-worktree behavior "intended" (a Limitation, in this KB's terms — `CLAUDE_PROJECT_DIR` is deliberately a stable root), but the second reporter's project-to-project crash manifestation was NOT addressed by that response and remains an active, unaddressed Bug with no workaround — kept classified as Bug overall since that unresolved half is the more severe orchestration hazard. The maintainer also acknowledged the worktree-interaction gap is undocumented and under consideration for a docs update and/or a new "current session directory" environment variable — watch for either shipping in a future release, which would materially improve this entry's Workaround options. #49989 was investigated as a possible earlier report of the same defect but is NOT folded in as confirmed-identical — it describes complete non-firing of `UserPromptSubmit` in worktrees (a different specific symptom, never reproduced by anyone else, closed `not_planned` with zero maintainer engagement) rather than the wrong-directory-execution mechanism #87890 actually proves; retained here only as historical context that worktree+hook interaction has been reported as broken since April 2026. **Run 20 (2026-10-25) re-check:** #87890 still open, no new comments since 2026-09-03 (7+ weeks), no linked PR; changelog 2.1.268-2.1.310 contains no `CLAUDE_PROJECT_DIR`/hook-env change, so no docs update or "current session directory" env var is confirmed shipped. **Needs re-verification** on current version (v2.1.310). Separately, a broad current search surfaced a large cluster of freshly-filed (Aug–Sep 2026), still-open `UserPromptSubmit`/`PreToolUse` non-firing reports (#92353, #92652, #90784, #90296, #92074, #85669, #90176, #87657) that were NOT investigated in this pass — flagged as a high-value area for a dedicated follow-up pass, since several appear platform/surface-specific (VS Code extension, desktop app "Cowork") rather than obviously duplicative of CC-047 or this entry.
 
 ---
 
@@ -2020,13 +1967,13 @@ Classification is mixed: the maintainer explicitly called the primary `EnterWork
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/76161 |
 | **Reported** | 2026-07-09 |
-| **Last Activity** | 2026-08-31 |
+| **Last Activity** | 2026-09-14 (closed by stale-bot, not_planned) |
 | **Confidence** | Confirmed (maintainer reproduced and acknowledged; fix stated to be in review) |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | Confirmed present on 2.1.233; reporter states this has existed "since nested-skill discovery shipped," not a recent regression |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | Confirmed present on 2.1.233; reporter states this has existed "since nested-skill discovery shipped," not a recent regression. Possibly partly mitigated from 2.1.304 (compaction now re-sends the skill list) - unverified for nested/lazy-discovered skills |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, area:core, area:skills, stale |
 
 **Summary:**
@@ -2050,6 +1997,8 @@ Directly threatens MOSAIC's use of scoped/project skills in any long-running or 
 **Notes:**
 Confirmed via direct maintainer engagement — one of the stronger-evidenced entries in this KB. No fix version has been confirmed shipped as of the last observed activity (2026-08-31); the `stale` label is a bot artifact from inactivity, not an indication the fix is abandoned. Re-verify on a future pass by checking recent release notes for skill-discovery/compaction fixes, and update Confidence/close this out to resolved if a shipped fix is confirmed. Distinct from CC-035 (undocumented total-registered-skill session cap) and from #74990 (listing-only drop, registry intact) — do not merge with either.
 
+**Run 20 (2026-10-25) update:** #76161 was auto-closed by github-actions[bot] on 2026-09-14 as `not_planned` ("inactive for too long") - a stale-bot closure, not a maintainer decision and not a shipped fix; the maintainer's 2026-08-17 "fix in review, we'll update here when it lands" was never followed up in-thread. Changelog 2.1.268-2.1.310 has no explicit nested-skill-discovery fix; the closest is 2.1.304 "Changed compaction to send Claude the skill list again afterwards" (addresses the listing/#74990 side; unclear whether it re-arms lazy `dynamicSkillDirs` discovery for discovered-but-uninvoked nested skills). **Needs re-verification on v2.1.310** (test: read file under nested skill subtree, compact, invoke skill). Kept active, Confidence stays Confirmed for the mechanism as of 2.1.233.
+
 ---
 
 ### CC-068: Windows: statusline `pwsh.exe` host processes never exit, accumulating hundreds of orphans per hour and degrading process-census-dependent tooling
@@ -2059,13 +2008,13 @@ Confirmed via direct maintainer engagement — one of the stronger-evidenced ent
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/86551 |
 | **Reported** | 2026-08-13 |
-| **Last Activity** | 2026-08-28 |
+| **Last Activity** | 2026-09-11 (closed by stale-bot, not_planned) |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 2.1.231, also observed on earlier 2.1.x |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | 2.1.231, also observed on earlier 2.1.x; possibly related Windows orphaned-PowerShell fix in 2.1.299 (see Notes) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:windows, area:statusline, stale |
 
 **Summary:**
@@ -2092,52 +2041,7 @@ Beyond raw memory/process-table growth, the reporter measured a concrete downstr
 **Notes:**
 Related to, but a distinct mechanism from, CC-043 (statusLine refresh debouncing) — both are statusline-driven resource-exhaustion hazards and share the same class of remediation advice ("keep statusline commands fast/lightweight"), but CC-043 is about concurrent-copy explosion under a slow command while this entry is about a per-invocation host-process leak independent of command speed. No maintainer engagement as of last activity; flag for re-verification and for independent corroboration in a future pass, since this is currently single-reporter Unverified despite the quality of the evidence.
 
----
-
-### CC-069: `UserPromptSubmit` hook, correctly registered and independently verified working, never fires for real interactively-typed prompts in the CLI
-
-| Field | Value |
-|-------|-------|
-| **Classification** | Bug |
-| **Source** | https://github.com/anthropics/claude-code/issues/92353 |
-| **Reported** | 2026-09-05 |
-| **Last Activity** | 2026-09-05 |
-| **Confidence** | Unverified |
-| **Orchestration Impact** | HIGH |
-| **Reproduced at MOSAIC** | No |
-| **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 2.1.261 (Windows, Git Bash CLI) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
-| **Labels** | bug, has repro, platform:windows, area:hooks, regression |
-
-**Summary:**
-A `UserPromptSubmit` hook, correctly listed by `/hooks` and independently confirmed to produce correct output when invoked manually with the exact JSON payload Claude Code would send it, never actually fires when a real prompt is typed and submitted in a live, interactive Git Bash CLI session on Windows — the prompt reaches the model unmodified every time. The reporter's own follow-up comment ruled out the initially-suspected cause (an early-session registration race, per closed issue #17277): a "warm-up prompt" sent first did not help, and the hook failed to fire on the very next message too — so in this environment the hook does not fire for any interactively-typed prompt, at any position in the session, not just the first one. Verified directly via `.jsonl` transcript inspection: the raw prompt text appears as a plain `"type":"user"` message immediately followed by a genuine assistant response with real token usage, with no hook-related trace anywhere nearby. A sibling `PreToolUse` (`Bash` matcher) hook in the same `settings.json` was separately observed firing correctly, but only from a different client (the desktop app's "Code" tab) — not yet confirmed to fire from the same Git Bash CLI session, leaving open whether the defect is `UserPromptSubmit`-specific or broader within this environment. `/doctor` separately surfaced generic "hook execution error" telemetry for this project.
-
-**Impact on Orchestration:**
-`UserPromptSubmit` is a documented mechanism for prompt-level interception, validation, and blocking (e.g. credential-leak prevention, prompt-format enforcement) in interactive CLI sessions — the execution mode MOSAIC's harness-native orchestration relies on. If the hook can silently never fire for an entire CLI session despite being correctly configured and independently proven functional, any MOSAIC workflow depending on `UserPromptSubmit` for a human-typed-prompt safety net or context-injection step gets no warning that it is not actually running.
-
-**Evidence:**
-- Single reporter, one self-follow-up comment, no maintainer response yet (issue is 4 days old as of this pass).
-- Reproduction is concrete and multi-angle: `/hooks` confirms registration, manual invocation with the real payload shape confirms the script itself is correct, and `.jsonl` transcript inspection independently proves the model received the raw, unintercepted prompt (ruling out a display-only/UX gap).
-- Reporter tested and ruled out the most obvious alternate explanation (early-session race per #17277) via a live warm-up-prompt experiment, narrowing the defect to "never fires in this session," not "fires late."
-- Meets the Unverified inclusion bar: threatens a core MOSAIC pattern (prompt-level tool-execution/context gating in an interactive CLI session, MOSAIC's own harness-native execution mode), reported on stock Anthropic infrastructure (Windows, Git Bash, no custom backend/proxy), and provides concrete, deterministic reproduction steps (not just symptoms).
-- Distinct mechanism from CC-046 (hooks in a `.claude/settings.json` created mid-session never arm until restart — here the settings file and hook predate session start) and CC-047 (a malformed sibling hook entry kills all hooks for an event type — here the hook entry itself is well-formed, individually confirmed correct, and no malformed sibling is reported).
-
-**Workaround(s):**
-1. No confirmed workaround yet — the reporter's tested "warm-up prompt" mitigation (sending an innocuous first message to let the hook register before a security-relevant prompt) did **not** work, ruling out the one candidate workaround suggested by the superficially similar closed issue #17277.
-2. Until this is resolved or re-verified, do not rely on `UserPromptSubmit` alone as a prompt-level safety net in interactive Git Bash CLI sessions on Windows — pair it with (or fall back to) `PreToolUse`/`permissions.deny` gating on the tool calls that would result from an unintercepted prompt, where feasible.
-
-**Notes:**
-Reporter frames this as a possible regression of the closed #17277 ("UserPromptSubmit hook not triggering consistently," closed 2026-01 after the reporter said it "appears to work more consistently with 2.1.3"), and cross-references two other closed reports with similar titles (#7873, #31114) — suggesting `UserPromptSubmit` non-firing on Windows/Git Bash CLI has been a recurring, never durably fixed theme across many months, distinct from the VS-Code-extension-specific and desktop/Cowork-specific non-firing reports investigated alongside this one (see below). Needs re-verification/corroboration in a future pass — currently single-reporter, no maintainer engagement, only 4 days old.
-
-Investigated alongside this entry (2026-09-09 pass) and NOT added, because each is scoped to a surface MOSAIC does not rely on for orchestration (MOSAIC's harness-native mode runs in the CLI/terminal or via the headless Runner pipeline, not the VS Code extension, the desktop app's Agent SDK entrypoint, or Cowork):
-- #92652 — `UserPromptSubmit` never fires in the VS Code extension specifically; reporter's own control confirms the identical settings file fires correctly in a non-IDE host on the same machine. Extension-only; CLI unaffected.
-- #90784 — `UserPromptSubmit` permanently stops firing for a session, correlated with a duplicated `generate_session_title` API request; observed only via `claude-vscode` (VS Code extension) entrypoint logs. Extension-specific trigger mechanism (title-generation race), no evidence it reproduces in the CLI.
-- #92074 — `PreToolUse`/`UserPromptSubmit` hooks fail to fire for every matcher tested, explicitly isolated to the VS Code extension via a debug signature (`Found 0 hook matchers in settings` in the extension vs. a correct non-zero count in the CLI for identical config). CLI explicitly confirmed unaffected by the reporter's own comparison.
-- #85669 — `UserPromptSubmit` not invoked when a prompt carries an attachment, explicitly isolated to the VS Code extension; the reporter's CLI control confirms the hook fires for the same case there.
-- #90176 — a Cowork-specific report that `isolation:"worktree"` and its `WorktreeCreate` hook escape hatch are unreachable because Cowork's session `cwd` is never a git repository (an internal outputs directory) and the `isGitRepo()` check runs before hooks are consulted. Thematically adjacent to the CC-054/CC-055/CC-056/CC-057/CC-063 worktree-isolation cluster, but the specific trigger (a subagent's cwd never being a git repo) doesn't apply to MOSAIC's own usage — MOSAIC's `EnterWorktree`-based fan-out always operates inside an actual project git repository, so this exact failure path is not expected to materialize there. Not added; flagged here only in case MOSAIC ever spawns a worktree-isolated subagent in a non-repo working directory.
-- #87657 — originally filed as "desktop-app/Agent SDK entrypoint sessions load 0 hooks," but the reporter's own follow-up comment scope-corrects this to an intermittent, per-session hook-registry loss (sometimes failing to initialize, sometimes ceasing mid-session) observed only on the desktop-app entrypoint, with no deterministic reproduction recipe — only diagnostic observation of when it happened to occur. Fails the Unverified inclusion bar's "concrete reproduction steps" requirement (symptom-only, not reproducible on demand) despite otherwise-real materiality (a hook-dispatch-loss mechanism, if it turns out not to be entrypoint-specific, could plausibly affect CLI/Runner sessions too). Worth a dedicated future pass if it accrues corroboration or a maintainer response.
-- #90296 — filed against a "ZCode desktop app," a differently-branded product, not `anthropics/claude-code` itself; cross-references real upstream issues (#31114, #40647, #19643) as same-symptom precedent but is not itself evidence about Claude Code. Not added as a standalone entry; the referenced upstream #31114 (queued/interrupting messages during generation skip `UserPromptSubmit`) is a plausible independent lead for a future pass if not already covered by an existing entry — see CC-072, which resolves this lead.
+**Run 20 (2026-10-25) update:** #86551 was auto-closed by github-actions[bot] on 2026-09-11 as `not_planned` ("inactive for too long") with zero maintainer engagement - not a fix. Changelog 2.1.299 says "Windows: Fixed the process-liveness check leaving orphaned PowerShell processes behind on busy machines until memory ran out" - a different spawn path (liveness check, not the statusline command), so it is NOT confirmed to fix this leak, but it shows the team addressed a similar orphan-pwsh symptom. **Needs re-verification on v2.1.310** with a custom PowerShell statusline; kept active (Unverified).
 
 ---
 
@@ -2148,13 +2052,13 @@ Investigated alongside this entry (2026-09-09 pass) and NOT added, because each 
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/90122 |
 | **Reported** | 2026-08-27 |
-| **Last Activity** | 2026-08-27 |
+| **Last Activity** | 2026-09-11 |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | 2.1.247 (Windows, Git for Windows 2.55.0.windows.3) |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | 2.1.247 (Windows, Git for Windows 2.55.0.windows.3); no re-test on newer versions |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:windows, area:hooks, area:plugins |
 
 **Summary:**
@@ -2176,6 +2080,8 @@ Any MOSAIC-authored or third-party hook that assumes a `commandWindows`-style pe
 **Notes:**
 Distinct mechanism from CC-071 (backslash-path escaping) and CC-063 (`CLAUDE_PROJECT_DIR` staleness) — this is specifically about an assumed-but-unsupported per-platform command field, undocumented, that silently no-ops rather than erroring. Needs re-verification/corroboration in a future pass — currently single-reporter, zero comments, and only about two weeks old as of this write-up.
 
+**Run 20 (2026-10-25) update:** #90122 still open (no maintainer response, no PR). One new comment (2026-09-11, `phillipjad`) adds a second surface: claude.ai organization plugin sync rejects `commandWindows` server-side too ("not a recognized hook field ... was not stored") for `SessionStart`/`SubagentStart`/`UserPromptSubmit`, and notes org-wide plugin pushes expose Windows users to the crash without per-OS control; also that `"shell": "powershell"` fixes Windows but breaks POSIX for a single-entry plugin (no per-platform override exists). Changelog 2.1.268-2.1.310 has no `commandWindows` support or docs change. Still Unverified (two commenters, same root cause, no maintainer). Last activity 2026-09-11 (6+ weeks): **Needs re-verification** on v2.1.310.
+
 ---
 
 ### CC-071: Windows hook commands with unquoted backslash paths silently never execute — bash strips the backslashes, hooks fail open with zero indication
@@ -2185,13 +2091,13 @@ Distinct mechanism from CC-071 (backslash-path escaping) and CC-063 (`CLAUDE_PRO
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/88578 |
 | **Reported** | 2026-08-21 |
-| **Last Activity** | 2026-08-22 |
+| **Last Activity** | 2026-10-16 (closed by stale-bot, not_planned) |
 | **Confidence** | Likely |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | Claude Code desktop app, Windows 11 Pro 26200 (both reporters); original reporter's outage ran 2026-07-06 through 2026-08-21 undetected |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Version(s) Affected** | Claude Code desktop app, Windows 11 Pro 26200 (both reporters); original reporter's outage ran 2026-07-06 through 2026-08-21 undetected; no re-test on newer versions |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:windows, area:hooks |
 
 **Summary:**
@@ -2215,6 +2121,8 @@ This directly threatens MOSAIC's own hook-based enforcement and telemetry (e.g. 
 **Notes:**
 Distinct mechanism from CC-047 (a malformed *array-entry shape* kills a whole event's hooks) and CC-063 (`CLAUDE_PROJECT_DIR` staleness after a worktree/project switch) — here the hook entry is well-formed and the working directory is correct; only the backslash-containing path token itself is mis-parsed by the Git-Bash launcher. Also distinct from CC-070 (`commandWindows` field silently ignored) — that is a missing-feature/undocumented-field issue, this is a shell-escaping defect in the one command field that does exist. No maintainer engagement yet; worth a follow-up corroboration/response check in a future pass.
 
+**Run 20 (2026-10-25) update:** #88578 was auto-closed by github-actions[bot] on 2026-10-16 as `not_planned` ("inactive for too long") - stale-bot closure, not a fix; no maintainer ever commented. Changelog 2.1.268-2.1.310 has no fix for backslash-path mangling in Windows hook commands. Related Windows hook hardening shipped but does not address this mechanism: 2.1.284 (failed hooks now log status code and stderr to the debug log), 2.1.288 (PreToolUse/PermissionRequest hooks skipped on match failure now block), 2.1.299/2.1.309/2.1.310 (PreToolUse/PermissionRequest hooks fail closed instead of open when Git Bash missing). So the fail-open silence is partly reduced for guard-type hooks only when the shell is missing; a hook whose command is mangled by bash (exit 127) is still presumed silent for non-blocking hooks - unverified on 2.1.310. Confidence stays Likely (two independent reporters); **Needs re-verification** on current version.
+
 ---
 
 ### CC-072: `UserPromptSubmit` hooks skip firing for messages sent while the agent is mid-turn/generating (interrupt messages) — closed by stale-bot, not maintainer-resolved, needs current-version re-verification
@@ -2230,7 +2138,7 @@ Distinct mechanism from CC-047 (a malformed *array-entry shape* kills a whole ev
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | Reported and confirmed present on 2.1.69, 2.1.70, and 2.1.76 (Windows 11 + WSL2); no confirmation on any version since April 2026 |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, area:hooks, regression, platform:wsl, stale |
 
 **Summary:**
@@ -2252,6 +2160,8 @@ Interrupt/follow-up messages sent while a subagent or the orchestrator is mid-tu
 **Notes:**
 **Needs re-verification on current version** — this is the resolution of the lead noted in CC-069's Notes (cross-referenced via #90296) and in the historical-corroboration discussion under CC-063; it was confirmed to exist on `anthropics/claude-code` (not a wrong-repo reference) but the report itself is now stale (last activity 2026-04-21, ~5 months and many releases before the current v2.1.267) and was never addressed by a maintainer despite the `not_planned` closure. Distinct mechanism from CC-069 (all real interactively-typed prompts never fire the hook in a specific Windows/Git-Bash CLI environment) and from CC-047/CC-063 (malformed-entry and stale-`CLAUDE_PROJECT_DIR` mechanisms) — this is specifically about interrupt/mid-turn message delivery bypassing hook dispatch. Kept ACTIVE rather than discarded because the underlying mechanism (interrupt messages bypassing `UserPromptSubmit`) would be HIGH-relevance if still current and no evidence surfaced that it was actually fixed — the stale-bot closure is not evidence of resolution. A future pass should specifically test mid-turn interrupt messages against a current release before this can be upgraded past "Needs re-verification."
 
+**Run 20 (2026-10-25) re-check:** #31114 unchanged (closed `not_planned` + locked, no new comments; no maintainer ever engaged). Changelog 2.1.268-2.1.310 contains several queued-prompt/`UserPromptSubmit`-hook-ordering fixes (2.1.296 Esc/interrupt during `UserPromptSubmit` hook no longer lets unchecked prompt through; 2.1.299 queued Remote Control prompts) but none states that mid-turn user messages now fire `UserPromptSubmit`. Still Needs re-verification at v2.1.310; now ~6 months since last confirmation.
+
 ---
 
 ### CC-073: Bash session `cwd` resets to the project directory whenever `cd` leaves it (or an added directory) — and hooks then receive that stale reset value, not the triggering command's actual directory (maintainer-confirmed)
@@ -2261,13 +2171,13 @@ Interrupt/follow-up messages sent while a subagent or the orchestrator is mid-tu
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/76708 |
 | **Reported** | 2026-07-11 |
-| **Last Activity** | 2026-08-31 |
+| **Last Activity** | 2026-09-15 (closed by stale-bot, not_planned) |
 | **Confidence** | Confirmed |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | Reported on 2.1.207 (macOS); maintainer independently reproduced and explained the mechanism on 2.1.233 (macOS) |
-| **Latest Platform Version** | v2.1.267 (2026-09-10) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, documentation, platform:macos, area:bash, area:hooks, stale, reproduced |
 
 **Summary:**
@@ -2289,6 +2199,8 @@ Any hook-based enforcement or logging that reads `cwd` to determine which reposi
 **Notes:**
 Distinct from CC-023 (plain cross-agent cwd drift, no hooks involved) and CC-063 (`CLAUDE_PROJECT_DIR` not propagating on worktree/project switches) — this entry is specifically the maintainer-confirmed mechanism behind why a hook's `cwd` field can silently mismatch the directory a triggering command actually ran in, in a plain single-session, no-worktree scenario. No fix PR linked as of last activity; worth re-checking whether "exposing the directory the triggering command actually ran in to tool hooks" has since shipped.
 
+**Run 20 (2026-10-25) update:** #76708 was auto-closed by github-actions[bot] on 2026-09-15 (`not_planned`, "inactive for too long") after the maintainer's 2026-08-16 comment - stale-bot closure, not a decision. Changelog 2.1.268-2.1.310 has no entry exposing the command's actual directory to hooks, so the gap is presumed still present on v2.1.310 (not directly tested). The cd-reset itself is documented by-design behavior (Limitation-like: https://code.claude.com/docs/en/tools-reference#bash-tool-behavior); the hook-cwd mismatch remains the Bug half. Confidence stays Confirmed (maintainer acknowledgment). Workarounds unchanged.
+
 ---
 
 ### CC-074: `/rewind`'s checkpoint file-tracking race can drop the "Restore code" option entirely for tracked-file edits, and separately fails to restore a deleted tracked git file
@@ -2298,13 +2210,13 @@ Distinct from CC-023 (plain cross-agent cwd drift, no hooks involved) and CC-063
 | **Classification** | Bug |
 | **Source** | https://github.com/anthropics/claude-code/issues/14002 (primary); related but distinct report at https://github.com/anthropics/claude-code/issues/93045 |
 | **Reported** | 2025-12-15 (#14002); 2026-09-09 (#93045) |
-| **Last Activity** | 2026-09-09 |
+| **Last Activity** | 2026-09-29 |
 | **Confidence** | Likely (for #14002's mechanism); #93045 is Unverified/single-reporter, included as a related data point rather than raising overall confidence |
 | **Orchestration Impact** | MEDIUM |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | #14002 reproduced across 2.0.69-2.0.76 (CLI) and independently on the Desktop app (no version given, 2026-08-04); #93045 reported on 2.1.266; no fix confirmed on current version |
-| **Latest Platform Version** | v2.1.267 (2026-09-10) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | bug, has repro, platform:macos, area:core (from #14002; #93045 carries no labels) |
 
 **Summary:**
@@ -2325,6 +2237,8 @@ Any MOSAIC workflow relying on `/rewind` for a mid-session rollback (human-drive
 **Notes:**
 Distinct from CC-042 (specifically about never-git-tracked NEW files never getting a restore option at all, no snapshot-race evidence) — this entry covers a broader tracking race that can drop the restore option even for git-tracked files genuinely edited via Claude's own tools, plus a separate, less-evidenced deletion-specific gap. Needs re-verification on the current version (v2.1.267): #14002's most recent confirming comment is from 2026-08-04 and #93045 is only one day old as of this pass, with no maintainer engagement on either.
 
+**Run 20 (2026-10-25) update:** Both issues still open, no maintainer comment on either. #14002 gained one comment (2026-09-29, community) stating the documented scope: only edits made with Claude's Edit/Write tools create checkpoints, so Bash/Python-script edits (sed -i, heredocs, redirects) and deletions are never restorable - suggested workaround of a CLAUDE.md rule to always edit via Edit/Write (inferred from docs behavior, not maintainer-confirmed in-thread). This likely explains #93045 (file deleted via shell is outside checkpoint tracking) rather than the "0 files tracked" race, so #93045 is probably the by-design Bash-untracked case (a Limitation), distinct from #14002's Edit/Write-tool race (Bug). Changelog: 2.1.309 "Fixed the `/rewind` list showing 'No code changes' for a turn that changed checkpointed files through `/code-review --fix`, a subagent or a shell command" (reduces the misleading message but not confirmed to fix the 'tracking 0 files' race) and 2.1.309 "`sed -i` ... is no longer restored by `/rewind`" (confirms shell edits are untracked by design). Also 2.1.301 fixed skills listing after `/rewind` and 2.1.275 fixed `/rewind` restoring truncated files in forked/background sessions. #14002's race remains unconfirmed fixed; **Needs re-verification on v2.1.310**. Added workaround: 3. Prefer Edit/Write tools over Bash for file mutations in sessions where `/rewind` fallback matters (documented checkpoint scope).
+
 ---
 
 ### CC-075: `EnterWorktree` unconditionally refuses inside any subagent with a pinned `cwd` (`isolation: "worktree"` or an explicit `cwd` override), with no documented fallback path
@@ -2334,13 +2248,13 @@ Distinct from CC-042 (specifically about never-git-tracked NEW files never getti
 | **Classification** | Limitation |
 | **Source** | https://github.com/anthropics/claude-code/issues/82737 |
 | **Reported** | 2026-07-30 |
-| **Last Activity** | 2026-08-20 |
+| **Last Activity** | 2026-10-06 (closed by reporter as completed, no comment) |
 | **Confidence** | Unverified |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | No |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | Observed 2026-07-30 on the CLI with a custom subagent invoked via the `Agent` tool; exact build not given |
-| **Latest Platform Version** | v2.1.267 (2026-09-10) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | area:agents |
 
 **Summary:**
@@ -2361,42 +2275,7 @@ Any MOSAIC agent template or project convention that expects a dispatched subage
 **Notes:**
 Distinct from CC-054 (session-wide `EnterWorktree` latch desync once the tool IS reachable) and CC-055/CC-056 (`isolation: "worktree"` Edit/Write and auto-reap defects) — this entry is about `EnterWorktree` being categorically unreachable from a pinned-cwd subagent's own turn in the first place, not about the tool behaving inconsistently once called. Classified as a Limitation rather than a Bug because the refusal's own error text states a deliberate protective rationale (this reads as intentional architecture, not an accident) — but the missing documented fallback is the operational gap worth tracking, and no maintainer has confirmed whether a fallback is planned. Needs re-verification and, ideally, independent corroboration or maintainer response in a future pass — zero comments as of last activity.
 
----
-
-### CC-078: `CLAUDE.md`/path-scoped rules never load when Claude creates a brand-new file matching the pattern — the loading trigger is gated on a prior `Read`, and a new file has nothing to read
-
-| Field | Value |
-|-------|-------|
-| **Classification** | Bug |
-| **Source** | https://github.com/anthropics/claude-code/issues/63142 (closed `not_planned` by a stale-activity bot, not a maintainer decision) |
-| **Reported** | 2026-05-28 |
-| **Last Activity** | 2026-09-07 (stale-bot lock comment; last substantive comment 2026-06-02) |
-| **Confidence** | Unverified (single reporter, no maintainer confirmation, and the one substantive comment is a related feature proposal rather than a corroboration — but included per the Unverified inclusion bar: it threatens a core MOSAIC pattern (subagents routinely create new files — tests, implementation code, artifacts — where project/path-scoped conventions matter most), reported on stock Anthropic infrastructure with no custom backend mentioned, and gives concrete, isolated reproduction steps) |
-| **Orchestration Impact** | MEDIUM |
-| **Reproduced at MOSAIC** | No |
-| **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | Reported 2026-05-28; no version given by reporter; unconfirmed on current version — needs re-verification |
-| **Latest Platform Version** | v2.1.267 (2026-09-09) |
-| **Labels** | enhancement, area:core, stale |
-
-**Summary:**
-Path-scoped `.claude/rules/*.md` (with `paths:` frontmatter) and subdirectory `CLAUDE.md` files only get injected into context when Claude reads a matching file via the native `Read` tool. When Claude instead *creates* a new file matching the pattern — the file doesn't exist yet, so there is nothing to `Read` before the `Write` — the matching rule set is silently never loaded for that operation, even using fully native tools with Auto Mode not a factor. The reporter notes this does not affect *editing* an existing file, since Claude always reads a file before modifying it (which correctly triggers loading); the gap is specific to first-time file creation. The issue was closed by an inactivity bot as `not_planned`, not by any maintainer decision — the one substantive comment is a third party proposing an `allowed-tools` frontmatter addition (tracked separately as #64708) to trigger rule loading directly on `Write`/`Edit` tool calls rather than only on `Read`, which would close this gap if implemented.
-
-**Impact on Orchestration:**
-New-file creation is one of the most common operations MOSAIC subagents perform — test-writer-tdd creating new test files, implementation-tdd creating new source files, planning/research agents creating new artifact files — and it is exactly the case where project/path-scoped conventions (naming, header boilerplate, required imports, license headers, formatting rules) matter most, since there's no existing file content to infer conventions from. If the governing `.claude/rules/*.md` or subdirectory `CLAUDE.md` never loads for that creation, the new file may silently violate project conventions with no error or signal. This is the same underlying `Read`-tool-exclusive loading design that CC-060 shows Auto Mode's Bash-first steering also defeats — but this entry's trigger is independent of Auto Mode entirely and reproduces with fully native `Write` tool calls, making it a more fundamental, harder-to-work-around variant of the same root design gap.
-
-**Evidence:**
-- Single reporter (bogdan), with clear, isolated reproduction steps distinguishing the working case (edit existing file — rule loads via the pre-edit `Read`) from the failing case (create new file — no `Read` occurs, rule never loads), tested for both `.claude/rules/` `paths:` frontmatter and subdirectory `CLAUDE.md`.
-- One substantive third-party comment (gmbalaa14) independently agrees the problem is real and proposes a concrete fix mechanism (`allowed-tools` frontmatter key to trigger loading on `Write`/`Edit` directly, tracked as #64708) — not a reproduction, but corroborates that the described gap matches a broader recognized limitation of the `paths:`-only trigger design.
-- No maintainer (COLLABORATOR/MEMBER/OWNER) engagement anywhere in the thread. Closed automatically by `github-actions[bot]` for inactivity (`not_planned` state reason), not by a maintainer determining it invalid or intentional — per this KB's rules, a stale-bot closure is not evidence of resolution and the behavior should be presumed to still exist absent contrary evidence (see CC-035's #31505 for the same closure pattern recurring as still-live).
-- Cross-referenced from CC-060's Evidence section as a mechanistically related but distinct trigger of the same `Read`-gated loading design.
-
-**Workaround(s):**
-1. ⭐ For any project/path-scoped convention that must apply to newly created files, hoist the rule into the root `CLAUDE.md` (loaded unconditionally at session start) rather than a nested/path-scoped rule file, mirroring CC-060's equivalent workaround — defeats the organizational benefit of path-scoped rules but is the only workaround with no dependency on tool-call ordering.
-2. Where feasible, have the agent template or workflow instruct subagents to explicitly re-read (`Read`) the relevant rules file immediately before creating a new file in a governed path, forcing the load rather than relying on the implicit trigger. Not confirmed by any GitHub reporter — inferred from the documented mechanism, not a validated community workaround.
-
-**Notes:**
-Filed as an `enhancement` rather than `bug` label, but the underlying behavior — a silent, undocumented gap in a documented memory-loading feature with no warning to the user — has real operational impact matching this KB's inclusion criteria regardless of how the reporter framed the fix request. Directly part of the same cluster as CC-034 (`--add-dir` rules skipped), CC-036 (`CLAUDE.md` above repo root skipped in worktrees), CC-059 (symlinked `.claude/rules/` never loading), and CC-060 (Auto Mode's Bash-first steering defeats the same `Read`-gated trigger) — all five entries share the same underlying architectural fragility: nested/path-scoped memory loading depends entirely on a `Read` tool call happening to occur on the exact right file, and any tool-call pattern that doesn't produce that exact `Read` (new-file creation, Bash-routed access, `--add-dir` boundaries, symlink resolution, parent-of-worktree path resolution) silently drops the rules with zero diagnostic. Needs re-verification on a current version — reported mid-2026 with no recent confirmation, and closed by bot rather than resolved. If #64708's `allowed-tools` frontmatter proposal is ever implemented, re-check whether it closes this gap.
+**Run 20 (2026-10-25) update:** #82737 was closed on 2026-10-06 by its own author (`LucaAhumada`) with state_reason `completed`, no closing comment, no linked PR, zero comments in total, no maintainer engagement. Changelog 2.1.268-2.1.310 contains no change to `EnterWorktree` behavior inside pinned-cwd subagents or to its tool description, so the refusal is presumed still present on v2.1.310; the author's close most likely means they adopted the `git worktree add` / spawn-with-`cwd` workaround (the tool's own error text already says "spawn an Agent with `cwd` set to it", i.e. workaround 2 is the officially hinted path). Kept active as Limitation, Unverified; not moved to resolved because no fix is evidenced.
 
 ---
 
@@ -2413,7 +2292,7 @@ Filed as an `enhancement` rather than `bug` label, but the underlying behavior �
 | **Reproduced at MOSAIC** | Yes |
 | **MOSAIC Response** | Unevaluated |
 | **Version(s) Affected** | Confirmed present on v2.1.269 (2026-09-12). The broader `tools:`-also-broken variant reported in #31287/#65142/#66581 (v2.1.69–v2.1.169) appears to have been fixed — `tools:` scoping for built-in tools now works correctly |
-| **Latest Platform Version** | v2.1.269 (2026-09-12) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | N/A for the direct reproduction; underlying GitHub issues carry `bug`, `has repro`, `area:mcp`, `area:agents`, `stale` |
 
 **Summary:**
@@ -2472,6 +2351,8 @@ Additional note on permission layer: MCP tools that appear in the schema still r
 
 **Remaining question:** Whether `mcpServers:` is intentionally subordinate to `tools:` (a design choice where `tools:` is the authoritative allowlist and `mcpServers:` is merely a connection hint that doesn't expand the allowlist) or whether this is an unintentional parsing/merge failure. If it's by-design, the classification should be changed to Limitation. No maintainer has commented on this interaction specifically.
 
+**Run 20 (2026-10-25) upstream check (MOSAIC-verified finding unchanged; nothing here downgrades it):** no GitHub issue found that states the narrowed `mcpServers:`-ignored-when-`tools:`-present interaction; the three source reports (#31287/#65142/#66581) remain stale-closed with no maintainer reply. Changelog 2.1.270-2.1.310 contains no fix for it. Relevant adjacent changes: 2.1.299 "Changed agent `tools:` lists to take only the named MCP server's tools; list a server whose name contains `__` as `mcp__<whole name>__*`" (this reinforces the `mcp__<server>__*`-in-`tools:` workaround as the supported form and may alter behavior for servers with `__` in the name - re-check workaround on >= 2.1.299 for such servers); 2.1.299 "subagent MCP servers" blocked by policy check are no longer started. Related open leads for MCP-in-subagent reliability: #104418 (open, 2026-10-22, v2.1.308: a subagent's frontmatter `mcpServers` server that fails its first start is never retried in the same session and tools are silently missing; slow servers beyond `MCP_TIMEOUT` also silently absent) and #75267 (stale-closed: one unresolvable name in a subagent `tools:` list silently voids the whole list). MOSAIC reproduction was on v2.1.269; **not yet re-run on v2.1.310 / post-2.1.299** - recommend re-running test T4/T5 matrix.
+
 ---
 
 ### CC-080: MCP server instruction blocks injected into agents/subagents that have no access to that server's tools
@@ -2487,7 +2368,7 @@ Additional note on permission layer: MCP tools that appear in the schema still r
 | **Reproduced at MOSAIC** | Yes |
 | **MOSAIC Response** | Awareness — primary agents receive instructions for all connected MCP servers regardless of tool scoping |
 | **Version(s) Affected** | Reported across v2.1.x from Feb–Sep 2026; confirmed on v2.1.269 |
-| **Latest Platform Version** | v2.1.269 (2026-09-12) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | `bug`, `area:security`, `area:mcp`, `area:agents` (from #47118) |
 
 **Summary:**
@@ -2513,6 +2394,8 @@ Every MOSAIC agent — primary and subagent — pays the context-token cost for 
 **Notes:**
 See also CC-081 (the inverse problem). #85307 frames these as two halves of one inverted routing bug. Additional leads: #85230 (background subagents lose MCP resource tools), #79728 (subagent tools: allowlist collapses when MCP server unavailable at spawn).
 
+**Run 20 (2026-10-25) upstream update:** #85307 was auto-closed by github-actions[bot] on 2026-10-04 (`not_planned`, no maintainer reply ever) and #75283 closed 2026-09-01 and locked 2026-10-23 - stale-bot closures, not fixes. A NEW open report, #104791 (2026-10-24, labels enhancement/area:cost/area:mcp/area:agents, 0 comments), independently confirms on **v2.1.310 (macOS)** that a custom subagent with a narrow `tools:` list still receives the `mcp_instructions_delta` attachment for every connected MCP server (~48.5K chars / ~12K tokens with ~20 servers), with no documented per-agent filter; it proposes injecting only instructions for servers in the agent's effective tool set or a frontmatter switch such as `mcpInstructions: listed | none`. This confirms the behavior is still present on the current release. Changelog 2.1.268-2.1.310: no scoping fix; 2.1.296/2.1.299 raised the per-server instruction cap from 2,048 to 4,096 characters (and uncapped for first-party api.anthropic.com servers), which can increase the per-subagent overhead; 2.1.283 made `/context` count MCP server instructions as their own row (useful for measuring the cost); `CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH` (2.1.280) can cap it. Added mitigation: set `CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH` low to bound per-server instruction size (documented env var; affects tool descriptions too - not MOSAIC-tested).
+
 ---
 
 ### CC-081: Subagents receive MCP server instructions late — only after their first tool turn
@@ -2528,7 +2411,7 @@ See also CC-081 (the inverse problem). #85307 frames these as two halves of one 
 | **Reproduced at MOSAIC** | Yes |
 | **MOSAIC Response** | Awareness + workaround: deliver guidance before the first turn, or keep the first turn MCP-free |
 | **Version(s) Affected** | Reported on v2.1.226 (#85307); earlier reports span v2.1.x; confirmed on v2.1.270 |
-| **Latest Platform Version** | v2.1.270 (2026-09-13) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | `area:mcp`, `area:agents` |
 
 **Summary:**
@@ -2559,6 +2442,8 @@ Three subagents reported no `# MCP Server Instructions` block. Their probes insp
 **Notes:**
 #85307's "inverted routing" framing is partly accurate: scoping is wrong (CC-080), and delivery to subagents is late rather than absent. Additional leads: #85230 (background subagents lose MCP resource tools), #79728 (subagent `tools:` allowlist collapses when MCP server unavailable at spawn), #84638 (concurrent identical inline `mcpServers:` share one server process).
 
+**Run 20 (2026-10-25) upstream update:** #85307 closed by stale-bot 2026-10-04 (`not_planned`, no maintainer reply) - not a fix. #104791 (open, v2.1.310, 2026-10-24) independently shows the `mcp_instructions_delta` attachment is still delivered to subagents on the current release (it is the same attachment type MOSAIC observed arriving after the first tool turn). Changelog 2.1.300: "Fixed Claude not being told about an MCP server's tools and instructions until its next tool call, when the server finished connecting after a compaction" - a related late-delivery fix for the main session after compaction, not for subagent start; no changelog entry delivers instructions to subagents before their first turn. MOSAIC re-test was on v2.1.270; not yet re-run on v2.1.310. New related lead: #104418 (open, v2.1.308) - a subagent frontmatter `mcpServers` server that fails its first start is never retried in-session and its tools are silently missing (no error to the model).
+
 ---
 
 ### CC-082: Async hooks are killed when a `-p` process exits - an async `Stop` hook is cut off mid-execution and an async `SessionEnd` hook writes nothing
@@ -2574,7 +2459,7 @@ Three subagents reported no `# MCP Server Instructions` block. Their probes insp
 | **Reproduced at MOSAIC** | Yes |
 | **MOSAIC Response** | Mitigated: the mosaic-logger registers `Stop` and `SessionEnd` synchronous (and Runner sessions run with session persistence on) |
 | **Version(s) Affected** | 2.1.288 (unknown for other versions) |
-| **Latest Platform Version** | v2.1.288 (2026-10-03) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | `area:hooks`, `area:non-interactive` |
 
 **Summary:**
@@ -2595,6 +2480,909 @@ The Runner waits for the harness process to exit and then reads the MOSAIC logs.
 3. Keep session persistence on for sessions whose transcript is needed.
 
 **Notes:**
-Not probed: other Claude Code versions, Linux/macOS, interactive sessions. See also OC-099 (OpenCode handler not awaited on exit) and GC-020 (GHCP CLI hooks not loaded in untrusted folders) for the same class of "hook output cannot be assumed" behaviour in the other harnesses.
+Run 20 (2026-10-25) upstream check: no GitHub issue found filed for async-hook kill-on-exit in `-p` mode, and changelog 2.1.289-2.1.310 has no change to async-hook lifetime at process exit (nearby, unrelated: 2.1.290 async Stop hook endless-loop fix with unquoted paths, 2.1.295 async hook multi-line JSON output and SessionStart resume duplication, 2.1.300 "SessionEnd hooks sometimes not running when you exit while a background command is still running" - a possible partial overlap worth re-testing on v2.1.310 but concerns background commands, not async hooks). MOSAIC-verified finding unchanged (still tested only on 2.1.288). Not probed: other Claude Code versions, Linux/macOS, interactive sessions. See also OC-099 (OpenCode handler not awaited on exit) and GC-020 (GHCP CLI hooks not loaded in untrusted folders) for the same class of "hook output cannot be assumed" behaviour in the other harnesses.
+
+---
+
+### CC-093: Windows/Git Bash: Bash tool's wrapped `-c` string silently truncated at ~8,186 chars (partial run with exit 0 possible), and backslash runs halved
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/85111 (primary, ~10 comments); https://github.com/anthropics/claude-code/issues/93618 (adds backslash-halving) |
+| **Reported** | 2026-08-08 |
+| **Last Activity** | 2026-10-23 |
+| **Confidence** | Confirmed |
+| **Orchestration Impact** | HIGH |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | Reproduced 2.1.226 through 2.1.300 (latest confirmation 2.1.300, 2026-10-15); across Git for Windows 2.35-2.55 / MSYS 3.3-3.6. Not re-confirmed on 2.1.310. |
+| **Latest Platform Version** | v2.1.310 |
+| **Labels** | #85111: `area:tools`; #93618: `bug`, `has repro`, `platform:windows`, `area:bash` |
+
+**Summary:**
+On Windows the Bash tool runs `bash.exe -c "<prefix> && eval '<command, each ' rewritten as '"'"'>' < /dev/null && pwd -P >| <cwd-file>"`. The MSYS2 runtime re-parses the raw Windows command line (`globify()` -> `glob()`, fixed 8192-wchar pattern buffer) and silently cuts the argument at 8,186 chars (8,191 with `LC_ALL=C`); the same step halves runs of backslashes (`\\` -> `\`). The usable command budget is about 7,700 chars minus 4 per apostrophe (prefix ~340-430 chars; anything that grows the prefix, e.g. inlined `CLAUDE_ENV_FILE` content, shrinks it). Failure shapes: (a) cut inside the command -> `unexpected EOF while looking for matching '` (the model blames an innocent apostrophe), nothing runs; (b) cut lands past the wrapper's closing quote -> `eval` runs a truncated script with exit 0 (e.g. heredoc loses its terminator, partial file written, the trailing self-check swallowed as heredoc body); (c) backslashes silently halved, no error. Write tool and PowerShell tool are unaffected.
+
+**Impact on Orchestration:**
+A subagent (or primary) writing large files via `cat > f <<'EOF'`, or passing large inline scripts/JSON/regexes through Bash on Windows, fails with misleading quoting errors that agents "fix" by re-escaping (never helps), or worse, silently writes truncated files with exit 0 and a disarmed verification step. Backslash halving silently corrupts regexes, Windows/UNC paths and JSON payloads. MOSAIC is Windows-run, so this is directly in the path of file-generating subagents.
+
+**Evidence:**
+- Root cause traced to msys2-runtime `dcrt0.cc`/`glob.cc` by independent commenters; reproduced without Claude Code (plain Node/Python spawn of `bash.exe`).
+- At least 8 independent reproductions across Claude Code 2.1.226/2.1.255/2.1.261/2.1.268/2.1.275/2.1.293/2.1.300 and three Git for Windows/MSYS versions; transcript audits (e.g. 101 of 23,409 and 135 of 54,043 Bash calls failed on valid-by-`bash -n` commands).
+- Exit-0 partial-run shape reproduced through the Bash tool (2.1.300).
+- No maintainer comment on either issue; confidence rests on multiple independent reproductions with evidence.
+
+**Workaround(s):**
+1. Write file content with the Write tool and run/consume the file (`--body-file`, `git commit -F`, `cat path >> target`); keep inline Bash commands (length + 4 per apostrophe) under ~7,200 chars. Widely used, effectively the best.
+2. PreToolUse hook on Bash that refuses commands whose length + 4 x apostrophes exceeds ~7,200 and tells the agent to use Write (reported by 3 users; #85111).
+3. Native `bash.exe` relay via `CLAUDE_CODE_GIT_BASH_PATH` (file must be named `bash.exe`) that passes the command to Git's bash via file/env var instead of argv; reported working incl. 30 KB heredocs and no backslash halving, but requires building a small binary (#85111, #93618). Not tested by us.
+4. `MSYS=noglob` is NOT a fix (breaks the apostrophe escaping).
+
+**Notes:**
+Related same-signature issues with a different root cause (apostrophe in profile path): #27163, #28759, #31465, #27212. Reported duplicates of #85111 per a commenter: #92543, #93915, #97692 (not individually verified). Related shell-snapshot variant: a very long PATH (many plugin `bin` entries) pushes the shell snapshot script past the same 8,186 cut, silently producing an invalid snapshot (81 of 83 failed `bash -n`) so every Bash call runs without the snapshot's aliases (comment on #85111, 2.1.275). Related to CC-024 (`CLAUDE_ENV_FILE` content is inlined into the same `-c` string and consumes the same budget; on the other hand a runaway env file can also push every command over the limit). Potential PreToolUse-hook workaround interacts with CC-014/CC-025 hook-enforcement caveats. Not seen reported for Linux/macOS (MSYS-specific mechanism). Possible 2.1.310 recurrence: #104745 (open, filed 2026-10-24, VS Code, Windows) reports EVERY Bash command (even `echo`) failing with `unexpected EOF while looking for matching '` mid-session while the shell snapshot is balanced -- the shape expected when the wrapper prefix alone (e.g. inlined `CLAUDE_ENV_FILE` content, CC-024) approaches the 8,186-char cut; single report, no diagnosis, so not independently confirmed as the same cause. Same all-commands-fail signature as the older #83243, #82376, #68337 cited in #85111.
+
+---
+
+### CC-094: `EnterWorktree(path=...)` to a valid worktree not nested under `.claude/worktrees/` reports success and moves Bash cwd, but Write/Edit guard keeps the original binding and mislabels the target "base repo checkout"
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/95389 |
+| **Reported** | 2026-09-18 |
+| **Last Activity** | 2026-09-20 (only other comment is a spam/promotional post, ignored) |
+| **Confidence** | Unverified |
+| **Orchestration Impact** | MEDIUM |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | Reported on a 2026-09 build (Windows 11, CLI/Agent SDK main thread); not re-tested on v2.1.310 |
+| **Latest Platform Version** | v2.1.310 |
+| **Labels** | bug, has repro, platform:windows, area:tools |
+
+**Summary:**
+From a main-thread session launched pinned to worktree A (`.claude/worktrees/...`), `EnterWorktree(path=<existing git-registered worktree B>)` returns unconditional success and Bash `pwd` moves to B. If B is nested under `.claude/worktrees/` a subsequent Write succeeds; if B lives elsewhere (e.g. created with `git worktree add` directly under the repo's parent directory), Write/Edit are REFUSED because the guard still enforces worktree A, calls B "the base repo checkout", and suggests a nonsensical "corrected" path nesting B under A. Repeating ExitWorktree(keep) + EnterWorktree gives a byte-identical failure.
+
+**Impact on Orchestration:**
+MOSAIC's worktree fan-out relies on agents operating in per-task worktrees. If a worktree is created outside `.claude/worktrees/` (e.g. by a MOSAIC script) and a session switches into it via `EnterWorktree`, Bash and Write/Edit disagree about where the session is; the failure mode here is fail-closed (writes refused with misleading text) rather than silent mis-writes, but the misleading remediation could lead an agent to write into a wrong nested path or abandon the task.
+
+**Evidence:**
+- Single reporter with step-by-step repro of both a working and failing case in one session; no maintainer or independent confirmation.
+- Included as Unverified because it concerns the Write/Edit worktree guard in the core worktree pattern, with concrete repro steps (stock Anthropic CLI, per report).
+
+**Workaround(s):**
+1. Create/enter worktrees only under `.claude/worktrees/` (reporter's Case 1 works), or launch the session directly with its cwd in the target worktree instead of switching with `EnterWorktree`. Single-reporter observation, not confirmed by others.
+
+**Notes:**
+Same family as CC-056 (Write/Edit pinned to launch-time worktree after a subagent's own `EnterWorktree`; #82354) and CC-063 (hook `CLAUDE_PROJECT_DIR` not following the switch; #87890), but distinct trigger: main-thread session, switch to an existing non-nested worktree, plus the misleading guard message. Related to CC-023/CC-054 (worktree state aliasing). Needs re-verification on v2.1.310.
+
+---
+
+### CC-095: Bash tool timeout is a hard SIGTERM kill (exit 143, no partial output) for commands failing an undocumented auto-background eligibility check; non-interactive mode reportedly never auto-backgrounds
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Limitation |
+| **Source** | https://github.com/anthropics/claude-code/issues/79879 |
+| **Reported** | 2026-07-21 |
+| **Last Activity** | 2026-10-22 (stale-label bump; last substantive comment 2026-09-02) |
+| **Confidence** | Likely |
+| **Orchestration Impact** | MEDIUM |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | Reported on 2.1.216 (Linux), seen again on 2.1.220 and 2.1.257; not re-checked on v2.1.310 |
+| **Latest Platform Version** | v2.1.310 |
+| **Labels** | area:tools, stale |
+
+**Summary:**
+When a foreground Bash call hits its `timeout`, the harness either auto-backgrounds it ("moved to the background (ID: ...)", output preserved) or kills the process group with SIGTERM ("Exit code 143 / Command timed out after Ns", no partial output). The choice is made before spawn from a static analysis of the command string and is undocumented. Reported kill-path triggers: a `$VAR`/backtick in a redirect target (`cmd > $S/out 2> $S/err`), a heredoc combined with a file redirect, any `git` subcommand anywhere in the chain, or a first word of `sleep`. A comment notes the eligibility flag is additionally gated on `!nonInteractive`, i.e. in `-p`/non-interactive mode no command is auto-backgrounded and every timeout is a kill (from reading the bundle; not independently tested by us). The reporter's bundle diff suggests nothing downstream depends on the analyzer, so the gate looks arbitrary, but no maintainer has responded.
+
+**Impact on Orchestration:**
+Headless/`-p` MOSAIC agents running long test suites, builds or scans via Bash lose all output and get a bare exit 143 when the timeout expires; the model cannot predict which class a command falls in and may report an estimate in place of the lost measurement. PreToolUse hooks that clamp `timeout` on the assumption that "timeout never kills" convert allowances into kills.
+
+**Evidence:**
+- Issue author decompiled the 2.1.216 bundle and probed repros (~5 s each); a second user hit the kill path twice on 2.1.220 with plain `python3` scans (no partial output); the author later ran 2.1.257 with the gate forced true and confirmed the same commands then auto-background with output intact.
+- No maintainer comment; the non-interactive claim is from code reading in a comment, not a behavioural repro. Classified Limitation because the split looks deliberate (undocumented design) rather than a defect; Likely rather than Confirmed (no maintainer statement).
+
+**Workaround(s):**
+1. Use `run_in_background: true` for any command that may exceed the timeout, or set `BASH_DEFAULT_TIMEOUT_MS` / `BASH_MAX_TIMEOUT_MS` (settings `env`) to cover the longest expected run (commenter-validated, 2.1.220).
+2. Avoid `$VAR` redirect targets and heredoc+redirect combinations in long commands; write output to literal paths (reporter observation).
+3. Do not write PreToolUse hooks that shorten `timeout` assuming it only backgrounds.
+4. A third-party binary patch exists (`Butanium/claude-code-patches`); not recommended.
+
+**Notes:**
+Related: #77645 (asks to document the auto-background message). Related to CC-018/CC-019/CC-052 (background Bash task lifecycle) but a different mechanism (timeout handling, not background-task kill). Needs re-verification of both the eligibility criteria and the `-p` behaviour on v2.1.310.
+
+---
+
+### CC-096: Messages API 32 MB request-body cap: token-based auto-compact never fires for byte-heavy history, and the error's recommended `/compact` re-sends the same oversized request, leaving the session bricked
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/104534 (primary, most recent); related: #74048, #81793 (open), #82419, #56691, #8092 |
+| **Reported** | 2026-10-23 (#104534); earlier threads from 2025 through 2026-07 |
+| **Last Activity** | 2026-10-24 (only other comment is promotional, ignored) |
+| **Confidence** | Likely |
+| **Orchestration Impact** | HIGH |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 2.1.309 (reported); earlier reports 2.1.220 and older. 2.1.229 changelog: "conversations exceeding the API's 32 MB request limit retrying compaction endlessly" fixed (partial). |
+| **Latest Platform Version** | v2.1.310 |
+| **Labels** | #104534: bug, area:core; #81793: area:core |
+
+**Summary:**
+The Messages API rejects request bodies over 32 MB (HTTP 413 `request_too_large`), a byte limit independent of the token window. Auto-compaction triggers on tokens, so a long session that accumulates base64 images/attachments or large pasted/tool-returned documents can cross 32 MB while at a small fraction of the (1M) token window, with no warning. Once over, every turn hard-fails; the error text recommends `/compact`, but compaction itself sends the full history to the model and so hits the same 413; `--resume` re-sends the same history and fails identically. Only `/clear` or hand-editing the `.jsonl` transcript recovers (a text-heavy variant message says "removing attachments or compacting cannot make it fit"). #104534 asks for byte-size-aware auto-compact and a local, model-free recovery command; no maintainer has responded to it. The 2.1.229 fix addressed endless compaction retries, not prevention or recovery.
+
+**Impact on Orchestration:**
+A long-running primary or resumed session in which agents read screenshots/PDFs or pull very large tool results can become permanently unusable, losing the session's context, without the auto-compaction safety net ever triggering. Headless runs surface this as a hard failure mid-workflow. Image-light MOSAIC workflows are less exposed, but any agent reading images/documents repeatedly is.
+
+**Evidence:**
+- #104534 (2.1.309) plus at least four earlier independent threads describing the same dead-end (#74048 38 screenshots under healthy token usage, #81793 ~20 sessions recovered via external transcript pruning, #82419 88 MB transcript where every resume fails deterministically, #56691 byte/token mismatch). Changelog 2.1.229 shows the harness team acknowledged the retry-loop facet.
+- #104534's own environment is a custom proxy/open-weight setup, but it states the failure also occurred on native Anthropic models, and the earlier reports are first-party.
+
+**Workaround(s):**
+1. Avoid accumulating large images/documents in one session: have agents use fresh sessions/subagents for image-heavy steps, and compact or restart proactively (esc-rewind plus summarize/compact works only when the bulk is in one recent turn) (#56691).
+2. If already bricked: restore from a backed-up transcript pruned externally (community tools: `claudecode-file-guardian /recover-session`, `session-survivor`) -- unsupported; parallel-tool-call sibling `tool_result` records must be kept consistent (#81793).
+3. `/clear` (discards context).
+
+**Notes:**
+Not the same as CC-029 (manual `/compact` silently no-ops) or CC-040 (inflated token usage triggers premature compaction): here the failure is a byte limit that token accounting does not see. #64911 (`/compact` blocked by 1M-context credit gate, v2.1.158) looks addressed by changelog 2.1.172 ("session now automatically compacts back under the standard context limit") and is not tracked. Related reported auto-compact trigger bugs not individually tracked yet: #101430 (compaction firing at 24-45% of 1M window), #103901 (early fire when `message_delta` reports `input_tokens: 0`), #104304 (not triggering near the 1M limit); Bedrock-only variants #104494, #98343 skipped (non-stock backend).
+
+---
+
+### CC-097: Client-side "double-escaped unicode repair" pass decodes literal `\uXXXX` text in ALL tool inputs (Write/Edit content, Bash/PowerShell commands, MCP args) before dispatch, silently corrupting file content
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/72957 (primary, 10 comments, label `reproduced`); related: #99361, #52813, #64479, #73483, #66058, #82614 |
+| **Reported** | 2026-07-01 |
+| **Last Activity** | 2026-10-19 |
+| **Confidence** | Confirmed |
+| **Orchestration Impact** | HIGH |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | Reproduced from 2.1.233 through 2.1.303 (latest confirmation 2026-10-19); Linux, Windows, macOS; not re-checked on 2.1.310 |
+| **Latest Platform Version** | v2.1.310 |
+| **Labels** | bug, has repro, platform:linux, area:tools, reproduced |
+
+**Summary:**
+Text consisting of a backslash, `u` and four hex digits (e.g. ` `, `﻿`, `A`) in a tool input arrives at the tool already decoded to the character, so it is impossible to write the literal six-character escape via Write/Edit (and, per commenters, Bash, PowerShell and MCP tool arguments). A COLLABORATOR (`bcherny`, 2026-08-17) reproduced it on 2.1.233 but attributed the root cause to the model emitting JSON escape form and routed it as a model issue. Later commenters showed it is a client-side pass: the 2.1.278/2.1.303 bundle contains `tengu_repair_double_escaped_unicode`, run over every tool's input after streaming (only the Workflow tool's `script` is excepted), and the transcript JSONL records both `wireToolInputs[<id>]` (six literal characters) and the decoded `input`. Behaviour details: surrogate pairs combine; `\U0001F600`, `\n`, `\t`, `\x41` and non-hex `\uZZZZ` survive; escaped control characters stay literal since 2.1.277, but Cf/Zl/Zp characters (U+202E, U+200B, U+2028) are decoded; the pass is skipped when the same input also contains a Windows-path-like string (so outcome depends on unrelated content); `\` decodes to a backslash, giving a way to emit a literal escape. No setting disables it, and PreToolUse hooks cannot see the pre-decode text.
+
+**Impact on Orchestration:**
+Any MOSAIC agent writing source files, test fixtures, JSON/YAML or docs containing `\uXXXX` text gets silently altered output: invisible characters in code (e.g. U+FEFF in a regex), build failures from U+2028 in C# string literals, tests that pass for the wrong reason (escaped test inputs decoded into the plain case), and a Trojan-Source-style vector from bidi/zero-width characters written into source. Read-back via the Read tool shows apparently normal or empty text, so agents rarely notice.
+
+**Evidence:**
+- COLLABORATOR reproduction on 2.1.233; ten comments with independent confirmation on Linux, Windows 10/11 and macOS across 2.1.278-2.1.303, binary-level evidence of the named pass, and transcript-level before/after fields.
+- No changelog entry since 2.1.278 changes the pass beyond the 2.1.218 Windows-path guard and 2.1.277 control-char skip; the maintainer's "model encoding" attribution is contradicted by the `wireToolInputs` evidence (a commenter asked for re-routing, 2026-10-19).
+
+**Workaround(s):**
+1. Never emit the four-hex-digit form in tool text: build it at run time (`chr(92) + "u2028"` in a Python heredoc, `[char]92` in PowerShell, `String.fromCodePoint`/`charCodeAt(0) === 0xFEFF` in JS) so the tool input carries the backslash and digits separately (multiple commenters).
+2. Type `\u200b` to produce a literal `​` through Write/Edit (single decode pass; verify bytes with `od -c`), unless the Windows-path guard has disabled the pass.
+3. Maintainer suggestion: have the agent write such content through a shell command (`printf`/heredoc) -- note commenters report Bash is decoded too, so prefer 1.
+4. A PostToolUse hook on `Write|Edit` that scans written files for Cf/Cc/Zl/Zp characters and blocks with a rewrite instruction (landraud63, works in their session; hook-enforcement caveats in CC-014/CC-025 apply).
+
+**Notes:**
+Related: #99361 (after an escaped-form match, Edit writes every non-ASCII character of `new_string` as an escape), #82614 (Edit/Write decode typed control escapes into raw bytes). Related but distinct Write/Edit fidelity reports not separately tracked: #100296 (Write/Edit silently strip trailing whitespace; whitespace-only `new_string` becomes a deletion, Windows), #85842 (Edit corrupts pre-existing non-UTF-8 bytes elsewhere in a file), #2805 (files created with CRLF on Linux, 53 comments). Needs re-verification on v2.1.310.
+
+---
+
+### CC-098: Write/Edit silently strip trailing whitespace from `new_string`/`content` in all non-Markdown files (while `old_string` stays exact) -- glues tokens together; whitespace-only replacement becomes a deletion
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/100296 (primary); same behaviour as feature request https://github.com/anthropics/claude-code/issues/101842 |
+| **Reported** | 2026-10-07 |
+| **Last Activity** | 2026-10-19 |
+| **Confidence** | Confirmed |
+| **Orchestration Impact** | HIGH |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | Reproduced on 2.1.289 (Windows desktop), 2.1.296 (Windows VS Code ext.), 2.1.299 (macOS desktop); not re-checked on v2.1.310. Markdown files are exempt since 2.1.89. |
+| **Latest Platform Version** | v2.1.310 |
+| **Labels** | #100296: bug, has repro, platform:windows, area:tools; #101842: enhancement |
+
+**Summary:**
+Outside `.md`/`.mdx`, the Write and Edit tools strip spaces/tabs at the end of every line of the text they write, between the model and the tool (the transcript shows `new_string` with the space in `wireToolInputs` and without it in the executed `input`; a PreToolUse hook already sees it stripped). `old_string` is matched exactly. Consequences: an edit whose strings end in a space glues tokens (`readarray -t ` -> `read_lines ` yielded `read_linesone`/`read_linesFOO`); a whitespace-only `new_string` (e.g. tab -> two spaces) becomes a deletion with "successfully replaced"; Write of `"  "` yields an empty file; Edit of an old/new pair differing only by trailing spaces is refused as "exactly the same". The tool reports success in all cases.
+
+**Impact on Orchestration:**
+Implementation/refactoring agents doing mechanical edits (token renames ending in a space, indentation conversion, fixture/golden/patch files with significant trailing whitespace) silently produce broken code that often still parses; review gates may not notice. One commenter measured 111 of 36,667 successful Edit calls (55 sessions, 5 weeks) losing a space, with 7 glued spots reaching committed code in a week.
+
+**Evidence:**
+- Three independent reports across Windows (desktop app, VS Code ext.) and macOS, with `od -c` byte checks, a 10-row behaviour table, transcript `wireToolInputs` vs `input` comparison, and a large-scale transcript census.
+- No maintainer response on either issue. The Markdown exemption in the 2.1.89 changelog shows the stripping is a known/intentional normalization, but its effect on `old_string`/`new_string` asymmetry is not acknowledged.
+
+**Workaround(s):**
+1. Avoid `old_string`/`new_string` that end in a space or tab: extend both strings to end on a non-whitespace character (e.g. include the following token), and never use whitespace-only `new_string` with Edit (use Bash `sed`/`python` or a Write of the full file content).
+2. PreToolUse hook on Edit that refuses an `old_string` ending in space/tab in non-Markdown files (reported by the #101842 author; catches the corrupting case; hook-enforcement caveats CC-014/CC-025).
+3. Verify edits to indentation/whitespace-sensitive files with `git diff`/`od -c` rather than trusting the success message.
+
+**Notes:**
+Same family as CC-097 (silent rewrite of tool input between model and tool; the transcript's `wireToolInputs` vs `input` fields expose both). Related whitespace/encoding fidelity reports not separately tracked: #85842 (non-UTF-8 bytes corrupted), #2805 (CRLF), #64601 (cp1252, stale-closed). Needs re-verification on v2.1.310.
+
+---
+
+### CC-099: Auto mode (`--permission-mode auto`) fails closed on Edit/Write when the server classifier returns "skipped" ("gave no verdict"), regression from 2.1.299
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/102351 |
+| **Reported** | 2026-10-15 |
+| **Last Activity** | 2026-10-20 |
+| **Confidence** | Likely |
+| **Orchestration Impact** | MEDIUM |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 2.1.299, 2.1.300 (Windows, drive M: exFAT, Team org); 2.1.304 (macOS, narrower scope). 2.1.296 and earlier work. Not re-checked on v2.1.310. |
+| **Latest Platform Version** | v2.1.310 |
+| **Labels** | bug, has repro, platform:windows, regression, area:permissions |
+
+**Summary:**
+In auto mode, Edit/Write to files inside the working directory were previously allowed by the local acceptEdits fast path (`reasonType: "mode"`). From 2.1.299 the server classifier answers `skipped` for these calls, the CLI's fast path is no longer taken (or throws and falls through silently), and the call is denied as `automode-unavailable` with "The server-side auto mode classifier gave no verdict ... This is a hard failure, not a transient one". Headless repro: `claude -p "<write one file>" --permission-mode auto` fails on 2.1.300 and succeeds on 2.1.296. The original reporter sees it for all paths on one exFAT drive (C: paths classify normally) with a Team org (`cc-plugin-sec-default@builtin` seated; whose events widened between 2.1.296 and 2.1.300); a second user reports the same on other drives, and a macOS user on 2.1.304 reports it only for a subdirectory containing local plugin directories. Reads and Bash are unaffected.
+
+**Impact on Orchestration:**
+Headless or unattended MOSAIC agent sessions running with `--permission-mode auto` cannot edit or write files in affected directories; the denial is non-transient so retries loop. Exposure depends on use of auto mode (not default for MOSAIC runs) and on org/path specifics.
+
+**Evidence:**
+- Three independent reporters (Windows x2, macOS), deterministic headless repro, debug-log lines (`Auto mode classifier unavailable ... (fail closed)`), version bisection 2.1.296 vs 2.1.299/2.1.300, and transcript history table. No maintainer response.
+- Trigger conditions are not fully understood (org plugin, drive type, or plugin dirs may matter), hence Likely rather than Confirmed.
+
+**Workaround(s):**
+1. Pin 2.1.296 (`claude install 2.1.296` plus `DISABLE_AUTOUPDATER=1`) -- reporter-validated; or use `acceptEdits` mode (Shift+Tab) instead of auto.
+2. Pre-approve Edit/Write via permission rules or use a non-auto permission mode for headless runs (not tested in thread).
+
+**Notes:**
+Related to CC-060 (Auto Mode side effects) and CC-013/CC-014 (permission enforcement quirks) only thematically. Needs re-verification on v2.1.310 (issue open, 3 comments, no fix noted).
+
+---
+
+### CC-100: Windows: Bash tool does not kill the descendant process tree on timeout, cancel, `TaskStop` or session exit -- orphaned `find`/`grep`/`bash` children accumulate and can lock the machine up
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/76353 (primary, 6 comments); related: #98092, #90672, #91869 |
+| **Reported** | 2026-07-10 |
+| **Last Activity** | 2026-10-23 |
+| **Confidence** | Confirmed |
+| **Orchestration Impact** | HIGH |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | Reproduced on 2.1.206, 2.1.237, 2.1.272, 2.1.289/2.1.291 (bounded headless repro), 2.1.295, 2.1.308; Windows 10/11, Git Bash (MSYS2). Not re-checked on v2.1.310. |
+| **Latest Platform Version** | v2.1.310 |
+| **Labels** | bug, has repro, platform:windows, area:bash |
+
+**Summary:**
+On Windows the Bash tool kills only the immediate `bash.exe` when a command times out, is cancelled, is stopped with `TaskStop`, or when the session exits; MSYS2 grandchildren (`find.exe`, `grep.exe`, `head.exe`, `tail.exe`, nested `bash.exe`) survive as orphans. A `find /` walks `/proc/registry*` (the MSYS2 registry mounts), pumping kernel handles without bound (one machine reached 4.18 million handles and 4.6 GB paged pool; a 10 s test suite took 26 min); `grep -o` orphans grew to 3.45 GB RSS; Defender amplified a 3-14%-CPU orphan into a pegged `MsMpEng.exe`. Bounded pipelines (`| head -50`) lose their bound because both pipeline members are orphaned. On 2.1.289/2.1.291 a bounded repro shows a timed-out call moved to background, `TaskStop` reporting "Successfully stopped" and the whole tree alive even after `claude -p` exited. The PowerShell tool does not leak (controlled A/B), and the `Monitor` tool leaks the same way (`tail -f | grep`) on stop and on expiry. With a blocking `PreToolUse` hook (`onFailure: block`, 2.1.295+), CPU-burning orphans make the hook time out and every Bash call on the machine is denied (2.1.308 report).
+
+**Impact on Orchestration:**
+Windows MOSAIC runs with many concurrent sessions/subagents issuing searches and long commands can accumulate orphans that degrade the whole machine, stall unrelated runs, lock files (a leaked `tail.exe` held a log open for a week), and deny all Bash calls when hooks are blocking. `TaskStop`/timeout success messages cannot be trusted as proof that work stopped.
+
+**Evidence:**
+- Six detailed comments from independent users over three months, with process-level measurements, A/B vs the PowerShell tool, a safe bounded repro (5 levels then `sleep`), and cancel/timeout/TaskStop/exit triggers; suggested fix (Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) consistently proposed. No maintainer response.
+- Related #91869 (single reporter, 2.1.259): a long-running Python/CUDA child promoted to background never signals completion on Windows even after finishing and writing valid output; killing the PID by hand immediately fires the notification.
+
+**Workaround(s):**
+1. Avoid unbounded scans: use `find / -path /proc -prune -o ...` (verified), scope `find`/`grep` to specific directories, prefer the Grep/Glob tools; keep commands short enough to finish within the timeout.
+2. Use `tail -f --pid=$$` for follow-style commands (exits by itself when the shell dies; verified for Bash and Monitor).
+3. Run long or risky commands through the PowerShell tool, which tears the tree down correctly (single-user A/B, 2.1.272).
+4. Periodically find and kill orphans: `Get-CimInstance Win32_Process` filtered to Git-for-Windows binaries whose parent is dead AND age/CPU is high (a dead-parent test alone also flags live Bash-tool children); `Stop-Process -Force`, or `Invoke-CimMethod ... Terminate` if that fails; allow ~15 s for teardown before judging.
+5. Do not combine `onFailure: block` hooks with heavy orphan-prone Bash use without a hook timeout margin.
+
+**Notes:**
+Distinct from CC-018 (self-backgrounding command false-completes) and CC-052/CC-019 (background Bash killed by the harness): here the process is NOT killed. Related to CC-002/CC-010 only in that stuck hooks stall tool calls. Needs re-verification on v2.1.310.
+
+---
+
+### CC-083: A changed MCP tool description or schema never reaches a session that already loaded the tool via ToolSearch (frozen `deferred_tools_record`, survives reconnect and `--resume`)
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/97369 |
+| **Reported** | 2026-09-26 |
+| **Last Activity** | 2026-10-19 |
+| **Confidence** | Confirmed |
+| **Orchestration Impact** | MEDIUM |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 2.1.280 - 2.1.300 (reported by 6 independent users across Windows/macOS, stdio, plugin and claude.ai connector servers); no fix seen through 2.1.310 |
+| **Latest Platform Version** | v2.1.310 |
+| **Labels** | bug, area:mcp |
+
+**Summary:**
+When a deferred MCP tool is loaded through ToolSearch, a `deferred_tools_record` attachment holding its description and input schema is written into the session transcript. Later changes to that tool's description or schema (server upgrade, `list_changed`, `/mcp reconnect`, plugin update, `--resume`) are never re-recorded: ToolSearch keeps returning the first definition. New tools do get through; only already-loaded tools are frozen. Calls still execute the server's new code, and client-side validation did not block a call using a new parameter, so the failure is that the model is documented with a stale contract.
+
+**Impact on Orchestration:**
+Long-lived primary or resumed sessions that load an MCP tool (e.g. a user-interaction or tracker tool) keep following outdated instructions after the server is updated. Multi-day sessions have been observed stale for 19-31 hours. Low blast radius for short-lived subagents.
+
+**Evidence:**
+- Seven comments, no maintainer response. Independent confirmations on 2.1.282 (transcript line-by-line evidence), 2.1.281/2.1.285 (claude.ai connector, ~19-31h stale), 2.1.289 (input-schema change), 2.1.294 (`list_changed` path; new-tool half #66084 looks fixed), 2.1.300 (plugin update path).
+- Per the 2.1.300 comment: `/compact` and `/clear` refresh the definition, `--resume`/`--continue` and `/reload-plugins --force` do not.
+
+**Workaround(s):**
+1. Start a new session, run `/clear`, or run `/compact` after a server/plugin update (confirmed by a commenter on 2.1.300).
+2. Put frequently changing guidance in tool output instead of the tool description.
+
+**Notes:**
+Related to CC-012 / CC-081 only in that all depend on the ToolSearch deferred-tool record. Distinct from #66084 (new tool not appearing).
+
+---
+
+### CC-103: Windows: session freezes mid-turn after a `PreToolUse`/`UserPromptSubmit` hook has already exited - the hook verdict is lost, the tool is never dispatched, no timeout fires (also background subagents)
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/95354 (cross-ref #81425, #92222) |
+| **Reported** | 2026-09-18 |
+| **Last Activity** | 2026-10-22 |
+| **Confidence** | Likely |
+| **Orchestration Impact** | HIGH |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 2.1.220 through 2.1.300 reported (Windows 10/11; VS Code extension and desktop app; CLI not explicitly confirmed) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | `bug`, `platform:windows`, `platform:vscode`, `area:hooks` |
+
+**Summary:**
+Intermittently, after a hook (`PreToolUse`, sometimes `UserPromptSubmit`) has finished and its process exited (96-219 ms against a 20 s timeout), the parent never moves on: the transcript ends in a `tool_use` with no `tool_result`, no classifier or `tool_dispatch_start` log line, no shell child is created, the process sits idle, Esc does nothing and queued prompts are never dequeued. Kill + `--resume` is the only recovery. The main reporter measured 14 freezes in ~10 h across 9 sessions on 2.1.292. Several independent reporters (SGAdv, zola-dev on the desktop app, rahadianMs, colleagues of the reporter) describe the same fingerprint; a configured hook timeout bounded it on one machine (30 s pause, then dispatch) but not on another. Another pattern in the thread (Windows PowerShell-tool/`pwsh` process-spawn stalls of 110-280 s from endpoint-security or Store-pwsh process-exit hangs) is a separate, environmental cause that was conflated and later separated by the reporter. No maintainer response.
+
+**Impact on Orchestration:**
+Unattended Windows sessions, including background subagents (`Agent` with `run_in_background`), can hang forever with no error. The 2.1.281 background-agent stall watchdog counts the never-dispatched call as "in flight" and defers (observed 600 s later, twice), so it never rescues the stall. A Runner waiting on such a session sees only an idle process.
+
+**Evidence:**
+- 26 comments with timestamped hook traces and extension debug logs showing the hook completing and the parent never consuming the verdict.
+- Independent corroboration from at least 3 other users on Windows (VS Code ext 2.1.282, desktop app 2.1.295).
+- Reproduces from 2.1.220 to 2.1.300 including a second, fresh machine (2.1.288). No maintainer comment or fix PR.
+- Hard to reproduce on demand ("most of the time it doesn't happen"); the reporter's trigger rate dropped sharply after removing the most frequent hook, so the hook-invocation frequency may be a multiplier.
+
+**Workaround(s):**
+1. Set an explicit `timeout` on every hook (bounded the stall to the timeout on the desktop app; not on the reporter's VS Code setup).
+2. Reduce the number of hook invocations on the hot path (use narrower `matcher`/`if:` filters; the reporter's stall rate dropped dramatically after replacing the highest-frequency hook).
+3. Recovery: kill the `claude` process and `--resume <session-id>`; an external Runner-level inactivity timeout is the only reliable detection.
+4. If using the PowerShell tool on Windows and seeing separate 100+ s launch delays: `CLAUDE_CODE_USE_POWERSHELL_TOOL` off (reporter stonee78); disable msbuild node reuse if builds run via pwsh.
+
+**Notes:**
+Relation to MOSAIC: CC-071 and CC-047 are different hook failure modes (hook never runs / all hooks dropped); this one is the hook running correctly and the parent losing the result. Most reports are VS Code extension / desktop app; headless `-p` frequency unknown. Needs MOSAIC-side check on Windows `-p` with `PreToolUse` hooks before assuming exposure.
+
+---
+
+### CC-104: Idle-session sweep SIGTERMs all harness-tracked background Bash tasks (about 30 min after the last human message), reported as bare "was stopped" with no actor
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/88071 (related: #76249/CC-052, #84625, #73332, #78046, #68625, #72851) |
+| **Reported** | 2026-08-19 |
+| **Last Activity** | 2026-10-20 |
+| **Confidence** | Likely |
+| **Orchestration Impact** | HIGH |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 2.1.197 through 2.1.251 in reporter transcripts (macOS, Linux; Windows per cross-refs); not re-verified on 2.1.310 |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | `bug`, `has repro`, `platform:macos`, `area:bash`, `stale` |
+
+**Summary:**
+A Bash call launched with `run_in_background: true` is killed (`<status>killed</status>`, "was stopped", no actor, no `TaskStop`) once the session has been idle. A Linux reporter captured the sender: SIGTERM from the session's own `claude` process (`si_code=SI_USER`, no memory pressure), applied as a sweep to the whole task tree at any depth, then SIGKILL to the tracked pid; across 114 kill decisions in 43 sessions none occurred under ~1800 s since the last human message (a necessary but not sufficient condition; 18 away-windows past the floor had a live task and no kill). The harness enqueues the "killed" status about 0.2-1.4 s before the signal and never verifies the death. Four independent users (macOS x3, Linux) reproduce it, including a trivial `git push` and dev servers that ran 80 min while active. Open, stale-labelled, no maintainer reply.
+
+**Impact on Orchestration:**
+Long-running background work (builds, test gates, delegated CLI runs) launched from a session that then waits for the async completion notification can be silently terminated, and the agent only sees "was stopped". In agent-driven or headless sessions the agent keeps taking turns long after the last human message, so the ~30 min floor can be crossed mid-run.
+
+**Evidence:**
+- Four independent reporters with logs; sender pid and `si_code` captured on Linux; 4 thumbs-up.
+- Controlled counter-test: launching and then immediately making a blocking wait call on the task in the same turn let a 7-minute task (past the ~6 min kill) complete cleanly.
+- Reporters differ on the exact idle threshold (6 min vs 60-90 min vs ~1800 s from last human message); the trigger is described as an external, aperiodic sweep with a per-session eligibility gate.
+
+**Workaround(s):**
+1. Block on the task in the same turn that launches it (foreground wait / `Monitor`-style wait) rather than ending the turn and waiting for the notification (reporter control test).
+2. Fully detach long jobs with `setsid` (new session AND process group; `nohup` or `&` alone stays reachable) and poll a status file (confirmed by two reporters, also in #84625).
+3. Keep the session continuously busy (a foreground heartbeat call), reported by one commenter.
+
+**Notes:**
+Distinct from CC-052 (#76249, original report is a stop-routing race; its comments carry the idle-kill variant) and CC-051 (macOS memory-pressure reap with documented opt-out env var, which does not apply here since no pressure was present). Also interacts with CC-019 (kill after arming as the turn's last call). Updated 2026-10-25: reporter's retracted claims (SIGTERM-trap survival, wide floor scope) are not relied on above. Needs re-verification on current versions. Suggested MOSAIC check: whether Runner `-p` sessions that launch background Bash and then end their turn exhibit it.
+
+---
+
+### CC-084: MCP tool call whose intended string argument is `""` is emitted as invalid JSON (`"key": ,`) and rejected client-side, deterministically
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/104954 (re-file of #89313, closed `not_planned` by stale-bot 2026-10-18) |
+| **Reported** | 2026-08-24 (#89313); re-filed 2026-10-25 (#104954) |
+| **Last Activity** | 2026-10-25 |
+| **Confidence** | Likely |
+| **Orchestration Impact** | MEDIUM |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 2.1.241 (Windows, VS Code + CLI), 2.1.280 (Linux CLI, Sonnet and Opus 5.5); no fix seen through 2.1.310 |
+| **Latest Platform Version** | v2.1.310 |
+| **Labels** | bug, has repro, area:tools, area:mcp (platform:windows on #89313, platform:linux on #104954) |
+
+**Summary:**
+When an MCP tool has an optional `string | null` parameter and the intended value is the empty string, the tool-call input is built with the value token missing (`{"new": , "rev": 2}`). Claude Code's own validator rejects it as unparsable JSON with an "unescaped backslashes / truncated output" hint, and the call never reaches the server. Two independent reporters on different OS/versions, both deterministic (6 of 6 and ~15 of ~15 attempts, across two models); same call with a non-empty value succeeds. No maintainer response on either issue.
+
+**Impact on Orchestration:**
+Any MCP tool where `""` is meaningful (clear a field, delete text) cannot be called with that value. The misleading error text sends the model into retry loops (10+ identical resends in one session), burning context and turns in unattended runs. Not known whether built-in tools (Write/Edit with empty strings) are affected; neither report claims so.
+
+**Evidence:**
+- Two independent reproductions (Windows 2.1.241; Linux 2.1.280), server-side ruled out by direct HTTP call with a real `""`.
+- Stale-bot closure of #89313 is not a fix; re-filed with identical failure on a later version.
+
+**Workaround(s):**
+1. Avoid designing MCP tools that need a literal empty string; accept an explicit sentinel or a separate boolean flag (reporter workaround, both threads).
+2. Literal `null` is not a substitute (see #95239: client transmits `"null"` string or `["null"]` in the Desktop app).
+
+**Notes:**
+Single-model-token-sampling glitch cannot be fully excluded, but determinism across two models and users points at client-side argument construction. Related MCP argument-handling reports: #86459 (array parameters stringified mid-call, see CC-085 if present).
+
+---
+
+### CC-105: In `bypassPermissions`, a `PreToolUse` hook's `ask` decision is overridden (the call runs) whenever the same call also writes into `.git/` or `.claude/` - `-p` repro on Windows
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/103994 (related: #89561, #87639, #86754) |
+| **Reported** | 2026-10-21 |
+| **Last Activity** | 2026-10-23 |
+| **Confidence** | Unverified |
+| **Orchestration Impact** | HIGH |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 2.1.302 (Windows 11, Git Bash, `claude -p --permission-mode bypassPermissions`) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | `bug`, `has repro`, `platform:windows`, `area:security`, `area:hooks`, `area:permissions` |
+
+**Summary:**
+In `claude -p` with `--permission-mode bypassPermissions`, a `PreToolUse` hook returning `permissionDecision: "ask"` normally resolves to a denial (no prompt surface), which is the safe behavior. But if the same Bash call also writes into `.git/` or `.claude/` (e.g. `... >> .git/info/exclude && git commit ...`), the call executes anyway; the same happens for the `Write` tool targeting `.claude/`. The reporter's 9-row matrix shows it does not occur in `default` or `acceptEdits` mode. Hypothesis: the built-in protected-path check is auto-approved under `bypassPermissions` and wins over the hook's `ask`. Single reporter (the one other comment is unrelated promotion); no maintainer response.
+
+**Impact on Orchestration:**
+Hook-based gates (for example a guard on `git commit`/`git push --force` in an unattended `-p` run) can be silently bypassed by an agent that happens to touch `.git/` or `.claude/` in the same command. Practical exposure only if MOSAIC relies on hook `ask` as a guardrail under `bypassPermissions`.
+
+**Evidence:**
+- Fully scripted repro (probe hook + `--settings` + per-command marker files) with a control matrix across three permission modes.
+- Included as Unverified because it threatens permission enforcement in headless operation, was observed on stock Anthropic infrastructure, and has concrete reproduction steps. No independent confirmation yet.
+
+**Workaround(s):**
+1. Have the hook read `permission_mode` from its payload and return `deny` (not `ask`) under `bypassPermissions` for calls touching `.git/` or `.claude/`, asking the agent to split the command (reporter's shipped workaround).
+2. Prefer `deny` over `ask` in unattended hooks generally.
+
+**Notes:**
+Same family as CC-014 (`ask` not enforced, interactive auto mode; #87639) but a distinct trigger (`bypassPermissions` + protected-path writes). Not yet re-tested on v2.1.310.
+
+---
+
+### CC-085: Concurrent subagents with byte-identical inline `mcpServers:` configs share ONE MCP server process and session (dedup keyed on config content, not on the spawning subagent)
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/84638 (closed `not_planned` by stale-bot 2026-10-05, not a fix) |
+| **Reported** | 2026-08-06 |
+| **Last Activity** | 2026-10-05 |
+| **Confidence** | Unverified |
+| **Orchestration Impact** | HIGH |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 2.1.220, 2.1.223 (macOS, headless `-p` and interactive); NOT re-tested on current v2.1.310 -- Needs re-verification |
+| **Latest Platform Version** | v2.1.310 |
+| **Labels** | area:mcp, area:agents, stale |
+
+**Summary:**
+Two concurrently spawned subagents (even of different agent types) whose frontmatter declares identical inline stdio `mcpServers:` configs are served by a single server process and a single MCP session (one `initialize`, interleaved calls from both agents, one PID in both of two runs). This contradicts the documented design that inline servers connect when the subagent starts and are cleaned up when it finishes. Reporter's workaround (making each agent's config byte-distinct) restores one process per agent at 5x concurrency, which also demonstrates the dedup key. One reporter plus a supportive comment; no maintainer response; stale-bot closure.
+
+**Impact on Orchestration:**
+Fan-out of parallel subagents that use a stateful inline MCP server (browser, DB cursor, session-scoped state) collide on one shared session; with Playwright, all agents land in one contested browser context. Also bears on CC-080's partial workaround (define subagent-only servers inline), which assumes per-subagent isolation. Server-level state bleed between subagents.
+
+**Evidence:**
+- Reproduction with PID/JSON-RPC logging, two independent runs, interleaved call timestamps; same family cited by reporter: #49372, #74635, #75207 (content-keyed dedup), #28126 (opposite behaviour on Windows, per-subagent duplicates), upstream microsoft/playwright-mcp#893 and #1631.
+- Single reporter on stock infra with concrete steps; included under the CaptureGuide Unverified criteria because it threatens fan-out isolation. Stale-closed, not fixed; Windows may behave differently (#28126).
+
+**Workaround(s):**
+1. Make each agent definition's inline server config byte-distinct (per-agent server name plus a dummy argv difference); verified at 5x concurrency by the reporter.
+2. Do not rely on MCP session isolation between parallel subagents for stateful servers; pass per-call isolation arguments (e.g. separate browser profile/user-data-dir) or serialize those subagents.
+
+**Notes:**
+See CC-080 (mitigation #1 there recommends inline servers), CC-079, CC-081. Needs re-verification on v2.1.310 before relying on either direction.
+
+---
+
+### CC-086: Background subagents (the default since v2.1.198) silently lose every built-in tool outside a fixed allowlist, even when listed in `tools:` (MCP resource tools, LSP, `ReportFindings`, `AskUserQuestion`)
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Limitation |
+| **Source** | https://github.com/anthropics/claude-code/issues/85230 (MCP resource tools); also #80733 (LSP), #84093 (`ReportFindings`) |
+| **Reported** | 2026-07-24 (#80733); 2026-08-09 (#85230) |
+| **Last Activity** | 2026-09-16 |
+| **Confidence** | Confirmed |
+| **Orchestration Impact** | MEDIUM |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 2.1.198 onward (observed 2.1.218, 2.1.226); no change seen through 2.1.310 |
+| **Latest Platform Version** | v2.1.310 |
+| **Labels** | area:mcp, area:agents |
+
+**Summary:**
+Since subagents run in the background by default, the background filter keeps all MCP tools but only a fixed allowlist of built-ins (Read, Grep, Glob, Bash, WebFetch, WebSearch, ToolSearch, Skill, ...). Anything else is removed from the subagent with no error or warning, "whether inherited or listed in the `tools` field" (this is documented in the subagents docs, per the reporters). Observed stripped: `ListMcpResourcesTool` / `ReadMcpResourceTool` / `ReadMcpResourceDirTool` (#85230, `deferred_tools_delta` showed 66 MCP tools and zero resource tools), `LSP` (#80733, probe `ToolSearch select:LSP` returns "No matching deferred tools found" while foreground subagents inherit it), `ReportFindings` (#84093), and `AskUserQuestion`. No maintainer comment on either issue; commenters on #85230 independently confirm.
+
+**Impact on Orchestration:**
+Subagent instructions that reference a stripped tool are structurally unfollowable in default dispatches; the agent silently falls back (text search instead of LSP, no resource access, cannot ask the user), and neither the coordinator nor the user is told. MCP-served documentation (resources) is unreachable from subagents. Related to the `tools:` scoping gaps in CC-009 and CC-079.
+
+**Evidence:**
+- Documented behavior (subagents docs "Available tools" allowlist), plus reproductions in three separate issues, direct `deferred_tools_delta`/ToolSearch probes, and two commenters on #85230.
+- Foreground subagents and forks are not filtered.
+
+**Workaround(s):**
+1. Run the subagent in the foreground (`run_in_background: false`) or as a fork where the tool is needed (reporters, #85230/#80733).
+2. Expose resources as an MCP tool (e.g. a generic `resource_read()` tool) or pass the resource content from the parent into the prompt (two commenters confirm).
+3. For user interaction from background subagents use an MCP tool (e.g. `mcp__contact-user__*`) rather than `AskUserQuestion`.
+
+**Notes:**
+By-design per docs; no fix expected. The requested mitigations (add read-only tools to the allowlist; warn when a listed tool is stripped; `background: false` frontmatter) are open feature asks. See `mcp-frontmatter-blocker.md` line 71 for MOSAIC's earlier observation of the same allowlist.
+
+---
+
+### CC-106: Under `bypassPermissions`/`--dangerously-skip-permissions`, built-in "dangerous rm" confirmation dialogs still block unattended background subagents for minutes to hours (also fires on commands with no `rm`)
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Limitation |
+| **Source** | https://github.com/anthropics/claude-code/issues/93392 and https://github.com/anthropics/claude-code/issues/104925 |
+| **Reported** | 2026-09-10 |
+| **Last Activity** | 2026-10-25 |
+| **Confidence** | Likely |
+| **Orchestration Impact** | HIGH |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 2.1.296 (#93392 comments), 2.1.310 (#104925); Linux and others. Not seen in non-interactive `-p` runs (denied instead) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | `bug`, `area:bash`, `area:agents`, `area:permissions` |
+
+**Summary:**
+Documented "critical path" removal checks (`rm`/`rmdir` on variable/glob/`$(...)` paths) still raise a confirmation prompt in `bypassPermissions`, and no allow rule or `PreToolUse` allow hook approves it. In sessions with background subagents or agent-team teammates nobody watches, the prompt blocks the agent until a human answers: freezes of 8-35 hours reported (#93392), and 10 waits of 22 s to 10.75 min in 9 days from a heuristic false positive on a command with no `rm` at all (nested subshell in command substitution, #104925, v2.1.310). Since 2.1.281 the prompt in `auto`/`bypassPermissions` has a two-minute countdown, then denies (and stops asking after three unanswered prompts), but per the docs a keypress in the terminal cancels the countdown and holds the prompt open indefinitely, which a commenter says fits the multi-hour freezes. The prompt does not reach the agent as a tool error, so the agent cannot learn the rule. #104925 also shows that with `isolation:"worktree"` the user-approved call is then refused by the worktree guard (see CC-107). Maintainer has not commented on either issue.
+
+**Impact on Orchestration:**
+Fan-out background subagents running with bypassed permissions can stall silently on a dialog only visible in the parent terminal; the orchestrator sees an idle agent. Headless `-p` sessions are not affected (denied with the built-in text).
+
+**Evidence:**
+- Three independent reporters on #93392 (incl. one measuring with a headless repro of the deny path) plus a separate reporter on #104925 with session-log counts and a scripted repro.
+- Behaviour is documented for critical-path removals (hence Limitation); the over-broad trigger and unattended blocking are the defects.
+
+**Workaround(s):**
+1. Add a `PermissionRequest` hook (matcher `Bash`) that returns `{"behavior":"deny","message":"..."}` when `permission_mode` is `bypassPermissions` (and `agent_id` is present for subagents only): the prompt is not shown and the agent receives the message as its tool result and rewrites the command (documented as answerable by hooks; verified in #93392 and #104925 comments).
+2. Instruct subagents (CLAUDE.md) to guard variables at the `rm` site, avoid `cd; rm ../..`, avoid `rm` on `$(...)` output, and avoid nested subshells in command substitutions.
+3. Env vars (must be in the launching environment, settings `env` ignored): `CLAUDE_CODE_DISABLE_SUBSTITUTION_RM_PROMPT`, `CLAUDE_CODE_DISABLE_INLINE_SHELL_RM_PROMPT`; do NOT set `CLAUDE_CODE_DISABLE_DANGEROUS_RM_TIMEOUT` (removes the countdown).
+
+**Notes:**
+Changelog v2.1.309 reportedly made the dangerous-`rm` prompt in bypass mode deny immediately in Desktop/VS Code "so unattended sessions keep going", yet #104925 (filed on 2.1.310, interactive `--dangerously-skip-permissions` CLI, nested-subshell heuristic) still waited minutes, so that change does not cover this path; re-verify. Related family: CC-002/CC-016 (background agents hanging on permission prompts), CC-107, and #103865 (headless `bypassPermissions --permission-prompts none` sessions intermittently hang on unanswerable prompts for ToolSearch/Bash/MCP tools; single reporter, no repro, not tracked separately but relevant to CC-002; consider re-check).
+
+---
+
+### CC-107: Worktree-isolated subagents: Bash isolation guard refuses harmless worktree-local commands as "too complex to verify", after which later commands are also refused
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/97225 and https://github.com/anthropics/claude-code/issues/97474 (also #97760 referenced in comments) |
+| **Reported** | 2026-09-25 |
+| **Last Activity** | 2026-10-25 |
+| **Confidence** | Likely |
+| **Orchestration Impact** | MEDIUM |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 2.1.282-2.1.310 reported (macOS, headless `claude -p`, also Linux per #104925) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | `bug`, `has repro`, `area:bash`, `area:agents`, `area:sandbox` |
+
+**Summary:**
+Inside a subagent dispatched with `isolation:"worktree"`, the Bash tool refuses commands it cannot prove are not git operations on another tree: `git -C .`, `export X=$PWD/...`, `awk -f /dev/stdin` heredocs, multi-path `ls`/`cat`/`grep`, loops, `cd`, `;` chaining, commands whose arguments merely contain "git"/"eval"/"github", and (per a commenter) commands referencing certain environment-variable names. A commenter reports one refusal can cascade to later unrelated commands and suggests the variable-name keying may be a symptom of corrupted per-session binding state (cross-ref CC-054/CC-057). #97225 includes a minimal scripted repro (`--safe-mode`, hooks/plugins/MCP disabled). No maintainer response; #97474 is labelled `duplicate`.
+
+**Impact on Orchestration:**
+MOSAIC worktree-isolated subagents lose turns to refusals, and can end up unable to run routine commands; there is no documented list of accepted shapes. Worse, interactive approval (CC-106) is wasted when the call is refused afterwards.
+
+**Evidence:**
+- Two reporters with 16 refused shapes and a minimal repro in headless mode, one commenter with a distinct variant, #104925 independently shows the refusal after user approval.
+- Several 2.1.28x reports; not yet re-tested on 2.1.310.
+
+**Workaround(s):**
+1. Use simple single-purpose commands: no `-C .` (use plain `git` or an absolute worktree path), literal absolute paths instead of `$PWD`/variables, single-path invocations, scripts written with Write and run by path instead of heredocs.
+2. Use Read/Grep/Glob tools rather than shell `cat`/`grep` for inspection.
+3. Avoid argument/variable names containing "git", "eval", "github".
+
+**Notes:**
+Distinct from CC-075 (EnterWorktree refusal) and CC-055/CC-056 (Edit/Write routing). Both source issues are by the same reporter (bobmatnyc / trusty-tools tooling), with independent corroboration from a commenter and #104925.
+
+---
+
+### CC-108: A subagent's own `run_in_background` Bash completion notification is queued but never wakes the idle subagent - the agent (and the coordinator waiting on it) hangs silently
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/91503 and https://github.com/anthropics/claude-code/issues/104789 (related: #78338, #21048, #29163, #75043, #88001) |
+| **Reported** | 2026-09-02 |
+| **Last Activity** | 2026-10-24 |
+| **Confidence** | Likely |
+| **Orchestration Impact** | HIGH |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 2.1.258 (Windows 11) and 2.1.309 (Linux) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | `bug`, `has repro`, `area:agents`, `platform:windows`/`platform:linux`, `stale` (#91503) |
+
+**Summary:**
+When a subagent starts `Bash(run_in_background: true)` and ends its turn to wait for the completion notice, the notification is created and queued when the command exits but nothing wakes the idle subagent; it stays idle indefinitely until a message (`SendMessage`) gives it a turn, after which it resumes correctly. #91503 measured it from `queue-operation` records: the main session's own task notification is `dequeue`d in 7 ms and starts a turn, while the subagent's sits until a manual nudge (2-3 min in the test) and is then `absorbed_mid_turn`; a subagent kept busy mid-turn receives it fine. #104789 (independent, Linux, 2.1.309, `isolation:"worktree"`, several parallel background subagents) saw two subagents idle for over 2 hours; it also reports a parent-side variant where a finished background subagent's completion notification never reached the coordinator for ~80 min (matches closed/stale #88001, #88545, #86365, #69732, #60001), still occurring on 2.1.30x. No maintainer comment on either; most earlier related issues were stale-bot closed without a fix.
+
+**Impact on Orchestration:**
+Fan-out of background subagents can stall silently: the stuck subagent is indistinguishable from one still working, and the orchestrator waits forever on a report that never comes. The shell script itself is not killed (not the CC-019/CC-052 mechanism).
+
+**Evidence:**
+- Two independent reporters, different OSes, with transcript-level evidence (queue records, on-disk timestamps, scripted repro in #91503).
+- Reporter of #104789 says users see it repeatedly over weeks; reporter of #91503 sees at least one stall a day in Agent Teams usage.
+
+**Workaround(s):**
+1. Watchdog on `subagents/agent-*.jsonl`: last assistant record `stop_reason: "end_turn"` plus an earlier "Command running in background with ID: X" with no later `<task-id>X</task-id>`; then `SendMessage` the agent by name to resume it (reporter's shipped detection).
+2. Have subagents wait on background work inside the same turn (blocking foreground wait/poll) instead of ending the turn to await the notification.
+3. Give the orchestrator its own per-dispatch timeout and treat an idle agent past it as a stall.
+
+**Notes:**
+Distinct from CC-001 (notifications phantom-cancelling pending calls) and CC-003. Related to CC-104/CC-052 only by the background-task theme. Note on method from #91503: do not ask the subagent what woke it; rely on queue records.
+
+---
+
+### CC-087: A subagent's own `run_in_background` Bash / `Monitor` completion never re-invokes the idle subagent (named in-process teammates); it stays idle until the lead messages it, or burns tokens on no-op polling
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/88423 (also #91503 Windows, #104789 background subagent; umbrella #87874, related #100595, #77873, #85422) |
+| **Reported** | 2026-08-21 |
+| **Last Activity** | 2026-10-23 |
+| **Confidence** | Confirmed |
+| **Orchestration Impact** | HIGH |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 2.1.227 - 2.1.306 (Linux, macOS; #91503 Windows); not fixed through 2.1.310 as far as the thread shows |
+| **Latest Platform Version** | v2.1.310 |
+| **Labels** | bug, has repro, platform:linux, area:agents |
+
+**Summary:**
+When a subagent launches a Bash command with `run_in_background: true` (or a `Monitor`) and ends its turn to wait, the completion notification does not wake it. On 2.1.238 the notice was enqueued into the lead's queue and dropped; on 2.1.300/2.1.306 it is recorded in the teammate's transcript as a `queued_command` task-notification but nothing starts a turn, so it is delivered only when the lead sends a `SendMessage` (0 of 205 wakes in an 11-day session came from the teammate's own background completions; idle gaps of 62 and 369 minutes seen). The changelog entry 2.1.243 ("background subagents not waking when their last background Bash task completes") does not cover named in-process teammates. One commenter finds unnamed background agents are woken correctly; only named in-process teammates (`taskKind: in_process_teammate`) stay idle. Six comments from independent users on Linux/macOS, no maintainer response.
+
+**Impact on Orchestration:**
+Any orchestration where a spawned subagent backgrounds long work (builds, CI watches, sweeps) and waits stalls indefinitely, with the lead's `idle_notification` indistinguishable from "done". Where subagents instead poll to stay alive, the cost is large: one subagent issued ~3,876 `echo .` calls over 4.5 h (~1.9B tokens, ~21% of the user's 40-day usage); another reporter measured 9+ hours of polling inside subagents on each of two machines.
+
+**Evidence:**
+- Reproduction in under 2 minutes (sleep 100, subagent ends turn), transcript-level evidence, six independent comments across 2.1.285-2.1.306, macOS and Linux; a related Windows report (#91503, no comments) and #104789 (new 2026-10-24).
+
+**Workaround(s):**
+1. Subagents wait in the foreground: `timeout 590 bash -c 'until <done-condition>; do sleep 20; done'` with Bash `timeout: 600000`, re-armed as needed; the lead owns longer waits and messages the subagent when work completes (multiple commenters).
+2. Lead keeps a heartbeat (e.g. CronCreate) that messages teammates with work in flight; or writes into the teammate inbox file `~/.claude/teams/<team>/inboxes/<name>.json` (reporter's daemon).
+3. A user-level `PreToolUse` Bash hook that blocks repeated no-op `echo`/`true`/`sleep` calls (circuit breaker) to cap the token burn.
+
+**Notes:**
+Related to CC-001/CC-002 (background-task delivery defects) but a distinct mechanism (completion routing to a subagent). Unnamed background agents reportedly unaffected, so MOSAIC's plain Agent-tool dispatches may not be exposed; named teammates / agent teams are.
+
+---
+
+### CC-109: Windows: `TaskStop` kills only the shell wrapper, not the process tree; children keep running while "Successfully stopped" is returned
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/85200 (related: #23154, #32183, #43944) |
+| **Reported** | 2026-08-09 |
+| **Last Activity** | 2026-10-24 |
+| **Confidence** | Confirmed |
+| **Orchestration Impact** | HIGH |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 2.1.220, 2.1.222, 2.1.233 (Windows 11, Git Bash, Claude Desktop "Code" tab); a commenter links a 2.1.296 report of the same orphaned child; not fixed through v2.1.310 as far as the thread and changelog show |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | `bug` |
+
+**Summary:**
+On Windows, `TaskStop` on a Bash-tool task terminates only the bash wrapper; descendants survive while the tool returns `Successfully stopped task: ...` (echoing the full command). Three independent reproductions: (1) `rm -rf /c` kept deleting for ~20 min after TaskStop (data loss, 2.1.222); (2) a `bash -> timeout -> python` loop: the python grandchild kept running and the surviving parent bash kept launching new children for ~20 min (2.1.220); (3) a paced `bash` + `sleep.exe` loop publishing to an external API kept running, producing duplicated public posts after a replacement worker was started (2.1.233). #85200 also reports the reverse mismatch: after a session boundary a live task was shown as "No completion record was found for this background shell command". No maintainer response; the latest comment (2026-10-24, reporter on 2.1.302) has not re-tested.
+
+**Impact on Orchestration:**
+The agent treats the TaskStop success as ground truth, so it starts conflicting replacement jobs or inspects state that is still mutating. For any workflow that cancels or replaces background work on Windows (duplicate paid API calls, duplicated external writes, destructive commands still running), the stop signal is unsafe.
+
+**Evidence:**
+- Three independent reporters, different workloads, process-table evidence (orphan PIDs), one transcript-backed data-loss incident.
+- Reporter notes sandboxed (WSL CLI) processes do not outlive the tool call, closing the orphan path there.
+
+**Workaround(s):**
+1. Never trust the TaskStop return value; verify against the process table and kill survivors, e.g. `Get-CimInstance Win32_Process -Filter "Name='bash.exe' OR Name='sleep.exe'" | Where-Object { $_.CommandLine -match '<script name>' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }` (kill `sleep.exe` too; it re-arms loops).
+2. Add a preflight guard in job scripts that aborts if an instance is already running (query by interpreter name, e.g. `Name like 'python%'`, otherwise the query's own command line false-positives).
+3. Run long-running work under the WSL CLI with Claude Code's bash sandbox, where processes do not outlive the tool call (single reporter).
+4. Deny rules for destructive commands (`rm`, `Remove-Item`, `git clean`) in `settings.json` limit blast radius (single reporter).
+
+**Notes:**
+Same root cause family as CC-100 (Windows Bash tool does not kill descendant process tree on timeout/cancel/TaskStop/exit) - the TaskStop-specific, success-reported-falsely variant. Distinct from CC-052/CC-104 (background tasks killed unexpectedly); here tasks are not killed when they should be. Related to #23154 (subagents cannot run TaskStop).
+
+---
+
+### CC-110: `Monitor` tool: `persistent` mode removed in 2.1.268 and every watch is capped at 30 minutes (schema still accepts up to 3600000 ms); re-arming loses events and depends on the model
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Limitation |
+| **Source** | https://github.com/anthropics/claude-code/issues/94393 (related: #63023, #65968) |
+| **Reported** | 2026-09-14 |
+| **Last Activity** | 2026-10-23 |
+| **Confidence** | Confirmed |
+| **Orchestration Impact** | MEDIUM |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 2.1.268 onward (last version honoring `persistent`: 2.1.267); reproduced to at least 2.1.285, Linux and Windows |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | `bug`, `has repro`, `platform:linux`, `area:tools`; 30+ thumbs-up |
+
+**Summary:**
+Since 2.1.268 the `Monitor` tool silently ignores `persistent` (no longer part of the input schema) and caps any watch at 1800000 ms (30 min), even though the validated `maximum` is still 3600000 and the public docs still list `persistent`. On expiry the model gets one notice and must re-arm. The bundled `sdk-tools.d.ts` documents the 30-minute cap ("Deadlines above 1800000ms are capped"), so this is effectively intended; no maintainer comment on the thread. Consequences reported: events written during the teardown/re-arm window are never delivered (silent event loss), re-arm turns cost about $0.04-0.05 each on large contexts (about $2/day per watch), the model sometimes fails to re-arm, and one user reports leaked monitor processes. Plugin-declared monitors (`monitors/monitors.json`) remain uncapped in the interactive terminal CLI only (not in `-p`, not armed in the VS Code extension).
+
+**Impact on Orchestration:**
+Workflows that use `Monitor` for "wake me when something arrives" over long training/build/CI waits get silent drops and added token cost unless the orchestrator re-arms reliably. Because the watch ends independently of whether the watched process or session is still alive, an agent can wait on a dead watch.
+
+**Evidence:**
+- Many independent reproducers across Linux/Windows/CLI/VS Code, bundled type definitions showing the cap, side-by-side tests of Monitor vs plugin monitor.
+- Thread consensus: not a bug in code but an undocumented behavior change; classified as Limitation.
+
+**Workaround(s):**
+1. For "wake on first event": a script that polls and exits on the first event, started with `Bash` `run_in_background`; the process exit re-invokes the session (not subject to the Monitor lifetime).
+2. Plugin-declared monitors in interactive CLI sessions (uncapped, but fixed command, not `-p`, and not armed under the VS Code extension; do not re-arm after exit).
+3. Pin to 2.1.267 (last version with `persistent`); not recommended long-term.
+4. Make re-arm explicit in orchestrator instructions and tolerate gaps (use idempotent, state-based watches rather than stream tails).
+
+**Notes:**
+Distinct from CC-104/CC-052/CC-019 (background Bash kills): a Monitor expiry is a notified, deterministic cap, not a silent kill.
+
+---
+
+### CC-088: `SubagentHandback` from a subagent spawned by an in-process teammate (Agent Teams, auto mode) fails with "the agent that spawned you is no longer running"; report is lost or misrouted to the lead, and the enforce loop burns tokens
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/96225 |
+| **Reported** | 2026-09-23 |
+| **Last Activity** | 2026-10-25 |
+| **Confidence** | Confirmed |
+| **Orchestration Impact** | MEDIUM |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 2.1.276 - 2.1.310 (regression; last good 2.1.270); macOS, Linux, Windows; Bedrock reproduced on 2.1.310 |
+| **Latest Platform Version** | v2.1.310 |
+| **Labels** | bug, has repro, platform:macos, area:agents, regression |
+
+**Summary:**
+With `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, in-process teammates, and auto mode, a subagent spawned by a teammate (foreground or background) gets `{"success":false,"message":"Nothing was sent: the agent that spawned you is no longer running."}` from `SubagentHandback` while the teammate is alive and blocked on the `Agent` call. The teammate's `Agent` call then returns "The subagent ended without delivering a report through SubagentHandback", and the report surfaces in the lead's conversation (or lead transcript) instead. A latest-comment finding on 2.1.310: after the 120 s auto-background switch of the teammate's foreground `Agent` call, hand-back reports success but is routed to the main thread rather than the teammate. `SendMessage` addressed to the teammate also lands in the main session's inbox (comment, 2.1.288). Reporter reads the bundle: the hand-back path is auto-mode-only and gated by feature flag `tengu_lively_waffle` (default flipped to true in 2.1.280); the failing branch is a liveness check against the spawner's task-registry entry. Five comments from 5 independent users on 3 OSes; no maintainer response.
+
+**Impact on Orchestration:**
+Teammate-led fan-out (teammate spawning worker subagents) cannot receive worker reports in auto mode; results are lost or arrive at the wrong agent. The `[handback-send-enforce]` loop re-prompts the child up to 3x per burst: 197 refused children over 51 h (~229M extra input tokens) on one Windows setup; ~208k tokens per one-word "pong" subagent on another. Relevant to MOSAIC only where agent teams / named in-process teammates are used with nested dispatch; plain lead -> subagent dispatch is not reported as affected.
+
+**Evidence:**
+- Minimal repro with timestamps and bundle analysis in the issue body; reproduced independently on Windows 2.1.276/2.1.281, Linux 2.1.283, macOS 2.1.288/2.1.306, Bedrock 2.1.310. Regression boundary stated (passes on 2.1.270).
+
+**Workaround(s):**
+1. Do not nest subagents under teammates; have the main/lead session spawn workers and relay results (commenter, 2.1.288).
+2. Workers deliver reports with `SendMessage` to the teammate (note the misrouting report above) or write them to a file; a `SubagentStop` hook receives the complete final text in `last_assistant_message` and can write it to a per-agent file the teammate reads (commenter, 2.1.283; first file holds the real report when the enforce loop reruns).
+3. Run the lead in a non-auto permission mode (reporter, untested by others).
+
+**Notes:**
+Distinct from CC-087 (completion notification routing for background Bash) though both are teammate-routing defects. Related #103605 (SubagentHandback accepted while the subagent's own background children are still running) not yet read in full.
+
+---
+
+### CC-089: `SubagentHandback` accepted (or forced by `[handback-send-enforce]`) while the subagent's own background children are still running; parent sees an unfinished subagent as done, second hand-back refused
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/103605 (related: #102867 forced hand-back while waiting on Monitor, #96849 second hand-back after resume rejected) |
+| **Reported** | 2026-10-19 |
+| **Last Activity** | 2026-10-21 |
+| **Confidence** | Unverified |
+| **Orchestration Impact** | HIGH |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 2.1.288 - 2.1.303 (Linux, auto mode, background subagents); not re-tested on 2.1.310 |
+| **Latest Platform Version** | v2.1.310 |
+| **Labels** | bug, has repro, platform:linux, area:agents |
+
+**Summary:**
+A background subagent S that spawned its own background child C can call `SubagentHandback` immediately and the parent receives that report at once (nothing marks it interim), while the harness correctly holds S's task notification until C finishes. When C's report re-invokes S, S's second `SubagentHandback` is refused ("your report was already delivered (SubagentHandback delivers one report)"), so the real result can only travel by `SendMessage`. A comment from the same reporter adds a variant: the harness itself injects `[handback-send-enforce] Your report has not been delivered. Call SubagentHandback ... now` while the subagent still has a background child running (11 times in one day on a long-lived, often-resumed orchestrating subagent), ending its run before the child finishes; the child's report then reaches the main session, not the spawner. Single reporter (with deterministic 3-step repro and a control), no maintainer response.
+
+**Impact on Orchestration:**
+A manager/orchestrator that dispatches mid-layer subagents treats a subagent as complete when it is not, and receives its real result late, via another channel, or misrouted. Pushes agents into keeping turns open with long `sleep` calls. Relevant to nested delegation (subagent -> background child) and any run that relies on SubagentHandback as the single result-capture mechanism.
+
+**Evidence:**
+- Concrete minimal repro plus control (ending turn with plain text behaves correctly) in the issue; one follow-up comment from the same user on 2.1.288/2.1.296. Included as Unverified under the CaptureGuide criteria (threatens result capture, stock infra, concrete repro). Cross-referenced issues #102867, #96849 not read.
+
+**Workaround(s):**
+1. Have the subagent end its turn with plain text (not `SubagentHandback`) while children are running; the child's report re-invokes it and it then hands back normally (reporter's control).
+2. When the enforcer fires with a child still running, hand back a report marked "INTERIM: <child> still running" and send the real result to the manager by `SendMessage` once woken (reporter).
+3. Avoid nested background children inside subagents where the parent needs one authoritative final report; wait for children in the foreground.
+
+**Notes:**
+See CC-088 (SubagentHandback failing for teammate-spawned children) and CC-087 (idle subagent not woken by its own background task). Together these are the SubagentHandback/background-completion routing cluster as of v2.1.310.
+
+---
+
+### CC-111: Hook payload identity gaps: `PreCompact`/`PostCompact`/`SessionStart(compact)` carry no `agent_id` for a subagent's compaction, and `SubagentStop` fires for internal summarizer calls with a phantom `agent_transcript_path`
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/91910 (related: #16424, #6885, #87065, #89555, #92089) |
+| **Reported** | 2026-09-03 |
+| **Last Activity** | 2026-10-24 |
+| **Confidence** | Confirmed |
+| **Orchestration Impact** | MEDIUM |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 2.1.259 through 2.1.309 (unchanged on every release re-checked; Linux, macOS, Windows) |
+| **Latest Platform Version** | v2.1.310 (2026-10-23) |
+| **Labels** | `bug`, `has repro`, `platform:linux`, `area:hooks`, `area:agents` |
+
+**Summary:**
+Four separate hook-payload problems in one thread, each reproduced by multiple independent users with bundle-level root cause: (1) when a background subagent auto-compacts, `PreCompact`, `PostCompact` and `SessionStart(compact)` fire with the parent's `session_id`/`transcript_path` and no `agent_id`/`agent_type` (the shared input builder is called without the tool-use context that tool events pass); for an in-process `--agent` subagent `agent_type` is even the MAIN thread's value, so type-based filtering misidentifies it; (2) `SubagentStop` fires for internal model forks (activity summarizer about every 30 s per background agent, away summary, compaction summarizer) with `agent_type: ""` and an `agent_transcript_path` that is never created (342 of 381 paths in one session; 165 of 176 stops on 2.1.269); (3) `SubagentStop` fires before the final transcript record is appended; (4) a `PreCompact` `{"decision":"block"}` whose condition belongs to the parent also blocks every subagent's compaction, and skill-scoped `PreCompact` hooks never fire. `SessionStart(compact)` output lands in the subagent's transcript (81 of 81 checked), so resume state meant for the main session gets injected into subagents. No maintainer response; no fix in 2.1.301-2.1.309.
+
+**Impact on Orchestration:**
+Hook-based logging/telemetry that counts `SubagentStop` over-reports dispatches several-fold and fails opening non-existent transcripts; compaction hooks that checkpoint, inject or block cannot tell main from subagent, so per-agent state can be consumed or injected into the wrong agent. Relevant to the MOSAIC logger's `SubagentStop`/`Stop` handlers and any compaction-state hook.
+
+**Evidence:**
+- 10+ comments from independent users with captured stdin payloads on 2.1.259-2.1.309, minified-source call sites, and a scripted `-p` repro (2.1.301).
+- Real nested spawns are unaffected (they carry `agent_type` and a `.meta.json`), which gives a reliable discriminator.
+
+**Workaround(s):**
+1. Discriminate real subagent stops by non-empty `agent_type` and the presence of the sibling `agent-<id>.meta.json`; ignore `agent_type == ""`.
+2. Do not consume or write state on compaction events: do it on `UserPromptSubmit` (main loop only); keep `SessionStart(compact)` output read-only and harmless for either agent.
+3. Heuristic: classify a compaction as a subagent's when a recently modified `<session>/subagents/**/agent-*.jsonl` transcript is fuller than the main transcript (a shipped replay classified 59 of 59 correctly; still a heuristic).
+4. Do not put session-wide `PreCompact` blocks on conditions that belong to the parent.
+
+**Notes:**
+Complements CC-050 (`SubagentStop` not firing on `TaskStop`/exit) and CC-082 (transcript still being written at `Stop`, final at `SessionEnd`; the same ordering applies to `SubagentStop`). Cross-ref for the MOSAIC logger design: `agent_id` is present on `PreToolUse`/`PostToolUse`/`SubagentStart` for subagents but not on the compaction events.
+
+---
+
+### CC-090: Streamable-HTTP MCP `tools/call` hangs ("still running" forever) when the server dies mid-call; client reconnects the GET stream but never fails the pending POST
+
+| Field | Value |
+|-------|-------|
+| **Classification** | Bug |
+| **Source** | https://github.com/anthropics/claude-code/issues/104166 (earlier bot-closed reports: #44006 stale, #55992 auto-dup of #44006, #60061 stale; none read in full) |
+| **Reported** | 2026-10-22 (first prior report #44006) |
+| **Last Activity** | 2026-10-22 |
+| **Confidence** | Likely |
+| **Orchestration Impact** | HIGH |
+| **Reproduced at MOSAIC** | No |
+| **MOSAIC Response** | Unevaluated |
+| **Version(s) Affected** | 2.1.304, 2.1.307 (Linux x64, unmodified release binaries); prior reports on 2.1.143 and earlier |
+| **Latest Platform Version** | v2.1.310 |
+| **Labels** | bug, has repro, platform:linux, area:mcp |
+
+**Summary:**
+When a Streamable-HTTP MCP server answers a `tools/call` POST with an SSE response and that stream ends (FIN, RST, or whole server death) before the result frame, Claude Code never rejects the pending request. It logs `Tool '<name>' still running (Ns elapsed)` indefinitely even though it reconnected the GET stream within ~1 s; the call is only failed when the client's transport is later closed for another reason (process teardown at 119 s / 238 s in the tests), at which point the "connection closed before the tool call was answered" error (and, per 2.1.307, the retry-only-if-idempotent rule) applies. Plain-JSON responses with a socket reset or HTTP 503 fail immediately (not affected). `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` is the only bound and is unset by default. Dependency-free stdlib repro with a case matrix on two versions; bot "possible duplicate" comment with auto-close pending.
+
+**Impact on Orchestration:**
+An MCP call to a remote/HTTP server that restarts or drops mid-call stalls the turn (primary agent or subagent) for the full session, with no error for the model to act on. In unattended/headless runs this silently consumes the run's time budget. Applies only to HTTP/SSE MCP servers, not stdio.
+
+**Evidence:**
+- Local repro script and per-version matrix in the issue body; three earlier independent reports of the same hang pattern (all bot-closed, per the reporter); the 2.1.307 changelog fix for double-send (#98466) is confirmed by the same reporter to act only after the transport closes, i.e. after this hang.
+- No maintainer response.
+
+**Workaround(s):**
+1. Set `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` (e.g. `20000`): the reporter's run aborted at 30 s with "sent no response or progress for 30s; aborting". Trade-off: legitimately long silent tool calls will be cut off.
+2. Prefer stdio MCP servers for critical tools; wrap headless runs in an external `timeout`.
+
+**Notes:**
+Related fixed item: #98466 / 2.1.307 (non-idempotent MCP tools were re-sent after "Connection closed"; now retried only for read-only/idempotent tools). That fix is not tracked as an entry (fixed on discovery; v2.1.307 changelog "Fixed HTTP MCP tool calls being sent twice when the connection closed mid-call"). Also note #101280 (HTTP MCP client gives up after ~15 s of connection-refused; session loses the server until manual `/mcp`), not investigated.
 
 ---

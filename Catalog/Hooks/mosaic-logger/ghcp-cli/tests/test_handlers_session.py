@@ -7,7 +7,7 @@ Key differences from the claude-code variant:
 - handle_user_prompt_submitted reads from 'prompt' (not 'user_prompt')
 - handle_agent_stop always emits a turn WITHOUT content (no last_assistant_message in agentStop)
 - handle_notification reads 'notificationType' (camelCase)
-- handle_pre_compact omits tokens_before (GHCP CLI preCompact payload has no token count fields)
+- handle_pre_compact writes no event (compactions are logged from the session transcript)
 - Three GHCP-CLI-specific observational events: userPromptTransformed, permissionRequest, errorOccurred
 
 Covers:
@@ -16,7 +16,7 @@ Covers:
   userPromptSubmitted -> turn(user) reading from camelCase 'prompt' field
   agentStop -> turn(assistant) without content, transcript-derived model/token_usage
   notification -> notification event reading 'notificationType'
-  preCompact -> compaction event (trigger only, no tokens_before)
+  preCompact -> no event in native mode
   userPromptTransformed -> observational prompt_transformed event
   permissionRequest -> observational permission_request, never writes stdout
   errorOccurred -> observational error_occurred, reads nested error.message
@@ -527,7 +527,7 @@ class TestHandleNotification(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# preCompact -> compaction event
+# preCompact -> no event (compactions are logged from the session transcript)
 # ---------------------------------------------------------------------------
 
 class TestHandlePreCompact(unittest.TestCase):
@@ -539,46 +539,24 @@ class TestHandlePreCompact(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_emits_exactly_one_event(self):
+    def test_writes_no_event_with_a_trigger(self):
         ctx = _make_ctx("preCompact",
                         {"sessionId": TEST_SESSION_ID, "trigger": "auto"},
                         self.tmp_path)
         session_handlers.handle_pre_compact(ctx)
-        self.assertEqual(1, len(_read_orchestrator_events(ctx)))
+        self.assertEqual([], _read_orchestrator_events(ctx))
 
-    def test_emitted_event_type_is_compaction(self):
-        ctx = _make_ctx("preCompact",
-                        {"sessionId": TEST_SESSION_ID, "trigger": "auto"},
-                        self.tmp_path)
-        session_handlers.handle_pre_compact(ctx)
-        self.assertEqual("compaction", _read_orchestrator_events(ctx)[0]["event"])
-
-    def test_trigger_included_when_present(self):
+    def test_writes_no_compaction_event_for_a_manual_trigger(self):
         ctx = _make_ctx("preCompact",
                         {"sessionId": TEST_SESSION_ID, "trigger": "manual"},
                         self.tmp_path)
         session_handlers.handle_pre_compact(ctx)
-        self.assertEqual("manual", _read_orchestrator_events(ctx)[0]["trigger"])
+        self.assertEqual([], _read_orchestrator_events(ctx))
 
-    def test_auto_trigger_passed_through(self):
-        ctx = _make_ctx("preCompact",
-                        {"sessionId": TEST_SESSION_ID, "trigger": "auto"},
-                        self.tmp_path)
-        session_handlers.handle_pre_compact(ctx)
-        self.assertEqual("auto", _read_orchestrator_events(ctx)[0]["trigger"])
-
-    def test_tokens_before_absent(self):
-        """GHCP CLI preCompact payload has no token count fields; must not be fabricated."""
-        ctx = _make_ctx("preCompact",
-                        {"sessionId": TEST_SESSION_ID, "trigger": "auto"},
-                        self.tmp_path)
-        session_handlers.handle_pre_compact(ctx)
-        self.assertNotIn("tokens_before", _read_orchestrator_events(ctx)[0])
-
-    def test_emits_even_without_trigger(self):
+    def test_writes_no_event_without_a_trigger(self):
         ctx = _make_ctx("preCompact", {"sessionId": TEST_SESSION_ID}, self.tmp_path)
         session_handlers.handle_pre_compact(ctx)
-        self.assertEqual(1, len(_read_orchestrator_events(ctx)))
+        self.assertEqual([], _read_orchestrator_events(ctx))
 
     def test_does_not_raise(self):
         ctx = _make_ctx("preCompact", {"sessionId": TEST_SESSION_ID, "trigger": "auto"},

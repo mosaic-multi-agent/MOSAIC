@@ -1,0 +1,226 @@
+{
+  "schema_version": "1",
+  "suite_id": "checkout-suite",
+  "started_at": "2026-08-07T12:00:00Z",
+  "finished_at": "2026-08-07T12:05:00Z",
+  "tests": [
+    {
+      "test_name": "checkout-happy-path",
+      "test_id": 0,
+      "description": "a valid cart checks out",
+      "layer": "subagent",
+      "aggregate": {
+        "test_name": "checkout-happy-path",
+        "test_id": 0,
+        "verdict": "PASS",
+        "reasons": [],
+        "counted": 1,
+        "passed": 1,
+        "excluded": 0,
+        "pass_rate": 1,
+        "required_pass_rate": 0,
+        "infrastructure_failure": false,
+        "total_cost": { "total_usd": 0.05, "attribution": "attributed", "detail": "" },
+        "exclusions": []
+      },
+      "runs": [
+        {
+          "run": { "run_id": "run-001", "test_name": "checkout-happy-path", "run_number": 1 },
+          "verdict": "PASS",
+          "reasons": [],
+          "assertions": [],
+          "conditions": [],
+          "duration_ms": 2000,
+          "cost": { "total_usd": 0.05, "attribution": "attributed", "detail": "" },
+          "negative_applied": false,
+          "subject_version": "unknown",
+          "subject_model": "unknown",
+          "stub_model": "unknown",
+          "harness_id": "unknown",
+          "termination_reason": "unknown",
+          "test_version": 0,
+          "test_id": 0
+        }
+      ]
+    },
+    {
+      "test_name": "checkout-rejects-invalid-cart",
+      "test_id": 0,
+      "description": "an empty cart is rejected rather than completed",
+      "layer": "subagent",
+      "aggregate": {
+        "test_name": "checkout-rejects-invalid-cart",
+        "test_id": 0,
+        "verdict": "FAIL",
+        "reasons": ["ASSERTION"],
+        "counted": 1,
+        "passed": 0,
+        "excluded": 0,
+        "pass_rate": 0,
+        "required_pass_rate": 0,
+        "infrastructure_failure": false,
+        "total_cost": { "total_usd": 0.02, "attribution": "attributed", "detail": "" },
+        "exclusions": []
+      },
+      "runs": [
+        {
+          "run": { "run_id": "run-001", "test_name": "checkout-rejects-invalid-cart", "run_number": 1 },
+          "verdict": "FAIL",
+          "reasons": ["ASSERTION"],
+          "assertions": [
+            {
+              "class": "final_state.last_status",
+              "target": "",
+              "outcome": "fail",
+              "expected": "REJECTED",
+              "actual": "COMPLETED",
+              "detail": "final status did not match"
+            }
+          ],
+          "conditions": [],
+          "duration_ms": 1500,
+          "cost": { "total_usd": 0.02, "attribution": "attributed", "detail": "" },
+          "negative_applied": false,
+          "subject_version": "unknown",
+          "subject_model": "unknown",
+          "stub_model": "unknown",
+          "harness_id": "unknown",
+          "termination_reason": "unknown",
+          "test_version": 0,
+          "test_id": 0
+        }
+      ]
+    },
+    {
+      "test_name": "checkout-times-out",
+      "test_id": 0,
+      "description": "the subject exceeds its declared timeout",
+      "layer": "subagent",
+      "aggregate": {
+        "test_name": "checkout-times-out",
+        "test_id": 0,
+        "verdict": "TIMEOUT",
+        "reasons": ["TIMEOUT"],
+        "counted": 1,
+        "passed": 0,
+        "excluded": 0,
+        "pass_rate": 0,
+        "required_pass_rate": 0,
+        "infrastructure_failure": false,
+        "total_cost": { "total_usd": 0.10, "attribution": "attributed", "detail": "" },
+        "exclusions": []
+      },
+      "runs": [
+        {
+          "run": { "run_id": "run-001", "test_name": "checkout-times-out", "run_number": 1 },
+          "verdict": "TIMEOUT",
+          "reasons": ["TIMEOUT"],
+          "assertions": [],
+          "conditions": [],
+          "duration_ms": 30000,
+          "cost": { "total_usd": 0.10, "attribution": "attributed", "detail": "" },
+          "negative_applied": false,
+          "subject_version": "unknown",
+          "subject_model": "unknown",
+          "stub_model": "unknown",
+          "harness_id": "unknown",
+          "termination_reason": "unknown",
+          "test_version": 0,
+          "test_id": 0
+        }
+      ]
+    },
+    {
+      "test_name": "checkout-state-integrity-fault",
+      "test_id": 0,
+      "description": "a lock reclaim recurs and ends the test as an infrastructure failure",
+      "layer": "subagent",
+      "aggregate": {
+        "test_name": "checkout-state-integrity-fault",
+        "test_id": 0,
+        "verdict": "FAIL",
+        "reasons": ["INFRASTRUCTURE"],
+        "counted": 0,
+        "passed": 0,
+        "excluded": 1,
+        "pass_rate": 0,
+        "required_pass_rate": 0,
+        "infrastructure_failure": true,
+        "total_cost": { "total_usd": 0, "attribution": "attributed", "detail": "" },
+        "exclusions": [
+          {
+            "key": { "run_id": "run-001", "test_name": "checkout-state-integrity-fault", "run_number": 1 },
+            "reason": "state_integrity",
+            "termination_reason": "",
+            "detail": "lock was reclaimed; one or more state updates may have been lost"
+          }
+        ]
+      },
+      "runs": [
+        {
+          "run": { "run_id": "run-001", "test_name": "checkout-state-integrity-fault", "run_number": 1 },
+          "verdict": "FAIL",
+          "reasons": ["STATE_INTEGRITY"],
+          "assertions": [],
+          "conditions": [],
+          "duration_ms": 5000,
+          "cost": { "total_usd": 0.03, "attribution": "attributed", "detail": "" },
+          "negative_applied": false,
+          "subject_version": "unknown",
+          "subject_model": "unknown",
+          "stub_model": "unknown",
+          "harness_id": "unknown",
+          "termination_reason": "unknown",
+          "test_version": 0,
+          "test_id": 0
+        }
+      ]
+    },
+    {
+      "test_name": "checkout-cost-unattributed",
+      "test_id": 0,
+      "description": "the subject passes but its cost could not be attributed",
+      "layer": "subagent",
+      "aggregate": {
+        "test_name": "checkout-cost-unattributed",
+        "test_id": 0,
+        "verdict": "PASS",
+        "reasons": [],
+        "counted": 1,
+        "passed": 1,
+        "excluded": 0,
+        "pass_rate": 1,
+        "required_pass_rate": 0,
+        "infrastructure_failure": false,
+        "total_cost": { "total_usd": 0, "attribution": "unavailable", "detail": "log root missing" },
+        "exclusions": []
+      },
+      "runs": [
+        {
+          "run": { "run_id": "run-001", "test_name": "checkout-cost-unattributed", "run_number": 1 },
+          "verdict": "PASS",
+          "reasons": [],
+          "assertions": [],
+          "conditions": [
+            { "kind": "cost_unattributed", "detail": "log root missing" }
+          ],
+          "duration_ms": 1000,
+          "cost": { "total_usd": 0, "attribution": "unavailable", "detail": "log root missing" },
+          "negative_applied": false,
+          "subject_version": "unknown",
+          "subject_model": "unknown",
+          "stub_model": "unknown",
+          "harness_id": "unknown",
+          "termination_reason": "unknown",
+          "test_version": 0,
+          "test_id": 0
+        }
+      ]
+    }
+  ],
+  "counts": { "FAIL": 2, "PASS": 2, "TIMEOUT": 1 },
+  "total_cost": { "total_usd": 0.17, "attribution": "unavailable", "detail": "log root missing" },
+  "infrastructure_failures": 1,
+  "catalog_folder": "",
+  "errors": []
+}

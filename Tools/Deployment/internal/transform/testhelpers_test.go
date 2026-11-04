@@ -34,8 +34,13 @@ func newFixtureModule(t *testing.T) domain.HarnessModule {
 	if err != nil {
 		t.Fatalf("parse fixture descriptor: %v", err)
 	}
+	desc.InjectionsVersion = fixtureInjectionsVersion
 	return &fixtureModule{desc: desc}
 }
+
+// fixtureInjectionsVersion is the injections version the fixture modules report. Real harness
+// modules read it from HarnessInjections.md; the fixture descriptor does not declare one.
+const fixtureInjectionsVersion = "1.2.0"
 
 // fixtureModel returns the standard model selection used in golden and pipeline tests.
 // Using OriginHarnessList reflects the normal flow where the user picks from the harness

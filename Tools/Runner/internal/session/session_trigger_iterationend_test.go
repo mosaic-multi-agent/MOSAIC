@@ -79,6 +79,8 @@ func newIterationEndStagedSession(t *testing.T) (ses session.Session, f *harness
 //   - commit-manager-git  (infra dispatch for Stage-2 end)
 func TestSession_Start_TriggerEval_ITERATION_END_FiresOnStageTransition(t *testing.T) {
 	ses, f, _, orchPath := newIterationEndStagedSession(t)
+	// The commit agent first answers the commit setup of the commits-enabled run.
+	f.Queue(infraCommitAgent, commitSetupEntry())
 
 	// Stage 1
 	f.Queue("implementation-tdd", harness.ScriptedEntry{Response: &domain.ProtocolResponse{
@@ -122,7 +124,7 @@ func TestSession_Start_TriggerEval_ITERATION_END_FiresOnStageTransition(t *testi
 		WorkflowID:           "staged",
 		Task:                 "task",
 		IsNewRun:             true,
-		RunSettings:          domain.RunSettings{Mode: domain.ExecutionModeAuto},
+		RunSettings:          commitsRun(domain.ExecutionModeAuto),
 		RunFolder:            filepath.Dir(orchPath), // Plan.md was written next to the orchestrator file.
 	}
 
@@ -130,7 +132,7 @@ func TestSession_Start_TriggerEval_ITERATION_END_FiresOnStageTransition(t *testi
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
 
-	invs := f.Invocations()
+	invs := triggerInvocations(f)
 	if len(invs) != 6 {
 		t.Fatalf("want 6 invocations (tdd1, review1, commit1, tdd2, review2, commit2), got %d", len(invs))
 	}
@@ -191,6 +193,9 @@ func TestSession_Start_TriggerEval_ITERATION_END_FiresAtEndOfSingleStage(t *test
 		Interact: &noopInteraction{},
 	})
 
+	// The commit agent first answers the commit setup of the commits-enabled run.
+	f.Queue(infraCommitAgent, commitSetupEntry())
+
 	// First step: not the last step of Stage-1, so ITERATION_END must not fire yet.
 	f.Queue("implementation-tdd", harness.ScriptedEntry{Response: &domain.ProtocolResponse{
 		AgentInstanceID: "implementation-tdd#1",
@@ -215,7 +220,7 @@ func TestSession_Start_TriggerEval_ITERATION_END_FiresAtEndOfSingleStage(t *test
 		WorkflowID:           "staged",
 		Task:                 "task",
 		IsNewRun:             true,
-		RunSettings:          domain.RunSettings{Mode: domain.ExecutionModeAuto},
+		RunSettings:          commitsRun(domain.ExecutionModeAuto),
 		RunFolder:            dir, // Plan.md was written into dir; the session must resolve it here.
 	}
 
@@ -223,7 +228,7 @@ func TestSession_Start_TriggerEval_ITERATION_END_FiresAtEndOfSingleStage(t *test
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
 
-	invs := f.Invocations()
+	invs := triggerInvocations(f)
 	if len(invs) != 3 {
 		t.Fatalf("want 3 invocations (tdd, review, commit), got %d: ITERATION_END must fire exactly once at the end of the single stage", len(invs))
 	}
@@ -269,6 +274,9 @@ func TestSession_Start_TriggerEval_ITERATION_END_DoesNotFireBeforeLastStep(t *te
 		Interact: &noopInteraction{},
 	})
 
+	// The commit agent first answers the commit setup of the commits-enabled run.
+	f.Queue(infraCommitAgent, commitSetupEntry())
+
 	// Intermediate step (not the last step of Stage-1): ITERATION_END must not fire.
 	f.Queue("implementation-tdd", harness.ScriptedEntry{Response: &domain.ProtocolResponse{
 		AgentInstanceID: "implementation-tdd#1",
@@ -293,7 +301,7 @@ func TestSession_Start_TriggerEval_ITERATION_END_DoesNotFireBeforeLastStep(t *te
 		WorkflowID:           "staged",
 		Task:                 "task",
 		IsNewRun:             true,
-		RunSettings:          domain.RunSettings{Mode: domain.ExecutionModeAuto},
+		RunSettings:          commitsRun(domain.ExecutionModeAuto),
 		RunFolder:            dir, // Plan.md was written into dir; the session must resolve it here.
 	}
 
@@ -301,7 +309,7 @@ func TestSession_Start_TriggerEval_ITERATION_END_DoesNotFireBeforeLastStep(t *te
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
 
-	invs := f.Invocations()
+	invs := triggerInvocations(f)
 	if len(invs) != 3 {
 		t.Fatalf("want exactly 3 invocations (tdd, review, commit), got %d", len(invs))
 	}
@@ -330,6 +338,8 @@ func TestSession_Start_TriggerEval_ITERATION_END_DoesNotFireBeforeLastStep(t *te
 // last step) and once at index 5 (after Stage-2's last step).
 func TestSession_Start_TriggerEval_ITERATION_END_FiresOncePerStageInMultiStageWorkflow(t *testing.T) {
 	ses, f, _, orchPath := newIterationEndStagedSession(t)
+	// The commit agent first answers the commit setup of the commits-enabled run.
+	f.Queue(infraCommitAgent, commitSetupEntry())
 
 	// Stage 1, step 1: not the last step of Stage-1.
 	f.Queue("implementation-tdd", harness.ScriptedEntry{Response: &domain.ProtocolResponse{
@@ -373,7 +383,7 @@ func TestSession_Start_TriggerEval_ITERATION_END_FiresOncePerStageInMultiStageWo
 		WorkflowID:           "staged",
 		Task:                 "task",
 		IsNewRun:             true,
-		RunSettings:          domain.RunSettings{Mode: domain.ExecutionModeAuto},
+		RunSettings:          commitsRun(domain.ExecutionModeAuto),
 		RunFolder:            filepath.Dir(orchPath),
 	}
 
@@ -381,7 +391,7 @@ func TestSession_Start_TriggerEval_ITERATION_END_FiresOncePerStageInMultiStageWo
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
 
-	invs := f.Invocations()
+	invs := triggerInvocations(f)
 	if len(invs) != 6 {
 		t.Fatalf("want 6 invocations (tdd1, review1, commit1, tdd2, review2, commit2), got %d", len(invs))
 	}

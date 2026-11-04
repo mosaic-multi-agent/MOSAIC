@@ -20,6 +20,9 @@ Key vscode-ghcp divergences (D5):
 
 import mosaic_logger_core as core
 import mosaic_logger_export as export
+import mosaic_logger_handlers_invocation as invocation
+import mosaic_logger_manifest_version as manifest_version
+import mosaic_logger_subagent_state as subagent_state
 import mosaic_logger_transcript as transcript
 
 
@@ -36,7 +39,7 @@ def emit_run_start(ctx: "core.HookContext") -> None:
             run_id=ctx.run_id,
             cwd=ctx.field("cwd"),
             model=ctx.field("model"),
-            adapter_version=core.adapter_version(ctx),
+            adapter_version=manifest_version.adapter_version(ctx),
         )
         core.append_event(ctx.paths.orchestrator_events(run_id), event)
     except Exception as exc:
@@ -117,15 +120,21 @@ def handle_pre_compact(ctx: "core.HookContext") -> None:
     schema defines only trigger, tokens_before, and tokens_after. Emitting
     custom_instructions under any key would invent a field with no schema
     definition, violating the degrade-never-fabricate rule.
+
+    One phase-less event per firing (PreCompact is the only compaction hook
+    registered). tokens_before is written only for a genuine integer payload
+    value. The event goes to the compacted subagent's stream when identified.
     """
     try:
-        run_id = core.effective_run_id(ctx)
+        tokens_before = ctx.field("tokens_before")
+        if isinstance(tokens_before, bool) or not isinstance(tokens_before, int):
+            tokens_before = None
         event = core.build_event(
             "compaction", ctx,
             trigger=ctx.field("trigger"),
-            tokens_before=ctx.field("tokens_before"),
+            tokens_before=tokens_before,
         )
-        core.append_event(ctx.paths.orchestrator_events(run_id), event)
+        core.append_event(subagent_state.compaction_destination(ctx), event)
     except Exception as exc:
         core.debug_log("handle_pre_compact failed", exc)
 
@@ -179,9 +188,14 @@ def handle_stop(ctx: "core.HookContext") -> None:
             ctx.transcript_path,
             ctx.paths.orchestrator_raw(run_id, ctx.session_id),
             "transcript_path",
+            owner_session_id=ctx.session_id,
         )
     except Exception as exc:
         core.debug_log("handle_stop: export failed", exc)
+
+    # Step 4: end subagents of this session that stopped without a completed
+    # spawning PostToolUse (invocation_end without response).
+    invocation.sweep_stopped_subagents(ctx)
 
 
 # ---------------------------------------------------------------------------

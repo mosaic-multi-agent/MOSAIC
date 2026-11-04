@@ -1,4 +1,4 @@
-// Package vscodeghcp implements the VS Code GitHub Copilot built-in harness module. It embeds
+// Package vscodeghcp implements the VS Code GHCP Local built-in harness module. It embeds
 // the vscode-ghcp.yaml descriptor and provides tool formatting as a flow-style YAML sequence
 // with single-quoted hierarchical path items (e.g. ['read/readFile', 'edit/editFiles']).
 //
@@ -29,17 +29,6 @@
 // tool and represent a deviation from the canonical output. VS Code GHCP recognises both
 // ".md" and ".agent.md" files in .github/agents/; the deployment tool emits ".md".
 //
-// Hook variant reuse: the vscode-ghcp hook variant in hook bundles declares reuses: claude-code.
-// The catalog resolves reuse references before calling HookPlan, so the HookPlanRequest already
-// contains the resolved file list. This module reads from the "vscode-ghcp" variant key without
-// any special reuse logic — reuse is handled upstream by the catalog.
-//
-// User-level editor setting: enabling hooks in VS Code requires setting "chat.hooks.enabled": true
-// in User Settings. This is a user-level VS Code setting that the deployment tool cannot write.
-// The registration step with ID "enable-chat-hooks" always has Performable: false and is always
-// reported as a TODO item, never attempted. This is not special-cased in module code; it is
-// a property of the registration step data provided in the hook bundle variant.
-//
 // Registration: init() calls registry.Register so the module is available whenever this
 // package is imported.
 package vscodeghcp
@@ -65,12 +54,12 @@ func init() {
 	})
 }
 
-// module is the VS Code GitHub Copilot built-in HarnessModule implementation.
+// module is the VS Code GHCP Local built-in HarnessModule implementation.
 type module struct {
 	ref             domain.HarnessRef
 	desc            *domain.HarnessDescriptor
-	injections      map[string]string // parsed from HarnessInjections.md at construction time
-	orchInjections  map[string]string // parsed from HarnessInjectionsOrchestrator.md at construction time
+	injections     map[string]string // parsed from HarnessInjections.md at construction time
+	orchInjections map[string]string // parsed from HarnessInjectionsOrchestrator.md at construction time
 }
 
 // New parses the embedded vscode-ghcp.yaml descriptor and reads HarnessInjections.md and
@@ -90,6 +79,7 @@ func New(opts registry.BuiltinOptions) (domain.HarnessModule, error) {
 	if err != nil {
 		return nil, fmt.Errorf("vscode-ghcp: load harness content: %w", err)
 	}
+	desc.InjectionsVersion = content.SharedVersion
 	desc.OrchestratorInjectionsVersion = content.OrchestratorVersion
 	ref := domain.HarnessRef{
 		ID:          desc.ID,
@@ -258,40 +248,17 @@ func (m *module) skillTargetPath(req domain.TargetPathRequest) (string, error) {
 	return path.Join(sp.Project, req.Key, filename), nil
 }
 
-// Injection returns the harness-level content for a canonical injection name.
-//
-// VS Code GHCP declares HarnessConstraints (file-reading constraint plus the parallel
-// tool calls instruction) as its sole harness-level injection.
-// For the "orchestrator" agent key, shared content is merged with orchestrator-only content
-// from HarnessInjectionsOrchestrator.md. For all other agent keys, only shared content is returned.
+// Injection returns the content this harness serves for one region and role. Each region
+// name is served from one source file only: the orchestrator region from
+// HarnessInjectionsOrchestrator.md (orchestrator role only), every other region from
+// HarnessInjections.md.
 func (m *module) Injection(req domain.InjectionRequest) (string, bool) {
-	sharedContent, sharedOk := m.injections[req.Name]
-	if req.Role != domain.RoleOrchestrator {
-		return sharedContent, sharedOk
-	}
-	orchContent, orchOk := m.orchInjections[req.Name]
-	if !sharedOk && !orchOk {
-		return "", false
-	}
-	if sharedContent != "" && orchContent != "" {
-		return sharedContent + "\n\n" + orchContent, true
-	}
-	if sharedContent != "" {
-		return sharedContent, true
-	}
-	if orchContent != "" {
-		return orchContent, true
-	}
-	return "", true
+	return injectionfile.HarnessContent{Shared: m.injections, Orchestrator: m.orchInjections}.Injection(req)
 }
 
-// HookPlan resolves a hook bundle for VS Code GHCP. The vscode-ghcp hook variant reuses
-// the claude-code file set; the catalog resolves this reuse before calling HookPlan by
-// populating the variant's Files from the claude-code variant. This module reads from the
-// "vscode-ghcp" variant key; no reuse logic is required here.
-//
-// The hook target directory is .claude/hooks/ — the same location as Claude Code hooks,
-// allowing a single deployment to serve both platforms.
+// HookPlan resolves a hook bundle for VS Code GHCP. It reads the file set and registration
+// steps from the descriptor's variant key in the bundle; files deploy under the descriptor's
+// hook directory (.github/hooks/), where the bundle's registration runs them.
 func (m *module) HookPlan(req domain.HookPlanRequest) (domain.HookPlan, error) {
 	if !m.desc.Hooks.Supported {
 		return domain.HookPlan{

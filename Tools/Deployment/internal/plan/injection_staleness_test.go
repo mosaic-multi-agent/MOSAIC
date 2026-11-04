@@ -382,6 +382,8 @@ func TestAgentStaleness_Orchestrator_WithInjectionRegion_OrchestratorInjVersionM
 		InjectionsVersion:             "3.0",
 		OrchestratorInjectionsVersion: "4.0",
 		HasInjectionRegion:            true,
+
+		HasOrchestratorInjectionRegion: true,
 	}
 	agent := makeOrchestrator()
 	agent.Version = deployed.Version

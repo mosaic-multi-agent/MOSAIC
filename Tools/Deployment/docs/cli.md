@@ -6,7 +6,7 @@ The `mosaic-deploy` tool provides two modes: an interactive TUI (when no subcomm
 
 Multi-valued selections — workflows, utility agents, hooks, and per-tier model mappings — are expressed via a **YAML selections file** supplied with `--selections <path>` rather than as repeated flags.
 
-**Rationale:** Repeated flags grow unmanageable for batch multi-workspace scripting. A selections file is stable, shareable, and version-controllable: a team can commit one canonical `selections.yaml` per project and pass it to every invocation. Repeated flags, by contrast, produce long and fragile shell one-liners. Single-valued flags (`--harness`, `--workspace`, `--scope`) remain as flags for ergonomics on one-off invocations.
+**Rationale:** Repeated flags grow unmanageable for batch multi-workspace scripting. A selections file is stable, shareable, and version-controllable: a team can commit one canonical `selections.yaml` per project and pass it to every invocation. Repeated flags, by contrast, produce long and fragile shell one-liners. Single-valued flags (`--harness`, `--workspace`) remain as flags for ergonomics on one-off invocations.
 
 ---
 
@@ -44,7 +44,7 @@ A stack flag (any occurrence of either) is *stack input*: the resulting stack is
 |------------|-------------------------|
 | `deploy`, `update`, `workflows`, `agents`, `hooks`, `render` | `--workspace` (`render --dest` alone has none) |
 | `promote` | nearest ancestor of `--file` holding `.mosaic/manifest.yaml` |
-| `transform` | `--path` itself or its nearest such ancestor |
+| `transform` | `--workspace` |
 | `check-index` | none: never reuses |
 
 `promote`, `transform` and `render` reuse a persisted stack but never persist one. To return a workspace to the default catalog alone, run a write subcommand with `--include-default-catalog` and no `--catalog-folder`.
@@ -72,7 +72,7 @@ When a layer shadows an item of a lower layer, the run reports it:
 
 ## `deploy` subcommand
 
-Deploy MOSAIC agents and skills into a new workspace.
+Deploy MOSAIC agents and skills into a new workspace, or re-deploy into an existing one.
 
 ```
 mosaic-deploy deploy [flags]
@@ -84,13 +84,14 @@ mosaic-deploy deploy [flags]
 |------|------|---------|-------------|
 | `--harness <id>` | string | — | Harness ID to deploy (e.g. `claude-code`) |
 | `--workspace <path>` | string | — | Absolute path to the target workspace |
-| `--scope <project\|user>` | string | `project` | Deployment scope |
+| `--conflict <skip\|overwrite\|backup>` | string | — | How to handle files the tool cannot confirm as its own |
 | `--selections <path>` | string | — | Path to a YAML selections file |
 | `--workflows <ids>` | string | — | Comma-separated workflow IDs; absent = use selections file; empty string = explicitly none |
 | `--infrastructure <ids>` | string | — | Comma-separated infrastructure agent IDs; absent = ask interactively; empty string = explicitly none |
 | `--output <json>` | string | — | Machine-readable output format |
 | `--dry-run` | bool | false | Plan without writing any files |
 | `--auto-confirm` | bool | false | Skip plan review and proceed automatically |
+| `--strict-models` | bool | false | Fail the run (exit 1) when any agent would be deployed without a resolved model, instead of recording a TODO gap. Applies to real and `--dry-run` runs; the check precedes review and any write |
 
 ### Selections file format
 
@@ -110,6 +111,10 @@ tier_models:
 
 Unknown keys in the selections file are silently ignored (forward-compatible).
 
+For `ghcp-cli` and `vscode-ghcp`, deploy refuses a workspace that already holds the other GHCP target and points to `transform`; both write agents as `X.agent.md` and migrate agents recorded as `X.md` (see "One GHCP target per workspace" and "GHCP agent file names" under `transform`).
+
+Re-running `deploy` on an existing workspace rewrites stale agents and keeps their project and custom regions and tool choices. A model the run supplies replaces the deployed one; otherwise the deployed model is kept. The selected workflows replace the deployed set. With no infrastructure selection, existing declarations are kept.
+
 ---
 
 ## `update` subcommand
@@ -126,15 +131,19 @@ mosaic-deploy update [flags]
 |------|------|---------|-------------|
 | `--harness <id>` | string | — | Harness ID |
 | `--workspace <path>` | string | — | Absolute path to the existing workspace |
-| `--conflict <skip\|overwrite\|backup>` | string | `skip` | How to handle locally-modified files |
+| `--conflict <skip\|overwrite\|backup>` | string | `skip` | How to handle files the tool cannot confirm as its own |
 | `--output <json>` | string | — | Machine-readable output format |
 | `--dry-run` | bool | false | Plan without writing any files |
 | `--auto-confirm` | bool | false | Skip plan review |
 
-The `--conflict` flag controls what happens when a file in the workspace has been locally modified since the last deployment:
+`--workspace` must exist; a missing path is an error and nothing is written.
+
+The `--conflict` flag controls what happens when the tool cannot confirm a file as its own: it cannot be parsed, or it has no manifest record:
 - `skip` (default): leave the file unchanged and record a TODO item
-- `overwrite`: replace the file with the latest version (local edits are lost)
-- `backup`: copy the local file to `<name>.backup` before overwriting
+- `overwrite`: replace the file with the latest version
+- `backup`: copy the file to `.mosaic/backups/<path>.<timestamp>.bak`, then overwrite
+
+**What an update keeps.** Only project and custom regions, models and tool choices survive an update. Edits elsewhere in an agent or skill file are replaced the next time the file is rewritten, and `--conflict` does not protect them. Keep your own content in project and custom regions.
 
 ### Orchestrator declaration refresh
 
@@ -146,14 +155,18 @@ Update also refreshes hook bundles that are already deployed in the workspace (f
 
 - Refreshed hook files are overwritten with the Catalog version (local edits are lost); files the new version no longer has are left in place.
 - An existing registration target (e.g. `.claude/settings.json`, `.github/hooks/mosaic-logger.json`) is never modified; a TODO with the registration fragment is reported for every refreshed hook whose target exists, whether or not the fragment changed. A missing target is created. The TODO is emitted when the update is applied, so the plan review and `--dry-run` show none. Up-to-date hooks and hooks skipped in a conflict produce no registration TODO.
-- A deployed hook with no manifest record is treated as locally modified: `--conflict skip` (default) leaves it as is; `overwrite` and `backup` refresh it.
-- `claude-code` and `vscode-ghcp` share `.claude/hooks/`; Update for either harness refreshes the shared hook, writing that harness's variant files (files only the other variant has keep their previous content).
+- A deployed hook with no manifest record is treated as a conflict: `--conflict skip` (default) leaves it as is; `overwrite` and `backup` refresh it.
+- Both GHCP harnesses keep hooks in `.github/hooks/`, and `claude-code` in `.claude/hooks/`; Update refreshes the hook folder of the harness it runs for.
+
+### GHCP workspaces
+
+A workspace holds one GHCP target at a time (decided by the manifest `harness_id`); Update for the other one is refused and points to `transform`. Update also migrates agents the manifest records as `X.md` to `X.agent.md`, with backups under `.mosaic/backups/` (see "GHCP agent file names" under `transform`).
 
 ---
 
 ## `transform` subcommand
 
-Convert one or more already-deployed agent files from one harness to another.
+Move the whole deployment of a workspace from one harness to another.
 
 ```
 mosaic-deploy transform [flags]
@@ -163,63 +176,102 @@ mosaic-deploy transform [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--harness <id>` | string | — | Source harness ID — the harness the input files were deployed for (required) |
-| `--target-harness <id>` | string | — | Target harness ID — the harness to transform into (required) |
-| `--path <path>` | string | — | Agent file or directory of agent files to transform (required) |
-| `--target-model <id>` | string | — | Target harness model identifier; used as fallback for source models not named in `--model-map`; absent means model field is left empty |
-| `--model-map <src=tgt>` | string (repeatable) | — | Map a source model to a target model; repeat per source model; unmapped sources fall back to `--target-model` |
-| `--overwrite` | bool | false | Replace an existing destination file |
-| `--dry-run` | bool | false | Compute and report outcomes without writing any file |
-| `--output <json>` | string | — | Machine-readable output format |
+| `--harness <id>` | string | - | Source harness ID (required) |
+| `--target-harness <id>` | string | - | Target harness ID (required) |
+| `--workspace <path>` | string | - | Workspace root whose deployment is moved (required) |
+| `--target-model <id>` | string | - | Default target model for source models not covered by `--model-map`; absent means those agents' model field is left empty |
+| `--model-map <src=tgt>` | string (repeatable) | - | Map a source model to a target model as `sourceModel=targetModel`; repeat once per source model. Use an empty source (`=targetModel`) for agents with no model set. Unmapped source models fall back to `--target-model` |
+| `--overwrite` | bool | false | Overwrite an existing destination file |
+| `--dry-run` | bool | false | Show the plan and outcomes without writing any file |
+| `--yes` | bool | false | Confirm the transform plan without prompting |
+| `--output <json>` | string | - | Machine-readable output format |
 
-`--path` is quote-stripped via the shared path-input helper, so shell-quoted paths (e.g. from drag-and-drop) work without manual editing.
+`--workspace` is quote-stripped via the shared path-input helper, so shell-quoted paths (e.g. from drag-and-drop) work without manual editing.
 
 ### Input and enumeration
 
-`--path` may name a single agent file or a directory of agent files. When a directory is given, enumeration is **non-recursive**: only regular files directly under the given directory are considered; subdirectories are not descended into. Files whose extension does not match the source harness's agent extension are silently excluded.
+The input is the workspace root, as for `deploy`. A single agent file or a loose folder of agent files is not accepted. Transform plans the whole deployment found in the workspace (agents, skills and hook bundles), shows the plan, and writes the target harness's copies only after the plan is confirmed (`--yes` confirms without prompting; `--dry-run` shows the plan and writes nothing).
 
-The destination path for each transformed file is resolved by the target harness's own path-resolution logic, relative to the workspace (project) root. The service derives the workspace root from the source file's directory by stripping the source harness's declared agents directory suffix (e.g. `.claude/agents`) — so output files land at `<workspace-root>/<target-harness-relative-path>` (e.g. `<workspace>/.opencode/agents/foo.opencode.md`), not nested inside the source harness's own directory. Use `--dry-run` to preview destination paths before committing.
+Agents are read from the source harness's agents folder and written to the target harness's agents folder (e.g. `.claude/agents/foo.md` becomes `.opencode/agents/foo.opencode.md`). The summary names the agents folder it looked in.
 
-### Per-file outcomes
+### What is kept and what comes from the target
 
-Each file in the input is processed independently. A file that does not match the source harness, or is not a MOSAIC agent at all, is recorded as a skip and processing continues. The outcome report lists every file with one of four statuses:
+Transform never upgrades the deployment. From the source it keeps unchanged: agent bodies, stamps, protocol and bundle regions, workflow tables, infrastructure declarations, and project and custom regions and skills. From the target it takes tool names, the frontmatter shape, role-dependent fields and the regions the harness fills in.
+
+Hooks are deployed from the target harness's catalog variant for the bundles present in the source. A bundle is not carried when the target cannot carry it. Because of this, injections and hooks in the target may be newer than the source. `update` is the explicit way to upgrade a deployment.
+
+For every pair except the GHCP pair below, source files and source manifest entries are never changed. The target deployment is recorded in the manifest. Agents written into `vscode-ghcp` are named `X.agent.md`, like the `ghcp-cli` agents.
+
+### GHCP pair
+
+`ghcp-cli` ("GHCP CLI / VS Code GHCP Copilot") and `vscode-ghcp` ("VS Code GHCP Local") share `.github/agents` and `.github/hooks`, and a workspace holds one of them at a time. Transform between the two (either direction) therefore replaces the source deployment instead of adding the target beside it:
+
+- Agents recorded in the manifest are rewritten in place as `.github/agents/X.agent.md` with the target's content. An agent recorded as a legacy `X.md` is migrated: the target version is written as `X.agent.md`, the old file is removed with its manifest entry, and an existing `X.agent.md` is replaced. Files in the folder that the manifest does not record are left alone.
+- Target hooks are written; source hook files and registrations the target does not write are removed, and target hook files and registrations that already exist are replaced.
+- Skills are left as they are.
+- Every removed or replaced file is first backed up under `.mosaic/backups/`.
+- `--dry-run` and the confirmation plan list the removals and replacements.
+- The run is atomic on failure: if a write fails, the workspace is left as it was.
+
+A workspace that holds both GHCP targets is refused by Transform and by every deploy flow (see below); clean it up by hand first.
+
+### One GHCP target per workspace
+
+The manifest `harness_id` decides which GHCP target a workspace holds. `deploy`, `update` and the other deploy flows for `ghcp-cli` or `vscode-ghcp` refuse to run in a workspace that holds the other one, change nothing, and point to `mosaic-deploy transform --harness <held> --target-harness <requested> --workspace <path>`. A workspace that holds both must have one of them removed by hand (its agent files in `.github/agents` and its hook files in `.github/hooks`).
+
+### GHCP agent file names
+
+Both GHCP targets write agents as `.github/agents/X.agent.md`, with content specific to each target. A workspace deployed earlier with `X.md` agents is migrated by the next full `deploy`, `agents` deploy, `update` or workflow update for its target: each old file is backed up under `.mosaic/backups/` and replaced by `X.agent.md`, and an existing `X.agent.md` for the same agent is backed up and replaced too. Only agents recorded as `X.md` in the manifest are migrated. `render` for `vscode-ghcp` also uses `X.agent.md`.
+
+### Models
+
+Each source model is mapped through `--model-map`, else `--target-model`, else asked interactively. A model that stays unresolved is omitted: the agent is written without a `model` key and is named in the summary and in the TODO file.
+
+### Per-item outcomes
+
+Each planned item (agent, skill or hook bundle) is processed independently and listed with one of three statuses:
 
 | Status | Meaning |
 |--------|---------|
-| `transformed` | Output produced at `destinationPath` (or computed, under `--dry-run`) |
-| `skipped-mismatch` | File's detected harness does not match `--harness` |
-| `skipped-not-agent` | File is not a transformed MOSAIC agent |
-| `failed` | File matched but could not be transformed or written (includes refused-overwrite) |
+| `transformed` | Written at `destinationPath` (or computed, under `--dry-run`) |
+| `skipped` | Not written; the reason says why (not a MOSAIC agent, destination already exists, hook bundle not carried, and so on) |
+| `failed` | The item could not be transformed or written |
 
-No destination file is overwritten without `--overwrite`; an existing destination without the flag produces a `failed` entry for that file and the batch continues.
+An existing destination is skipped and kept unless `--overwrite` is given. A failed item does not stop the others. Between `ghcp-cli` and `vscode-ghcp` the plan always replaces the existing destination whatever `--overwrite` says, and a failure leaves the workspace unchanged (see "GHCP pair" above).
+
+Esc at a question cancels the run: nothing is written.
 
 ### Exit codes
 
 | Code | Meaning |
 |------|---------|
-| 0 | All considered files transformed successfully |
-| 1 | An unrecoverable error (unresolvable harness, unreadable path, user cancellation) |
-| 3 | Invalid arguments (missing required flag) |
+| 0 | Everything transformed; nothing to follow up |
+| 1 | An item failed, or an unrecoverable error (unresolvable harness, unreadable workspace, cancellation, plan not confirmed) |
+| 2 | Completed, but something needs follow-up: agents without a model, tools without a target equivalent, or hook bundles not carried. Removals and replacements of the GHCP pair are reported in the plan and do not by themselves give exit code 2 |
+| 3 | Invalid arguments (missing required flag or malformed `--model-map`) |
 
 ### JSON output
 
-With `--output json`, a single `TransformHarnessResult` JSON document is written to stdout containing `sourceHarnessId`, `targetHarnessId`, `inputPath`, `inputIsDirectory`, `dryRun`, the per-file `files` array, and the summary counts (`transformed`, `skippedMismatch`, `skippedNotAgent`, `failed`). The exit code is unchanged.
+With `--output json`, a single document is written to stdout containing `sourceHarnessId`, `targetHarnessId`, `workspace`, `sourceAgentsDir`, `dryRun`, `cancelled`, `targetModel`, `appliedModelMap`, `unresolvedModels`, the per-item `files` array, `notes`, `todoPath`, and the counts `transformed`, `skipped` and `failed`, plus `stackInEffect`. A document is also written when the run was cancelled.
+
+For the GHCP pair, the document also carries two arrays, each absent when empty: `removals` (files the run removes, or would remove under `--dry-run`) and `replacements` (existing files the run overwrites after backing them up). Each entry has `kind` (`agent` or `hook`), `key` (the agent or hook key, when there is one), `path` (workspace-relative, forward slashes), `reason`, and `backupPath` (the absolute backup file; set only after a real run that backed the file up). The human output lists the same entries under `removals:` and `replacements:` and ends the summary line with `removed: N` and `replaced: N`.
 
 ### Example
 
 ```sh
-# Dry-run to preview which files would be transformed and where output would land.
+# Dry-run to preview the plan: which items would be written and where.
 mosaic-deploy transform \
   --harness claude-code \
   --target-harness opencode \
-  --path /path/to/agents/ \
+  --workspace /path/to/my-project \
   --dry-run
 
-# Transform a directory, replacing any existing destination files.
+# Move the deployment, confirming the plan and replacing existing destination files.
 mosaic-deploy transform \
   --harness claude-code \
   --target-harness opencode \
-  --path /path/to/agents/ \
+  --workspace /path/to/my-project \
+  --yes \
   --overwrite \
   --output json
 ```
@@ -248,7 +300,7 @@ Use `agents` when you want to add or refresh individual agents in an existing wo
 | `--utility <ids>` | string | — | Comma-separated utility agent IDs; absent = ask; empty = none |
 | `--infra <ids>` | string | — | Comma-separated infrastructure agent IDs; absent = ask; empty = none |
 | `--standalone <ids>` | string | — | Comma-separated standalone agent IDs; absent = ask; empty = none |
-| `--conflict <skip\|overwrite\|backup>` | string | — | Default decision for locally-modified files |
+| `--conflict <skip\|overwrite\|backup>` | string | — | Default decision for files the tool cannot confirm as its own |
 | `--output <json>` | string | — | Machine-readable output format |
 | `--dry-run` | bool | false | Compute and report without writing any file |
 | `--yes` | bool | false | Auto-confirm the deployment plan without prompting |
@@ -261,7 +313,7 @@ If any of the four per-class flags (`--subagents`, `--utility`, `--infra`, `--st
 
 ### Orchestrator declarations
 
-If an orchestrator file (`orchestrator.md`, `orchestrator-script.md`) is already present in the workspace, declarations for the newly deployed infrastructure agents are added to it. Existing declarations, including hand-added ones, are kept, and a re-deployed agent is refreshed in place. No extra question is asked. A locally modified orchestrator follows `--conflict`; when it is skipped, a TODO entry explains the manual step. No orchestrator is created when none is present, and the workflows in the orchestrator are not changed.
+If an orchestrator file (`orchestrator.md`, `orchestrator-script.md`) is already present in the workspace, declarations for the newly deployed infrastructure agents are added to it. Existing declarations, including hand-added ones, are kept, and a re-deployed agent is refreshed in place, keeping its project and custom regions, models and tool choices. No extra question is asked. An orchestrator the tool cannot confirm as its own follows `--conflict`; when it is skipped, a TODO entry explains the manual step. No orchestrator is created when none is present, and the workflows in the orchestrator are not changed.
 
 ### Exit codes
 
@@ -348,13 +400,27 @@ Exit code: `0` when every layer is clean (a missing index counts as clean), `2` 
 | 0 | success | All items deployed successfully |
 | 1 | failure | An unrecoverable error occurred |
 | 2 | completed-with-skips | Run completed but some items were skipped; see TODO file |
-| 3 | usage | Invalid arguments or unrecognised subcommand |
+| 3 | usage | Invalid arguments or unrecognised subcommand; the error is printed to stderr |
+
+With `deploy --strict-models`, an agent left without a resolved model fails the run with exit 1 and the stderr line `error: strict models: N agent(s) have no resolved model: <key> (tier <tier>), ...` (`<none>` when the agent declares no tier). Under `--output json` stdout then holds one failure document instead of a `RunSummary`:
+
+```json
+{
+  "error": true,
+  "reason": "unresolved-models",
+  "message": "strict models: 1 agent(s) have no resolved model: orchestrator (tier TEST_SUBJECT)",
+  "detail": "orchestrator (tier TEST_SUBJECT)",
+  "exitCode": 1
+}
+```
+
+Without the flag the gap goes to the TODO list as before.
 
 ---
 
 ## Machine-readable output (`--output json`)
 
-When `--output json` is set, `mosaic-deploy` writes a single JSON document to stdout containing the full `RunSummary`. The exit code is unchanged. Scripting consumers should read from stdout and parse JSON; diagnostic messages go to stderr.
+When `--output json` is set, `mosaic-deploy` writes a single JSON document to stdout containing the full `RunSummary`. The exit code is unchanged. With `deploy --strict-models` and an unresolved model, a failure document (see Exit codes) replaces the `RunSummary`. Scripting consumers should read from stdout and parse JSON; diagnostic messages go to stderr.
 
 ```sh
 result=$(mosaic-deploy deploy --harness claude-code --workspace /path --auto-confirm --output json)

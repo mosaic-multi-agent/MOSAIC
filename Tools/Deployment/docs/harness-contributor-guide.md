@@ -90,20 +90,18 @@ frontmatter:
 
 ### Register with MOSAIC
 
-Point MOSAIC at your descriptor file using the `--harness` flag:
+MOSAIC discovers the descriptor at startup. Select it by its id:
 
 ```
-mosaic-deploy --harness /path/to/my-harness.yaml deploy
+mosaic-deploy deploy --harness my-harness --workspace /path/to/project
 ```
-
-Or register it in your project's MOSAIC configuration file.
 
 ### Test it
 
-Run MOSAIC's built-in conformance check to verify your descriptor is well-formed:
+A dry run loads your descriptor and plans a deployment without writing anything:
 
 ```
-mosaic-deploy --harness /path/to/my-harness.yaml validate
+mosaic-deploy deploy --harness my-harness --workspace /path/to/project --dry-run --auto-confirm
 ```
 
 ---
@@ -308,10 +306,11 @@ validation rules.
 
 Before submitting a harness, verify:
 
-- [ ] Descriptor YAML is valid (`mosaic-deploy --harness myharness.yaml validate`)
+- [ ] Descriptor loads and plans (`mosaic-deploy deploy --harness my-harness --workspace <path> --dry-run --auto-confirm`)
 - [ ] All generic tool mappings are declared
 - [ ] Deployment paths are tested for `ScopeProject` on the target platforms; any other scope must return `ErrUnsupportedScope`
 - [ ] `injection("HarnessConstraints")` returns your constraints (or `ok=false` if none)
+- [ ] Orchestrators carry two harness regions: `HarnessConstraints` (from `HarnessInjections.md`) and `OrchestratorHarnessConstraints` (from `HarnessInjectionsOrchestrator.md`); subagents carry only the first. Each file needs a frontmatter `version`, which is the version of its region; a descriptor `injections_version` is ignored
 - [ ] `hook_plan` returns `Supported=false` with a non-empty `Reason` if hooks are not supported
 - [ ] `TargetPath` for an unknown artifact kind returns `ErrArtifactUnsupported` (code `"unsupported_artifact"`)
 - [ ] Each method returns consistent results on repeated calls with equal input (determinism)

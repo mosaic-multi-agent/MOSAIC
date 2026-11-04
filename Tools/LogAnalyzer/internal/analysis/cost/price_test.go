@@ -6,9 +6,10 @@ package cost_test
 //   - Each token category is priced independently at its configured rate.
 //   - An absent token category yields MoneyNoData (not MoneyKnown(0)).
 //   - A present-zero token count yields MoneyKnown(0) (distinct from absent).
-//   - Output tier is chosen per invocation from total context vs. threshold.
-//   - The cliff is all-or-nothing: context >= threshold reprices ALL output at the
-//     at-threshold rate, never only the excess tokens.
+//   - The tier is chosen per request from total context (input + cache read +
+//     cache write) vs. the long_context threshold and applies to all categories.
+//   - The cliff is all-or-nothing: context >= threshold reprices ALL output (and every
+//     other category) at the long-context rates, never only the excess tokens.
 //   - A model absent from the table yields Priced=false and every money cell
 //     MoneyUnpriced — token totals are still present in InvocationCost.Tokens.
 //
@@ -37,30 +38,30 @@ func mustParseRate(t *testing.T, s string) domain.Rate {
 	return r
 }
 
-// flatPricing returns a ModelPricing with no long-context threshold.
-// Rates: input="3.00", cachedInput="0.30", cacheWrite="3.75", output="15.00".
+// flatPricing returns a ModelPricing with no long-context tier.
+// Rates: input="3.00", cacheRead="0.30", cacheWrite5m="3.75", cacheWrite1h="6.00", output="15.00".
 func flatPricing(t *testing.T, model domain.ModelID) domain.ModelPricing {
 	t.Helper()
 	return domain.ModelPricing{
-		Model:                model,
-		Input:                mustParseRate(t, "3.00"),
-		CachedInput:          mustParseRate(t, "0.30"),
-		CacheWrite:           mustParseRate(t, "3.75"),
-		OutputUnderThreshold: mustParseRate(t, "15.00"),
-		HasThreshold:         false,
+		Model: model,
+		Standard: domain.RateSet{
+			Input:        mustParseRate(t, "3.00"),
+			CacheRead:    mustParseRate(t, "0.30"),
+			CacheWrite5m: mustParseRate(t, "3.75"),
+			CacheWrite1h: mustParseRate(t, "6.00"),
+			Output:       mustParseRate(t, "15.00"),
+		},
 	}
 }
 
-// tieredPricing returns a ModelPricing with a long-context threshold.
-// Rates: input="3.00", cachedInput="0.30", cacheWrite="3.75",
-//
-//	outputUnder="15.00", outputAt="22.50".
+// tieredPricing returns a ModelPricing with a long-context tier. The tier
+// repeats the standard rates except output, which is "22.50".
 func tieredPricing(t *testing.T, model domain.ModelID, threshold int64) domain.ModelPricing {
 	t.Helper()
 	p := flatPricing(t, model)
-	p.OutputAtThreshold = mustParseRate(t, "22.50")
-	p.ContextLengthThreshold = threshold
-	p.HasThreshold = true
+	p.HasLongContext = true
+	p.LongContext = domain.LongContextPricing{Threshold: threshold, Rates: p.Standard}
+	p.LongContext.Rates.Output = mustParseRate(t, "22.50")
 	return p
 }
 
@@ -116,7 +117,7 @@ func TestPriceInvocation_InputRate_CorrectAmount(t *testing.T) {
 	model := domain.ModelID("test-model")
 	table := testTable(flatPricing(t, model))
 
-	ic := cost.PriceInvocation(inv(model, domain.TokenUsage{
+	ic := priceAtDefaultTier(inv(model, domain.TokenUsage{
 		Input: domain.Tokens(1_000_000),
 	}), table)
 
@@ -132,7 +133,7 @@ func TestPriceInvocation_CacheReadRate_CorrectAmount(t *testing.T) {
 	model := domain.ModelID("test-model")
 	table := testTable(flatPricing(t, model))
 
-	ic := cost.PriceInvocation(inv(model, domain.TokenUsage{
+	ic := priceAtDefaultTier(inv(model, domain.TokenUsage{
 		CacheRead: domain.Tokens(1_000_000),
 	}), table)
 
@@ -144,7 +145,7 @@ func TestPriceInvocation_CacheCreationRate_CorrectAmount(t *testing.T) {
 	model := domain.ModelID("test-model")
 	table := testTable(flatPricing(t, model))
 
-	ic := cost.PriceInvocation(inv(model, domain.TokenUsage{
+	ic := priceAtDefaultTier(inv(model, domain.TokenUsage{
 		CacheCreation: domain.Tokens(1_000_000),
 	}), table)
 
@@ -156,7 +157,7 @@ func TestPriceInvocation_AllCategoriesPresent_AllMoneyKnown(t *testing.T) {
 	model := domain.ModelID("test-model")
 	table := testTable(flatPricing(t, model))
 
-	ic := cost.PriceInvocation(inv(model, domain.TokenUsage{
+	ic := priceAtDefaultTier(inv(model, domain.TokenUsage{
 		Input:         domain.Tokens(1_000_000),
 		CacheRead:     domain.Tokens(1_000_000),
 		CacheCreation: domain.Tokens(1_000_000),
@@ -183,7 +184,7 @@ func TestPriceInvocation_AbsentCategory_IsNoData(t *testing.T) {
 	model := domain.ModelID("test-model")
 	table := testTable(flatPricing(t, model))
 
-	ic := cost.PriceInvocation(inv(model, domain.TokenUsage{
+	ic := priceAtDefaultTier(inv(model, domain.TokenUsage{
 		Input:  domain.Tokens(1_000_000),
 		Output: domain.Tokens(1_000_000),
 		// CacheRead:     absent
@@ -207,7 +208,7 @@ func TestPriceInvocation_AllCategoriesAbsent_AllNoData(t *testing.T) {
 	model := domain.ModelID("test-model")
 	table := testTable(flatPricing(t, model))
 
-	ic := cost.PriceInvocation(inv(model, domain.TokenUsage{}), table) // all absent
+	ic := priceAtDefaultTier(inv(model, domain.TokenUsage{}), table) // all absent
 
 	assertNoData(t, "Input (all absent)", ic.Money.Input)
 	assertNoData(t, "CacheRead (all absent)", ic.Money.CacheRead)
@@ -221,7 +222,7 @@ func TestPriceInvocation_PresentZeroTokens_IsKnownZero(t *testing.T) {
 	model := domain.ModelID("test-model")
 	table := testTable(flatPricing(t, model))
 
-	ic := cost.PriceInvocation(inv(model, domain.TokenUsage{
+	ic := priceAtDefaultTier(inv(model, domain.TokenUsage{
 		Input: domain.Tokens(0), // present, value = 0
 	}), table)
 
@@ -243,7 +244,7 @@ func TestPriceInvocation_TokensStoredInResult(t *testing.T) {
 		Output: domain.Tokens(200),
 	}
 
-	ic := cost.PriceInvocation(inv(model, usage), table)
+	ic := priceAtDefaultTier(inv(model, usage), table)
 
 	if v, ok := ic.Tokens.Input.Value(); !ok || v != 500 {
 		t.Errorf("Tokens.Input = (%d, %v), want (500, true)", v, ok)
@@ -254,16 +255,16 @@ func TestPriceInvocation_TokensStoredInResult(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// T4.2 — Output tier selection within PriceInvocation
+// Output rate selection within PriceInvocation (full-tier behaviour: see price_request_test.go)
 // ---------------------------------------------------------------------------
 
 func TestPriceInvocation_BelowThreshold_UsesUnderRate(t *testing.T) {
-	// Context = 100_000 < threshold 200_000 → TierStandard → output at OutputUnderThreshold.
+	// Context = 100_000 < threshold 200_000 → TierStandard → output at standard output rate.
 	// 1_000_000 output tokens at "15.00"/1M = 15_000_000_000 nanos.
 	model := domain.ModelID("test-model")
 	table := testTable(tieredPricing(t, model, 200_000))
 
-	ic := cost.PriceInvocation(inv(model, domain.TokenUsage{
+	ic := priceAtDefaultTier(inv(model, domain.TokenUsage{
 		Input:  domain.Tokens(100_000), // context = 100K < threshold
 		Output: domain.Tokens(1_000_000),
 	}), table)
@@ -275,12 +276,12 @@ func TestPriceInvocation_BelowThreshold_UsesUnderRate(t *testing.T) {
 }
 
 func TestPriceInvocation_ExactlyAtThreshold_UsesAtRate(t *testing.T) {
-	// Context = 200_000 == threshold 200_000 → TierLongContext → output at OutputAtThreshold.
+	// Context = 200_000 == threshold 200_000 → TierLongContext → output at long-context output rate.
 	// 1_000_000 output tokens at "22.50"/1M = 22_500_000_000 nanos.
 	model := domain.ModelID("test-model")
 	table := testTable(tieredPricing(t, model, 200_000))
 
-	ic := cost.PriceInvocation(inv(model, domain.TokenUsage{
+	ic := priceAtDefaultTier(inv(model, domain.TokenUsage{
 		Input:  domain.Tokens(200_000), // context exactly at threshold
 		Output: domain.Tokens(1_000_000),
 	}), table)
@@ -292,11 +293,11 @@ func TestPriceInvocation_ExactlyAtThreshold_UsesAtRate(t *testing.T) {
 }
 
 func TestPriceInvocation_AboveThreshold_UsesAtRate(t *testing.T) {
-	// Context = 300_000 > threshold 200_000 → TierLongContext → output at OutputAtThreshold.
+	// Context = 300_000 > threshold 200_000 → TierLongContext → output at long-context output rate.
 	model := domain.ModelID("test-model")
 	table := testTable(tieredPricing(t, model, 200_000))
 
-	ic := cost.PriceInvocation(inv(model, domain.TokenUsage{
+	ic := priceAtDefaultTier(inv(model, domain.TokenUsage{
 		Input:  domain.Tokens(300_000), // context > threshold
 		Output: domain.Tokens(1_000_000),
 	}), table)
@@ -308,12 +309,12 @@ func TestPriceInvocation_AboveThreshold_UsesAtRate(t *testing.T) {
 }
 
 func TestPriceInvocation_NoThreshold_AlwaysUnderRate(t *testing.T) {
-	// HasThreshold=false → always TierStandard → output at OutputUnderThreshold.
+	// HasLongContext=false → always TierStandard → output at standard output rate.
 	// Even enormous context does not trigger a tier change.
 	model := domain.ModelID("test-model")
 	table := testTable(flatPricing(t, model))
 
-	ic := cost.PriceInvocation(inv(model, domain.TokenUsage{
+	ic := priceAtDefaultTier(inv(model, domain.TokenUsage{
 		Input:  domain.Tokens(999_999_999), // enormous context
 		Output: domain.Tokens(1_000_000),
 	}), table)
@@ -350,7 +351,7 @@ func TestPriceInvocation_CliffIsAllOrNothing(t *testing.T) {
 	model := domain.ModelID("test-model")
 	table := testTable(tieredPricing(t, model, 200_000))
 
-	ic := cost.PriceInvocation(inv(model, domain.TokenUsage{
+	ic := priceAtDefaultTier(inv(model, domain.TokenUsage{
 		Input:  domain.Tokens(250_000),
 		Output: domain.Tokens(1_000_000),
 	}), table)
@@ -380,7 +381,7 @@ func TestPriceInvocation_JustBelowCliff_UsesUnderRate(t *testing.T) {
 	model := domain.ModelID("test-model")
 	table := testTable(tieredPricing(t, model, 200_000))
 
-	ic := cost.PriceInvocation(inv(model, domain.TokenUsage{
+	ic := priceAtDefaultTier(inv(model, domain.TokenUsage{
 		Input:  domain.Tokens(199_999), // 1 below threshold
 		Output: domain.Tokens(1_000_000),
 	}), table)
@@ -392,7 +393,7 @@ func TestPriceInvocation_JustBelowCliff_UsesUnderRate(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// T4.4 — Per-invocation tiering granularity
+// Per-request tiering granularity
 // ---------------------------------------------------------------------------
 
 func TestSumCosts_TwoInvocations_TieredIndependently(t *testing.T) {
@@ -420,8 +421,8 @@ func TestSumCosts_TwoInvocations_TieredIndependently(t *testing.T) {
 		Output: domain.Tokens(1_000_000),
 	})
 
-	costA := cost.PriceInvocation(invA, table)
-	costB := cost.PriceInvocation(invB, table)
+	costA := priceAtDefaultTier(invA, table)
+	costB := priceAtDefaultTier(invB, table)
 
 	// Verify independent tier selection before checking the sum.
 	if costA.Tier != cost.TierStandard {
@@ -434,8 +435,8 @@ func TestSumCosts_TwoInvocations_TieredIndependently(t *testing.T) {
 	sum := cost.SumCosts(costA, costB)
 
 	const (
-		wantOutputNanos       = int64(37_500_000_000) // 15B + 22.5B — per-invocation tiering
-		wrongRunLevelTiering  = int64(45_000_000_000) // 2 × 22.5B — tiering the summed context
+		wantOutputNanos      = int64(37_500_000_000) // 15B + 22.5B — per-request tiering
+		wrongRunLevelTiering = int64(45_000_000_000) // 2 × 22.5B — tiering the summed context
 	)
 
 	if wantOutputNanos == wrongRunLevelTiering {
@@ -446,7 +447,7 @@ func TestSumCosts_TwoInvocations_TieredIndependently(t *testing.T) {
 		t.Fatalf("sum.Output state = %v, want MoneyKnown", sum.Output.State)
 	}
 	if got := sum.Output.Amount.Nanos(); got != wantOutputNanos {
-		t.Errorf("sum.Output = %d nanos, want %d (per-invocation tiering, not run-level tiering); run-level tiering would give %d",
+		t.Errorf("sum.Output = %d nanos, want %d (per-request tiering, not run-level tiering); run-level tiering would give %d",
 			got, wantOutputNanos, wrongRunLevelTiering)
 	}
 }
@@ -459,7 +460,7 @@ func TestPriceInvocation_ModelNotInTable_PricedFalse(t *testing.T) {
 	// A model absent from the pricing table yields Priced=false.
 	table := domain.EmptyPricingTable()
 
-	ic := cost.PriceInvocation(inv("unknown-model", domain.TokenUsage{
+	ic := priceAtDefaultTier(inv("unknown-model", domain.TokenUsage{
 		Input:  domain.Tokens(1_000_000),
 		Output: domain.Tokens(1_000_000),
 	}), table)
@@ -474,7 +475,7 @@ func TestPriceInvocation_ModelNotInTable_AllMoneyIsUnpriced(t *testing.T) {
 	// never MoneyKnown(0). This is required by AC4.5.
 	table := domain.EmptyPricingTable()
 
-	ic := cost.PriceInvocation(inv("unknown-model", domain.TokenUsage{
+	ic := priceAtDefaultTier(inv("unknown-model", domain.TokenUsage{
 		Input:  domain.Tokens(1_000_000),
 		Output: domain.Tokens(1_000_000),
 	}), table)
@@ -490,7 +491,7 @@ func TestPriceInvocation_ModelNotInTable_TokensPreserved(t *testing.T) {
 	// The pricing gap is an explicit money state, not a reason to discard usage data.
 	table := domain.EmptyPricingTable()
 
-	ic := cost.PriceInvocation(inv("unknown-model", domain.TokenUsage{
+	ic := priceAtDefaultTier(inv("unknown-model", domain.TokenUsage{
 		Input:  domain.Tokens(100_000),
 		Output: domain.Tokens(50_000),
 	}), table)
@@ -509,11 +510,11 @@ func TestSumCosts_MixedPricedAndUnpriced_CompleteFalse(t *testing.T) {
 	model := domain.ModelID("test-model")
 	table := testTable(flatPricing(t, model))
 
-	pricedCost := cost.PriceInvocation(inv(model, domain.TokenUsage{
+	pricedCost := priceAtDefaultTier(inv(model, domain.TokenUsage{
 		Input:  domain.Tokens(1_000_000),
 		Output: domain.Tokens(1_000_000),
 	}), table)
-	unpricedCost := cost.PriceInvocation(inv("unknown-model", domain.TokenUsage{
+	unpricedCost := priceAtDefaultTier(inv("unknown-model", domain.TokenUsage{
 		Input:  domain.Tokens(500_000),
 		Output: domain.Tokens(500_000),
 	}), domain.EmptyPricingTable())
@@ -529,8 +530,8 @@ func TestSumCosts_AllUnpriced_TotalIsUnpricedAndIncompleteFalse(t *testing.T) {
 	// When every invocation is unpriced, Complete=false.
 	emptyTable := domain.EmptyPricingTable()
 
-	cost1 := cost.PriceInvocation(inv("model-a", domain.TokenUsage{Input: domain.Tokens(1_000_000)}), emptyTable)
-	cost2 := cost.PriceInvocation(inv("model-b", domain.TokenUsage{Input: domain.Tokens(2_000_000)}), emptyTable)
+	cost1 := priceAtDefaultTier(inv("model-a", domain.TokenUsage{Input: domain.Tokens(1_000_000)}), emptyTable)
+	cost2 := priceAtDefaultTier(inv("model-b", domain.TokenUsage{Input: domain.Tokens(2_000_000)}), emptyTable)
 
 	sum := cost.SumCosts(cost1, cost2)
 
@@ -546,8 +547,8 @@ func TestSumCosts_AllPriced_CompleteTrueWithCorrectTotal(t *testing.T) {
 	table := testTable(flatPricing(t, model))
 
 	// Two invocations: 1M input each at "3.00"/1M = 3_000_000_000 nanos each.
-	cost1 := cost.PriceInvocation(inv(model, domain.TokenUsage{Input: domain.Tokens(1_000_000)}), table)
-	cost2 := cost.PriceInvocation(inv(model, domain.TokenUsage{Input: domain.Tokens(1_000_000)}), table)
+	cost1 := priceAtDefaultTier(inv(model, domain.TokenUsage{Input: domain.Tokens(1_000_000)}), table)
+	cost2 := priceAtDefaultTier(inv(model, domain.TokenUsage{Input: domain.Tokens(1_000_000)}), table)
 
 	sum := cost.SumCosts(cost1, cost2)
 
@@ -569,4 +570,10 @@ func TestSumCosts_Empty_ReturnsNoDataAndComplete(t *testing.T) {
 	if sum.Input.State != domain.MoneyNoData {
 		t.Errorf("Input state = %v, want MoneyNoData (empty sum)", sum.Input.State)
 	}
+}
+
+// priceAtDefaultTier prices inv with the built-in default cache-write tier, the
+// behavior of a harness without a configured tier.
+func priceAtDefaultTier(inv domain.InvocationUsage, table domain.PricingTable) cost.InvocationCost {
+	return cost.PriceInvocation(inv, table, domain.DefaultCacheWriteTier)
 }

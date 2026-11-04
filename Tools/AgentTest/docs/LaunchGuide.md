@@ -141,6 +141,8 @@ Tools\AgentTest\dist\mosaic-agent-test.exe validate <suite-file>
 
 The CLI exits with a structured result and is suitable for scripted use, CI, and cases where stdout must carry the machine-readable report (`--format json`).
 
+**`--subject-model <id>`** is required on every `run` and `validate`. A run without a subject model selection is rejected by preflight before anything is deployed or spawned; the harness default model never stands in. `--stub-model <id>` is optional and defaults to the subject model. In the TUI the same selection is made on the model screen. Preflight also rejects a test catalogue whose agents declare a `recommended_tier` other than `TEST-SUBJECT` or `TEST-STUB`.
+
 **`--max-concurrent-runs <n>`** sets how many tests × repetitions run concurrently across the entire suite. The default is `4` (see the Max concurrent runs section under the TUI settings above for the full rationale). A value of `1` is strictly sequential. Values below `1` are rejected as a usage error.
 
 ```
@@ -344,6 +346,8 @@ MOSAIC_AGENT_TEST_MOSAIC_ROOT=D:\my-config-root
 **Option 1 is the standard path.**
 
 ### 8.3 Cost Attribution Diagnostics
+
+Cost is computed and recorded in report files (`total_cost`, per-run `cost`), but it is not shown in any summary or display: not in the text report, CLI progress lines, the TUI, or the generated summary markdown.
 
 A run's cost report can produce one of four attribution values. Each names a distinct failure cause:
 

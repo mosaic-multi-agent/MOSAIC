@@ -50,12 +50,13 @@ var gapToCategory = map[domain.GapKind]domain.TodoCategory{
 
 // collector is the concrete Collector implementation.
 type collector struct {
-	items []domain.TodoItem
+	items    []domain.TodoItem
+	gapsSeen map[string]bool
 }
 
 // NewCollector creates a new, empty Collector.
 func NewCollector() Collector {
-	return &collector{}
+	return &collector{gapsSeen: make(map[string]bool)}
 }
 
 // Add stores a TodoItem directly. All fields are preserved verbatim.
@@ -63,8 +64,14 @@ func (c *collector) Add(item domain.TodoItem) {
 	c.items = append(c.items, item)
 }
 
-// AddGap converts a Gap into a TodoItem using gapToCategory and stores it.
+// AddGap converts a Gap into a TodoItem using gapToCategory and stores it, unless a gap with the
+// same identity (see gapIdentity) was already added since the last Reset.
 func (c *collector) AddGap(g domain.Gap) {
+	id := gapIdentity(g)
+	if c.gapsSeen[id] {
+		return
+	}
+	c.gapsSeen[id] = true
 	cat, ok := gapToCategory[g.Kind]
 	if !ok {
 		cat = domain.TodoManual
@@ -75,6 +82,7 @@ func (c *collector) AddGap(g domain.Gap) {
 		Owner:    g.Owner,
 		Detail:   g.Detail,
 		Fragment: g.Fragment,
+		Kind:     g.Kind,
 	})
 }
 
@@ -110,6 +118,7 @@ func (c *collector) Items() []domain.TodoItem {
 // results until new items are added.
 func (c *collector) Reset() {
 	c.items = c.items[:0]
+	c.gapsSeen = make(map[string]bool)
 }
 
 // Groups returns items partitioned by category in the same order as Items. Only categories

@@ -666,27 +666,27 @@ func TestDescriptorOnly_OrchestratorContent_OverlaidForOrchestratorAgent(t *test
 	id := "descriptor-orchoverlay-test"
 	wantContent := "orchestrator-tier-constraint"
 	yamlContent := fmt.Sprintf("schema_version: \"1\"\nid: %q\ndisplay_name: \"Orch Overlay Test\"\n", id)
-	injectionsMd := "# Shared — no regions\n"
+	injectionsMd := "---\nversion: \"1.0.0\"\n---\n# Shared — no regions\n"
 	orchMd := fmt.Sprintf(`---
 version: "1.0.0"
 ---
 
 # Orchestrator Injections
 
-<HarnessConstraints type="managed">
+<OrchestratorHarnessConstraints type="managed">
 %s
-</HarnessConstraints>
+</OrchestratorHarnessConstraints>
 `, wantContent)
 	root := makeDescriptorRootWithOrchestratorContent(t, id, yamlContent, injectionsMd, orchMd)
 	m := resolveDescriptorOnly(t, root, id)
 
-	got, ok := m.Injection(domain.InjectionRequest{Name: "HarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
+	got, ok := m.Injection(domain.InjectionRequest{Name: "OrchestratorHarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
 	if !ok {
-		t.Errorf("Injection(HarnessConstraints, orchestrator, RoleOrchestrator) returned ok=false; " +
+		t.Errorf("Injection(OrchestratorHarnessConstraints, orchestrator, RoleOrchestrator) returned ok=false; " +
 			"managed content from HarnessInjectionsOrchestrator.md must be served to the orchestrator agent")
 	}
 	if ok && got != wantContent {
-		t.Errorf("Injection(HarnessConstraints, orchestrator, RoleOrchestrator) = %q, want %q", got, wantContent)
+		t.Errorf("Injection(OrchestratorHarnessConstraints, orchestrator, RoleOrchestrator) = %q, want %q", got, wantContent)
 	}
 }
 
@@ -737,23 +737,23 @@ func TestDescriptorOnly_OrchestratorRole_NonOrchestratorKey_ReturnsMergedContent
 	id := "descriptor-orchrole-nonkey-test"
 	wantContent := "orchestrator-tier-constraint-for-role-test"
 	yamlContent := fmt.Sprintf("schema_version: \"1\"\nid: %q\ndisplay_name: \"Orch Role Non-Key Test\"\n", id)
-	injectionsMd := "# Shared -- no regions\n"
+	injectionsMd := "---\nversion: \"1.0.0\"\n---\n# Shared -- no regions\n"
 	orchMd := fmt.Sprintf(`---
 version: "1.0.0"
 ---
 
 # Orchestrator Injections
 
-<HarnessConstraints type="managed">
+<OrchestratorHarnessConstraints type="managed">
 %s
-</HarnessConstraints>
+</OrchestratorHarnessConstraints>
 `, wantContent)
 	root := makeDescriptorRootWithOrchestratorContent(t, id, yamlContent, injectionsMd, orchMd)
 	m := resolveDescriptorOnly(t, root, id)
 
 	// Orchestrator-role agent with non-"orchestrator" key must receive orchestrator content.
 	got, ok := m.Injection(domain.InjectionRequest{
-		Name:     "HarnessConstraints",
+		Name:     "OrchestratorHarnessConstraints",
 		AgentKey: "orchestrator-script", // not "orchestrator"
 		Role:     domain.RoleOrchestrator,
 	})
@@ -779,22 +779,22 @@ func TestDescriptorOnly_OrchestratorContent_NotServedToNonOrchestratorAgent(t *t
 	orchContent := "orchestrator-only-value"
 	yamlContent := fmt.Sprintf("schema_version: \"1\"\nid: %q\ndisplay_name: \"Orch No Worker Test\"\n", id)
 	// Shared file is empty; orch file has content. Only orchestrator agent should see it.
-	injectionsMd := "# Shared — no regions\n"
+	injectionsMd := "---\nversion: \"1.0.0\"\n---\n# Shared — no regions\n"
 	orchMd := fmt.Sprintf(`---
 version: "1.0.0"
 ---
 
-<HarnessConstraints type="managed">
+<OrchestratorHarnessConstraints type="managed">
 %s
-</HarnessConstraints>
+</OrchestratorHarnessConstraints>
 `, orchContent)
 	root := makeDescriptorRootWithOrchestratorContent(t, id, yamlContent, injectionsMd, orchMd)
 	m := resolveDescriptorOnly(t, root, id)
 
 	// Non-orchestrator agent must not receive orchestrator-only content.
-	_, ok := m.Injection(domain.InjectionRequest{Name: "HarnessConstraints", AgentKey: "worker"})
+	_, ok := m.Injection(domain.InjectionRequest{Name: "OrchestratorHarnessConstraints", AgentKey: "worker"})
 	if ok {
-		t.Errorf("Injection(HarnessConstraints, worker) returned ok=true; " +
+		t.Errorf("Injection(OrchestratorHarnessConstraints, worker) returned ok=true; " +
 			"orchestrator-only content must not be served to non-orchestrator agents")
 	}
 }

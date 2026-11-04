@@ -22,6 +22,11 @@ type runState struct {
 	// FindingCrossStreamRecord has already been raised. Subsequent foreign
 	// observations of the same record_id produce no additional finding.
 	crossStreamReported map[string]bool
+	// activity accumulates the run model; nil until the first related event.
+	activity *runActivityState
+	facts    *factsState // digest facts; nil until the first event
+	// unattributed holds the run-level usage of the unattributed stream; nil if none.
+	unattributed *actorState
 }
 
 // actorState holds mutable state for one actor within a run.
@@ -95,6 +100,11 @@ func NewAggregator() *Aggregator {
 // attributed to an actor produce a Finding rather than being dropped silently.
 func (a *Aggregator) Add(ref domain.StreamRef, ev domain.Event) {
 	rs := a.getOrCreateRunState(ref.Run)
+	if ref.Kind == domain.StreamUnattributed {
+		a.addUnattributed(rs, ref, ev)
+		return
+	}
+	a.recordFacts(rs, ref, ev)
 
 	// Handle run-completion markers before any other processing.
 	switch ev.Type {
@@ -106,7 +116,12 @@ func (a *Aggregator) Add(ref domain.StreamRef, ev domain.Event) {
 	// Benign event types carry no attribution-relevant field blocks.
 	// They must be silently discarded with no finding and no totals change.
 	switch ev.Type {
-	case domain.EventOther, domain.EventRunStart, domain.EventSessionStart:
+	case domain.EventOther, domain.EventRunStart, domain.EventSessionStart, domain.EventNotification:
+		return
+	}
+
+	// Tool-call and compaction events feed the run model only.
+	if a.recordToolOrCompaction(rs, ref, ev) {
 		return
 	}
 
@@ -170,9 +185,12 @@ func (a *Aggregator) handleOrchestratorEvent(rs *runState, ref domain.StreamRef,
 			return
 		}
 		rs.orchestrator.invocations = append(rs.orchestrator.invocations, domain.InvocationUsage{
-			Model:   ev.Turn.Model,
-			Harness: ev.Harness,
-			Usage:   ev.Turn.Usage,
+			Model:    ev.Turn.Model,
+			Provider: ev.Turn.Provider,
+			Harness:  ev.Harness,
+			Usage:    ev.Turn.Usage,
+			At:       ev.Timestamp,
+			Kind:     domain.CallMain,
 		})
 
 	default:
@@ -205,122 +223,6 @@ func (a *Aggregator) handleAgentEvent(rs *runState, ref domain.StreamRef, ev dom
 	}
 }
 
-// handleAgentUsageRecord processes a usage_record event on a subagent instance
-// stream, resolving the actor identity (event field wins over folder hint,
-// same as invocation_end) and routing it into that actor's per-record total.
-func (a *Aggregator) handleAgentUsageRecord(rs *runState, ref domain.StreamRef, ev domain.Event) {
-	if ev.UsageRecord == nil {
-		return
-	}
-
-	rec := ev.UsageRecord
-
-	id := rec.AgentInstanceID
-	if id == "" {
-		id = ref.InstanceHint
-	}
-	if id == "" {
-		a.findings = append(a.findings, domain.Finding{
-			Kind:     domain.FindingUnidentifiedEvent,
-			Severity: domain.SeverityWarning,
-			Run:      ref.Run,
-			Detail:   "usage_record with no usable agent_instance_id",
-		})
-		return
-	}
-
-	as := a.getOrCreateActorState(rs, id)
-	a.handleUsageRecord(rs, ref, ev, as)
-}
-
-// handleUsageRecord applies two rules in order for each usage_record event:
-//
-//  1. Single-stream check (run-scoped): for a non-empty record_id, consult
-//     the run's ownership registry. If the record is absent, register this
-//     actor as owner and proceed to rule 2. If the record is already owned by
-//     this same actor, it is ordinary re-observation — proceed to rule 2. If
-//     the record is owned by a different actor, raise exactly one
-//     FindingCrossStreamRecord (the first time only) and return without
-//     contributing the record to this actor's total.
-//
-//  2. Supersede (per-actor): for a non-empty record_id already held by this
-//     actor, replace the stored entry in place (last observation wins),
-//     preserving file order and record count. For a record_id not yet held,
-//     append in file order. For an empty record_id, append and raise
-//     FindingUnidentifiedEvent.
-func (a *Aggregator) handleUsageRecord(rs *runState, ref domain.StreamRef, ev domain.Event, as *actorState) {
-	rec := ev.UsageRecord
-	if rec == nil {
-		return
-	}
-
-	entry := domain.InvocationUsage{
-		Model:   rec.Model,
-		Harness: ev.Harness,
-		Usage:   rec.Usage,
-	}
-
-	if rec.RecordID == "" {
-		// Empty record_id: cannot enter either registry or supersede map.
-		a.findings = append(a.findings, domain.Finding{
-			Kind:     domain.FindingUnidentifiedEvent,
-			Severity: domain.SeverityWarning,
-			Run:      ref.Run,
-			Actor:    as.actor,
-			Detail:   "usage_record with no record_id",
-		})
-		as.records = append(as.records, entry)
-		return
-	}
-
-	// Rule 1: single-stream invariant check.
-	if owner, owned := rs.recordOwners[rec.RecordID]; owned {
-		if !sameActorIdentity(owner, as.actor) {
-			// Cross-stream violation: raise at most one finding per record.
-			if !rs.crossStreamReported[rec.RecordID] {
-				rs.crossStreamReported[rec.RecordID] = true
-				a.findings = append(a.findings, domain.Finding{
-					Kind:     domain.FindingCrossStreamRecord,
-					Severity: domain.SeverityWarning,
-					Path:     ref.Path,
-					Line:     0,
-					Run:      ref.Run,
-					Actor:    as.actor,
-					Detail: "usage_record " + rec.RecordID +
-						" already attributed to " + owner.Label() +
-						"; duplicate on " + as.actor.Label() + " ignored",
-				})
-			}
-			return
-		}
-		// Same actor: fall through to per-actor supersede.
-	} else {
-		// First time this record_id is seen in this run: register ownership.
-		rs.recordOwners[rec.RecordID] = as.actor
-	}
-
-	// Rule 2: per-actor supersede.
-	if as.recordIndex == nil {
-		as.recordIndex = make(map[string]int)
-	}
-	if idx, seen := as.recordIndex[rec.RecordID]; seen {
-		// Last observation wins: replace in place, preserving file order and count.
-		as.records[idx] = entry
-		return
-	}
-
-	// First observation for this actor: append and record its position.
-	as.recordIndex[rec.RecordID] = len(as.records)
-	as.records = append(as.records, entry)
-}
-
-// sameActorIdentity reports whether two ActorRefs identify the same stream
-// owner. It compares only Kind and Instance, deliberately ignoring Type (the
-// agent_type hint from invocation_start) which is not part of stream identity.
-func sameActorIdentity(a, b domain.ActorRef) bool {
-	return a.Kind == b.Kind && a.Instance == b.Instance
-}
-
 // handleInvocationStart processes an invocation_start event.
 // It supplies agent_type but carries no token usage.
 func (a *Aggregator) handleInvocationStart(rs *runState, ref domain.StreamRef, ev domain.Event) {
@@ -336,6 +238,7 @@ func (a *Aggregator) handleInvocationStart(rs *runState, ref domain.StreamRef, e
 		return
 	}
 
+	rs.recordInvocationStart(id, ev.Timestamp)
 	as := a.getOrCreateActorState(rs, id)
 	if ev.InvocationStart.AgentType != "" {
 		as.actor.Type = ev.InvocationStart.AgentType
@@ -367,6 +270,7 @@ func (a *Aggregator) handleInvocationEnd(rs *runState, ref domain.StreamRef, ev 
 		return
 	}
 
+	rs.recordInvocationEnd(id, end, ev.Timestamp)
 	actor := domain.AgentInstance(id)
 
 	// Quality findings do not halt aggregation; the invocation is still recorded.
@@ -393,9 +297,12 @@ func (a *Aggregator) handleInvocationEnd(rs *runState, ref domain.StreamRef, ev 
 	as := a.getOrCreateActorState(rs, id)
 	// Preserve the actor instance set at creation; only add the invocation record.
 	as.invocations = append(as.invocations, domain.InvocationUsage{
-		Model:   end.Model,
-		Harness: ev.Harness,
-		Usage:   end.Usage,
+		Model:    end.Model,
+		Provider: end.Provider,
+		Harness:  ev.Harness,
+		Usage:    end.Usage,
+		At:       ev.Timestamp,
+		Kind:     domain.CallMain,
 	})
 }
 
@@ -460,13 +367,17 @@ func buildRunAggregate(rs *runState) domain.RunAggregate {
 		})
 	}
 
-	return domain.RunAggregate{
+	out := domain.RunAggregate{
 		Run:         rs.run,
 		Provisional: rs.provisional,
 		Orchestrator: domain.ActorAggregate{
 			Actor:       rs.orchestrator.actor,
 			Invocations: rs.orchestrator.effective(),
 		},
-		Agents: agents,
+		Agents:   agents,
+		Activity: buildActivity(rs),
 	}
+	out.Unattributed = unattributedAggregate(rs)
+	applyFacts(rs, &out)
+	return out
 }

@@ -484,7 +484,7 @@ func iterationEndRig(t *testing.T, kind dispatchPathKind, review ...harness.Scri
 		WorkflowVersion: "1.0",
 		Task:            "test task",
 		GlobalSequence:  1,
-		RunSettings:     domain.RunSettings{Mode: modeFor(kind)},
+		RunSettings:     commitsRecorded(domain.RunSettings{Mode: modeFor(kind)}),
 		CurrentState: domain.CurrentState{
 			Phase:      "EXECUTION",
 			Stage:      "1",

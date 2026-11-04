@@ -16,10 +16,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"mosaic-common/docformat"
 	"mosaic-deploy/internal/config"
+	"mosaic-deploy/internal/agentkey"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/transform"
 )
@@ -93,9 +93,9 @@ func renderAgent(_ context.Context, s *service, req RenderAgentRequest) (RenderA
 		}
 
 		sourcePath = req.SourcePath
-		// Agent key: base name without extension (strips .md or any other extension).
+		// Agent key: base name without a trailing .agent.md or .md.
 		base := filepath.Base(req.SourcePath)
-		agentKey = strings.TrimSuffix(base, filepath.Ext(base))
+		agentKey = agentkey.FromFileName(base)
 	} else {
 		// Source from catalogue.
 		agent, ok := s.deps.Catalog.Agent(req.SourceAgentKey)

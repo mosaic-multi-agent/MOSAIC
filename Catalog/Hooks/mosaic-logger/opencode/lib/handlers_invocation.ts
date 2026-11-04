@@ -13,7 +13,8 @@
  */
 
 import { currentTimestamp, effectiveRunId, debugLog } from "./core.js";
-import { extractInstanceId, extractRunId, extractStatusCode, fallbackInstanceId } from "./runstate.js";
+import { extractInstanceId, extractStatusCode, fallbackInstanceId } from "./runstate.js";
+import { dispatchRunId } from "./run_binding.js";
 import { renderInput, renderOutput, writeArtifact } from "./artifacts.js";
 import { exportSession, exportOrchestratorTranscript } from "./export.js";
 import type { HandlerDependencies } from "./handlers_session.js";
@@ -153,7 +154,7 @@ export function createInvocationHandlers(deps: HandlerDependencies): {
       }
       promptText = extractFirstUserText(messages);
       agentInstanceId = extractInstanceId(promptText);
-      extractedRunId = extractRunId(promptText);
+      extractedRunId = dispatchRunId(promptText);
       // Derive agent type from the instance id when no separate agentType field
       if (agentInstanceId?.includes("#")) {
         agentType = agentInstanceId.split("#")[0];

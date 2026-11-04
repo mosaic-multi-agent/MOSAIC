@@ -31,6 +31,7 @@ import (
 	"mosaic-agent-test/internal/harness/claudecode"
 	"mosaic-agent-test/internal/harness/opencode"
 	"mosaic-agent-test/internal/launch"
+	"mosaic-agent-test/internal/modelevidence"
 	"mosaic-agent-test/internal/preflight"
 	"mosaic-agent-test/internal/report"
 	"mosaic-agent-test/internal/resultstore"
@@ -418,6 +419,11 @@ type Deps struct {
 	FixtureFactory fixtures.ResolverFactory
 	Effects        sideeffects.Applier
 	Cost      domain.CostProvider
+
+	// ObservedModels reports which model the subject of a run actually used,
+	// from the run's logs.
+	ObservedModels domain.ObservedModelProvider
+
 	Clock     domain.Clock
 	Preflight func(preflight.Input) (preflight.Plan, authoring.Report)
 
@@ -590,6 +596,12 @@ func buildDeps(cfg WiringConfig) (Deps, error) {
 		WorkingDir:     cfg.MosaicRoot,
 	})
 
+	observedModels := modelevidence.New(modelevidence.Options{
+		ExecutablePath: cfg.CostToolPath,
+		Timeout:        cfg.CostTimeout,
+		WorkingDir:     cfg.MosaicRoot,
+	})
+
 	// Construct the deployment port once, here. Both Deps.Deploy (for the
 	// runner) and Deps.Preflight (for dry-run declaration validation) close
 	// over the same value, so preflight and the runner can never validate
@@ -618,6 +630,7 @@ func buildDeps(cfg WiringConfig) (Deps, error) {
 		FixtureFactory: fixtureFactory,
 		Effects:        effects,
 		Cost:           costProvider,
+		ObservedModels: observedModels,
 		Clock:          systemClock{},
 		Preflight: func(in preflight.Input) (preflight.Plan, authoring.Report) {
 			in.MosaicRootProvenance = provenance
@@ -756,6 +769,7 @@ func (r composedSuiteRunner) Run(ctx context.Context, p preflight.Plan, sink dom
 	// process-wide deployer from RunnerDeps.
 	if p.CatalogFolder != r.deps.CatalogFolder && r.deps.NewDeployer != nil {
 		rd.Deploy = r.deps.NewDeployer(p.CatalogFolder)
+		rd.CatalogFolder = p.CatalogFolder
 	}
 
 	ctor := r.newSuite
@@ -882,11 +896,13 @@ func (d Deps) RunnerDeps(ws workspace.Manager, progress domain.ProgressSink, bun
 		FixtureFactory: d.FixtureFactory,
 		Effects:        d.Effects,
 		Cost:           d.Cost,
+		ObservedModels: d.ObservedModels,
 		Clock:          d.Clock,
 		Progress:       progress,
 		Deploy:         d.Deploy,
+		CatalogFolder:  d.CatalogFolder,
 
-		SelfPath:        d.SelfPath,
+		SelfPath:       d.SelfPath,
 		LoggerBundleDir: d.LoggerBundleDir,
 		InterpreterCmd:  bundle.InterpreterCmd,
 

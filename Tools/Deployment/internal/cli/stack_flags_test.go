@@ -26,7 +26,7 @@ func stackFlagSubcommands(workspace string) map[string][]string {
 		"hooks":       {"hooks", "--harness", "stub-harness", "--workspace", workspace, "--hooks", "", "--yes"},
 		"render":      {"render", "--harness", "stub-harness", "--source-agent", "orchestrator", "--dest", "/tmp/output.md"},
 		"promote":     {"promote", "--file", "/nonexistent/agent.md", "--harness", "stub-harness"},
-		"transform":   {"transform", "--harness", "stub-harness", "--target-harness", "other-harness", "--path", "/nonexistent/agent.md"},
+		"transform":   {"transform", "--harness", "stub-harness", "--target-harness", "other-harness", "--workspace", "/nonexistent/agent.md"},
 		"check-index": {"check-index"},
 	}
 }

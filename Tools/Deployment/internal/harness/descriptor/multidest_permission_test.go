@@ -556,10 +556,10 @@ func TestMultiDestPermission_Regression_NoCustomDest_CustomToolUsesDestMain(t *t
 	}
 }
 
-// TestMultiDestPermission_Regression_NoCustomDest_PermissionMapContainsOnlyUniverse asserts
-// that with no CustomToolDestinations, the permission map is Universe-only (the custom name
-// does not appear as a pair key since it is not a Universe tool).
-func TestMultiDestPermission_Regression_NoCustomDest_PermissionMapContainsOnlyUniverse(t *testing.T) {
+// TestMultiDestPermission_Regression_NoCustomDest_PermissionMapAppendsCustomAfterUniverse asserts
+// that with no CustomToolDestinations, the custom name falls through to the main destination and
+// is appended once with value allow after the Universe pairs.
+func TestMultiDestPermission_Regression_NoCustomDest_PermissionMapAppendsCustomAfterUniverse(t *testing.T) {
 	d := makePermNoCustomDestDescriptor()
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
@@ -573,14 +573,16 @@ func TestMultiDestPermission_Regression_NoCustomDest_PermissionMapContainsOnlyUn
 		t.Fatalf("MapTools: %v", err)
 	}
 	pairs := permPairs(t, result)
-	// Universe has 2 tools; the map must have exactly 2 pairs.
-	if len(pairs) != 2 {
-		t.Errorf("permission map pairs count: want 2 (Universe tools only), got %d: %v", len(pairs), pairs)
+	// Universe has 2 tools; the custom server is appended as the third and last pair.
+	if len(pairs) != 3 {
+		t.Fatalf("permission map pairs count: want 3 (2 Universe tools + custom), got %d: %v", len(pairs), pairs)
 	}
-	for _, p := range pairs {
-		if p.Key == "my-server" {
-			t.Errorf("custom name %q must not appear in the permission map (unchanged regression)", "my-server")
-		}
+	last := pairs[2]
+	if last.Key != "my-server" {
+		t.Errorf("last pair key: want %q appended after Universe pairs, got %q", "my-server", last.Key)
+	}
+	if last.Value.Scalar != string(domain.Allow) {
+		t.Errorf("custom pair value: want %q, got %q", domain.Allow, last.Value.Scalar)
 	}
 }
 

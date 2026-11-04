@@ -92,7 +92,7 @@ func TestStackFlow_PathScreenKind_FollowsTheMode(t *testing.T) {
 		{"deploy-hooks takes a directory", domain.ModeDeployHooks, dir, true},
 		{"promote takes a file", domain.ModePromoteToGeneric, file, true},
 		{"promote rejects a directory", domain.ModePromoteToGeneric, dir, false},
-		{"transform takes a file", domain.ModeTransformHarness, file, true},
+		{"transform rejects a file", domain.ModeTransformHarness, file, false},
 		{"transform takes a directory", domain.ModeTransformHarness, dir, true},
 	}
 	for _, tc := range cases {
@@ -118,8 +118,14 @@ func TestStackFlow_PrefilledPath_IsShownOnThePathScreenBeforeTheStackScreen(t *t
 
 			f.toPath(t)
 
-			if !strings.Contains(f.m.View(), f.path) {
-				t.Errorf("the path screen does not show the pre-filled path %q:\n%s", f.path, f.m.View())
+			// The input is width-bounded, so a long path is windowed around the
+			// cursor (at the end of the value): the path's tail must be visible.
+			tail := f.path
+			if len(tail) > 12 {
+				tail = tail[len(tail)-12:]
+			}
+			if !strings.Contains(f.m.View(), tail) {
+				t.Errorf("the path screen does not show the end of the pre-filled path %q:\n%s", f.path, f.m.View())
 			}
 			if f.onStack() {
 				t.Error("the stack screen is showing instead of the pre-filled path screen")

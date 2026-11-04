@@ -4,10 +4,12 @@ package domain
 type SourceKind uint8
 
 const (
-	SourceNotFound  SourceKind = iota // nothing at the probed/supplied location
-	SourceLogsRoot                    // a tree of run folders
-	SourceSingleRun                   // the path is itself one run folder
-	SourceUnusable                    // exists but is not a logs tree
+	SourceNotFound   SourceKind = iota // nothing at the probed/supplied location
+	SourceLogsRoot                     // a tree of run folders
+	SourceSingleRun                    // the path is itself one run folder
+	SourceUnusable                     // exists but is not a logs tree
+	SourceDigestFile                   // the path is one digest file
+	SourceDigestDir                    // a directory holding digests and no log structure
 )
 
 // Source describes a resolved (or unresolved) log source. It is never an error.
@@ -17,9 +19,11 @@ type Source struct {
 	Reason string // human-readable, set only when Kind == SourceUnusable
 }
 
-// IsUsable reports whether the source Kind is LogsRoot or SingleRun.
+// IsUsable reports whether the source holds analysable data: a logs root, a
+// single run folder, a digest file or a directory of digests.
 func (s Source) IsUsable() bool {
-	return s.Kind == SourceLogsRoot || s.Kind == SourceSingleRun
+	return s.Kind == SourceLogsRoot || s.Kind == SourceSingleRun ||
+		s.Kind == SourceDigestFile || s.Kind == SourceDigestDir
 }
 
 // AgentEntry is one agent-instance folder discovered by structure alone.
@@ -36,7 +40,8 @@ type AgentEntry struct {
 type RunEntry struct {
 	Run              RunRef
 	Dir              string
-	OrchestratorFile string   // "" when 00_orchestrator_events.jsonl is absent
+	OrchestratorFile string       // "" when 00_orchestrator_events.jsonl is absent
+	UnattributedFile string       // "" when 00_unattributed_events.jsonl is absent
 	Agents           []AgentEntry // sorted by Dir
 }
 
@@ -58,8 +63,9 @@ func (i Inventory) IsEmpty() bool {
 type StreamKind uint8
 
 const (
-	StreamOrchestrator  StreamKind = iota
+	StreamOrchestrator StreamKind = iota
 	StreamAgentInstance
+	StreamUnattributed // run-root 00_unattributed_events.jsonl
 )
 
 // StreamRef is the provenance the reader/app attaches to every event handed to

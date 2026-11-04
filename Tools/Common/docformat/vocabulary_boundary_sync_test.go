@@ -291,7 +291,7 @@ func TestVocabulary_CanonicalOrder_ExactSixSlotSequence(t *testing.T) {
 }
 
 func TestVocabulary_CanonicalDeployed_ExactEightNameSequence(t *testing.T) {
-	// Authoritative 8-name closed set. Order matters for cross-copy comparison.
+	// Authoritative 9-name closed set. Order matters for cross-copy comparison.
 	// LanguagePatterns and CustomConstraints are removed from the tool-managed
 	// vocabulary; LanguagePatterns moves to the advisory InjectionParent catalogue,
 	// CustomConstraints is deleted outright.
@@ -303,6 +303,7 @@ func TestVocabulary_CanonicalDeployed_ExactEightNameSequence(t *testing.T) {
 		"AvailableWorkflows",
 		"InfrastructureAgents",
 		"HarnessConstraints",
+		"OrchestratorHarnessConstraints",
 		"ErrorHandlingCommon",
 		"ExecutionPhilosophyCommon",
 	}
@@ -318,19 +319,20 @@ func TestVocabulary_CanonicalDeployed_ExactEightNameSequence(t *testing.T) {
 }
 
 func TestVocabulary_DeployedParent_ExactEightEntryMap(t *testing.T) {
-	// Authoritative 8-entry parent map. Values are the primary drift signal: a wrong
+	// Authoritative 9-entry parent map. Values are the primary drift signal: a wrong
 	// parent silently misroutes validation without any other symptom.
 	// LanguagePatterns and CustomConstraints are removed.
 	// Any deviation is a drift from boundary_constants.py (where "" in Go is None in Python).
 	want := map[string]string{
-		"CommunicationProtocol":     "", // top level
-		"AuthorityHierarchy":        "Identity",
-		"ClosingProcedure":          "Identity",
-		"AvailableWorkflows":        "Identity",
-		"InfrastructureAgents":      "Identity",
-		"HarnessConstraints":        "Constraints",
-		"ErrorHandlingCommon":       "ErrorHandling",
-		"ExecutionPhilosophyCommon": "ExecutionPhilosophy",
+		"CommunicationProtocol":          "", // top level
+		"AuthorityHierarchy":             "Identity",
+		"ClosingProcedure":               "Identity",
+		"AvailableWorkflows":             "Identity",
+		"InfrastructureAgents":           "Identity",
+		"HarnessConstraints":             "Constraints",
+		"OrchestratorHarnessConstraints": "Constraints",
+		"ErrorHandlingCommon":            "ErrorHandling",
+		"ExecutionPhilosophyCommon":      "ExecutionPhilosophy",
 	}
 	got := docformat.DeployedParent
 	if got == nil {

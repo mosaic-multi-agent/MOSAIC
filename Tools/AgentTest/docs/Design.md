@@ -122,7 +122,7 @@ AgentTest's `agentdeploy` port needs two additions: a `CatalogFolder` field in `
 
 The net effect: the test author recreates the agents/workflows directory structure, puts their orchestrator and test workflows there, and points the tool at it. Protocol injection, bundle loading and the built-in harnesses' injections come from the same catalogue stack, so the test catalogue carries its own copies; harness transformation itself is the tool's.
 
-**Maintenance obligation.** The copies of `CommunicationProtocol.md`, `DeployedSections.md`, `HarnessInjections/` and `Orchestrator/orchestrator-script.md` in `Tools/AgentTest/catalog` (and in `Tools/Runner/TestCatalog`) must be synced when the default ones in `Catalog/` change. The frozen golden fixture `Tools/Deployment/testdata/frozen-catalog/Catalog` is a deliberate snapshot and is not synced. `Tools/AgentTest/catalog` uses agent ids 1-25, which overlap the default catalogue's ids, so a stack of the default layer plus the AgentTest catalogue fails composition with a numeric-id collision. This is correct behaviour: the test catalogue is meant to deploy standalone, without the default-layer flag, and is not a defect.
+**Maintenance obligation.** The copies of `CommunicationProtocol.md`, `DeployedSections.md`, `HarnessInjections/` and `Orchestrator/orchestrator-script.md` in `Tools/AgentTest/catalog` (and in `Tools/Runner/TestCatalog`) must be synced when the default ones in `Catalog/` change. The synced `Orchestrator/orchestrator-script.md` must keep `recommended_tier: TEST-SUBJECT` (the default declares `HIGH`); preflight rejects any catalogue agent whose tier is outside `TEST-SUBJECT` / `TEST-STUB`. The frozen golden fixture `Tools/Deployment/testdata/frozen-catalog/Catalog` is a deliberate snapshot and is not synced. `Tools/AgentTest/catalog` uses agent ids 1-25, which overlap the default catalogue's ids, so a stack of the default layer plus the AgentTest catalogue fails composition with a numeric-id collision. This is correct behaviour: the test catalogue is meant to deploy standalone, without the default-layer flag, and is not a defect.
 
 ### 3.4 Why Not Reuse the Product Catalogue
 
@@ -215,6 +215,8 @@ To test whether an orchestrator handles a specific routing condition correctly:
 1. **Preflight** dry-runs the deploy call to catch catalogue misses, bad workflow IDs, and missing agent definitions before any sandbox is created.
 2. **Setup** creates a fresh sandbox, deploys the orchestrator and all referenced agents into it via a single `mosaic-deploy deploy --catalog-folder <test-catalogue>` call (or via per-agent `render` calls when using the `stub_agents` path), seeds declared files, provisions the interception hooks. The deploy tool resolves agents, workflows, protocol, bundle and harness injections from the test catalogue (a stack of that one folder), not from the real MOSAIC root.
 3. **Launch** starts the orchestrator through the harness CLI. The orchestrator sees a real harness environment with its workflow(s) baked into its system prompt.
+
+**Model pinning.** The subject runs the selected subject model by explicit launch argument (`--model <selected>` for Claude Code, `--model provider/model` for OpenCode), never a harness default. The launch-time argument takes precedence over the definition's `model` field in both harnesses (versions, evidence and the Claude Code subagent order for stubs are recorded in `HarnessKnowledge/KnownIssues/CrossHarnessComparison.md`, section 10). Between setup and launch the runner also reads every deployed definition (subject and stubs) back through the adapter and aborts the run as an infrastructure failure if its `model` field is missing or differs from the model selected for its tier. The tier is the one each agent declares (`recommended_tier`) in the test catalogue files the deployer is given, joined to the deployed agent by agent key (the file name without `.md`), never taken from the deploy tool's output and never inferred from which agent is the subject. A deployed agent with no catalogue file, no declared tier, a tier without a selected model, or a key matching more than one catalogue file fails the check (fail closed). Every `stub_agents` entry is treated as declaring the stub tier.
 4. **Interception** — every time the orchestrator dispatches a collaborator, the harness routes the call through the interception pipeline. The pipeline matches the collaborator identity against the stub registry and returns the declared response. The orchestrator receives it as if a real collaborator produced it.
 5. **Snapshot** captures the invocation log, the orchestration document the orchestrator wrote, and any side effects, while the sandbox still exists.
 6. **Evaluate** is a pure function from evidence to verdict: did the orchestrator dispatch the right agents in the right order? Did it reach the expected final state? Did the invocation sequence match? Did echo fidelity hold?
@@ -274,6 +276,11 @@ The report JSON emitted after a suite run carries the test identity and versioni
 - `run.test_name` — the test definition's `name` (in the run key)
 - `test_version` — the test definition's `version` at the time the run was executed
 - `test_id` (integer) — the test definition's numeric `id`
+
+**Model fields (additive):**
+- Per-run `observed_subject_models` — the subject model(s) the run's logs show (always an array) — and `model_verification` (`verified`, `mismatch`, `no_evidence`, `not_assessed`). `subject_model` and `stub_model` keep their names and meaning: they are the **selected** models, not labels.
+- Top-level `model_verdict` (`MODEL_VERIFIED` only when at least one run exists and every run is verified, `MODEL_UNVERIFIED` otherwise), `model_label` (the runs' common observed model when verified, `""` otherwise) and `unverified_runs` (count of runs that are not verified). The verdict is derived once in the report model and rendered by the JSON and text reports, the CLI progress line and the TUI results and detail screens.
+- Labels are by the observed model only. An invalid run or suite carries no model label in any heading or summary, only the `MODEL UNVERIFIED` verdict; the selected and observed values appear only in the exclusion detail. The text report prints `observed subject model:` and `selected stub model:` lines for verified runs only. The CLI exit code is unchanged: an invalid run already fails its test as an infrastructure failure. The report file name never carries the selected model.
 
 These fields feed the results storage and summary system. The numeric `test_id` allows the summary generator to track a test across renames (when `test_name` changes but `test_id` stays the same). The `test_version` allows the summary generator to flag stored results that were collected against an older version of a test's assertions.
 
@@ -349,6 +356,19 @@ A subject that **never dispatches a collaborator using the documented protocol e
 - A subject that dispatches at least one collaborator before the cutoff will generally have its events attributed correctly, because the protocol-envelope binding fires on the first dispatch.
 
 ---
+
+### 5.7 Observed-Model Verification and Run Validity
+
+The evidence carries two things for the subject model: the **selected** model (what the run was configured to use) and the **observed** model(s) (what the run's logs say the subject session used). After the subject finishes and before teardown, the runner asks the observed-model port, which delegates to `mosaic-log-analyzer report`, for the observed models. A missing port or a port error is recorded as "no evidence"; the selection is never substituted for an observation. Models used by stub invocations are neither verified nor recorded.
+
+A run is **valid** only when every observed subject model equals the selected subject model by exact string equality (an alias, a case difference or a suffix difference is a mismatch). Otherwise the run is invalid:
+
+- **Mismatch:** an observed model differs from the selection.
+- **No evidence:** the subject model could not be determined (missing, empty, unparseable, tool failure, or a harness whose logs carry no subject model).
+
+An invalid run fails with the `MODEL_UNVERIFIED` reason, is excluded from pass rates (`model_mismatch` or `model_evidence_missing`), and marks the test as an infrastructure failure on its own, with a detail naming both the selected and the observed values. Precedence between exclusions: a mismatch outranks every other reason; state integrity and spawn failure outrank missing evidence; missing evidence outranks echo mismatch and infrastructure.
+
+Invalid-model runs are **not retried**: they are reported immediately. The state-integrity and spawn-failure retry rules for other exclusion reasons are unchanged.
 
 ## 6. Design Decisions
 

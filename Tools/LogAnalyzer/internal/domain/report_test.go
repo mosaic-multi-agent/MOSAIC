@@ -71,7 +71,7 @@ func TestReport_HasUnpricedModels_WithUnpricedModels_ReturnsTrue(t *testing.T) {
 		Runs: []domain.RunReport{
 			{Run: domain.NamedRun("20260802T074635Z-480e")},
 		},
-		UnpricedModels: []domain.ModelID{"unknown-model"},
+		UnpricedModels: []domain.PricingKey{{Model: "unknown-model"}},
 	}
 	if !r.HasUnpricedModels() {
 		t.Error("Report with non-empty UnpricedModels must return HasUnpricedModels()=true")
@@ -159,10 +159,10 @@ func TestReport_CanExpressUnpricedMoney(t *testing.T) {
 						Complete: false,
 					},
 				},
-				UnpricedModels: []domain.ModelID{"claude-opus-4"},
+				UnpricedModels: []domain.PricingKey{{Model: "claude-opus-4"}},
 			},
 		},
-		UnpricedModels: []domain.ModelID{"claude-opus-4"},
+		UnpricedModels: []domain.PricingKey{{Model: "claude-opus-4"}},
 	}
 	if !r.HasUnpricedModels() {
 		t.Error("report with an unpriced model must return HasUnpricedModels()=true")

@@ -1,0 +1,15 @@
+{
+  "description": "VS Code dialect token names: the new generation (gen_ai.usage.cache_write.input_tokens, gen_ai.usage.reasoning.output_tokens) is read; when a span carries both the new generation and the legacy names (cache_creation, reasoning_tokens), the new generation wins for cache_creation_tokens and reasoning_tokens and the input difference is computed with the new cache write value.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

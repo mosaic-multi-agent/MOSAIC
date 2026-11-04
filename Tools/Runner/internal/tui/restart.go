@@ -33,7 +33,7 @@ func (m *rootModel) restartAsResume(rebuildSession bool) tea.Cmd {
 	}
 	m.progressScreen.SetHistory(m.loadHistory())
 	m.screen = screenProgress
-	return tea.Batch(m.progressScreen.Init(), m.startSession())
+	return tea.Batch(m.startProgressTicks(),m.startSession())
 }
 
 // runArtifactExists reports whether the run folder holds an artifact: the

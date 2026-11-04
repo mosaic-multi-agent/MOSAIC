@@ -83,6 +83,8 @@ func newTwoGatedClassesSession(t *testing.T) (ses session.Session, f *harness.Mo
 // and only those two agents' triggers are evaluated per workflow step.
 func TestSession_Start_TwoGatedClasses_BothSelectedFire(t *testing.T) {
 	ses, f, _, orchPath := newTwoGatedClassesSession(t)
+	cfg := baseLinearConfig(orchPath)
+	enableCommits(f, &cfg) // queues the commit setup reply ahead of the trigger replies
 
 	// Queue the expected GREEN dispatch sequence.
 	// With INVOCATION_INTERVAL:1, one checkpoint agent and one commit agent fire
@@ -123,7 +125,6 @@ func TestSession_Start_TwoGatedClasses_BothSelectedFire(t *testing.T) {
 	// intentionally NOT queued. In RED they fire (nil filter) and MockAdapter records
 	// their invocations, allowing the assertions below to catch the RED failure.
 
-	cfg := baseLinearConfig(orchPath)
 	cfg.Checkpoints = true
 	cfg.InfraClassSelections = map[string]string{
 		"checkpoint": "checkpoint-manager-git",

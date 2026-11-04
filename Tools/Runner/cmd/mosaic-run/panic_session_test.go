@@ -7,6 +7,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -94,7 +95,7 @@ func TestPanicLoggingSession_WithoutPanicPassesResultThroughAndLogsNothing(t *te
 
 	got, err := startNoPanic(t, newPanicLoggingSession(inner, rec))
 
-	if got != want || err != boom || inner.calls != 1 {
+	if !reflect.DeepEqual(got, want) || err != boom || inner.calls != 1 {
 		t.Fatalf("got (%+v, %v), calls=%d; want the inner result unchanged", got, err, inner.calls)
 	}
 	if n := len(rec.snapshot()); n != 0 {

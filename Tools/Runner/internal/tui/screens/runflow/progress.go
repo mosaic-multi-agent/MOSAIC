@@ -19,10 +19,16 @@ type ProgressRow struct {
 	Stage         string
 	Status        string // "running", "SUCCESS", "BLOCKED", etc.
 	Elapsed       time.Duration
+
+	Infrastructure bool   // the entry's agent is a declared infrastructure agent
+	ErrorCode      string // recorded error code; "" when none
+	Reason         string // recorded Summary; shown only for a failed infrastructure row
 }
 
-// tickMsg is sent periodically to update elapsed time.
-type tickMsg time.Time
+// TickMsg is sent periodically to update elapsed time. The root model must
+// deliver every TickMsg to the progress screen, whichever screen is current,
+// because the screen re-arms the next tick only when it receives one.
+type TickMsg time.Time
 
 // Text shown by the stop-confirmation gate. The prompt is rendered inside a
 // bordered banner rather than as a bare line, and each resolution leaves an
@@ -47,21 +53,25 @@ const (
 // by the root model ahead of screen delegation, so force-quit stays available
 // and the user is never trapped in an unresolved confirmation.
 type ProgressScreen struct {
-	rows           []ProgressRow
-	runningIdx     int // index of currently running row, or -1
-	consultation   *domain.ConsultationActivity
-	startTime      time.Time
-	stopRequest    bool
-	confirmPending bool
-	gateEvents     []StopGateEvent
-	pendingRequests PendingRequests
-	requestEvents   []RequestKeyEvent
-	artifactView   bool
-	status         string
-	statusErr      bool
-	width          int
-	height         int
-	styles         screens.Styles
+	rows              []ProgressRow
+	runningIdx        int // index of currently running row, or -1
+	consultation      *domain.ConsultationActivity
+	startTime         time.Time
+	stopRequest       bool
+	confirmPending    bool
+	gateEvents        []StopGateEvent
+	pendingRequests   PendingRequests
+	requestEvents     []RequestKeyEvent
+	guardWaived       bool
+	guardEvents       []GuardKeyEvent
+	artifactView      bool
+	guidanceView      bool
+	guidanceAvailable bool
+	status            string
+	statusErr         bool
+	width             int
+	height            int
+	styles            screens.Styles
 }
 
 // NewProgressScreen creates a new progress screen.
@@ -78,7 +88,7 @@ func NewProgressScreen(width, height int, styles screens.Styles) *ProgressScreen
 // Init returns a tick command so the elapsed time updates every second.
 func (s *ProgressScreen) Init() tea.Cmd {
 	return tea.Every(time.Second, func(t time.Time) tea.Msg {
-		return tickMsg(t)
+		return TickMsg(t)
 	})
 }
 
@@ -150,15 +160,23 @@ func (s *ProgressScreen) Update(msg tea.Msg) tea.Cmd {
 				}
 			case "a", "A", "i", "I":
 				s.artifactView = true
+			case "e", "E":
+				if s.guidanceAvailable {
+					s.guidanceView = true
+				}
+			case "g", "G":
+				if !s.stopRequest {
+					s.recordGuardKey(key)
+				}
 			default:
 				if !s.stopRequest {
 					s.recordRequestKey(key)
 				}
 			}
 		}
-	case tickMsg:
+	case TickMsg:
 		return tea.Every(time.Second, func(t time.Time) tea.Msg {
-			return tickMsg(t)
+			return TickMsg(t)
 		})
 	}
 	return nil
@@ -206,6 +224,8 @@ func (s *ProgressScreen) View() string {
 				label += fmt.Sprintf(" iteration=%s", row.Stage)
 			}
 			line = indicator + s.styles.Selected.Render(label)
+		} else if isFailedInfraRow(row) {
+			line = s.renderInfraFailureRow(row)
 		} else if row.Status == "SUCCESS" {
 			label := fmt.Sprintf("%s  %s", row.AgentInstance, row.Status)
 			line = indicator + s.styles.Success.Render(label)
@@ -231,7 +251,7 @@ func (s *ProgressScreen) View() string {
 		rowsBuilder.WriteString(line)
 	}
 
-	help := s.styles.Help.Width(s.width).Render(helpBarText)
+	help := s.styles.Help.Width(s.width).Render(s.helpBar())
 
 	parts := []string{title, statusLine, border, rowsBuilder.String()}
 	if pending := s.pendingLines(); pending != "" {
@@ -242,6 +262,9 @@ func (s *ProgressScreen) View() string {
 	} else if s.stopRequest {
 		stopNotice := s.styles.Warning.Width(s.width).Render("Stopping after current step completes…")
 		parts = append(parts, stopNotice)
+	}
+	if line := s.guardIndicatorLine(); line != "" {
+		parts = append(parts, line)
 	}
 	parts = append(parts, border, help)
 	return strings.Join(parts, "\n")

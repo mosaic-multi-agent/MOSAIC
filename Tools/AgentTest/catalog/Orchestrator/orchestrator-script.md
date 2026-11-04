@@ -1,11 +1,11 @@
 ---
-version: 3.3.0
+version: 3.4.0
 name: orchestrator-script
 description: Makes one routing decision per Runner invocation by reading the orchestration artifact and returning a dispatch or stop instruction
 role: orchestrator
 model: {model-identifier}
 tools: [file_read, file_edit, file_search, content_search]
-recommended_tier: TEST_SUBJECT
+recommended_tier: TEST-SUBJECT
 tier_rationale: reads a full orchestration artifact, reconstructs run state from its execution log, and makes one unretryable routing decision whose wrong answer sends the run somewhere nobody chose
 required_skills: []
 ---
@@ -272,6 +272,8 @@ Reading artifacts and files to understand the run's state is legitimate and expe
 
 <HarnessConstraints type="managed">
 </HarnessConstraints>
+<OrchestratorHarnessConstraints type="managed">
+</OrchestratorHarnessConstraints>
 
 </Constraints>
 ---

@@ -31,7 +31,6 @@ import {
   LogPaths,
   setDebugLogger,
   debugLog,
-  readAdapterVersion,
   type DebugLogFn,
 } from "../lib/core";
 
@@ -40,8 +39,8 @@ import {
 // ---------------------------------------------------------------------------
 
 describe("constants", () => {
-  it("SCHEMA_VERSION is 1.0.0", () => {
-    expect(SCHEMA_VERSION).toBe("1.0.0");
+  it("SCHEMA_VERSION is 1.3.0", () => {
+    expect(SCHEMA_VERSION).toBe("1.3.0");
   });
 
   it("HARNESS is opencode", () => {
@@ -246,7 +245,7 @@ describe("buildEvent", () => {
   describe("common envelope fields", () => {
     it("sets schema_version to SCHEMA_VERSION constant", () => {
       const result = buildEvent("test_event", { timestamp: FIXED_TS }, {});
-      expect(result["schema_version"]).toBe("1.0.0");
+      expect(result["schema_version"]).toBe("1.3.0");
     });
 
     it("sets event to the provided event name", () => {
@@ -851,53 +850,5 @@ describe("setDebugLogger / debugLog", () => {
     });
     // debugLog must swallow logger errors — never propagate
     expect(() => debugLog("this should not throw")).not.toThrow();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// readAdapterVersion
-// ---------------------------------------------------------------------------
-
-describe("readAdapterVersion", () => {
-  let tempDir: string;
-
-  beforeEach(() => {
-    tempDir = nodeFs.mkdtempSync(
-      nodePath.join(nodeOs.tmpdir(), "mosaic-adapter-version-test-"),
-    );
-  });
-
-  afterEach(() => {
-    nodeFs.rmSync(tempDir, { recursive: true, force: true });
-  });
-
-  it("returns the version string from a hook.yaml containing a version line", async () => {
-    const hookYamlPath = nodePath.join(tempDir, "hook.yaml");
-    nodeFs.writeFileSync(
-      hookYamlPath,
-      'version: "1.2.3"\nopencode:\n  supported: true\n',
-    );
-    const result = await readAdapterVersion(hookYamlPath);
-    expect(result).toBe("1.2.3");
-  });
-
-  it("returns undefined when the hook.yaml contains no version key", async () => {
-    const hookYamlPath = nodePath.join(tempDir, "hook.yaml");
-    nodeFs.writeFileSync(hookYamlPath, "opencode:\n  supported: true\n");
-    const result = await readAdapterVersion(hookYamlPath);
-    expect(result).toBeUndefined();
-  });
-
-  it("returns undefined without throwing when the file does not exist", async () => {
-    const missingPath = nodePath.join(tempDir, "nonexistent.yaml");
-    await expect(readAdapterVersion(missingPath)).resolves.toBeUndefined();
-  });
-
-  it("returns undefined for an ambiguous or malformed version value", async () => {
-    const hookYamlPath = nodePath.join(tempDir, "hook.yaml");
-    // A nested-object value is ambiguous for a regex-based parser with no YAML library
-    nodeFs.writeFileSync(hookYamlPath, "version: {nested: value}\n");
-    const result = await readAdapterVersion(hookYamlPath);
-    expect(result).toBeUndefined();
   });
 });

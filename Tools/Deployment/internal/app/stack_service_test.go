@@ -179,8 +179,7 @@ func nonWriteCommands() []nonWriteCommand {
 		{name: "transform", run: func(t *testing.T, f *spFixture, ws string) error {
 			deps, _ := newTransformDeps(t, interactiontest.NewBuilder().Build())
 			f.adopt(&deps)
-			path := writeTransformFile(t, t.TempDir(), "my-agent.src.md", matchingAgentBytes())
-			_, err := app.New(deps).TransformHarness(context.Background(), newPreAnsweredTransformRequest(path))
+			_, err := app.New(deps).TransformHarness(context.Background(), newPreAnsweredTransformRequest(ws))
 			return err
 		}},
 		{name: "promote", run: func(t *testing.T, f *spFixture, ws string) error {

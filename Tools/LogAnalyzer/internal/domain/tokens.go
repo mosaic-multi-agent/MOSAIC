@@ -8,7 +8,20 @@ const (
 	CategoryCacheRead     TokenCategory = "cache_read"
 	CategoryCacheCreation TokenCategory = "cache_creation"
 	CategoryOutput        TokenCategory = "output"
+
+	// CategoryReasoning is the display-only reasoning part of output. It is never
+	// billable and never has a money cell.
+	CategoryReasoning TokenCategory = "reasoning"
 )
+
+// IsBillable reports whether the category is one of the four billable ones.
+func (c TokenCategory) IsBillable() bool { return c != CategoryReasoning }
+
+// BreakdownCategories returns the categories a token breakdown shows: the four
+// billable ones in canonical order, then reasoning.
+func BreakdownCategories() []TokenCategory {
+	return append(BillableCategories(), CategoryReasoning)
+}
 
 // TokenCount is an optional token quantity. The zero value is absent.
 // Absent is a distinct state from present-zero and must survive all arithmetic.
@@ -66,8 +79,35 @@ func SumTokens(counts ...TokenCount) TokenCount {
 type TokenUsage struct {
 	Input         TokenCount
 	CacheRead     TokenCount
-	CacheCreation TokenCount
+	CacheCreation TokenCount // always the cache-write total
 	Output        TokenCount
+
+	// Cache-write tier split. For one decoded usage block: both present (summing
+	// to CacheCreation) or both absent. Never present without CacheCreation.
+	CacheCreation5m TokenCount
+	CacheCreation1h TokenCount
+
+	// Reasoning is the reasoning part of Output; display only, never billed.
+	Reasoning TokenCount
+}
+
+// HasCacheWriteSplit reports whether both tier fields are present.
+func (u TokenUsage) HasCacheWriteSplit() bool {
+	return u.CacheCreation5m.present && u.CacheCreation1h.present
+}
+
+// UnsplitCacheCreation returns the cache-write tokens not covered by the split:
+// CacheCreation - (CacheCreation5m + CacheCreation1h), absent tiers counting 0.
+// Absent when CacheCreation is absent; never negative.
+func (u TokenUsage) UnsplitCacheCreation() TokenCount {
+	if !u.CacheCreation.present {
+		return AbsentTokens()
+	}
+	rest := u.CacheCreation.value - u.CacheCreation5m.ValueOr(0) - u.CacheCreation1h.ValueOr(0)
+	if rest < 0 {
+		rest = 0
+	}
+	return Tokens(rest)
 }
 
 // IsEmpty reports true when all four categories are absent.
@@ -82,6 +122,11 @@ func (u TokenUsage) Add(other TokenUsage) TokenUsage {
 		CacheRead:     u.CacheRead.Add(other.CacheRead),
 		CacheCreation: u.CacheCreation.Add(other.CacheCreation),
 		Output:        u.Output.Add(other.Output),
+
+		CacheCreation5m: u.CacheCreation5m.Add(other.CacheCreation5m),
+		CacheCreation1h: u.CacheCreation1h.Add(other.CacheCreation1h),
+
+		Reasoning: u.Reasoning.Add(other.Reasoning),
 	}
 }
 
@@ -119,6 +164,8 @@ func (c TokenCategory) Label() string {
 		return "cache write"
 	case CategoryOutput:
 		return "output"
+	case CategoryReasoning:
+		return "reasoning"
 	default:
 		return ""
 	}
@@ -146,6 +193,8 @@ func (u TokenUsage) Get(c TokenCategory) (TokenCount, bool) {
 		return u.CacheCreation, true
 	case CategoryOutput:
 		return u.Output, true
+	case CategoryReasoning:
+		return u.Reasoning, true
 	default:
 		return AbsentTokens(), false
 	}

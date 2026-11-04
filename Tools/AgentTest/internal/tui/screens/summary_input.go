@@ -23,7 +23,7 @@ type SummaryInputScreen struct {
 // initialFilter. An empty initialFilter means "all versions".
 func NewSummaryInputScreen(initialFilter string, width int, styles Styles) *SummaryInputScreen {
 	return &SummaryInputScreen{
-		entry:     newDraftEntry(),
+		entry:     newDraftEntry(width),
 		confirmed: initialFilter,
 		width:     width,
 		styles:    styles,
@@ -63,7 +63,7 @@ func (s *SummaryInputScreen) View() string {
 	}
 	title := s.styles.Title.Render("Generate Summary")
 	subtitle := s.styles.Muted.Render("Enter a version filter (--for-version) or leave empty to summarise all versions")
-	value := s.styles.Selected.Render(display)
+	value := s.entry.render(display, s.styles.Selected)
 	help := s.styles.Help.Render("type version  backspace delete  enter confirm  esc back")
 	content := title + "\n" + subtitle + "\n\n  " + value + "\n\n" + help
 	if s.width > 0 {
@@ -90,6 +90,7 @@ func (s *SummaryInputScreen) Reset() {
 // current filter.
 func (s *SummaryInputScreen) Resize(width int) {
 	s.width = width
+	s.entry.setWidth(width)
 }
 
 // VersionFilter returns the currently confirmed version filter, normalized.

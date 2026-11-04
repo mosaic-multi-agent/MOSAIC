@@ -974,23 +974,16 @@ class TestReadAssistantRecordsDefensiveContract(unittest.TestCase):
         result = transcript.read_assistant_records(str(path))
         self.assertNotIn("input_tokens", result[0].token_usage)
 
-    def test_cache_creation_tokens_mapping_is_unchanged_and_flattened(self):
+    def test_cache_creation_tokens_stays_the_total_without_tier_object(self):
         path = self.tmp_path / "t.jsonl"
         _write_transcript(path, [
             _assistant_record(model="m", cache_creation_input_tokens=10),
         ])
         result = transcript.read_assistant_records(str(path))
         usage = result[0].token_usage
-        self.assertIn("cache_creation_tokens", usage)
-        self.assertEqual(10, usage["cache_creation_tokens"])
-        # No split-tier fields must be introduced.
-        self.assertNotIn("ephemeral_1h_input_tokens", usage)
-        self.assertNotIn("ephemeral_5m_input_tokens", usage)
+        self.assertEqual({"cache_creation_tokens": 10}, usage)
 
-    def test_nested_ephemeral_cache_tier_object_is_ignored(self):
-        # A record carrying a nested cache_creation object with ephemeral-tier
-        # sub-fields alongside the flattened value must still yield only the
-        # four mapped keys - no tier fields are ever introduced (D6/AC4.6).
+    def test_nested_ephemeral_cache_tier_object_yields_both_tier_fields(self):
         path = self.tmp_path / "t.jsonl"
         _write_transcript(path, [
             {
@@ -1009,12 +1002,11 @@ class TestReadAssistantRecordsDefensiveContract(unittest.TestCase):
             },
         ])
         result = transcript.read_assistant_records(str(path))
-        usage = result[0].token_usage
         self.assertEqual(
-            {"input_tokens", "cache_creation_tokens"},
-            set(usage.keys()),
+            {"input_tokens": 5, "cache_creation_tokens": 10,
+             "cache_creation_5m_tokens": 3, "cache_creation_1h_tokens": 7},
+            result[0].token_usage,
         )
-        self.assertEqual(10, usage["cache_creation_tokens"])
 
 
 # ---------------------------------------------------------------------------

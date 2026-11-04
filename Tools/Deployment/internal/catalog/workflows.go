@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"mosaic-deploy/internal/agentkey"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -145,7 +146,7 @@ func parseWorkflowFile(path, category string) (domain.Workflow, error) {
 	}
 	if id == "" {
 		base := filepath.Base(path)
-		id = strings.TrimSuffix(base, ".md")
+		id = agentkey.FromFileName(base)
 	}
 
 	wf := domain.Workflow{

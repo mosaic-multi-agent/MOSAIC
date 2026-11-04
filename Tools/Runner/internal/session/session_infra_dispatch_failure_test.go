@@ -30,8 +30,9 @@ func blockedCommit(code domain.ErrorCode) harness.ScriptedEntry {
 }
 
 // runProductExpectingCommitRow runs one Product iteration whose commit
-// dispatch ends as entry, and returns the rig and the commit's applied row.
-func runProductExpectingCommitRow(t *testing.T, rig *blockRig, entry *harness.ScriptedEntry) domain.CompletedStep {
+// dispatch ends as entry, and returns the commit's applied row. The run uses
+// cfg, which enables commits.
+func runProductExpectingCommitRow(t *testing.T, rig *blockRig, cfg domain.RunConfig, entry *harness.ScriptedEntry) domain.CompletedStep {
 	t.Helper()
 	queueProductIteration(rig, "A")
 	if entry != nil {
@@ -40,7 +41,7 @@ func runProductExpectingCommitRow(t *testing.T, rig *blockRig, entry *harness.Sc
 
 	// The commit agent's on_failure is halt, so a failing dispatch stops the
 	// run; the row is recorded before the stop.
-	if _, err := rig.ses.Start(context.Background(), rig.config("product-block", domain.ExecutionModeAuto)); err != nil {
+	if _, err := rig.ses.Start(context.Background(), cfg); err != nil {
 		t.Fatalf("want nil error from Start, got %v", err)
 	}
 	rows := infraRowsOf(rig.store, infraCommitAgent)
@@ -52,9 +53,10 @@ func runProductExpectingCommitRow(t *testing.T, rig *blockRig, entry *harness.Sc
 
 func TestSession_Start_InfraDispatchBlockedWithErrorCode_RowCarriesTheCode(t *testing.T) {
 	rig := newProductRig(t, "iteration-end-product-block-orch.md", infraCommitAgent, "A")
+	rig.queueCommitSetup()
 	entry := blockedCommit(domain.ErrorINPUT_NOT_FOUND)
 
-	row := runProductExpectingCommitRow(t, rig, &entry)
+	row := runProductExpectingCommitRow(t, rig, rig.commitsConfig("product-block", domain.ExecutionModeAuto), &entry)
 
 	if row.Status != domain.StatusBLOCKED {
 		t.Errorf("want row status BLOCKED, got %q", row.Status)
@@ -66,9 +68,10 @@ func TestSession_Start_InfraDispatchBlockedWithErrorCode_RowCarriesTheCode(t *te
 
 func TestSession_Start_InfraDispatchHarnessInvocationError_RowIsBlockedE501(t *testing.T) {
 	rig := newProductRig(t, "iteration-end-product-block-orch.md", infraCommitAgent, "A")
+	rig.queueCommitSetup()
 	entry := harness.ScriptedEntry{Err: errors.New("harness transport failed")}
 
-	row := runProductExpectingCommitRow(t, rig, &entry)
+	row := runProductExpectingCommitRow(t, rig, rig.commitsConfig("product-block", domain.ExecutionModeAuto), &entry)
 
 	if row.Status != domain.StatusBLOCKED {
 		t.Errorf("want row status BLOCKED, got %q", row.Status)
@@ -80,11 +83,14 @@ func TestSession_Start_InfraDispatchHarnessInvocationError_RowIsBlockedE501(t *t
 
 func TestSession_Start_InfraDispatchAgentDefinitionUnresolvable_RowIsBlockedE501(t *testing.T) {
 	// The commit agent's definition file is not written, so the trigger
-	// dispatch cannot resolve it.
+	// dispatch cannot resolve it. The run is a resume that recorded its commit
+	// branch, so commit setup (which would need the definition) does not run.
 	rig := newBlockRig(t, "iteration-end-product-block-orch.md", nil, "planner", "builder", "checker")
 	rig.queueOK("planner", runFileWrite("ProductPlan.md", scheduleDoc("Product", "Products", ids("A"))))
+	rig.resumeFrom("product-block", domain.ExecutionModeAuto)
+	rig.recordCommitsEnabled()
 
-	row := runProductExpectingCommitRow(t, rig, nil)
+	row := runProductExpectingCommitRow(t, rig, rig.resumeConfig("product-block", domain.ExecutionModeAuto), nil)
 
 	if row.Status != domain.StatusBLOCKED {
 		t.Errorf("want row status BLOCKED, got %q", row.Status)
@@ -107,6 +113,7 @@ func runStageGroupedOnFileStore(t *testing.T, commitEntry harness.ScriptedEntry)
 	rig := newStageGroupedRig(t, "2")
 	rig.writeRunFile(t, "Stage-2/Plan.md", "# Plan\n")
 	queueStageRows(rig, map[string]string{"test-writer": "Stage-2/PlanProgress.md"})
+	rig.queueCommitSetup()
 	rig.adapter.Queue(infraCommitAgent, commitEntry)
 	path := filepath.Join(rig.runFolder, "Orchestration.md")
 	rig.ses = session.New(session.Deps{
@@ -116,7 +123,7 @@ func runStageGroupedOnFileStore(t *testing.T, commitEntry harness.ScriptedEntry)
 		Clock:    fixedClock{t: epoch},
 		Interact: &noopInteraction{},
 	})
-	cfg := rig.config("stage-grouped", domain.ExecutionModeAuto)
+	cfg := rig.commitsConfig("stage-grouped", domain.ExecutionModeAuto)
 	cfg.RunID = testRunID
 
 	if _, err := rig.ses.Start(context.Background(), cfg); err != nil {
@@ -128,7 +135,7 @@ func runStageGroupedOnFileStore(t *testing.T, commitEntry harness.ScriptedEntry)
 		t.Fatalf("read run artifact: %v", err)
 	}
 	for _, line := range strings.Split(string(data), "\n") {
-		if strings.HasPrefix(line, "|") && strings.Contains(line, infraCommitAgent+"#") {
+		if strings.HasPrefix(line, "|") && strings.Contains(line, infraCommitAgent+"#") && !strings.Contains(line, commitSetupSummary) {
 			return line
 		}
 	}

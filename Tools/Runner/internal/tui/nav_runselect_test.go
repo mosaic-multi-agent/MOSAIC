@@ -174,8 +174,10 @@ func TestRunSelect_EnterOnNewRun_SetsIsNewRunAndAdvances(t *testing.T) {
 // TestRunSelect_EnterOnCandidate_SetsRunIDAndAdvances verifies that pressing Enter on
 // a candidate entry populates the run identity and transitions to the file screen.
 func TestRunSelect_EnterOnCandidate_SetsRunIDAndAdvances(t *testing.T) {
+	// The first candidate has a real artifact: a resume whose artifact cannot be
+	// read is refused right after run selection.
 	candidates := []runscan.RunCandidate{
-		newTestCandidate("20260701T120000Z-a3f9", "/ws/Orchestration-20260701T120000Z-a3f9"),
+		newTestCandidate("20260701T120000Z-a3f9", writeFlowArtifact(t, fullyRecorded())),
 		newTestCandidate("20260702T120000Z-b4e8", "/ws/Orchestration-20260702T120000Z-b4e8"),
 	}
 	m := newModelWithScan(candidates)

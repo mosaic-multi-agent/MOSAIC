@@ -13,9 +13,15 @@ type Deps struct {
 	Source      domain.LogSource
 	Reader      domain.EventReader
 	Pricing     domain.PricingStore
+	Settings    domain.SettingsStore // nil = built-in defaults, no findings, SettingsPath() == ""
+	Digests     domain.DigestStore   // nil = no digest support (Analyze is logs-only)
 	Clock       domain.Clock
 	Interaction domain.Interaction
-	WorkDir     string // used for default-location probing
+	WorkDir     string                  // used for default-location probing
+	ToolVersion string                  // LogAnalyzer version recorded in exported digests
+	Ingester    domain.UsageIngester    // nil = ingest-otel off
+	IngestProbe domain.IngestStateProbe // nil = pending usage is never reported
+	Alarms      domain.AlarmSource      // nil = adapter alarms are not read
 }
 
 // Service is the single use-case layer both frontends drive.
@@ -56,6 +62,8 @@ type Result struct {
 	Report  domain.Report // zero value unless Outcome == OutcomeReport
 	// Session lets the caller re-price without re-reading logs.
 	Session *Session
+	// GapConfigPath is the file the pricing-gap flow wrote ("" = it saved nothing).
+	GapConfigPath string
 }
 
 // PricingPath returns the config file path from the injected pricing store.
@@ -78,7 +86,7 @@ func (s *Service) PricingPath() string {
 //     pricing document, or a context cancellation).
 func (s *Service) Analyze(ctx context.Context, req Request) (Result, error) {
 	// Resolve source following explicit → default → prompt order.
-	src, outcome, err := s.resolveSource(ctx, req)
+	src, digestFiles, outcome, err := s.resolveWith(ctx, req, s.digestResolver())
 	if err != nil {
 		return Result{}, err
 	}
@@ -92,44 +100,47 @@ func (s *Service) Analyze(ctx context.Context, req Request) (Result, error) {
 		return Result{}, err
 	}
 
-	// Enumerate the source to discover run folders and event files.
-	inv, enumFindings := s.deps.Source.Enumerate(src)
+	// Load analysis settings. An absent file is not an error; an unparseable one is.
+	settings, settingsFindings, err := s.loadSettings(ctx)
+	if err != nil {
+		return Result{}, err
+	}
 
-	// Collect findings from infrastructure phases to carry into the quality summary.
-	carried := make([]domain.Finding, 0, len(pricingFindings)+len(enumFindings))
-	carried = append(carried, pricingFindings...)
-	carried = append(carried, enumFindings...)
+	loaded, err := s.readSource(ctx, src, digestFiles)
+	if err != nil {
+		return Result{}, err
+	}
 
 	// A structurally valid source with no run data is a named no-data outcome.
-	if inv.IsEmpty() {
+	if loaded.noData {
 		return Result{
 			Outcome: OutcomeNoData,
 			Source:  src,
 		}, nil
 	}
 
-	// Read every discovered event file exactly once.
-	streams, readFindings, err := s.readAllStreams(ctx, inv)
-	if err != nil {
-		return Result{}, err
-	}
-	carried = append(carried, readFindings...)
+	// Findings from infrastructure phases carry into the quality summary.
+	carried := make([]domain.Finding, 0, len(pricingFindings)+len(settingsFindings)+len(loaded.findings))
+	carried = append(carried, pricingFindings...)
+	carried = append(carried, settingsFindings...)
+	carried = append(carried, loaded.findings...)
+	agg := loaded.aggregate
 
-	// Aggregate (pure attribution) then price (pure money computation).
-	in := analysis.Input{Streams: streams}
-	agg, aggFindings := analysis.Aggregate(in)
-	carried = append(carried, aggFindings...)
-
-	report, priceFindings := analysis.Price(agg, table, src)
+	report, priceFindings := analysis.Price(agg, table, settings, src)
+	usageIngest := s.probeUsageIngest(loaded.inventory)
+	applyUsageIngest(&report, usageIngest)
 	carried = append(carried, priceFindings...)
 
 	// Attach the complete quality summary, merging findings from every phase.
 	report.Quality = domain.NewQualitySummary(carried)
 
 	sess := &Session{
-		aggregate: agg,
-		table:     table,
-		source:    src,
+		aggregate:      agg,
+		table:          table,
+		settings:       settings,
+		source:         src,
+		exportFindings: loaded.exportFindings,
+		usageIngest:    usageIngest,
 	}
 
 	result := Result{
@@ -141,12 +152,31 @@ func (s *Service) Analyze(ctx context.Context, req Request) (Result, error) {
 
 	// Optionally run the interactive pricing-gap resolution flow.
 	if req.ResolvePricingGaps && report.HasUnpricedModels() {
-		updated, err := s.ResolvePricingGaps(ctx, sess, report)
+		updated, written, err := s.resolvePricingGapsWritten(ctx, sess, report)
 		if err != nil {
 			return Result{}, err
 		}
 		result.Report = updated
+		result.GapConfigPath = written
 	}
 
 	return result, nil
+}
+
+// SettingsPath returns the settings file path from the injected settings store,
+// or "" when none is configured.
+func (s *Service) SettingsPath() string {
+	if s.deps.Settings == nil {
+		return ""
+	}
+	return s.deps.Settings.Path()
+}
+
+// loadSettings loads the analysis settings; a nil store yields the built-in
+// defaults and no findings. An error means the settings document is unusable.
+func (s *Service) loadSettings(ctx context.Context) (domain.AnalysisSettings, []domain.Finding, error) {
+	if s.deps.Settings == nil {
+		return domain.DefaultAnalysisSettings(), nil, nil
+	}
+	return s.deps.Settings.Load(ctx)
 }

@@ -2,7 +2,6 @@ package plan
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"mosaic-deploy/internal/domain"
 )
@@ -46,7 +45,7 @@ func EnumerateTargetPaths(
 		targetPath, err := module.TargetPath(domain.TargetPathRequest{
 			Kind:     domain.ArtifactAgent,
 			Key:      agent.Key,
-			FileName: filepath.Base(agent.SourcePath),
+			FileName: AgentFileName(module, agent),
 			Scope:    scope,
 			GOOS:     goos,
 		})

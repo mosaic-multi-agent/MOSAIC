@@ -4,9 +4,9 @@ Owns: run_id and agent_instance_id extraction from dispatch content,
 agent_key -> agent_instance_id mapping files.
 
 Key divergence from claude-code: correlation key parameter is named 'agent_key'
-(not 'agent_id'). In this adapter, handlers pass ctx.agent_name as agent_key.
-The on-disk JSON stores the field as "agent_key" (not "agent_id"), making the
-divergence self-documenting on disk (D3).
+(not 'agent_id'). In this adapter, handlers pass the normalised agent_id (the
+spawning tool-call ID, `toolu_...`) as agent_key, or agent_name when agent_id is
+absent. The on-disk JSON stores the field as "agent_key" (not "agent_id").
 """
 
 import datetime
@@ -300,9 +300,8 @@ def put_agent_mapping(paths: "core.LogPaths",
                       agent_type: "str | None") -> bool:
     """Persist the agent_key -> agent_instance_id mapping via atomic replace.
 
-    D3: parameter is named agent_key (not agent_id) because VS Code provides
-    agent_name at SubagentStart, not an opaque agent_id. The on-disk field is
-    also named "agent_key" to make the divergence self-documenting on disk.
+    The parameter is named agent_key: it is the normalised agent_id (the spawning
+    tool-call ID) or, when agent_id is absent, agent_name.
 
     One file per agent_key; parallel SubagentStart processes with distinct keys
     never contend. Returns True on success. Never raises.
@@ -346,9 +345,8 @@ def resolve_invocation_id(paths: "core.LogPaths",
     """Return the agent_instance_id for routing a subagent-scoped event.
 
     Falls back to the deterministic 'unmapped_{agent_key}' string when no
-    mapping exists. Never returns None. The fallback contains agent_name
-    (not an opaque harness ID) so uncorrelated firings are visibly
-    quarantined and traceable.
+    mapping exists. Never returns None. The fallback contains the key so
+    uncorrelated firings are visibly quarantined and traceable.
     """
     mapping = get_agent_mapping(paths, run_id, agent_key)
     if mapping is not None:

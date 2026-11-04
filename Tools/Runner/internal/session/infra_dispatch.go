@@ -25,7 +25,10 @@ func (s *sessionImpl) dispatchInfraAgent(
 ) (haltRun bool, stopRequested bool, reviewSignal *reviewConsultSignal, err error) {
 	infraSeq := *seq + 1
 	instanceID := fmt.Sprintf("%s#%d", agent.Name, infraSeq)
-	req := buildInfraRequest(agent, matched, instanceID, state.RunID, config.RunFolder, completedStep, boundaries)
+	if agent.Class == "commit" && containsTrigger(matched, domain.InfraTriggerIterationEnd) && state.CommitBranch == "" {
+		return true, false, nil, fmt.Errorf("commit branch is missing: not dispatching %s without a recorded commit branch", agent.Name)
+	}
+	req := buildInfraRequest(agent, matched, instanceID, state.RunID, config.RunFolder, state.CommitBranch, completedStep, boundaries)
 
 	agentRef, resolveErr := agentresolve.ResolveOne(orchDir, agent.Name)
 	var response domain.ProtocolResponse
@@ -81,6 +84,10 @@ func (s *sessionImpl) dispatchInfraAgent(
 	}
 	*state = newState
 	*seq = infraSeq
+	s.reportInfraStepDone(infraStep, agent.Class)
+	if response.StatusCode != domain.StatusSUCCESS {
+		s.reportInfraFailure(infraStep, agent.Class, matched, infraPolicy(agent), failureReason(response))
+	}
 
 	// Apply on_failure policy for non-SUCCESS outcomes.
 	if response.StatusCode != domain.StatusSUCCESS {

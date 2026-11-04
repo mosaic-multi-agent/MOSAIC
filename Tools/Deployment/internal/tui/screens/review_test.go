@@ -859,9 +859,9 @@ func TestReviewScreen_VersionDelta_HarnessVersionUsesUserFacingLabel(t *testing.
 
 // TestReviewScreen_VersionDelta_InjectionsVersionUsesUserFacingLabel verifies that the raw
 // internal field name "injections_version" is replaced by the user-facing label
-// "harness injection version (body tag)". The explanation is necessary because the field
-// name "injections_version" is ambiguous — it actually refers to a body-tag version
-// attribute, not a frontmatter key, which the label makes clear.
+// "HarnessInjections.md version". The label names the source file because the field
+// name "injections_version" is ambiguous - it refers to the shared injection file
+// version, which the label makes clear.
 func TestReviewScreen_VersionDelta_InjectionsVersionUsesUserFacingLabel(t *testing.T) {
 	p := planWithItems(domain.ModeUpdateWorkspace, []domain.PlanItem{
 		{
@@ -875,8 +875,8 @@ func TestReviewScreen_VersionDelta_InjectionsVersionUsesUserFacingLabel(t *testi
 	s := screens.NewReviewScreen(p, 120, 80, plainStyles())
 	view := s.View()
 
-	if !strings.Contains(view, "harness injection version") {
-		t.Errorf("plan review does not show user-facing label containing \"harness injection version\" for "+
+	if !strings.Contains(view, "HarnessInjections.md version") {
+		t.Errorf("plan review does not show user-facing label containing \"HarnessInjections.md version\" for "+
 			"\"injections_version\" delta; raw field names must not be exposed to users:\n%s", view)
 	}
 }
@@ -927,7 +927,7 @@ func TestReviewScreen_VersionDelta_BundleVersionUsesUserFacingLabel(t *testing.T
 
 // TestReviewScreen_VersionDelta_OrchestratorInjectionsVersionUsesUserFacingLabel verifies
 // that the raw internal field name "orchestrator_injections_version" is replaced by the
-// user-facing label "orchestrator injection version".
+// user-facing label "HarnessInjectionsOrchestrator.md version".
 func TestReviewScreen_VersionDelta_OrchestratorInjectionsVersionUsesUserFacingLabel(t *testing.T) {
 	p := planWithItems(domain.ModeUpdateWorkspace, []domain.PlanItem{
 		{
@@ -941,8 +941,8 @@ func TestReviewScreen_VersionDelta_OrchestratorInjectionsVersionUsesUserFacingLa
 	s := screens.NewReviewScreen(p, 120, 80, plainStyles())
 	view := s.View()
 
-	if !strings.Contains(view, "orchestrator injection version") {
-		t.Errorf("plan review does not show user-facing label \"orchestrator injection version\" for "+
+	if !strings.Contains(view, "HarnessInjectionsOrchestrator.md version") {
+		t.Errorf("plan review does not show user-facing label \"HarnessInjectionsOrchestrator.md version\" for "+
 			"\"orchestrator_injections_version\" delta; raw field names must not be exposed:\n%s", view)
 	}
 }

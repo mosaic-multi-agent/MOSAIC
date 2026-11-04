@@ -37,6 +37,7 @@ func TestValidate_EnvironmentProblem_ReportedAsError(t *testing.T) {
 				{Kind: domain.ProblemInterpreterUnresolved, Detail: detail},
 			},
 		},
+		Overrides: selectedModels(),
 	})
 
 	if !report.HasErrors() {
@@ -82,6 +83,7 @@ func TestValidate_MultipleEnvironmentProblems_EachReported(t *testing.T) {
 				{Kind: domain.ProblemBundleUnreadable, Detail: "bundle problem"},
 			},
 		},
+		Overrides: selectedModels(),
 	})
 
 	count := 0
@@ -112,6 +114,7 @@ func TestValidate_NoEnvironmentProblems_ReportsNoEnvironmentError(t *testing.T) 
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
 		Environment: domain.EnvironmentReport{},
+		Overrides:   selectedModels(),
 	})
 
 	for _, d := range report.Diagnostics {

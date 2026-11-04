@@ -74,8 +74,8 @@ type Scenario struct {
 	// forwarded verbatim into the stand-in's own sidecar — see
 	// standin_test.go's standinScript for what each one makes the
 	// stand-in do before processing any turn.
-	SleepBeforeExit  string
-	SeedDeadLock     bool
+	SleepBeforeExit string
+	SeedDeadLock    bool
 	// SeedDeadLockOnce seeds the dead lock only on the first spawn: a
 	// marker file written beside the script path prevents subsequent
 	// spawns from seeding again, so attempt two can run clean and
@@ -126,11 +126,21 @@ type Scenario struct {
 	// exercising cost reporting supplies its own domain.CostProvider double.
 	Cost domain.CostProvider
 
+	// ObservedModels, when set, replaces the default evidence double, which
+	// reports the scenario's selected subject model. A scenario exercising a
+	// mismatching or missing observed model supplies its own.
+	ObservedModels domain.ObservedModelProvider
+
 	// Args, when non-nil, replaces the default ["run", suite, "--format",
 	// "json"] invocation — set to exercise "validate" or a different flag
 	// surface. Overriding replaces the whole argument list; SuitePath is not
 	// re-injected.
 	Args []string
+
+	// OmitSubjectModel, when true, leaves --subject-model off the default
+	// invocation, to exercise the rejection of a run with no subject model
+	// selection. It has no effect when Args is set.
+	OmitSubjectModel bool
 
 	// MaxConcurrentRuns is the bound the scenario's suite executes under.
 	// Zero selects the suite's own default (DefaultMaxConcurrentRuns), so
@@ -183,10 +193,16 @@ type wireTestReportDoc struct {
 }
 
 type wireAggregateDoc struct {
-	Verdict               string `json:"verdict"`
-	Counted               int    `json:"counted"`
-	Excluded              int    `json:"excluded"`
-	InfrastructureFailure bool   `json:"infrastructure_failure"`
+	Verdict               string             `json:"verdict"`
+	Counted               int                `json:"counted"`
+	Excluded              int                `json:"excluded"`
+	InfrastructureFailure bool               `json:"infrastructure_failure"`
+	Exclusions            []wireExclusionDoc `json:"exclusions"`
+}
+
+type wireExclusionDoc struct {
+	Reason string `json:"reason"`
+	Detail string `json:"detail"`
 }
 
 type wireRunKeyDoc struct {
@@ -233,6 +249,10 @@ func moduleRoot(t *testing.T) string {
 	// This file lives at <moduleRoot>/e2e/harness_test.go.
 	return filepath.Dir(filepath.Dir(file))
 }
+
+// scenarioSubjectModel is the subject model selection the default invocation
+// passes, so existing scenarios run through the same selection guard as a user.
+const scenarioSubjectModel = "scenario-subject-model"
 
 // RunScenario executes one scenario through the binary's real non-interactive
 // entry point — argument parsing, dispatch, pre-flight, suite execution and
@@ -281,6 +301,10 @@ func RunScenario(t *testing.T, sc Scenario) Outcome {
 	if sc.Cost != nil {
 		cost = sc.Cost
 	}
+	var observed domain.ObservedModelProvider = selectedModelEvidence{model: scenarioSubjectModel}
+	if sc.ObservedModels != nil {
+		observed = sc.ObservedModels
+	}
 
 	workspaceRoot := sc.WorkspaceRoot
 	if workspaceRoot == "" {
@@ -298,6 +322,7 @@ func RunScenario(t *testing.T, sc Scenario) Outcome {
 				fixtures:          resolver,
 				effects:           effects,
 				cost:              cost,
+				observed:          observed,
 				clock:             clock,
 				maxConcurrentRuns: sc.MaxConcurrentRuns,
 			}, nil
@@ -312,6 +337,12 @@ func RunScenario(t *testing.T, sc Scenario) Outcome {
 	args := sc.Args
 	if args == nil {
 		args = []string{"run", filepath.Join(dir, sc.SuitePath), "--format", "json"}
+		// A run needs an explicit subject model selection. The in-process
+		// harness has no model catalog entry, so the value is not validated
+		// against one; it only has to be present.
+		if !sc.OmitSubjectModel {
+			args = append(args, "--subject-model", scenarioSubjectModel)
+		}
 	}
 
 	runCtx := sc.Ctx
@@ -348,6 +379,7 @@ type scenarioSuiteRunner struct {
 	fixtures          fixtures.Resolver
 	effects           sideeffects.Applier
 	cost              domain.CostProvider
+	observed          domain.ObservedModelProvider
 	clock             domain.Clock
 	maxConcurrentRuns int
 }
@@ -362,6 +394,8 @@ func (r scenarioSuiteRunner) Run(ctx context.Context, p preflight.Plan, sink dom
 		Cost:       r.cost,
 		Clock:      r.clock,
 		Progress:   sink,
+
+		ObservedModels: r.observed,
 	}
 	s := suite.New(suite.Options{
 		Runner:            scenarioTestRunner{deps: rd},
@@ -391,6 +425,15 @@ type zeroCostProvider struct{}
 
 func (zeroCostProvider) Cost(ctx context.Context, q domain.CostQuery) (domain.CostReport, error) {
 	return domain.CostReport{Attribution: domain.AttributionAttributed}, nil
+}
+
+// selectedModelEvidence is the default observed-model double: it reports that
+// the subject session used the scenario's selected model, so scenarios that
+// are not about model validity run through the same check and stay valid.
+type selectedModelEvidence struct{ model string }
+
+func (e selectedModelEvidence) ObservedSubjectModels(_ context.Context, _ domain.ObservedModelQuery) (domain.ObservedModelEvidence, error) {
+	return domain.ObservedModelEvidence{Models: []string{e.model}}, nil
 }
 
 // standinDecoder maps the stand-in's own final-line JSON envelope onto a

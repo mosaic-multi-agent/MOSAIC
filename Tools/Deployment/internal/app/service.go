@@ -83,21 +83,18 @@ type Service interface {
 	// Hook artifacts remain entirely out of scope and registrations are always cleared.
 	UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest) (domain.RunSummary, error)
 
-	// TransformHarness converts one or more already-deployed agents from a source harness
-	// into a target harness's deployed form.
+	// TransformHarness moves the deployment of a workspace root from a source harness to a
+	// target harness. It plans every agent before asking or writing anything, asks the model
+	// and custom-tool questions for the files that will be written, shows the plan for review
+	// (unless AutoConfirmPlan) and writes through the deploy executor in one atomic run.
 	//
-	// req.Path may name a single agent file or a directory. A directory is enumerated
-	// non-recursively; only regular files with the source harness's agent extension are
-	// considered, and every other entry is reported as a skip rather than an error.
-	//
-	// Per-file independence is the contract: a mismatched, non-agent, or failing file is
-	// recorded in the result and the batch continues. A non-nil error is reserved for
-	// failures that make the whole run meaningless — an unresolvable harness id, an
-	// unreadable input path, or user cancellation of a question.
+	// Per-file independence is the contract: a skipped or failing file is recorded in the
+	// result and the others continue. A non-nil error is reserved for failures that make the
+	// whole run meaningless: an unresolvable harness id, an unreadable workspace, user
+	// cancellation (the result then has Cancelled set) or a write failure that reverted the run.
 	//
 	// No destination file is overwritten unless req.Overwrite is true; without it, an
-	// existing destination yields a per-file outcome with StatusFailed and
-	// ErrTransformDestinationExists as its reason.
+	// existing destination is skipped and kept.
 	TransformHarness(ctx context.Context, req TransformHarnessRequest) (TransformHarnessResult, error)
 
 	// DeployAgents deploys a user-chosen mix of ordinary subagents, Infrastructure-category
@@ -176,7 +173,7 @@ type Service interface {
 	// harness-only agent file, so that a one-off harness-specific agent becomes reusable
 	// across harnesses through the normal Deploy/Update flow.
 	//
-	// The source file must satisfy the two-signal eligibility rule — `transform_version` in
+	// The source file must satisfy the two-signal eligibility rule — a harness_version or transform_version stamp in
 	// frontmatter AND a structurally valid set of canonical boundary tags. An ineligible file
 	// is rejected with an error wrapping ErrPromoteNotTransformed and nothing is written.
 	//
@@ -328,6 +325,8 @@ func New(d Deps) Service {
 // pre-answered in the request (CD-6).
 type service struct {
 	deps Deps
+	// ghcpHeld, when set by the test-only constructor, replaces GHCP target detection.
+	ghcpHeld *ghcpTargets
 }
 
 // ListHarnesses returns every harness the registry knows about, including gated ones.
@@ -432,6 +431,11 @@ type DeployRequest struct {
 	// for each conflict (subject to the apply-to-all latch). This mirrors
 	// UpdateRequest.ConflictDefault and is populated by the deploy --conflict CLI flag.
 	ConflictDefault domain.ConflictDecision
+
+	// StrictModels makes an unresolved agent model fatal. When true, DeployNew returns
+	// *UnresolvedModelsError, before review and before any write, when any agent of the run
+	// would be written without a resolved model. When false, behaviour is unchanged.
+	StrictModels bool
 }
 
 // UpdateRequest carries the caller's pre-answers for the update flow.

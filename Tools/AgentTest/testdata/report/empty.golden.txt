@@ -1,8 +1,9 @@
+MODEL UNVERIFIED: no runs were evaluated; this is not a model result
 Repetitions: suite default
 Suite: empty-suite
 Started: 2026-08-07T12:00:00Z
 Finished: 2026-08-07T12:00:00Z
 
+MODEL UNVERIFIED: no runs were evaluated; this is not a model result
 Totals:
 Infrastructure failures: 0
-Total cost: $0.00 (attributed)

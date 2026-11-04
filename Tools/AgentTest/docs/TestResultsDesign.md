@@ -110,6 +110,10 @@ The `store` command, per report:
 
 When processing multiple files, the command reports a summary: `Stored 12 reports (3 skipped: 2 non-report, 1 unknown version)`.
 
+**Observed-model refusal.** A report is refused (not filed) when any run of any test lacks an observed subject model or has one that differs from the run's selected `subject_model`. There is no override. Refused reports are listed per report with the reason on the CLI and the TUI, and counted as `N refused` in the summary line. The refusal applies only when persisting; reading and summarising already-stored reports is unchanged and stored files are never modified.
+
+**Filing by observed model.** For newly stored reports the `{model-short}` in the file name and the model grouping and headings in generated summaries use the observed subject model. Reports stored before the observed-model field existed have no such field and are read and summarised by their selected `subject_model`. Cost is not shown in summaries.
+
 The original reports are untouched. The user can re-store, delete, or ignore them.
 
 ### 3.3 Summary Phase (Read-Only Generation)
@@ -200,22 +204,22 @@ One subsection per model. Each contains the overall model score followed by per-
 ## Model: claude-sonnet-4.6
 
 ### Overall
-| Harness | Tests | Passed | Pass Rate | Avg Duration | Total Cost |
-|---------|-------|--------|-----------|--------------|------------|
-| claude-code | 12 | 10 | 83.3% | 38s | $0.42 |
-| opencode | 12 | 8 | 66.7% | 45s | $0.38 |
+| Harness | Tests | Passed | Pass Rate | Avg Duration |
+|---------|-------|--------|-----------|--------------|
+| claude-code | 12 | 10 | 83.3% | 38s |
+| opencode | 12 | 8 | 66.7% | 45s |
 
 ### Suite: status-routing (claude-code)
-| Test | Reps | Passed | Rate | Avg Duration | Cost | Failure Classes |
-|------|------|--------|------|--------------|------|-----------------|
-| findings-route-back | 10 | 8 | 80% | 45s | $0.03 | assertion_failure |
-| partially-done-redispatch | 10 | 10 | 100% | 32s | $0.02 | — |
+| Test | Reps | Passed | Rate | Avg Duration | Failure Classes |
+|------|------|--------|------|--------------|-----------------|
+| findings-route-back | 10 | 8 | 80% | 45s | assertion_failure |
+| partially-done-redispatch | 10 | 10 | 100% | 32s | — |
 
 ### Suite: status-routing (opencode)
-| Test | Reps | Passed | Rate | Avg Duration | Cost | Failure Classes |
-|------|------|--------|------|--------------|------|-----------------|
-| findings-route-back | 10 | 6 | 60% | 52s | $0.03 | assertion_failure |
-| partially-done-redispatch | 10 | 9 | 90% | 38s | $0.02 | — |
+| Test | Reps | Passed | Rate | Avg Duration | Failure Classes |
+|------|------|--------|------|--------------|-----------------|
+| findings-route-back | 10 | 6 | 60% | 52s | assertion_failure |
+| partially-done-redispatch | 10 | 9 | 90% | 38s | — |
 ```
 
 Repeated for each model. Each model subsection ends with an analysis placeholder:
@@ -377,13 +381,16 @@ For reference, these fields in the report schema feed the storage and summary sy
 - `test_version` — the test definition's `version` at the time the run was executed (new field; enables staleness detection in the summary generator)
 - `test_id` — the test definition's numeric `id` (new per-run field; integer)
 - `harness_id` — which harness adapter produced this run
-- `subject_model` — model the orchestrator ran on
-- `stub_model` — model used for stub responses (if applicable)
+- `subject_model` - model selected for the subject (a selection, never a label)
+- `stub_model` - model selected for stub responses (if applicable)
+- `observed_subject_models` - subject model(s) the run's logs show (array); `model_verification` - `verified`, `mismatch`, `no_evidence` or `not_assessed`
 - `subject_version` — orchestrator version from frontmatter
 - `harness_version` — version of the harness that ran the run (for Claude Code, from `claude --version`); omitted when unknown. It is retained in the stored copy but is not part of the file name or directory key.
 - `duration_ms`, `cost`
 - `verdict`, `reasons`, `assertions`, `conditions`
 - `termination_reason`
+
+**Per-report:** `model_verdict` (`MODEL_VERIFIED` / `MODEL_UNVERIFIED`), `model_label` (the common observed model when verified, otherwise empty) and `unverified_runs`. A suite with any invalid run (mismatch or no evidence), or with no runs, is `MODEL_UNVERIFIED` and carries no model label in its text heading, summary, progress line or TUI display. All additions are additive; stored reports without them still decode.
 
 **Schema changes made (additive):** The string `test_id` field in per-test and per-run JSON was renamed to `test_name`. A new integer `test_id` field was added at per-test and per-run levels, carrying the stable numeric identity from the test definition. A new `test_version` field was added at the per-run level. These changes are additive at the wire level — old consumers reading `test_id` as a string will encounter an integer instead.
 
@@ -427,4 +434,4 @@ A report where some tests have `infrastructure_failure: true` or where the suite
 
 ### 6.5 Cost Attribution
 
-Reports where cost attribution is `unknown_bucket` or `unavailable` should still be storable and summarized, but cost columns in summaries should show a warning marker rather than `$0.00` which would be misleading.
+Summaries do not show cost: per-run cost figures are not comparable across harnesses (prompt caching differs) and say nothing about real-use cost. Report files, including the stored ones, still carry `total_cost` and per-run `cost`; stored reports with cost fields are still storable and summarized, and the cost fields are simply ignored by the summary renderings.

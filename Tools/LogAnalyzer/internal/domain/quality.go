@@ -18,11 +18,27 @@ const (
 	FindingMissingEventFile    FindingKind = "missing_event_file"
 	FindingInvalidPricingEntry FindingKind = "invalid_pricing_entry"
 
+	// FindingInvalidSettingsEntry reports an invalid settings-file entry; its
+	// default applied. Warning severity; NOT a data-loss kind.
+	FindingInvalidSettingsEntry FindingKind = "invalid_settings_entry"
+
 	// FindingCrossStreamRecord reports a usage_record whose record_id was
 	// observed on more than one stream within a single run, violating the
 	// format's single-stream invariant. The data is suspect, not partial:
 	// this kind is deliberately NOT a member of dataLossKinds.
 	FindingCrossStreamRecord FindingKind = "cross_stream_record"
+
+	// FindingInvalidCacheTierSplit reports a token_usage block whose cache-write
+	// tier fields were present but inconsistent; the split was ignored. Warning
+	// severity; NOT a data-loss kind.
+	FindingInvalidCacheTierSplit FindingKind = "invalid_cache_tier_split"
+
+	// FindingCompactionMismatch reports that an actor's logged and detected
+	// compactions disagree: a context drop with no logged compaction near it, a
+	// logged compaction with no drop near it, or a compaction logged on the
+	// orchestrator stream that matches a subagent's drop. Run and Actor are set.
+	// Warning severity; NOT a data-loss kind.
+	FindingCompactionMismatch FindingKind = "compaction_mismatch"
 )
 
 // FindingSeverity lets a frontend decide prominence without parsing kinds.
@@ -57,11 +73,18 @@ func (q QualitySummary) IsClean() bool { return len(q.Findings) == 0 }
 // dataLossKinds is the set of finding kinds that indicate the underlying data
 // is known to be partial (i.e. events were irrecoverably lost).
 var dataLossKinds = map[FindingKind]bool{
-	FindingMalformedLine:  true,
-	FindingTruncatedLine:  true,
-	FindingUnreadableFile: true,
-	FindingMissingEventFile: true,
+	FindingMalformedLine:      true,
+	FindingTruncatedLine:      true,
+	FindingUnreadableFile:     true,
+	FindingMissingEventFile:   true,
 	FindingUnrecognisedFolder: true,
+
+	// Digest files skipped at load time.
+	FindingInvalidDigest:            true,
+	FindingUnsupportedDigestVersion: true,
+
+	// An adapter reported a transcript with assistant turns and no readable usage.
+	FindingTranscriptFormatChanged: true,
 }
 
 // Incomplete reports whether the data behind the report is known to be partial.

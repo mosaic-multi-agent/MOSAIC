@@ -274,6 +274,9 @@ func TestAgentStaleness_Orchestrator_OrchestratorInjectionsVersionMismatch_Produ
 		HarnessVersion:                "2.0",
 		InjectionsVersion:             "3.0",
 		OrchestratorInjectionsVersion: "4.0",
+
+		HasInjectionRegion:             true,
+		HasOrchestratorInjectionRegion: true,
 	}
 	// Use an orchestrator-role agent.
 	agent := makeOrchestrator()

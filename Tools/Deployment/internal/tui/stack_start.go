@@ -76,7 +76,7 @@ func (m *rootModel) startStack() stackStart {
 }
 
 // persistedWorkspace returns the workspace whose persisted stack applies to the confirmed path:
-// for promote and transform the workspace containing the path, for the other modes the path
+// for promote the workspace containing the file, for the other modes the path
 // itself when it is a workspace.
 func (m *rootModel) persistedWorkspace() (string, bool) {
 	path := m.selections.workspacePath
@@ -85,7 +85,7 @@ func (m *rootModel) persistedWorkspace() (string, bool) {
 		return "", false
 	}
 	switch m.selections.mode {
-	case domain.ModePromoteToGeneric, domain.ModeTransformHarness:
+	case domain.ModePromoteToGeneric:
 		return workspace, true
 	}
 	return workspace, sameDirectory(workspace, path)

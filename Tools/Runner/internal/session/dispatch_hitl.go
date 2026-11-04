@@ -160,7 +160,7 @@ func (s *sessionImpl) handleAutoHITLRedispatch(ctx context.Context, rs *runStart
 		if s.deps.Routing == nil {
 			alMsg := "anti-loop guard: no routing consultant configured"
 			s.deps.Debug.Log(domain.EventSessionDeviationUnresolved, alMsg)
-			return hitlRedispatchState{}, true, false, domain.RunOutcome{Status: domain.RunDeviationUnresolved, Message: alMsg}, nil
+			return hitlRedispatchState{}, true, false, domain.RunOutcome{Status: domain.RunDeviationUnresolved, Message: alMsg, AntiLoopStop: true}, nil
 		}
 		alDevInfo := domain.DeviationInfo{
 			Kind: domain.DeviationNonSuccess, Response: hitlResponse,

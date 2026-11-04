@@ -25,8 +25,10 @@ const (
 
 // routeSession builds a session over the named orchestrator fixture. Agent
 // files are written for every name in agents, and plan, when not empty, is
-// written as Plan.md next to the orchestrator file.
-func routeSession(t *testing.T, fixture, plan string, consultant domain.RoutingConsultant, agents ...string) (
+// written as Plan.md next to the orchestrator file. The runs of routeConfig
+// enable commits, so the fixture's first commit-class agent, commitAgent,
+// answers commit setup first.
+func routeSession(t *testing.T, fixture, plan, commitAgent string, consultant domain.RoutingConsultant, agents ...string) (
 	ses session.Session, f *harness.MockAdapter, orchPath string,
 ) {
 	t.Helper()
@@ -41,6 +43,7 @@ func routeSession(t *testing.T, fixture, plan string, consultant domain.RoutingC
 		}
 	}
 	f = harness.NewMockAdapter()
+	f.Queue(commitAgent, commitSetupEntry())
 	ses = session.New(session.Deps{
 		Harness:  f,
 		Store:    &memStore{},
@@ -64,7 +67,7 @@ func routeConfig(orchPath, workflowID string, mode domain.ExecutionMode) domain.
 // the run-scope row, not after the last row of the last iteration.
 func TestSession_Start_PhaseEnd_BlockFollowedByRunScopeRowInSamePhase_FiresAfterTrailingRow(t *testing.T) {
 	forEachSessionAutoMode(t, func(t *testing.T, mode domain.ExecutionMode) {
-		ses, f, orchPath := routeSession(t, "phase-end-block-then-run-scope-orch.md", condTwoStagePlan, nil,
+		ses, f, orchPath := routeSession(t, "phase-end-block-then-run-scope-orch.md", condTwoStagePlan, routeCommitAgent, nil,
 			"implementation-tdd", "implementation-review", "wrap-up", routeCommitAgent, routeCheckpointAgent)
 		for i := 0; i < 2; i++ {
 			queueCond(f, "implementation-tdd", domain.StatusSUCCESS)
@@ -105,7 +108,7 @@ func TestSession_Start_PhaseEndMode1_JoinLeavingPhase_FiresAfterJoinOnly(t *test
 		consultant.queueDispatch(agent, "task", i)
 	}
 	consultant.queueStop("done")
-	ses, f, orchPath := routeSession(t, "phase-end-fork-join-leaves-orch.md", "", consultant,
+	ses, f, orchPath := routeSession(t, "phase-end-fork-join-leaves-orch.md", "", routePhaseAgent, consultant,
 		"scout", "research-a", "research-b", "merge", "reporter", "cleanup", routePhaseAgent)
 	for _, agent := range []string{"scout", "research-a", "research-b", "merge"} {
 		queueCond(f, agent, domain.StatusSUCCESS)
@@ -132,7 +135,7 @@ func TestSession_Start_IterationEndMode1_DeclaredCompleteOnFirstRow_FiresAfterIt
 	consultant := &scriptedRoutingConsultant{}
 	consultant.queueStagedDispatch("worker", "task", 0, "1")
 	consultant.queueStop("done")
-	ses, f, orchPath := routeSession(t, "iteration-end-declared-complete-orch.md", condOneStagePlan, consultant,
+	ses, f, orchPath := routeSession(t, "iteration-end-declared-complete-orch.md", condOneStagePlan, routeCommitAgent, consultant,
 		"worker", "checker", "reporter", routeCommitAgent)
 	queueCond(f, "worker", domain.StatusSUCCESS)
 	queueCond(f, routeCommitAgent, domain.StatusSUCCESS)
@@ -151,7 +154,7 @@ func TestSession_Start_IterationEndMode1_ConsultedRouteDiffersFromDeclared_Trigg
 	consultant.queueStagedDispatch("worker", "task", 0, "1")
 	consultant.queueStagedDispatch("checker", "task", 1, "1")
 	consultant.queueStop("done")
-	ses, f, orchPath := routeSession(t, "iteration-end-declared-complete-orch.md", condOneStagePlan, consultant,
+	ses, f, orchPath := routeSession(t, "iteration-end-declared-complete-orch.md", condOneStagePlan, routeCommitAgent, consultant,
 		"worker", "checker", "reporter", routeCommitAgent)
 	queueCond(f, "worker", domain.StatusSUCCESS)
 	queueCond(f, routeCommitAgent, domain.StatusSUCCESS)

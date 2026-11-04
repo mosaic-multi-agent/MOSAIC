@@ -14,7 +14,7 @@ import (
 const AbsentMarker = screens.AbsentMarker
 
 // UnpricedMarker is rendered for a money cell whose model has no pricing entry.
-// It must never be "$0.00".
+// It must never be a zero amount.
 const UnpricedMarker = screens.UnpricedMarker
 
 // ProvisionalLabel marks a run with no run_end/session_end so its cost is not
@@ -32,13 +32,13 @@ func FormatTokens(t domain.TokenCount) string {
 
 // FormatMoney renders a MoneyValue: AbsentMarker for MoneyNoData,
 // UnpricedMarker for MoneyUnpriced, and a currency-formatted amount for
-// MoneyKnown (including "$0.00").
-func FormatMoney(v domain.MoneyValue) string {
-	return screens.FormatMoney(v)
+// MoneyKnown (including a zero amount) in the currency cur.
+func FormatMoney(cur domain.CurrencyCode, v domain.MoneyValue) string {
+	return screens.FormatMoney(cur, v)
 }
 
 // FormatTotal renders a CategoryMoney total, appending a partial-total marker
 // when Complete is false.
-func FormatTotal(c domain.CategoryMoney) string {
-	return screens.FormatTotal(c)
+func FormatTotal(cur domain.CurrencyCode, c domain.CategoryMoney) string {
+	return screens.FormatTotal(cur, c)
 }

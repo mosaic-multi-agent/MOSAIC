@@ -25,8 +25,7 @@ import (
 type runtimeModule struct {
 	ref             domain.HarnessRef
 	desc            *domain.HarnessDescriptor
-	injections      map[string]string // parsed from HarnessInjections.md at resolve time; may be empty
-	orchInjections  map[string]string // parsed from HarnessInjectionsOrchestrator.md; may be empty
+	content injectionfile.HarnessContent // HarnessInjections.md and HarnessInjectionsOrchestrator.md regions; either map may be empty
 }
 
 // newRuntimeModule constructs a descriptor-driven module for the given ref and descriptor.
@@ -40,40 +39,48 @@ func newRuntimeModule(ref domain.HarnessRef, desc *domain.HarnessDescriptor, inj
 	if orchInjections == nil {
 		orchInjections = make(map[string]string)
 	}
-	return &runtimeModule{ref: ref, desc: desc, injections: injections, orchInjections: orchInjections}
+	return &runtimeModule{ref: ref, desc: desc, content: injectionfile.HarnessContent{Shared: injections, Orchestrator: orchInjections}}
 }
 
-// loadInjections reads HarnessInjections.md from the same directory as the harness YAML file
-// and parses it using injectionfile.ParseDeployedRegions. If the file does not exist, an empty
-// map is returned (absence is treated as no harness-level injections). Any other read or
-// parse error is returned to the caller.
-func loadInjections(yamlPath string) (map[string]string, error) {
-	mdPath := filepath.Join(filepath.Dir(yamlPath), "HarnessInjections.md")
-	data, err := os.ReadFile(mdPath)
+// tierInjections is the injection content read from the files next to a descriptor.
+type tierInjections struct {
+	shared         map[string]string
+	sharedVersion  string
+	orch           map[string]string
+	orchVersion    string
+}
+
+// loadTierInjections reads HarnessInjections.md and HarnessInjectionsOrchestrator.md from the
+// directory of the harness YAML file. A missing or unparseable file means no injections of that
+// kind and no version. A file that parses but has no frontmatter version is an error naming the
+// file path.
+func loadTierInjections(yamlPath string) (tierInjections, error) {
+	dir := filepath.Dir(yamlPath)
+	shared, sharedVersion, err := loadTierFile(dir, injectionfile.SharedFileName)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return make(map[string]string), nil
-		}
-		return nil, err
+		return tierInjections{}, err
 	}
-	return injectionfile.ParseDeployedRegions(data)
+	orch, orchVersion, err := loadTierFile(dir, injectionfile.OrchestratorFileName)
+	if err != nil {
+		return tierInjections{}, err
+	}
+	return tierInjections{shared: shared, sharedVersion: sharedVersion, orch: orch, orchVersion: orchVersion}, nil
 }
 
-// loadOrchInjections reads HarnessInjectionsOrchestrator.md from the same directory as the
-// harness YAML file and parses it using injectionfile.ParseDeployedRegionsWithVersion. If the
-// file does not exist, an empty map and an empty version are returned (absence is treated as
-// no orchestrator-only injections, which is the common case). Any other read or parse error
-// is returned to the caller.
-func loadOrchInjections(yamlPath string) (regions map[string]string, version string, err error) {
-	mdPath := filepath.Join(filepath.Dir(yamlPath), "HarnessInjectionsOrchestrator.md")
-	data, readErr := os.ReadFile(mdPath)
-	if readErr != nil {
-		if os.IsNotExist(readErr) {
-			return make(map[string]string), "", nil
-		}
-		return nil, "", readErr
+func loadTierFile(dir, name string) (map[string]string, string, error) {
+	path := filepath.Join(dir, name)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return map[string]string{}, "", nil
 	}
-	return injectionfile.ParseDeployedRegionsWithVersion(data)
+	regions, version, err := injectionfile.ParseDeployedRegionsWithVersion(data)
+	if err != nil {
+		return map[string]string{}, "", nil
+	}
+	if version == "" {
+		return nil, "", injectionfile.NewMissingVersionError(name, path)
+	}
+	return regions, version, nil
 }
 
 // Ref returns the identity and provenance of this harness. The value is stable; calling Ref
@@ -115,30 +122,11 @@ func (m *runtimeModule) TargetPath(req domain.TargetPathRequest) (string, error)
 	return descriptor.ResolveTargetPath(m.desc, req)
 }
 
-// Injection returns the harness-level content for a canonical injection name.
-//
-// When req.Role == domain.RoleOrchestrator, shared content (from HarnessInjections.md) is
-// merged with orchestrator-only content (from HarnessInjectionsOrchestrator.md, loaded at
-// construction time). For all other roles (including zero value), only shared content is returned.
+// Injection returns the content this harness serves for one region and role: the orchestrator
+// region from HarnessInjectionsOrchestrator.md (orchestrator role only), every other region
+// from HarnessInjections.md. The two files are never merged.
 func (m *runtimeModule) Injection(req domain.InjectionRequest) (string, bool) {
-	sharedContent, sharedOk := m.injections[req.Name]
-	if req.Role != domain.RoleOrchestrator {
-		return sharedContent, sharedOk
-	}
-	orchContent, orchOk := m.orchInjections[req.Name]
-	if !sharedOk && !orchOk {
-		return "", false
-	}
-	if sharedContent != "" && orchContent != "" {
-		return sharedContent + "\n\n" + orchContent, true
-	}
-	if sharedContent != "" {
-		return sharedContent, true
-	}
-	if orchContent != "" {
-		return orchContent, true
-	}
-	return "", true
+	return m.content.Injection(req)
 }
 
 // HookPlan returns a plan for deploying one hook bundle with this harness. When the
@@ -159,3 +147,4 @@ func (m *runtimeModule) HookPlan(req domain.HookPlanRequest) (domain.HookPlan, e
 		Reason:    "hook variant files are not available for runtime-provisioned harnesses",
 	}, nil
 }
+

@@ -7,33 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"mosaic-common/docformat"
 	"mosaic-common/mdtable"
 	"mosaic-run/internal/domain"
 )
-
-// extractSectionContent extracts the bytes between a section's open and close tags.
-// Returns (content, true) on success, (nil, false) if the section is not found.
-func extractSectionContent(body []byte, sectionName string) ([]byte, bool) {
-	openTag, err := docformat.RenderOpenTagLine(docformat.NodeSection, sectionName, "")
-	if err != nil {
-		return nil, false
-	}
-	closeTag, err := docformat.RenderCloseTagLine(sectionName)
-	if err != nil {
-		return nil, false
-	}
-
-	openEnd, ok := findTagLineEnd(body, bytes.TrimSpace(openTag), 0)
-	if !ok {
-		return nil, false
-	}
-	closeStart, ok := findTagLineStart(body, bytes.TrimSpace(closeTag), openEnd)
-	if !ok {
-		return nil, false
-	}
-	return dropBlankLines(body[openEnd:closeStart]), true
-}
 
 // parseExecutionLog parses the execution log table from section content.
 func parseExecutionLog(content []byte) ([]domain.ExecutionLogEntry, error) {

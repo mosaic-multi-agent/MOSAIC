@@ -90,12 +90,12 @@ func TestCanonicalManagedBlocks_DisjointFromCanonicalDeployed(t *testing.T) {
 }
 
 func TestCanonicalDeployed_Stage4_StillContainsEightNames(t *testing.T) {
-	// Adding CanonicalManagedBlocks must not change CanonicalDeployed. The closed eight-name
-	// set must remain exactly eight so that RefreshScope.Regions(), bundle-target validation,
+	// Adding CanonicalManagedBlocks must not change CanonicalDeployed. The closed nine-name
+	// set must remain exactly nine so that RefreshScope.Regions(), bundle-target validation,
 	// and generator sweep tests remain unaffected.
 	got := docformat.CanonicalDeployed
-	if len(got) != 8 {
-		t.Fatalf("CanonicalDeployed length: want 8 (unchanged by Stage 4), got %d: %v", len(got), got)
+	if len(got) != 9 {
+		t.Fatalf("CanonicalDeployed length: want 9 (unchanged by managed blocks), got %d: %v", len(got), got)
 	}
 }
 

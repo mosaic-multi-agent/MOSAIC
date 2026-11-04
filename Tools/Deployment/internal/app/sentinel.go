@@ -70,3 +70,10 @@ func (e *RevertedRunError) Unwrap() error {
 func (e *RevertedRunError) Is(target error) bool {
 	return target == ErrRunReverted
 }
+
+// ErrTransformSameHarness reports a transform request whose source and target harness are identical.
+var ErrTransformSameHarness = errors.New("source and target harness must differ")
+
+// ErrWorkspaceNotFound reports that the workspace path given to update or workflows does not
+// exist or is not a directory. Returned wrapped with the path.
+var ErrWorkspaceNotFound = errors.New("workspace does not exist")

@@ -159,4 +159,8 @@ type ProgressEvent struct {
 	// ProgressSuiteFinished
 	Counts    map[Verdict]int
 	TotalCost CostReport
+	// ModelVerdict and ModelLabel carry the suite-level model verdict and its
+	// label. Empty on an event from an older producer.
+	ModelVerdict ModelVerdict
+	ModelLabel   string
 }
