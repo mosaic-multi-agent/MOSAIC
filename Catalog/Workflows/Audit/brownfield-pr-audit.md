@@ -2,7 +2,7 @@
 version: "4.1"
 name: "Brownfield PR Audit Workflow"
 description: "Audit quality of existing code for PR review — multi-pass research, plan-driven staged audits with 4 types, per-audit PR comment transform with cross-audit deduplication, a final human-gated review of the consolidated comment queue, and post."
-hint: "Proven, not just theoretical — run a handful of times against real PRs with sufficient quality. Its purpose is straightforward (let AI participate as a reviewer on a live pull request) but the machinery underneath is the most elaborate in the catalog — 4 audit types running as parallel stages, per-stage PR comment transforms, cross-audit dedup. Requirements.md must be user-authored with PR ID, branches, and scope before starting."
+hint: "Proven, not just theoretical — run a handful of times against real PRs with sufficient quality. Its purpose is straightforward (let AI participate as a reviewer on a live pull request) but the machinery underneath is the most elaborate in the catalog — 4 audit types running as parallel stages, per-stage PR comment transforms, cross-audit dedup, and a whole-queue dedup pass before the single human approval of the comments. Requirements.md must be user-authored with PR ID, branches, and scope before starting."
 author: MOSAIC
 id: brownfield-pr-audit
 referenced_agents:
@@ -17,7 +17,7 @@ referenced_agents:
   - audit-review
   - contracts-audit
   - audit-response-merger
-  - pr-response-review
+  - pr-response-dedup
 artifacts:
   - Requirements.md
   - PullRequestComments.md
@@ -41,7 +41,7 @@ artifacts:
   - Stage-*/PullRequestResponses.md
   - Stage-*/TransformReport.md
   - AuditTransformReport.md
-  - PullRequestResponsesReview.md
+  - PullRequestResponsesDedupLog.md
 ---
 
 <Workflow type="core" name="brownfield-pr-audit" version="4.1">
@@ -68,8 +68,8 @@ artifacts:
 | EXECUTION.[Stage].Contracts | audit-review(contracts) | FALSE | NEXT | contracts-audit | Requirements.md, Research.md, ResearchContracts.md, Stage-{Stage}/ContractsAudit.md | Stage-{Stage}/contracts-audit-review.md |
 | EXECUTION.[Stage].Contracts | audit-to-pull-request(contracts) | FALSE | COMPLETE | - | Requirements.md, PullRequestComments.md, PullRequestResponses.md, Stage-{Stage}/ContractsAudit.md, Stage-{Stage}/contracts-audit-review.md | Stage-{Stage}/PullRequestResponses.md, Stage-{Stage}/TransformReport.md |
 | REVIEW | audit-response-merger | FALSE | NEXT | - | Requirements.md, PullRequestComments.md, AuditPlan.md, Stage-*/PullRequestResponses.md, Stage-*/TransformReport.md | PullRequestResponses.md, AuditTransformReport.md |
-| REVIEW | pr-response-review | TRUE | NEXT | - | PullRequestResponses.md, AuditTransformReport.md, PullRequestComments.md | PullRequestResponses.md, PullRequestResponsesReview.md |
-| COMPLETION | pull-request-comment-interface(post) | TRUE | COMPLETE | - | PullRequestResponses.md | PullRequestResponses.md |
+| REVIEW | pr-response-dedup | TRUE | NEXT | - | PullRequestResponses.md, AuditTransformReport.md, PullRequestComments.md | PullRequestResponses.md, PullRequestResponsesDedupLog.md |
+| COMPLETION | pull-request-comment-interface(post) | FALSE | COMPLETE | - | PullRequestResponses.md | PullRequestResponses.md |
 
 **Blocks:**
 
@@ -103,7 +103,9 @@ Field-used only a couple of times so far, but with sufficient quality to call it
 
 **Reviewed groups.** The Architecture and Contracts groups carry an `audit-review` step whose suggested fix target is the audit in the same group. Since 4.0 this also applies to focused deep-dive stages of those types, which previously went to PR comments unreviewed.
 
-**Two-pass deduplication before posting (4.1).** Several audit types read the same files, so one issue often reaches the queue several times: at disjoint line ranges, as overlapping multi-bullet comments, or once per file for a systemic finding. A field run posted 105 comments of which 12-15 were such duplicates. `audit-response-merger` stays script-driven, because it must scale to dozens of partial files, and only sees candidate groups its scripts link. `pr-response-review` then reads the whole consolidated queue in one window (about 105 entries fit comfortably) and removes what the scripts cannot see, logging every merge and drop in `PullRequestResponsesReview.md`. The human gate moved from the merger to this row: approving a queue of 100+ comments is not a practical review, approving a short decision log plus the pruned queue is. `On Findings` is `-` because the agent repairs the queue itself; its only action-requiring outcome is malformed entries, which go to the human.
+**Two-pass deduplication before posting (4.1).** Several audit types read the same files, so one issue often reaches the queue several times: at disjoint line ranges, as overlapping multi-bullet comments, or once per file for a systemic finding. A field run posted 105 comments of which 12-15 were such duplicates. The two passes split the work by what each can see. `audit-response-merger` stays script-driven, because it must scale to dozens of partial files: it judges only candidate groups its scripts link (entries from different audits sharing a line range or identifiers, or naming each other's files) and records the pairs it could not decide. `pr-response-dedup` then reads the whole consolidated queue in one window (about 105 entries fit comfortably) and judges every pair in a file, including same-audit pairs and pairs only the wording connects. Both keep both entries when uncertain: a duplicate left in can be seen and removed, a false merge cannot be seen at all. The dedup agent copies the merger's merges and undecided pairs into `PullRequestResponsesDedupLog.md` beside its own decisions, so every merge applied to the queue is in front of the human at one gate.
+
+**One human gate before posting (4.1).** The gate moved from the merger (now HITL FALSE) to `pr-response-dedup`: approving a queue of 100+ comments is not a practical review, approving a short decision log plus the pruned queue is. The poster runs HITL FALSE because it posts exactly the queue the human just approved; a second approval of the same queue adds a step, not a check. `On Findings` is `-` on the dedup row because the agent repairs the queue itself; its only action-requiring outcome is malformed entries, which go to the human.
 
 ### Pattern: script-mediated context scaling via schema-conformant JSON artifacts
 
@@ -114,7 +116,7 @@ The problem: `audit-response-merger` consolidates the partial PR-response-queue 
 The fix has two parts, and both matter:
 
 1. **Producers write structured JSON embedded in markdown, conforming to a schema they read from a template artifact** — `audit-to-pull-request` doesn't invent its own output shape; it reads the response-queue schema from a template and writes to it exactly.
-2. **The consumer discovers the schema from one sample, then writes scripts to process the rest.** `audit-response-merger` reads exactly one partial file of each type with `file_read` to learn the field names and structure, then authors and runs scripts that parse, extract, group, and merge every remaining file. LLM reasoning is reserved for the one step that's genuinely semantic — judging whether two candidate findings describe the same underlying issue — everything mechanical (parsing, linking candidates by line proximity, shared identifiers and text similarity, counting, assembling output) is scripted.
+2. **The consumer discovers the schema from one sample, then writes scripts to process the rest.** `audit-response-merger` reads exactly one partial file of each type with `file_read` to learn the field names and structure, then authors and runs scripts that parse, extract, group, and merge every remaining file. LLM reasoning is reserved for the one step that's genuinely semantic — judging whether two candidate findings describe the same underlying issue — everything mechanical (parsing, linking candidates by line position and shared identifiers, counting, assembling output) is scripted.
 
 The critical dependency this creates: **both the artifact's producer and its consumer must be aware of its format up front**, so the consumer's scripts can run immediately against real data instead of needing a discovery phase against every file. That's why the schema lives in a template artifact both sides read, rather than being implicit in whatever the producer happens to write. Skipping this — letting producers freelance their output shape — would force the consumer back into per-file manual reading, defeating the entire pattern.
 
@@ -129,7 +131,7 @@ This is a reusable pattern beyond this workflow specifically: whenever a workflo
 | 3.1 | 2026-08-17 | MOSAIC | Changelog tracking begins here; earlier revisions predate this record. |
 | 3.2 | 2026-08-26 | MOSAIC | Replace Unicode emoji with ASCII tokens in HITL column (TRUE/FALSE). |
 | 4.0 | 2026-10-10 | MOSAIC | Migrated to WorkflowFormat 2.16 and restructured: the fixed architecture/contracts tracks (a fork) and the planner's stages (a block) could no longer run side by side (B3), so the fixed tracks became whole-PR `Architecture` and `Contracts` stages that `planner-audit` always creates. One declared `[Stage]` block (`AuditPlan.md`, `Stages`) with one group per audit type selected by `Approach`; `(staged)` duplicate rows, the fork and the `Waits For` column removed. Focused research now runs after planning and before the block. Legacy `*` targets, the in-region version line and the notes removed (seed note moved to Design Rationale). |
-| 4.1 | 2026-10-21 | MOSAIC | Added `pr-response-review` (REVIEW, HITL TRUE) between `audit-response-merger` and the poster: a whole-queue pass that merges same-issue comments, drops per-file copies of systemic findings and comments covered by open PR threads, and writes `PullRequestResponsesReview.md`. The human gate moved from the merger (now HITL FALSE) to this row. |
+| 4.1 | 2026-10-21 | MOSAIC | Added `pr-response-dedup` (REVIEW, HITL TRUE) between `audit-response-merger` and the poster: a whole-queue pass that merges same-issue comments, drops per-file copies of systemic findings and comments covered by open PR threads, and writes `PullRequestResponsesDedupLog.md`, which also reports the merger's merges. The single human gate moved to this row; the merger and the poster are now HITL FALSE. |
 
 ---
 
