@@ -26,7 +26,7 @@ func mlInvokeFailingHarness(t *testing.T, runFolder, harnessStr string) string {
 	if err := os.MkdirAll(filepath.Dir(events), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	h := buildAdapter(runFolder, harnessStr, mlMissingBinary, "blanket", time.Minute)
+	h := buildAdapter(runFolder, harnessStr, mlMissingBinary, "blanket", nonHITLTimeouts(time.Minute), nil)
 	agentFile := filepath.Join(ws, "Research.md")
 	if err := os.WriteFile(agentFile, []byte("# Agent: Research\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -76,7 +76,7 @@ func TestBuildAdapter_OpenCodeWithoutRunFolderGetsNoSafetyNet(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Chdir(ws)
-			h := buildAdapter(folder, "opencode", mlMissingBinary, "", time.Minute)
+			h := buildAdapter(folder, "opencode", mlMissingBinary, "", nonHITLTimeouts(time.Minute), nil)
 
 			_, err := h.Invoke(context.Background(), domain.AgentReference{Identifier: "Research"},
 				domain.ProtocolRequest{AgentInstanceID: mlAgentInstance, RunID: mlRunID})
@@ -94,7 +94,7 @@ func TestBuildAdapter_OpenCodeWithoutRunFolderGetsNoSafetyNet(t *testing.T) {
 func TestBuildAdapter_DecoratedOpenCodeKeepsOptionalCapabilities(t *testing.T) {
 	runFolder, _ := mlRunFolder(t)
 
-	h := buildAdapter(runFolder, "opencode", mlMissingBinary, "", time.Minute)
+	h := buildAdapter(runFolder, "opencode", mlMissingBinary, "", nonHITLTimeouts(time.Minute), nil)
 
 	raw, ok := h.(domain.RawInvoker)
 	if !ok || raw == nil {
@@ -119,7 +119,7 @@ func TestBuildAdapter_DecoratedOpenCodeInvokeRawNeverWritesInvocationEnd(t *test
 	if err := os.MkdirAll(filepath.Dir(events), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	h := buildAdapter(runFolder, "opencode", mlMissingBinary, "", time.Minute)
+	h := buildAdapter(runFolder, "opencode", mlMissingBinary, "", nonHITLTimeouts(time.Minute), nil)
 	raw := h.(domain.RawInvoker)
 
 	_, err := raw.InvokeRaw(context.Background(),

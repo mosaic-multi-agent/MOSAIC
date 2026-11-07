@@ -16,8 +16,10 @@ const (
 
 // Fixed option IDs of the manual routing dialogue.
 const (
-	ManualStopOptionID = "stop"    // row step: stop the run
-	ManualHITLDefault  = "default" // HITL step: no override
-	ManualHITLOn       = "on"      // HITL step: override to on
-	ManualHITLOff      = "off"     // HITL step: override to off
+	ManualStopOptionID = "stop" // row step: stop the run
+	// ManualAskOrchestratorOptionID hands the row decision to the orchestrator.
+	ManualAskOrchestratorOptionID = "ask-orchestrator"
+	ManualHITLDefault             = "default" // HITL step: no override
+	ManualHITLOn                  = "on"      // HITL step: override to on
+	ManualHITLOff                 = "off"     // HITL step: override to off
 )

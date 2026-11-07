@@ -1,3 +1,18 @@
+# Unreleased
+
+## Tools
+
+### Runner v1.10.0
+#### Changes
+- Human-in-the-loop dispatches now have their own timeout: `--hitl-timeout` (default 4h). `--timeout` (default 30m) applies to the other dispatches. The TUI asks for both, also on resume
+- The progress screen shows the live activity of the running invocation; `l` hides or shows it. It reads "no live output available" until the first event arrives
+- Claude Code runs in stream-json mode, so its activity is visible while it runs
+- `x` on the progress screen force-stops the running invocation after its own confirmation. Only that invocation is killed; the run stops resumably or continues in the manual routing dialogue
+- Timeouts and force stops kill the whole process tree of the invocation, not only its main process. AgentTest runs get the same kill on timeout
+- The manual routing dialogue can hand the decision to the orchestrator ("Ask the orchestrator to decide") when you opened it yourself
+#### Bugfixes
+- Resuming a run now re-dispatches the last attempt when it was not accepted (interrupted or force-stopped), instead of routing on its recorded status
+
 # 0.7.3 (2026-11-02)
 
 > **To upgrade:** run `Update workspace` to get the new orchestrator region, the updated agents and the updated `mosaic-logger` hook.

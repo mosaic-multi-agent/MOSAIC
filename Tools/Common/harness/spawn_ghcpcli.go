@@ -233,6 +233,8 @@ func (s *ghcpCLISpawner) Spawn(ctx context.Context, req SpawnRequest) (Response,
 		Stdin:      stdin,
 		Timeout:    timeout,
 		Sink:       s.cfg.sink,
+
+		OnStdoutLine: req.OnStdoutLine,
 	})
 	if err != nil {
 		// Two-class error handling: only ErrNonZeroExit comes with a fully
@@ -265,4 +267,3 @@ func (s *ghcpCLISpawner) Spawn(ctx context.Context, req SpawnRequest) (Response,
 	resp.Protocol = protocol
 	return resp, nil
 }
-

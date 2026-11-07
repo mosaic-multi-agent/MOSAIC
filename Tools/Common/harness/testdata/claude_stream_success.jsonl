@@ -1,0 +1,6 @@
+{"type":"system","subtype":"init","session_id":"abc123","model":"claude-test","tools":["Read","Write"]}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Let me look at the file."}]},"session_id":"abc123"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tu_1","name":"Read","input":{"file_path":"a.txt"}}]},"session_id":"abc123"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"tu_1","content":"hello"}]},"session_id":"abc123"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Done."}]},"session_id":"abc123"}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":15756,"num_turns":2,"result":"{\"agent_instance_id\":\"test-agent#1\",\"status_code\":\"SUCCESS\",\"status_message\":\"ok\"}","session_id":"abc123","total_cost_usd":0.01,"usage":{"input_tokens":10,"output_tokens":5}}

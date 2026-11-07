@@ -100,7 +100,7 @@ var helperScenarios = map[string]func(){
 	"large-garbage":                  helperScenarioLargeGarbage,
 	"protocol-decode-fail":           helperScenarioProtocolDecodeFail,
 	"bad-envelope-large":             helperScenarioBadEnvelopeLarge,
-	"object-envelope":                helperScenarioObjectEnvelope,
+	"stream-envelope":                helperScenarioStreamEnvelope,
 	"opencode-success":               helperScenarioOpencodeSuccess,
 	"opencode-stream-error":          helperScenarioOpencodeStreamError,
 	"opencode-incomplete":            helperScenarioOpencodeIncomplete,
@@ -113,16 +113,10 @@ var helperScenarios = map[string]func(){
 
 // helperScenarioSuccess implements the GO_HELPER_CMD=success scenario.
 func helperScenarioSuccess() {
-	// Produce a valid --output-format json envelope containing a
-	// Communication Protocol response embedded in the result string.
-	type resultEntry struct {
-		Type   string `json:"type"`
-		Result string `json:"result"`
-	}
-	protocolResp := `{"agent_instance_id":"test-agent#1","status_code":"SUCCESS","status_message":"ok"}`
-	envelope := []resultEntry{{Type: "result", Result: protocolResp}}
-	data, _ := json.Marshal(envelope)
-	os.Stdout.Write(data) //nolint:errcheck
+	// Produce a valid --output-format stream-json transcript whose final
+	// result line carries a Communication Protocol response.
+	writeStreamLines(streamInitLine, streamAssistantTextLine("working"),
+		streamResultLine(false, "success", streamProtocolOK))
 }
 
 // helperScenarioExit1 implements the GO_HELPER_CMD=exit1 scenario.
@@ -145,9 +139,9 @@ func helperScenarioBadJson() {
 
 // helperScenarioBadEnvelope implements the GO_HELPER_CMD=bad-envelope scenario.
 func helperScenarioBadEnvelope() {
-	// Write valid JSON that contains no "result" type entry and therefore
-	// has no extractable protocol response.
-	os.Stdout.WriteString(`[{"type":"assistant","message":"hello there"}]`) //nolint:errcheck
+	// Write a valid stream-json transcript that contains no "result" line
+	// and therefore has no extractable protocol response.
+	writeStreamLines(streamInitLine, streamAssistantTextLine("hello there"))
 }
 
 // helperScenarioBareJson implements the GO_HELPER_CMD=bare-json scenario.
@@ -195,40 +189,22 @@ func helperScenarioProtocolDecodeFail() {
 
 // helperScenarioBadEnvelopeLarge implements the GO_HELPER_CMD=bad-envelope-large scenario.
 func helperScenarioBadEnvelopeLarge() {
-	// Write a valid JSON array with no "result"-type entry, the same
+	// Write a stream-json transcript with no "result" line, the same
 	// shape as "bad-envelope", but padded well beyond the shared
 	// package's 2000-byte error-string cap. Exercises untruncated
 	// raw-content capture on the ErrProtocolNotExtractable path.
-	os.Stdout.WriteString(`[{"type":"assistant","message":"` + strings.Repeat("x", 3000) + `"}]`) //nolint:errcheck
+	writeStreamLines(streamInitLine, streamAssistantTextLine(strings.Repeat("x", 3000)))
 }
 
-// helperScenarioObjectEnvelope implements the GO_HELPER_CMD=object-envelope scenario.
-func helperScenarioObjectEnvelope() {
-	// Write a realistic single-object CLI envelope (the shape Claude
-	// Code actually emits for an ordinary turn): a "type":"result"
-	// object carrying a "result" field with the protocol response text,
-	// surrounded by other CLI-emitted fields. A successful invocation
-	// against this must be classified as a normal envelope, not a
-	// recovery.
-	type objectEnvelope struct {
-		IsError    bool   `json:"is_error"`
-		SessionID  string `json:"session_id"`
-		Subtype    string `json:"subtype"`
-		Type       string `json:"type"`
-		Result     string `json:"result"`
-		DurationMs int    `json:"duration_ms"`
-	}
-	protocolResp := `{"agent_instance_id":"test-agent#1","status_code":"SUCCESS","status_message":"ok"}`
-	envelope := objectEnvelope{
-		IsError:    false,
-		SessionID:  "session-abc123",
-		Subtype:    "success",
-		Type:       "result",
-		Result:     protocolResp,
-		DurationMs: 15756,
-	}
-	data, _ := json.Marshal(envelope)
-	os.Stdout.Write(data) //nolint:errcheck
+// helperScenarioStreamEnvelope implements the GO_HELPER_CMD=stream-envelope scenario.
+func helperScenarioStreamEnvelope() {
+	// Write a realistic stream-json transcript (system init, assistant
+	// text and tool_use, user tool_result, final result line). A successful
+	// invocation against this must be classified as a normal envelope, not
+	// a recovery.
+	writeStreamLines(streamInitLine, streamAssistantTextLine("looking"),
+		streamToolUseLine, streamToolResultLine,
+		streamResultLine(false, "success", streamProtocolOK))
 }
 
 // helperScenarioOpencodeSuccess implements the GO_HELPER_CMD=opencode-success scenario.

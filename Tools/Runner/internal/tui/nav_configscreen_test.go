@@ -53,6 +53,7 @@ func TestConfigScreen_PromptsCount(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	answerHITLTimeoutOnModel(m) // HITL timeout
 
 	// Steps 4–6: version drift, checkpoints, and manual resolution.
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // version drift
@@ -177,6 +178,7 @@ func TestConfigScreen_HarnessStep_SelectionIsAlwaysClaudeCode(t *testing.T) {
 	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
 	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 	s.Update(tea.KeyMsg{Type: tea.KeyEnter}) // timeout → version drift
+	answerHITLTimeoutOnScreen(s) // HITL timeout
 	s.Update(tea.KeyMsg{Type: tea.KeyEnter}) // version drift → checkpoints
 	s.Update(tea.KeyMsg{Type: tea.KeyEnter}) // checkpoints → manual resolution
 	s.Update(tea.KeyMsg{Type: tea.KeyEnter}) // manual resolution → done
@@ -221,12 +223,14 @@ func TestConfigScreen_EscBackNavigation_VersionDriftToTimeoutStep(t *testing.T) 
 	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
 	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 	s.Update(tea.KeyMsg{Type: tea.KeyEnter}) // timeout → version drift
+	answerHITLTimeoutOnScreen(s) // HITL timeout
 
-	// Esc from version drift must return to the timeout step, not harness.
+	// Esc from the step after the HITL timeout must return to the HITL timeout
+	// step, not harness.
 	s.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	view = s.View()
-	if !containsAny(view, "timeout", "Timeout", "Invocation", "invocation") {
-		t.Errorf("Esc from version-drift did not return to timeout step; "+
+	if !containsAny(view, "HITL invocation timeout") {
+		t.Errorf("Esc from the step after the HITL timeout did not return to it; "+
 			"the special-case harness branch may still be routing back to harness:\n%s", view)
 	}
 }

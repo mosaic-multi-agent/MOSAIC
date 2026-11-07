@@ -110,6 +110,13 @@ func (s *sessionImpl) runCommitSetup(
 		TaskDescription: "commit setup: establish the target branch for this run",
 	}
 	response, invokeErr := s.invokeAndLog(ctx, agentRef, req)
+	if isForceStopped(invokeErr) {
+		recorded := state
+		if err := s.recordForceStop(ctx, &recorded, forcedAttempt{req: req, row: domain.NoWorkflowRow, infra: true}); err != nil {
+			return state, domain.RunOutcome{Status: domain.RunFailed, Message: "commit setup row apply failed: " + err.Error()}, true, err
+		}
+		return recorded, forceStopStopOutcome(req.AgentInstanceID), true, nil
+	}
 	step := domain.CompletedStep{
 		Seq:              seq,
 		AgentInstance:    req.AgentInstanceID,

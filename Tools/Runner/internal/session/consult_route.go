@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 
@@ -195,20 +194,19 @@ func routingRequest(
 // missing dispatch instruction.
 func (s *sessionImpl) consultSelectResolver(ctx context.Context, req domain.ConsultationRequest, config domain.RunConfig) (instr domain.RoutingInstruction, done bool, outcome domain.RunOutcome, err error) {
 	var consultErr error
+	var stop bool
 	if s.useManualResolver(req) {
-		instr, consultErr = s.deps.Manual.ConsultRouting(ctx, req)
+		instr, consultErr = s.deps.Manual.ConsultRouting(ctx, s.withAskOrchestratorOffer(req))
 	} else {
-		instr, consultErr = s.consultOrchestratorAgent(ctx, req)
-		if consultErr != nil && config.ManualResolution && s.deps.Manual != nil {
-			s.deps.Debug.Log(domain.EventSessionManualResolve, "primary consultation failed; trying manual resolver",
-				domain.F("error", consultErr.Error()),
-			)
-			instr, consultErr = s.deps.Manual.ConsultRouting(ctx, req)
-		} else if consultErr != nil && config.ManualResolution {
-			// Unreachable after the start-time port check; reported rather
-			// than silently skipped.
-			consultErr = errors.Join(consultErr, newManualMissing())
-		}
+		instr, stop, consultErr = s.consultPrimary(ctx, req, config)
+	}
+	// The user handed the decision to the orchestrator: consult it for the
+	// same decision (repeats when a force stop reopens the dialogue).
+	for consultErr == nil && !stop && instr.AskOrchestrator != nil {
+		instr, stop, consultErr = s.consultPrimary(ctx, req, config)
+	}
+	if stop {
+		return instr, true, forceStopStopOutcome(consultationSubject), nil
 	}
 	if consultErr != nil {
 		s.deps.Debug.Log(domain.EventSessionConsultFailed, consultErr.Error())
@@ -309,6 +307,14 @@ func (s *sessionImpl) consultHandleHarnessErr(
 	if ctx.Err() != nil {
 		return true, domain.RunOutcome{Status: domain.RunStopped, Message: "run stopped: context cancelled"}, nil
 	}
+	route := func() (bool, domain.RunOutcome, error) {
+		return s.consultRoute(ctx, nil, state, seq, lastResponse, prevWorkflowStep,
+			stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
+	}
+	attempt := forcedAttempt{req: agentReq, phase: phase, stage: effectiveStage, row: domain.WorkflowRowFromIndex(dispInstr.RowIndex)}
+	if isForceStopped(invokeErr) {
+		return s.forceStopAttempt(ctx, attempt, true, state, seq, lastResponse, antiLoop, route)
+	}
 	s.deps.Debug.Log(domain.EventSessionHarnessError, invokeErr.Error(),
 		domain.F("agent", agentReq.AgentInstanceID),
 	)
@@ -356,6 +362,10 @@ func (s *sessionImpl) consultHandleHarnessErr(
 			return s.applyConsultStep(ctx, agentRef, bypassReq, finalResp, finalSeq, routed, routedResp, phase, effectiveStage, dispInstr,
 				state, seq, lastResponse, prevWorkflowStep, stages,
 				table, agents, config, declaredInfraAgents, admitted, antiLoop)
+		}
+		if isForceStopped(bypassErr) {
+			attempt.req = bypassReq
+			return s.forceStopAttempt(ctx, attempt, true, state, seq, lastResponse, antiLoop, route)
 		}
 		if recErr := s.recordFailedBypass(ctx, state, bypassReq, phase, effectiveStage, dispInstr.RowIndex, bypassErr); recErr != nil {
 			return true, domain.RunOutcome{Status: domain.RunFailed, Message: recErr.Error()}, recErr

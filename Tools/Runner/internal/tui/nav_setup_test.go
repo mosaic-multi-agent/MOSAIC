@@ -108,6 +108,7 @@ func TestSetupSequence_ResumedRun_ForwardNavigation_ReachesProgressScreen(t *tes
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // timeout → version drift
+	answerHITLTimeoutOnModel(m) // HITL timeout
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // version drift
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // checkpoints → manual-resolution
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // manual-resolution: disabled (default, cursor 0) → screenProgress

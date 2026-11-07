@@ -3,7 +3,8 @@ package session_test
 // Tests for consultation failure classes, consultations leaving no row for a
 // non-default orchestrator identifier, and resume of artifacts written by an
 // earlier Runner version that still carry consultation rows (position recovery
-// and rewind for both default and non-default orchestrator identifiers).
+// and re-dispatch of the unaccepted attempt for both default and non-default
+// orchestrator identifiers).
 
 import (
 	"context"
@@ -190,26 +191,27 @@ func TestSession_Resume_WithTrailingConsultationRow_PositionRecovery(t *testing.
 	}
 }
 
-// TestSession_Resume_Rewind_WithConsultationRowsInLog_CorrectlyIdentifiesLastWorkflowStep
-// verifies the re-run rewind path (FR-33): when a run is resumed after a
-// mid-invocation interruption and the execution log contains consultation rows,
-// the rewind correctly identifies the last completed workflow step by skipping
-// the consultation rows, then routes to the step that was interrupted.
+// TestSession_Resume_WithConsultationRowsInLog_RedispatchesLastWorkflowAttempt
+// verifies the resume of an unaccepted attempt (FR-33): when a run is resumed
+// and the execution log contains consultation rows, the consultation rows are
+// skipped to find the last workflow attempt, which is not the accepted
+// current_state and is therefore re-dispatched as recorded. Routing then
+// continues from its outcome.
 //
 // Log layout:
 //   - seq=1: orchestrator#1 (consultation/infra — first routing decision)
-//   - seq=2: agent-a#2      (workflow step — completed)
+//   - seq=2: agent-a#2      (workflow step — not the accepted current_state)
 //   - seq=3: orchestrator#3 (consultation/infra — next routing decision)
 //
-// current_state.LastAgent = "agent-b#4" (premature: set before agent-b's
-// Apply completed, then the session crashed).
+// current_state.LastAgent = "agent-b#4" (does not match the last workflow log
+// entry).
 //
-// The rewind must skip orchestrator#3, find agent-a#2 as the last completed
-// workflow step, and route to agent-b (the step that was being dispatched when
-// the crash occurred).
-func TestSession_Resume_Rewind_WithConsultationRowsInLog_CorrectlyIdentifiesLastWorkflowStep(t *testing.T) {
+// The resume must skip orchestrator#3, find agent-a#2 as the unaccepted
+// attempt and re-dispatch agent-a first; the consultation that follows its
+// outcome then routes to agent-b.
+func TestSession_Resume_WithConsultationRowsInLog_RedispatchesLastWorkflowAttempt(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
-	// After the rewind the session consults for the next step and dispatches agent-b.
+	// After the re-dispatch the session consults for the next step and dispatches agent-b.
 	consultant.queueDispatch("agent-b", "step 2 (retry after interruption)", 1)
 	consultant.queueStop("done")
 
@@ -238,6 +240,11 @@ func TestSession_Resume_Rewind_WithConsultationRowsInLog_CorrectlyIdentifiesLast
 	}
 	store.exists = true
 
+	f.Queue("agent-a", harness.ScriptedEntry{Response: &domain.ProtocolResponse{
+		AgentInstanceID: "agent-a#4",
+		StatusCode:      domain.StatusSUCCESS,
+		StatusMessage:   "re-done",
+	}})
 	f.Queue("agent-b", harness.ScriptedEntry{Response: &domain.ProtocolResponse{
 		AgentInstanceID: "agent-b#5",
 		StatusCode:      domain.StatusSUCCESS,
@@ -250,24 +257,24 @@ func TestSession_Resume_Rewind_WithConsultationRowsInLog_CorrectlyIdentifiesLast
 	got, err := ses.Start(context.Background(), cfg)
 
 	if err != nil {
-		t.Fatalf("want nil error on resume (consultation rows must not prevent rewind), got %v", err)
+		t.Fatalf("want nil error on resume (consultation rows must not prevent the re-dispatch), got %v", err)
 	}
 	if got.Status != domain.RunStoppedByConsultant {
 		t.Errorf("want RunStoppedByConsultant after stop instruction, got %q (message: %q)",
 			got.Status, got.Message)
 	}
-	// agent-b must have been dispatched: a correct rewind sets CurrentState to
-	// agent-a#2 (the last completed workflow step), which routes the engine to
-	// agent-b. If the rewind had failed to skip the consultation rows it would
-	// have returned RunFailed with PositionUnresolvedError, or re-dispatched
-	// agent-a unnecessarily.
+	// agent-a#2 is the unaccepted attempt: it is re-dispatched first, without a
+	// consultation; the consultant's dispatch of agent-b follows its outcome.
 	invs := f.Invocations()
-	if len(invs) == 0 {
-		t.Fatal("want at least one harness invocation (agent-b) on resume, got 0")
+	if len(invs) != 2 {
+		t.Fatalf("want 2 harness invocations (agent-a re-dispatch, then agent-b), got %d", len(invs))
 	}
-	if invs[0].Agent.Identifier != "agent-b" {
-		t.Errorf("want rewind to route to agent-b (the interrupted step), got %q",
+	if invs[0].Agent.Identifier != "agent-a" {
+		t.Errorf("want the unaccepted attempt agent-a re-dispatched first, got %q",
 			invs[0].Agent.Identifier)
+	}
+	if invs[1].Agent.Identifier != "agent-b" {
+		t.Errorf("want the consultant's agent-b second, got %q", invs[1].Agent.Identifier)
 	}
 }
 
@@ -373,28 +380,28 @@ func TestSession_Resume_WithTrailingConsultationRow_NonDefaultOrchestrator_Posit
 	}
 }
 
-// TestSession_Resume_Rewind_WithConsultationRowsInLog_NonDefaultOrchestrator_CorrectlyIdentifiesLastWorkflowStep
+// TestSession_Resume_WithConsultationRowsInLog_NonDefaultOrchestrator_RedispatchesLastWorkflowAttempt
 // is the non-default-orchestrator complement to
-// TestSession_Resume_Rewind_WithConsultationRowsInLog_CorrectlyIdentifiesLastWorkflowStep.
+// TestSession_Resume_WithConsultationRowsInLog_RedispatchesLastWorkflowAttempt.
 //
 // The orchestrator file is named "custom-orch.md" so the resolved identifier is
 // "custom-orch". Pre-populated consultation log entries carry "custom-orch#N".
-// If the FR-33 rewind path hardcodes any specific string the consultation rows will
-// not be recognised as infrastructure, the rewind will mis-identify the last
-// completed workflow step, and the test will fail.
+// If the resume hardcodes any specific string the consultation rows will not be
+// recognised as infrastructure, the last workflow attempt will be mis-identified,
+// and the test will fail.
 //
 // Log layout:
 //   - seq=1: custom-orch#1 (consultation/infra — first routing decision)
 //   - seq=2: agent-a#2      (workflow step — completed)
 //   - seq=3: custom-orch#3  (consultation/infra — next routing decision)
 //
-// current_state.LastAgent = "agent-b#4" (premature: set before agent-b's Apply
-// completed, then the session crashed).
+// current_state.LastAgent = "agent-b#4" (does not match the last workflow log
+// entry).
 //
-// The rewind must skip custom-orch#3, find agent-a#2 as the last completed
-// workflow step, and route to agent-b (the step that was being dispatched when
-// the crash occurred). Expected result: RunStoppedByConsultant.
-func TestSession_Resume_Rewind_WithConsultationRowsInLog_NonDefaultOrchestrator_CorrectlyIdentifiesLastWorkflowStep(t *testing.T) {
+// The resume must skip custom-orch#3, find agent-a#2 as the unaccepted attempt,
+// re-dispatch it, and then follow the consultant's dispatch of agent-b.
+// Expected result: RunStoppedByConsultant.
+func TestSession_Resume_WithConsultationRowsInLog_NonDefaultOrchestrator_RedispatchesLastWorkflowAttempt(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
 	consultant.queueDispatch("agent-b", "step 2 (retry after interruption)", 1)
 	consultant.queueStop("done")
@@ -444,6 +451,11 @@ func TestSession_Resume_Rewind_WithConsultationRowsInLog_NonDefaultOrchestrator_
 	}
 	store.exists = true
 
+	f.Queue("agent-a", harness.ScriptedEntry{Response: &domain.ProtocolResponse{
+		AgentInstanceID: "agent-a#4",
+		StatusCode:      domain.StatusSUCCESS,
+		StatusMessage:   "re-done",
+	}})
 	f.Queue("agent-b", harness.ScriptedEntry{Response: &domain.ProtocolResponse{
 		AgentInstanceID: "agent-b#5",
 		StatusCode:      domain.StatusSUCCESS,
@@ -462,22 +474,21 @@ func TestSession_Resume_Rewind_WithConsultationRowsInLog_NonDefaultOrchestrator_
 	got, err := ses.Start(context.Background(), cfg)
 
 	if err != nil {
-		t.Fatalf("want nil error on resume (consultation rows with non-default orchestrator must not prevent rewind), got %v", err)
+		t.Fatalf("want nil error on resume (consultation rows with non-default orchestrator must not prevent the re-dispatch), got %v", err)
 	}
 	if got.Status != domain.RunStoppedByConsultant {
 		t.Errorf("want RunStoppedByConsultant after stop instruction, got %q (message: %q)",
 			got.Status, got.Message)
 	}
-	// agent-b must have been dispatched: a correct rewind sets CurrentState to
-	// agent-a#2 (the last completed workflow step), which routes the engine to
-	// agent-b. If the rewind failed to skip "custom-orch#N" entries it would have
-	// returned RunFailed with PositionUnresolvedError, or re-dispatched agent-a.
+	// agent-a#2 is the unaccepted attempt: re-dispatched first, then the
+	// consultant's agent-b. If "custom-orch#N" entries were not recognised as
+	// infrastructure the resume would have failed with PositionUnresolvedError.
 	invs := f.Invocations()
-	if len(invs) == 0 {
-		t.Fatal("want at least one harness invocation (agent-b) on resume, got 0")
+	if len(invs) != 2 {
+		t.Fatalf("want 2 harness invocations (agent-a re-dispatch, then agent-b), got %d", len(invs))
 	}
-	if invs[0].Agent.Identifier != "agent-b" {
-		t.Errorf("want rewind to route to agent-b (the interrupted step), got %q",
-			invs[0].Agent.Identifier)
+	if invs[0].Agent.Identifier != "agent-a" || invs[1].Agent.Identifier != "agent-b" {
+		t.Errorf("want invocations agent-a then agent-b, got %q then %q",
+			invs[0].Agent.Identifier, invs[1].Agent.Identifier)
 	}
 }

@@ -319,10 +319,12 @@ func (s *sessionImpl) resumeRunArtifact(ctx context.Context, rs *runStartCtx) (d
 	// has run yet and the resume point reports a fresh start.
 	rs.seq = max(resume.Seq, state.GlobalSequence)
 
-	if resume.RerunLast {
-		state = rewindStateForRerun(rs.admitted.Table, domain.NewInfraAgentSet(rs.declaredInfraAgents, s.orchRef.Identifier), state)
-	}
 	rs.state = state
+	if resume.RerunLast {
+		if err := s.prepareResumeRedispatch(rs, state); err != nil {
+			return domain.RunOutcome{Status: domain.RunFailed, Message: err.Error()}, true, err
+		}
+	}
 	return domain.RunOutcome{}, false, nil
 }
 

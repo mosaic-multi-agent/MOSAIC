@@ -74,6 +74,8 @@ func twoCheckpointAgents() []domain.DeclaredInfraAgent {
 func advanceOnce(s *ConfigScreen) {
 	view := screenText(s)
 	switch {
+	case showsHITLTimeout(s):
+		answerHITLTimeout(s, "4h")
 	case strings.Contains(view, "invocation timeout"):
 		typeText(s, "30m")
 		pressKey(s, tea.KeyEnter)

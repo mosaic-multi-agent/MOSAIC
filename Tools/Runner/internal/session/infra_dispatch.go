@@ -51,6 +51,13 @@ func (s *sessionImpl) dispatchInfraAgent(
 			if ctx.Err() != nil {
 				return true, false, nil, ctx.Err()
 			}
+			if isForceStopped(invokeErr) {
+				attempt := forcedAttempt{req: req, phase: completedStep.Phase, stage: completedStep.Stage, row: domain.NoWorkflowRow}
+				if err := s.infraForceStop(ctx, state, seq, attempt); err != nil {
+					return false, false, nil, err
+				}
+				return true, false, nil, nil
+			}
 			// Harness-level error: treat as non-SUCCESS and apply on_failure policy.
 			response = domain.HarnessErrorResponse(req.AgentInstanceID, state.RunID, invokeErr)
 		}

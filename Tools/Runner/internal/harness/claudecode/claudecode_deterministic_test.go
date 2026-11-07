@@ -48,9 +48,9 @@ import (
 	"testing"
 	"time"
 
+	commonharness "mosaic-common/harness"
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/harness/claudecode"
-	commonharness "mosaic-common/harness"
 )
 
 // ---------------------------------------------------------------------------

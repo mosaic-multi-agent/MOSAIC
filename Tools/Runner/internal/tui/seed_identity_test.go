@@ -104,6 +104,7 @@ func TestRunIdentity_NewRun_SelectionsUnchangedByConfigReconstruction(t *testing
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // timeout → version drift
+	answerHITLTimeoutOnModel(m) // HITL timeout
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // version drift
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // checkpoints
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // manual-resolution (always shown; accept default disabled)

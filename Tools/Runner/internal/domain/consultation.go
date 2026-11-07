@@ -59,6 +59,11 @@ type ConsultationRequest struct {
 	// current stage sets. NEVER serialised onto the wire. Nil: no defaults
 	// (empty lists, HITL off).
 	RowDefaults RowDefaultsFunc
+
+	// OfferAskOrchestrator makes the ManualResolver offer
+	// ManualAskOrchestratorOptionID in its row question. NEVER serialised onto
+	// the wire. False: the dialogue is exactly the one without the option.
+	OfferAskOrchestrator bool
 }
 
 // RowDefaultsFunc resolves the DispatchDefaults of row at iteration ("" for a
@@ -74,7 +79,14 @@ type RowDefaultsFunc func(row RoutingRow, iteration IterationID) (DispatchDefaul
 type RoutingInstruction struct {
 	Dispatch *DispatchInstruction
 	Stop     *StopInstruction
+	// AskOrchestrator is set only by the ManualResolver: the user handed the
+	// decision to the orchestrator consultant.
+	AskOrchestrator *AskOrchestratorInstruction
 }
+
+// AskOrchestratorInstruction asks the session to obtain this routing
+// decision from the orchestrator consultant. It carries no fields.
+type AskOrchestratorInstruction struct{}
 
 // DispatchInstruction directs the Runner to dispatch one agent. Optional
 // fields are pointers so that "the consultant omitted this, fall back to the

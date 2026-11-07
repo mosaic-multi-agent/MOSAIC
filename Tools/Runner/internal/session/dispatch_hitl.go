@@ -202,6 +202,10 @@ func (s *sessionImpl) handleAutoHITLRedispatchError(ctx context.Context, rs *run
 	if ctx.Err() != nil {
 		return hitlRedispatchState{}, true, false, domain.RunOutcome{Status: domain.RunStopped, Message: "run stopped: context cancelled"}, nil
 	}
+	if isForceStopped(rdErr) {
+		done, out, err := s.autoForceStop(ctx, rs, attemptOfStep(hitlStep, hitlStep.Request), true)
+		return hitlRedispatchState{}, done, true, out, err
+	}
 	s.deps.Debug.Log(domain.EventSessionHarnessError, rdErr.Error(),
 		domain.F("agent", hitlStep.Request.AgentInstanceID),
 	)
@@ -229,9 +233,14 @@ func (s *sessionImpl) handleAutoHITLRedispatchError(ctx context.Context, rs *run
 		bypassSeq := rs.state.GlobalSequence + 1
 		bypassReq := hitlStep.Request
 		bypassReq.AgentInstanceID = fmt.Sprintf("%s#%d", hitlStep.Agent.Identifier, bypassSeq)
-		if bypassResp, bypassErr := s.invokeAndLog(ctx, hitlStep.Agent, bypassReq); bypassErr == nil {
+		bypassResp, bypassErr := s.invokeAndLog(ctx, hitlStep.Agent, bypassReq)
+		if bypassErr == nil {
 			hitlStep.Request = bypassReq
 			return hitlRedispatchState{step: hitlStep, response: bypassResp, hitlAttemptSeq: bypassSeq}, false, false, domain.RunOutcome{}, nil
+		}
+		if isForceStopped(bypassErr) {
+			done, out, err := s.autoForceStop(ctx, rs, attemptOfStep(hitlStep, bypassReq), true)
+			return hitlRedispatchState{}, done, true, out, err
 		}
 	}
 	rdResp := domain.HarnessErrorResponse(hitlStep.Request.AgentInstanceID, rs.config.RunID, rdErr)

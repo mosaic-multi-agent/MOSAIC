@@ -180,6 +180,10 @@ type rootModel struct {
 	// running session's dispatch loop.
 	stopSignal *session.StopSignal
 
+	// forceStop is the shared force-stop request. See Options.ForceStop; nil
+	// when the force-stop control is not wired.
+	forceStop *session.ForceStopSignal
+
 	// inRunRequests is the shared one-shot in-run request object. See
 	// Options.InRunRequests; the same instance backs every session's take
 	// functions.
@@ -321,6 +325,7 @@ func newRootModel(ctx context.Context, sess session.Session, opts Options) *root
 		clock:                  opts.Clock,
 		onRunIDResolved:        opts.OnRunIDResolved,
 		stopSignal:             opts.StopSignal,
+		forceStop:              opts.ForceStop,
 		inRunRequests:          opts.InRunRequests,
 		guardWaiver:            opts.GuardWaiver,
 		guidance:               opts.Guidance,

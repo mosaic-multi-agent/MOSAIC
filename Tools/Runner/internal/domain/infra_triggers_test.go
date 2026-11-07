@@ -144,4 +144,3 @@ func TestInfraTriggerRefusalReason_StageEndInOverride_SaysOverrideMustNameIterat
 		t.Errorf("redeploying does not fix an override; reason must not suggest it, got %q", got)
 	}
 }
-

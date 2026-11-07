@@ -6,7 +6,7 @@ import (
 	"mosaic-run/internal/domain"
 )
 
-// stepAfterTimeout returns the step that follows the harness timeout: the
+// stepAfterTimeout returns the step that follows the HITL timeout: the
 // version-drift question when it applies, then whatever follows it.
 func (s *ConfigScreen) stepAfterTimeout() configStep {
 	if s.showsVersionDrift() {
@@ -31,12 +31,12 @@ func (s *ConfigScreen) stepAfterVersionDrift() configStep {
 
 // stepBeforeResumeSettings returns the step a resume shows before its
 // commit-branch and runner-settings questions: the version-drift question when
-// it applies, else the harness timeout.
+// it applies, else the HITL timeout.
 func (s *ConfigScreen) stepBeforeResumeSettings() configStep {
 	if s.showsVersionDrift() {
 		return configStepVersionDrift
 	}
-	return configStepHarnessTimeout
+	return configStepHITLTimeout
 }
 
 // entryCursor returns the cursor a step starts with when the wizard moves
@@ -61,10 +61,7 @@ func (s *ConfigScreen) Reopen() tea.Cmd {
 	s.back = false
 	s.step = s.lastResumeStep()
 	s.cursor = s.reopenCursor()
-	if s.step == configStepHarnessTimeout {
-		return s.timeoutInput.Init()
-	}
-	return nil
+	return s.timeoutStepInit()
 }
 
 // lastResumeStep returns the last question a resume asks.

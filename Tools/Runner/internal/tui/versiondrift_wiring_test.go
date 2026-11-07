@@ -63,6 +63,7 @@ func driveConfigScreenPastTimeout(m *rootModel) {
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // confirm timeout
+	answerHITLTimeoutOnModel(m) // HITL timeout
 }
 
 // TestSetupFlow_NewRun_NeverPromptsForVersionDrift verifies that a new run driven
@@ -116,11 +117,12 @@ func TestSetupFlow_ResumedRun_WorkflowVersionUnmatchedByRecord_PromptsForVersion
 		t.Fatalf("after the harness question on a resumed run: screen = %v, want screenSetupConfig", m.screen)
 	}
 
-	// Act: a resume asks the harness timeout first, then the drift question.
+	// Act: a resume asks both timeouts first, then the drift question.
 	for _, r := range "30m" {
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	answerHITLTimeoutOnModel(m)
 
 	// Assert
 	if view := m.configScreen.View(); !containsStr(view, versionDriftPrompt) {

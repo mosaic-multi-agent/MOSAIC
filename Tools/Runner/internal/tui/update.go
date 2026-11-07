@@ -41,6 +41,11 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleStepRecorded(recMsg)
 	}
 
+	// Live activity of the running invocation, reported by the harness adapters.
+	if m.handleActivityMsg(msg) {
+		return m, nil
+	}
+
 	// Consultation start and end announced by the session.
 	if cMsg, ok := msg.(consultStartedMsg); ok {
 		return m.handleConsultStarted(cMsg)

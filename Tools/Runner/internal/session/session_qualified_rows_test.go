@@ -290,14 +290,13 @@ func seedQualifiedResume(r qualifiedRun, lastAgent, lastPhase string, log ...dom
 }
 
 // TestSession_QualifiedRows_Resume_InterruptedAfterInfraEntry_RerunsExactRow
-// verifies the mid-invocation rewind over qualified rows: the interrupted row
-// (implementer) is preceded by an infrastructure entry, which itself follows
-// build-review(tests). The qualified row's log entry must be recognised as a
-// routing-table entry, so the rewind stops at it and the run re-dispatches
-// implementer. A rewind that treats it as foreign would fall back to planner
-// and dispatch build-review(tests) a second time. The implementer row already
-// has a SUCCESS entry, so the resume consults the orchestrator, which re-runs
-// that exact row.
+// verifies the resume of an unaccepted attempt over qualified rows: the
+// interrupted row (implementer) is preceded by an infrastructure entry, which
+// itself follows build-review(tests). The qualified row's log entry must be
+// recognised as a routing-table entry, so the run re-dispatches implementer
+// directly from its recorded row, without a finished-work consultation. A
+// resume that treats the entry as foreign would fall back to planner and
+// dispatch build-review(tests) a second time.
 func TestSession_QualifiedRows_Resume_InterruptedAfterInfraEntry_RerunsExactRow(t *testing.T) {
 	r := newQualifiedRun(t, qualifiedOptions{})
 	infra := qualifiedStep(3, "checkpoint-manager-git#3", "PLANNING", int(domain.NoWorkflowRow))
@@ -309,7 +308,6 @@ func TestSession_QualifiedRows_Resume_InterruptedAfterInfraEntry_RerunsExactRow(
 	)
 	r.queue("implementer", "implementer#5", domain.StatusSUCCESS)
 	r.queue("build-review", "build-review#6", domain.StatusSUCCESS)
-	r.consultant.queueDispatch("implementer", "rerun the interrupted implementer row", 2)
 	cfg := r.config(domain.ExecutionModeAuto)
 	markResume(&cfg)
 
@@ -322,17 +320,16 @@ func TestSession_QualifiedRows_Resume_InterruptedAfterInfraEntry_RerunsExactRow(
 	}
 	requireDispatchStep(t, invs, 0, "implementer", "implementer#5", "")
 	requireDispatchStep(t, invs, 1, "build-review", "build-review#6", "impl")
-	if len(r.consultant.Requests) != 1 {
-		t.Fatalf("want one finished-work consultation for the already finished implementer row, got %d", len(r.consultant.Requests))
+	if n := len(r.consultant.Requests); n != 0 {
+		t.Errorf("want no consultation: the unaccepted attempt is re-dispatched directly, got %d", n)
 	}
-	requireFinishedWorkConsultation(t, r.consultant.Requests[0], 2)
 }
 
 // TestSession_QualifiedRows_Resume_InterruptedQualifiedRow_RerunsRowByRecordedRow
 // verifies that an interrupted build-review(impl) row is re-dispatched with its
 // own focus, picked by the recorded WorkflowRow, not the earlier row that holds
-// the same bare agent id. The row already has a SUCCESS entry, so the resume
-// consults the orchestrator, which re-runs that exact row.
+// the same bare agent id. The attempt is re-dispatched directly, without a
+// finished-work consultation.
 func TestSession_QualifiedRows_Resume_InterruptedQualifiedRow_RerunsRowByRecordedRow(t *testing.T) {
 	r := newQualifiedRun(t, qualifiedOptions{})
 	seedQualifiedResume(r, "implementer#3", "EXECUTION",
@@ -342,7 +339,6 @@ func TestSession_QualifiedRows_Resume_InterruptedQualifiedRow_RerunsRowByRecorde
 		qualifiedStep(4, "build-review#4", "REVIEW", 4),
 	)
 	r.queue("build-review", "build-review#5", domain.StatusSUCCESS)
-	r.consultant.queueDispatch("build-review", qualifiedFocus("impl"), 3)
 	cfg := r.config(domain.ExecutionModeAuto)
 	markResume(&cfg)
 
@@ -355,10 +351,9 @@ func TestSession_QualifiedRows_Resume_InterruptedQualifiedRow_RerunsRowByRecorde
 	}
 	requireDispatchStep(t, invs, 0, "build-review", "build-review#5", "impl")
 	requireRecordedRows(t, r.store, 4)
-	if len(r.consultant.Requests) != 1 {
-		t.Fatalf("want one finished-work consultation for the already finished row, got %d", len(r.consultant.Requests))
+	if n := len(r.consultant.Requests); n != 0 {
+		t.Errorf("want no consultation: the unaccepted attempt is re-dispatched directly, got %d", n)
 	}
-	requireFinishedWorkConsultation(t, r.consultant.Requests[0], 3)
 }
 
 // ===== Missing agent file =====

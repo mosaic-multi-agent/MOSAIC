@@ -4,8 +4,8 @@ package runconfig
 
 import (
 	"os"
-	"strings"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -43,12 +43,14 @@ func newConfigScreenAtHarnessStep() *ConfigScreen {
 }
 
 // advanceConfigScreenTimeout types a valid timeout ("30m") into the ConfigScreen
-// and confirms it. Must be called when the screen is at configStepHarnessTimeout.
+// and confirms it, then answers the HITL timeout step that follows with "4h".
+// Must be called when the screen is at configStepHarnessTimeout.
 func advanceConfigScreenTimeout(s *ConfigScreen) {
 	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'3'}})
 	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
 	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 	pressKey(s, tea.KeyEnter)
+	answerHITLTimeout(s, "4h")
 }
 
 // driveConfigScreenPastPreModeSteps is a no-op in Stage 8: in GREEN the mode

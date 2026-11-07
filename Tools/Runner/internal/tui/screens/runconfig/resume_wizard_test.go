@@ -15,6 +15,7 @@ package runconfig
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -24,6 +25,7 @@ import (
 // Prompt names used by the helpers below.
 const (
 	promptTimeout      = "timeout"
+	promptHITLTimeout  = "hitl-timeout"
 	promptDrift        = "drift"
 	promptMode         = "mode"
 	promptCommitBranch = "commit-branch"
@@ -37,8 +39,9 @@ const (
 
 // promptName names the prompt the screen is showing.
 func promptName(s *ConfigScreen) string {
-	view := screenText(s)
+	view := collapsedText(s)
 	for _, p := range []struct{ marker, name string }{
+		{hitlPromptMarker, promptHITLTimeout},
 		{"invocation timeout", promptTimeout},
 		{"allow workflow version drift", promptDrift},
 		{"execution mode", promptMode},
@@ -114,12 +117,12 @@ func assertPrompts(t *testing.T, got []string, want ...string) {
 
 // ===== A resume of a fully recorded run =====
 
-func TestConfigScreen_Resume_RecordedRun_AsksOnlyTheTimeout(t *testing.T) {
+func TestConfigScreen_Resume_RecordedRun_AsksOnlyTheTwoTimeouts(t *testing.T) {
 	s := newRecordedResume("1.0", "1.0")
 
 	got := resumePrompts(t, s)
 
-	assertPrompts(t, got, promptTimeout)
+	assertPrompts(t, got, promptTimeout, promptHITLTimeout)
 }
 
 func TestConfigScreen_Resume_RecordedRun_NeverAsksARecordedSetting(t *testing.T) {
@@ -164,7 +167,7 @@ func TestConfigScreen_Resume_DriftedVersions_AsksTheTimeoutThenVersionDrift(t *t
 
 	got := resumePrompts(t, s)
 
-	assertPrompts(t, got, promptTimeout, promptDrift)
+	assertPrompts(t, got, promptTimeout, promptHITLTimeout, promptDrift)
 }
 
 // ===== The pending commit-setup retry =====
@@ -175,17 +178,38 @@ func newPendingCommitRetry() *ConfigScreen {
 	return s
 }
 
-func TestConfigScreen_Resume_PendingCommitSetup_AsksTheCommitBranchAndTheTimeoutOnly(t *testing.T) {
+func TestConfigScreen_Resume_PendingCommitSetup_AsksTheCommitBranchAndTheTimeoutsOnly(t *testing.T) {
 	s := newPendingCommitRetry()
 
 	got := resumePrompts(t, s)
 
-	if len(got) != 2 {
-		t.Fatalf("prompts shown = %v, want exactly the timeout and the commit branch", got)
+	if len(got) != 3 {
+		t.Fatalf("prompts shown = %v, want exactly the two timeouts and the commit branch", got)
 	}
-	seen := map[string]bool{got[0]: true, got[1]: true}
-	if !seen[promptTimeout] || !seen[promptCommitBranch] {
-		t.Errorf("prompts shown = %v, want the timeout and the commit branch", got)
+	seen := map[string]bool{got[0]: true, got[1]: true, got[2]: true}
+	if !seen[promptTimeout] || !seen[promptHITLTimeout] || !seen[promptCommitBranch] {
+		t.Errorf("prompts shown = %v, want the two timeouts and the commit branch", got)
+	}
+	if got[0] != promptTimeout || got[1] != promptHITLTimeout {
+		t.Errorf("prompts shown = %v, want the HITL timeout directly after the timeout", got)
+	}
+}
+
+func TestConfigScreen_Resume_AsksTheHITLTimeoutAndCarriesBothValues(t *testing.T) {
+	s := newRecordedResume("1.0", "1.0")
+	typeText(s, "50m")
+	pressKey(s, tea.KeyEnter)
+	if got := promptName(s); got != promptHITLTimeout {
+		t.Fatalf("prompt after the timeout = %q, want %q", got, promptHITLTimeout)
+	}
+
+	answerHITLTimeout(s, "90m")
+
+	if !s.Done() {
+		t.Fatalf("a fully recorded resume asked more than the two timeouts; showing %q", promptName(s))
+	}
+	if sel := s.Selection(); sel.Timeout != 50*time.Minute || sel.HITLTimeout != 90*time.Minute {
+		t.Errorf("Timeout = %v, HITLTimeout = %v, want 50m and 90m", sel.Timeout, sel.HITLTimeout)
 	}
 }
 
@@ -216,7 +240,7 @@ func TestConfigScreen_Resume_Adoption_AsksModePreConsultationAndManualResolution
 
 	got := resumePrompts(t, s) // advanceOnce picks auto
 
-	assertPrompts(t, got, promptMode, promptTimeout, promptPreConsult, promptManual)
+	assertPrompts(t, got, promptMode, promptTimeout, promptHITLTimeout, promptPreConsult, promptManual)
 }
 
 func TestConfigScreen_Resume_Adoption_OrchestratedMode_SkipsPreConsultation(t *testing.T) {
@@ -229,7 +253,7 @@ func TestConfigScreen_Resume_Adoption_OrchestratedMode_SkipsPreConsultation(t *t
 
 	got := resumePrompts(t, s)
 
-	assertPrompts(t, got, promptTimeout, promptManual)
+	assertPrompts(t, got, promptTimeout, promptHITLTimeout, promptManual)
 }
 
 func TestConfigScreen_Resume_Adoption_NeverAsksCheckpointsCommitsOrInfrastructure(t *testing.T) {
@@ -303,6 +327,6 @@ func TestConfigScreen_NewRun_AsksEveryQuestionAsBefore(t *testing.T) {
 	got := resumePrompts(t, s)
 
 	assertPrompts(t, got,
-		promptMode, promptTimeout, promptCheckpoints, promptCommits,
+		promptMode, promptTimeout, promptHITLTimeout, promptCheckpoints, promptCommits,
 		promptPreConsult, promptManual, promptInfraClass, promptInfraClass, promptReviewLimit)
 }

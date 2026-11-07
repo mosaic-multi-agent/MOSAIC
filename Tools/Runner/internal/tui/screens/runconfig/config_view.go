@@ -28,6 +28,8 @@ func (s *ConfigScreen) View() string {
 		}
 	case configStepHarnessTimeout:
 		body.WriteString(s.timeoutInput.View())
+	case configStepHITLTimeout:
+		body.WriteString(s.hitlTimeoutInput.View())
 	case configStepVersionDrift:
 		// Defense in depth: the step machine never lands here unless the prompt is
 		// meaningful, but never render it if it somehow does.

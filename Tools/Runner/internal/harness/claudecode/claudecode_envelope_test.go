@@ -20,7 +20,7 @@ import (
 // ---------------------------------------------------------------------------
 
 // TestClaudeCodeAdapter_ValidEnvelope_ReturnsParsedResponse verifies that a
-// valid --output-format json envelope containing a Communication Protocol
+// valid --output-format stream-json transcript containing a Communication Protocol
 // response is correctly parsed into a domain.ProtocolResponse.
 func TestClaudeCodeAdapter_ValidEnvelope_ReturnsParsedResponse(t *testing.T) {
 	t.Setenv("GO_WANT_HELPER_PROCESS", "1")

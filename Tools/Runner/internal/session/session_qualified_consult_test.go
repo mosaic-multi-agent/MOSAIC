@@ -177,7 +177,6 @@ func TestSession_QualifiedRows_Orchestrated_ResumeAfterSecondQualifiedRowKeepsTh
 		Clock:    fixedClock{t: epoch},
 		Interact: &noopInteraction{},
 	})
-	r.consultant.queueDispatch("build-review", "re-run the implementation review", qrImplReview)
 	r.consultant.queueStop("done")
 	r.queue("build-review", "build-review#5", domain.StatusSUCCESS)
 	cfg := r.config(domain.ExecutionModeOrchestrated)

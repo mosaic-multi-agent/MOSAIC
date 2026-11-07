@@ -6,7 +6,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/tui/screens"
@@ -60,13 +59,15 @@ type ProgressScreen struct {
 	stopRequest       bool
 	confirmPending    bool
 	gateEvents        []StopGateEvent
-	pendingRequests   PendingRequests
+	forceStop         forceStopGate
+	pendingRequests  PendingRequests
 	requestEvents     []RequestKeyEvent
 	guardWaived       bool
 	guardEvents       []GuardKeyEvent
 	artifactView      bool
 	guidanceView      bool
 	guidanceAvailable bool
+	activity          activityPanel
 	status            string
 	statusErr         bool
 	width             int
@@ -132,7 +133,9 @@ func (s *ProgressScreen) SetStatus(msg string, isError bool) {
 func (s *ProgressScreen) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if s.confirmPending {
+		if s.forceStop.pending {
+			s.updateForceStopGate(msg.String())
+		} else if s.confirmPending {
 			// The gate is sticky: only an explicit confirm or cancel key
 			// resolves it. Every other key is ignored so the prompt cannot be
 			// dismissed by a stray press, and in particular does not fall
@@ -158,6 +161,8 @@ func (s *ProgressScreen) Update(msg tea.Msg) tea.Cmd {
 					s.gateEvents = append(s.gateEvents,
 						StopGateEvent{Kind: StopGateEntered, Key: key})
 				}
+			case "x", "X":
+				s.openForceStopGate(key)
 			case "a", "A", "i", "I":
 				s.artifactView = true
 			case "e", "E":
@@ -168,6 +173,8 @@ func (s *ProgressScreen) Update(msg tea.Msg) tea.Cmd {
 				if !s.stopRequest {
 					s.recordGuardKey(key)
 				}
+			case "l", "L":
+				s.toggleActivity()
 			default:
 				if !s.stopRequest {
 					s.recordRequestKey(key)
@@ -263,11 +270,14 @@ func (s *ProgressScreen) View() string {
 		stopNotice := s.styles.Warning.Width(s.width).Render("Stopping after current step completes…")
 		parts = append(parts, stopNotice)
 	}
+	if s.forceStop.pending {
+		parts = append(parts, s.forceStopBanner())
+	}
 	if line := s.guardIndicatorLine(); line != "" {
 		parts = append(parts, line)
 	}
 	parts = append(parts, border, help)
-	return strings.Join(parts, "\n")
+	return strings.Join(s.withActivityPanel(parts), "\n")
 }
 
 // confirmBanner renders the pending stop prompt as a bordered box, so it reads
@@ -279,15 +289,7 @@ func (s *ProgressScreen) View() string {
 // screen width, like every other line in the view, and does not wrap in a
 // terminal of that width.
 func (s *ProgressScreen) confirmBanner() string {
-	bodyWidth := s.width - 2
-	if bodyWidth < 1 {
-		bodyWidth = 1
-	}
-	return s.styles.Warning.
-		Width(bodyWidth).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(s.styles.Warning.GetForeground()).
-		Render(confirmPromptLabel)
+	return s.promptBanner(confirmPromptLabel)
 }
 
 // GracefulStop reports whether the user requested a graceful stop.
@@ -316,6 +318,7 @@ func (s *ProgressScreen) ResetStopState() {
 	s.stopRequest = false
 	s.confirmPending = false
 	s.gateEvents = nil
+	s.resetForceStop()
 	s.status = ""
 	s.statusErr = false
 }

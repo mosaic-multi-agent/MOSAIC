@@ -70,6 +70,12 @@ type CompletedStep struct {
 	// CompletedStep construction sites produce HITLRejected=false.
 	HITLRejected bool
 
+	// ForceStopped is true when the attempt was force-stopped by the user.
+	// Store.Apply appends the log row (Status PARTIALLY_DONE, Summary
+	// ForceStoppedSummary) and leaves current_state and the artifact registry
+	// unchanged, as for a HITL-rejected step.
+	ForceStopped bool
+
 	// Routed, when non-nil, is the status/error code current_state records and
 	// routing uses, instead of Status/ErrorCode. Set only for a
 	// gate-discharging re-dispatch that returned SUCCESS.
@@ -388,12 +394,12 @@ const (
 	// request was discarded. Fields: agent, row (1-based), stage (recorded form).
 	EventSessionConsultDiscarded = "session.consult.discarded"
 
-	EventSessionPreConsult      = "session.preconsult"
-	EventSessionCommitSetup     = "session.commit.setup"
-	EventSessionHITLVerify      = "session.hitl.verify"
-	EventSessionHITLRedispatch  = "session.hitl.redispatch"
-	EventSessionHITLEscalate    = "session.hitl.escalate"
-	EventSessionManualResolve   = "session.manual.resolve"
+	EventSessionPreConsult     = "session.preconsult"
+	EventSessionCommitSetup    = "session.commit.setup"
+	EventSessionHITLVerify     = "session.hitl.verify"
+	EventSessionHITLRedispatch = "session.hitl.redispatch"
+	EventSessionHITLEscalate   = "session.hitl.escalate"
+	EventSessionManualResolve  = "session.manual.resolve"
 
 	// EventSessionFilterUnmatched is emitted when an InfrastructureFilter key
 	// does not match any declared infrastructure agent name. This is informational

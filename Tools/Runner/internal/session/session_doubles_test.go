@@ -274,7 +274,7 @@ func (m *memStore) Apply(_ context.Context, state domain.ArtifactState, step dom
 	// current_state is updated only for workflow steps, matching the real
 	// fileStore's contract (ContractsDesign.md, domain.ArtifactStore.Apply):
 	// an infrastructure step must not move the recorded workflow position.
-	if !step.IsInfrastructure && !step.HITLRejected {
+	if !step.IsInfrastructure && !step.HITLRejected && !step.ForceStopped {
 		state.CurrentState = domain.CurrentState{
 			Phase:      step.Phase,
 			Stage:      step.Stage,
@@ -290,6 +290,12 @@ func (m *memStore) Apply(_ context.Context, state domain.ArtifactState, step dom
 		Stage:       step.Stage,
 		WorkflowRow: step.WorkflowRow,
 		Status:      step.Status,
+	}
+	// A force-stopped row keeps its summary and inputs: its marker and its
+	// recorded inputs are what resume and the counters read.
+	if step.ForceStopped {
+		entry.Summary = step.Summary
+		entry.Inputs = step.Inputs
 	}
 	// Like the file store, only a BLOCKED row carries its error code in the log.
 	if step.Status == domain.StatusBLOCKED {

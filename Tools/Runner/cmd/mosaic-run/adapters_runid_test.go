@@ -36,7 +36,7 @@ func TestBuildAdapter_WithRunFolder_BindsTheRunIDOnEveryRealHarness(t *testing.T
 	for _, harnessID := range realHarnessIDs {
 		harnessID := harnessID
 		t.Run(harnessID, func(t *testing.T) {
-			h := buildAdapter(runFolder, harnessID, "some-path", "blanket", 5*time.Minute)
+			h := buildAdapter(runFolder, harnessID, "some-path", "blanket", nonHITLTimeouts(5*time.Minute), nil)
 
 			reporter, ok := h.(adapterRunID)
 			if !ok {
@@ -53,7 +53,7 @@ func TestBuildAdapter_WithoutRunFolder_BindsNoRunID(t *testing.T) {
 	for _, harnessID := range realHarnessIDs {
 		harnessID := harnessID
 		t.Run(harnessID, func(t *testing.T) {
-			h := buildAdapter("", harnessID, "some-path", "blanket", 5*time.Minute)
+			h := buildAdapter("", harnessID, "some-path", "blanket", nonHITLTimeouts(5*time.Minute), nil)
 
 			reporter, ok := h.(adapterRunID)
 			if !ok {
@@ -69,7 +69,7 @@ func TestBuildAdapter_WithoutRunFolder_BindsNoRunID(t *testing.T) {
 func TestBuildAdapter_WithNonRunFolder_BindsNoRunID(t *testing.T) {
 	notARunFolder := filepath.Join(t.TempDir(), "not-a-run-folder")
 
-	h := buildAdapter(notARunFolder, commonharness.HarnessIDClaudeCode, "some-path", "", 5*time.Minute)
+	h := buildAdapter(notARunFolder, commonharness.HarnessIDClaudeCode, "some-path", "", nonHITLTimeouts(5*time.Minute), nil)
 
 	reporter, ok := h.(adapterRunID)
 	if !ok {

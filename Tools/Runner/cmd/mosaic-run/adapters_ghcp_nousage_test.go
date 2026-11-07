@@ -28,7 +28,7 @@ func TestBuildAdapter_GHCPCLI_IsNotWrappedWithUsageIngest(t *testing.T) {
 	bare := ghcpcli.NewGHCPCLIAdapterWithMode("copilot", time.Minute, domain.NopDebugLogger{}, commonharness.GHCPCLIModeBlanket)
 
 	// Act
-	got := buildAdapter(runFolder, commonharness.HarnessIDGHCPCLI, "copilot", string(commonharness.GHCPCLIModeBlanket), time.Minute)
+	got := buildAdapter(runFolder, commonharness.HarnessIDGHCPCLI, "copilot", string(commonharness.GHCPCLIModeBlanket), nonHITLTimeouts(time.Minute), nil)
 
 	// Assert
 	if reflect.TypeOf(got) != reflect.TypeOf(bare) {
@@ -41,7 +41,7 @@ func TestBuildAdapter_GHCPCLI_IsNotWrappedWithUsageIngest(t *testing.T) {
 func TestBuildAdapter_GHCPCLI_KeepsItsCapabilitiesWithoutUsageIngest(t *testing.T) {
 	runFolder, _ := mlRunFolder(t)
 
-	got := buildAdapter(runFolder, commonharness.HarnessIDGHCPCLI, "/opt/copilot", "", time.Minute)
+	got := buildAdapter(runFolder, commonharness.HarnessIDGHCPCLI, "/opt/copilot", "", nonHITLTimeouts(time.Minute), nil)
 
 	revealer, ok := got.(domain.ExecutableRevealer)
 	if !ok || revealer.ExecutablePath() != "/opt/copilot" {

@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	commonharness "mosaic-common/harness"
 
@@ -28,7 +27,7 @@ import (
 	"github.com/mattn/go-isatty"
 )
 
-const ToolVersion = "1.9.0"
+const ToolVersion = "1.10.0"
 
 // wantsTUI reports whether mosaic-run should launch the interactive TUI.
 // The TUI is launched when:
@@ -125,18 +124,7 @@ func runCLIMode(args, cobraArgs []string) int {
 	if harnessStr == "" {
 		harnessStr = "fake" // matches the flag default
 	}
-	timeoutStr := scanFlag(args, "--timeout")
-	if timeoutStr == "" {
-		timeoutStr = "30m" // matches the flag default
-	}
 	execPathStr := scanFlag(args, "--executable-path")
-
-	// Parse the timeout duration; fall back to 30 minutes on invalid input
-	// (cli.Run will surface the parse error to the user with ExitUsage).
-	invocationTimeout := 30 * time.Minute
-	if d, err := time.ParseDuration(timeoutStr); err == nil && d > 0 {
-		invocationTimeout = d
-	}
 
 	// Resolve run identity. The working directory is passed explicitly to avoid a
 	// redundant os.Getwd call. The store return value is always nil; the
@@ -178,7 +166,7 @@ func runCLIMode(args, cobraArgs []string) int {
 
 	// Build the harness adapter via buildAdapter, passing the process logger
 	// so that invocation I/O is captured in the debug log.
-	h := buildAdapter(runIdentity.RunFolder, harnessStr, execPathStr, ghcpPermissionMode, invocationTimeout, logger)
+	h := buildAdapter(runIdentity.RunFolder, harnessStr, execPathStr, ghcpPermissionMode, timeoutsFromArgs(args), nil, logger)
 
 	// Extract the raw-JSON transport if the selected harness adapter implements it.
 	// Production adapters implement both HarnessAdapter and RawInvoker over the same

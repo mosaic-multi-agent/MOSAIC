@@ -27,62 +27,6 @@ func extractAgentIdentifier(instanceID string) string {
 	return instanceID
 }
 
-// rewindStateForRerun adjusts the artifact CurrentState for a mid-invocation
-// interruption (FR-33): the last logged step was interrupted before Apply
-// completed, so the session must re-dispatch it. Rewinding CurrentState to
-// the last WORKFLOW log entry before the interrupted one (or empty) causes
-// engine.Next to route to the interrupted row again.
-//
-// Trailing infrastructure entries between the interrupted step and the
-// workflow step that precedes it are skipped: current_state must reflect the
-// last completed WORKFLOW step, never an infrastructure invocation, so the
-// engine's row-lookup stays correct when infrastructure activity interleaves
-// with the interruption.
-//
-// An entry is recognised as infrastructure by the same two-condition
-// derivation used elsewhere: absent from the routing table and present in
-// infra. infra may be nil, meaning no infrastructure agents are declared.
-func rewindStateForRerun(table domain.RoutingTable, infra domain.InfraAgentSet, state domain.ArtifactState) domain.ArtifactState {
-	for i := len(state.ExecutionLog) - 2; i >= 0; i-- {
-		entry := state.ExecutionLog[i]
-		agentID := extractAgentIdentifier(entry.Agent)
-		if !isRoutingTableAgent(table, agentID) {
-			if infra != nil && infra.IsInfrastructureAgent(entry.Agent) {
-				continue // recognised infrastructure entry: keep looking
-			}
-			// Not a routing table participant and not recognised
-			// infrastructure either. Unreachable in practice -- ResumePoint
-			// would already have stopped on this entry with
-			// PositionUnresolvedError before this function is ever called --
-			// but applying the same two-condition recognition rule used
-			// elsewhere (rather than "absent from the routing table" alone)
-			// keeps this function from silently masking a defect if that
-			// call ordering ever changes.
-			continue
-		}
-		state.CurrentState = domain.CurrentState{
-			Phase:      entry.Phase,
-			Stage:      entry.Stage,
-			LastStatus: domain.StatusSUCCESS,
-			LastAgent:  entry.Agent,
-		}
-		return state
-	}
-	state.CurrentState = domain.CurrentState{}
-	return state
-}
-
-// isRoutingTableAgent reports whether agentID names a participant in table,
-// in any row.
-func isRoutingTableAgent(table domain.RoutingTable, agentID string) bool {
-	for _, row := range table.Rows {
-		if rowAgentID(row) == agentID {
-			return true
-		}
-	}
-	return false
-}
-
 // bindRunContext calls BindRunContext on v if v is non-nil and implements
 // domain.RunContextBinder. Consultants that do not implement the interface are
 // silently skipped, so callers need not check before calling.

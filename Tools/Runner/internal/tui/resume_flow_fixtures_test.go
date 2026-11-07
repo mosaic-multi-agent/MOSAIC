@@ -245,6 +245,7 @@ func (f *resumeFlow) showing(text string) bool {
 
 // Wizard prompts, by the text the configuration screen shows for them.
 var flowPrompts = []struct{ marker, name string }{
+	{hitlTimeoutPromptMarker, "hitl-timeout"},
 	{"invocation timeout", "timeout"},
 	{"allow workflow version drift", "drift"},
 	{"execution mode", "mode"},
@@ -258,7 +259,7 @@ var flowPrompts = []struct{ marker, name string }{
 }
 
 func (f *resumeFlow) prompt() string {
-	view := strings.ToLower(f.m.configScreen.View())
+	view := collapseSpaces(strings.ToLower(f.m.configScreen.View()))
 	for _, p := range flowPrompts {
 		if strings.Contains(view, p.marker) {
 			return p.name
@@ -280,6 +281,12 @@ func (f *resumeFlow) answerWizard(alternative bool) []string {
 		switch name {
 		case "timeout":
 			f.typeText("45m")
+			f.key(tea.KeyEnter)
+		case "hitl-timeout":
+			for j := 0; j < 12; j++ {
+				f.key(tea.KeyBackspace)
+			}
+			f.typeText("3h")
 			f.key(tea.KeyEnter)
 		case "mode":
 			f.key(tea.KeyDown)

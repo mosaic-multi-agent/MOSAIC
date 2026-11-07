@@ -190,6 +190,10 @@ type Deps struct {
 	// false, so the dispatch loop never nil-checks it.
 	StopRequested func() bool
 
+	// ForceStop opens a force-stop window around every invocation of a
+	// dispatched agent. Optional: nil means never force-stopped.
+	ForceStop domain.ForceStopWatcher
+
 	// TakeManualDispatchRequest takes a pending in-run manual-dispatch request
 	// (true = it was pending and is now consumed). Optional: nil is normalised
 	// in New to a function that always returns false.
@@ -264,6 +268,9 @@ func New(deps Deps) Session {
 	if deps.StopRequested == nil {
 		deps.StopRequested = func() bool { return false }
 	}
+	if deps.ForceStop == nil {
+		deps.ForceStop = domain.NopForceStopWatcher{}
+	}
 	if deps.GuidanceStore == nil {
 		deps.GuidanceStore = noGuidanceStore{}
 	}
@@ -327,6 +334,9 @@ type sessionImpl struct {
 	// droppedSchedules holds, per block whose latest produced schedule was
 	// judged defective, the last schedule accepted for it.
 	droppedSchedules domain.BlockSchedules
+	// pendingInfra is the post-kill choice of a force-stopped infrastructure
+	// agent, until the trigger evaluation's caller acts on it.
+	pendingInfra *pendingInfraForceStop
 }
 
 // isRawTextHarnessError reports whether err is a raw-text protocol failure:
@@ -347,9 +357,14 @@ func isRawTextHarnessError(err error) bool {
 // unchanged so callers need only change the method name.
 func (s *sessionImpl) invokeAndLog(ctx context.Context, agentRef domain.AgentReference, request domain.ProtocolRequest) (domain.ProtocolResponse, error) {
 	s.deps.DispatchLog.LogRequest(request)
-	resp, err := s.deps.Harness.Invoke(ctx, agentRef, request)
+	wctx, release := s.deps.ForceStop.Watch(ctx)
+	resp, err := s.deps.Harness.Invoke(wctx, agentRef, request)
+	forced := release()
 	if err != nil {
 		s.deps.DispatchLog.LogError(request.AgentInstanceID, err.Error())
+		if forced && ctx.Err() == nil {
+			err = &forceStopError{err: err}
+		}
 	} else {
 		s.deps.DispatchLog.LogResponse(resp)
 	}

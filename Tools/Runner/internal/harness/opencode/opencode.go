@@ -4,6 +4,15 @@
 // OpenCode spawner, mirroring ClaudeCodeAdapter's thin mapping-wrapper shape:
 // it converts domain.AgentReference/ProtocolRequest into the shared package's
 // neutral types, delegates the spawn, and converts the result back.
+//
+// Kill behaviour (verified on Windows with OpenCode 1.18.18): `opencode run`
+// hosts the agent session inside the spawned process, so the whole-descendant
+// kill used for timeout and force stop ends the session's work. Method: a
+// `run --format json --auto` agent performing 60 sequential bash tool calls
+// (file append plus a 3-second sleep) was killed with `taskkill /F /T` after
+// 8 calls; the file stayed unchanged for the next 25 seconds. No session abort through the OpenCode server API is
+// therefore needed, and the adapter makes no server calls. Re-verify if `run`
+// ever defaults to attaching to a persistent server.
 package opencode
 
 import (
@@ -43,6 +52,8 @@ var (
 type OpenCodeAdapter struct {
 	executablePath string
 	timeout        time.Duration
+	hitlTimeout    time.Duration
+	activityObs    domain.ActivityObserver
 	spawner        commonharness.Spawner
 	sink           commonharness.Sink
 	logger         domain.DebugLogger
@@ -67,7 +78,7 @@ func NewOpenCodeAdapter(executablePath string, timeout time.Duration) *OpenCodeA
 // logger is normalised to domain.NopDebugLogger.
 func NewOpenCodeAdapterWithLogger(executablePath string, timeout time.Duration, logger domain.DebugLogger, opts ...roleenv.Option) *OpenCodeAdapter {
 	if timeout == 0 {
-		timeout = 30 * time.Minute
+		timeout = domain.DefaultTimeout
 	}
 	if logger == nil {
 		logger = domain.NopDebugLogger{}
@@ -88,7 +99,7 @@ func NewOpenCodeAdapterWithLogger(executablePath string, timeout time.Duration, 
 // `opencode run`'s exit code cannot report.
 //
 // On context cancellation, terminates the subprocess and returns ctx.Err().
-func (a *OpenCodeAdapter) Invoke(ctx context.Context, agent domain.AgentReference, request domain.ProtocolRequest) (domain.ProtocolResponse, error) {
+func (a *OpenCodeAdapter) invoke(ctx context.Context, agent domain.AgentReference, request domain.ProtocolRequest, onLine func([]byte)) (domain.ProtocolResponse, error) {
 	a.logger.Log(domain.EventHarnessInvokeStart, "dispatching invocation",
 		domain.F("agent", request.AgentInstanceID),
 		domain.F("kind", string(agent.InvocationKind)),
@@ -110,8 +121,10 @@ func (a *OpenCodeAdapter) Invoke(ctx context.Context, agent domain.AgentReferenc
 			Kind:           commonharness.InvocationKind(agent.InvocationKind),
 		},
 		Prompt:       string(reqBytes),
+		Timeout:      a.invokeTimeout(request.HumanInTheLoop),
 		Env:          roleenv.SubagentEnv(runID, request.AgentInstanceID),
 		OutputFormat: "json",
+		OnStdoutLine: onLine,
 		// SystemPrompt carries a synthesized <env> block for BOTH invocation
 		// kinds, unlike ClaudeCodeAdapter (which only needs one for the
 		// orchestrator kind): OpenCode's --agent replaces the default system
@@ -192,7 +205,7 @@ func (a *OpenCodeAdapter) Invoke(ctx context.Context, agent domain.AgentReferenc
 // routing instructions) are returned as plain text without being rejected.
 //
 // On context cancellation, returns ctx.Err().
-func (a *OpenCodeAdapter) InvokeRaw(ctx context.Context, agent domain.AgentReference, payload []byte) ([]byte, error) {
+func (a *OpenCodeAdapter) invokeRaw(ctx context.Context, agent domain.AgentReference, payload []byte, onLine func([]byte)) ([]byte, error) {
 	a.logger.Log(domain.EventHarnessInvokeStart, "dispatching raw invocation",
 		domain.F("agent", agent.Identifier),
 		domain.F("kind", string(agent.InvocationKind)),
@@ -227,11 +240,12 @@ func (a *OpenCodeAdapter) InvokeRaw(ctx context.Context, agent domain.AgentRefer
 	}
 
 	resp, err := commonharness.Run(ctx, cmd, args, commonharness.RunOptions{
-		WorkingDir: spawnReq.WorkingDir,
-		Env:        spawnReq.Env,
-		Stdin:      stdin,
-		Timeout:    a.timeout,
-		Sink:       a.sink,
+		WorkingDir:   spawnReq.WorkingDir,
+		Env:          spawnReq.Env,
+		Stdin:        stdin,
+		Timeout:      a.timeout,
+		Sink:         a.sink,
+		OnStdoutLine: onLine,
 	})
 	if err != nil {
 		// A missing or non-executable binary is recoverable via the override
@@ -275,4 +289,28 @@ func (a *OpenCodeAdapter) InvokeRaw(ctx context.Context, agent domain.AgentRefer
 		domain.F("agent", agent.Identifier),
 	)
 	return []byte(text), nil
+}
+
+// WithHITLTimeout sets the timeout for Invoke calls whose request has
+// HumanInTheLoop == true. d <= 0 selects domain.DefaultHITLTimeout.
+// Returns a. Call before the first invocation; not safe concurrently with
+// invocations.
+func (a *OpenCodeAdapter) WithHITLTimeout(d time.Duration) *OpenCodeAdapter {
+	if d <= 0 {
+		d = domain.DefaultHITLTimeout
+	}
+	a.hitlTimeout = d
+	return a
+}
+
+// invokeTimeout returns the timeout bounding an Invoke call for the given
+// effective HITL flag.
+func (a *OpenCodeAdapter) invokeTimeout(hitl bool) time.Duration {
+	if !hitl {
+		return a.timeout
+	}
+	if a.hitlTimeout <= 0 {
+		return domain.DefaultHITLTimeout
+	}
+	return a.hitlTimeout
 }

@@ -8,6 +8,7 @@
 package claudecode
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -44,6 +45,8 @@ import (
 type ClaudeCodeAdapter struct {
 	executablePath string
 	timeout        time.Duration
+	hitlTimeout    time.Duration
+	activityObs    domain.ActivityObserver
 	spawner        commonharness.Spawner
 	sink           commonharness.Sink
 	logger         domain.DebugLogger
@@ -74,7 +77,7 @@ func NewClaudeCodeAdapter(executablePath string, timeout time.Duration) *ClaudeC
 // logger field is never nil and Invoke never nil-checks it.
 func NewClaudeCodeAdapterWithLogger(executablePath string, timeout time.Duration, logger domain.DebugLogger, opts ...roleenv.Option) *ClaudeCodeAdapter {
 	if timeout == 0 {
-		timeout = 30 * time.Minute
+		timeout = domain.DefaultTimeout
 	}
 	if logger == nil {
 		logger = domain.NopDebugLogger{}
@@ -102,7 +105,7 @@ func NewClaudeCodeAdapterWithLogger(executablePath string, timeout time.Duration
 //   - ErrMalformedOutput: valid JSON envelope but protocol response not extractable.
 //
 // On context cancellation, terminates the subprocess and returns ctx.Err().
-func (a *ClaudeCodeAdapter) Invoke(ctx context.Context, agent domain.AgentReference, request domain.ProtocolRequest) (domain.ProtocolResponse, error) {
+func (a *ClaudeCodeAdapter) invoke(ctx context.Context, agent domain.AgentReference, request domain.ProtocolRequest, onLine func([]byte)) (domain.ProtocolResponse, error) {
 	a.logger.Log(domain.EventHarnessInvokeStart, "dispatching invocation",
 		domain.F("agent", request.AgentInstanceID),
 		domain.F("kind", string(agent.InvocationKind)),
@@ -138,9 +141,11 @@ func (a *ClaudeCodeAdapter) Invoke(ctx context.Context, agent domain.AgentRefere
 			Kind:           commonharness.InvocationKind(agent.InvocationKind),
 		},
 		Prompt:             string(reqBytes),
+		Timeout:            a.invokeTimeout(request.HumanInTheLoop),
 		Env:                roleenv.SubagentEnv(runID, request.AgentInstanceID),
 		SessionPersistence: true,
-		OutputFormat:       "json",
+		OutputFormat:       "stream-json",
+		OnStdoutLine:       onLine,
 		DerivedTools:       derivedTools,
 		ToolsDerived:       true, // signals derivation was performed; empty slice is valid (strict dontAsk, no tools)
 	}
@@ -232,7 +237,7 @@ func (a *ClaudeCodeAdapter) Invoke(ctx context.Context, agent domain.AgentRefere
 //
 // Error returns follow the same sentinel taxonomy as Invoke. On context
 // cancellation, returns ctx.Err().
-func (a *ClaudeCodeAdapter) InvokeRaw(ctx context.Context, agent domain.AgentReference, payload []byte) ([]byte, error) {
+func (a *ClaudeCodeAdapter) invokeRaw(ctx context.Context, agent domain.AgentReference, payload []byte, onLine func([]byte)) ([]byte, error) {
 	a.logger.Log(domain.EventHarnessInvokeStart, "dispatching raw invocation",
 		domain.F("agent", agent.Identifier),
 		domain.F("kind", string(agent.InvocationKind)),
@@ -261,7 +266,7 @@ func (a *ClaudeCodeAdapter) InvokeRaw(ctx context.Context, agent domain.AgentRef
 		Prompt:             string(payload),
 		Env:                roleenv.OrchestratorEnv(a.roleEnv.RunID),
 		SessionPersistence: true,
-		OutputFormat:       "json",
+		OutputFormat:       "stream-json",
 		DerivedTools:       derivedTools,
 		ToolsDerived:       true, // signals derivation was performed; empty slice is valid (strict dontAsk, no tools)
 	}
@@ -283,11 +288,12 @@ func (a *ClaudeCodeAdapter) InvokeRaw(ctx context.Context, agent domain.AgentRef
 	}
 
 	resp, err := commonharness.Run(ctx, cmd, args, commonharness.RunOptions{
-		WorkingDir: spawnReq.WorkingDir,
-		Env:        spawnReq.Env,
-		Stdin:      stdin,
-		Timeout:    a.timeout,
-		Sink:       a.sink,
+		WorkingDir:   spawnReq.WorkingDir,
+		Env:          spawnReq.Env,
+		Stdin:        stdin,
+		Timeout:      a.timeout,
+		Sink:         a.sink,
+		OnStdoutLine: onLine,
 	})
 	if err != nil {
 		// A missing or non-executable binary is recoverable via the override
@@ -355,7 +361,48 @@ func isNormalEnvelope(data []byte) bool {
 		Result string `json:"result"`
 	}
 	if json.Unmarshal(data, &obj) != nil {
-		return false
+		return isNormalStream(data)
 	}
 	return obj.Type == "result" && obj.Result != ""
+}
+
+// isNormalStream reports whether data is a stream-json JSONL transcript with
+// at least one result-bearing line ("type":"result" with a non-empty "result").
+// Other lines are ignored, so a bare protocol response or CLI noise is still
+// classified as recovered.
+func isNormalStream(data []byte) bool {
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		var obj struct {
+			Type   string `json:"type"`
+			Result string `json:"result"`
+		}
+		if json.Unmarshal(bytes.TrimSpace(line), &obj) == nil && obj.Type == "result" && obj.Result != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// WithHITLTimeout sets the timeout for Invoke calls whose request has
+// HumanInTheLoop == true. d <= 0 selects domain.DefaultHITLTimeout.
+// Returns a. Call before the first invocation; not safe concurrently with
+// invocations.
+func (a *ClaudeCodeAdapter) WithHITLTimeout(d time.Duration) *ClaudeCodeAdapter {
+	if d <= 0 {
+		d = domain.DefaultHITLTimeout
+	}
+	a.hitlTimeout = d
+	return a
+}
+
+// invokeTimeout returns the timeout bounding an Invoke call for the given
+// effective HITL flag.
+func (a *ClaudeCodeAdapter) invokeTimeout(hitl bool) time.Duration {
+	if !hitl {
+		return a.timeout
+	}
+	if a.hitlTimeout <= 0 {
+		return domain.DefaultHITLTimeout
+	}
+	return a.hitlTimeout
 }

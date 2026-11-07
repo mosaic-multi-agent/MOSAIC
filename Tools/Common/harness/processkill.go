@@ -7,6 +7,17 @@ import (
 	"strconv"
 )
 
+// killGroup ends an agent process together with every descendant. Run creates
+// one per invocation before Start (newKillGroup, build-tagged per platform),
+// calls attach right after Start, and finishes with exactly one of kill (timeout
+// or cancellation) or release (the process exited on its own; descendants are
+// left alone).
+type killGroup interface {
+	attach(p *os.Process)
+	kill(p *os.Process)
+	release()
+}
+
 // killProcessTree terminates the process and, on Windows, its entire
 // descendant tree. On non-Windows platforms it falls back to p.Kill(),
 // preserving existing behavior exactly.

@@ -191,6 +191,15 @@ func (s *sessionImpl) consultHITLRedispatch(
 		if ctx.Err() != nil {
 			return domain.ProtocolResponse{}, 0, false, true, domain.RunOutcome{Status: domain.RunStopped, Message: "run stopped: context cancelled"}, nil
 		}
+		if isForceStopped(rdErr) {
+			attempt := forcedAttempt{req: rdReq, phase: phase, stage: effectiveStage, row: domain.WorkflowRowFromIndex(dispInstr.RowIndex)}
+			fDone, fOut, fErr := s.forceStopAttempt(ctx, attempt, true, state, seq, lastResponse, antiLoop,
+				func() (bool, domain.RunOutcome, error) {
+					return s.consultRoute(ctx, nil, state, seq, lastResponse, prevWorkflowStep,
+						stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
+				})
+			return domain.ProtocolResponse{}, 0, true, fDone, fOut, fErr
+		}
 		s.deps.Debug.Log(domain.EventSessionHarnessError, rdErr.Error(),
 			domain.F("agent", rdReq.AgentInstanceID),
 		)
@@ -349,6 +358,12 @@ func (s *sessionImpl) applyConsultStep(
 			return true, domain.RunOutcome{Status: domain.RunStopped, Message: "run stopped: graceful stop confirmed"}, nil
 		}
 		if halt {
+			if fDone, fOut, handled, fErr := s.followUpInfraForceStop(lastResponse, func() (bool, domain.RunOutcome, error) {
+				return s.consultRoute(ctx, nil, state, seq, lastResponse, prevWorkflowStep,
+					stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
+			}); handled {
+				return fDone, fOut, fErr
+			}
 			return true, domain.RunOutcome{Status: domain.RunStopped, Message: "infrastructure agent halted the run"}, nil
 		}
 		cp := completedStep

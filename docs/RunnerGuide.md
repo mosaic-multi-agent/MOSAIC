@@ -84,7 +84,8 @@ All three modes are dramatically cheaper than running the orchestrator agent man
 | `--task` | New run | — | Task description for the run; not needed with `--run` |
 | `--harness` | Yes | `fake` | Harness adapter (`claude-code`, `opencode`, `ghcp-cli`) |
 | `--mode` | New run | — | Execution mode (`orchestrated`, `auto`, `auto-review`); on a resume only for a run that records no Runner settings |
-| `--timeout` | No | `30m` | Per-invocation timeout for the harness adapter |
+| `--timeout` | No | `30m` | Per-invocation timeout for dispatches without human-in-the-loop |
+| `--hitl-timeout` | No | `4h` | Per-invocation timeout for dispatches sent with `human_in_the_loop: true`, where a person may take long to answer |
 | `--pre-consult` | No | `true` | One-shot environment consultation at run start (auto/auto-review only); use `--pre-consult=false` to disable |
 | `--manual-resolution` | No | `false` | When a consultation fails, let the user choose the next dispatch in an interactive dialogue; needs the TUI (see [Manual routing](#manual-routing)) |
 | `--review-loop-limit` | New run | — | Maximum review loop iterations: a positive integer, or `none` for no limit. Required for a new run and fixed once the run exists |
@@ -141,7 +142,7 @@ The guidance is saved as plain text in `Orchestration-{run_id}/RunnerGuidance.tx
 
 Normally the orchestrator decides where a run goes when the workflow table does not. With `--manual-resolution` (or the matching TUI setting), a consultation that fails (for example an unusable orchestrator reply) hands that one decision to you instead of ending the run. From the TUI stop screen, **Manual dispatch** does the same once on demand.
 
-The TUI asks you step by step: the **row** to run (or stop the run), the **iteration** for a row in a block, the **task** description, the **input** and **output** artifacts (the row's defaults are pre-checked, and you can add paths), optional **constraints**, and a **HITL** choice (default, on or off). Esc steps back one question. A dispatch that does not fit the workflow (for example an iteration that is not in the block's schedule) is explained and you are taken back to correct it.
+The TUI asks you step by step: the **row** to run (or stop the run), the **iteration** for a row in a block, the **task** description, the **input** and **output** artifacts (the row's defaults are pre-checked, and you can add paths), optional **constraints**, and a **HITL** choice (default, on or off). The first question also offers **Ask the orchestrator to decide** when you asked for the dialogue yourself (not when it opened because a consultation failed), which hands that decision to the orchestrator. Esc steps back one question. A dispatch that does not fit the workflow (for example an iteration that is not in the block's schedule) is explained and you are taken back to correct it.
 
 The dialogue ends without dispatching anything, and the run stops with its state saved and resumable, when you press Esc at the first question, when the interface cannot ask questions, or when the dialogue gives up (after 3 rejected dispatches, or after 64 questions in one attempt). The non-interactive CLI cannot answer the dialogue at all: with `--manual-resolution` there, a failed consultation ends the run as a resumable stop (exit code 6) rather than dispatching or waiting for input.
 
@@ -159,13 +160,19 @@ Every run creates an `Orchestration-{run_id}/` folder in the working directory. 
 ./mosaic-run
 ```
 
-A resume needs no settings flags: the workflow, task, mode, checkpoints, commits, review loop limit and infrastructure selections are read from the run. The TUI asks only what belongs to this session (harness, timeout, and, when they apply, version drift and the commit branch of a pending commit setup); the CLI needs `--run` and `--harness`. A run created by native orchestration records no Runner settings, so its first resume still needs `--mode` (the TUI asks). Before the run continues, the TUI shows and the CLI prints a summary of the recorded settings. A resume that cannot work is refused early, before you are asked anything: the run records no workflow, its workflow is no longer in the orchestrator file, or its recorded infrastructure no longer matches what is deployed.
+A resume needs no settings flags: the workflow, task, mode, checkpoints, commits, review loop limit and infrastructure selections are read from the run. The TUI asks only what belongs to this session (harness, the timeout and the human-in-the-loop timeout, and, when they apply, version drift and the commit branch of a pending commit setup); the CLI needs `--run` and `--harness`. A run created by native orchestration records no Runner settings, so its first resume still needs `--mode` (the TUI asks). Before the run continues, the TUI shows and the CLI prints a summary of the recorded settings. A resume that cannot work is refused early, before you are asked anything: the run records no workflow, its workflow is no longer in the orchestrator file, or its recorded infrastructure no longer matches what is deployed.
 
-The Runner reads the existing `Orchestration.md`, determines where the run left off, and continues from there. It finds the row and iteration of the last step from the Execution Log, the same way it does while the run is live, so a resumed run continues where the live run would have. The counters behind the automatic retries and the review loop limit are read from the log too, so they carry over; only the guard against repeated identical orchestrator dispatches starts again from zero.
+The Runner reads the existing `Orchestration.md`, determines where the run left off, and continues from there. If the last attempt was not accepted (it was interrupted, or force-stopped), the resume runs that assignment again instead of routing on its recorded status. It finds the row and iteration of the last step from the Execution Log, the same way it does while the run is live, so a resumed run continues where the live run would have. The counters behind the automatic retries and the review loop limit are read from the log too, so they carry over; only the guard against repeated identical orchestrator dispatches starts again from zero.
 
 In the TUI you do not have to leave the program to continue. After a graceful stop, **Continue** on the done screen resumes the run in place; after an orchestrator stop, **Retry** and **Manual dispatch** on the stop screen do the same. All of them resume the existing run (a run whose `Orchestration.md` exists is never restarted as new) and the progress screen shows the history of what already ran, rebuilt from the Execution Log, rather than starting empty.
 
 If the orchestrator keeps requesting a dispatch that the Runner's loop guard blocks (the same agent dispatched four times in a row on one row), the Runner asks the orchestrator again twice and then stops the run with its state saved, so you can continue it after looking at what happened. In the TUI the ending screen then offers `g  continue with loop guard off`, which resumes with the guard off for that session only. You can also switch the guard off while a run is in progress by pressing `g` on the progress screen (a red line, `LOOP GUARD OFF for this session`, stays visible until you press `g` again). It lasts for the session only and has no CLI flag. While it is off, same-agent dispatches are not limited, so watch for runaway loops; the other limits (automatic retries, review loop limit) still apply.
+
+### Live activity and force stop
+
+The progress screen shows what the running invocation is doing (tool calls, messages and usage so far). Press `l` to hide or show this panel. It reads `no live output available` until the invocation reports its first event. Claude Code runs in stream-json mode so that it reports activity too.
+
+Press `x` to force-stop the running invocation. A separate confirmation (`y` or `n`) comes first. Only the running invocation is killed, with everything it started; the Runner itself keeps running. The attempt is logged as not accepted (`Force-stopped by the user; attempt not accepted`), and you choose whether to stop the run (resumable) or to open the manual routing dialogue. The same whole-tree kill is used when an invocation times out.
 
 When you press stop in the TUI while the orchestrator is deciding, a decision that finishes after the stop request is discarded rather than dispatched. The Runner tells you so, and the decision is made again on resume.
 
@@ -233,4 +240,6 @@ When enabled, the Runner dispatches a commit infrastructure agent to commit comp
 | Enable checkpoints | `--checkpoints enabled --infra-class "checkpoint=checkpoint-manager-git"` |
 | Enable stage commits | `--commits enabled --infra-class "commit=commit-manager-git"` |
 | Set a longer timeout per invocation | `--timeout 1h` |
+| Allow people more time to answer | `--hitl-timeout 8h` |
+| Stop the running invocation at once | `x` on the progress screen, then `y` |
 | Choose the next dispatch yourself when a consultation fails | `--manual-resolution` (needs the TUI) |

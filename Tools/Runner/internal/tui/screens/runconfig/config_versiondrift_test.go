@@ -90,7 +90,7 @@ func TestConfigScreen_VersionDrift_ResumedRun_DifferentVersions_AllowingDriftRec
 
 	// Assert
 	if !s.Selection().AllowVersionDrift {
-		t.Errorf("AllowVersionDrift = false after selecting Yes on the drift prompt, want true; "+
+		t.Errorf("AllowVersionDrift = false after selecting Yes on the drift prompt, want true; " +
 			"the user's consent to run against a drifted workflow must be captured")
 	}
 	if s.step != configStepManualResolution {
@@ -117,7 +117,7 @@ func TestConfigScreen_VersionDrift_ResumedRun_DifferentVersions_RefusingDriftRec
 
 	// Assert
 	if s.Selection().AllowVersionDrift {
-		t.Errorf("AllowVersionDrift = true after selecting No on the drift prompt, want false; "+
+		t.Errorf("AllowVersionDrift = true after selecting No on the drift prompt, want false; " +
 			"refusing drift must not be recorded as consent")
 	}
 	if s.step != configStepManualResolution {
@@ -141,7 +141,7 @@ func TestConfigScreen_VersionDrift_NewRun_ViewNeverRendersPrompt(t *testing.T) {
 
 	// Assert
 	if strings.Contains(view, "Allow workflow version drift") {
-		t.Errorf("View() rendered version-drift prompt when isNewRun=true; "+
+		t.Errorf("View() rendered version-drift prompt when isNewRun=true; " +
 			"defense in depth: prompt must never be rendered when isNewRun=true, regardless of step state")
 	}
 }
@@ -169,8 +169,8 @@ func TestConfigScreen_VersionDrift_NewRun_BackFromCheckpointsSkipsVersionDriftSt
 			"a step skipped going forward must also be skipped going back, otherwise the user " +
 			"reaches an empty prompt that still records a drift answer")
 	}
-	if s.step != configStepHarnessTimeout {
-		t.Errorf("Esc from checkpoints on a new run: step=%v, want configStepHarnessTimeout", s.step)
+	if !showsHITLTimeout(s) {
+		t.Errorf("Esc from checkpoints on a new run: the HITL timeout step (the one before checkpoints) is not shown; view:\n%s", s.View())
 	}
 }
 

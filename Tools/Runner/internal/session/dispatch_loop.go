@@ -34,6 +34,12 @@ func (s *sessionImpl) runDispatchLoop(ctx context.Context, rs *runStartCtx) (dom
 			}
 			continue
 		}
+		if out, done, handled, err := s.runResumeRedispatch(ctx, rs); handled {
+			if done {
+				return out, err
+			}
+			continue
+		}
 		decision := engine.Next(engine.NextInput{
 			Workflow:            rs.admitted,
 			Schedules:           rs.stages,
@@ -229,10 +235,14 @@ func (s *sessionImpl) handleAutoHarnessErrorAndBypass(ctx context.Context, rs *r
 	if ctx.Err() != nil {
 		return domain.ProtocolResponse{}, step, true, false, domain.RunOutcome{Status: domain.RunStopped, Message: "run stopped: context cancelled"}, nil
 	}
+	if isForceStopped(invokeErr) {
+		done, out, err := s.autoForceStop(ctx, rs, attemptOfStep(step, step.Request), step.Retry == domain.RetryNone)
+		return domain.ProtocolResponse{}, step, done, true, out, err
+	}
 	s.deps.Debug.Log(domain.EventSessionHarnessError, invokeErr.Error(),
 		domain.F("agent", step.Request.AgentInstanceID),
 	)
-	harnessResp := domain.HarnessErrorResponse(step.Request.AgentInstanceID, rs.config.RunID, invokeErr)
+	harnessResp :=domain.HarnessErrorResponse(step.Request.AgentInstanceID, rs.config.RunID, invokeErr)
 	deviationInfo := domain.DeviationInfo{
 		Kind:          domain.DeviationNonSuccess,
 		Response:      harnessResp,
@@ -276,6 +286,10 @@ func (s *sessionImpl) handleAutoHarnessErrorAndBypass(ctx context.Context, rs *r
 		if bypassErr == nil {
 			step.Request = bypassReq
 			return bypassResp, step, false, false, domain.RunOutcome{}, nil
+		}
+		if isForceStopped(bypassErr) {
+			done, out, err := s.autoForceStop(ctx, rs, attemptOfStep(step, bypassReq), true)
+			return domain.ProtocolResponse{}, step, done, true, out, err
 		}
 		if recErr := s.recordFailedBypass(ctx, &rs.state, bypassReq, step.Phase, step.Stage, step.RowIndex, bypassErr); recErr != nil {
 			return domain.ProtocolResponse{}, step, true, false, domain.RunOutcome{Status: domain.RunFailed, Message: recErr.Error()}, recErr
@@ -368,6 +382,11 @@ func (s *sessionImpl) postDispatchTriggers(ctx context.Context, rs *runStartCtx,
 		return domain.RunOutcome{Status: domain.RunStopped, Message: "run stopped: graceful stop confirmed"}, true, nil
 	}
 	if halt {
+		if done, out, handled, err := s.followUpInfraForceStop(&rs.lastResponse, func() (bool, domain.RunOutcome, error) {
+			return s.routeFromRS(ctx, rs)
+		}); handled {
+			return out, done, err
+		}
 		return domain.RunOutcome{Status: domain.RunStopped, Message: "infrastructure agent halted the run"}, true, nil
 	}
 	cp := completedStep

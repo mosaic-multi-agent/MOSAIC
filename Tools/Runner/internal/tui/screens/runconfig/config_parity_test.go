@@ -23,7 +23,8 @@ import (
 // that completing the wizard with mode=orchestrated, checkpoints=disabled,
 // commits=absent, pre-consult=absent, manual-resolution=disabled produces a
 // Settings struct equivalent to what the CLI would produce from:
-//   --mode orchestrated
+//
+//	--mode orchestrated
 //
 // RED: Settings remains zero-valued (ExecutionModeUnset for Mode, false for all bools).
 func TestConfigScreen_Parity_OrchestratedMode_SettingsMatchCLIEquivalent(t *testing.T) {
@@ -33,10 +34,10 @@ func TestConfigScreen_Parity_OrchestratedMode_SettingsMatchCLIEquivalent(t *test
 	// Drive through all steps with the simplest configuration:
 	// mode=orchestrated, no commit agent, all other steps use defaults (disabled/no).
 	driveConfigScreenModeSelect(s, 0) // orchestrated
-	pressKey(s, tea.KeyEnter)          // harness
-	advanceConfigScreenTimeout(s)      // timeout
-	pressKey(s, tea.KeyEnter)          // version drift: no drift (default)
-	pressKey(s, tea.KeyEnter)          // checkpoints: disabled (default)
+	pressKey(s, tea.KeyEnter)         // harness
+	advanceConfigScreenTimeout(s)     // timeout
+	pressKey(s, tea.KeyEnter)         // version drift: no drift (default)
+	pressKey(s, tea.KeyEnter)         // checkpoints: disabled (default)
 	// No commits step (no commit agent).
 	// No pre-consult step (orchestrated mode).
 	if s.step == configStepManualResolution {
@@ -75,7 +76,8 @@ func TestConfigScreen_Parity_OrchestratedMode_SettingsMatchCLIEquivalent(t *test
 // TestConfigScreen_Parity_AutoModeWithPreConsult_SettingsMatchCLIEquivalent
 // verifies that selecting mode=auto and enabling pre-consultation produces
 // Settings equivalent to:
-//   --mode auto --pre-consult
+//
+//	--mode auto --pre-consult
 //
 // RED: Settings.Mode is ExecutionModeUnset, Settings.PreConsultation is false.
 func TestConfigScreen_Parity_AutoModeWithPreConsult_SettingsMatchCLIEquivalent(t *testing.T) {
@@ -83,10 +85,10 @@ func TestConfigScreen_Parity_AutoModeWithPreConsult_SettingsMatchCLIEquivalent(t
 	s.SetDeclaredAgents(nil)
 
 	driveConfigScreenModeSelect(s, 1) // auto
-	pressKey(s, tea.KeyEnter)          // harness
-	advanceConfigScreenTimeout(s)      // timeout
-	pressKey(s, tea.KeyEnter)          // version drift
-	pressKey(s, tea.KeyEnter)          // checkpoints
+	pressKey(s, tea.KeyEnter)         // harness
+	advanceConfigScreenTimeout(s)     // timeout
+	pressKey(s, tea.KeyEnter)         // version drift
+	pressKey(s, tea.KeyEnter)         // checkpoints
 
 	// Pre-consult step should appear for mode=auto; enable it.
 	// cursor 0 = Disabled (default), cursor 1 = Enabled.
@@ -144,10 +146,10 @@ func TestConfigScreen_ManualResolutionStep_ViewShowsOptions(t *testing.T) {
 	s.SetDeclaredAgents(nil) // no commit agent; orchestrated mode skips commits and pre-consult
 
 	driveConfigScreenModeSelect(s, 0) // orchestrated
-	pressKey(s, tea.KeyEnter)          // harness
-	advanceConfigScreenTimeout(s)      // timeout
-	pressKey(s, tea.KeyEnter)          // version drift
-	pressKey(s, tea.KeyEnter)          // checkpoints
+	pressKey(s, tea.KeyEnter)         // harness
+	advanceConfigScreenTimeout(s)     // timeout
+	pressKey(s, tea.KeyEnter)         // version drift
+	pressKey(s, tea.KeyEnter)         // checkpoints
 
 	if s.step != configStepManualResolution {
 		t.Fatalf("step = %v after checkpoints (orchestrated, no commit agent), want configStepManualResolution (%v); "+
@@ -175,10 +177,10 @@ func TestConfigScreen_ManualResolutionStep_EnabledSetsManualResolutionTrue(t *te
 	s.SetDeclaredAgents(nil)
 
 	driveConfigScreenModeSelect(s, 0) // orchestrated
-	pressKey(s, tea.KeyEnter)          // harness
-	advanceConfigScreenTimeout(s)      // timeout
-	pressKey(s, tea.KeyEnter)          // version drift
-	pressKey(s, tea.KeyEnter)          // checkpoints
+	pressKey(s, tea.KeyEnter)         // harness
+	advanceConfigScreenTimeout(s)     // timeout
+	pressKey(s, tea.KeyEnter)         // version drift
+	pressKey(s, tea.KeyEnter)         // checkpoints
 
 	if s.step != configStepManualResolution {
 		t.Fatalf("step = %v, want configStepManualResolution; cannot test selection", s.step)
@@ -217,10 +219,10 @@ func TestConfigScreen_BackNav_CommitBranchReachable_WhenCommitsEnabled(t *testin
 	})
 
 	driveConfigScreenModeSelect(s, 0) // orchestrated (no pre-consult step)
-	pressKey(s, tea.KeyEnter)          // harness
-	advanceConfigScreenTimeout(s)      // timeout
-	pressKey(s, tea.KeyEnter)          // version drift
-	pressKey(s, tea.KeyEnter)          // checkpoints
+	pressKey(s, tea.KeyEnter)         // harness
+	advanceConfigScreenTimeout(s)     // timeout
+	pressKey(s, tea.KeyEnter)         // version drift
+	pressKey(s, tea.KeyEnter)         // checkpoints
 
 	// Enable commits so the commit-branch step appears.
 	// cursor 0 = Disabled (default), cursor 1 = Enabled.
@@ -254,7 +256,8 @@ func TestConfigScreen_BackNav_CommitBranchReachable_WhenCommitsEnabled(t *testin
 // TestConfigScreen_Parity_CommitsEnabledUserOwn_SettingsMatchCLIEquivalent
 // verifies that selecting commits=enabled with branch=user-own produces
 // Settings equivalent to:
-//   --mode orchestrated --commits enabled --commit-branch user-own
+//
+//	--mode orchestrated --commits enabled --commit-branch user-own
 //
 // RED: commits and commit-branch steps are not shown.
 func TestConfigScreen_Parity_CommitsEnabledUserOwn_SettingsMatchCLIEquivalent(t *testing.T) {
@@ -264,10 +267,10 @@ func TestConfigScreen_Parity_CommitsEnabledUserOwn_SettingsMatchCLIEquivalent(t 
 	})
 
 	driveConfigScreenModeSelect(s, 0) // orchestrated
-	pressKey(s, tea.KeyEnter)          // harness
-	advanceConfigScreenTimeout(s)      // timeout
-	pressKey(s, tea.KeyEnter)          // version drift
-	pressKey(s, tea.KeyEnter)          // checkpoints
+	pressKey(s, tea.KeyEnter)         // harness
+	advanceConfigScreenTimeout(s)     // timeout
+	pressKey(s, tea.KeyEnter)         // version drift
+	pressKey(s, tea.KeyEnter)         // checkpoints
 
 	// cursor 0 = Disabled (default), cursor 1 = Enabled.
 	if s.step == configStepCommits {
@@ -308,7 +311,8 @@ func TestConfigScreen_Parity_CommitsEnabledUserOwn_SettingsMatchCLIEquivalent(t 
 
 // TestConfigScreen_Parity_ManualResolutionEnabled_SettingsMatchCLIEquivalent
 // verifies that enabling manual resolution produces Settings equivalent to:
-//   --mode orchestrated --manual-resolution
+//
+//	--mode orchestrated --manual-resolution
 //
 // RED: configStepManualResolution is not wired in; Settings.ManualResolution
 // remains false.
@@ -317,10 +321,10 @@ func TestConfigScreen_Parity_ManualResolutionEnabled_SettingsMatchCLIEquivalent(
 	s.SetDeclaredAgents(nil) // no commit agent
 
 	driveConfigScreenModeSelect(s, 0) // orchestrated
-	pressKey(s, tea.KeyEnter)          // harness
-	advanceConfigScreenTimeout(s)      // timeout
-	pressKey(s, tea.KeyEnter)          // version drift
-	pressKey(s, tea.KeyEnter)          // checkpoints
+	pressKey(s, tea.KeyEnter)         // harness
+	advanceConfigScreenTimeout(s)     // timeout
+	pressKey(s, tea.KeyEnter)         // version drift
+	pressKey(s, tea.KeyEnter)         // checkpoints
 
 	if s.step == configStepManualResolution {
 		// Disabled is the default preselection at cursor 0; enabled is at cursor 1.
@@ -357,7 +361,8 @@ func TestConfigScreen_Parity_ManualResolutionEnabled_SettingsMatchCLIEquivalent(
 // TestConfigScreen_Parity_CommitsEnabledMOSAICOwned_SettingsMatchCLIEquivalent
 // verifies that selecting commits=enabled with branch=mosaic-owned produces
 // Settings equivalent to:
-//   --mode orchestrated --commits enabled --commit-branch mosaic-owned
+//
+//	--mode orchestrated --commits enabled --commit-branch mosaic-owned
 //
 // RED: neither commits step nor commit-branch step is shown.
 func TestConfigScreen_Parity_CommitsEnabledMOSAICOwned_SettingsMatchCLIEquivalent(t *testing.T) {
@@ -367,10 +372,10 @@ func TestConfigScreen_Parity_CommitsEnabledMOSAICOwned_SettingsMatchCLIEquivalen
 	})
 
 	driveConfigScreenModeSelect(s, 0) // orchestrated
-	pressKey(s, tea.KeyEnter)          // harness
-	advanceConfigScreenTimeout(s)      // timeout
-	pressKey(s, tea.KeyEnter)          // version drift
-	pressKey(s, tea.KeyEnter)          // checkpoints
+	pressKey(s, tea.KeyEnter)         // harness
+	advanceConfigScreenTimeout(s)     // timeout
+	pressKey(s, tea.KeyEnter)         // version drift
+	pressKey(s, tea.KeyEnter)         // checkpoints
 
 	// cursor 0 = Disabled (default), cursor 1 = Enabled.
 	if s.step == configStepCommits {
@@ -406,5 +411,3 @@ func TestConfigScreen_Parity_CommitsEnabledMOSAICOwned_SettingsMatchCLIEquivalen
 			got, wantSettings)
 	}
 }
-
-

@@ -36,14 +36,14 @@ func TestConfigScreen_CommitsStep_NotShown_WhenNoCommitAgentDeclared(t *testing.
 	})
 
 	driveConfigScreenModeSelect(s, 0) // mode
-	pressKey(s, tea.KeyEnter)          // harness
-	advanceConfigScreenTimeout(s)      // timeout
-	pressKey(s, tea.KeyEnter)          // version drift
-	pressKey(s, tea.KeyEnter)          // checkpoints
+	pressKey(s, tea.KeyEnter)         // harness
+	advanceConfigScreenTimeout(s)     // timeout
+	pressKey(s, tea.KeyEnter)         // version drift
+	pressKey(s, tea.KeyEnter)         // checkpoints
 
 	// The commits step must not appear when no commit-class agent is declared.
 	if s.step == configStepCommits {
-		t.Errorf("step = configStepCommits after checkpoints when no commit agent is declared; "+
+		t.Errorf("step = configStepCommits after checkpoints when no commit agent is declared; " +
 			"the commits step must be skipped when no commit-class agent exists")
 		return
 	}
@@ -75,10 +75,10 @@ func TestConfigScreen_CommitsStep_Shown_WhenCommitAgentDeclared(t *testing.T) {
 	})
 
 	driveConfigScreenModeSelect(s, 0) // mode
-	pressKey(s, tea.KeyEnter)          // harness
-	advanceConfigScreenTimeout(s)      // timeout
-	pressKey(s, tea.KeyEnter)          // version drift
-	pressKey(s, tea.KeyEnter)          // checkpoints
+	pressKey(s, tea.KeyEnter)         // harness
+	advanceConfigScreenTimeout(s)     // timeout
+	pressKey(s, tea.KeyEnter)         // version drift
+	pressKey(s, tea.KeyEnter)         // checkpoints
 
 	// After checkpoints with a commit agent declared, the wizard must show the
 	// commits step (configStepCommits), not jump to Done or infraClass.
@@ -112,10 +112,10 @@ func TestConfigScreen_CommitBranchStep_NotShown_WhenCommitsDisabled(t *testing.T
 	})
 
 	driveConfigScreenModeSelect(s, 0) // mode
-	pressKey(s, tea.KeyEnter)          // harness
-	advanceConfigScreenTimeout(s)      // timeout
-	pressKey(s, tea.KeyEnter)          // version drift
-	pressKey(s, tea.KeyEnter)          // checkpoints
+	pressKey(s, tea.KeyEnter)         // harness
+	advanceConfigScreenTimeout(s)     // timeout
+	pressKey(s, tea.KeyEnter)         // version drift
+	pressKey(s, tea.KeyEnter)         // checkpoints
 
 	if s.step == configStepCommits {
 		// Commits step is shown — cursor 0 = Disabled by default, just confirm.
@@ -123,7 +123,7 @@ func TestConfigScreen_CommitBranchStep_NotShown_WhenCommitsDisabled(t *testing.T
 
 		// The commit branch step must not appear.
 		if s.step == configStepCommitBranch {
-			t.Errorf("step = configStepCommitBranch after selecting commits=disabled; "+
+			t.Errorf("step = configStepCommitBranch after selecting commits=disabled; " +
 				"the commit branch step must be skipped when commits are disabled")
 		}
 	}
@@ -144,10 +144,10 @@ func TestConfigScreen_CommitBranchStep_Shown_WhenCommitsEnabled(t *testing.T) {
 	})
 
 	driveConfigScreenModeSelect(s, 0) // mode (orchestrated)
-	pressKey(s, tea.KeyEnter)          // harness
-	advanceConfigScreenTimeout(s)      // timeout
-	pressKey(s, tea.KeyEnter)          // version drift
-	pressKey(s, tea.KeyEnter)          // checkpoints
+	pressKey(s, tea.KeyEnter)         // harness
+	advanceConfigScreenTimeout(s)     // timeout
+	pressKey(s, tea.KeyEnter)         // version drift
+	pressKey(s, tea.KeyEnter)         // checkpoints
 
 	if s.step != configStepCommits {
 		t.Fatalf("step = %v after checkpoints with commit agent, want configStepCommits; "+
@@ -215,10 +215,10 @@ func TestConfigScreen_PreConsultStep_NotShown_WhenModeOrchestrated(t *testing.T)
 	s.SetDeclaredAgents(nil)
 
 	driveConfigScreenModeSelect(s, 0) // orchestrated
-	pressKey(s, tea.KeyEnter)          // harness
-	advanceConfigScreenTimeout(s)      // timeout
-	pressKey(s, tea.KeyEnter)          // version drift
-	pressKey(s, tea.KeyEnter)          // checkpoints
+	pressKey(s, tea.KeyEnter)         // harness
+	advanceConfigScreenTimeout(s)     // timeout
+	pressKey(s, tea.KeyEnter)         // version drift
+	pressKey(s, tea.KeyEnter)         // checkpoints
 
 	// After checkpoints with orchestrated mode, the pre-consult step must NOT appear.
 	if s.step == configStepPreConsult {
@@ -237,10 +237,10 @@ func TestConfigScreen_PreConsultStep_Shown_WhenModeAuto(t *testing.T) {
 	s.SetDeclaredAgents(nil) // no commit agent
 
 	driveConfigScreenModeSelect(s, 1) // auto
-	pressKey(s, tea.KeyEnter)          // harness
-	advanceConfigScreenTimeout(s)      // timeout
-	pressKey(s, tea.KeyEnter)          // version drift
-	pressKey(s, tea.KeyEnter)          // checkpoints
+	pressKey(s, tea.KeyEnter)         // harness
+	advanceConfigScreenTimeout(s)     // timeout
+	pressKey(s, tea.KeyEnter)         // version drift
+	pressKey(s, tea.KeyEnter)         // checkpoints
 
 	// After checkpoints with mode=auto, the pre-consult step must appear.
 	// In RED the wizard reaches Done() or stays at an unexpected step.
@@ -264,10 +264,10 @@ func TestConfigScreen_PreConsultStep_Shown_WhenModeAutoReview(t *testing.T) {
 	s.SetDeclaredAgents(nil)
 
 	driveConfigScreenModeSelect(s, 2) // auto-review
-	pressKey(s, tea.KeyEnter)          // harness
-	advanceConfigScreenTimeout(s)      // timeout
-	pressKey(s, tea.KeyEnter)          // version drift
-	pressKey(s, tea.KeyEnter)          // checkpoints
+	pressKey(s, tea.KeyEnter)         // harness
+	advanceConfigScreenTimeout(s)     // timeout
+	pressKey(s, tea.KeyEnter)         // version drift
+	pressKey(s, tea.KeyEnter)         // checkpoints
 
 	if s.Done() {
 		t.Error("ConfigScreen reached Done() before the pre-consultation step; " +
@@ -279,4 +279,3 @@ func TestConfigScreen_PreConsultStep_Shown_WhenModeAutoReview(t *testing.T) {
 			s.step, configStepPreConsult)
 	}
 }
-

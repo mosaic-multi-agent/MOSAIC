@@ -62,9 +62,9 @@ func TestClaudeCodeAdapter_OrdinaryInvocation_IncludesPromptFlag(t *testing.T) {
 	}
 }
 
-// TestClaudeCodeAdapter_OrdinaryInvocation_IncludesOutputFormatJSON verifies
-// that ordinary invocations include --output-format json.
-func TestClaudeCodeAdapter_OrdinaryInvocation_IncludesOutputFormatJSON(t *testing.T) {
+// TestClaudeCodeAdapter_OrdinaryInvocation_IncludesOutputFormatStreamJSON verifies
+// that ordinary invocations include --output-format stream-json --verbose.
+func TestClaudeCodeAdapter_OrdinaryInvocation_IncludesOutputFormatStreamJSON(t *testing.T) {
 	argsFile := setHelperEnv(t, "success")
 
 	adapter := claudecode.NewClaudeCodeAdapter(helperExe(t), 5*time.Second)
@@ -74,8 +74,8 @@ func TestClaudeCodeAdapter_OrdinaryInvocation_IncludesOutputFormatJSON(t *testin
 	}
 
 	args := readArgs(t, argsFile)
-	if !containsSequence(args, "--output-format", "json") {
-		t.Errorf("want --output-format json in args, got %v", args)
+	if !containsSequence(args, "--output-format", "stream-json") || !containsArg(args, "--verbose") {
+		t.Errorf("want --output-format stream-json and --verbose in args, got %v", args)
 	}
 }
 
@@ -177,9 +177,9 @@ func TestClaudeCodeAdapter_OrchestratorInvocation_NoAppendSystemPromptFile(t *te
 	}
 }
 
-// TestClaudeCodeAdapter_OrchestratorInvocation_IncludesOutputFormatJSON
-// verifies that orchestrator invocations include --output-format json.
-func TestClaudeCodeAdapter_OrchestratorInvocation_IncludesOutputFormatJSON(t *testing.T) {
+// TestClaudeCodeAdapter_OrchestratorInvocation_IncludesOutputFormatStreamJSON
+// verifies that orchestrator invocations include --output-format stream-json --verbose.
+func TestClaudeCodeAdapter_OrchestratorInvocation_IncludesOutputFormatStreamJSON(t *testing.T) {
 	argsFile := setHelperEnv(t, "success")
 
 	adapter := claudecode.NewClaudeCodeAdapter(helperExe(t), 5*time.Second)
@@ -189,8 +189,8 @@ func TestClaudeCodeAdapter_OrchestratorInvocation_IncludesOutputFormatJSON(t *te
 	}
 
 	args := readArgs(t, argsFile)
-	if !containsSequence(args, "--output-format", "json") {
-		t.Errorf("want --output-format json in orchestrator args, got %v", args)
+	if !containsSequence(args, "--output-format", "stream-json") || !containsArg(args, "--verbose") {
+		t.Errorf("want --output-format stream-json and --verbose in orchestrator args, got %v", args)
 	}
 }
 

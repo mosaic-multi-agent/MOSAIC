@@ -31,8 +31,9 @@ func reviewLoopLimitReached(workflow domain.AdmittedWorkflow, state domain.Artif
 	if row, ok := tableRow(workflow, pos.rowIdx); ok {
 		posRow = &row
 	}
+	log := withoutForceStopped(state.ExecutionLog)
 	count := 0
-	for i, e := range state.ExecutionLog {
+	for i, e := range log {
 		if (e.Status != domain.StatusCOMPLETED_NEEDS_ACTION && e.Status != domain.StatusSUCCESS) ||
 			e.Phase != pos.entry.Phase ||
 			extractAgentName(e.Agent) != reviewer ||
@@ -40,8 +41,8 @@ func reviewLoopLimitReached(workflow domain.AdmittedWorkflow, state domain.Artif
 			continue
 		}
 		followsOwnCNA := i > 0 &&
-			state.ExecutionLog[i-1].Status == domain.StatusCOMPLETED_NEEDS_ACTION &&
-			extractAgentName(state.ExecutionLog[i-1].Agent) == reviewer
+			log[i-1].Status == domain.StatusCOMPLETED_NEEDS_ACTION &&
+			extractAgentName(log[i-1].Agent) == reviewer
 		switch {
 		case e.Status == domain.StatusSUCCESS && !followsOwnCNA:
 			count = 0
@@ -50,4 +51,16 @@ func reviewLoopLimitReached(workflow domain.AdmittedWorkflow, state domain.Artif
 		}
 	}
 	return count >= limit
+}
+
+// withoutForceStopped returns log without its force-stopped rows, which no
+// counter sees.
+func withoutForceStopped(log []domain.ExecutionLogEntry) []domain.ExecutionLogEntry {
+	out := make([]domain.ExecutionLogEntry, 0, len(log))
+	for _, e := range log {
+		if !e.IsForceStopped() {
+			out = append(out, e)
+		}
+	}
+	return out
 }

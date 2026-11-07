@@ -101,6 +101,10 @@ type SpawnRequest struct {
 	// GHCPCLIModePartialAllowlist for per-tool --allow-tool entries derived
 	// from DerivedTools.
 	GHCPCLIMode GHCPCLIPermissionMode
+
+	// OnStdoutLine is passed unchanged into RunOptions.OnStdoutLine by the
+	// Claude Code, OpenCode and GHCP CLI spawners. Nil: today's behaviour.
+	OnStdoutLine func(line []byte)
 }
 
 // GHCPCLIPermissionMode selects one of the two supported GHCP CLI permission
@@ -210,6 +214,10 @@ type RunOptions struct {
 	Stdin      []byte
 	Timeout    time.Duration
 	Sink       Sink
+
+	// OnStdoutLine, when non-nil, receives each stdout line while the process
+	// runs. Nil: today's behaviour exactly.
+	OnStdoutLine func(line []byte)
 }
 
 // Option configures a Spawner constructed by NewClaudeCode.

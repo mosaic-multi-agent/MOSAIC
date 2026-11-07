@@ -89,6 +89,10 @@ func ParseClaudeCodeEnvelope(data []byte) (string, error) {
 			return "", fmt.Errorf("%w: no result field in CLI envelope object", ErrProtocolNotExtractable)
 		}
 
+		if text, ok, streamErr := parseClaudeCodeStream(data); ok {
+			return text, streamErr
+		}
+
 		rawText := strings.TrimSpace(string(data))
 		if _, recErr := ExtractProtocolJSON(rawText); recErr == nil {
 			return rawText, nil

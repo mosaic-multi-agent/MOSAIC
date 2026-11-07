@@ -1,0 +1,9 @@
+{"type":"session.skills_loaded","data":{"skills":[]}}
+{"type":"assistant.message","data":{"messageId":"m1","content":"Looking at the file.","toolRequests":[]}}
+{"type":"tool.execution_start","data":{"toolCallId":"t1","toolName":"view","arguments":{"path":"src/main.go"}}}
+{"type":"tool.execution_complete","data":{"toolCallId":"t1","success":true,"result":{"content":"package main"}}}
+{"type":"assistant.usage","data":{"model":"m","inputTokens":150,"outputTokens":25}}
+{"type":"subagent.started","data":{"toolCallId":"t2","agentName":"reviewer","agentDisplayName":"Reviewer","agentDescription":"Review the change"}}
+{"type":"subagent.completed","data":{"toolCallId":"t2","agentName":"reviewer","durationMs":10}}
+{"type":"assistant.message","data":{"messageId":"m2","content":"All done."}}
+{"type":"result","exitCode":0}

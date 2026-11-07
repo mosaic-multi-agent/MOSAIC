@@ -54,6 +54,7 @@ type answerMsg struct {
 //	err := tui.Run(ctx, workflows, sess, tui.Options{Interaction: ref})
 type ProgramRef struct {
 	prog atomic.Pointer[tea.Program]
+	act  activitySender
 }
 
 // NewProgramRef returns a ProgramRef that implements interaction.Interaction. Pass it as
