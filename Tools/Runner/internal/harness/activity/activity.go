@@ -9,6 +9,9 @@ import "mosaic-run/internal/domain"
 // or malformed lines yield nil, never an error or panic.
 type Decoder interface {
 	Decode(line []byte) []domain.ActivityItem
+	// Status returns the cumulative ActivityStatus after every line passed to
+	// Decode so far. The zero value before the first line.
+	Status() domain.ActivityStatus
 }
 
 // LineObserver returns a callback for RunOptions/SpawnRequest.OnStdoutLine
@@ -18,6 +21,7 @@ func LineObserver(dec Decoder, feed domain.ActivityFeed) func(line []byte) {
 		for _, item := range dec.Decode(line) {
 			feed.Activity(item)
 		}
+		feed.Status(dec.Status())
 	}
 }
 
@@ -62,6 +66,18 @@ func (f *safeFeed) Activity(item domain.ActivityItem) {
 		}
 	}()
 	f.inner.Activity(item)
+}
+
+func (f *safeFeed) Status(st domain.ActivityStatus) {
+	if f.failed {
+		return
+	}
+	defer func() {
+		if recover() != nil {
+			f.failed = true
+		}
+	}()
+	f.inner.Status(st)
 }
 
 func (f *safeFeed) Ended() {

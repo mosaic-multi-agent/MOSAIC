@@ -10,14 +10,31 @@ import (
 // ---- wire types for the two-action orchestrator consultation contract ----
 
 // wireRequest is the JSON payload the Runner sends to the orchestrator for both
-// routing and pre-consultation. All four fields are always present on the wire;
-// last_status_message and last_error_reason are null (not absent) when the
-// ConsultationRequest carries nil.
+// routing and pre-consultation. All members are always present on the wire;
+// the nullable ones are null (not absent) when the ConsultationRequest carries
+// nil.
+//
+// last_status is the status code of the response whose message is in
+// last_status_message: the subagent's returned status, or "HARNESS_ERROR" when
+// the Runner recorded the attempt as a harness failure (the failure
+// description is then in last_status_message and last_error_reason). It is
+// null whenever last_status_message is null, and always for pre-consultation.
 type wireRequest struct {
 	OrchestrationArtifact string  `json:"orchestration_artifact"`
 	Context               string  `json:"context"`
+	LastStatus            *string `json:"last_status"`         // no omitempty: null must be emitted
 	LastStatusMessage     *string `json:"last_status_message"` // no omitempty: null must be emitted
 	LastErrorReason       *string `json:"last_error_reason"`   // no omitempty: null must be emitted
+	UserMessage           *string `json:"user_message"`        // no omitempty: null must be emitted
+}
+
+// statusWire converts an optional status code to its wire form.
+func statusWire(s *domain.StatusCode) *string {
+	if s == nil {
+		return nil
+	}
+	v := string(*s)
+	return &v
 }
 
 // wireRoutingResponse is the JSON payload the orchestrator returns for a routing

@@ -1,8 +1,9 @@
 package session_test
 
 // Tests for the error reason carried on routing consultations and for harness
-// errors recorded as BLOCKED/E501 workflow outcomes on every path that can hit
-// one (auto dispatch, HITL re-dispatch, consultant-routed dispatch).
+// errors recorded as workflow outcomes on every path that can hit one (auto
+// dispatch and consultant-routed dispatch: HARNESS_ERROR; HITL re-dispatch:
+// the synthetic BLOCKED/E501).
 //
 // Consultation behavior is proven through the captured ConsultationRequest,
 // never through the Execution Log rows a consultation may or may not write.
@@ -35,9 +36,36 @@ func blockedResponse(instance string, code domain.ErrorCode, message, reason str
 }
 
 // requireHarnessErrorRow asserts store.Applied holds an accepted workflow row
-// for the failed attempt: BLOCKED/E501, neither infrastructure nor HITL
+// for the failed attempt: HARNESS_ERROR, neither infrastructure nor HITL
 // rejected, naming agent and carrying the failure description. Returns it.
 func requireHarnessErrorRow(t *testing.T, store *memStore, agent, wantInSummary string) domain.CompletedStep {
+	t.Helper()
+	for _, s := range store.Applied {
+		if s.Status == domain.StatusHARNESS_ERROR && strings.HasPrefix(s.AgentInstance, agent+"#") {
+			if s.ErrorCode != domain.ErrorNone {
+				t.Errorf("want no error code on the HARNESS_ERROR row of %s, got %q", agent, s.ErrorCode)
+			}
+			if s.IsInfrastructure {
+				t.Errorf("want the harness-error row of %s to be a workflow row, got IsInfrastructure=true", agent)
+			}
+			if s.HITLRejected {
+				t.Errorf("want the harness-error row of %s not HITL-gated, got HITLRejected=true", agent)
+			}
+			if !strings.Contains(s.Summary, wantInSummary) {
+				t.Errorf("want harness-error row Summary to contain %q, got %q", wantInSummary, s.Summary)
+			}
+			return s
+		}
+	}
+	t.Fatalf("want a HARNESS_ERROR row for %s in store.Applied, got %+v", agent, store.Applied)
+	return domain.CompletedStep{}
+}
+
+// requireSyntheticE501Row asserts store.Applied holds an accepted workflow row
+// for the failed attempt of a site that still records the synthetic
+// BLOCKED/E501 (the HITL repair re-dispatch): neither infrastructure nor HITL
+// rejected, naming agent and carrying the failure description. Returns it.
+func requireSyntheticE501Row(t *testing.T, store *memStore, agent, wantInSummary string) domain.CompletedStep {
 	t.Helper()
 	for _, s := range store.Applied {
 		if s.Status == domain.StatusBLOCKED && s.ErrorCode == domain.ErrorTOOL_UNAVAILABLE &&
@@ -59,7 +87,7 @@ func requireHarnessErrorRow(t *testing.T, store *memStore, agent, wantInSummary 
 }
 
 // requireCurrentStateBlockedE501 asserts the persisted workflow position is
-// the failed step.
+// the failed step of a site that still records the synthetic BLOCKED/E501.
 func requireCurrentStateBlockedE501(t *testing.T, store *memStore, wantAgentInstance string) {
 	t.Helper()
 	cs := store.state.CurrentState
@@ -214,7 +242,7 @@ func TestSession_LastErrorReason_OrchestratedFollowsTriggeringResponse(t *testin
 
 // ===== harness errors: auto path =====
 
-func TestSession_HarnessError_AutoPath_RecordedAsBlockedE501AndRoutedAsDeviation(t *testing.T) {
+func TestSession_HarnessError_AutoPath_RecordedAsHarnessErrorAndRoutedAsDeviation(t *testing.T) {
 	modes := []domain.ExecutionMode{domain.ExecutionModeAuto, domain.ExecutionModeAutoReview}
 	failures := []string{
 		"harness: subprocess timed out after 60s",
@@ -227,8 +255,8 @@ func TestSession_HarnessError_AutoPath_RecordedAsBlockedE501AndRoutedAsDeviation
 				consultant.queueStop("done")
 				ses, f, store, orchPath := newAutoSessionWithConsultant(t, consultant)
 				// The harness keeps failing: the engine re-dispatches until the
-				// E501 budget is used up, and only then deviates to the consultant.
-				for i := 0; i < engine.E501AttemptLimit; i++ {
+				// HARNESS_ERROR budget is used up, and only then deviates to the consultant.
+				for i := 0; i < engine.HarnessErrorAttemptLimit; i++ {
 					f.Queue("agent-a", harness.ScriptedEntry{Err: errors.New(failure)})
 				}
 				cfg := baseLinearConfig(orchPath)
@@ -237,23 +265,23 @@ func TestSession_HarnessError_AutoPath_RecordedAsBlockedE501AndRoutedAsDeviation
 				ses.Start(context.Background(), cfg) //nolint:errcheck
 
 				requireHarnessErrorRow(t, store, "agent-a", failure)
-				if n := countInvocationsFor(f.Invocations(), "agent-a"); n != engine.E501AttemptLimit {
-					t.Errorf("want %d agent-a dispatches before the deviation, got %d", engine.E501AttemptLimit, n)
+				if n := countInvocationsFor(f.Invocations(), "agent-a"); n != engine.HarnessErrorAttemptLimit {
+					t.Errorf("want %d agent-a dispatches before the deviation, got %d", engine.HarnessErrorAttemptLimit, n)
 				}
-				requireCurrentStateBlockedE501(t, store, store.Applied[len(store.Applied)-1].AgentInstance)
+				requireCurrentStateUntouchedByFailure(t, store)
 				if len(consultant.Requests) != 1 {
 					t.Fatalf("want exactly one consultation once the budget is used up, got %d", len(consultant.Requests))
 				}
-				requireBlockedE501Deviation(t, consultant.Requests[0])
+				requireHarnessErrorDeviation(t, consultant.Requests[0])
 				requireErrorReasonCarries(t, consultant.Requests[0], failure)
 			})
 		}
 	}
 }
 
-// The first attempt's E501 row is recorded before the raw-text bypass retry,
+// The first attempt's HARNESS_ERROR row is recorded before the raw-text bypass retry,
 // even when the retry then succeeds; the run routes on the retry.
-func TestSession_HarnessError_BypassFirstAttempt_E501RowRecordedBeforeRetry(t *testing.T) {
+func TestSession_HarnessError_BypassFirstAttempt_HarnessErrorRowRecordedBeforeRetry(t *testing.T) {
 	consultant := &scriptedRoutingConsultant{}
 	ses, f, store, orchPath := newAutoSessionWithConsultant(t, consultant)
 	f.Queue("agent-a",
@@ -282,10 +310,10 @@ func TestSession_HarnessError_BypassFirstAttempt_E501RowRecordedBeforeRetry(t *t
 		}
 	}
 	if len(aRows) != 2 {
-		t.Fatalf("want 2 agent-a workflow rows (E501 attempt, then retry), got %d: %+v", len(aRows), aRows)
+		t.Fatalf("want 2 agent-a workflow rows (failed attempt, then retry), got %d: %+v", len(aRows), aRows)
 	}
-	if aRows[0].Status != domain.StatusBLOCKED || aRows[0].ErrorCode != domain.ErrorTOOL_UNAVAILABLE {
-		t.Errorf("want first agent-a row BLOCKED/E501, got %s/%s", aRows[0].Status, aRows[0].ErrorCode)
+	if aRows[0].Status != domain.StatusHARNESS_ERROR {
+		t.Errorf("want first agent-a row HARNESS_ERROR, got %s", aRows[0].Status)
 	}
 	if aRows[1].Status != domain.StatusSUCCESS {
 		t.Errorf("want second agent-a row SUCCESS, got %s", aRows[1].Status)
@@ -304,7 +332,7 @@ func TestSession_HarnessError_BypassFirstAttempt_E501RowRecordedBeforeRetry(t *t
 
 // ===== harness errors: HITL re-dispatch path =====
 
-func TestSession_HarnessError_HITLRedispatch_RecordedAsBlockedE501NotGated(t *testing.T) {
+func TestSession_HarnessError_HITLRedispatch_RecordedAsHarnessErrorNotGated(t *testing.T) {
 	const failure = "harness: subprocess timed out during HITL re-dispatch"
 	consultant := &scriptedRoutingConsultant{}
 	consultant.queueStop("done")
@@ -326,18 +354,18 @@ func TestSession_HarnessError_HITLRedispatch_RecordedAsBlockedE501NotGated(t *te
 	if rejected != 1 {
 		t.Errorf("want exactly the initial attempt HITL-rejected, got %d rejected rows", rejected)
 	}
-	row := requireHarnessErrorRow(t, store, "agent-a", failure)
-	requireCurrentStateBlockedE501(t, store, row.AgentInstance)
+	requireHarnessErrorRow(t, store, "agent-a", failure)
+	requireCurrentStateUntouchedByFailure(t, store)
 	if len(consultant.Requests) == 0 {
 		t.Fatal("want the engine deviation to reach the consultant, got no consultation")
 	}
-	requireBlockedE501Deviation(t, consultant.Requests[0])
+	requireHarnessErrorDeviation(t, consultant.Requests[0])
 	requireErrorReasonCarries(t, consultant.Requests[0], failure)
 }
 
 // ===== harness errors: consultant-routed path =====
 
-func TestSession_HarnessError_ConsultPath_RecordedAsBlockedE501AndNextConsultationCarriesDescription(t *testing.T) {
+func TestSession_HarnessError_ConsultPath_RecordedAsHarnessErrorAndNextConsultationCarriesDescription(t *testing.T) {
 	const failure = "harness: launch failed: permission denied"
 	consultant := &scriptedRoutingConsultant{}
 	consultant.queueDispatch("agent-a", "try the work", 0)
@@ -347,8 +375,8 @@ func TestSession_HarnessError_ConsultPath_RecordedAsBlockedE501AndNextConsultati
 
 	ses.Start(context.Background(), baseOrchestratedConfig(orchPath)) //nolint:errcheck
 
-	row := requireHarnessErrorRow(t, store, "agent-a", failure)
-	requireCurrentStateBlockedE501(t, store, row.AgentInstance)
+	requireHarnessErrorRow(t, store, "agent-a", failure)
+	requireCurrentStateUntouchedByFailure(t, store)
 	if len(consultant.Requests) < 2 {
 		t.Fatalf("want a consultation after the harness error, got %d requests", len(consultant.Requests))
 	}

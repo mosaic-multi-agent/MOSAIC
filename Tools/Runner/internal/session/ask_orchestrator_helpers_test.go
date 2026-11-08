@@ -31,13 +31,16 @@ func scriptRow(u *manualUser, answers ...string) *rowProbe {
 		})
 	}
 	u.one[domain.QuestionManualRow] = fns
+	// A user who hands the decision over and adds no message.
+	u.say(domain.QuestionManualAskMessage, "")
 	return probe
 }
 
-// onlyRowAsked reports whether the user was asked nothing but row questions.
+// onlyRowAsked reports whether the user was asked nothing but row questions
+// and the message step that follows handing the decision over.
 func onlyRowAsked(u *manualUser) bool {
 	for _, id := range u.asked {
-		if id != domain.QuestionManualRow {
+		if id != domain.QuestionManualRow && id != domain.QuestionManualAskMessage {
 			return false
 		}
 	}

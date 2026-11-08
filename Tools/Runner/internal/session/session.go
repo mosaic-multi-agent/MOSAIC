@@ -42,13 +42,21 @@
 //     - Deviation: engine returns Deviation; session routes through the
 //       RoutingConsultant (consultRoute). If no consultant is wired, the run
 //       terminates with RunDeviationUnresolved.
-//     - Harness error: a harness-level failure (timeout, launch failure) is
-//       recorded as a synthetic BLOCKED response with error code E501, whose
-//       status message and error reason are the Runner's error description
-//       ("never a crash" per port contract). It is persisted as an accepted
-//       workflow row (current_state.error_code E501) and routed through the
-//       RoutingConsultant as an ordinary BLOCKED/E501 deviation; the next
-//       consultation request carries the description as last_error_reason.
+//     - Harness error: on the engine-routed and consultant-routed dispatch
+//       paths an invocation that ends without a usable subagent response
+//       (timeout, process failure, unparseable or empty response, GHCP agent
+//       deselected or session error) is recorded as a HARNESS_ERROR row whose
+//       Summary names the failure kind and its detail ("never a crash" per
+//       port contract). The row never moves current_state and is never
+//       HITL-accepted. Routing: raw-text bypass for an unparseable or empty
+//       response, then mechanical re-dispatch while the HARNESS_ERROR budget
+//       (3 per row and iteration since the last SUCCESS) lasts, then a
+//       deviation to the RoutingConsultant (at once in orchestrated mode); the
+//       next consultation request carries the Summary as last_error_reason.
+//       A subagent that itself returns BLOCKED/E501 keeps the BLOCKED row and
+//       its own E501 budget. The HITL repair re-dispatch, infrastructure
+//       dispatch and commit setup still record a synthetic BLOCKED response
+//       with error code E501 (domain.HarnessErrorResponse).
 //     - HITL verification: after every attempt of an HITL-dispatched step, whatever
 //       its status, the outputs the attempt actually created or modified (found
 //       by the OutputWriteDetector against a baseline taken before the first
@@ -361,7 +369,11 @@ func (s *sessionImpl) invokeAndLog(ctx context.Context, agentRef domain.AgentRef
 	resp, err := s.deps.Harness.Invoke(wctx, agentRef, request)
 	forced := release()
 	if err != nil {
-		s.deps.DispatchLog.LogError(request.AgentInstanceID, err.Error())
+		if forced || ctx.Err() != nil {
+			s.deps.DispatchLog.LogError(request.AgentInstanceID, err.Error())
+		} else {
+			s.deps.DispatchLog.LogHarnessError(request.AgentInstanceID, classifyHarnessFailure(err), err.Error())
+		}
 		if forced && ctx.Err() == nil {
 			err = &forceStopError{err: err}
 		}

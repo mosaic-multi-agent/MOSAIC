@@ -12,6 +12,9 @@ const (
 	QuestionManualOutputs     interaction.QuestionID = "manual-routing.outputs"
 	QuestionManualConstraints interaction.QuestionID = "manual-routing.constraints"
 	QuestionManualHITL        interaction.QuestionID = "manual-routing.hitl"
+	// QuestionManualAskMessage is the optional message step after the row
+	// step's ManualAskOrchestratorOptionID.
+	QuestionManualAskMessage interaction.QuestionID = "manual-routing.ask-message"
 )
 
 // Fixed option IDs of the manual routing dialogue.

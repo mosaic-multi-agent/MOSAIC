@@ -7,50 +7,77 @@ import (
 	"mosaic-run/internal/domain"
 )
 
-type ghcpCLIDecoder struct{}
+type ghcpCLIDecoder struct {
+	status domain.ActivityStatus
+	tools  openTools
+}
 
 // NewGHCPCLIDecoder decodes --output-format json lines.
-func NewGHCPCLIDecoder() Decoder { return ghcpCLIDecoder{} }
+func NewGHCPCLIDecoder() Decoder { return &ghcpCLIDecoder{} }
 
 type ghcpCLILine struct {
 	Type string `json:"type"`
 	Data struct {
 		Content          string          `json:"content"`
 		ToolName         string          `json:"toolName"`
+		ToolCallID       string          `json:"toolCallId"`
+		ParentToolCallID string          `json:"parentToolCallId"`
+		Model            string          `json:"model"`
 		Arguments        json.RawMessage `json:"arguments"`
 		AgentName        string          `json:"agentName"`
 		AgentDisplayName string          `json:"agentDisplayName"`
 		AgentDescription string          `json:"agentDescription"`
 		InputTokens      int             `json:"inputTokens"`
 		OutputTokens     int             `json:"outputTokens"`
+		CacheReadTokens  int             `json:"cacheReadTokens"`
+		CacheWriteTokens int             `json:"cacheWriteTokens"`
 	} `json:"data"`
 }
 
-func (ghcpCLIDecoder) Decode(line []byte) []domain.ActivityItem {
+func (d *ghcpCLIDecoder) Status() domain.ActivityStatus { return d.status }
+
+func (d *ghcpCLIDecoder) Decode(line []byte) []domain.ActivityItem {
 	var l ghcpCLILine
 	if json.Unmarshal(line, &l) != nil {
 		return nil
 	}
-	d := l.Data
+	data := l.Data
 	switch l.Type {
 	case "assistant.message":
-		return textItems(d.Content)
+		return textItems(data.Content)
 	case "tool.execution_start":
-		return []domain.ActivityItem{{Kind: domain.ActivityToolCall, Name: d.ToolName, Summary: shortInput(d.Arguments)}}
-	case "subagent.started":
-		name := d.AgentName
-		if name == "" {
-			name = d.AgentDisplayName
+		if data.ParentToolCallID == "" {
+			d.tools.start(data.ToolCallID, data.ToolName)
+			d.status.RunningTool, d.status.RunningToolID = d.tools.newest()
 		}
-		summary := d.AgentDescription
+		return []domain.ActivityItem{{Kind: domain.ActivityToolCall, Name: data.ToolName, Summary: shortInput(data.Arguments)}}
+	case "tool.execution_complete":
+		d.tools.finish(data.ToolCallID)
+		d.status.RunningTool, d.status.RunningToolID = d.tools.newest()
+	case "subagent.started":
+		name := data.AgentName
+		if name == "" {
+			name = data.AgentDisplayName
+		}
+		summary := data.AgentDescription
 		if strings.TrimSpace(summary) == "" {
-			summary = d.AgentDisplayName
+			summary = data.AgentDisplayName
 		}
 		return []domain.ActivityItem{{Kind: domain.ActivitySubagent, Name: name, Summary: shorten(summary)}}
 	case "assistant.usage":
-		if item, ok := usageItem(d.InputTokens, d.OutputTokens, nil); ok {
+		if data.ParentToolCallID == "" {
+			d.recordMainCall(data.Model, data.InputTokens+data.CacheReadTokens+data.CacheWriteTokens)
+		}
+		if item, ok := usageItem(data.InputTokens, data.OutputTokens, nil); ok {
 			return []domain.ActivityItem{item}
 		}
 	}
 	return nil
+}
+
+func (d *ghcpCLIDecoder) recordMainCall(model string, context int) {
+	if model != "" {
+		d.status.Model = model
+	}
+	d.status.ContextTokens, d.status.HasContext = context, true
 }

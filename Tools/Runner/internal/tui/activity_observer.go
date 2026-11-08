@@ -2,6 +2,7 @@ package tui
 
 import (
 	"sync"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -24,6 +25,15 @@ type activityStartedMsg struct {
 type activityItemMsg struct {
 	key  runflow.ActivityKey
 	item domain.ActivityItem
+}
+
+// activityStatusMsg carries the latest stream status of the invocation key.
+// Statuses are latest-wins: the sender keeps at most one queued per invocation
+// and never drops it as an item.
+type activityStatusMsg struct {
+	key    runflow.ActivityKey
+	status domain.ActivityStatus
+	at     time.Time
 }
 
 // activityEndedMsg announces that the invocation key finished.
@@ -53,6 +63,9 @@ func (a *activitySender) newKey() runflow.ActivityKey {
 func (a *activitySender) post(p *tea.Program, msg tea.Msg) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if st, isStatus := msg.(activityStatusMsg); isStatus && a.replaceQueuedStatus(st) {
+		return
+	}
 	if _, isItem := msg.(activityItemMsg); isItem {
 		if a.items >= maxPendingActivityItems {
 			a.dropOldestItem()
@@ -64,6 +77,18 @@ func (a *activitySender) post(p *tea.Program, msg tea.Msg) {
 		a.running = true
 		go a.drain(p)
 	}
+}
+
+// replaceQueuedStatus overwrites the still-queued status of the same
+// invocation with st and reports whether there was one. Caller holds mu.
+func (a *activitySender) replaceQueuedStatus(st activityStatusMsg) bool {
+	for i := len(a.queue) - 1; i >= 0; i-- {
+		if q, ok := a.queue[i].(activityStatusMsg); ok && q.key == st.key {
+			a.queue[i] = st
+			return true
+		}
+	}
+	return false
 }
 
 // dropOldestItem removes the oldest queued item message. Caller holds mu.
@@ -130,6 +155,17 @@ func (f *programFeed) Activity(item domain.ActivityItem) {
 	}
 }
 
+// Status implements domain.ActivityFeed. The status is stamped with its
+// receipt time, which the screen shows as the last stream event.
+func (f *programFeed) Status(st domain.ActivityStatus) {
+	f.mu.Lock()
+	ended := f.ended
+	f.mu.Unlock()
+	if !ended {
+		f.send(activityStatusMsg{key: f.key, status: st, at: time.Now()})
+	}
+}
+
 // Ended implements domain.ActivityFeed.
 func (f *programFeed) Ended() {
 	f.mu.Lock()
@@ -152,6 +188,10 @@ func (m *rootModel) handleActivityMsg(msg tea.Msg) bool {
 	case activityItemMsg:
 		if m.progressScreen != nil {
 			m.progressScreen.AppendActivity(msg.key, msg.item)
+		}
+	case activityStatusMsg:
+		if m.progressScreen != nil {
+			m.progressScreen.UpdateActivityStatus(msg.key, msg.status, msg.at)
 		}
 	case activityEndedMsg:
 		if m.progressScreen != nil {

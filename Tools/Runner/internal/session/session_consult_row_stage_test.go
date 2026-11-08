@@ -110,8 +110,8 @@ func TestSession_ConsultRoute_HarnessErrorRecursion_RecordsEachInstructionRowAnd
 		t.Fatalf("want 2 workflow steps (failed attempt, routed step), got %d: %+v", len(steps), steps)
 	}
 	requireStepAt(t, steps[0], "EXECUTION", 4, "2.Implementation")
-	if steps[0].Status != domain.StatusBLOCKED {
-		t.Errorf("want the failed attempt recorded BLOCKED, got %q", steps[0].Status)
+	if steps[0].Status != domain.StatusHARNESS_ERROR {
+		t.Errorf("want the failed attempt recorded HARNESS_ERROR, got %q", steps[0].Status)
 	}
 	requireStepAt(t, steps[1], "EXECUTION", 3, "1.Test")
 }

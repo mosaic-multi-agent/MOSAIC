@@ -71,7 +71,7 @@ func (d *manualDialogue) stepRow(ctx context.Context) error {
 		return nil
 	}
 	if d.req.OfferAskOrchestrator && strings.EqualFold(choice, domain.ManualAskOrchestratorOptionID) {
-		d.result = &domain.RoutingInstruction{AskOrchestrator: &domain.AskOrchestratorInstruction{}}
+		d.step = stepAskMessage
 		return nil
 	}
 	n, convErr := strconv.Atoi(choice)

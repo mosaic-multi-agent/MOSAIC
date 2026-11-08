@@ -33,7 +33,7 @@ class OnceCase(WorkspaceTestCase):
         self.addCleanup(self._env.__exit__, None, None, None)
 
     def prompt(self, session_id=SESSION_ID):
-        fire(self.workspace, "UserPromptSubmit", user_prompt=PROMPT,
+        fire(self.workspace, "UserPromptSubmit", prompt=PROMPT,
              session_id=session_id, transcript_path=self.transcript)
 
     def stop(self, message=RESPONSE, session_id=SESSION_ID):

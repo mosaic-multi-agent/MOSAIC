@@ -273,8 +273,10 @@ func (m *memStore) Apply(_ context.Context, state domain.ArtifactState, step dom
 	state.GlobalSequence = step.Seq
 	// current_state is updated only for workflow steps, matching the real
 	// fileStore's contract (ContractsDesign.md, domain.ArtifactStore.Apply):
-	// an infrastructure step must not move the recorded workflow position.
-	if !step.IsInfrastructure && !step.HITLRejected && !step.ForceStopped {
+	// an infrastructure step must not move the recorded workflow position, and
+	// neither may a HARNESS_ERROR row: it is never an accepted outcome.
+	if !step.IsInfrastructure && !step.HITLRejected && !step.ForceStopped &&
+		step.Status != domain.StatusHARNESS_ERROR {
 		state.CurrentState = domain.CurrentState{
 			Phase:      step.Phase,
 			Stage:      step.Stage,

@@ -91,6 +91,8 @@ func (f *wiringFeed) Activity(item domain.ActivityItem) {
 	f.o.items = append(f.o.items, item)
 }
 
+func (f *wiringFeed) Status(domain.ActivityStatus) {}
+
 func (f *wiringFeed) Ended() {
 	f.o.mu.Lock()
 	defer f.o.mu.Unlock()

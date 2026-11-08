@@ -94,7 +94,7 @@ func TestSession_ConsultRoute_FallbackArtifacts_ResolvesTemplateTokens(t *testin
 	// Engine auto-dispatches Stage-2/agent-a (row 1). Harness fails on every
 	// attempt until the E501 budget is used up, which triggers consultRoute with
 	// deviation.CurrentStage = "2".
-	for i := 0; i < engine.E501AttemptLimit; i++ {
+	for i := 0; i < engine.HarnessErrorAttemptLimit; i++ {
 		f.Queue("agent-a", harness.ScriptedEntry{Err: errors.New("simulated harness failure on Stage-2/agent-a")})
 	}
 	// Consultant re-routes to row 1 (agent-a). Harness succeeds.
@@ -125,7 +125,7 @@ func TestSession_ConsultRoute_FallbackArtifacts_ResolvesTemplateTokens(t *testin
 	// (index 1, after the failed auto-routed attempt at index 0) must not
 	// contain the literal template token in its OutputArtifacts.
 	invocations := f.Invocations()
-	consultIdx := engine.E501AttemptLimit
+	consultIdx := engine.HarnessErrorAttemptLimit
 	if len(invocations) <= consultIdx {
 		t.Fatalf("want at least %d harness invocations (failed auto attempts + consultant re-route), got %d",
 			consultIdx+1, len(invocations))
@@ -172,7 +172,7 @@ func TestSession_ConsultRoute_FallbackArtifacts_ResolvesTemplateTokens(t *testin
 
 // TestSession_ConsultRoute_HarnessFailure_PersistsFailedAttemptRecord verifies
 // that when a harness invocation failure triggers a consultation (deviation
-// path), a workflow CompletedStep with Status=BLOCKED and ErrorCode=E501 whose
+// path), a workflow CompletedStep with Status=HARNESS_ERROR whose
 // Summary carries the failure message is persisted to the store. The execution
 // log therefore always has a record of every dispatch attempt, including those
 // that fail before a response is returned.
@@ -200,9 +200,9 @@ func TestSession_ConsultRoute_HarnessFailure_PersistsFailedAttemptRecord(t *test
 		Interact: &noopInteraction{},
 	})
 
-	// The harness fails on every dispatch until the engine's E501 budget is used
-	// up; only then is the consultation triggered with a deviation.
-	for i := 0; i < engine.E501AttemptLimit; i++ {
+	// The harness fails on every dispatch until the engine's HARNESS_ERROR budget
+	// is used up; only then is the consultation triggered with a deviation.
+	for i := 0; i < engine.HarnessErrorAttemptLimit; i++ {
 		f.Queue("agent-a", harness.ScriptedEntry{Err: errors.New(errMsg)})
 	}
 	// Next invocation (consultant re-routes to row 0 again): SUCCESS.
@@ -226,21 +226,21 @@ func TestSession_ConsultRoute_HarnessFailure_PersistsFailedAttemptRecord(t *test
 	}
 
 	// store.Applied must contain a workflow CompletedStep (neither
-	// infrastructure nor HITL rejected) with Status BLOCKED and ErrorCode E501
+	// infrastructure nor HITL rejected) with Status HARNESS_ERROR
 	// whose Summary contains the error message (for traceability).
 	var failedAttemptStep *domain.CompletedStep
 	for i := range store.Applied {
 		s := &store.Applied[i]
 		if !s.IsInfrastructure && !s.HITLRejected &&
-			s.Status == domain.StatusBLOCKED && s.ErrorCode == domain.ErrorTOOL_UNAVAILABLE {
+			s.Status == domain.StatusHARNESS_ERROR {
 			cp := *s
 			failedAttemptStep = &cp
 			break
 		}
 	}
 	if failedAttemptStep == nil {
-		t.Error("want a workflow CompletedStep in store.Applied with Status=BLOCKED and " +
-			"ErrorCode=E501 capturing the harness failure, got none; " +
+		t.Error("want a workflow CompletedStep in store.Applied with Status=HARNESS_ERROR " +
+			"capturing the harness failure, got none; " +
 			"a record of the failed dispatch attempt must be persisted so the " +
 			"execution log has a complete history of every dispatch attempt")
 	} else {

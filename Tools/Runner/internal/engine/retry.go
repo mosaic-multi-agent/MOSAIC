@@ -143,6 +143,11 @@ func mechanicalRetry(
 			return domain.EngineDecision{}, false
 		}
 		kind = domain.RetryToolUnavailable
+	case domain.StatusHARNESS_ERROR:
+		if HarnessErrorBudgetRemaining(log, row, pos.stage) <= 0 {
+			return domain.EngineDecision{}, false
+		}
+		kind = domain.RetryHarnessError
 	default:
 		return domain.EngineDecision{}, false
 	}

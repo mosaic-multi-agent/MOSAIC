@@ -45,7 +45,7 @@ class SubagentSessionCase(WorkspaceTestCase):
         with self.env():
             fire(self.workspace, "SessionStart", source="startup",
                  model="claude-opus-4-5", transcript_path=self.transcript)
-            fire(self.workspace, "UserPromptSubmit", user_prompt=PROMPT,
+            fire(self.workspace, "UserPromptSubmit", prompt=PROMPT,
                  transcript_path=self.transcript)
             fire(self.workspace, "PreToolUse", tool_name="Read",
                  tool_use_id="call-1", tool_input={"file_path": "a.txt"},
@@ -189,7 +189,7 @@ class TestSubagentExitSafety(WorkspaceTestCase):
                           instance_id=INSTANCE_ID)
 
     def start_and_stop(self, transcript):
-        fire(self.workspace, "UserPromptSubmit", user_prompt=PROMPT,
+        fire(self.workspace, "UserPromptSubmit", prompt=PROMPT,
              transcript_path=transcript)
         fire(self.workspace, "Stop", last_assistant_message=RESPONSE,
              transcript_path=transcript)
@@ -206,7 +206,7 @@ class TestSubagentExitSafety(WorkspaceTestCase):
     def test_tool_firings_do_not_emit_usage_records(self):
         transcript = write_transcript(self.workspace, [assistant_record("x")])
         with self.env():
-            fire(self.workspace, "UserPromptSubmit", user_prompt=PROMPT,
+            fire(self.workspace, "UserPromptSubmit", prompt=PROMPT,
                  transcript_path=transcript)
             fire(self.workspace, "PreToolUse", tool_name="Read",
                  tool_use_id="c1", tool_input={},
@@ -245,7 +245,7 @@ class TestSubagentExitSafety(WorkspaceTestCase):
     def test_session_end_without_response_omits_final_assistant_turn(self):
         transcript = write_transcript(self.workspace, [assistant_record("x")])
         with self.env():
-            fire(self.workspace, "UserPromptSubmit", user_prompt=PROMPT,
+            fire(self.workspace, "UserPromptSubmit", prompt=PROMPT,
                  transcript_path=transcript)
             fire(self.workspace, "SessionEnd", reason="other",
                  transcript_path=transcript)
@@ -296,7 +296,7 @@ class TestSubagentResponseFormat(WorkspaceTestCase):
         transcript = write_transcript(self.workspace, [assistant_record("x")])
         with runner_env(self.workspace, role="subagent", run_id=RUN_ID,
                         instance_id=INSTANCE_ID):
-            fire(self.workspace, "UserPromptSubmit", user_prompt=PROMPT,
+            fire(self.workspace, "UserPromptSubmit", prompt=PROMPT,
                  transcript_path=transcript)
             fire(self.workspace, "Stop", last_assistant_message="plain text",
                  transcript_path=transcript)

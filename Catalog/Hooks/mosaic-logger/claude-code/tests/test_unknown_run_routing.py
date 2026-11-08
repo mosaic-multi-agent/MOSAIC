@@ -208,11 +208,11 @@ class TestUnknownRunRoutingSessionEvents(unittest.TestCase):
         )
 
     def test_user_prompt_submit_without_run_id_routes_to_unknown_run(self):
-        """UserPromptSubmit whose user_prompt has no run_id routes to unknown-run/."""
+        """UserPromptSubmit whose prompt has no run_id routes to unknown-run/."""
         payload = {
             "hook_event_name": "UserPromptSubmit",
             "session_id": "unknown-route-sess-005",
-            "user_prompt": "Hello, no run_id in this message",
+            "prompt": "Hello, no run_id in this message",
         }
         _dispatch_with_env(payload, self.tmp_path)
 
@@ -475,7 +475,7 @@ class TestNoCrashOnExtractionFailure(unittest.TestCase):
             {"hook_event_name": "SessionStart", "session_id": "s1"},
             {"hook_event_name": "SessionEnd", "session_id": "s1"},
             {"hook_event_name": "UserPromptSubmit", "session_id": "s1",
-             "user_prompt": "no run id here"},
+             "prompt": "no run id here"},
             {"hook_event_name": "Stop", "session_id": "s1",
              "last_assistant_message": "done"},
             {"hook_event_name": "Notification", "session_id": "s1",

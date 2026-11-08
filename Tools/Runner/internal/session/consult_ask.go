@@ -13,6 +13,15 @@ import (
 // when a routing consultant is wired.
 func (s *sessionImpl) withAskOrchestratorOffer(req domain.ConsultationRequest) domain.ConsultationRequest {
 	req.OfferAskOrchestrator = s.deps.Routing != nil
+	req.UserMessage = nil
+	return req
+}
+
+// withUserMessage returns req carrying msg as the user message of this one
+// consultation. The message lives only in the returned copy: the caller's
+// request and the session state are untouched.
+func withUserMessage(req domain.ConsultationRequest, msg *string) domain.ConsultationRequest {
+	req.UserMessage = msg
 	return req
 }
 

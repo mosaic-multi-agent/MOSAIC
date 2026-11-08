@@ -60,7 +60,7 @@ type ProgressScreen struct {
 	confirmPending    bool
 	gateEvents        []StopGateEvent
 	forceStop         forceStopGate
-	pendingRequests  PendingRequests
+	pendingRequests   PendingRequests
 	requestEvents     []RequestKeyEvent
 	guardWaived       bool
 	guardEvents       []GuardKeyEvent
@@ -68,6 +68,7 @@ type ProgressScreen struct {
 	guidanceView      bool
 	guidanceAvailable bool
 	activity          activityPanel
+	clock             func() time.Time // nil: time.Now
 	status            string
 	statusErr         bool
 	width             int
@@ -239,6 +240,9 @@ func (s *ProgressScreen) View() string {
 		} else if row.Status == "" {
 			label := fmt.Sprintf("%s  phase=%s", row.AgentInstance, row.Phase)
 			line = indicator + s.styles.Body.Render(label)
+		} else if isRunnerRecordedStatus(row.Status) {
+			label := fmt.Sprintf("%s  %s", row.AgentInstance, row.Status)
+			line = indicator + s.runnerRecordedStyle().Render(label)
 		} else if row.Status == "BLOCKED" || row.Status == "CAPABILITY_EXCEEDED" {
 			label := fmt.Sprintf("%s  %s", row.AgentInstance, row.Status)
 			line = indicator + s.styles.Error.Render(label)

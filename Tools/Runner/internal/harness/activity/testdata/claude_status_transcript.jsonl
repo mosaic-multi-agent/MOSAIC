@@ -1,0 +1,7 @@
+{"type":"system","subtype":"init","model":"claude-sonnet-4-5","session_id":"s1"}
+{"type":"assistant","parent_tool_use_id":null,"message":{"id":"msg_1","role":"assistant","content":[{"type":"text","text":"Reading."}],"usage":{"input_tokens":10,"cache_read_input_tokens":100,"cache_creation_input_tokens":5,"output_tokens":3}}}
+{"type":"assistant","parent_tool_use_id":null,"message":{"id":"msg_1","role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"a.go"}}],"usage":{"input_tokens":10,"cache_read_input_tokens":100,"cache_creation_input_tokens":5,"output_tokens":3}}}
+{"type":"user","parent_tool_use_id":null,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"ok"}]}}
+{"type":"assistant","parent_tool_use_id":"toolu_task","message":{"id":"msg_sub","role":"assistant","content":[{"type":"text","text":"sub-agent work"}],"usage":{"input_tokens":9000,"cache_read_input_tokens":9000,"cache_creation_input_tokens":0,"output_tokens":1}}}
+{"type":"assistant","parent_tool_use_id":null,"message":{"id":"msg_2","role":"assistant","content":[{"type":"text","text":"Done."}],"usage":{"input_tokens":4,"cache_read_input_tokens":200,"cache_creation_input_tokens":0,"output_tokens":2}}}
+{"type":"result","subtype":"success","is_error":false,"result":"Done.","total_cost_usd":0.25}

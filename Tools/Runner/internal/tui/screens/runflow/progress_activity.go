@@ -1,7 +1,6 @@
 package runflow
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -22,16 +21,18 @@ type ActivityKey uint64
 
 // activityPanel is the live activity of the current invocation.
 type activityPanel struct {
-	hidden   bool // zero value: the panel is shown
-	begun    bool
-	key      ActivityKey
-	inv      domain.ActivityInvocation
-	started  time.Time
-	endedAt  time.Time // zero while the invocation runs
-	events   int       // items received, usage included
-	items    []domain.ActivityItem
-	usage    domain.ActivityUsage
-	hasUsage bool
+	hidden  bool // zero value: the panel is shown
+	begun   bool
+	key     ActivityKey
+	inv     domain.ActivityInvocation
+	started time.Time
+	endedAt time.Time // zero while the invocation runs
+	events  int       // items received, usage included
+	items   []domain.ActivityItem
+
+	status    domain.ActivityStatus // latest stream status of the invocation
+	statusAt  time.Time             // when status was received; zero before the first
+	toolSince time.Time             // when the open tool call was first reported; zero when none
 }
 
 // BeginActivity makes inv the current invocation: clears the previous items,
@@ -42,7 +43,7 @@ func (s *ProgressScreen) BeginActivity(key ActivityKey, inv domain.ActivityInvoc
 		begun:   true,
 		key:     key,
 		inv:     inv,
-		started: time.Now(),
+		started: s.activityNow(),
 	}
 }
 
@@ -54,13 +55,6 @@ func (s *ProgressScreen) AppendActivity(key ActivityKey, item domain.ActivityIte
 	}
 	a.events++
 	if item.Kind == domain.ActivityKindUsage {
-		a.hasUsage = true
-		a.usage.InputTokens += item.Usage.InputTokens
-		a.usage.OutputTokens += item.Usage.OutputTokens
-		if item.Usage.HasCost {
-			a.usage.CostUSD += item.Usage.CostUSD
-			a.usage.HasCost = true
-		}
 		return
 	}
 	a.items = append(a.items, item)
@@ -75,7 +69,7 @@ func (s *ProgressScreen) EndActivity(key ActivityKey) {
 	if !a.begun || a.key != key || !a.endedAt.IsZero() {
 		return
 	}
-	a.endedAt = time.Now()
+	a.endedAt = s.activityNow()
 }
 
 // ActivityVisible reports whether the panel is shown.
@@ -83,35 +77,6 @@ func (s *ProgressScreen) ActivityVisible() bool { return !s.activity.hidden }
 
 // toggleActivity shows or hides the panel.
 func (s *ProgressScreen) toggleActivity() { s.activity.hidden = !s.activity.hidden }
-
-// activityHeader renders the panel's first line: whose activity, elapsed time,
-// the ended mark, and the summed usage where the harness reported it.
-func (s *ProgressScreen) activityHeader() string {
-	a := &s.activity
-	who := "Activity"
-	if a.inv.Source == domain.ActivitySourceConsultation {
-		who = "Activity (consultation)"
-	}
-	h := fmt.Sprintf("%s: %s", who, a.inv.Agent)
-	if a.inv.Harness != "" {
-		h += fmt.Sprintf(" (%s)", a.inv.Harness)
-	}
-	end := time.Now()
-	if !a.endedAt.IsZero() {
-		end = a.endedAt
-	}
-	h += "  " + end.Sub(a.started).Round(time.Second).String()
-	if !a.endedAt.IsZero() {
-		h += " ended"
-	}
-	if a.hasUsage {
-		h += fmt.Sprintf("  tokens in %d out %d", a.usage.InputTokens, a.usage.OutputTokens)
-		if a.usage.HasCost {
-			h += fmt.Sprintf("  $%.2f", a.usage.CostUSD)
-		}
-	}
-	return s.styles.Selected.Render(fitWidth(h, s.width))
-}
 
 // activityItemLine renders one item in short form.
 func activityItemLine(it domain.ActivityItem) string {

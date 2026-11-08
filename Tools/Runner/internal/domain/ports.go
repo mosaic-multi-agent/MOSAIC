@@ -301,6 +301,12 @@ type DispatchLogger interface {
 	// the result of err.Error() on the harness error.
 	LogError(agentInstanceID string, errText string)
 
+	// LogHarnessError records an invocation that ended in a harness-level
+	// failure the Runner records as HARNESS_ERROR: an "error" entry with the
+	// error text plus status "HARNESS_ERROR" and failure_kind f.Kind.
+	// Never fails, never blocks.
+	LogHarnessError(agentInstanceID string, f HarnessFailure, errText string)
+
 	// SetRunID associates the log with a run_id. Called before the first
 	// write, it creates the file at RunnerLogs/{run_id}/{run_id}-dispatch.log;
 	// called after, it records a correlation entry into the existing
@@ -393,6 +399,10 @@ const (
 	// EventSessionConsultDiscarded: a routing decision completed after a stop
 	// request was discarded. Fields: agent, row (1-based), stage (recorded form).
 	EventSessionConsultDiscarded = "session.consult.discarded"
+
+	// EventSessionConsultUserMessage: an orchestrator routing consultation
+	// carries a user message. Fields: context (routing), message (verbatim).
+	EventSessionConsultUserMessage = "session.consult.user_message"
 
 	EventSessionPreConsult     = "session.preconsult"
 	EventSessionCommitSetup    = "session.commit.setup"

@@ -139,7 +139,8 @@ def handle_subagent_role_prompt(ctx: "core.HookContext") -> None:
     mode = runner_mode.read_runner_mode()
     if mode is None or _is_claimed(ctx, mode, "completed"):
         return
-    _ensure_invocation_start(ctx, mode, ctx.field("user_prompt"))
+    # Claude Code's UserPromptSubmit payload carries the text in `prompt`.
+    _ensure_invocation_start(ctx, mode, ctx.field("prompt"))
 
 
 def handle_subagent_role_stop(ctx: "core.HookContext") -> None:

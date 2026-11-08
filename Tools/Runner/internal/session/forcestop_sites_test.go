@@ -50,6 +50,7 @@ func newSiteRun(t *testing.T, fixture string, agents []string, agent string, nth
 func requireNoRetryOrConsultation(t *testing.T, r siteRun, consultCalls int, wantCalls int) {
 	t.Helper()
 	requireE501Rows(t, r, 0)
+	requireHarnessErrorRows(t, r, 0)
 	requireConsultations(t, consultCalls, wantCalls)
 }
 
@@ -60,6 +61,16 @@ func requireE501Rows(t *testing.T, r siteRun, want int) {
 	t.Helper()
 	if n := countE501Steps(r.store); n != want {
 		t.Errorf("want %d BLOCKED/E501 rows (none for the force stop), got %d", want, n)
+	}
+}
+
+// requireHarnessErrorRows asserts the number of HARNESS_ERROR rows. A bypass
+// scenario legitimately records one for the original raw-text failure; the
+// killed bypass attempt itself must add none.
+func requireHarnessErrorRows(t *testing.T, r siteRun, want int) {
+	t.Helper()
+	if n := countHarnessErrorSteps(r.store); n != want {
+		t.Errorf("want %d HARNESS_ERROR rows (none for the force stop), got %d", want, n)
 	}
 }
 
@@ -132,7 +143,8 @@ func TestSession_ForceStop_RawTextBypassRedispatch_RecordsUnacceptedRowWithoutRe
 
 	requireRunStatus(t, got, err, domain.RunStopped)
 	requireForceStoppedRow(t, r.store, "agent-a", false)
-	requireE501Rows(t, r, 1)
+	requireHarnessErrorRows(t, r, 1)
+	requireE501Rows(t, r, 0)
 	requireConsultations(t, consultant.CallCount, 0)
 	if n := countInvocationsFor(r.f.Invocations(), "agent-a"); n != 1 {
 		t.Errorf("want only the original raw-text invocation to have completed (the bypass was killed, none after), got %d", n)
@@ -149,7 +161,8 @@ func TestSession_ForceStop_ConsultantRoutedBypassRedispatch_RecordsUnacceptedRow
 
 	requireRunStatus(t, got, err, domain.RunStopped)
 	requireForceStoppedRow(t, r.store, "agent-a", false)
-	requireE501Rows(t, r, 1)
+	requireHarnessErrorRows(t, r, 1)
+	requireE501Rows(t, r, 0)
 	requireConsultations(t, consultant.CallCount, 1)
 }
 
@@ -193,7 +206,7 @@ func TestSession_ForceStop_HITLRedispatchBypass_AutoMode_RecordsUnacceptedRow(t 
 
 	requireRunStatus(t, got, err, domain.RunStopped)
 	requireForceStoppedRow(t, r.store, "agent-a", false)
-	requireE501Rows(t, r, 1)
+	requireHarnessErrorRows(t, r, 1)
 	requireConsultations(t, consultant.CallCount, 0)
 	if n := countInvocationsFor(r.f.Invocations(), "agent-a"); n != 2 {
 		t.Errorf("want the killed bypass not retried (2 completed agent-a invocations), got %d", n)

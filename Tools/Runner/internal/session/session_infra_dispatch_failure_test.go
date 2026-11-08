@@ -1,8 +1,9 @@
 package session_test
 
 // How an infrastructure dispatch is recorded: the sent inputs and the error
-// code of a BLOCKED outcome reach the Execution Log row, and a harness-level
-// failure of an infrastructure dispatch is a BLOCKED row with E501.
+// code of a BLOCKED outcome reach the Execution Log row, a harness-level
+// failure of an infrastructure dispatch is a HARNESS_ERROR row, and an
+// unresolvable agent definition is a CONFIG_ERROR row.
 
 import (
 	"context"
@@ -66,22 +67,23 @@ func TestSession_Start_InfraDispatchBlockedWithErrorCode_RowCarriesTheCode(t *te
 	}
 }
 
-func TestSession_Start_InfraDispatchHarnessInvocationError_RowIsBlockedE501(t *testing.T) {
+func TestSession_Start_InfraDispatchHarnessInvocationError_RowIsHarnessErrorNamingTheKind(t *testing.T) {
 	rig := newProductRig(t, "iteration-end-product-block-orch.md", infraCommitAgent, "A")
 	rig.queueCommitSetup()
 	entry := harness.ScriptedEntry{Err: errors.New("harness transport failed")}
 
 	row := runProductExpectingCommitRow(t, rig, rig.commitsConfig("product-block", domain.ExecutionModeAuto), &entry)
 
-	if row.Status != domain.StatusBLOCKED {
-		t.Errorf("want row status BLOCKED, got %q", row.Status)
+	if row.Status != domain.StatusHARNESS_ERROR {
+		t.Errorf("want row status HARNESS_ERROR, got %q", row.Status)
 	}
-	if row.ErrorCode != domain.ErrorTOOL_UNAVAILABLE {
-		t.Errorf("want row error code %q, got %q", domain.ErrorTOOL_UNAVAILABLE, row.ErrorCode)
+	if row.ErrorCode != domain.ErrorNone {
+		t.Errorf("want no error code on the row, got %q", row.ErrorCode)
 	}
+	requireSummaryNamesKind(t, row.Summary, "other", "harness transport failed")
 }
 
-func TestSession_Start_InfraDispatchAgentDefinitionUnresolvable_RowIsBlockedE501(t *testing.T) {
+func TestSession_Start_InfraDispatchAgentDefinitionUnresolvable_RowIsConfigError(t *testing.T) {
 	// The commit agent's definition file is not written, so the trigger
 	// dispatch cannot resolve it. The run is a resume that recorded its commit
 	// branch, so commit setup (which would need the definition) does not run.
@@ -92,11 +94,14 @@ func TestSession_Start_InfraDispatchAgentDefinitionUnresolvable_RowIsBlockedE501
 
 	row := runProductExpectingCommitRow(t, rig, rig.resumeConfig("product-block", domain.ExecutionModeAuto), nil)
 
-	if row.Status != domain.StatusBLOCKED {
-		t.Errorf("want row status BLOCKED, got %q", row.Status)
+	if row.Status != domain.StatusCONFIG_ERROR {
+		t.Errorf("want row status CONFIG_ERROR, got %q", row.Status)
 	}
-	if row.ErrorCode != domain.ErrorTOOL_UNAVAILABLE {
-		t.Errorf("want row error code %q, got %q", domain.ErrorTOOL_UNAVAILABLE, row.ErrorCode)
+	if row.ErrorCode != domain.ErrorNone {
+		t.Errorf("want no error code on the row, got %q", row.ErrorCode)
+	}
+	if !strings.Contains(row.Summary, "agent definition not resolved") {
+		t.Errorf("want the Summary to name the unresolved definition, got %q", row.Summary)
 	}
 	if n := len(rig.requestsOf(infraCommitAgent)); n != 0 {
 		t.Errorf("want no dispatch of an agent whose definition cannot be resolved, got %d", n)

@@ -141,6 +141,9 @@ func requireScheduleDefectConsult(t *testing.T, req domain.ConsultationRequest, 
 	if req.LastStatusMessage == nil || *req.LastStatusMessage != sdProducerMessage {
 		t.Errorf("want last_status_message %q, got %v", sdProducerMessage, req.LastStatusMessage)
 	}
+	if req.LastStatus == nil || *req.LastStatus != domain.StatusSUCCESS {
+		t.Errorf("want last_status SUCCESS (the producer's own status), got %v", req.LastStatus)
+	}
 }
 
 // newNoConsultantRig is newBlockRig for a session with no routing consultant.

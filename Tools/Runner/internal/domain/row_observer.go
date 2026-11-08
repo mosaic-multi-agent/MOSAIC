@@ -25,6 +25,9 @@ type ConsultationActivity struct {
 	// Kind is the deviation kind of a routing consultation; empty when there
 	// is no deviation and for pre-consultation.
 	Kind DeviationKind
+	// HasUserMessage is true when this routing consultation carries a
+	// non-null user_message.
+	HasUserMessage bool
 }
 
 // ConsultationObserver receives the start and end of every consultation the

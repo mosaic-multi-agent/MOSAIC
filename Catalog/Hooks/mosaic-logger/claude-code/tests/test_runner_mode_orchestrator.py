@@ -39,7 +39,7 @@ class OrchestratorCase(WorkspaceTestCase):
         with runner_env(self.workspace, role="orchestrator", run_id=RUN_ID):
             fire(self.workspace, "SessionStart", source="startup",
                  session_id=session_id, transcript_path=transcript)
-            fire(self.workspace, "UserPromptSubmit", user_prompt="go",
+            fire(self.workspace, "UserPromptSubmit", prompt="go",
                  session_id=session_id, transcript_path=transcript)
             fire(self.workspace, "PreToolUse", tool_name="Bash",
                  tool_use_id="c1", tool_input={"command": "ls"},

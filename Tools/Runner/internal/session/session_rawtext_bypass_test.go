@@ -8,8 +8,8 @@ package session_test
 //   - Raw-text sentinel error (ErrProtocolNotExtractable): bypass succeeds on
 //     direct redispatch, run continues normally without consulting orchestrator.
 //   - Raw-text sentinel error (ErrMalformedJSON): bypass fails on redispatch,
-//     the failed bypass is its own BLOCKED/E501 attempt and the engine
-//     re-dispatches while the E501 budget remains.
+//     the failed bypass is its own HARNESS_ERROR attempt and the engine
+//     re-dispatches while the HARNESS_ERROR budget remains.
 //
 //   Consultant-routed dispatch bypass (consultRoute path, session.go ~line 1776):
 //   - Raw-text sentinel error (ErrEmptyResponse): bypass inside consultRoute
@@ -78,20 +78,21 @@ func countInvocationsFor(invs []harness.Invocation, agentID string) int {
 	return n
 }
 
-// requireHarnessErrorStep asserts that store.Applied contains at least one
+// requireHarnessErrorStep asserts, for the HITL repair re-dispatch,
+// that store.Applied contains at least one
 // accepted workflow CompletedStep (neither infrastructure nor HITL rejected)
-// with Status BLOCKED and ErrorCode E501 recording the failed harness attempt.
+// with Status HARNESS_ERROR recording the failed harness attempt.
 // Returns the first such step. Fails the test if none is found.
 func requireHarnessErrorStep(t *testing.T, store *memStore, context string) domain.CompletedStep {
 	t.Helper()
 	for _, s := range store.Applied {
 		if !s.IsInfrastructure && !s.HITLRejected &&
-			s.Status == domain.StatusBLOCKED && s.ErrorCode == domain.ErrorTOOL_UNAVAILABLE {
+			s.Status == domain.StatusHARNESS_ERROR {
 			return s
 		}
 	}
-	t.Errorf("%s: want a workflow CompletedStep in store.Applied with Status=BLOCKED and "+
-		"ErrorCode=E501 recording the failed harness attempt, got none; "+
+	t.Errorf("%s: want a workflow CompletedStep in store.Applied with Status=HARNESS_ERROR "+
+		"recording the failed harness attempt, got none; "+
 		"the failed attempt must be persisted before the next dispatch so the "+
 		"execution log has a complete record of every dispatch attempt", context)
 	return domain.CompletedStep{}
@@ -159,23 +160,23 @@ func TestSession_RawTextBypass_MainLoop_BypassSucceeds_RunCompletes(t *testing.T
 			"bypass must invoke the same agent exactly once before proceeding",
 			n)
 	}
-	// The failed first attempt is persisted as a BLOCKED/E501 workflow row even
+	// The failed first attempt is persisted as a HARNESS_ERROR workflow row even
 	// though the bypass retry then succeeds.
-	requireHarnessErrorStep(t, store, "main-loop site")
+	requireHarnessFailureStep(t, store, "main-loop site")
 }
 
-// ===== (b) Main dispatch loop: bypass fails, the engine's E501 decision follows =====
+// ===== (b) Main dispatch loop: bypass fails, the engine's HARNESS_ERROR decision follows =====
 
 // TestSession_RawTextBypass_MainLoop_BypassFails_EngineRetriesWhileBudgetRemains
 // verifies that when the bypass redispatch at the auto-routed dispatch site
-// also fails, the failed bypass counts as its own BLOCKED/E501 attempt and the
+// also fails, the failed bypass counts as its own HARNESS_ERROR attempt and the
 // engine's decision follows: with budget left, the same agent is dispatched
 // again without consulting the orchestrator.
 //
 // Sentinel exercised: ErrMalformedJSON.
 //
 // Three agent-a invocations: the original raw-text error, the failed bypass
-// (two of the three E501 attempts), and the engine's re-dispatch that succeeds.
+// (two of the three HARNESS_ERROR attempts), and the engine's re-dispatch that succeeds.
 func TestSession_RawTextBypass_MainLoop_BypassFails_EngineRetriesWhileBudgetRemains(t *testing.T) {
 	// Empty consultant: any consultation fails the run early.
 	consultant := &scriptedRoutingConsultant{}
@@ -201,13 +202,13 @@ func TestSession_RawTextBypass_MainLoop_BypassFails_EngineRetriesWhileBudgetRema
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
 	if consultant.CallCount != 0 {
-		t.Errorf("want no consultation while E501 budget remains, got %d", consultant.CallCount)
+		t.Errorf("want no consultation while HARNESS_ERROR budget remains, got %d", consultant.CallCount)
 	}
 	if n := countInvocationsFor(f.Invocations(), "agent-a"); n != 3 {
 		t.Errorf("want 3 agent-a harness invocations (original error + failed bypass + engine re-dispatch), got %d", n)
 	}
-	if n := countE501RowsFor(store, "agent-a"); n != 2 {
-		t.Errorf("want 2 BLOCKED/E501 agent-a rows (original error and failed bypass), got %d", n)
+	if n := countHarnessErrorRowsFor(store, "agent-a"); n != 2 {
+		t.Errorf("want 2 HARNESS_ERROR agent-a rows (original error and failed bypass), got %d", n)
 	}
 }
 

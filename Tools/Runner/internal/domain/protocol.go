@@ -12,7 +12,23 @@ const (
 	StatusNEEDS_CLARIFICATION    StatusCode = "NEEDS_CLARIFICATION"
 	StatusCAPABILITY_EXCEEDED    StatusCode = "CAPABILITY_EXCEEDED"
 	StatusBLOCKED                StatusCode = "BLOCKED"
+
+	// StatusHARNESS_ERROR records an invocation that ended without a usable
+	// subagent response. Runner-recorded only: it is not a Communication
+	// Protocol status and no subagent ever returns it.
+	StatusHARNESS_ERROR StatusCode = "HARNESS_ERROR"
+
+	// StatusCONFIG_ERROR records an infrastructure agent that could not be
+	// dispatched because its definition cannot be resolved. Runner-recorded
+	// only: it is not a Communication Protocol status.
+	StatusCONFIG_ERROR StatusCode = "CONFIG_ERROR"
 )
+
+// IsRunnerRecorded reports whether s is a status only the Runner records
+// (StatusHARNESS_ERROR or StatusCONFIG_ERROR), never one a subagent returned.
+func (s StatusCode) IsRunnerRecorded() bool {
+	return s == StatusHARNESS_ERROR || s == StatusCONFIG_ERROR
+}
 
 // ErrorCode is a Communication Protocol v1.12 error code (BLOCKED only).
 type ErrorCode string

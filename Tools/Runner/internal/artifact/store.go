@@ -176,7 +176,8 @@ func (f *fileStore) Apply(ctx context.Context, state domain.ArtifactState, step 
 	// The invocation is still fully recorded above and below: the execution
 	// log entry, sequence bump, and artifact registry upsert all apply to an
 	// infrastructure step unchanged.
-	if !step.IsInfrastructure && !step.ForceStopped {
+	// A HARNESS_ERROR row is an unaccepted attempt and leaves it untouched too.
+	if !step.IsInfrastructure && !step.ForceStopped && step.Status != domain.StatusHARNESS_ERROR {
 		newState.CurrentState = domain.CurrentState{
 			Phase:      step.Phase,
 			Stage:      step.Stage,
@@ -287,7 +288,7 @@ func atomicWrite(path string, data []byte) error {
 // writtenArtifacts returns the artifacts the step registers: none for a
 // force-stopped attempt, which is unaccepted.
 func writtenArtifacts(step domain.CompletedStep) []string {
-	if step.ForceStopped {
+	if step.ForceStopped || step.Status == domain.StatusHARNESS_ERROR {
 		return nil
 	}
 	return step.WrittenArtifacts

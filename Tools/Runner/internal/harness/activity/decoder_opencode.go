@@ -6,10 +6,12 @@ import (
 	"mosaic-run/internal/domain"
 )
 
-type openCodeDecoder struct{}
+type openCodeDecoder struct {
+	status domain.ActivityStatus
+}
 
 // NewOpenCodeDecoder decodes run --format json lines.
-func NewOpenCodeDecoder() Decoder { return openCodeDecoder{} }
+func NewOpenCodeDecoder() Decoder { return &openCodeDecoder{} }
 
 type openCodeLine struct {
 	Type string `json:"type"`
@@ -20,6 +22,10 @@ type openCodeLine struct {
 		Tokens struct {
 			Input  int `json:"input"`
 			Output int `json:"output"`
+			Cache  struct {
+				Read  int `json:"read"`
+				Write int `json:"write"`
+			} `json:"cache"`
 		} `json:"tokens"`
 		State struct {
 			Status string          `json:"status"`
@@ -28,7 +34,9 @@ type openCodeLine struct {
 	} `json:"part"`
 }
 
-func (openCodeDecoder) Decode(line []byte) []domain.ActivityItem {
+func (d *openCodeDecoder) Status() domain.ActivityStatus { return d.status }
+
+func (d *openCodeDecoder) Decode(line []byte) []domain.ActivityItem {
 	var l openCodeLine
 	if json.Unmarshal(line, &l) != nil {
 		return nil
@@ -46,7 +54,13 @@ func (openCodeDecoder) Decode(line []byte) []domain.ActivityItem {
 		}
 		return []domain.ActivityItem{{Kind: domain.ActivityToolCall, Name: p.Tool, Summary: shortInput(p.State.Input)}}
 	case "step_finish":
-		if item, ok := usageItem(p.Tokens.Input, p.Tokens.Output, p.Cost); ok {
+		t := p.Tokens
+		d.status.ContextTokens, d.status.HasContext = t.Input+t.Cache.Read+t.Cache.Write, true
+		if p.Cost != nil {
+			d.status.CostUSD += *p.Cost
+			d.status.HasCost = true
+		}
+		if item, ok := usageItem(t.Input, t.Output, p.Cost); ok {
 			return []domain.ActivityItem{item}
 		}
 	}

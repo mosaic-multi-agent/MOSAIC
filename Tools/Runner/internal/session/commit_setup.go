@@ -124,9 +124,15 @@ func (s *sessionImpl) runCommitSetup(
 		IsInfrastructure: true,
 	}
 	if invokeErr != nil {
-		step.Status = domain.StatusBLOCKED
-		step.ErrorCode = domain.ErrorTOOL_UNAVAILABLE
-		step.Summary = invokeErr.Error()
+		failure := classifyHarnessFailure(invokeErr)
+		s.deps.Debug.Log(domain.EventSessionHarnessError, failure.Summary(),
+			domain.F("agent", req.AgentInstanceID),
+			domain.F("status", string(domain.StatusHARNESS_ERROR)),
+			domain.F("kind", string(failure.Kind)),
+		)
+		step.Status = domain.StatusHARNESS_ERROR
+		step.ErrorCode = domain.ErrorNone
+		step.Summary = failure.Summary()
 	} else {
 		step.Status = response.StatusCode
 		step.ErrorCode = response.ErrorCode

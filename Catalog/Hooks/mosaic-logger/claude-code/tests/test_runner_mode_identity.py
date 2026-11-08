@@ -87,7 +87,7 @@ class TestRunIdPrecedence(WorkspaceTestCase):
         with runner_env(self.workspace, role="orchestrator", run_id=RUN_ID):
             fire(self.workspace, "SessionStart", source="startup")
             fire(self.workspace, "UserPromptSubmit",
-                 user_prompt=_prompt_naming(OTHER_RUN_ID))
+                 prompt=_prompt_naming(OTHER_RUN_ID))
         self.assertEqual([RUN_ID], self.run_folders())
         self.assertTrue(self.orchestrator_events(RUN_ID))
 
@@ -96,14 +96,14 @@ class TestRunIdPrecedence(WorkspaceTestCase):
                         instance_id=INSTANCE_ID):
             fire(self.workspace, "SessionStart", source="startup")
             fire(self.workspace, "UserPromptSubmit",
-                 user_prompt=_prompt_naming(OTHER_RUN_ID))
+                 prompt=_prompt_naming(OTHER_RUN_ID))
         self.assertEqual([RUN_ID], self.run_folders())
         self.assertTrue(self.invocation_events())
 
     def test_native_mode_user_prompt_text_never_overrides_env_run_id(self):
         with runner_env(self.workspace, run_id=RUN_ID):
             fire(self.workspace, "UserPromptSubmit",
-                 user_prompt=_prompt_naming(OTHER_RUN_ID))
+                 prompt=_prompt_naming(OTHER_RUN_ID))
         self.assertEqual([RUN_ID], self.run_folders())
         self.assertNotIn(OTHER_RUN_ID, self.run_folders())
 

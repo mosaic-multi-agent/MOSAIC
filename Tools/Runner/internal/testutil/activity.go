@@ -19,11 +19,12 @@ const GateWait = 5 * time.Second
 
 // Observer is a recording domain.ActivityObserver.
 type Observer struct {
-	mu     sync.Mutex
-	starts []domain.ActivityInvocation
-	items  []domain.ActivityItem
-	events []string // "start", "item", "end" in call order
-	ends   int
+	mu       sync.Mutex
+	starts   []domain.ActivityInvocation
+	items    []domain.ActivityItem
+	events   []string // "start", "item", "end" in call order
+	statuses []domain.ActivityStatus
+	ends     int
 	// OnItem, when set before use, is called after each item is recorded.
 	OnItem func(domain.ActivityItem)
 }
@@ -48,6 +49,21 @@ func (f *recordingFeed) Activity(item domain.ActivityItem) {
 	if cb != nil {
 		cb(item)
 	}
+}
+
+// Status records the status without adding a lifecycle event, so statuses do
+// not disturb the start/item/end ordering checks.
+func (f *recordingFeed) Status(st domain.ActivityStatus) {
+	f.o.mu.Lock()
+	defer f.o.mu.Unlock()
+	f.o.statuses = append(f.o.statuses, st)
+}
+
+// Statuses returns the statuses recorded so far, in call order.
+func (o *Observer) Statuses() []domain.ActivityStatus {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return append([]domain.ActivityStatus(nil), o.statuses...)
 }
 
 func (f *recordingFeed) Ended() {

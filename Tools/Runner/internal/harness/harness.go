@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 
+	commonharness "mosaic-common/harness"
 	"mosaic-run/internal/domain"
 )
 
@@ -25,7 +26,9 @@ import (
 //   - Err: returned as the harness-level error (error-path entry).
 //   - RawJSON: passed through json.Unmarshal; an invalid JSON payload
 //     produces an error return rather than a panic, exercising the
-//     malformed-response handling path.
+//     malformed-response handling path. The error wraps
+//     commonharness.ErrMalformedJSON like a real adapter's malformed response,
+//     so it takes the same classification and raw-text bypass.
 //
 // An entry with none of the three fields set returns a sentinel error.
 type ScriptedEntry struct {
@@ -140,7 +143,7 @@ func (f *MockAdapter) Invoke(ctx context.Context, agent domain.AgentReference, r
 	if entry.RawJSON != nil {
 		var resp domain.ProtocolResponse
 		if err := json.Unmarshal(entry.RawJSON, &resp); err != nil {
-			return domain.ProtocolResponse{}, fmt.Errorf("harness: malformed protocol response from agent %q: %w", agent.Identifier, err)
+			return domain.ProtocolResponse{}, fmt.Errorf("%w: malformed protocol response from agent %q: %w", commonharness.ErrMalformedJSON, agent.Identifier, err)
 		}
 		return resp, nil
 	}

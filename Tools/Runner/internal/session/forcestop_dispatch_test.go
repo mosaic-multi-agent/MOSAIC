@@ -76,6 +76,9 @@ func TestSession_ForceStop_EngineDispatch_IsNotAHarnessError(t *testing.T) {
 	got, err := r.ses.Start(context.Background(), r.cfg)
 
 	requireRunStatus(t, got, err, domain.RunStopped)
+	if n := countHarnessErrorSteps(r.store); n != 0 {
+		t.Errorf("want no HARNESS_ERROR row for a force stop, got %d", n)
+	}
 	if n := countE501Steps(r.store); n != 0 {
 		t.Errorf("want no BLOCKED/E501 row for a force stop, got %d", n)
 	}

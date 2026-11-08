@@ -1,0 +1,6 @@
+{"type":"step_start","sessionID":"ses_1","part":{"type":"step-start"}}
+{"type":"tool_use","sessionID":"ses_1","part":{"type":"tool","callID":"c1","tool":"bash","state":{"status":"completed","input":{"command":"go test ./..."},"output":"ok"}}}
+{"type":"step_finish","sessionID":"ses_1","part":{"type":"step-finish","reason":"tool-calls","cost":0.004,"tokens":{"input":300,"output":50,"reasoning":0,"cache":{"read":20,"write":5}}}}
+{"type":"step_start","sessionID":"ses_1","part":{"type":"step-start"}}
+{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"All done."}}
+{"type":"step_finish","sessionID":"ses_1","part":{"type":"step-finish","reason":"stop","cost":0.002,"tokens":{"input":80,"output":10,"reasoning":0,"cache":{"read":400,"write":0}}}}

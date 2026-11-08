@@ -1,9 +1,9 @@
 package session_test
 
-// Tests for the E501 budget on consultant-routed dispatches: a harness error
+// Tests for the HARNESS_ERROR budget on consultant-routed dispatches: a harness error
 // or a failed raw-text bypass of an agent the consultant dispatched is retried
 // mechanically while budget remains, a failed bypass is logged as its own
-// BLOCKED/E501 row under the bypass instance, and the consultation happens
+// HARNESS_ERROR row under the bypass instance, and the consultation happens
 // only once the budget is used up.
 
 import (
@@ -42,26 +42,26 @@ func runConsultPathDispatch(t *testing.T, mode domain.ExecutionMode, agentBEntri
 
 // requireConsultedOnlyAfterBudget asserts the dispatched agent-b ran exactly
 // the budget of attempts and that the second consultation, after the first
-// one that dispatched it, carries the BLOCKED/E501 deviation.
+// one that dispatched it, carries the HARNESS_ERROR deviation.
 func (r consultPathRun) requireConsultedOnlyAfterBudget(t *testing.T) {
 	t.Helper()
 	requireRunStatus(t, r.got, r.err, domain.RunStoppedByConsultant)
-	if n := countInvocationsFor(r.f.Invocations(), "agent-b"); n != engine.E501AttemptLimit {
-		t.Errorf("want %d agent-b dispatches before the next consultation, got %d", engine.E501AttemptLimit, n)
+	if n := countInvocationsFor(r.f.Invocations(), "agent-b"); n != engine.HarnessErrorAttemptLimit {
+		t.Errorf("want %d agent-b dispatches before the next consultation, got %d", engine.HarnessErrorAttemptLimit, n)
 	}
 	if r.consultant.CallCount != 2 {
 		t.Fatalf("want 2 consultations (agent-a failure, then the used-up budget), got %d", r.consultant.CallCount)
 	}
-	requireBlockedE501Deviation(t, r.consultant.Requests[1])
-	if n := countE501RowsFor(r.store, "agent-b"); n != engine.E501AttemptLimit {
-		t.Errorf("want %d BLOCKED/E501 agent-b rows, got %d", engine.E501AttemptLimit, n)
+	requireHarnessErrorDeviation(t, r.consultant.Requests[1])
+	if n := countHarnessErrorRowsFor(r.store, "agent-b"); n != engine.HarnessErrorAttemptLimit {
+		t.Errorf("want %d HARNESS_ERROR agent-b rows, got %d", engine.HarnessErrorAttemptLimit, n)
 	}
 }
 
-func TestSession_E501_ConsultPath_HarnessErrors_RedispatchedUntilBudgetUsedUp(t *testing.T) {
+func TestSession_HarnessError_ConsultPath_HarnessErrors_RedispatchedUntilBudgetUsedUp(t *testing.T) {
 	for _, mode := range autoModes {
 		t.Run(string(mode), func(t *testing.T) {
-			entries := repeatedEntries(engine.E501AttemptLimit+2, failEntry("harness: subprocess timed out"))
+			entries := repeatedEntries(engine.HarnessErrorAttemptLimit+2, failEntry("harness: subprocess timed out"))
 
 			r := runConsultPathDispatch(t, mode, entries...)
 
@@ -71,7 +71,7 @@ func TestSession_E501_ConsultPath_HarnessErrors_RedispatchedUntilBudgetUsedUp(t 
 	}
 }
 
-func TestSession_E501_ConsultPath_FailedBypass_IsLoggedAsOwnRowAndCountsAsAnAttempt(t *testing.T) {
+func TestSession_HarnessError_ConsultPath_FailedBypass_IsLoggedAsOwnRowAndCountsAsAnAttempt(t *testing.T) {
 	for _, mode := range autoModes {
 		t.Run(string(mode), func(t *testing.T) {
 			r := runConsultPathDispatch(t, mode, rawTextEntry(), failEntry("harness: bypass timed out"),
@@ -80,8 +80,8 @@ func TestSession_E501_ConsultPath_FailedBypass_IsLoggedAsOwnRowAndCountsAsAnAtte
 
 			r.requireConsultedOnlyAfterBudget(t)
 			rows := agentRows(r.store, "agent-b")
-			if len(rows) != engine.E501AttemptLimit {
-				t.Fatalf("want %d rows (error, failed bypass, third attempt), got %d: %+v", engine.E501AttemptLimit, len(rows), rows)
+			if len(rows) != engine.HarnessErrorAttemptLimit {
+				t.Fatalf("want %d rows (error, failed bypass, third attempt), got %d: %+v", engine.HarnessErrorAttemptLimit, len(rows), rows)
 			}
 			for i, row := range rows {
 				if row.WorkflowRow != rows[0].WorkflowRow || row.Phase != rows[0].Phase || row.Stage != rows[0].Stage {
@@ -99,7 +99,7 @@ func TestSession_E501_ConsultPath_FailedBypass_IsLoggedAsOwnRowAndCountsAsAnAtte
 
 // The bypass is one attempt of the budget: a raw-text error as the third
 // attempt is not retried but consulted.
-func TestSession_E501_ConsultPath_RawTextErrorWithNoBudgetLeft_SkipsBypass(t *testing.T) {
+func TestSession_HarnessError_ConsultPath_RawTextErrorWithNoBudgetLeft_SkipsBypass(t *testing.T) {
 	for _, mode := range autoModes {
 		t.Run(string(mode), func(t *testing.T) {
 			r := runConsultPathDispatch(t, mode, failEntry("harness: first"), failEntry("harness: second"), rawTextEntry(),

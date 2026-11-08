@@ -11,9 +11,12 @@ import (
 )
 
 type scriptedDecoder struct {
+	status domain.ActivityStatus
 	byLine map[string][]domain.ActivityItem
 	seen   []string
 }
+
+func (d *scriptedDecoder) Status() domain.ActivityStatus { return d.status }
 
 func (d *scriptedDecoder) Decode(line []byte) []domain.ActivityItem {
 	d.seen = append(d.seen, string(bytes.Clone(line)))
@@ -21,11 +24,13 @@ func (d *scriptedDecoder) Decode(line []byte) []domain.ActivityItem {
 }
 
 type collectingFeed struct {
-	items []domain.ActivityItem
-	ended int
+	items    []domain.ActivityItem
+	statuses []domain.ActivityStatus
+	ended    int
 }
 
 func (f *collectingFeed) Activity(item domain.ActivityItem) { f.items = append(f.items, item) }
+func (f *collectingFeed) Status(st domain.ActivityStatus)   { f.statuses = append(f.statuses, st) }
 func (f *collectingFeed) Ended()                            { f.ended++ }
 
 func TestLineObserver_ReportsDecodedItemsToFeedInOrder(t *testing.T) {

@@ -33,9 +33,10 @@ func (s *sessionImpl) dispatchInfraAgent(
 	agentRef, resolveErr := agentresolve.ResolveOne(orchDir, agent.Name)
 	var response domain.ProtocolResponse
 	if resolveErr != nil {
-		// Cannot locate the agent definition file; treat as non-SUCCESS and
-		// apply the on_failure policy without dispatching.
-		response = domain.HarnessErrorResponse(req.AgentInstanceID, state.RunID, resolveErr)
+		// Cannot locate the agent definition file: a configuration error, not
+		// a harness failure. Treated as non-SUCCESS; the on_failure policy
+		// applies without dispatching.
+		response = domain.ConfigErrorResponse(req.AgentInstanceID, state.RunID, resolveErr)
 	} else {
 		// Graceful-stop checkpoint before dispatching.
 		if s.deps.StopRequested() {
@@ -59,7 +60,13 @@ func (s *sessionImpl) dispatchInfraAgent(
 				return true, false, nil, nil
 			}
 			// Harness-level error: treat as non-SUCCESS and apply on_failure policy.
-			response = domain.HarnessErrorResponse(req.AgentInstanceID, state.RunID, invokeErr)
+			failure := classifyHarnessFailure(invokeErr)
+			s.deps.Debug.Log(domain.EventSessionHarnessError, failure.Summary(),
+				domain.F("agent", req.AgentInstanceID),
+				domain.F("status", string(domain.StatusHARNESS_ERROR)),
+				domain.F("kind", string(failure.Kind)),
+			)
+			response = domain.HarnessFailureResponse(req.AgentInstanceID, state.RunID, failure)
 		}
 	}
 

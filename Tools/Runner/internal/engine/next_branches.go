@@ -30,6 +30,20 @@ func orchestratedDecision(in NextInput) domain.EngineDecision {
 	}}
 }
 
+// orchestratedDecisionAt is the orchestrated-mode consultation after a
+// HARNESS_ERROR attempt, positioned at the failed attempt's own row (-1 when it
+// cannot be resolved). The attempt never moved current_state, so its phase and
+// stage come from the attempt's log entry.
+func orchestratedDecisionAt(in NextInput, pos position) domain.EngineDecision {
+	return domain.EngineDecision{Consult: &domain.ConsultDecision{
+		Trigger:       domain.ConsultTriggerOrchestratedMode,
+		CurrentRow:    pos.rowIdx,
+		CurrentPhase:  pos.entry.Phase,
+		CurrentStage:  pos.entry.Stage,
+		ArtifactState: in.State,
+	}}
+}
+
 // nonSuccessDecision decides after a non-SUCCESS response at currentRow:
 // the auto-review findings route-back, the review-loop-limit deviation, or
 // the generic non-SUCCESS deviation.

@@ -178,8 +178,8 @@ func TestIntegration_CommitSetup_FailedSetup_KeepsArtifactAndRow(t *testing.T) {
 	got, err := sess.Start(context.Background(), commitFailureConfig(orchPath, "commit-fail task"))
 
 	state := requireFailedSetupKeptOnDisk(t, artifactPath, got, err, f)
-	if len(state.ExecutionLog) == 1 && state.ExecutionLog[0].Status != domain.StatusBLOCKED {
-		t.Errorf("want the harness failure recorded as BLOCKED, got %q", state.ExecutionLog[0].Status)
+	if len(state.ExecutionLog) == 1 && state.ExecutionLog[0].Status != domain.StatusHARNESS_ERROR {
+		t.Errorf("want the harness failure recorded as HARNESS_ERROR, got %q", state.ExecutionLog[0].Status)
 	}
 }
 

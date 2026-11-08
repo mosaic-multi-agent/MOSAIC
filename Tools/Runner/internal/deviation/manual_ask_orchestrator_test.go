@@ -71,9 +71,10 @@ func TestManualDialogue_AskOrchestratorNotOffered_RowQuestionIsUnchanged(t *test
 	}
 }
 
-func TestManualDialogue_ChoosingAskOrchestrator_EndsAtOnceWithAnAskInstruction(t *testing.T) {
+func TestManualDialogue_ChoosingAskOrchestrator_EndsAfterTheMessageStepWithAnAskInstruction(t *testing.T) {
 	d := newDialogue(t).standard("3", "1")
 	d.one[domain.QuestionManualRow] = []oneFn{pick(domain.ManualAskOrchestratorOptionID)}
+	d.text[domain.QuestionManualAskMessage] = []textFn{say("")}
 
 	instr, err := consultManual(t, d, stagedRoutingTable(), askOrchestratorRequest(true))
 
@@ -83,7 +84,7 @@ func TestManualDialogue_ChoosingAskOrchestrator_EndsAtOnceWithAnAskInstruction(t
 	if instr.AskOrchestrator == nil || instr.Dispatch != nil || instr.Stop != nil {
 		t.Fatalf("want exactly an ask-orchestrator instruction, got %+v", instr)
 	}
-	requireSequence(t, d, domain.QuestionManualRow)
+	requireSequence(t, d, domain.QuestionManualRow, domain.QuestionManualAskMessage)
 }
 
 func TestManualDialogue_AskOrchestratorOffered_OtherChoicesBehaveAsBefore(t *testing.T) {

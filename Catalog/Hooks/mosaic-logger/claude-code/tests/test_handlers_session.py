@@ -3,7 +3,7 @@
 Covers:
   SessionStart → session_start event with resumed derivation and
   SessionEnd → session_end with undocumented reason pass-through
-  UserPromptSubmit → user turn (full untruncated content);
+  (UserPromptSubmit lives in test_handlers_user_prompt_submit.py)
   Stop → assistant turn (full content, transcript-derived model/token_usage)
   Notification → notification event; PreCompact/PostCompact →
   two independent partial compaction events (design decision: two partials)
@@ -404,125 +404,6 @@ class TestHandleSessionEnd(unittest.TestCase):
         session_handlers.handle_session_end(ctx)
         expected_path = ctx.paths.orchestrator_events(TEST_RUN_ID)
         self.assertTrue(expected_path.exists())
-
-
-# ---------------------------------------------------------------------------
-# T3.3 – UserPromptSubmit → user turn
-# ---------------------------------------------------------------------------
-
-class TestHandleUserPromptSubmit(unittest.TestCase):
-    """handle_user_prompt_submit emits a turn with role 'user' and full content."""
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.tmp_path = pathlib.Path(self.tmp.name)
-
-    def tearDown(self):
-        self.tmp.cleanup()
-
-    def test_emits_exactly_one_event(self):
-        payload = {
-            "hook_event_name": "UserPromptSubmit",
-            "session_id": TEST_SESSION_ID,
-            "user_prompt": "Hello, Claude!",
-        }
-        ctx = _make_ctx(payload, self.tmp_path)
-        session_handlers.handle_user_prompt_submit(ctx)
-        events = _read_events(ctx)
-        self.assertEqual(1, len(events))
-
-    def test_emitted_event_type_is_turn(self):
-        payload = {
-            "hook_event_name": "UserPromptSubmit",
-            "session_id": TEST_SESSION_ID,
-            "user_prompt": "Hello!",
-        }
-        ctx = _make_ctx(payload, self.tmp_path)
-        session_handlers.handle_user_prompt_submit(ctx)
-        event = _read_events(ctx)[0]
-        self.assertEqual("turn", event["event"])
-
-    def test_role_is_user(self):
-        payload = {
-            "hook_event_name": "UserPromptSubmit",
-            "session_id": TEST_SESSION_ID,
-            "user_prompt": "Hello!",
-        }
-        ctx = _make_ctx(payload, self.tmp_path)
-        session_handlers.handle_user_prompt_submit(ctx)
-        event = _read_events(ctx)[0]
-        self.assertEqual("user", event["role"])
-
-    def test_content_matches_user_prompt_exactly(self):
-        prompt = "What is the meaning of life?"
-        payload = {
-            "hook_event_name": "UserPromptSubmit",
-            "session_id": TEST_SESSION_ID,
-            "user_prompt": prompt,
-        }
-        ctx = _make_ctx(payload, self.tmp_path)
-        session_handlers.handle_user_prompt_submit(ctx)
-        event = _read_events(ctx)[0]
-        self.assertEqual(prompt, event["content"])
-
-    def test_content_is_full_and_untruncated(self):
-        """Multi-kilobyte prompts must not be truncated."""
-        long_prompt = "A" * 50_000
-        payload = {
-            "hook_event_name": "UserPromptSubmit",
-            "session_id": TEST_SESSION_ID,
-            "user_prompt": long_prompt,
-        }
-        ctx = _make_ctx(payload, self.tmp_path)
-        session_handlers.handle_user_prompt_submit(ctx)
-        event = _read_events(ctx)[0]
-        self.assertEqual(len(long_prompt), len(event["content"]))
-        self.assertEqual(long_prompt, event["content"])
-
-    def test_no_event_when_user_prompt_absent(self):
-        payload = {
-            "hook_event_name": "UserPromptSubmit",
-            "session_id": TEST_SESSION_ID,
-        }
-        ctx = _make_ctx(payload, self.tmp_path)
-        session_handlers.handle_user_prompt_submit(ctx)
-        events = _read_events(ctx)
-        self.assertEqual(0, len(events))
-
-    def test_no_event_when_user_prompt_is_empty_string(self):
-        payload = {
-            "hook_event_name": "UserPromptSubmit",
-            "session_id": TEST_SESSION_ID,
-            "user_prompt": "",
-        }
-        ctx = _make_ctx(payload, self.tmp_path)
-        session_handlers.handle_user_prompt_submit(ctx)
-        events = _read_events(ctx)
-        self.assertEqual(0, len(events))
-
-    def test_user_turn_has_no_token_usage(self):
-        """User turns have no assistant usage record; token_usage must not be fabricated."""
-        payload = {
-            "hook_event_name": "UserPromptSubmit",
-            "session_id": TEST_SESSION_ID,
-            "user_prompt": "Hello!",
-        }
-        ctx = _make_ctx(payload, self.tmp_path)
-        session_handlers.handle_user_prompt_submit(ctx)
-        event = _read_events(ctx)[0]
-        self.assertNotIn("token_usage", event)
-
-    def test_user_turn_has_no_model(self):
-        """User turns should not carry model; model is an assistant-turn field."""
-        payload = {
-            "hook_event_name": "UserPromptSubmit",
-            "session_id": TEST_SESSION_ID,
-            "user_prompt": "Hello!",
-        }
-        ctx = _make_ctx(payload, self.tmp_path)
-        session_handlers.handle_user_prompt_submit(ctx)
-        event = _read_events(ctx)[0]
-        self.assertNotIn("model", event)
 
 
 # ---------------------------------------------------------------------------

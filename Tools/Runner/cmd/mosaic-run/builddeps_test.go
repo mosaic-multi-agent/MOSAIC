@@ -181,7 +181,9 @@ type sentinelDispatchLogger struct{}
 func (s *sentinelDispatchLogger) LogRequest(_ domain.ProtocolRequest)   {}
 func (s *sentinelDispatchLogger) LogResponse(_ domain.ProtocolResponse) {}
 func (s *sentinelDispatchLogger) LogError(_ string, _ string)           {}
-func (s *sentinelDispatchLogger) SetRunID(_ string)                     {}
+func (s *sentinelDispatchLogger) LogHarnessError(_ string, _ domain.HarnessFailure, _ string) {
+}
+func (s *sentinelDispatchLogger) SetRunID(_ string) {}
 func (s *sentinelDispatchLogger) Close()                                {}
 func (s *sentinelDispatchLogger) Path() string                          { return "" }
 

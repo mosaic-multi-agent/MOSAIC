@@ -23,9 +23,13 @@ func infraFailureLabel(row ProgressRow) string {
 }
 
 // renderInfraFailureRow renders a failed infrastructure row in the Error
-// style, truncated to one screen line.
+// style (the Runner-recorded style for a Runner-recorded status), truncated to
+// one screen line.
 func (s *ProgressScreen) renderInfraFailureRow(row ProgressRow) string {
 	style := s.styles.Error
+	if isRunnerRecordedStatus(row.Status) {
+		style = s.runnerRecordedStyle()
+	}
 	if w := s.width - 2; w > 0 {
 		style = style.MaxWidth(w)
 	}

@@ -206,44 +206,22 @@ func (s *sessionImpl) handleAutoHITLRedispatchError(ctx context.Context, rs *run
 		done, out, err := s.autoForceStop(ctx, rs, attemptOfStep(hitlStep, hitlStep.Request), true)
 		return hitlRedispatchState{}, done, true, out, err
 	}
-	s.deps.Debug.Log(domain.EventSessionHarnessError, rdErr.Error(),
-		domain.F("agent", hitlStep.Request.AgentInstanceID),
-	)
-	rdFailedStep := domain.CompletedStep{
-		Seq:           rs.state.GlobalSequence + 1,
-		AgentInstance: hitlStep.Request.AgentInstanceID,
-		Phase:         hitlStep.Phase,
-		Stage:         hitlStep.Stage,
-		WorkflowRow:   domain.WorkflowRowFromIndex(hitlStep.RowIndex),
-		Status:        domain.StatusBLOCKED,
-		ErrorCode:     domain.ErrorTOOL_UNAVAILABLE,
-		Summary:       rdErr.Error(),
-		Timestamp:     s.deps.Clock.Now(),
-		Inputs:        formatInputs(hitlStep.Request.InputArtifacts),
-	}
-	newState, applyErr := s.applyAndAnnounce(ctx, rs.state, rdFailedStep)
-	if applyErr != nil {
-		s.deps.Debug.Log(domain.EventSessionApplyFailed, applyErr.Error())
-		return hitlRedispatchState{}, true, false, domain.RunOutcome{Status: domain.RunFailed, Message: applyErr.Error()}, applyErr
-	}
-	rs.state = newState
+	failed := failedAttempt{agent: hitlStep.Agent, req: hitlStep.Request, phase: hitlStep.Phase, stage: hitlStep.Stage, rowIndex: hitlStep.RowIndex}
+	rdResp, bypass, recErr := s.handleRepairHarnessFailure(ctx, &rs.state, failed, rdErr, &rs.antiLoop)
 	rs.seq = rs.state.GlobalSequence
-	// Raw-text bypass within HITL redispatch.
-	if isRawTextHarnessError(rdErr) && rs.antiLoop.recordDispatch(hitlStep.RowIndex, hitlStep.Agent.Identifier) {
-		bypassSeq := rs.state.GlobalSequence + 1
-		bypassReq := hitlStep.Request
-		bypassReq.AgentInstanceID = fmt.Sprintf("%s#%d", hitlStep.Agent.Identifier, bypassSeq)
-		bypassResp, bypassErr := s.invokeAndLog(ctx, hitlStep.Agent, bypassReq)
-		if bypassErr == nil {
-			hitlStep.Request = bypassReq
-			return hitlRedispatchState{step: hitlStep, response: bypassResp, hitlAttemptSeq: bypassSeq}, false, false, domain.RunOutcome{}, nil
-		}
-		if isForceStopped(bypassErr) {
-			done, out, err := s.autoForceStop(ctx, rs, attemptOfStep(hitlStep, bypassReq), true)
-			return hitlRedispatchState{}, done, true, out, err
-		}
+	if recErr != nil {
+		return hitlRedispatchState{}, true, false, domain.RunOutcome{Status: domain.RunFailed, Message: recErr.Error()}, recErr
 	}
-	rdResp := domain.HarnessErrorResponse(hitlStep.Request.AgentInstanceID, rs.config.RunID, rdErr)
+	switch bypass.kind {
+	case bypassSucceeded:
+		hitlStep.Request = bypass.req
+		return hitlRedispatchState{step: hitlStep, response: bypass.resp, hitlAttemptSeq: bypass.seq}, false, false, domain.RunOutcome{}, nil
+	case bypassForceStopped:
+		done, out, err := s.autoForceStop(ctx, rs, attemptOfStep(hitlStep, bypass.req), true)
+		return hitlRedispatchState{}, done, true, out, err
+	case bypassRecordFailed:
+		return hitlRedispatchState{}, true, false, domain.RunOutcome{Status: domain.RunFailed, Message: bypass.err.Error()}, bypass.err
+	}
 	rdDevInfo := domain.DeviationInfo{
 		Kind:       domain.DeviationNonSuccess,
 		Response:   rdResp,

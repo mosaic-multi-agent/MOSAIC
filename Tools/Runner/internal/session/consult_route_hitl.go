@@ -200,23 +200,9 @@ func (s *sessionImpl) consultHITLRedispatch(
 				})
 			return domain.ProtocolResponse{}, 0, true, fDone, fOut, fErr
 		}
-		s.deps.Debug.Log(domain.EventSessionHarnessError, rdErr.Error(),
-			domain.F("agent", rdReq.AgentInstanceID),
-		)
-		rdDevInfo := domain.DeviationInfo{
-			Kind: domain.DeviationHarnessError,
-			Response: domain.ProtocolResponse{
-				AgentInstanceID: rdReq.AgentInstanceID,
-				StatusCode:      domain.StatusBLOCKED,
-				StatusMessage:   rdErr.Error(),
-			},
-			CurrentRow:    dispInstr.RowIndex,
-			CurrentPhase:  phase,
-			ArtifactState: *state,
-		}
-		crDone, crOut, crErr := s.consultRoute(ctx, &rdDevInfo, state, seq, lastResponse, prevWorkflowStep,
-			stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
-		return domain.ProtocolResponse{}, 0, true, crDone, crOut, crErr
+		return s.consultRepairHarnessFailure(ctx,
+			failedAttempt{agent: agentRef, req: rdReq, phase: phase, stage: effectiveStage, rowIndex: dispInstr.RowIndex},
+			rdErr, state, seq, lastResponse, prevWorkflowStep, stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
 	}
 	return rdResp, newAttemptSeq, false, false, domain.RunOutcome{}, nil
 }

@@ -79,6 +79,16 @@ func TestSession_AskOrchestrator_ForceStopOfTheConsultation_ChoiceManual_Reopens
 // choice "manual". withRouting selects whether a routing consultant is wired.
 func postKillRig(t *testing.T, withRouting bool, user *manualUser) (session.Session, domain.RunConfig) {
 	t.Helper()
+	var consultant *scriptedRoutingConsultant
+	if withRouting {
+		consultant = &scriptedRoutingConsultant{}
+	}
+	return postKillRigWith(t, user, consultant)
+}
+
+// postKillRigWith is postKillRig with the given routing consultant (nil: none).
+func postKillRigWith(t *testing.T, user *manualUser, consultant *scriptedRoutingConsultant) (session.Session, domain.RunConfig) {
+	t.Helper()
 	dir := t.TempDir()
 	orchPath := copyOrchestratorFile(t, dir, "linear-orch.md")
 	writeAgentFile(t, dir, "agent-a")
@@ -92,8 +102,8 @@ func postKillRig(t *testing.T, withRouting bool, user *manualUser) (session.Sess
 		Manual:    &deviation.ManualResolver{Interact: user},
 		ForceStop: win,
 	}
-	if withRouting {
-		deps.Routing = &scriptedRoutingConsultant{}
+	if consultant != nil {
+		deps.Routing = consultant
 	}
 	return session.New(deps), baseLinearConfig(orchPath)
 }

@@ -74,37 +74,40 @@ func TestSession_E501_SuccessAfterRetries_NeedsNoConsultation(t *testing.T) {
 	}
 }
 
-func TestSession_E501_HarnessErrors_ThreeDispatchesThenOneConsultation(t *testing.T) {
+func TestSession_HarnessError_ThreeDispatchesThenOneConsultation(t *testing.T) {
 	for _, mode := range autoModes {
 		t.Run(string(mode), func(t *testing.T) {
 			consultant := &scriptedRoutingConsultant{}
 			consultant.queueStop("budget used up")
 			ses, f, store, orchPath := newAutoSessionWithConsultant(t, consultant)
-			for i := 0; i < engine.E501AttemptLimit+3; i++ {
+			for i := 0; i < engine.HarnessErrorAttemptLimit+3; i++ {
 				f.Queue("agent-a", failEntry("harness: subprocess timed out"))
 			}
 
 			got, err := ses.Start(context.Background(), configForMode(orchPath, mode))
 
 			requireRunStatus(t, got, err, domain.RunStoppedByConsultant)
-			if n := countInvocationsFor(f.Invocations(), "agent-a"); n != engine.E501AttemptLimit {
-				t.Errorf("want %d agent-a dispatches, got %d", engine.E501AttemptLimit, n)
+			if n := countInvocationsFor(f.Invocations(), "agent-a"); n != engine.HarnessErrorAttemptLimit {
+				t.Errorf("want %d agent-a dispatches, got %d", engine.HarnessErrorAttemptLimit, n)
 			}
 			if consultant.CallCount != 1 {
 				t.Fatalf("want exactly one consultation after the budget, got %d", consultant.CallCount)
 			}
-			requireBlockedE501Deviation(t, consultant.Requests[0])
+			requireHarnessErrorDeviation(t, consultant.Requests[0])
 			requireErrorReasonCarries(t, consultant.Requests[0], "subprocess timed out")
-			if n := countE501RowsFor(store, "agent-a"); n != engine.E501AttemptLimit {
-				t.Errorf("want %d BLOCKED/E501 rows, got %d", engine.E501AttemptLimit, n)
+			if n := countHarnessErrorRowsFor(store, "agent-a"); n != engine.HarnessErrorAttemptLimit {
+				t.Errorf("want %d HARNESS_ERROR rows, got %d", engine.HarnessErrorAttemptLimit, n)
+			}
+			if n := countE501RowsFor(store, "agent-a"); n != 0 {
+				t.Errorf("want no BLOCKED/E501 rows for harness failures, got %d", n)
 			}
 		})
 	}
 }
 
-// A harness error plus a failed raw-text bypass are two BLOCKED/E501 rows and
+// A harness error plus a failed raw-text bypass are two HARNESS_ERROR rows and
 // two of the three attempts: one more dispatch follows, then the consultation.
-func TestSession_E501_FailedBypass_IsLoggedAsOwnRowAndCountsAsAnAttempt(t *testing.T) {
+func TestSession_HarnessError_FailedBypass_IsLoggedAsOwnRowAndCountsAsAnAttempt(t *testing.T) {
 	for _, mode := range autoModes {
 		t.Run(string(mode), func(t *testing.T) {
 			consultant := &scriptedRoutingConsultant{}
@@ -124,11 +127,11 @@ func TestSession_E501_FailedBypass_IsLoggedAsOwnRowAndCountsAsAnAttempt(t *testi
 			}
 			rows := agentRows(store, "agent-a")
 			if len(rows) != 3 {
-				t.Fatalf("want 3 BLOCKED/E501 rows (error, failed bypass, third attempt), got %d: %+v", len(rows), rows)
+				t.Fatalf("want 3 HARNESS_ERROR rows (error, failed bypass, third attempt), got %d: %+v", len(rows), rows)
 			}
 			for i, r := range rows {
-				if r.Status != domain.StatusBLOCKED || r.ErrorCode != domain.ErrorTOOL_UNAVAILABLE {
-					t.Errorf("row %d: want BLOCKED/E501, got %s/%s", i+1, r.Status, r.ErrorCode)
+				if r.Status != domain.StatusHARNESS_ERROR || r.ErrorCode != domain.ErrorNone {
+					t.Errorf("row %d: want HARNESS_ERROR without error code, got %s/%s", i+1, r.Status, r.ErrorCode)
 				}
 				if r.WorkflowRow != rows[0].WorkflowRow || r.Phase != rows[0].Phase || r.Stage != rows[0].Stage {
 					t.Errorf("row %d: want the same row, phase and stage as the first attempt", i+1)
@@ -163,8 +166,8 @@ func TestSession_E501_RawTextErrorWithNoBudgetLeft_SkipsBypass(t *testing.T) {
 	}
 }
 
-// Orchestrated mode: E501 from an agent or the harness is a consultation, not
-// a mechanical re-dispatch.
+// Orchestrated mode: E501 from an agent or a harness error is a consultation,
+// not a mechanical re-dispatch.
 func TestSession_E501_OrchestratedMode_ConsultsInsteadOfRedispatching(t *testing.T) {
 	entries := map[string]harness.ScriptedEntry{
 		"agent reply":   e501Entry(),
@@ -196,11 +199,35 @@ func TestSession_E501_OrchestratedMode_ConsultsInsteadOfRedispatching(t *testing
 type restartCase struct {
 	name         string
 	prior        []seedRow
-	wantAttempts int // dispatches made after the resume; each fails with a harness error
+	wantAttempts int // dispatches made after the resume; each fails the way the test scripts
+}
+
+// runBudgetRestart seeds the run with tc.prior, resumes it with an agent that
+// fails every dispatch with entry, and asserts the dispatches made before the
+// single consultation.
+func runBudgetRestart(t *testing.T, tc restartCase, entry harness.ScriptedEntry) {
+	t.Helper()
+	run := seedFileStoreRun(t, tc.prior)
+	consultant := &scriptedRoutingConsultant{}
+	consultant.queueStop("budget used up")
+	f := harness.NewMockAdapter()
+	queueRepeated(f, "agent-a", 5, entry)
+	ses := run.newSession(f, consultant)
+
+	got, err := ses.Start(context.Background(), run.resumeConfig())
+
+	requireRunStatus(t, got, err, domain.RunStoppedByConsultant)
+	if n := countInvocationsFor(f.Invocations(), "agent-a"); n != tc.wantAttempts {
+		t.Errorf("want %d dispatches after the resume, got %d", tc.wantAttempts, n)
+	}
+	if consultant.CallCount != 1 {
+		t.Errorf("want exactly one consultation once the budget is used up, got %d", consultant.CallCount)
+	}
 }
 
 func TestSession_E501_BudgetSurvivesRestartThroughArtifactFile(t *testing.T) {
 	e501 := seedRow{domain.StatusBLOCKED, domain.ErrorTOOL_UNAVAILABLE}
+	harnessErr := seedRow{domain.StatusHARNESS_ERROR, domain.ErrorNone}
 	cases := []restartCase{
 		{"one earlier attempt leaves two", []seedRow{e501}, 2},
 		{"two earlier attempts leave one", []seedRow{e501, e501}, 1},
@@ -209,32 +236,43 @@ func TestSession_E501_BudgetSurvivesRestartThroughArtifactFile(t *testing.T) {
 			[]seedRow{{domain.StatusBLOCKED, domain.ErrorDEPENDENCY_MISSING}, e501, e501}, 1},
 		{"a SUCCESS at the row resets the budget",
 			[]seedRow{e501, e501, e501, {domain.StatusSUCCESS, domain.ErrorNone}, e501}, 2},
+		{"harness errors at the row do not use the E501 budget",
+			[]seedRow{harnessErr, harnessErr, harnessErr, e501}, 2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			run := seedFileStoreRun(t, tc.prior)
-			consultant := &scriptedRoutingConsultant{}
-			consultant.queueStop("budget used up")
-			f := harness.NewMockAdapter()
-			queueRepeated(f, "agent-a", 5, failEntry("harness: still down"))
-			ses := run.newSession(f, consultant)
-
-			got, err := ses.Start(context.Background(), run.resumeConfig())
-
-			requireRunStatus(t, got, err, domain.RunStoppedByConsultant)
-			if n := countInvocationsFor(f.Invocations(), "agent-a"); n != tc.wantAttempts {
-				t.Errorf("want %d dispatches after the resume, got %d", tc.wantAttempts, n)
-			}
-			if consultant.CallCount != 1 {
-				t.Errorf("want exactly one consultation once the budget is used up, got %d", consultant.CallCount)
-			}
+			runBudgetRestart(t, tc, e501Entry())
 		})
 	}
 }
 
-// The rows a live run records, including the failed bypass, carry their error
-// code through the Execution Log of the real file store.
-func TestSession_E501_RowsReadBackFromArtifactFileKeepTheirErrorCode(t *testing.T) {
+// A trailing HARNESS_ERROR row is an unaccepted attempt: the resume re-runs it
+// once whatever the budget, and the budget read from the whole log (including
+// the rows before the restart) bounds what follows.
+func TestSession_HarnessError_BudgetSurvivesRestartThroughArtifactFile(t *testing.T) {
+	e501 := seedRow{domain.StatusBLOCKED, domain.ErrorTOOL_UNAVAILABLE}
+	harnessErr := seedRow{domain.StatusHARNESS_ERROR, domain.ErrorNone}
+	cases := []restartCase{
+		{"one earlier attempt leaves two", []seedRow{harnessErr}, 2},
+		{"two earlier attempts leave one", []seedRow{harnessErr, harnessErr}, 1},
+		{"all three used up still re-runs the unaccepted attempt once", []seedRow{harnessErr, harnessErr, harnessErr}, 1},
+		{"another error code at the row does not use the budget",
+			[]seedRow{{domain.StatusBLOCKED, domain.ErrorDEPENDENCY_MISSING}, harnessErr, harnessErr}, 1},
+		{"a SUCCESS at the row resets the budget",
+			[]seedRow{harnessErr, harnessErr, harnessErr, {domain.StatusSUCCESS, domain.ErrorNone}, harnessErr}, 2},
+		{"old synthetic E501 rows do not use the harness error budget",
+			[]seedRow{e501, e501}, 3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			runBudgetRestart(t, tc, failEntry("harness: still down"))
+		})
+	}
+}
+
+// The rows a live run records, including the failed bypass, carry their status
+// through the Execution Log of the real file store, without an error code.
+func TestSession_HarnessError_RowsReadBackFromArtifactFileKeepTheirStatus(t *testing.T) {
 	run := emptyFileStoreRun(t)
 	consultant := &scriptedRoutingConsultant{}
 	consultant.queueStop("budget used up")
@@ -249,17 +287,23 @@ func TestSession_E501_RowsReadBackFromArtifactFileKeepTheirErrorCode(t *testing.
 	if err != nil {
 		t.Fatalf("read artifact: %v", err)
 	}
-	if left := engine.E501BudgetRemaining(state.ExecutionLog, domain.RoutingRow{Index: 0}, ""); left != 0 {
+	if left := engine.HarnessErrorBudgetRemaining(state.ExecutionLog, domain.RoutingRow{Index: 0}, ""); left != 0 {
 		t.Errorf("want the budget read back from the file as used up, got %d left", left)
 	}
 	n := 0
 	for _, e := range state.ExecutionLog {
-		if e.Status == domain.StatusBLOCKED && e.ErrorCode == domain.ErrorTOOL_UNAVAILABLE {
+		if e.Status == domain.StatusHARNESS_ERROR && e.ErrorCode == domain.ErrorNone {
 			n++
 		}
 	}
-	if n != engine.E501AttemptLimit {
-		t.Errorf("want %d BLOCKED/E501 rows read back, got %d", engine.E501AttemptLimit, n)
+	if n != engine.HarnessErrorAttemptLimit {
+		t.Errorf("want %d HARNESS_ERROR rows read back, got %d", engine.HarnessErrorAttemptLimit, n)
+	}
+	if left := engine.E501BudgetRemaining(state.ExecutionLog, domain.RoutingRow{Index: 0}, ""); left != engine.E501AttemptLimit {
+		t.Errorf("want the E501 budget untouched by harness errors, got %d left", left)
+	}
+	if cs := state.CurrentState; cs.LastAgent != "" || cs.LastStatus != "" {
+		t.Errorf("want current_state untouched by HARNESS_ERROR rows, got last_agent=%q last_status=%q", cs.LastAgent, cs.LastStatus)
 	}
 }
 

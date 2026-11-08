@@ -370,16 +370,15 @@ func TestSession_Start_CommitsEnabled_EmptyBranchName_KeepsArtifactAndRow(t *tes
 }
 
 // TestSession_Start_CommitsEnabled_HarnessError_KeepsArtifactAndRow verifies
-// that a harness failure during setup is recorded as a BLOCKED row (E501), the
+// that a harness failure during setup is recorded as a HARNESS_ERROR row, the
 // artifact is kept, and the outcome carries the underlying error.
 func TestSession_Start_CommitsEnabled_HarnessError_KeepsArtifactAndRow(t *testing.T) {
 	harnessErr := errors.New("git: authentication failed")
 	r := startWithSetupEntry(t, harness.ScriptedEntry{Err: harnessErr})
 
-	requireSetupFailureKept(t, r, domain.StatusBLOCKED)
-	if len(r.store.Applied) == 1 && r.store.Applied[0].ErrorCode != domain.ErrorTOOL_UNAVAILABLE {
-		t.Errorf("want the harness error recorded with error code %q, got %q",
-			domain.ErrorTOOL_UNAVAILABLE, r.store.Applied[0].ErrorCode)
+	requireSetupFailureKept(t, r, domain.StatusHARNESS_ERROR)
+	if len(r.store.Applied) == 1 && r.store.Applied[0].ErrorCode != domain.ErrorNone {
+		t.Errorf("want no error code on the harness error row, got %q", r.store.Applied[0].ErrorCode)
 	}
 	if !errors.Is(r.out.Cause, harnessErr) {
 		t.Errorf("want outcome Cause to wrap the harness error, got %v", r.out.Cause)

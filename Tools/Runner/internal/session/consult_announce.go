@@ -9,7 +9,7 @@ import (
 // activityFor describes a routing consultation for req: its deviation kind
 // when the request carries a deviation, none otherwise.
 func activityFor(req domain.ConsultationRequest) domain.ConsultationActivity {
-	a := domain.ConsultationActivity{Context: req.Context}
+	a := domain.ConsultationActivity{Context: req.Context, HasUserMessage: req.UserMessage != nil}
 	if req.Deviation != nil {
 		a.Kind = req.Deviation.Kind
 	}
@@ -20,6 +20,12 @@ func activityFor(req domain.ConsultationRequest) domain.ConsultationActivity {
 // announcing the consultation's start before the call and its end as soon as
 // the call returns, whatever the outcome.
 func (s *sessionImpl) consultOrchestratorAgent(ctx context.Context, req domain.ConsultationRequest) (domain.RoutingInstruction, error) {
+	if req.UserMessage != nil {
+		s.deps.Debug.Log(domain.EventSessionConsultUserMessage, "consultation carries a user message",
+			domain.F("context", string(req.Context)),
+			domain.F("message", *req.UserMessage),
+		)
+	}
 	s.deps.Consultations.ConsultationStarted(ctx, activityFor(req))
 	defer s.deps.Consultations.ConsultationEnded(ctx)
 	var instr domain.RoutingInstruction

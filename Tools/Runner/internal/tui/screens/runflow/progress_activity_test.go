@@ -40,11 +40,6 @@ func subagentItem(name, summary string) domain.ActivityItem {
 	return domain.ActivityItem{Kind: domain.ActivitySubagent, Name: name, Summary: summary}
 }
 
-func usageItem(in, out int, cost float64, hasCost bool) domain.ActivityItem {
-	return domain.ActivityItem{Kind: domain.ActivityKindUsage,
-		Usage: domain.ActivityUsage{InputTokens: in, OutputTokens: out, CostUSD: cost, HasCost: hasCost}}
-}
-
 // newActivityScreen is a progress screen with one running step and invocation
 // 1 begun.
 func newActivityScreen(t *testing.T) *ProgressScreen {
@@ -265,51 +260,6 @@ func TestActivityPanel_Items_AreShownOldestFirst(t *testing.T) {
 	a, b, c := strings.Index(view, "line-alpha"), strings.Index(view, "line-bravo"), strings.Index(view, "line-charlie")
 	if a < 0 || b < a || c < b {
 		t.Errorf("items not in output order (positions %d, %d, %d):\n%s", a, b, c, view)
-	}
-}
-
-func TestActivityPanel_Usage_ShowsSummedTokensAndCost(t *testing.T) {
-	s := newActivityScreen(t)
-	s.AppendActivity(1, usageItem(1000, 200, 0.01, true))
-	s.AppendActivity(1, usageItem(500, 50, 0.02, true))
-
-	view := s.View()
-
-	for _, want := range []string{"1500", "250", "0.03"} {
-		if !strings.Contains(view, want) {
-			t.Errorf("View() lacks the summed usage figure %q:\n%s", want, view)
-		}
-	}
-}
-
-func TestActivityPanel_Usage_WithoutCost_ShowsTokensOnly(t *testing.T) {
-	s := newActivityScreen(t)
-	s.AppendActivity(1, usageItem(1234, 567, 0, false))
-
-	view := s.View()
-
-	if !strings.Contains(view, "1234") || !strings.Contains(view, "567") {
-		t.Errorf("View() lacks the token figures:\n%s", view)
-	}
-	if strings.Contains(view, "$") {
-		t.Errorf("View() shows a cost although none was reported:\n%s", view)
-	}
-}
-
-func TestActivityPanel_Usage_AsTheFirstEvent_EndsThePlaceholder(t *testing.T) {
-	s := newActivityScreen(t)
-	if !strings.Contains(s.View(), placeholderText) {
-		t.Fatal("placeholder not shown before the first event")
-	}
-
-	s.AppendActivity(1, usageItem(10, 5, 0, false))
-
-	view := s.View()
-	if strings.Contains(view, placeholderText) {
-		t.Errorf("placeholder still shown after the first event (usage):\n%s", view)
-	}
-	if !strings.Contains(view, "10") || !strings.Contains(view, "5") {
-		t.Errorf("usage figures not shown after the first event:\n%s", view)
 	}
 }
 

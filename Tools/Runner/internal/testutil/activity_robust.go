@@ -57,6 +57,14 @@ func (f *failingFeed) Activity(domain.ActivityItem) {
 	<-f.o.release
 }
 
+func (f *failingFeed) Status(domain.ActivityStatus) {
+	f.o.calls.Add(1)
+	if f.o.panics {
+		panic("activity feed failure")
+	}
+	<-f.o.release
+}
+
 func (f *failingFeed) Ended() {
 	if f.o.panics {
 		panic("activity feed failure on end")
