@@ -44,6 +44,9 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 		SilenceUsage:  true,
 		// RunE on root handles the case where no subcommand is provided.
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if v, _ := cmd.Flags().GetBool("version"); v {
+				return fmt.Errorf("--version must be the only argument")
+			}
 			return fmt.Errorf("a subcommand is required: agents, check-index, deploy, hooks, promote, render, transform, update, workflows")
 		},
 	}
@@ -52,6 +55,7 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 	root.SetOut(errOut)
 	root.SetErr(errOut)
 
+	root.Flags().Bool("version", false, "Print the tool version and exit")
 	root.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
 	root.PersistentFlags().StringVar(&mosaicRoot, "mosaic-root", "", "Override the MOSAIC root directory")
 	registerStackFlags(root)

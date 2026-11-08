@@ -19,6 +19,32 @@ import (
 // it as a harness in a selection UI would misrepresent it.
 const FakeHarnessID = "fake"
 
+// disabledHarnesses lists catalog harnesses Runner temporarily refuses, with
+// the reason shown to the user. A disabled harness is neither offered in any
+// selection UI nor accepted by the --harness flag.
+var disabledHarnesses = map[string]string{
+	commonharness.HarnessIDClaudeCode: "Claude Code is temporarily disabled in Runner: agents ignore the model and tools in their definition file. Use opencode or ghcp-cli, or run Claude Code natively",
+}
+
+// DisabledReason reports whether id is a catalog harness Runner temporarily
+// refuses, and why.
+func DisabledReason(id string) (string, bool) {
+	reason, ok := disabledHarnesses[id]
+	return reason, ok
+}
+
+// enabledCLIHarnesses returns the catalog's CLI harnesses minus the disabled ones.
+func enabledCLIHarnesses() []commonharness.CLIHarness {
+	catalog := commonharness.CLIHarnesses()
+	out := make([]commonharness.CLIHarness, 0, len(catalog))
+	for _, entry := range catalog {
+		if _, disabled := DisabledReason(entry.ID); !disabled {
+			out = append(out, entry)
+		}
+	}
+	return out
+}
+
 // Selection is one accepted --harness value.
 type Selection struct {
 	ID    string
@@ -34,7 +60,7 @@ type Selection struct {
 // tool-local test double first (it is the flag's default), then every
 // CLI-backed harness the shared catalog declares, in the catalog's order.
 func Selections() []Selection {
-	catalog := commonharness.CLIHarnesses()
+	catalog := enabledCLIHarnesses()
 	sels := make([]Selection, 0, len(catalog)+1)
 	sels = append(sels, Selection{ID: FakeHarnessID, Label: "Fake (test double)", CLIBacked: false})
 	for _, entry := range catalog {
@@ -48,13 +74,16 @@ func Accepts(id string) bool {
 	if id == FakeHarnessID {
 		return true
 	}
+	if _, disabled := DisabledReason(id); disabled {
+		return false
+	}
 	return commonharness.IsCLIHarness(id)
 }
 
 // CLISelections returns only the CLI-backed entries — what a selection UI
 // offers, since the test double is a flag-only value.
 func CLISelections() []Selection {
-	catalog := commonharness.CLIHarnesses()
+	catalog := enabledCLIHarnesses()
 	sels := make([]Selection, 0, len(catalog))
 	for _, entry := range catalog {
 		sels = append(sels, Selection{ID: entry.ID, Label: entry.Label, CLIBacked: true})

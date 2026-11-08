@@ -24,7 +24,7 @@ import (
 	"mosaic-log-analyzer/internal/tui"
 )
 
-const ToolVersion = "1.2.1"
+const ToolVersion = "1.2.2"
 
 // valueFlagNames are the flags that consume a following token in space-separated
 // form (--flag value). Boolean flags like --tui are NOT in this set.
@@ -126,6 +126,10 @@ func (c *realClock) Now() time.Time { return time.Now().UTC() }
 
 func main() {
 	args := os.Args[1:]
+
+	if versionRequested(args) {
+		os.Exit(runVersion(os.Stdout))
+	}
 
 	workDir, err := os.Getwd()
 	if err != nil {

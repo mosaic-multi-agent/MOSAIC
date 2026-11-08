@@ -95,6 +95,8 @@ type RunsScreen struct {
 	done   bool
 	back   bool
 	marks  runMarks
+	// version is shown in the title when non-empty.
+	version string
 	pageChrome
 }
 
@@ -107,6 +109,18 @@ func NewRunsScreen(report domain.Report, width, height int, styles Styles) *Runs
 		height: height,
 		styles: styles,
 	}
+}
+
+// SetVersion sets the tool version shown in the Runs screen title.
+// Call before View for the version to appear.
+func (s *RunsScreen) SetVersion(v string) { s.version = v }
+
+// title returns the page title, versioned when a version was set.
+func (s *RunsScreen) title() string {
+	if s.version == "" {
+		return runsTitle
+	}
+	return "Log Analyzer v" + s.version + " " + string(rune(0x2014)) + " Runs"
 }
 
 // SetReport replaces the report (used after a reprice without re-navigating).
@@ -251,7 +265,7 @@ func (s *RunsScreen) View(width, height int) string {
 		body = append(append(head, renderTableLines(t, width, w.Count, st)...), tail...)
 	}
 
-	page := Page{Title: runsTitle, Badges: s.badges(), Keys: runsKeys, Help: true, Hint: FormatScrollHint(w, n)}
+	page := Page{Title: s.title(), Badges: s.badges(), Keys: runsKeys, Help: true, Hint: FormatScrollHint(w, n)}
 	return s.render(page, withLegend(runsOverlayGroups(), runsLegend()...), body, width, height, st)
 }
 

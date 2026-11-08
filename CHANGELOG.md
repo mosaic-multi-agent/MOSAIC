@@ -1,44 +1,46 @@
-# Unreleased
+# 0.7.4 (2026-11-08)
+
+> **To upgrade:** run `Update workspace` to get the updated `orchestrator-script` and `mosaic-logger` hook. Runner v1.11.1 needs `orchestrator-script` v3.5.0.
 
 ## Tools
 
-### Deploy v1.6.0
+### Deploy v1.6.1
 #### Changes
-- `Update workspace` and `Update workflows` now keep custom workflows that are deployed in the orchestrator but not supplied by the catalog stack. Before, they were removed
-- In `Update workflows`, deployed custom workflows appear in the checklist with the hint `not in catalog; deployed only`, unchecked like deployed catalog workflows. Confirming without ticking one removes it, and the run summary names it. Tick the ones you want to keep
-- A kept custom workflow is not updated or validated. The run warns: `<id> is not in the catalog stack; kept as deployed, not updated or validated.`
-- A workflow id given explicitly (`--workflows`, or the add-workflows input of `Update workspace`) may name a deployed custom workflow to keep it; any other id the catalog does not supply is still an unknown-workflow error
-- A deployed orchestrator file with a line that begins with a workflow tag and carries more content on that line now fails the update for that file, and nothing is written
-- `Update workspace` and `Update workflows` no longer show the removed-layer hint for unknown workflow ids; `Deploy workspace` keeps it
+- `--version` prints the tool version
+- `Update workspace` and `Update workflows` keep deployed custom workflows that the catalog does not supply, instead of removing them. They are not updated or validated, and the run warns about each one. In `Update workflows` they appear unchecked as `not in catalog; deployed only`; tick the ones to keep, or name them with `--workflows`
+- An orchestrator file with extra content on a workflow tag line now fails its update without writing anything
 
-### Runner v1.11.0
-> The script orchestrator agent must know `HARNESS_ERROR` and `user_message`; its update ships together with this Runner. Run `Update workspace` to get it.
+### Runner v1.11.1
 #### Changes
-- An invocation that ends without a usable response (timeout, process failure, unparseable or empty response, GHCP agent deselected, GHCP session error) is now recorded as `HARNESS_ERROR`, with the kind of failure in the summary, instead of a made-up `BLOCKED` with `E501`. It is never accepted, so a resume runs the same assignment again
-- A `HARNESS_ERROR` is retried automatically in auto and auto-review modes, up to 3 attempts per row and iteration since the last success, separately from the `E501` budget; an unparseable response first gets one direct re-run. After that, or at once in orchestrated mode, the orchestrator is consulted, and the request reports `HARNESS_ERROR` with the failure description. Runs recorded by earlier versions still resume
-- Failed HITL repair re-dispatches, infrastructure agents and commit setup are recorded as `HARNESS_ERROR` too, and an infrastructure agent whose definition cannot be found as `CONFIG_ERROR`. Every screen and the CLI show these statuses as their own, never as a `BLOCKED` of the agent
-- The live activity header shows the model, the context size of the latest call (`ctx 112k`) and `running <tool> <time>` or `quiet <time>`, highlighted from 5 minutes. When the invocation ends it shows the elapsed time, `ended`, the last context size and the cost in USD (Claude Code and OpenCode). Token totals are no longer shown
-- After "Ask the orchestrator to decide" in the manual routing dialogue you can add an optional multi-line message. It is sent verbatim to the orchestrator with that one decision only, and is not stored or sent again
-
-### Runner v1.10.0
-#### Changes
-- Human-in-the-loop dispatches now have their own timeout: `--hitl-timeout` (default 4h). `--timeout` (default 30m) applies to the other dispatches. The TUI asks for both, also on resume
-- The progress screen shows the live activity of the running invocation; `l` hides or shows it. It reads "no live output available" until the first event arrives
-- Claude Code runs in stream-json mode, so its activity is visible while it runs
-- `x` on the progress screen force-stops the running invocation after its own confirmation. Only that invocation is killed; the run stops resumably or continues in the manual routing dialogue
-- Timeouts and force stops kill the whole process tree of the invocation, not only its main process. AgentTest runs get the same kill on timeout
-- The manual routing dialogue can hand the decision to the orchestrator ("Ask the orchestrator to decide") when you opened it yourself
+- `--version` prints the tool version
+- Human-in-the-loop dispatches have their own timeout, `--hitl-timeout` (default 4h); `--timeout` (default 30m) covers the rest
+- The progress screen shows the live activity of the running invocation (`l` toggles it): model, context size, current tool or quiet time, and at the end elapsed time and cost (Claude Code and OpenCode)
+- `x` force-stops the running invocation. Timeouts and force stops kill its whole process tree (AgentTest timeouts too)
+- The manual routing dialogue can hand the decision to the orchestrator, with an optional one-off message
+- An invocation without a usable response (timeout, crash, unparseable output, GHCP session errors) is recorded as `HARNESS_ERROR` instead of `BLOCKED`/`E501`, and a missing infrastructure agent as `CONFIG_ERROR`. `HARNESS_ERROR` is retried up to 3 times in auto modes before the orchestrator is consulted, and a resume re-runs it
 #### Bugfixes
-- Resuming a run now re-dispatches the last attempt when it was not accepted (interrupted or force-stopped), instead of routing on its recorded status
+- Resuming re-dispatches an interrupted or force-stopped attempt instead of routing on its recorded status
+
+#### Known issues
+- Runner does not pick correct model for Claude Code (it never did, same issue applies to all previous versions as well). Will be fixed in next version very soon. Claude Code is disabled in this version.
+
+### LogAnalyzer v1.2.2
+#### Changes
+- `--version` prints the tool version
+- The Runs screen title shows the version
+
+### AgentTest v1.2.1
+#### Changes
+- `--version` prints the tool version
 
 ## Hooks
 
 ### mosaic-logger v1.11.1
 #### Bugfixes
-- Claude Code in Runner mode now logs the prompt of each subagent invocation; before, the subagent logs held no prompt. Native and Runner orchestrator sessions now log the user turns too. Runs logged before this are not repaired
+- Claude Code under Runner now logs subagent prompts, and orchestrator sessions log user turns
 
 ## Catalog
-- **orchestrator-script** (v3.5.0): knows `HARNESS_ERROR` and `CONFIG_ERROR` and the request's new `last_status` and `user_message` fields; required by Runner v1.11.0. Its reply is always its final message, never sent through a tool. With a user-interaction tool available, it asks the user instead of stopping the run when it cannot decide
+- **orchestrator-script** (v3.5.0): supports `HARNESS_ERROR`, `CONFIG_ERROR` and the user message from the routing dialogue; asks the user instead of stopping when it cannot decide and an ask tool is available
 
 # 0.7.3 (2026-11-02)
 

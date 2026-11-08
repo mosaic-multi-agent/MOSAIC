@@ -99,6 +99,10 @@ func selectFrontend(args []string, isTerminal TerminalCheck) Frontend {
 		return FrontendInterceptor
 	}
 
+	if versionRequested(args) {
+		return FrontendVersion
+	}
+
 	positional := false
 	for i := 0; i < len(args); i++ {
 		arg := args[i]

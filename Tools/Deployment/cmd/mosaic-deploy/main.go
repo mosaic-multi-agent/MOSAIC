@@ -45,7 +45,7 @@ import (
 	_ "mosaic-deploy/internal/harness/builtin/vscodeghcp"
 )
 
-const ToolVersion = "1.6.0"
+const ToolVersion = "1.6.1"
 
 // wantsTUI reports whether mosaic-deploy should launch the interactive TUI: no subcommand
 // was given, and both stdin and stdout are attached to a real terminal (not a pipe/redirect).
@@ -75,6 +75,10 @@ func isFreshConsole(args []string) bool {
 
 func main() {
 	args := os.Args[1:]
+
+	if versionRequested(args) {
+		os.Exit(runVersion(os.Stdout))
+	}
 
 	if len(args) == 0 && !wantsTUI(args) {
 		fmt.Fprintln(os.Stderr, "usage: mosaic-deploy <deploy|update> [flags]")
