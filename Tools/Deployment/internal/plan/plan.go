@@ -40,6 +40,8 @@ type Input struct {
 	GOOS            string
 	Manifest        manifest.Snapshot
 	WorkflowIDs            []string                         // selection order is preserved into Plan.Workflows
+	// KeptWorkflowIDs are workflow ids the caller keeps as deployed; the catalog does not supply them.
+	KeptWorkflowIDs        []string
 	// SubagentIDs are ordinary (non-infrastructure) subagents named directly, populated only by
 	// ModeDeployAgents. The planner forwards them into Selection.SubagentIDs; nil in every other
 	// mode.

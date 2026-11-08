@@ -23,6 +23,7 @@ type infraContentInput struct {
 type buildContentOptions struct {
 	infraByPath       map[string]infraContentInput
 	preserveWorkflows map[string]bool
+	keptWorkflows     map[string]DeployedPathWorkflows
 	// replaceInfrastructure makes an empty infrastructure block list clear the deployed
 	// declarations of every orchestrator-role file instead of keeping them.
 	replaceInfrastructure bool
@@ -64,6 +65,15 @@ func (o buildContentOptions) applyTo(targetPath string, req *transform.Request) 
 		req.Workflows = nil
 		req.PreserveDeployedWorkflows = true
 	}
+	if layout, ok := o.keptWorkflows[targetPath]; ok {
+		req.Workflows = mergeKeptWorkflows(req.Workflows, layout)
+	}
+}
+
+// withKeptWorkflows makes buildContent place each path's kept workflow blocks, byte for byte,
+// among the catalog workflow blocks of that file.
+func withKeptWorkflows(byPath map[string]DeployedPathWorkflows) buildContentOption {
+	return func(o *buildContentOptions) { o.keptWorkflows = byPath }
 }
 
 // infraContentForPaths returns the same catalog-built blocks and merge mode for every path.

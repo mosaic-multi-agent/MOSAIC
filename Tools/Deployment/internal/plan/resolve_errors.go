@@ -24,6 +24,12 @@ func (e *UnknownWorkflowError) Is(target error) bool {
 	return target == ErrUnknownWorkflow
 }
 
+// NewUnknownWorkflowError builds the unknown-workflow error for workflowID, naming where the
+// catalog was searched.
+func NewUnknownWorkflowError(c catalog.Catalog, workflowID string) error {
+	return unknownWorkflowError(c, workflowID)
+}
+
 // unknownWorkflowError builds the error for a workflow id that none of the searched catalogs provides.
 func unknownWorkflowError(c catalog.Catalog, workflowID string) error {
 	return &UnknownWorkflowError{WorkflowID: workflowID, Searched: searchedCatalogs(c)}

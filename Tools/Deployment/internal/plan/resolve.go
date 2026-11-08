@@ -13,6 +13,8 @@ import (
 // A nil or empty slice means "none selected" for that dimension.
 type Selection struct {
 	WorkflowIDs            []string
+	// KeptWorkflowIDs are ids resolved without catalog lookup and excluded from drift.
+	KeptWorkflowIDs        []string
 	// SubagentIDs are ordinary (non-infrastructure) subagents named directly rather than
 	// reached through a workflow's ReferencedAgents. Populated only by ModeDeployAgents;
 	// nil in every other mode.
@@ -115,7 +117,11 @@ func ResolveArtifactsFrom(c catalog.Catalog, sel Selection) (ArtifactSet, error)
 	}
 
 	// Collect agents referenced by selected workflows.
+	keptIDs := keptSet(sel.KeptWorkflowIDs)
 	for _, wfID := range sel.WorkflowIDs {
+		if keptIDs[wfID] {
+			continue // kept: not validated, names no agents
+		}
 		wf, ok := c.Workflow(wfID)
 		if !ok {
 			return ArtifactSet{}, unknownWorkflowError(c, wfID)

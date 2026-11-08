@@ -7,6 +7,7 @@ import "mosaic-deploy/internal/domain"
 type WorkflowBlock struct {
 	ID    string
 	Block []byte // the section block including its boundary tags, in source order
+	Kept  bool   // true: Block is emitted exactly as given; no retype, no Row column
 }
 
 // Request carries every input that Apply needs. Apply performs no filesystem, network,

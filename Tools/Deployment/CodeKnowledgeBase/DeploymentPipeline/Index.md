@@ -323,6 +323,10 @@ recorded is a real, detectable local modification, not noise to be smoothed over
   custom tool is reported only by the transform and still gets its entry. `--strict-models`
   reads the plan's own gaps and is unaffected.
 
+## Kept custom workflows
+
+During `update` and `workflows`, a deployed workflow the catalog stack does not supply is a kept workflow. `plan.ResolveArtifacts` resolves only catalog-supplied workflow ids; kept ids are carried separately (`plan/resolve_kept.go`) and their agents are not pulled in. In the Workflow-class region (`AvailableWorkflows`) kept blocks are emitted byte-for-byte in selection order: `transform` marks them `Kept`, skips line-ending conversion for them, and does not place a custom region nested in a kept block a second time (`transform/workflow_kept_region.go`). Kept blocks are found by `transform.KeptWorkflowBlocks`; a line that begins with a workflow tag and carries more content on that line fails the call, so nothing is written for that file. Each kept id yields a `GapWorkflowKept` warning once, even when both orchestrator-role files hold it. The unknown-workflow removed-layer hint belongs to `deploy` only.
+
 ## Known Complexity
 
 No further tier is recommended for this scope at this time. The five-stage flow, the

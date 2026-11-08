@@ -361,7 +361,7 @@ func processRegions(doc *docformat.Document, req Request) (outcomes []RegionOutc
 					// capture-regenerate-reemit sequence applied to their deployed parent.
 					// Placing them again would fail with ErrDuplicateRegionName and produce
 					// a duplicate outcome entry.
-					if !reemittedNames[name] {
+					if !reemittedNames[name] && !holdsCustomRegion(body, name) {
 						customNames = append(customNames, name)
 					}
 				}
@@ -602,8 +602,7 @@ func applyWorkflowRegion(node *docformat.Node, name string, class domain.Injecti
 		}, nil
 	}
 
-	assembled, ids := assembleWorkflowBlocks(req.Workflows)
-	assembled = ConvertLineEndings(assembled, sourceLineEnding(req))
+	assembled, ids := assembleWorkflowRegionBytes(req.Workflows, sourceLineEnding(req))
 	node.SetContent(assembled) //nolint:errcheck // Node.SetContent always returns nil; forward-compatible error return.
 	return RegionOutcome{
 		Name:   name,

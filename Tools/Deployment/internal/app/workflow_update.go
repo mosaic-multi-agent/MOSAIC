@@ -100,6 +100,16 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 		orchState = probeAgentWithRecordedLegacy(workspace, module, snap, orchestrator.Key, orchTargetPath)
 	}
 
+	// Probe the orchestrator-script early: its deployed workflows join the checklist.
+	script := s.probeWorkflowScript(module, workspace, scope, snap)
+	deployedCustom, err := readKeptWorkflows(workspace, s.deps.Catalog, []deployedOrchestratorFile{
+		{TargetPath: orchTargetPath, Present: orchState.Present},
+		{TargetPath: script.targetPath, Present: script.state.Present},
+	})
+	if err != nil {
+		return domain.RunSummary{}, err
+	}
+
 	// Replace semantics: use the user's selection directly. No union with the deployed set.
 	// An unset (nil) WorkflowIDs causes the flow to ask through the Interaction port (CD-6).
 	workflowIDs := req.WorkflowIDs
@@ -129,7 +139,7 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 			}
 			q := domain.ChoiceQuestion{
 				Question: domain.Question{ID: domain.QWorkflows, Title: "Select workflows", AllowSkip: true, AllowSkipAll: true},
-				Options:  opts,
+				Options:  append(opts, customChecklistOptions(deployedCustom)...),
 			}
 			ans, err := s.deps.Interaction.SelectMany(ctx, q)
 			if err != nil || ans.Status != domain.Answered {
@@ -143,9 +153,19 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	// Resolve the artifact set from the selected workflow IDs to enumerate target paths for
 	// the deployed-state probe. The plan will also resolve internally; this is the app layer's
 	// probe-preparation step.
-	set, err := plan.ResolveArtifacts(s.deps.Catalog, workflowIDs, nil, nil, nil)
+	// Only catalog-supplied ids reach the strict resolvers; selected deployed custom ids are kept.
+	selectedIDs := workflowIDs
+	workflowIDs, keptIDs, err := classifyExplicitWorkflowIDs(s.deps.Catalog, selectedIDs, deployedCustom.customIDSet())
 	if err != nil {
-		return domain.RunSummary{}, withRemovedLayerHint(err, s.deployedWorkflowIDs(module, workspace, scope, true))
+		return domain.RunSummary{}, err
+	}
+	kept := selectedKeptWorkflows(deployedCustom, selectedIDs, keptIDs)
+	s.recordRemovedWorkflows(removedCustomWorkflowIDs(deployedCustom, keptIDs))
+	s.recordKeptWorkflowWarnings(kept.ids)
+
+	set, err := plan.ResolveArtifactsFrom(s.deps.Catalog, plan.Selection{WorkflowIDs: workflowIDs, KeptWorkflowIDs: kept.ids})
+	if err != nil {
+		return domain.RunSummary{}, err
 	}
 
 	plannedPaths, err := plan.EnumerateTargetPaths(set, module, scope, s.deps.GOOS)
@@ -155,7 +175,6 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 
 	// Seed the full probe with the orchestrator state already probed above so the orchestrator
 	// file is read exactly once per run.
-	script := s.probeWorkflowScript(module, workspace, scope, snap)
 	var seed map[string]domain.DeployedArtifactState
 	if orchTargetPath != "" || script.targetPath != "" {
 		seed = make(map[string]domain.DeployedArtifactState)
@@ -236,7 +255,7 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	planInput := plan.Input{
 		Catalog: s.deps.Catalog, Module: module, Mode: domain.ModeUpdateWorkflows,
 		WorkspacePath: workspace, Scope: scope, GOOS: s.deps.GOOS,
-		Manifest: snap, WorkflowIDs: workflowIDs,
+		Manifest: snap, WorkflowIDs: workflowIDs, KeptWorkflowIDs: kept.ids,
 		DeployedState:       deployedState,
 		LegacyAgentPaths:    legacyAgentPaths,
 		Models:              models,
@@ -333,7 +352,7 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	deployedReader := newDeployedBytes(workspace, nil).withMigratedAgents(p).reader()
 	// Custom tools resolved above for new agents; already-deployed agents are never in the
 	// input to resolveCustomTools so no already-deployed agent can trigger a tool question.
-	contentFn := s.buildContent(module, agentByKey, models, customTools, skippedTools, workflowBlocks, nil, scope, deployedReader, toolMappingsVersion, protocol, bundle, nil)
+	contentFn := s.buildContent(module, agentByKey, models, customTools, skippedTools, workflowBlocks, nil, scope, deployedReader, toolMappingsVersion, protocol, bundle, nil, withKeptWorkflows(kept.byPath))
 
 	// Version stamps cover the orchestrator and all admitted new-agent and new-skill items.
 	// set.Skills is passed so admitted skill items are stamped; set.Hooks is nil because hook

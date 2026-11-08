@@ -191,7 +191,19 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	}
 
 	existing := discoverExistingWorkflows(orchState)
-	workflowIDs := unionPreserveOrder(existing, req.AddWorkflowIDs)
+	kept, err := readKeptWorkflows(workspace, s.deps.Catalog, []deployedOrchestratorFile{
+		{TargetPath: orchTargetPath, Present: orchState.Present},
+		{TargetPath: orchScriptTargetPath, Present: orchScriptState.Present},
+	})
+	if err != nil {
+		return domain.RunSummary{}, err
+	}
+	// Only catalog-supplied ids reach the strict resolvers; deployed custom ids are kept as deployed.
+	workflowIDs, _, err := classifyExplicitWorkflowIDs(s.deps.Catalog, unionPreserveOrder(existing, req.AddWorkflowIDs), kept.customIDSet())
+	if err != nil {
+		return domain.RunSummary{}, err
+	}
+	s.recordKeptWorkflowWarnings(kept.ids)
 
 	// Resolve the artifact set from both the discovered workflow IDs and the workspace-scan
 	// matched keys. Both sources union into the same set; this call is the app layer's own
@@ -201,11 +213,12 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	set, err := plan.ResolveArtifactsFrom(s.deps.Catalog, plan.Selection{
 		HookIDs:             hookIDs,
 		WorkflowIDs:         workflowIDs,
+		KeptWorkflowIDs:     kept.ids,
 		ScannedAgentKeys:    scannedAgentKeys,
 		ExcludeOrchestrator: plan.OrchestratorExcludedFor(domain.ModeUpdateWorkspace),
 	})
 	if err != nil {
-		return domain.RunSummary{}, withRemovedLayerHint(err, s.deployedWorkflowIDs(module, workspace, scope, true))
+		return domain.RunSummary{}, err
 	}
 
 	plannedPaths, err := plan.EnumerateTargetPaths(set, module, scope, s.deps.GOOS)
@@ -303,7 +316,7 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	planInput := plan.Input{
 		Catalog: s.deps.Catalog, Module: module, Mode: domain.ModeUpdateWorkspace,
 		WorkspacePath: workspace, Scope: scope, GOOS: s.deps.GOOS,
-		Manifest: snap, WorkflowIDs: workflowIDs, HookIDs: hookIDs,
+		Manifest: snap, WorkflowIDs: workflowIDs, KeptWorkflowIDs: kept.ids, HookIDs: hookIDs,
 		// ScannedAgentKeys carries the same slice used for the app layer's ResolveArtifactsFrom
 		// call above, ensuring the probe map and the built plan resolve the identical artifact set.
 		ScannedAgentKeys:           scannedAgentKeys,
@@ -386,7 +399,7 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	deployedReader := newDeployedBytes(workspace, nil).withMigratedAgents(p).reader()
 	// Update never asks about or adds infrastructure declarations; it refreshes stale
 	// catalog-backed ones in place (refresh-only merge), leaving all others byte-identical.
-	contentFn := s.buildContent(module, agentByKey, allModels, req.CustomTools, nil, workflowBlocks, nil, scope, deployedReader, toolMappingsVersion, protocol, bundle, harnessOnlyPlan, orchRefresh.refreshContentOptions(s)...)
+	contentFn := s.buildContent(module, agentByKey, allModels, req.CustomTools, nil, workflowBlocks, nil, scope, deployedReader, toolMappingsVersion, protocol, bundle, harnessOnlyPlan, append(orchRefresh.refreshContentOptions(s), withKeptWorkflows(kept.byPath))...)
 
 	versionStamps := s.withProvenance(buildVersionStamps(set.Agents, set.Skills, set.Hooks, p.Items, module.Descriptor(), toolMappingsVersion), p.Items)
 

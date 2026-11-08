@@ -2,6 +2,15 @@
 
 ## Tools
 
+### Deploy v1.6.0
+#### Changes
+- `Update workspace` and `Update workflows` now keep custom workflows that are deployed in the orchestrator but not supplied by the catalog stack. Before, they were removed
+- In `Update workflows`, deployed custom workflows appear in the checklist with the hint `not in catalog; deployed only`, unchecked like deployed catalog workflows. Confirming without ticking one removes it, and the run summary names it. Tick the ones you want to keep
+- A kept custom workflow is not updated or validated. The run warns: `<id> is not in the catalog stack; kept as deployed, not updated or validated.`
+- A workflow id given explicitly (`--workflows`, or the add-workflows input of `Update workspace`) may name a deployed custom workflow to keep it; any other id the catalog does not supply is still an unknown-workflow error
+- A deployed orchestrator file with a line that begins with a workflow tag and carries more content on that line now fails the update for that file, and nothing is written
+- `Update workspace` and `Update workflows` no longer show the removed-layer hint for unknown workflow ids; `Deploy workspace` keeps it
+
 ### Runner v1.10.0
 #### Changes
 - Human-in-the-loop dispatches now have their own timeout: `--hitl-timeout` (default 4h). `--timeout` (default 30m) applies to the other dispatches. The TUI asks for both, also on resume
