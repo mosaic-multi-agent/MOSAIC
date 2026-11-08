@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"mosaic-deploy/internal/agentformat"
 	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/transform"
@@ -271,6 +272,12 @@ func renderAgent(_ context.Context, s *service, req RenderAgentRequest) (RenderA
 		ToolMappingsVersion:           toolMappingsVersion,
 		InjectionsVersion:             desc.InjectionsVersion,
 		OrchestratorInjectionsVersion: desc.OrchestratorInjectionsVersion,
+		// Op is always OpCreate for a render: the render service targets a fresh destination
+		// and produces content from source alone with no prior bytes. The Overwrite flag
+		// governs whether an existing destination file may be replaced; it does NOT make
+		// the render an update. OpCreate with nil PriorDeployed is the only combination the
+		// Codex encoder accepts for this input, and it truthfully describes the operation.
+		Op: agentformat.OpCreate,
 		// Deployed is nil: there is no prior deployed file at a fresh render destination.
 	})
 	if transformErr != nil {

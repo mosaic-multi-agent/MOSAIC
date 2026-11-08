@@ -473,12 +473,27 @@ func ResolveTargetPath(d *domain.HarnessDescriptor, req domain.TargetPathRequest
 		return "", err
 	}
 
-	// Determine the target filename: use req.FileName when given (skill or hook bundles
-	// may have source file names that differ from the artifact key), otherwise derive
-	// from the artifact key plus the harness's extension rule.
-	filename := req.FileName
-	if filename == "" {
-		ext := d.Extensions[req.Kind]
+	// Determine the target filename. Skill and hook bundle files are deployed verbatim
+	// (their filenames are not re-encoded to a different format). Agent artifacts use the
+	// harness-declared extension: when the descriptor declares an extension for the
+	// artifact kind, the deployed filename is derived from the stem of the source filename
+	// (or from req.Key if no filename was given) combined with the declared extension.
+	// This maps the MOSAIC generic-form source (.md) to the harness's deployed format
+	// (e.g. .toml for the Codex TOML format). When no extension is declared, the source
+	// filename is used as-is (Markdown harnesses that share the .md extension).
+	ext := d.Extensions[req.Kind]
+	var filename string
+	if req.Kind != domain.ArtifactSkill && ext != "" {
+		// Non-skill artifact with a harness-declared extension: replace the source
+		// extension with the declared one.
+		stem := req.Key
+		if req.FileName != "" {
+			stem = strings.TrimSuffix(path.Base(req.FileName), path.Ext(req.FileName))
+		}
+		filename = stem + ext
+	} else if req.FileName != "" {
+		filename = req.FileName
+	} else {
 		filename = req.Key + ext
 	}
 

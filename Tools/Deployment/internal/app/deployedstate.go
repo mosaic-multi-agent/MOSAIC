@@ -282,6 +282,21 @@ func probeDeployedStateWithIndex(
 ) (map[string]domain.DeployedArtifactState, error) {
 	result := make(map[string]domain.DeployedArtifactState, len(paths))
 
+	// Build a set of all target paths that are already claimed by some indexed file.
+	// A "claimed" path is one where a deployed file carries a mosaic_id stamp, so it
+	// belongs to a specific catalog agent by ID. When a planned path is claimed by a
+	// different agent's file, it must NOT be probed as a fallback (doing so would let
+	// a file with a wrong ID be treated as belonging to this agent).
+	// Paths are normalised with filepath.FromSlash so that forward-slash paths from
+	// path.Join (used in descriptor.ResolveTargetPath) compare correctly against
+	// backslash-separated paths from filepath.Join (used in buildDeployedAgentIndex).
+	claimedPaths := make(map[string]bool)
+	for _, entries := range index {
+		for _, e := range entries {
+			claimedPaths[filepath.FromSlash(e.TargetPath)] = true
+		}
+	}
+
 	for _, pp := range paths {
 		// Seeded entries are reused without re-reading or re-resolving.
 		if seeded, ok := seed[pp.TargetPath]; ok {
@@ -306,18 +321,24 @@ func probeDeployedStateWithIndex(
 				}
 				if resolved == "" {
 					// Agent has a numeric id but no deployed file matches in the index.
-					// Fallback: probe at the planned path only when the scan flagged this path
-					// as parse-failed. This catches files that exist on disk but could not be
-					// indexed because their frontmatter was unparseable. Files that simply have
-					// a different id (non-matching id-based resolution) still yield Present: false.
-					if parseFailedPaths[pp.TargetPath] {
+					// Probe at the planned target path when that path is not already claimed
+					// by another agent's indexed file. A claimed path carries a mosaic_id that
+					// does not match this agent, so it must not be treated as belonging to it.
+					// An unclaimed path may hold a file written without an ID stamp (e.g. a
+					// Codex TOML file from a first deploy or from a tool that omits the stamp),
+					// and probing it gives the planner the version information it needs for
+					// idempotency. If the file is absent, probeDeployedArtifact returns
+					// Present: false — the same outcome as the old unconditional Present: false.
+					normalizedTargetPath := filepath.FromSlash(pp.TargetPath)
+					if claimedPaths[normalizedTargetPath] {
+						// The file at this path is owned by a different agent; do not probe.
+						result[pp.TargetPath] = domain.DeployedArtifactState{Present: false}
+					} else {
 						fallback := probeDeployedArtifact(workspace, pp.TargetPath, modelKey, pp.Ref.Kind, src)
-						if fallback.Present {
+						if fallback.Present && parseFailedPaths[pp.TargetPath] {
 							fallback.ParseFailed = true
 						}
 						result[pp.TargetPath] = fallback
-					} else {
-						result[pp.TargetPath] = domain.DeployedArtifactState{Present: false}
 					}
 				} else {
 					// Probe at the id-resolved path (may differ from planned path if renamed).

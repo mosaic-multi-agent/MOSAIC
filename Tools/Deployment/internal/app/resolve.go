@@ -1076,6 +1076,21 @@ func (s *service) buildContent(
 			// todo collector after Apply returns via mergeDecodeReport below.
 		}
 
+		if deployedReader == nil {
+			// No deployed reader means no prior file on disk (Deploy workspace, Deploy agents,
+			// Deploy hooks). Derive the operation from the plan item's Action so the
+			// agentformat layer receives an explicit Op rather than OpUnspecified.
+			// Deployed and DeployedRaw stay nil: supplying prior bytes here is out of scope
+			// (it would change behaviour for existing Markdown harnesses and reopen the
+			// accepted Codex Update limitation documented in
+			// CODEX-DEPLOY-UPDATE-LIMITATION-20260921.md).
+			var opErr error
+			op, opErr = actionToOp(item.Action)
+			if opErr != nil {
+				return nil, opErr
+			}
+		}
+
 		var wfBlocks []transform.WorkflowBlock
 		var infraBlocks []transform.InfrastructureBlock
 		if agent.Role == domain.RoleOrchestrator {

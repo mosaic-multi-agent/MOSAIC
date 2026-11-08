@@ -272,6 +272,32 @@ func readDeployedArtifact(path string, kind domain.ArtifactKind, src *domain.Har
 	return result
 }
 
+// actionToOp maps a domain.PlanAction to the agentformat.Operation that the
+// transform/agentformat layers require. It is the single definition of that mapping;
+// no caller may re-derive it, and no layer below app may infer it from Deployed being
+// nil or non-nil (see transform/types.go Op contract).
+//
+// The mapping is total over the four defined PlanAction values:
+//
+//	ActionCreate     ("create")           -> OpCreate
+//	ActionUpdate     ("update")           -> OpUpdate
+//	ActionUnchanged  ("unchanged")        -> OpUpdate
+//	ActionConflict   ("locally-modified") -> OpUpdate
+//
+// Any other value, including the zero value PlanAction(""), returns
+// (OpUnspecified, non-nil error). The error carries no subject; callers add their own
+// context so their existing messages are unchanged.
+func actionToOp(action domain.PlanAction) (agentformat.Operation, error) {
+	switch action {
+	case domain.ActionCreate:
+		return agentformat.OpCreate, nil
+	case domain.ActionUpdate, domain.ActionUnchanged, domain.ActionConflict:
+		return agentformat.OpUpdate, nil
+	default:
+		return agentformat.OpUnspecified, fmt.Errorf("unrecognised PlanAction %q", action)
+	}
+}
+
 // readDeployedPlanItem is Layer 3 of the decode funnel.
 //
 // It resolves the target path and artifact kind from the plan item, calls
@@ -294,17 +320,10 @@ func readDeployedArtifact(path string, kind domain.ArtifactKind, src *domain.Har
 // actually touching the file (absent, unreadable, undecodable, ok) lands inside
 // DeployedRead and leaves this error nil. The two channels never both carry a failure.
 func readDeployedPlanItem(workspace string, desc *domain.HarnessDescriptor, item domain.PlanItem) (DeployedRead, agentformat.Operation, error) {
-	// Map PlanItem.Action to agentformat.Operation.
-	// This switch must be exhaustive: a new PlanAction value must be added here.
-	var op agentformat.Operation
-	switch item.Action {
-	case domain.ActionCreate:
-		op = agentformat.OpCreate
-	case domain.ActionUpdate, domain.ActionUnchanged, domain.ActionConflict:
-		op = agentformat.OpUpdate
-	default:
+	op, err := actionToOp(item.Action)
+	if err != nil {
 		return DeployedRead{}, agentformat.OpUnspecified,
-			fmt.Errorf("readDeployedPlanItem: unrecognised PlanAction %q for item %q", item.Action, item.TargetPath)
+			fmt.Errorf("readDeployedPlanItem: %w for item %q", err, item.TargetPath)
 	}
 
 	path := filepath.Join(workspace, item.TargetPath)
