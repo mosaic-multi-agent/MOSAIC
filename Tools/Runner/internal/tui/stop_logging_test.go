@@ -295,8 +295,8 @@ func TestStopLogging_NoStopAttempted_RecordsNothing(t *testing.T) {
 	rec := &tuiRecordingLogger{}
 	m := newStopLoggingModel(rec, session.NewStopSignal())
 
-	// Act -- keys an ordinary run receives, none of which touches the gate.
-	for _, key := range []string{"x", "z", "1"} {
+	// Act -- keys an ordinary run receives, none of which touches a stop gate.
+	for _, key := range []string{"z", "1", "q"} {
 		pressProgressRune(m, key)
 	}
 

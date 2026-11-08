@@ -1,3 +1,47 @@
+# 0.7.4 (2026-11-08)
+
+> **To upgrade:** run `Update workspace` to get the updated `orchestrator-script` and `mosaic-logger` hook. Runner v1.11.1 needs `orchestrator-script` v3.5.0.
+
+## Tools
+
+### Deploy v1.6.1
+#### Changes
+- `--version` prints the tool version
+- `Update workspace` and `Update workflows` keep deployed custom workflows that the catalog does not supply, instead of removing them. They are not updated or validated, and the run warns about each one. In `Update workflows` they appear unchecked as `not in catalog; deployed only`; tick the ones to keep, or name them with `--workflows`
+- An orchestrator file with extra content on a workflow tag line now fails its update without writing anything
+
+### Runner v1.11.1
+#### Changes
+- `--version` prints the tool version
+- Human-in-the-loop dispatches have their own timeout, `--hitl-timeout` (default 4h); `--timeout` (default 30m) covers the rest
+- The progress screen shows the live activity of the running invocation (`l` toggles it): model, context size, current tool or quiet time, and at the end elapsed time and cost (Claude Code and OpenCode)
+- `x` force-stops the running invocation. Timeouts and force stops kill its whole process tree (AgentTest timeouts too)
+- The manual routing dialogue can hand the decision to the orchestrator, with an optional one-off message
+- An invocation without a usable response (timeout, crash, unparseable output, GHCP session errors) is recorded as `HARNESS_ERROR` instead of `BLOCKED`/`E501`, and a missing infrastructure agent as `CONFIG_ERROR`. `HARNESS_ERROR` is retried up to 3 times in auto modes before the orchestrator is consulted, and a resume re-runs it
+#### Bugfixes
+- Resuming re-dispatches an interrupted or force-stopped attempt instead of routing on its recorded status
+
+#### Known issues
+- Runner does not pick correct model for Claude Code (it never did, same issue applies to all previous versions as well). Will be fixed in next version very soon. Claude Code is disabled in this version.
+
+### LogAnalyzer v1.2.2
+#### Changes
+- `--version` prints the tool version
+- The Runs screen title shows the version
+
+### AgentTest v1.2.1
+#### Changes
+- `--version` prints the tool version
+
+## Hooks
+
+### mosaic-logger v1.11.1
+#### Bugfixes
+- Claude Code under Runner now logs subagent prompts, and orchestrator sessions log user turns
+
+## Catalog
+- **orchestrator-script** (v3.5.0): supports `HARNESS_ERROR`, `CONFIG_ERROR` and the user message from the routing dialogue; asks the user instead of stopping when it cannot decide and an ask tool is available
+
 # 0.7.3 (2026-11-02)
 
 > **To upgrade:** run `Update workspace` to get the new orchestrator region, the updated agents and the updated `mosaic-logger` hook.

@@ -12,4 +12,7 @@ const (
 	// produced a defective block schedule. Mechanical: the anti-loop guard
 	// does not count it.
 	RetryScheduleDefect RetryKind = "schedule-defect"
+	// RetryHarnessError marks the engine's mechanical re-dispatch after a
+	// HARNESS_ERROR attempt. Mechanical: the anti-loop guard does not count it.
+	RetryHarnessError RetryKind = "harness-error"
 )

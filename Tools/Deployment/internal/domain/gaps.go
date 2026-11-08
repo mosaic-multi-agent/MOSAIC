@@ -68,6 +68,11 @@ const (
 	// GapRoleForbiddenRegion reports a non-orchestrator agent that carries the
 	// OrchestratorHarnessConstraints region. Deploy and update continue.
 	GapRoleForbiddenRegion GapKind = "role-forbidden-region"
+
+	// GapWorkflowKept reports a workflow deployed in an orchestrator-role file that the catalog
+	// stack does not supply. The block is kept as deployed, not updated or validated. One gap
+	// is produced per kept workflow id per run.
+	GapWorkflowKept GapKind = "workflow-kept"
 )
 
 // Gap is produced by transform, plan, and deploy when a decision could not be made automatically.

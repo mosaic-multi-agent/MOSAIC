@@ -35,8 +35,8 @@ type SuccessEntry struct {
 type FindingsKind string
 
 const (
-	FindingsNone       FindingsKind = "none"       // "-"
-	FindingsTarget     FindingsKind = "target"     // Target set
+	FindingsNone   FindingsKind = "none"   // "-"
+	FindingsTarget FindingsKind = "target" // Target set
 )
 
 // FindingsEntry is the typed On Findings cell. Target is read only when Kind

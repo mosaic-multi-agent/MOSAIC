@@ -24,6 +24,7 @@ type runFlags struct {
 	isNewRun              bool
 	harness               string
 	timeout               string
+	hitlTimeout           string
 	infraClass            string
 	inputFlags            []string
 	infrastructure        string
@@ -64,6 +65,7 @@ func readRunFlags(cmd *cobra.Command) runFlags {
 	f.isNewRun, _ = cmd.Flags().GetBool("new-run")
 	f.harness, _ = cmd.Flags().GetString("harness")
 	f.timeout, _ = cmd.Flags().GetString("timeout")
+	f.hitlTimeout, _ = cmd.Flags().GetString("hitl-timeout")
 	f.infraClass, _ = cmd.Flags().GetString("infra-class")
 	f.reviewLoopLimit, _ = cmd.Flags().GetString("review-loop-limit")
 	f.modeChanged = cmd.Flags().Changed("mode")
@@ -150,8 +152,17 @@ func parseCheckpointsFlag(raw string, errOut io.Writer) (enabled bool, exitCode 
 
 // validateTimeoutFlag verifies that --timeout is a parseable duration.
 func validateTimeoutFlag(raw string, errOut io.Writer) (exitCode int, ok bool) {
+	return validateDurationFlag("--timeout", raw, errOut)
+}
+
+// validateHITLTimeoutFlag verifies that --hitl-timeout is a parseable duration.
+func validateHITLTimeoutFlag(raw string, errOut io.Writer) (exitCode int, ok bool) {
+	return validateDurationFlag("--hitl-timeout", raw, errOut)
+}
+
+func validateDurationFlag(name, raw string, errOut io.Writer) (exitCode int, ok bool) {
 	if _, err := time.ParseDuration(raw); err != nil {
-		fmt.Fprintf(errOut, "error: invalid --timeout value %q: %v\n", raw, err)
+		fmt.Fprintf(errOut, "error: invalid %s value %q: %v\n", name, raw, err)
 		return ExitUsage, false
 	}
 	return ExitSuccess, true

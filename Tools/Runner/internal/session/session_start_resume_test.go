@@ -74,7 +74,7 @@ func TestSession_Start_MidInvocationInterruption_RerunsLastStep(t *testing.T) {
 
 	// Simulate interruption: current_state says agent-b (advanced), but the
 	// last execution log entry is agent-a (the actual last completed step).
-	// This mismatch triggers RerunLast=true in engine.ResumePoint.
+	// This mismatch makes the last logged attempt the unaccepted one.
 	store.state = domain.ArtifactState{
 		Workflow:        "linear",
 		WorkflowVersion: "1.0",

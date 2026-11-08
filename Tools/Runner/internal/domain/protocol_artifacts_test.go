@@ -62,7 +62,7 @@ func TestProtocolRequest_EmptyNonNilArtifactLists_SerializeAsEmptyArrays(t *test
 
 func TestProtocolRequest_OnlyOneListNil_ThatListIsAnEmptyArrayAndTheOtherIsKept(t *testing.T) {
 	cases := map[string]struct {
-		req                    domain.ProtocolRequest
+		req                   domain.ProtocolRequest
 		wantInput, wantOutput string
 	}{
 		"nil input": {

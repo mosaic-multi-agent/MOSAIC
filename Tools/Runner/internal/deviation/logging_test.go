@@ -40,6 +40,10 @@ func (l *recordingDispatchLogger) LogError(id, text string) {
 	l.errs = append(l.errs, struct{ id, text string }{id, text})
 }
 
+func (l *recordingDispatchLogger) LogHarnessError(id string, _ domain.HarnessFailure, text string) {
+	l.LogError(id, text)
+}
+
 func (l *recordingDispatchLogger) SetRunID(_ string) {}
 func (l *recordingDispatchLogger) Close()             {}
 func (l *recordingDispatchLogger) Path() string       { return "" }

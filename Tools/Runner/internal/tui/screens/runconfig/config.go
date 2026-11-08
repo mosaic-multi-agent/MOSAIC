@@ -2,8 +2,6 @@ package runconfig
 
 import (
 	"errors"
-	"fmt"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -39,7 +37,8 @@ type ConfigSelection struct {
 	// to the fake adapter for test and backward-compatibility paths.
 	Harness string
 
-	Timeout time.Duration // invocation timeout
+	Timeout     time.Duration // non-HITL invocation timeout
+	HITLTimeout time.Duration // HITL invocation timeout; domain.DefaultHITLTimeout when not asked
 
 	// InfraClassSelections maps gated infrastructure class names (e.g. "checkpoint",
 	// "commit") to the selected agent name for this run. Populated by the
@@ -76,6 +75,7 @@ const (
 
 	configStepHarness        // harness adapter selection
 	configStepHarnessTimeout // timeout entry (shown for any CLI-backed harness)
+	configStepHITLTimeout    // human_in_the_loop: true timeout entry, right after it
 	configStepVersionDrift
 	configStepCheckpoints
 
@@ -130,6 +130,7 @@ type ConfigScreen struct {
 	height             int
 	styles             screens.Styles
 	timeoutInput       *widgets.TextInput
+	hitlTimeoutInput   *widgets.TextInput
 	limitInput         *widgets.TextInput
 	declaredAgents     []domain.DeclaredInfraAgent // populated by SetDeclaredAgents
 	harnessPreselected bool                        // true when harness was selected before config wizard
@@ -167,26 +168,7 @@ func NewConfigScreen(width, height int, styles screens.Styles) *ConfigScreen {
 		Input:  styles.Body,
 		ErrMsg: styles.Error,
 	}
-	timeoutInput := widgets.NewTextInput(
-		"Invocation timeout (e.g. 30m, 1h):",
-		"30m",
-		width,
-		inputStyles,
-	)
-	timeoutInput.SetValidate(func(v string) error {
-		v = strings.TrimSpace(v)
-		if v == "" {
-			return errors.New("timeout cannot be empty")
-		}
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return fmt.Errorf("invalid duration %q: must be like 30m, 1h, 90m", v)
-		}
-		if d <= 0 {
-			return errors.New("timeout must be greater than zero")
-		}
-		return nil
-	})
+	timeoutInput, hitlTimeoutInput := newTimeoutInputs(width, inputStyles)
 	limitInput := widgets.NewTextInput(
 		"Review loop limit (a positive integer or \"no limit\"; suggested "+suggestedReviewLoopLimit+"):",
 		suggestedReviewLoopLimit,
@@ -201,50 +183,25 @@ func NewConfigScreen(width, height int, styles screens.Styles) *ConfigScreen {
 	})
 	limitInput.SetValue(suggestedReviewLoopLimit)
 	return &ConfigScreen{
-		limitInput:      limitInput,
-		step:            configStepMode,
-		cursor:          -1, // mode step starts with no option preselected
-		sel:             ConfigSelection{},
-		width:           width,
-		height:          height,
-		styles:          styles,
-		timeoutInput:    timeoutInput,
-		isNewRun:        true, // safe default
-		recordedVersion: "",
-		currentVersion:  "",
+		limitInput:       limitInput,
+		step:             configStepMode,
+		cursor:           -1, // mode step starts with no option preselected
+		sel:              ConfigSelection{HITLTimeout: domain.DefaultHITLTimeout},
+		width:            width,
+		height:           height,
+		styles:           styles,
+		timeoutInput:     timeoutInput,
+		hitlTimeoutInput: hitlTimeoutInput,
+		isNewRun:         true, // safe default
+		recordedVersion:  "",
+		currentVersion:   "",
 	}
 }
 
 // Update processes a key message for the current configuration prompt.
 func (s *ConfigScreen) Update(msg tea.Msg) tea.Cmd {
-	// The harness timeout step delegates all key handling to the text input widget.
-	if s.step == configStepHarnessTimeout {
-		cmd := s.timeoutInput.Update(msg)
-		if s.timeoutInput.Back() {
-			s.timeoutInput.Reset()
-			if s.firstStep() == configStepHarnessTimeout {
-				s.back = true
-			} else if s.harnessPreselected {
-				s.step = configStepMode
-				s.cursor = s.modeIndex()
-			} else {
-				s.step = configStepHarness
-				s.cursor = 0
-			}
-			return nil
-		}
-		if s.timeoutInput.Done() {
-			durStr := strings.TrimSpace(s.timeoutInput.Value())
-			if d, err := time.ParseDuration(durStr); err == nil && d > 0 {
-				s.sel.Timeout = d
-			} else {
-				s.sel.Timeout = 30 * time.Minute
-			}
-			s.timeoutInput.Reset()
-			s.step = s.stepAfterTimeout()
-			s.cursor = s.entryCursor(s.step)
-			return nil
-		}
+	// The two timeout steps delegate all key handling to their text inputs.
+	if cmd, handled := s.updateTimeoutStep(msg); handled {
 		return cmd
 	}
 
@@ -316,9 +273,7 @@ func (s *ConfigScreen) Update(msg tea.Msg) tea.Cmd {
 			prev, prevCursor := s.prevStepAndCursor()
 			s.step = prev
 			s.cursor = prevCursor
-			if prev == configStepHarnessTimeout {
-				return s.timeoutInput.Init()
-			}
+			return s.timeoutStepInit()
 		}
 	}
 	return nil
@@ -449,10 +404,11 @@ func (s *ConfigScreen) Selection() ConfigSelection { return s.sel }
 
 // Reset clears the done, back flags and returns to the first step.
 func (s *ConfigScreen) Reset() {
-	s.sel = ConfigSelection{}
+	s.sel = ConfigSelection{HITLTimeout: domain.DefaultHITLTimeout}
 	s.back = false
 	s.moveToFirstStep()
 	s.timeoutInput.Reset()
+	s.hitlTimeoutInput.Reset()
 	s.limitInput.Reset()
 	s.limitInput.SetValue(suggestedReviewLoopLimit)
 	s.infraClassQueue = nil
@@ -464,6 +420,7 @@ func (s *ConfigScreen) Resize(width, height int) {
 	s.width = width
 	s.height = height
 	s.timeoutInput.Resize(width)
+	s.hitlTimeoutInput.Resize(width)
 	s.limitInput.Resize(width)
 }
 

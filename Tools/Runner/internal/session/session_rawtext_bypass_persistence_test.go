@@ -6,7 +6,7 @@ package session_test
 // Coverage:
 //
 //   Non-sentinel errors skip bypass:
-//   - A generic error not wrapping any sentinel is one E501 attempt that the
+//   - A generic error not wrapping any sentinel is one HARNESS_ERROR attempt that the
 //     engine re-dispatches, with no bypass invocation.
 //
 //   Anti-loop guard checked during bypass:
@@ -15,7 +15,7 @@ package session_test
 //
 //   Persistence before dispatch at consultRoute harness-error branch (AC4.6):
 //   - When a harness error occurs inside consultRoute, a workflow
-//     CompletedStep with Status=BLOCKED and ErrorCode=E501 must be written to
+//     CompletedStep with Status=HARNESS_ERROR must be written to
 //     the store before any further dispatch.
 //
 //   Persistence before dispatch at HITL-redispatch fallback (AC4.6):
@@ -46,7 +46,7 @@ import (
 
 // TestSession_RawTextBypass_NonSentinelError_SkipsBypass verifies that a
 // generic harness error that does not wrap any commonharness sentinel does not
-// trigger the raw-text bypass: the failure is one BLOCKED/E501 attempt, and the
+// trigger the raw-text bypass: the failure is one HARNESS_ERROR attempt, and the
 // engine re-dispatches the same agent without consulting the orchestrator.
 func TestSession_RawTextBypass_NonSentinelError_SkipsBypass(t *testing.T) {
 	// Empty consultant: any consultation fails the run early.
@@ -77,9 +77,9 @@ func TestSession_RawTextBypass_NonSentinelError_SkipsBypass(t *testing.T) {
 	if n := countInvocationsFor(f.Invocations(), "agent-a"); n != 2 {
 		t.Errorf("want 2 agent-a invocations (error + engine re-dispatch), got %d", n)
 	}
-	// Exactly one E501 attempt: the error. A bypass would have been a second one.
-	if n := countE501RowsFor(store, "agent-a"); n != 1 {
-		t.Errorf("want 1 BLOCKED/E501 agent-a row for a non-sentinel error, got %d", n)
+	// Exactly one HARNESS_ERROR attempt: the error. A bypass would have been a second one.
+	if n := countHarnessErrorRowsFor(store, "agent-a"); n != 1 {
+		t.Errorf("want 1 HARNESS_ERROR agent-a row for a non-sentinel error, got %d", n)
 	}
 }
 
@@ -144,7 +144,7 @@ func TestSession_RawTextBypass_AntiLoopTrips_BypassSkipped(t *testing.T) {
 // TestSession_RawTextBypass_ConsultRoute_HarnessError_PersistenceBeforeDispatch
 // verifies that when a harness invocation fails at the consultant-routed
 // dispatch site (inside consultRoute), a workflow CompletedStep with
-// Status=BLOCKED and ErrorCode=E501 is persisted to the store before the
+// Status=HARNESS_ERROR is persisted to the store before the
 // recursive consultRoute or bypass redispatch.
 func TestSession_RawTextBypass_ConsultRoute_HarnessError_PersistenceBeforeDispatch(t *testing.T) {
 	const errMsg = "simulated consultant-routed harness failure for persistence check"
@@ -188,10 +188,10 @@ func TestSession_RawTextBypass_ConsultRoute_HarnessError_PersistenceBeforeDispat
 		t.Fatalf("want nil error, got %v", err)
 	}
 
-	// store.Applied must contain a workflow CompletedStep with Status=BLOCKED
-	// and ErrorCode=E501 capturing the harness failure that occurred inside
+	// store.Applied must contain a workflow CompletedStep with Status=HARNESS_ERROR
+	// capturing the harness failure that occurred inside
 	// consultRoute, recorded before any further dispatch.
-	step := requireHarnessErrorStep(t, store,
+	step := requireHarnessFailureStep(t, store,
 		"consultant-routed harness error (inside consultRoute)")
 	if step.AgentInstance != "" && !strings.Contains(step.Summary, errMsg) {
 		t.Errorf("want step.Summary to contain the harness error message %q, got %q; "+

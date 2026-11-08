@@ -127,6 +127,11 @@ type Options struct {
 	// Request()/Reset() calls have no effect on the running session.
 	StopSignal *session.StopSignal
 
+	// ForceStop is the shared force-stop request. The same instance must be the
+	// one behind session.Deps.ForceStop of every session the SessionFactory
+	// builds. When nil, the force-stop control is not offered.
+	ForceStop *session.ForceStopSignal
+
 	// GuardWaiver is the shared anti-loop guard waiver. The same instance must be
 	// the one behind session.Deps.AntiLoopWaived of every session the
 	// SessionFactory builds. When nil, rootModel uses session.NewGuardWaiver().

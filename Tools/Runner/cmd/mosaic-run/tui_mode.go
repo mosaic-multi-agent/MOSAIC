@@ -56,6 +56,10 @@ func runTUIMode(args []string, devMode bool) {
 	// its own orphan flag.
 	stopSignal := session.NewStopSignal()
 
+	// The force-stop request is shared the same way: the TUI raises it, every
+	// rebuilt session watches it.
+	forceStop := session.NewForceStopSignal()
+
 	// The in-run request object is shared the same way and for the same
 	// reason: the TUI sets requests that every rebuilt session must read.
 	requests := session.NewInRunRequests()
@@ -104,6 +108,7 @@ func runTUIMode(args []string, devMode bool) {
 		Minter:         minter,
 		Identity:       identity,
 		StopSignal:     stopSignal,
+		ForceStop:      forceStop,
 		Requests:       requests,
 		GuardWaiver:    guardWaiver,
 		Guidance:       standingGuidance,

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
+	commonharness "mosaic-common/harness"
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/harness/ghcpcli"
-	commonharness "mosaic-common/harness"
 )
 
 // ---------------------------------------------------------------------------

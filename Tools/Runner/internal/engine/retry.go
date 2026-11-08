@@ -37,6 +37,9 @@ func ScheduleDefectAttempts(log []domain.ExecutionLogEntry, row domain.RoutingRo
 	attempts := 0
 	for i := len(log) - 1; i >= 0; i-- {
 		e := log[i]
+		if e.IsForceStopped() {
+			continue
+		}
 		if e.WorkflowRow == domain.NoWorkflowRow {
 			continue
 		}
@@ -71,6 +74,9 @@ func E501BudgetRemaining(log []domain.ExecutionLogEntry, row domain.RoutingRow, 
 	used := 0
 	for i := len(log) - 1; i >= 0; i-- {
 		e := log[i]
+		if e.IsForceStopped() {
+			continue
+		}
 		if e.WorkflowRow != own || !entryHasValue(e, row, want) {
 			continue
 		}
@@ -95,6 +101,9 @@ func partiallyDoneRunLength(
 	k := 0
 	for i := len(log) - 1; i >= 0; i-- {
 		e := log[i]
+		if e.IsForceStopped() {
+			continue
+		}
 		if e.WorkflowRow == domain.NoWorkflowRow {
 			continue
 		}
@@ -134,6 +143,11 @@ func mechanicalRetry(
 			return domain.EngineDecision{}, false
 		}
 		kind = domain.RetryToolUnavailable
+	case domain.StatusHARNESS_ERROR:
+		if HarnessErrorBudgetRemaining(log, row, pos.stage) <= 0 {
+			return domain.EngineDecision{}, false
+		}
+		kind = domain.RetryHarnessError
 	default:
 		return domain.EngineDecision{}, false
 	}

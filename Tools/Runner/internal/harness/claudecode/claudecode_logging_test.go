@@ -377,7 +377,7 @@ func TestClaudeCodeAdapterWithLogger_ProtocolNotExtractable_LogsRawContent(t *te
 		t.Fatalf("want %s logged when no protocol response is extractable, got events: %v",
 			domain.EventHarnessParseFailed, logger.allEvents())
 	}
-	if !strings.Contains(msg, `"type":"assistant","message":"hello there"`) {
+	if !strings.Contains(msg, `"type":"assistant"`) || !strings.Contains(msg, `"text":"hello there"`) {
 		t.Errorf("want logged message to contain the raw CLI output, got %q", msg)
 	}
 }
@@ -440,7 +440,7 @@ func TestClaudeCodeAdapterWithLogger_MalformedJSON_NoDuplicateRawContentLog(t *t
 // recovery: no EventHarnessParseRecovered entry is logged, and the response
 // is still parsed correctly.
 func TestClaudeCodeAdapterWithLogger_ObjectShapedEnvelope_NoParseRecoveredLogged(t *testing.T) {
-	setHelperEnv(t, "object-envelope")
+	setHelperEnv(t, "stream-envelope")
 	logger := &recordingLogger{}
 	adapter := claudecode.NewClaudeCodeAdapterWithLogger(helperExe(t), 5*time.Second, logger)
 

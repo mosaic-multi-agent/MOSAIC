@@ -40,13 +40,13 @@ func assertAsked(t *testing.T, asked []string, want ...string) {
 	}
 }
 
-func TestResumeWizard_FullyRecordedRun_AsksOnlyTheTimeout(t *testing.T) {
+func TestResumeWizard_FullyRecordedRun_AsksOnlyTheTwoTimeouts(t *testing.T) {
 	f := newResumeFlow(t, fullyRecorded(), flowOrchestrator{})
 	f.toWizard()
 
 	asked := f.answerWizard(false)
 
-	assertAsked(t, asked, "timeout")
+	assertAsked(t, asked, "timeout", "hitl-timeout")
 }
 
 func TestResumeWizard_FullyRecordedRun_NeverAsksARecordedSetting(t *testing.T) {
@@ -58,7 +58,7 @@ func TestResumeWizard_FullyRecordedRun_NeverAsksARecordedSetting(t *testing.T) {
 	assertNeverAsked(t, asked, recordedSettingQuestions)
 }
 
-func TestResumeWizard_DriftedVersion_AsksTheTimeoutThenVersionDrift(t *testing.T) {
+func TestResumeWizard_DriftedVersion_AsksTheTimeoutsThenVersionDrift(t *testing.T) {
 	a := fullyRecorded()
 	a.version = "0.9"
 	f := newResumeFlow(t, a, flowOrchestrator{})
@@ -66,7 +66,7 @@ func TestResumeWizard_DriftedVersion_AsksTheTimeoutThenVersionDrift(t *testing.T
 
 	asked := f.answerWizard(false)
 
-	assertAsked(t, asked, "timeout", "drift")
+	assertAsked(t, asked, "timeout", "hitl-timeout", "drift")
 }
 
 func TestResumeWizard_PendingCommitSetup_AsksTheCommitBranch(t *testing.T) {
@@ -99,7 +99,7 @@ func TestResumeWizard_RunThatRecordsNoMode_AsksModePreConsultationAndManualResol
 
 	asked := f.answerWizard(false)
 
-	assertAsked(t, asked, "mode", "timeout", "pre-consultation", "manual-resolution")
+	assertAsked(t, asked, "mode", "timeout", "hitl-timeout", "pre-consultation", "manual-resolution")
 }
 
 // The branch question was the one whose answer produced a refusal after every

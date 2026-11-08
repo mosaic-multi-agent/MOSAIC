@@ -73,6 +73,14 @@ type errorEntry struct {
 	Error           string `json:"error"`             // err.Error() text
 }
 
+// harnessErrorEntry is an errorEntry for an invocation recorded as
+// HARNESS_ERROR; the added members are additive to the error shape.
+type harnessErrorEntry struct {
+	errorEntry
+	Status      string `json:"status"`       // always "HARNESS_ERROR"
+	FailureKind string `json:"failure_kind"` // domain.HarnessFailureKind
+}
+
 // correlationEntry records a late-bound run_id association.
 type correlationEntry struct {
 	Type      string `json:"type"`      // always "correlation"
@@ -205,6 +213,36 @@ func (l *Logger) LogError(agentInstanceID string, errText string) {
 		Timestamp:       time.Now().UTC().Format(time.RFC3339),
 		AgentInstanceID: agentInstanceID,
 		Error:           errText,
+	}
+	l.appendJSONLocked(entry)
+}
+
+// LogHarnessError implements domain.DispatchLogger. Records an invocation that
+// ended without a usable subagent response as an error entry that also carries
+// the recorded status HARNESS_ERROR and the failure kind.
+func (l *Logger) LogHarnessError(agentInstanceID string, f domain.HarnessFailure, errText string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.disabled {
+		return
+	}
+	if !l.opened {
+		l.initFileLocked()
+	}
+	if l.disabled {
+		return
+	}
+
+	entry := harnessErrorEntry{
+		errorEntry: errorEntry{
+			Type:            "error",
+			Timestamp:       time.Now().UTC().Format(time.RFC3339),
+			AgentInstanceID: agentInstanceID,
+			Error:           errText,
+		},
+		Status:      string(domain.StatusHARNESS_ERROR),
+		FailureKind: string(f.Kind),
 	}
 	l.appendJSONLocked(entry)
 }

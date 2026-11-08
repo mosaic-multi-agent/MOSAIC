@@ -92,6 +92,37 @@ func TestLastErrorReasonFor_NonBlockedStatusesReturnNil(t *testing.T) {
 	}
 }
 
+func TestLastErrorReasonFor_HarnessErrorReturnsFailureDescriptionVerbatim(t *testing.T) {
+	const desc = "timeout: harness invocation timed out after 60s"
+	resp := &domain.ProtocolResponse{
+		StatusCode:    domain.StatusHARNESS_ERROR,
+		StatusMessage: desc,
+		ErrorReason:   desc,
+	}
+
+	got := domain.LastErrorReasonFor(resp)
+
+	if got == nil {
+		t.Fatal("want non-nil pointer for a HARNESS_ERROR response, got nil")
+	}
+	if *got != desc {
+		t.Errorf("want error_reason verbatim, got %q", *got)
+	}
+}
+
+func TestLastErrorReasonFor_HarnessErrorWithEmptyReasonReturnsPointerToEmptyString(t *testing.T) {
+	resp := &domain.ProtocolResponse{StatusCode: domain.StatusHARNESS_ERROR}
+
+	got := domain.LastErrorReasonFor(resp)
+
+	if got == nil {
+		t.Fatal("want pointer to empty string for HARNESS_ERROR with no error_reason, got nil")
+	}
+	if *got != "" {
+		t.Errorf("want empty string, got %q", *got)
+	}
+}
+
 func TestLastErrorReasonFor_NilResponseReturnsNil(t *testing.T) {
 	if got := domain.LastErrorReasonFor(nil); got != nil {
 		t.Errorf("want nil for nil response, got %q", *got)

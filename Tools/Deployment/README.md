@@ -229,6 +229,10 @@ Whenever mosaic-deploy rebuilds workflows into an orchestrator (a full deploy or
 
 The update flow likewise refreshes catalog-backed infrastructure declarations in the orchestrator when their definition changed in the catalog; it never adds new declarations or touches hand-added ones.
 
+### Kept custom workflows
+
+`update` and `workflows` keep deployed custom workflows that the catalog stack does not supply. A kept workflow stays in the orchestrator exactly as deployed and is not updated or validated; the run warns `<id> is not in the catalog stack; kept as deployed, not updated or validated.` In the `workflows` checklist these appear with the hint `not in catalog; deployed only` and start unchecked, like deployed catalog workflows: confirming without ticking one removes it, and the run summary names it. `update` keeps all of them. An explicit `--workflows` id the catalog does not supply is accepted only when it names a deployed custom workflow; any other is an unknown-workflow error. These two flows do not show the removed-layer hint for unknown ids; `deploy` does. If a deployed orchestrator file has a line that begins with a workflow tag and carries more content on that line, the update for that file fails and nothing is written.
+
 **CLI example:**
 
 ```sh

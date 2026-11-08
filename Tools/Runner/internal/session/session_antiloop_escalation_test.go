@@ -106,8 +106,8 @@ func TestSession_AntiLoopGuard_DoesNotBlockMechanicalRetriesWithinBounds(t *test
 			repeatedEntries(engine.E501AttemptLimit-1, e501Entry()),
 			statusEntry(domain.StatusSUCCESS, domain.ErrorNone, "done")), engine.E501AttemptLimit},
 		{"harness errors up to just inside the budget, then SUCCESS", append(
-			repeatedEntries(engine.E501AttemptLimit-1, failEntry("harness: subprocess timed out")),
-			statusEntry(domain.StatusSUCCESS, domain.ErrorNone, "done")), engine.E501AttemptLimit},
+			repeatedEntries(engine.HarnessErrorAttemptLimit-1, failEntry("harness: subprocess timed out")),
+			statusEntry(domain.StatusSUCCESS, domain.ErrorNone, "done")), engine.HarnessErrorAttemptLimit},
 	}
 	for _, mode := range autoModes {
 		for _, tc := range cases {

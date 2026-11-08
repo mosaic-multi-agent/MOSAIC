@@ -41,6 +41,8 @@ var gapToCategory = map[domain.GapKind]domain.TodoCategory{
 	domain.GapDefaultContentDeployed:       domain.TodoInjections,
 	domain.GapEnclosingSectionChanged:      domain.TodoInjections,
 	domain.GapSkippedFile:                  domain.TodoSkippedFiles,
+	domain.GapWorkflowKept:                 domain.TodoSkippedFiles,
+	domain.GapWorkflowRemoved:              domain.TodoSkippedFiles,
 	domain.GapHookRegistration:         domain.TodoRegistration,
 	domain.GapManualStep:               domain.TodoManual,
 	domain.GapCatalogShadowing:         domain.TodoManual,

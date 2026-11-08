@@ -1,6 +1,6 @@
 package runflow
 
-const helpBarWithGuidanceText = "s graceful-stop  m manual-dispatch  h hitl-next  g loop-guard  e guidance  a artifact-view  ctrl+c force-quit"
+const helpBarWithGuidanceText = "s graceful-stop  m manual-dispatch  h hitl-next  g loop-guard  e guidance  a artifact-view  ctrl+c force-quit  l activity"
 
 // SetGuidanceAvailable sets whether the session holds standing guidance, which
 // decides whether the guidance key is offered and listed in the help bar.

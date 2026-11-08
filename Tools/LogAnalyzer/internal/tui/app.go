@@ -289,6 +289,7 @@ func (m Model) handleAnalysisDone(done analysisDoneMsg) (tea.Model, tea.Cmd) {
 		m.report = done.result.Report
 		style := m.screenStyles()
 		m.runsScreen = screens.NewRunsScreen(m.report, m.width, m.height, style)
+		m.runsScreen.SetVersion(m.opts.Version)
 		m.screen = screenRuns
 		m = m.withGapSavedStatus(done.result)
 

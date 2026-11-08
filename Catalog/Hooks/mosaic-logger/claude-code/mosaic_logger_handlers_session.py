@@ -75,9 +75,9 @@ def handle_session_end(ctx: "core.HookContext") -> None:
 
 
 def handle_user_prompt_submit(ctx: "core.HookContext") -> None:
-    """Emit turn with role 'user'."""
+    """Emit turn with role 'user' from the payload's `prompt` field."""
     run_id = core.effective_run_id(ctx)
-    content = ctx.field("user_prompt")
+    content = ctx.field("prompt")
     if content is None:
         return
     event = core.build_event(

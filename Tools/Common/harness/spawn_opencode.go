@@ -150,6 +150,8 @@ func (s *openCodeSpawner) Spawn(ctx context.Context, req SpawnRequest) (Response
 		Stdin:      stdin,
 		Timeout:    timeout,
 		Sink:       s.cfg.sink,
+
+		OnStdoutLine: req.OnStdoutLine,
 	})
 	if err != nil {
 		return Response{}, err

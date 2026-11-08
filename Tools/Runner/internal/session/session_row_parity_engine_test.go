@@ -99,7 +99,7 @@ func TestRowParity_Engine_FailedHarnessAttempt_IsAnnouncedAndNextAttemptFollows(
 
 			rig.start(configForMode(rig.orchPath, mode))
 
-			requireHarnessErrorStep(t, rig.store.memStore, "engine path")
+			requireHarnessFailureStep(t, rig.store.memStore, "engine path")
 			rig.requireParity(t, 3)
 		})
 	}
@@ -115,8 +115,8 @@ func TestRowParity_Engine_FailedBypassAttempt_IsAnnounced(t *testing.T) {
 
 			rig.start(configForMode(rig.orchPath, mode))
 
-			if n := countE501RowsFor(rig.store.memStore, "agent-a"); n < 2 {
-				t.Fatalf("scenario did not run as intended: want the failed attempt and the failed bypass recorded, got %d E501 rows", n)
+			if n := countHarnessErrorRowsFor(rig.store.memStore, "agent-a"); n < 2 {
+				t.Fatalf("scenario did not run as intended: want the failed attempt and the failed bypass recorded, got %d HARNESS_ERROR rows", n)
 			}
 			rig.requireParity(t, 4)
 		})
@@ -141,7 +141,7 @@ func TestRowParity_Engine_FailedHITLRedispatch_IsAnnounced(t *testing.T) {
 	for _, s := range rig.store.Applied {
 		if s.HITLRejected {
 			rejected++
-		} else if rejected > 0 && s.Status == domain.StatusBLOCKED && s.AgentInstance != "" {
+		} else if rejected > 0 && s.Status == domain.StatusHARNESS_ERROR && s.AgentInstance != "" {
 			failedAfter++
 		}
 	}

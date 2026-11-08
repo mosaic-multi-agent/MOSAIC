@@ -46,8 +46,8 @@ func newLoggedArtifactStore(path string, logger domain.DebugLogger) domain.Artif
 //
 // When harnessStr is "claude-code", "opencode", or "ghcp-cli", the
 // corresponding CLI adapter is created with execPathStr as the executable
-// path and timeout as the invocation limit. A zero or negative timeout is
-// treated as the default (30 minutes). execPathStr is the executable path
+// path and timeouts as the invocation limits (non-HITL and HITL dispatches).
+// Zero or negative values are treated as the defaults (30 minutes / 4 hours). execPathStr is the executable path
 // override supplied via --executable-path; when empty, each harness uses its
 // own per-harness default binary name.
 // For any other value (including "fake" and unknown strings), MockAdapter is
@@ -67,7 +67,8 @@ func newLoggedArtifactStore(path string, logger domain.DebugLogger) domain.Artif
 //
 // runFolder is the absolute Orchestration-{run_id} folder of the run the adapter
 // is bound to; "" or a non-run folder means no run id is supplied.
-func buildAdapter(runFolder, harnessStr, execPathStr, ghcpMode string, timeout time.Duration, loggers ...domain.DebugLogger) domain.HarnessAdapter {
+func buildAdapter(runFolder, harnessStr, execPathStr, ghcpMode string, timeouts domain.InvocationTimeouts, activity domain.ActivityObserver, loggers ...domain.DebugLogger) domain.HarnessAdapter {
+	timeouts = timeouts.Normalized()
 	var logger domain.DebugLogger = domain.NopDebugLogger{}
 	if len(loggers) > 0 && loggers[0] != nil {
 		logger = loggers[0]
@@ -79,32 +80,23 @@ func buildAdapter(runFolder, harnessStr, execPathStr, ghcpMode string, timeout t
 		if exe == "" {
 			exe = "claude"
 		}
-		if timeout <= 0 {
-			timeout = 30 * time.Minute
-		}
-		return claudecode.NewClaudeCodeAdapterWithLogger(exe, timeout, logger, runOpts...)
+		return claudecode.NewClaudeCodeAdapterWithLogger(exe, timeouts.NonHITL, logger, runOpts...).WithHITLTimeout(timeouts.HITL).WithActivityObserver(activity)
 	case commonharness.HarnessIDOpenCode:
 		exe := execPathStr
 		if exe == "" {
 			exe = "opencode"
 		}
-		if timeout <= 0 {
-			timeout = 30 * time.Minute
-		}
-		return withOpenCodeSafetyNet(opencode.NewOpenCodeAdapterWithLogger(exe, timeout, logger, runOpts...), runFolder, logger)
+		return withOpenCodeSafetyNet(opencode.NewOpenCodeAdapterWithLogger(exe, timeouts.NonHITL, logger, runOpts...).WithHITLTimeout(timeouts.HITL).WithActivityObserver(activity), runFolder, logger)
 	case commonharness.HarnessIDGHCPCLI:
 		exe := execPathStr
 		if exe == "" {
 			exe = "copilot"
 		}
-		if timeout <= 0 {
-			timeout = 30 * time.Minute
-		}
 		mode := commonharness.GHCPCLIPermissionMode(ghcpMode)
 		if mode != commonharness.GHCPCLIModeBlanket && mode != commonharness.GHCPCLIModePartialAllowlist {
 			mode = commonharness.GHCPCLIModeBlanket
 		}
-		return ghcpcli.NewGHCPCLIAdapterWithMode(exe, timeout, logger, mode, runOpts...)
+		return ghcpcli.NewGHCPCLIAdapterWithMode(exe, timeouts.NonHITL, logger, mode, runOpts...).WithHITLTimeout(timeouts.HITL).WithActivityObserver(activity)
 	default: // "fake" or unknown
 		return harness.NewMockAdapter()
 	}

@@ -98,11 +98,11 @@ const (
 
 // DeviationInfo carries everything the deviation resolver needs.
 type DeviationInfo struct {
-	Kind                DeviationKind
-	Response            ProtocolResponse // the deviating response
-	CurrentRow          int              // row index of the row that deviated
-	CurrentPhase        string
-	CurrentStage        string
+	Kind         DeviationKind
+	Response     ProtocolResponse // the deviating response
+	CurrentRow   int              // row index of the row that deviated
+	CurrentPhase string
+	CurrentStage string
 	// PlannedContinuation is where the happy path would have gone; set for
 	// DeviationFinishedWork (the already-finished step), nil otherwise.
 	PlannedContinuation *DispatchStep

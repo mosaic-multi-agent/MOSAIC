@@ -9,7 +9,7 @@ import (
 // activityFor describes a routing consultation for req: its deviation kind
 // when the request carries a deviation, none otherwise.
 func activityFor(req domain.ConsultationRequest) domain.ConsultationActivity {
-	a := domain.ConsultationActivity{Context: req.Context}
+	a := domain.ConsultationActivity{Context: req.Context, HasUserMessage: req.UserMessage != nil}
 	if req.Deviation != nil {
 		a.Kind = req.Deviation.Kind
 	}
@@ -20,9 +20,21 @@ func activityFor(req domain.ConsultationRequest) domain.ConsultationActivity {
 // announcing the consultation's start before the call and its end as soon as
 // the call returns, whatever the outcome.
 func (s *sessionImpl) consultOrchestratorAgent(ctx context.Context, req domain.ConsultationRequest) (domain.RoutingInstruction, error) {
+	if req.UserMessage != nil {
+		s.deps.Debug.Log(domain.EventSessionConsultUserMessage, "consultation carries a user message",
+			domain.F("context", string(req.Context)),
+			domain.F("message", *req.UserMessage),
+		)
+	}
 	s.deps.Consultations.ConsultationStarted(ctx, activityFor(req))
 	defer s.deps.Consultations.ConsultationEnded(ctx)
-	return s.deps.Routing.ConsultRouting(ctx, req)
+	var instr domain.RoutingInstruction
+	err := s.watchConsultation(ctx, forceStopTargetConsultation, func(wctx context.Context) error {
+		var callErr error
+		instr, callErr = s.deps.Routing.ConsultRouting(wctx, req)
+		return callErr
+	})
+	return instr, err
 }
 
 // preConsultOrchestratorAgent calls the pre-consultant, announcing start and
@@ -30,5 +42,11 @@ func (s *sessionImpl) consultOrchestratorAgent(ctx context.Context, req domain.C
 func (s *sessionImpl) preConsultOrchestratorAgent(ctx context.Context, req domain.ConsultationRequest) (domain.PreConsultationAdvice, error) {
 	s.deps.Consultations.ConsultationStarted(ctx, domain.ConsultationActivity{Context: req.Context})
 	defer s.deps.Consultations.ConsultationEnded(ctx)
-	return s.deps.PreConsult.PreConsult(ctx, req)
+	var advice domain.PreConsultationAdvice
+	err := s.watchConsultation(ctx, forceStopTargetPreConsultation, func(wctx context.Context) error {
+		var callErr error
+		advice, callErr = s.deps.PreConsult.PreConsult(wctx, req)
+		return callErr
+	})
+	return advice, err
 }

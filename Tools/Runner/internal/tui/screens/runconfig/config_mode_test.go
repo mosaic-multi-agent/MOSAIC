@@ -79,18 +79,18 @@ func TestConfigScreen_ModeStep_NoPreselection(t *testing.T) {
 // RED: Nothing populates Settings.Mode; it remains ExecutionModeUnset.
 func TestConfigScreen_ModeStep_SelectOrchestrated_ProducesOrchestratedMode(t *testing.T) {
 	s := NewConfigScreen(80, 24, screens.Styles{})
-	s.SetDeclaredAgents(nil) // no declared agents — simplest case
-	s.SetIsNewRun(false)     // simulate resumed run so version-drift screen appears
+	s.SetDeclaredAgents(nil)       // no declared agents — simplest case
+	s.SetIsNewRun(false)           // simulate resumed run so version-drift screen appears
 	s.SetNeedsRunnerAdoption(true) // a resumed native artifact still asks the mode first
 
 	// Drive to done: mode (orchestrated = cursor 0), harness, timeout, version drift, checkpoints,
 	// manual-resolution (always shown; orchestrated has no pre-consult step).
 	driveConfigScreenModeSelect(s, 0) // orchestrated
-	pressKey(s, tea.KeyEnter)          // harness
-	advanceConfigScreenTimeout(s)      // timeout
-	pressKey(s, tea.KeyEnter)          // version drift
-	pressKey(s, tea.KeyEnter)          // checkpoints
-	pressKey(s, tea.KeyEnter)          // manual-resolution (disabled default, no commit agent, no infra class)
+	pressKey(s, tea.KeyEnter)         // harness
+	advanceConfigScreenTimeout(s)     // timeout
+	pressKey(s, tea.KeyEnter)         // version drift
+	pressKey(s, tea.KeyEnter)         // checkpoints
+	pressKey(s, tea.KeyEnter)         // manual-resolution (disabled default, no commit agent, no infra class)
 
 	acceptReviewLoopLimitIfAsked(s)
 	if !s.Done() {
@@ -112,12 +112,12 @@ func TestConfigScreen_ModeStep_SelectAuto_ProducesAutoMode(t *testing.T) {
 	s.SetDeclaredAgents(nil)
 
 	driveConfigScreenModeSelect(s, 1) // auto
-	pressKey(s, tea.KeyEnter)          // harness
-	advanceConfigScreenTimeout(s)      // timeout
-	pressKey(s, tea.KeyEnter)          // version drift
-	pressKey(s, tea.KeyEnter)          // checkpoints
-	pressKey(s, tea.KeyEnter)          // pre-consult (shown for auto mode; accept default)
-	pressKey(s, tea.KeyEnter)          // manual-resolution (always shown; accept default)
+	pressKey(s, tea.KeyEnter)         // harness
+	advanceConfigScreenTimeout(s)     // timeout
+	pressKey(s, tea.KeyEnter)         // version drift
+	pressKey(s, tea.KeyEnter)         // checkpoints
+	pressKey(s, tea.KeyEnter)         // pre-consult (shown for auto mode; accept default)
+	pressKey(s, tea.KeyEnter)         // manual-resolution (always shown; accept default)
 
 	acceptReviewLoopLimitIfAsked(s)
 	if !s.Done() {
@@ -139,12 +139,12 @@ func TestConfigScreen_ModeStep_SelectAutoReview_ProducesAutoReviewMode(t *testin
 	s.SetDeclaredAgents(nil)
 
 	driveConfigScreenModeSelect(s, 2) // auto-review
-	pressKey(s, tea.KeyEnter)          // harness
-	advanceConfigScreenTimeout(s)      // timeout
-	pressKey(s, tea.KeyEnter)          // version drift
-	pressKey(s, tea.KeyEnter)          // checkpoints
-	pressKey(s, tea.KeyEnter)          // pre-consult (shown for auto-review mode; accept default)
-	pressKey(s, tea.KeyEnter)          // manual-resolution (always shown; accept default)
+	pressKey(s, tea.KeyEnter)         // harness
+	advanceConfigScreenTimeout(s)     // timeout
+	pressKey(s, tea.KeyEnter)         // version drift
+	pressKey(s, tea.KeyEnter)         // checkpoints
+	pressKey(s, tea.KeyEnter)         // pre-consult (shown for auto-review mode; accept default)
+	pressKey(s, tea.KeyEnter)         // manual-resolution (always shown; accept default)
 
 	acceptReviewLoopLimitIfAsked(s)
 	if !s.Done() {
@@ -155,4 +155,3 @@ func TestConfigScreen_ModeStep_SelectAutoReview_ProducesAutoReviewMode(t *testin
 			s.Selection().Settings.Mode, domain.ExecutionModeAutoReview)
 	}
 }
-

@@ -58,6 +58,9 @@ type runStartCtx struct {
 	// resumedDefect is the defective produced schedule a resume found, for the
 	// dispatch loop to act on first.
 	resumedDefect *pendingScheduleDefect
+	// resumeRedispatch is the re-dispatch of a trailing unaccepted attempt a
+	// resume found, for the dispatch loop to run before it asks the engine.
+	resumeRedispatch *domain.DispatchStep
 }
 
 // prepareRouting handles steps 1 through 2c of the run-start sequence:

@@ -53,6 +53,8 @@ var (
 type GHCPCLIAdapter struct {
 	executablePath string
 	timeout        time.Duration
+	hitlTimeout    time.Duration
+	activityObs    domain.ActivityObserver
 	spawner        commonharness.Spawner
 	sink           commonharness.Sink
 	logger         domain.DebugLogger
@@ -89,7 +91,7 @@ func NewGHCPCLIAdapter(executablePath string, timeout time.Duration) *GHCPCLIAda
 // To use a different permission mode, call NewGHCPCLIAdapterWithMode instead.
 func NewGHCPCLIAdapterWithLogger(executablePath string, timeout time.Duration, logger domain.DebugLogger) *GHCPCLIAdapter {
 	if timeout == 0 {
-		timeout = 30 * time.Minute
+		timeout = domain.DefaultTimeout
 	}
 	if logger == nil {
 		logger = domain.NopDebugLogger{}
@@ -117,7 +119,7 @@ func NewGHCPCLIAdapterWithLogger(executablePath string, timeout time.Duration, l
 // production wiring.
 func NewGHCPCLIAdapterWithMode(executablePath string, timeout time.Duration, logger domain.DebugLogger, mode commonharness.GHCPCLIPermissionMode, opts ...roleenv.Option) *GHCPCLIAdapter {
 	if timeout == 0 {
-		timeout = 30 * time.Minute
+		timeout = domain.DefaultTimeout
 	}
 	if logger == nil {
 		logger = domain.NopDebugLogger{}
@@ -138,7 +140,7 @@ func NewGHCPCLIAdapterWithMode(executablePath string, timeout time.Duration, log
 // context is rendered into the agent profile at deploy time by Tools/Deployment.
 //
 // On context cancellation, terminates the subprocess and returns ctx.Err().
-func (a *GHCPCLIAdapter) Invoke(ctx context.Context, agent domain.AgentReference, request domain.ProtocolRequest) (domain.ProtocolResponse, error) {
+func (a *GHCPCLIAdapter) invoke(ctx context.Context, agent domain.AgentReference, request domain.ProtocolRequest, onLine func([]byte)) (domain.ProtocolResponse, error) {
 	a.logger.Log(domain.EventHarnessInvokeStart, "dispatching invocation",
 		domain.F("agent", request.AgentInstanceID),
 		domain.F("kind", string(agent.InvocationKind)),
@@ -160,8 +162,10 @@ func (a *GHCPCLIAdapter) Invoke(ctx context.Context, agent domain.AgentReference
 			Kind:           commonharness.InvocationKind(agent.InvocationKind),
 		},
 		Prompt:       string(reqBytes),
+		Timeout:      a.invokeTimeout(request.HumanInTheLoop),
 		Env:          roleenv.SubagentEnv(runID, request.AgentInstanceID),
 		OutputFormat: "json",
+		OnStdoutLine: onLine,
 		GHCPCLIMode:  a.mode,
 		// SystemPrompt is deliberately left unset for both invocation kinds.
 		// GHCP CLI layers instructions from files it discovers itself; MOSAIC
@@ -253,7 +257,7 @@ func (a *GHCPCLIAdapter) Invoke(ctx context.Context, agent domain.AgentReference
 // the envelope parser's verdict from the stream is authoritative.
 //
 // On context cancellation, returns ctx.Err().
-func (a *GHCPCLIAdapter) InvokeRaw(ctx context.Context, agent domain.AgentReference, payload []byte) ([]byte, error) {
+func (a *GHCPCLIAdapter) invokeRaw(ctx context.Context, agent domain.AgentReference, payload []byte, onLine func([]byte)) ([]byte, error) {
 	a.logger.Log(domain.EventHarnessInvokeStart, "dispatching raw invocation",
 		domain.F("agent", agent.Identifier),
 		domain.F("kind", string(agent.InvocationKind)),
@@ -302,11 +306,12 @@ func (a *GHCPCLIAdapter) InvokeRaw(ctx context.Context, agent domain.AgentRefere
 	}
 
 	resp, err := commonharness.Run(ctx, cmd, args, commonharness.RunOptions{
-		WorkingDir: spawnReq.WorkingDir,
-		Env:        spawnReq.Env,
-		Stdin:      stdin,
-		Timeout:    a.timeout,
-		Sink:       a.sink,
+		WorkingDir:   spawnReq.WorkingDir,
+		Env:          spawnReq.Env,
+		Stdin:        stdin,
+		Timeout:      a.timeout,
+		Sink:         a.sink,
+		OnStdoutLine: onLine,
 	})
 	if err != nil {
 		if !errors.Is(err, commonharness.ErrNonZeroExit) {
@@ -354,4 +359,28 @@ func (a *GHCPCLIAdapter) InvokeRaw(ctx context.Context, agent domain.AgentRefere
 	)
 	a.logOutcome(domain.EventHarnessInvokeOK, "raw invocation succeeded", agent.Identifier, resp.Stdout)
 	return []byte(text), nil
+}
+
+// WithHITLTimeout sets the timeout for Invoke calls whose request has
+// HumanInTheLoop == true. d <= 0 selects domain.DefaultHITLTimeout.
+// Returns a. Call before the first invocation; not safe concurrently with
+// invocations.
+func (a *GHCPCLIAdapter) WithHITLTimeout(d time.Duration) *GHCPCLIAdapter {
+	if d <= 0 {
+		d = domain.DefaultHITLTimeout
+	}
+	a.hitlTimeout = d
+	return a
+}
+
+// invokeTimeout returns the timeout bounding an Invoke call for the given
+// effective HITL flag.
+func (a *GHCPCLIAdapter) invokeTimeout(hitl bool) time.Duration {
+	if !hitl {
+		return a.timeout
+	}
+	if a.hitlTimeout <= 0 {
+		return domain.DefaultHITLTimeout
+	}
+	return a.hitlTimeout
 }

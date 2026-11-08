@@ -11,9 +11,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-
-	"mosaic-run/internal/tui/screens/runconfig"
 	"mosaic-run/internal/tui/screens"
+	"mosaic-run/internal/tui/screens/runconfig"
 )
 
 // newSeedScreen creates a SeedInputScreen for testing with a zero-value Styles

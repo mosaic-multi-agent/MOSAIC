@@ -1,0 +1,2 @@
+{"schema_version":"1.3.0","event":"invocation_start","timestamp":"2026-10-20T10:01:00.000Z","harness":"opencode","session_id":"s-a2","run_id":"20261020T100000Z-a002","agent_instance_id":"impl#1","agent_type":"impl"}
+{"schema_version":"1.3.0","event":"invocation_end","timestamp":"2026-10-20T10:02:00.000Z","harness":"opencode","session_id":"s-a2","run_id":"20261020T100000Z-a002","agent_instance_id":"impl#1","status_code":"SUCCESS","model":"claude-sonnet-4","provider":"anthropic","token_usage":{"input_tokens":900,"output_tokens":90}}

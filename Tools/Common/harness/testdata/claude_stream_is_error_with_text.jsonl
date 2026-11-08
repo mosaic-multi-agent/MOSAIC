@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","session_id":"abc123"}
+{"type":"result","subtype":"success","is_error":true,"duration_ms":120,"result":"Invalid API key - please run /login","session_id":"abc123"}

@@ -203,7 +203,7 @@ def _full_session_payloads(tmp_path: pathlib.Path,
 
         # 2 – UserPromptSubmit: orchestrator user turn.
         _base("UserPromptSubmit",
-              user_prompt="Start the orchestration workflow."),
+              prompt="Start the orchestration workflow."),
 
         # 3 – Orchestrator tool call pair (no agent_id → orchestrator stream).
         _base("PreToolUse",

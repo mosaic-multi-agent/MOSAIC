@@ -26,6 +26,7 @@ func TestAntiLoopWaiver_GuardOff_MechanicalRetryBoundsStillStopTheRedispatch(t *
 	}{
 		{"PARTIALLY_DONE bound", statusEntry(domain.StatusPARTIALLY_DONE, domain.ErrorNone, "half done"), 1 + engine.PartiallyDoneRedispatchLimit},
 		{"E501 budget", e501Entry(), engine.E501AttemptLimit},
+		{"HARNESS_ERROR budget", failEntry("harness: subprocess timed out"), engine.HarnessErrorAttemptLimit},
 	}
 	for _, mode := range autoModes {
 		for _, tc := range cases {

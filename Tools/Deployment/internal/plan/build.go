@@ -19,7 +19,8 @@ func (p *planner) Build(ctx context.Context, in Input) (domain.Plan, error) {
 	// Resolve the complete artifact set from all selections, including standalone agents.
 	set, err := ResolveArtifactsFrom(in.Catalog, Selection{
 		WorkflowIDs:            in.WorkflowIDs,
-		SubagentIDs:            in.SubagentIDs,
+		KeptWorkflowIDs:        in.KeptWorkflowIDs,
+		SubagentIDs:           in.SubagentIDs,
 		UtilityAgentIDs:        in.UtilityAgentIDs,
 		InfrastructureAgentIDs: in.InfrastructureAgentIDs,
 		StandaloneAgentIDs:     in.StandaloneAgentIDs,
@@ -49,12 +50,7 @@ func (p *planner) Build(ctx context.Context, in Input) (domain.Plan, error) {
 	// workflow staleness to orchestrator-role agents without duplicating this lookup.
 	// WorkflowIDs are guaranteed to be valid: ResolveArtifacts already returned ErrUnknownWorkflow
 	// for any unrecognised ID, so Catalog.Workflow(id) always succeeds here.
-	selectedWorkflows := make([]domain.Workflow, 0, len(in.WorkflowIDs))
-	for _, id := range in.WorkflowIDs {
-		if wf, ok := in.Catalog.Workflow(id); ok {
-			selectedWorkflows = append(selectedWorkflows, wf)
-		}
-	}
+	selectedWorkflows := catalogWorkflowsFor(in.Catalog.Workflow, in.WorkflowIDs, in.KeptWorkflowIDs)
 
 	// Build plan items for each agent.
 	for _, agent := range set.Agents {
@@ -63,6 +59,7 @@ func (p *planner) Build(ctx context.Context, in Input) (domain.Plan, error) {
 
 		model := in.Models[agent.Key]
 		deployed := in.DeployedState[targetPath]
+		deployed.Workflows = deployedWithoutKept(deployed.Workflows, in.KeptWorkflowIDs)
 
 		// Classify before evaluating gaps: the GapNoModel emission rule depends on the action.
 		item := classifyAgentItemLegacyAware(in.LegacyAgentPaths[targetPath], agent, targetPath, model, manifestUsable, in.Manifest.Manifest, deployed, descriptorForAgent(desc, agent, in.OrchestratorRegionUndeliverable), selectedWorkflows, in.ToolMappingsVersion, in.ProtocolVersion, in.BundleVersion, infrastructureInput{Catalog: in.Catalog, Intent: in.InfrastructureDeclarations}, supplierOf(in.Catalog))

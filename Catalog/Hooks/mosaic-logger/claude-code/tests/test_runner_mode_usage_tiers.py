@@ -38,7 +38,7 @@ class SummedUsageCase(WorkspaceTestCase):
         transcript = write_transcript(self.workspace, list(records))
         with runner_env(self.workspace, role="subagent", run_id=RUN_ID,
                         instance_id=INSTANCE_ID):
-            fire(self.workspace, "UserPromptSubmit", user_prompt="go",
+            fire(self.workspace, "UserPromptSubmit", prompt="go",
                  transcript_path=transcript)
             fire(self.workspace, "SessionEnd", reason="other",
                  transcript_path=transcript)

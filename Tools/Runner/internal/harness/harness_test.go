@@ -36,6 +36,7 @@ import (
 	"errors"
 	"testing"
 
+	commonharness "mosaic-common/harness"
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/harness"
 )
@@ -199,6 +200,30 @@ func TestMockAdapter_MalformedRawJSON_ReturnsError(t *testing.T) {
 	// The error should mention the agent so the caller can correlate it.
 	if !contains(err.Error(), "agent-a") {
 		t.Errorf("want error message to mention agent-a, got %q", err.Error())
+	}
+}
+
+// TestMockAdapter_MalformedRawJSON_IsClassifiedLikeARealMalformedResponse
+// verifies that a RawJSON payload that does not decode as a protocol response
+// returns an error wrapping the Common malformed-JSON sentinel, so it takes the
+// same classification and raw-text bypass path as a real adapter's malformed
+// response. The golden payload has a stray `,"` before the closing brace.
+func TestMockAdapter_MalformedRawJSON_IsClassifiedLikeARealMalformedResponse(t *testing.T) {
+	payloads := map[string]string{
+		"not json at all":          `{not valid json`,
+		"stray quote before brace": `{"agent_instance_id":"a#1","run_id":"r","status_code":"COMPLETED_NEEDS_ACTION","status_message":"done.","}`,
+	}
+	for name, payload := range payloads {
+		t.Run(name, func(t *testing.T) {
+			f := harness.NewMockAdapter()
+			f.Queue("agent-a", harness.ScriptedEntry{RawJSON: []byte(payload)})
+
+			_, err := f.Invoke(context.Background(), agentRef("agent-a"), minimalRequest("agent-a#1"))
+
+			if !errors.Is(err, commonharness.ErrMalformedJSON) {
+				t.Errorf("want an error wrapping commonharness.ErrMalformedJSON, got %v", err)
+			}
+		})
 	}
 }
 

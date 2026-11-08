@@ -170,7 +170,7 @@ func TestSession_InfraDispatch_PolicyIsUnchangedForEveryStatusAndErrorCode(t *te
 	}
 }
 
-func TestSession_InfraDispatch_HarnessError_WritesFailureEventWithE501AndTheErrorText(t *testing.T) {
+func TestSession_InfraDispatch_HarnessError_WritesFailureEventWithHarnessErrorAndTheErrorText(t *testing.T) {
 	rig := newInfraReportRig(t, infraContinueFixture, true, nil)
 	rig.queueWorkflow()
 	rig.queueCheckpoint(harness.ScriptedEntry{Err: errors.New("transport broke")})
@@ -183,7 +183,7 @@ func TestSession_InfraDispatch_HarnessError_WritesFailureEventWithE501AndTheErro
 	if len(failed) != 1 {
 		t.Fatalf("want exactly 1 %s event for a harness-level error, got %d", domain.EventSessionInfraFailed, len(failed))
 	}
-	requireFields(t, failed[0], map[string]string{"status": "BLOCKED", "error_code": "E501", "policy": "continue"})
+	requireFields(t, failed[0], map[string]string{"status": "HARNESS_ERROR", "error_code": "", "policy": "continue"})
 	if !strings.Contains(failed[0].Message, "transport broke") {
 		t.Errorf("event message = %q, want the harness error text", failed[0].Message)
 	}
@@ -203,7 +203,7 @@ func TestSession_InfraDispatch_UnresolvableDefinition_WritesFailureEventAndNever
 	if len(failed) == 0 {
 		t.Fatalf("want a %s event for the definition that cannot be resolved, got none", domain.EventSessionInfraFailed)
 	}
-	requireFields(t, failed[0], map[string]string{"status": "BLOCKED", "error_code": "E501", "agent": firstCheckpointInstance})
+	requireFields(t, failed[0], map[string]string{"status": "CONFIG_ERROR", "error_code": "", "agent": firstCheckpointInstance})
 	if n := infraFilterInvocationCountFor(rig.adapter.Invocations(), infraCheckpointAgent); n != 0 {
 		t.Errorf("want no dispatch of an agent whose definition cannot be resolved, got %d", n)
 	}

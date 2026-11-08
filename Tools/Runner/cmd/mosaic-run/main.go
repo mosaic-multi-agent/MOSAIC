@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	commonharness "mosaic-common/harness"
 
@@ -28,7 +27,12 @@ import (
 	"github.com/mattn/go-isatty"
 )
 
-const ToolVersion = "1.9.0"
+const ToolVersion = "1.11.1"
+
+// stdioIsTerminal reports whether stdin and stdout are both real terminals.
+func stdioIsTerminal() bool {
+	return isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd())
+}
 
 // wantsTUI reports whether mosaic-run should launch the interactive TUI.
 // The TUI is launched when:
@@ -40,17 +44,31 @@ const ToolVersion = "1.9.0"
 // This mirrors the deployment tool's wantsTUI pattern to ensure consistent
 // behaviour across mosaic-run and mosaic-deploy.
 func wantsTUI(args []string) bool {
+	return wantsTUIWith(args, stdioIsTerminal)
+}
+
+// wantsTUIWith is wantsTUI with an injectable terminal check.
+func wantsTUIWith(args []string, isTerminal func() bool) bool {
 	if scanBoolFlag(args, "--tui") {
 		return true
 	}
 	if hasPositionalArg(args) {
 		return false
 	}
-	return isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd())
+	return isTerminal()
 }
 
 func main() {
 	args := os.Args[1:]
+
+	// --version is decided before any other routing or wiring: no TUI, logger,
+	// run identity or workspace access.
+	switch selectFrontend(args, stdioIsTerminal) {
+	case frontendVersion:
+		os.Exit(runVersion(os.Stdout))
+	case frontendVersionUsage:
+		os.Exit(runVersionUsage(os.Stderr))
+	}
 
 	// Pre-scan --dev before any other processing. The --dev flag gates the test
 	// subcommand and the TUI test flow. It is an entry-point-only flag (like
@@ -125,18 +143,7 @@ func runCLIMode(args, cobraArgs []string) int {
 	if harnessStr == "" {
 		harnessStr = "fake" // matches the flag default
 	}
-	timeoutStr := scanFlag(args, "--timeout")
-	if timeoutStr == "" {
-		timeoutStr = "30m" // matches the flag default
-	}
 	execPathStr := scanFlag(args, "--executable-path")
-
-	// Parse the timeout duration; fall back to 30 minutes on invalid input
-	// (cli.Run will surface the parse error to the user with ExitUsage).
-	invocationTimeout := 30 * time.Minute
-	if d, err := time.ParseDuration(timeoutStr); err == nil && d > 0 {
-		invocationTimeout = d
-	}
 
 	// Resolve run identity. The working directory is passed explicitly to avoid a
 	// redundant os.Getwd call. The store return value is always nil; the
@@ -178,7 +185,7 @@ func runCLIMode(args, cobraArgs []string) int {
 
 	// Build the harness adapter via buildAdapter, passing the process logger
 	// so that invocation I/O is captured in the debug log.
-	h := buildAdapter(runIdentity.RunFolder, harnessStr, execPathStr, ghcpPermissionMode, invocationTimeout, logger)
+	h := buildAdapter(runIdentity.RunFolder, harnessStr, execPathStr, ghcpPermissionMode, timeoutsFromArgs(args), nil, logger)
 
 	// Extract the raw-JSON transport if the selected harness adapter implements it.
 	// Production adapters implement both HarnessAdapter and RawInvoker over the same

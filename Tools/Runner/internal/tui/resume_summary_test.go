@@ -146,8 +146,8 @@ func TestResumeSummary_Back_ReturnsToThePreviousQuestionWithoutStarting(t *testi
 		t.Fatalf("screen = %v after going back from the summary, want screenSetupConfig (%v)",
 			f.m.screen, screenSetupConfig)
 	}
-	if got := f.prompt(); got != "timeout" {
-		t.Errorf("going back showed %q, want the last question asked (the timeout)", got)
+	if got := f.prompt(); got != "hitl-timeout" {
+		t.Errorf("going back showed %q, want the last question asked (the HITL timeout)", got)
 	}
 	if n := len(f.launched()); n != 0 {
 		t.Errorf("%d session(s) launched by going back", n)
@@ -159,7 +159,7 @@ func TestResumeSummary_Back_ThenForward_KeepsTheEarlierAnswer(t *testing.T) {
 	f.toSummary()
 	f.key(tea.KeyEsc)
 
-	f.key(tea.KeyEnter) // accept the timeout as it was answered
+	f.key(tea.KeyEnter) // accept the HITL timeout as it was answered
 
 	if !f.showing(summaryTitle) {
 		t.Fatalf("the summary is not shown again after answering the same question; screen = %v, view:\n%s",

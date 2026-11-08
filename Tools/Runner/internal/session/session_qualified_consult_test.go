@@ -93,7 +93,7 @@ func TestSession_QualifiedRows_AutoModes_ConsultedDispatchOfSecondQualifiedRow(t
 			r.queue("planner", "planner#1", domain.StatusSUCCESS)
 			r.queue("build-review", "build-review#2", domain.StatusSUCCESS)
 			r.queue("implementer", "implementer#3", domain.StatusSUCCESS)
-			for i := 0; i < engine.E501AttemptLimit; i++ {
+			for i := 0; i < engine.HarnessErrorAttemptLimit; i++ {
 				r.f.Queue("build-review", harness.ScriptedEntry{Err: errors.New("simulated harness failure")})
 			}
 			r.consultant.queueDispatch("build-review", "retry the implementation review", qrImplReview)
@@ -177,7 +177,6 @@ func TestSession_QualifiedRows_Orchestrated_ResumeAfterSecondQualifiedRowKeepsTh
 		Clock:    fixedClock{t: epoch},
 		Interact: &noopInteraction{},
 	})
-	r.consultant.queueDispatch("build-review", "re-run the implementation review", qrImplReview)
 	r.consultant.queueStop("done")
 	r.queue("build-review", "build-review#5", domain.StatusSUCCESS)
 	cfg := r.config(domain.ExecutionModeOrchestrated)

@@ -134,6 +134,9 @@ func (NopDispatchLogger) LogResponse(resp ProtocolResponse) {}
 // LogError implements DispatchLogger. It discards the entry.
 func (NopDispatchLogger) LogError(agentInstanceID string, errText string) {}
 
+// LogHarnessError implements DispatchLogger. It discards the entry.
+func (NopDispatchLogger) LogHarnessError(agentInstanceID string, f HarnessFailure, errText string) {}
+
 // SetRunID implements DispatchLogger. It is a no-op.
 func (NopDispatchLogger) SetRunID(runID string) {}
 

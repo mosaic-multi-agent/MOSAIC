@@ -52,7 +52,7 @@ def _quoted_forms(run_id):
 _NEVER_SOURCES = (
     ("Stop", "last_assistant_message", {}),
     ("SubagentStop", "last_assistant_message", {"agent_id": "agt-q1"}),
-    ("UserPromptSubmit", "user_prompt", {}),
+    ("UserPromptSubmit", "prompt", {}),
     ("Notification", "message", {"notification_type": "info"}),
 )
 
@@ -208,9 +208,9 @@ class TestBoundSessionSwitching(_BindingCase):
         self.assertEqual(RUN_ID, self.binding())
         self.assertFalse(self.run_dir_exists(OTHER_RUN_ID))
 
-    def test_quoting_user_prompt_and_notification_do_not_switch_a_bound_session(self):
+    def test_quoting_prompt_and_notification_do_not_switch_a_bound_session(self):
         self.dispatch_via_tool(RUN_ID)
-        self.fire_native("UserPromptSubmit", user_prompt=f"check {OTHER_RUN_ID}")
+        self.fire_native("UserPromptSubmit", prompt=f"check {OTHER_RUN_ID}")
         self.fire_native("Notification", notification_type="info",
                          message=f"run_id: {OTHER_RUN_ID}")
         self.assertEqual(RUN_ID, self.binding())

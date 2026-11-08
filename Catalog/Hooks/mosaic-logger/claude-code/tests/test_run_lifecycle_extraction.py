@@ -2,7 +2,7 @@
 
 Covers:
 - resolve_run_identity: a run id is taken only from a SubagentStart dispatch prompt
-  (agent_prompt carrying an agent instance id); user_prompt, last_assistant_message
+  (agent_prompt carrying an agent instance id); prompt, last_assistant_message
   and Notification message are never binding sources
 - Events with no prompt-bearing field (SessionStart, SessionEnd, PreToolUse,
   PostToolUse, PostToolUseFailure, PreCompact, PostCompact) yield ctx.run_id = None
@@ -122,7 +122,7 @@ class TestResolveRunIdentityPerEvent(unittest.TestCase):
         """UserPromptSubmit: a run id in the user prompt is not a binding source."""
         ctx = self._make_ctx(
             "UserPromptSubmit", "per-event-user-prompt-submit",
-            user_prompt=f'"run_id": "{VALID_RUN_ID}" — process this please',
+            prompt=f'"run_id": "{VALID_RUN_ID}" — process this please',
         )
         mosaic_logger.resolve_run_identity(ctx)
         self.assertIsNone(ctx.run_id)
@@ -222,7 +222,7 @@ class TestResolveRunIdentityPerEvent(unittest.TestCase):
         """resolve_run_identity is robust against malformed prompt content."""
         ctx = self._make_ctx(
             "UserPromptSubmit", "per-event-never-raises-malformed",
-            user_prompt="\x00\x01 {broken",
+            prompt="\x00\x01 {broken",
         )
         try:
             mosaic_logger.resolve_run_identity(ctx)
@@ -303,12 +303,12 @@ class TestExtractionBasedDispatch(unittest.TestCase):
         )
 
     def test_user_prompt_submit_quoting_run_id_does_not_write_to_that_run_folder(self):
-        """UserPromptSubmit where user_prompt merely contains a valid run_id does not
+        """UserPromptSubmit where prompt merely contains a valid run_id does not
         bind the session: nothing is written under that run's folder."""
         payload = {
             "hook_event_name": "UserPromptSubmit",
             "session_id": "extraction-sess-003",
-            "user_prompt": f'"run_id": "{VALID_RUN_ID}" -- please process this task',
+            "prompt": f'"run_id": "{VALID_RUN_ID}" -- please process this task',
         }
         _dispatch_with_env(payload, self.tmp_path)
 
@@ -775,7 +775,7 @@ class TestResolveRunIdentityEstablishesBinding(unittest.TestCase):
         session_id = "establish-sess-user-prompt"
         ctx = self._ctx(
             "UserPromptSubmit", session_id, "2026-07-27T17:00:00.000Z",
-            user_prompt=f'"run_id": "{VALID_RUN_ID}" — please proceed',
+            prompt=f'"run_id": "{VALID_RUN_ID}" — please proceed',
         )
         mosaic_logger.resolve_run_identity(ctx)
         bound = runstate.get_session_run_binding(

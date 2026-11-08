@@ -49,6 +49,8 @@ func (m *rootModel) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	m.applyForceStopEvents()
+
 	if m.progressScreen.GracefulStop() {
 		m.stopSignal.Request()
 		if confirmed {

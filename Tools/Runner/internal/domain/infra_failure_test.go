@@ -175,3 +175,22 @@ func TestInfraFailure_String_OmitsTheErrorCodePartWhenThereIsNone(t *testing.T) 
 		t.Errorf("String() = %q, want %q", got, want)
 	}
 }
+
+func TestListInfraFailures_RunnerRecordedStatusesAreListedWithoutAnErrorCode(t *testing.T) {
+	log := []domain.ExecutionLogEntry{
+		logEntry(1, "commit-manager-git#1", domain.StatusHARNESS_ERROR, domain.ErrorNone, "timeout: setup stalled"),
+		logEntry(2, "checkpoint-manager-git#2", domain.StatusCONFIG_ERROR, domain.ErrorNone, "agent definition not resolved: missing"),
+	}
+
+	got := domain.ListInfraFailures(log, infraFailureDeclared())
+
+	requireAgents(t, got, "commit-manager-git#1", "checkpoint-manager-git#2")
+	if len(got) == 2 {
+		if got[0].Status != domain.StatusHARNESS_ERROR || got[1].Status != domain.StatusCONFIG_ERROR {
+			t.Errorf("listed statuses = %q, %q, want HARNESS_ERROR and CONFIG_ERROR", got[0].Status, got[1].Status)
+		}
+		if line := got[1].String(); !strings.Contains(line, "CONFIG_ERROR  agent definition not resolved") {
+			t.Errorf("rendered line = %q, want the status followed directly by the Summary", line)
+		}
+	}
+}

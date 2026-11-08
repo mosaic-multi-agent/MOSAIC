@@ -306,11 +306,11 @@ func TestSession_Start_WithLogger_DeviationResolution_LogsDeviation(t *testing.T
 	}
 }
 
-// TestSession_Start_WithLogger_HarnessErrorDeviationUnresolved_RecordsE501Row
+// TestSession_Start_WithLogger_HarnessErrorDeviationUnresolved_RecordsHarnessErrorRow
 // verifies that when a harness error occurs and no routing consultant is wired,
-// the failed step is still recorded as a BLOCKED/E501 workflow row and the
+// the failed step is still recorded as a HARNESS_ERROR workflow row and the
 // session logs EventSessionDeviationUnresolved.
-func TestSession_Start_WithLogger_HarnessErrorDeviationUnresolved_RecordsE501Row(t *testing.T) {
+func TestSession_Start_WithLogger_HarnessErrorDeviationUnresolved_RecordsHarnessErrorRow(t *testing.T) {
 	logger := &sessionRecordingLogger{}
 	ses, f, store, orchPath := newTestDeviationWorkflowSession(t, logger)
 
@@ -338,8 +338,8 @@ func TestSession_Start_WithLogger_HarnessErrorDeviationUnresolved_RecordsE501Row
 		t.Errorf("want the harness-error row to be an accepted workflow row, got infra=%v rejected=%v",
 			step.IsInfrastructure, step.HITLRejected)
 	}
-	if step.Status != domain.StatusBLOCKED || step.ErrorCode != domain.ErrorTOOL_UNAVAILABLE {
-		t.Errorf("want harness-error row BLOCKED/E501, got %s/%s", step.Status, step.ErrorCode)
+	if step.Status != domain.StatusHARNESS_ERROR || step.ErrorCode != domain.ErrorNone {
+		t.Errorf("want harness-error row HARNESS_ERROR with no error code, got %s/%s", step.Status, step.ErrorCode)
 	}
 }
 

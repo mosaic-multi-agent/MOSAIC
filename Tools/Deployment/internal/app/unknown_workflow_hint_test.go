@@ -4,10 +4,13 @@ package app_test
 // points tell the user when a requested or deployed workflow id is not in the catalog stack in
 // effect: the error lists the catalogs searched and, only when that workflow is already
 // deployed in the workspace, says it may have come from a layer that is no longer in the stack.
+// Update itself keeps such a deployed workflow instead of failing.
 
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -52,22 +55,22 @@ func requireSearchedCatalogs(t *testing.T, err error) {
 	}
 }
 
-func TestUnknownDeployedWorkflow_Update_NamesSearchedCatalogsAndRemovedLayerHint(t *testing.T) {
+func TestUnknownDeployedWorkflow_Update_KeepsWorkflowAndDoesNotFail(t *testing.T) {
 	deps, ws := crDeps(t, interactiontest.NewBuilder().Build(), crStackOpts{})
 	crWriteDeployed(t, ws, "orchestrator.md", "team-review")
 
 	_, err := app.New(deps).Update(context.Background(), app.UpdateRequest{
 		HarnessID: "stub-harness", WorkspacePath: ws, AutoConfirmPlan: true})
 
-	if !errors.Is(err, plan.ErrUnknownWorkflow) {
-		t.Fatalf("error = %v, want errors.Is(err, plan.ErrUnknownWorkflow)", err)
+	if err != nil {
+		t.Fatalf("Update of a deployed workflow the stack lacks must keep it and succeed, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "team-review") {
-		t.Errorf("error %q does not name the workflow", err.Error())
+	got, readErr := os.ReadFile(filepath.Join(ws, "orchestrator.md"))
+	if readErr != nil {
+		t.Fatalf("read orchestrator.md: %v", readErr)
 	}
-	requireSearchedCatalogs(t, err)
-	if strings.Count(err.Error(), removedLayerHintPhrase) != 1 {
-		t.Errorf("error %q must carry the removed-layer hint exactly once", err.Error())
+	if !strings.Contains(string(got), "Body of team-review.") {
+		t.Errorf("kept workflow body missing from orchestrator.md after Update:\n%s", got)
 	}
 }
 
@@ -86,22 +89,36 @@ func TestUnknownWorkflowRequestedByUpdate_NotDeployed_HasNoRemovedLayerHint(t *t
 	}
 }
 
-func TestUnknownDeployedWorkflow_DeployAndWorkflowUpdate_AddRemovedLayerHint(t *testing.T) {
-	for _, op := range unknownWorkflowOps() {
-		t.Run(op.name, func(t *testing.T) {
-			deps, ws := crDeps(t, interactiontest.NewBuilder().Build(), crStackOpts{})
-			crWriteDeployed(t, ws, "orchestrator.md", "team-review")
+func TestUnknownDeployedWorkflow_Deploy_AddsRemovedLayerHint(t *testing.T) {
+	deps, ws := crDeps(t, interactiontest.NewBuilder().Build(), crStackOpts{})
+	crWriteDeployed(t, ws, "orchestrator.md", "team-review")
 
-			err := op.run(app.New(deps), ws, "team-review")
+	err := unknownWorkflowOps()[0].run(app.New(deps), ws, "team-review")
 
-			if !errors.Is(err, plan.ErrUnknownWorkflow) {
-				t.Fatalf("error = %v, want errors.Is(err, plan.ErrUnknownWorkflow)", err)
-			}
-			requireSearchedCatalogs(t, err)
-			if strings.Count(err.Error(), removedLayerHintPhrase) != 1 {
-				t.Errorf("error %q must carry the removed-layer hint exactly once", err.Error())
-			}
-		})
+	if !errors.Is(err, plan.ErrUnknownWorkflow) {
+		t.Fatalf("error = %v, want errors.Is(err, plan.ErrUnknownWorkflow)", err)
+	}
+	requireSearchedCatalogs(t, err)
+	if strings.Count(err.Error(), removedLayerHintPhrase) != 1 {
+		t.Errorf("error %q must carry the removed-layer hint exactly once", err.Error())
+	}
+}
+
+func TestUnknownDeployedWorkflow_WorkflowUpdate_KeepsExplicitlySelectedWorkflow(t *testing.T) {
+	deps, ws := crDeps(t, interactiontest.NewBuilder().Build(), crStackOpts{})
+	crWriteDeployed(t, ws, "orchestrator.md", "team-review")
+
+	err := unknownWorkflowOps()[1].run(app.New(deps), ws, "team-review")
+
+	if err != nil {
+		t.Fatalf("workflow update selecting a deployed workflow the stack lacks must keep it and succeed, got: %v", err)
+	}
+	got, readErr := os.ReadFile(filepath.Join(ws, "orchestrator.md"))
+	if readErr != nil {
+		t.Fatalf("read orchestrator.md: %v", readErr)
+	}
+	if !strings.Contains(string(got), "Body of team-review.") {
+		t.Errorf("kept workflow body missing from orchestrator.md after workflow update:\n%s", got)
 	}
 }
 

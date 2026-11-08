@@ -70,7 +70,7 @@ func TestSession_CommitSetup_Blocked_WritesOneFailureEventWithClassEmptyTriggers
 	}
 }
 
-func TestSession_CommitSetup_HarnessError_WritesFailureEventWithE501AndTheErrorText(t *testing.T) {
+func TestSession_CommitSetup_HarnessError_WritesFailureEventWithHarnessErrorAndTheErrorText(t *testing.T) {
 	got, logger := startCommitSetup(t, harness.ScriptedEntry{Err: errors.New("git: authentication failed")})
 
 	if got.Status != domain.RunStartFailed {
@@ -80,7 +80,7 @@ func TestSession_CommitSetup_HarnessError_WritesFailureEventWithE501AndTheErrorT
 	if len(failed) != 1 {
 		t.Fatalf("want exactly 1 %s event, got %d", domain.EventSessionInfraFailed, len(failed))
 	}
-	requireFields(t, failed[0], map[string]string{"status": "BLOCKED", "error_code": "E501", "policy": "halt", "triggers": ""})
+	requireFields(t, failed[0], map[string]string{"status": "HARNESS_ERROR", "error_code": "", "policy": "halt", "triggers": ""})
 	if !strings.Contains(failed[0].Message, "authentication failed") {
 		t.Errorf("event message = %q, want the harness error text", failed[0].Message)
 	}

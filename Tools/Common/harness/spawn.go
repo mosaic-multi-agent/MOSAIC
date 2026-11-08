@@ -74,6 +74,8 @@ func (s *claudeCodeSpawner) Spawn(ctx context.Context, req SpawnRequest) (Respon
 		Stdin:      stdin,
 		Timeout:    timeout,
 		Sink:       s.cfg.sink,
+
+		OnStdoutLine: req.OnStdoutLine,
 	})
 	if err != nil {
 		return resp, err
@@ -170,6 +172,11 @@ func BuildArgs(req SpawnRequest) (args []string, stdin []byte, err error) {
 		}
 	}
 
+	// The CLI rejects stream-json in print mode without --verbose.
+	if req.OutputFormat == "stream-json" {
+		args = append(args, "--verbose")
+	}
+
 	if !req.SessionPersistence {
 		args = append(args, "--no-session-persistence")
 	}
@@ -237,12 +244,22 @@ func Run(ctx context.Context, cmd Command, args []string, o RunOptions) (Respons
 	}
 
 	var stdout, stderr bytes.Buffer
-	execCmd.Stdout = &stdout
+	var obs *lineObserver
+	if o.OnStdoutLine != nil {
+		obs = startLineObserver(o.OnStdoutLine)
+	}
+	execCmd.Stdout = teeStdout(&stdout, obs)
 	execCmd.Stderr = &stderr
 
+	group := newKillGroup(execCmd)
 	if err := execCmd.Start(); err != nil {
+		group.release()
+		if obs != nil {
+			obs.stop()
+		}
 		return Response{}, fmt.Errorf("%w: %v", ErrExecutableNotFound, err)
 	}
+	group.attach(execCmd.Process)
 
 	waitCh := make(chan error, 1)
 	go func() { waitCh <- execCmd.Wait() }()
@@ -255,18 +272,28 @@ func Run(ctx context.Context, cmd Command, args []string, o RunOptions) (Respons
 	var waitErr error
 	select {
 	case <-ctx.Done():
-		killProcessTree(execCmd.Process)
+		group.kill(execCmd.Process)
 		<-waitCh
+		if obs != nil {
+			obs.stop()
+		}
 		return Response{}, ErrCancelled
 	case <-time.After(timeout):
-		killProcessTree(execCmd.Process)
+		group.kill(execCmd.Process)
 		<-waitCh
+		if obs != nil {
+			obs.stop()
+		}
 		logEvent(o.Sink, "spawn.timeout", "invocation exceeded configured timeout", nil)
 		return Response{}, ErrTimeout
 	case waitErr = <-waitCh:
 	}
 
+	group.release()
 	duration := time.Since(start)
+	if obs != nil {
+		obs.finish(observerDrainGrace)
+	}
 
 	logEvent(o.Sink, "spawn.stdout", stdout.String(), []Field{{Key: "bytes", Value: strconv.Itoa(stdout.Len())}})
 	logEvent(o.Sink, "spawn.stderr", stderr.String(), []Field{{Key: "bytes", Value: strconv.Itoa(stderr.Len())}})

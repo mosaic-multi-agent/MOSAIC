@@ -27,7 +27,7 @@ import (
 //  2. required-flag and mutual-exclusivity validation
 //  3. --checkpoints parsing
 //  4. --harness validation
-//  5. --timeout validation
+//  5. --timeout and --hitl-timeout validation
 //  6. run-identity resolution (skipped when identity is pre-resolved)
 //  7. run announcement
 //  8. --mode parsing
@@ -55,6 +55,10 @@ func executeRun(ctx context.Context, cmd *cobra.Command, store domain.ArtifactSt
 	}
 
 	if code, ok := validateTimeoutFlag(f.timeout, errOut); !ok {
+		return code
+	}
+
+	if code, ok := validateHITLTimeoutFlag(f.hitlTimeout, errOut); !ok {
 		return code
 	}
 

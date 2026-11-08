@@ -38,6 +38,12 @@ var orchRunFn = func(orch *testrun.Orchestrator, ctx context.Context, cfg testru
 	return orch.Run(ctx, cfg)
 }
 
+// buildAdapterFn is the package-level seam for adapter construction in the
+// interactive wiring. Tests override this variable to observe the arguments,
+// notably the activity observer, the wiring hands over. The default is the
+// production constructor.
+var buildAdapterFn = buildAdapter
+
 // interactiveWiringInput carries the process-scoped values runTUIMode hoists
 // and hands to the seam. Everything here is constructed once per process.
 type interactiveWiringInput struct {
@@ -59,6 +65,11 @@ type interactiveWiringInput struct {
 	// passing nil is a programming error, not a normalised default. A default
 	// here would recreate the orphan-signal defect the seam exists to fix.
 	StopSignal *session.StopSignal
+
+	// ForceStop is the shared force-stop request, constructed exactly once in
+	// runTUIMode next to StopSignal. The TUI raises it; every session built
+	// here watches it.
+	ForceStop *session.ForceStopSignal
 
 	// Requests is the shared in-run request object, constructed exactly once in
 	// runTUIMode next to StopSignal. Nil is a programming error, not a default.
@@ -154,7 +165,7 @@ func buildInteractiveWiring(in interactiveWiringInput) interactiveWiring {
 			artifactPath = filepath.Join(mintedFolder, "Orchestration.md")
 			effectiveRunFolder = mintedFolder
 		}
-		h := buildAdapter(effectiveRunFolder, cfg.Harness, execPath, cfg.GHCPCLIMode, cfg.Timeout, in.Debug)
+		h := buildAdapterFn(effectiveRunFolder, cfg.Harness, execPath, cfg.GHCPCLIMode, domain.InvocationTimeouts{NonHITL: cfg.Timeout, HITL: cfg.HITLTimeout}, activityObserverOf(in.ProgramRef), in.Debug)
 		store := newLoggedArtifactStore(artifactPath, in.Debug)
 
 		// Extract the raw-JSON transport if the selected harness adapter
@@ -173,6 +184,12 @@ func buildInteractiveWiring(in interactiveWiringInput) interactiveWiring {
 		// alone, because the non-interactive frontend has no stop affordance.
 		routingDeps := buildDeps(rawInvoker, in.ProgramRef, artifact.NewApprovalReader(), in.DispatchLog)
 
+		// A nil *ForceStopSignal must not become a non-nil interface value.
+		var forceStop domain.ForceStopWatcher
+		if in.ForceStop != nil {
+			forceStop = in.ForceStop
+		}
+
 		return session.Deps{
 			Harness:        h,
 			Store:          store,
@@ -190,6 +207,7 @@ func buildInteractiveWiring(in interactiveWiringInput) interactiveWiring {
 			Approvals:      routingDeps.Approvals,
 			Outputs:        artifact.NewOutputWriteDetector(),
 			StopRequested:  in.StopSignal.Requested,
+			ForceStop:      forceStop,
 			AntiLoopWaived: in.GuardWaiver.Waived,
 			TakeManualDispatchRequest: func() bool {
 				return in.Requests.Take(domain.InRunRequestManualDispatch)
@@ -226,6 +244,7 @@ func buildInteractiveWiring(in interactiveWiringInput) interactiveWiring {
 			Clock:             in.Clock,
 			OnRunIDResolved:   in.OnRunIDResolved,
 			StopSignal:        in.StopSignal,
+			ForceStop:         in.ForceStop,
 			InRunRequests:     in.Requests,
 			GuardWaiver:       in.GuardWaiver,
 			Debug:             in.Debug,
@@ -364,4 +383,13 @@ func buildDeps(
 	}
 
 	return deps
+}
+
+// activityObserverOf returns ref as the activity observer, or nil (no observer)
+// when ref is nil, so a nil pointer never becomes a non-nil interface.
+func activityObserverOf(ref *tui.ProgramRef) domain.ActivityObserver {
+	if ref == nil {
+		return nil
+	}
+	return ref
 }

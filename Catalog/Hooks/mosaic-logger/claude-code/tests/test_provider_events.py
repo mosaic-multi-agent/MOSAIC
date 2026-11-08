@@ -157,7 +157,7 @@ class TestNativeSessionEvents(ProviderEnvCase):
         self.use_env(BEDROCK)
         ctx = _native_ctx(self.workspace, {
             "hook_event_name": "UserPromptSubmit", "session_id": _SESSION,
-            "user_prompt": "go"})
+            "prompt": "go"})
         session_handlers.handle_user_prompt_submit(ctx)
         event = self._orchestrator_stream()[0]
         self.assertNotIn("provider", event)
@@ -260,7 +260,7 @@ class TestRunnerSubagentEvents(ProviderEnvCase):
             self.workspace, [user_record("go"), assistant_record("ok")])
         with runner_env(self.workspace, role="subagent", run_id=RUN_ID,
                         instance_id=INSTANCE_ID):
-            fire(self.workspace, "UserPromptSubmit", user_prompt="go",
+            fire(self.workspace, "UserPromptSubmit", prompt="go",
                  transcript_path=transcript)
             fire(self.workspace, "SessionEnd", reason="other",
                  last_assistant_message="ok",

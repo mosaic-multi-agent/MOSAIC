@@ -70,6 +70,12 @@ type CompletedStep struct {
 	// CompletedStep construction sites produce HITLRejected=false.
 	HITLRejected bool
 
+	// ForceStopped is true when the attempt was force-stopped by the user.
+	// Store.Apply appends the log row (Status PARTIALLY_DONE, Summary
+	// ForceStoppedSummary) and leaves current_state and the artifact registry
+	// unchanged, as for a HITL-rejected step.
+	ForceStopped bool
+
 	// Routed, when non-nil, is the status/error code current_state records and
 	// routing uses, instead of Status/ErrorCode. Set only for a
 	// gate-discharging re-dispatch that returned SUCCESS.
@@ -295,6 +301,12 @@ type DispatchLogger interface {
 	// the result of err.Error() on the harness error.
 	LogError(agentInstanceID string, errText string)
 
+	// LogHarnessError records an invocation that ended in a harness-level
+	// failure the Runner records as HARNESS_ERROR: an "error" entry with the
+	// error text plus status "HARNESS_ERROR" and failure_kind f.Kind.
+	// Never fails, never blocks.
+	LogHarnessError(agentInstanceID string, f HarnessFailure, errText string)
+
 	// SetRunID associates the log with a run_id. Called before the first
 	// write, it creates the file at RunnerLogs/{run_id}/{run_id}-dispatch.log;
 	// called after, it records a correlation entry into the existing
@@ -388,12 +400,16 @@ const (
 	// request was discarded. Fields: agent, row (1-based), stage (recorded form).
 	EventSessionConsultDiscarded = "session.consult.discarded"
 
-	EventSessionPreConsult      = "session.preconsult"
-	EventSessionCommitSetup     = "session.commit.setup"
-	EventSessionHITLVerify      = "session.hitl.verify"
-	EventSessionHITLRedispatch  = "session.hitl.redispatch"
-	EventSessionHITLEscalate    = "session.hitl.escalate"
-	EventSessionManualResolve   = "session.manual.resolve"
+	// EventSessionConsultUserMessage: an orchestrator routing consultation
+	// carries a user message. Fields: context (routing), message (verbatim).
+	EventSessionConsultUserMessage = "session.consult.user_message"
+
+	EventSessionPreConsult     = "session.preconsult"
+	EventSessionCommitSetup    = "session.commit.setup"
+	EventSessionHITLVerify     = "session.hitl.verify"
+	EventSessionHITLRedispatch = "session.hitl.redispatch"
+	EventSessionHITLEscalate   = "session.hitl.escalate"
+	EventSessionManualResolve  = "session.manual.resolve"
 
 	// EventSessionFilterUnmatched is emitted when an InfrastructureFilter key
 	// does not match any declared infrastructure agent name. This is informational

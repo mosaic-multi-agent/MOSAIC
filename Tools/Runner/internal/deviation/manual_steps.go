@@ -37,6 +37,7 @@ const (
 	stepOutputs
 	stepConstraints
 	stepHITL
+	stepAskMessage
 )
 
 // listState is the user's selection on one artifact list step. set is false
@@ -103,6 +104,8 @@ func (d *manualDialogue) runStep(ctx context.Context) error {
 		return d.stepOutputs(ctx)
 	case stepConstraints:
 		return d.stepConstraints(ctx)
+	case stepAskMessage:
+		return d.stepAskMessage(ctx)
 	default:
 		return d.stepHITL(ctx)
 	}

@@ -24,6 +24,8 @@ type antiLoopState struct {
 	lastAgent   string // identifier of the last dispatched agent
 	escalations int    // consecutive guard escalations since the last allowed dispatch
 
+	before antiLoopSnapshot // counters before the last counted dispatch
+
 	waiver     func() bool        // nil = the guard is always on
 	waivedSeen bool               // waiver value seen at the previous guard check
 	log        domain.DebugLogger // receives guard switch entries; nil = none
@@ -37,8 +39,10 @@ type antiLoopState struct {
 // allowed dispatch also resets the consecutive guard escalation count.
 func (a *antiLoopState) recordDispatch(rowIndex int, agentID string) bool {
 	if a.observeWaiver() {
+		a.before.valid = false
 		return true // the user switched the guard off for this session
 	}
+	a.before = antiLoopSnapshot{valid: true, rowIndex: a.rowIndex, count: a.count, lastAgent: a.lastAgent, escalations: a.escalations}
 	if rowIndex != a.rowIndex || agentID != a.lastAgent {
 		// New step or different agent: reset counter.
 		a.rowIndex = rowIndex

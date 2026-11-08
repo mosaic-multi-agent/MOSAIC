@@ -31,6 +31,13 @@ type ConsultationRequest struct {
 	// Runner-constructed error description rather than an agent message.
 	LastStatusMessage *string
 
+	// LastStatus is the status_code of the response whose status_message is
+	// LastStatusMessage: the subagent's returned status, or StatusHARNESS_ERROR
+	// for an attempt the Runner recorded as a harness error. Nil exactly when
+	// LastStatusMessage is nil (first step of a new run, every
+	// pre-consultation). Always encoded on the wire.
+	LastStatus *StatusCode
+
 	// LastErrorReason is the error_reason of a triggering BLOCKED response, or
 	// the Runner-constructed description for a harness error. Nil - serialised
 	// as JSON null - for every other status, on the first step of a new run and
@@ -59,6 +66,17 @@ type ConsultationRequest struct {
 	// current stage sets. NEVER serialised onto the wire. Nil: no defaults
 	// (empty lists, HITL off).
 	RowDefaults RowDefaultsFunc
+
+	// OfferAskOrchestrator makes the ManualResolver offer
+	// ManualAskOrchestratorOptionID in its row question. NEVER serialised onto
+	// the wire. False: the dialogue is exactly the one without the option.
+	OfferAskOrchestrator bool
+
+	// UserMessage is the user's message for this one routing consultation,
+	// verbatim (line breaks kept). Nil for every other consultation, for every
+	// pre-consultation and when the user left the message step empty. Always
+	// encoded on the wire. Never persisted.
+	UserMessage *string
 }
 
 // RowDefaultsFunc resolves the DispatchDefaults of row at iteration ("" for a
@@ -74,6 +92,17 @@ type RowDefaultsFunc func(row RoutingRow, iteration IterationID) (DispatchDefaul
 type RoutingInstruction struct {
 	Dispatch *DispatchInstruction
 	Stop     *StopInstruction
+	// AskOrchestrator is set only by the ManualResolver: the user handed the
+	// decision to the orchestrator consultant.
+	AskOrchestrator *AskOrchestratorInstruction
+}
+
+// AskOrchestratorInstruction asks the session to obtain this routing
+// decision from the orchestrator consultant.
+type AskOrchestratorInstruction struct {
+	// UserMessage is the text entered in the message step, verbatim; nil when
+	// the step was left empty (no non-whitespace character).
+	UserMessage *string
 }
 
 // DispatchInstruction directs the Runner to dispatch one agent. Optional

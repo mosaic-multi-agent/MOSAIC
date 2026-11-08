@@ -70,6 +70,10 @@ func (d *manualDialogue) stepRow(ctx context.Context) error {
 		d.result = &domain.RoutingInstruction{Stop: &domain.StopInstruction{Reason: "user requested stop"}}
 		return nil
 	}
+	if d.req.OfferAskOrchestrator && strings.EqualFold(choice, domain.ManualAskOrchestratorOptionID) {
+		d.step = stepAskMessage
+		return nil
+	}
 	n, convErr := strconv.Atoi(choice)
 	if convErr != nil || n < 1 || n > len(d.table.Rows) {
 		return d.invalidResult(ctx, fmt.Sprintf("row choice %q is not a row of the routing table (1 to %d)", choice, len(d.table.Rows)), stepRow)
@@ -89,6 +93,9 @@ func (d *manualDialogue) rowQuestion() interaction.ChoiceQuestion {
 			ID:    strconv.Itoa(i + 1),
 			Label: fmt.Sprintf("[%d] %s (%s)", i+1, row.BareAgentID(), row.Phase),
 		})
+	}
+	if d.req.OfferAskOrchestrator {
+		options = append(options, interaction.Option{ID: domain.ManualAskOrchestratorOptionID, Label: "Ask the orchestrator to decide"})
 	}
 	options = append(options, interaction.Option{ID: domain.ManualStopOptionID, Label: "Stop the run"})
 	return interaction.ChoiceQuestion{

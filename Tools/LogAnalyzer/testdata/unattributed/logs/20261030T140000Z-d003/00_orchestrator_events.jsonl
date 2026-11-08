@@ -1,0 +1,2 @@
+{"schema_version":"1.3.0","event":"usage_record","timestamp":"2026-10-30T14:00:05.000Z","harness":"claude-code","session_id":"s-d3","run_id":"20261030T140000Z-d003","record_id":"p-1","model":"claude-sonnet-4","token_usage":{"input_tokens":100,"output_tokens":10}}
+{"schema_version":"1.3.0","event":"run_end","timestamp":"2026-10-30T14:01:00.000Z","harness":"claude-code","session_id":"s-d3","run_id":"20261030T140000Z-d003","outcome":"completed"}

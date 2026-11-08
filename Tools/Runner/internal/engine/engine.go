@@ -73,6 +73,12 @@ func Next(in NextInput) domain.EngineDecision {
 		}}
 	}
 
+	// A HARNESS_ERROR attempt is never accepted, so it is routed by its own
+	// log entry rather than by current_state.
+	if lastResponse != nil && lastResponse.StatusCode == domain.StatusHARNESS_ERROR {
+		return harnessErrorDecision(in, sc)
+	}
+
 	// ExecutionModeOrchestrated: the engine never produces a routing decision.
 	if in.Mode == domain.ExecutionModeOrchestrated {
 		return orchestratedDecision(in)

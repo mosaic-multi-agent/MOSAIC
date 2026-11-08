@@ -2,6 +2,7 @@ package runflow
 
 import (
 	"fmt"
+	"strings"
 
 	"mosaic-run/internal/domain"
 )
@@ -36,8 +37,21 @@ func (s *ProgressScreen) consultationLine() string {
 	label := "consultation: routing"
 	if c.Context == domain.ConsultContextPreConsultation {
 		label = "consultation: pre-consultation"
-	} else if c.Kind != "" {
-		label += fmt.Sprintf(" (%s)", c.Kind)
+	} else if details := consultationDetails(c); details != "" {
+		label += fmt.Sprintf(" (%s)", details)
 	}
 	return s.styles.Selected.Render("▶ " + label)
+}
+
+// consultationDetails lists what the routing row shows in parentheses: the
+// deviation kind and a note that the consultation carries a user message.
+func consultationDetails(c *domain.ConsultationActivity) string {
+	var parts []string
+	if c.Kind != "" {
+		parts = append(parts, string(c.Kind))
+	}
+	if c.HasUserMessage {
+		parts = append(parts, "user message")
+	}
+	return strings.Join(parts, ", ")
 }

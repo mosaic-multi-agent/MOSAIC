@@ -19,8 +19,8 @@ import (
 // continues normally, using the real file-based artifact store.
 //
 // The mismatch between execution log and current_state triggers
-// engine.ResumePoint to return RerunLast=true, causing the session to call
-// rewindStateForRerun and re-dispatch the last logged row before advancing.
+// engine.ResumePoint to return RerunLast=true, causing the session to
+// re-dispatch the last logged row as recorded before advancing.
 func TestIntegration_InterruptedRun_ResumesFromRerunLast(t *testing.T) {
 	dir := t.TempDir()
 	orchPath := copyFile(t, dir, "orchestrator.md",

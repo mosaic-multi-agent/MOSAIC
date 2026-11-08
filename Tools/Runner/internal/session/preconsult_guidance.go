@@ -64,6 +64,9 @@ func (s *sessionImpl) preConsultGuidance(ctx context.Context, rs *runStartCtx) (
 		Context:               domain.ConsultContextPreConsultation,
 		OrchestrationArtifact: filepath.Join(rs.config.RunFolder, "Orchestration.md"),
 	})
+	if isForceStopped(pcErr) {
+		return domain.Guidance{}, preConsultForceStopOutcome(), true
+	}
 	if pcErr != nil {
 		// The run folder, artifact and any setup row are kept; pre-consultation
 		// writes nothing to the artifact, and a resume retries it.

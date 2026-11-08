@@ -160,4 +160,3 @@ func TestConfigScreen_HarnessStep_EnterAdvancesToTimeoutStep(t *testing.T) {
 		t.Errorf("step = %v after Enter on harness step, want configStepHarnessTimeout", s.step)
 	}
 }
-

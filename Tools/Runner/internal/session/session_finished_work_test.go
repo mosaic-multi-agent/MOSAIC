@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"mosaic-common/interaction"
 	"mosaic-run/internal/deviation"
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/harness"
@@ -124,23 +123,22 @@ func TestSession_FinishedWork_Live_ConsultantDispatchOfFinishedStepRunsWithoutTr
 	}
 }
 
-func TestSession_FinishedWork_Resume_RequestHasNullStatusMessageAndErrorReason(t *testing.T) {
+// The recorded unaccepted attempt is re-dispatched directly on resume; there is
+// no finished-work consultation.
+func TestSession_FinishedWork_Resume_RedispatchesRecordedAttemptWithoutConsultation(t *testing.T) {
 	r, cfg := resumedFinishedRun(t)
 
 	got, err := r.ses.Start(context.Background(), cfg)
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
-	if len(r.consultant.Requests) != 1 {
-		t.Fatalf("want exactly one consultation, got %d", len(r.consultant.Requests))
+	if len(r.consultant.Requests) != 0 {
+		t.Errorf("want no consultation on resume, got %d", len(r.consultant.Requests))
 	}
-	req := r.consultant.Requests[0]
-	requireFinishedWorkConsultation(t, req, 3)
-	if req.LastStatusMessage != nil {
-		t.Errorf("last_status_message: want null on resume, got %q", *req.LastStatusMessage)
+	invs := r.f.Invocations()
+	if len(invs) != 1 {
+		t.Fatalf("want the recorded attempt re-dispatched once, got %d dispatches", len(invs))
 	}
-	if req.LastErrorReason != nil {
-		t.Errorf("last_error_reason: want null on resume, got %q", *req.LastErrorReason)
-	}
+	requireDispatchStep(t, invs, 0, "build-review", "build-review#5", "impl")
 }
 
 func TestSession_FinishedWork_Resume_ConsultationConsumesNoSeqAndWritesNoLogRow(t *testing.T) {
@@ -160,7 +158,7 @@ func TestSession_FinishedWork_Resume_ConsultationConsumesNoSeqAndWritesNoLogRow(
 	requireRecordedRows(t, r.store, 4)
 }
 
-func TestSession_FinishedWork_ManualDispatchArmed_IsResolvedByTheManualResolver(t *testing.T) {
+func TestSession_FinishedWork_Resume_ManualDispatchArmed_StillRedispatchesRecordedAttempt(t *testing.T) {
 	r, cfg := resumedFinishedRun(t)
 	user := newManualUser(t).pickOne(domain.QuestionManualRow, "4").
 		say(domain.QuestionManualTask, "re-run the impl review").
@@ -181,15 +179,12 @@ func TestSession_FinishedWork_ManualDispatchArmed_IsResolvedByTheManualResolver(
 	got, err := r.ses.Start(context.Background(), cfg)
 
 	requireRunStatus(t, got, err, domain.RunCompleted)
-	if !slices.Contains(user.asked, interaction.QuestionID(domain.QuestionManualRow)) {
-		t.Errorf("want the manual dialogue asked for the finished-work consultation, asked %v", user.asked)
-	}
 	if r.consultant.CallCount != 0 {
-		t.Errorf("want the armed manual dispatch to take the place of the orchestrator, got %d consultations", r.consultant.CallCount)
+		t.Errorf("want no orchestrator consultation, got %d", r.consultant.CallCount)
 	}
 	invs := r.f.Invocations()
 	if len(invs) != 1 {
-		t.Fatalf("want the manually chosen step dispatched once, got %d dispatches", len(invs))
+		t.Fatalf("want the recorded attempt dispatched once, got %d dispatches", len(invs))
 	}
 	if inv := invs[0]; inv.Agent.Identifier != "build-review" || inv.Request.AgentInstanceID != "build-review#5" {
 		t.Errorf("want build-review dispatched as build-review#5, got %q as %q", inv.Agent.Identifier, inv.Request.AgentInstanceID)

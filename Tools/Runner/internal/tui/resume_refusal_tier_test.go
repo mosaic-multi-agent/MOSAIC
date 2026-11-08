@@ -139,8 +139,9 @@ func TestResumeRefusal_VersionMismatch_IsNotRefusedAndLeadsToTheVersionDriftQues
 	}
 	f.typeText("45m")
 	f.key(tea.KeyEnter)
+	answerHITLTimeoutOnModel(f.m)
 	if got := f.prompt(); got != "drift" {
-		t.Errorf("after the timeout the wizard shows %q, want the version-drift question", got)
+		t.Errorf("after both timeouts the wizard shows %q, want the version-drift question", got)
 	}
 }
 

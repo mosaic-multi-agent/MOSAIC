@@ -92,7 +92,7 @@ func TestRowParity_Consulted_FailedHarnessAttempt_IsAnnouncedAndNextAttemptFollo
 
 	rig.start(baseOrchestratedConfig(rig.orchPath))
 
-	requireHarnessErrorStep(t, rig.store.memStore, "consultant path")
+	requireHarnessFailureStep(t, rig.store.memStore, "consultant path")
 	rig.requireParity(t, 3)
 }
 
@@ -109,8 +109,8 @@ func TestRowParity_Consulted_FailedBypassAttempt_IsAnnounced(t *testing.T) {
 
 	rig.start(baseOrchestratedConfig(rig.orchPath))
 
-	if n := countE501RowsFor(rig.store.memStore, "agent-a"); n < 2 {
-		t.Fatalf("scenario did not run as intended: want the failed attempt and the failed bypass recorded, got %d E501 rows", n)
+	if n := countHarnessErrorRowsFor(rig.store.memStore, "agent-a"); n < 2 {
+		t.Fatalf("scenario did not run as intended: want the failed attempt and the failed bypass recorded, got %d HARNESS_ERROR rows", n)
 	}
 	rig.requireParity(t, 4)
 }

@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 
@@ -180,6 +179,8 @@ func routingRequest(
 	if lastResponse != nil {
 		msg := lastResponse.StatusMessage
 		req.LastStatusMessage = &msg
+		status := lastResponse.StatusCode
+		req.LastStatus = &status
 		req.LastErrorReason = domain.LastErrorReasonFor(lastResponse)
 	}
 	if deviation != nil && deviation.ErrorReason != "" {
@@ -195,20 +196,19 @@ func routingRequest(
 // missing dispatch instruction.
 func (s *sessionImpl) consultSelectResolver(ctx context.Context, req domain.ConsultationRequest, config domain.RunConfig) (instr domain.RoutingInstruction, done bool, outcome domain.RunOutcome, err error) {
 	var consultErr error
+	var stop bool
 	if s.useManualResolver(req) {
-		instr, consultErr = s.deps.Manual.ConsultRouting(ctx, req)
+		instr, consultErr = s.deps.Manual.ConsultRouting(ctx, s.withAskOrchestratorOffer(req))
 	} else {
-		instr, consultErr = s.consultOrchestratorAgent(ctx, req)
-		if consultErr != nil && config.ManualResolution && s.deps.Manual != nil {
-			s.deps.Debug.Log(domain.EventSessionManualResolve, "primary consultation failed; trying manual resolver",
-				domain.F("error", consultErr.Error()),
-			)
-			instr, consultErr = s.deps.Manual.ConsultRouting(ctx, req)
-		} else if consultErr != nil && config.ManualResolution {
-			// Unreachable after the start-time port check; reported rather
-			// than silently skipped.
-			consultErr = errors.Join(consultErr, newManualMissing())
-		}
+		instr, stop, consultErr = s.consultPrimary(ctx, req, config)
+	}
+	// The user handed the decision to the orchestrator: consult it for the
+	// same decision (repeats when a force stop reopens the dialogue).
+	for consultErr == nil && !stop && instr.AskOrchestrator != nil {
+		instr, stop, consultErr = s.consultPrimary(ctx, withUserMessage(req, instr.AskOrchestrator.UserMessage), config)
+	}
+	if stop {
+		return instr, true, forceStopStopOutcome(consultationSubject), nil
 	}
 	if consultErr != nil {
 		s.deps.Debug.Log(domain.EventSessionConsultFailed, consultErr.Error())
@@ -284,8 +284,9 @@ func buildConsultAgentRequest(
 }
 
 // consultHandleHarnessErr handles a harness-level error from a consultant-
-// routed invocation. It persists the failed attempt, attempts a raw-text
-// bypass, and on bypass failure calls consultRoute recursively.
+// routed invocation. It persists the failed attempt as a HARNESS_ERROR row,
+// attempts a raw-text bypass, and on bypass failure either lets the engine
+// re-dispatch (budget left) or calls consultRoute recursively.
 func (s *sessionImpl) consultHandleHarnessErr(
 	ctx context.Context,
 	agentRef domain.AgentReference,
@@ -309,64 +310,48 @@ func (s *sessionImpl) consultHandleHarnessErr(
 	if ctx.Err() != nil {
 		return true, domain.RunOutcome{Status: domain.RunStopped, Message: "run stopped: context cancelled"}, nil
 	}
-	s.deps.Debug.Log(domain.EventSessionHarnessError, invokeErr.Error(),
-		domain.F("agent", agentReq.AgentInstanceID),
-	)
-	crFailedStep := domain.CompletedStep{
-		Seq:           state.GlobalSequence + 1,
-		AgentInstance: agentReq.AgentInstanceID,
-		Phase:         phase,
-		Stage:         effectiveStage,
-		WorkflowRow:   domain.WorkflowRowFromIndex(dispInstr.RowIndex),
-		Status:        domain.StatusBLOCKED,
-		ErrorCode:     domain.ErrorTOOL_UNAVAILABLE,
-		Summary:       invokeErr.Error(),
-		Timestamp:     s.deps.Clock.Now(),
-		Inputs:        formatInputs(agentReq.InputArtifacts),
+	route := func() (bool, domain.RunOutcome, error) {
+		return s.consultRoute(ctx, nil, state, seq, lastResponse, prevWorkflowStep,
+			stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
 	}
-	crNewState, crApplyErr := s.applyAndAnnounce(ctx, *state, crFailedStep)
-	if crApplyErr != nil {
-		return true, domain.RunOutcome{Status: domain.RunFailed, Message: crApplyErr.Error()}, crApplyErr
+	attempt := forcedAttempt{req: agentReq, phase: phase, stage: effectiveStage, row: domain.WorkflowRowFromIndex(dispInstr.RowIndex)}
+	if isForceStopped(invokeErr) {
+		return s.forceStopAttempt(ctx, attempt, true, state, seq, lastResponse, antiLoop, route)
 	}
-	*state = crNewState
-	harnessResp := domain.HarnessErrorResponse(agentReq.AgentInstanceID, config.RunID, invokeErr)
-	devInfo := domain.DeviationInfo{
-		Kind:          domain.DeviationNonSuccess,
-		Response:      harnessResp,
-		CurrentRow:    dispInstr.RowIndex,
-		CurrentPhase:  phase,
-		ArtifactState: *state,
+	failed := failedAttempt{agent: agentRef, req: agentReq, phase: phase, stage: effectiveStage, rowIndex: dispInstr.RowIndex}
+	harnessResp, recErr := s.recordHarnessFailure(ctx, state, failed, invokeErr)
+	if recErr != nil {
+		return true, domain.RunOutcome{Status: domain.RunFailed, Message: recErr.Error()}, recErr
 	}
 	// Raw-text bypass: attempt one direct redispatch before triggering a
 	// recursive consultRoute call.
-	if isRawTextHarnessError(invokeErr) && bypassPermitted(*state, table, dispInstr.RowIndex, effectiveStage, agentRef.Identifier, antiLoop) {
-		bypassSeq := state.GlobalSequence + 1
-		bypassReq := agentReq
-		bypassReq.AgentInstanceID = fmt.Sprintf("%s#%d", agentRef.Identifier, bypassSeq)
-		bypassResp, bypassErr := s.invokeAndLog(ctx, agentRef, bypassReq)
-		if bypassErr == nil {
-			finalResp, finalSeq, routed, routedResp, cont, hitlDone, hitlOut, hitlErr := s.runConsultHITL(
-				ctx, agentRef, bypassReq, bypassResp, bypassSeq, agentReq.HumanInTheLoop, dispInstr,
-				effectiveStage, phase, state, seq, lastResponse, prevWorkflowStep, stages,
-				table, agents, config, declaredInfraAgents, admitted, antiLoop,
-			)
-			if cont || hitlDone || hitlErr != nil {
-				return hitlDone, hitlOut, hitlErr
-			}
-			return s.applyConsultStep(ctx, agentRef, bypassReq, finalResp, finalSeq, routed, routedResp, phase, effectiveStage, dispInstr,
-				state, seq, lastResponse, prevWorkflowStep, stages,
-				table, agents, config, declaredInfraAgents, admitted, antiLoop)
+	bypass := s.attemptRawTextBypass(ctx, state, table, failed, invokeErr, antiLoop)
+	switch bypass.kind {
+	case bypassSucceeded:
+		finalResp, finalSeq, routed, routedResp, cont, hitlDone, hitlOut, hitlErr := s.runConsultHITL(
+			ctx, agentRef, bypass.req, bypass.resp, bypass.seq, agentReq.HumanInTheLoop, dispInstr,
+			effectiveStage, phase, state, seq, lastResponse, prevWorkflowStep, stages,
+			table, agents, config, declaredInfraAgents, admitted, antiLoop,
+		)
+		if cont || hitlDone || hitlErr != nil {
+			return hitlDone, hitlOut, hitlErr
 		}
-		if recErr := s.recordFailedBypass(ctx, state, bypassReq, phase, effectiveStage, dispInstr.RowIndex, bypassErr); recErr != nil {
-			return true, domain.RunOutcome{Status: domain.RunFailed, Message: recErr.Error()}, recErr
-		}
+		return s.applyConsultStep(ctx, agentRef, bypass.req, finalResp, finalSeq, routed, routedResp, phase, effectiveStage, dispInstr,
+			state, seq, lastResponse, prevWorkflowStep, stages,
+			table, agents, config, declaredInfraAgents, admitted, antiLoop)
+	case bypassForceStopped:
+		return s.forceStopAttempt(ctx, forcedAttempt{req: bypass.req, phase: phase, stage: effectiveStage, row: domain.WorkflowRowFromIndex(dispInstr.RowIndex)},
+			true, state, seq, lastResponse, antiLoop, route)
+	case bypassRecordFailed:
+		return true, domain.RunOutcome{Status: domain.RunFailed, Message: bypass.err.Error()}, bypass.err
 	}
 	*lastResponse = &harnessResp
-	if isMechanicalRetryMode(state.Mode) && e501BudgetLeft(*state, table, dispInstr.RowIndex, effectiveStage) {
+	if isMechanicalRetryMode(state.Mode) && harnessErrorBudgetLeft(*state, table, dispInstr.RowIndex, effectiveStage) {
 		// Budget remains: the engine decision re-dispatches the same row and stage.
 		*seq = state.GlobalSequence
 		return false, domain.RunOutcome{}, nil
 	}
+	devInfo := harnessErrorDeviation(failed, harnessResp, *state)
 	return s.consultRoute(ctx, &devInfo, state, seq, lastResponse, prevWorkflowStep,
 		stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
 }

@@ -81,6 +81,7 @@ func newRootCommandWithExitCode(opts Options, exitCode *int) *cobra.Command {
 	root.PersistentFlags().StringVar(&runFlag, "run", "", "restrict analysis to one run id")
 	root.PersistentFlags().StringVar(&formatFlag, "format", "", "output format: json or text")
 	root.PersistentFlags().Bool("tui", false, "launch interactive TUI (consumed by composition root)")
+	root.Flags().Bool("version", false, "Print the tool version and exit")
 
 	// ------------------------------------------------------------------
 	// report subcommand

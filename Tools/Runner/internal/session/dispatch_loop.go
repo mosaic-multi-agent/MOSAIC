@@ -34,6 +34,12 @@ func (s *sessionImpl) runDispatchLoop(ctx context.Context, rs *runStartCtx) (dom
 			}
 			continue
 		}
+		if out, done, handled, err := s.runResumeRedispatch(ctx, rs); handled {
+			if done {
+				return out, err
+			}
+			continue
+		}
 		decision := engine.Next(engine.NextInput{
 			Workflow:            rs.admitted,
 			Schedules:           rs.stages,
@@ -219,8 +225,9 @@ func (s *sessionImpl) prepareAutoDispatchRequest(ctx context.Context, rs *runSta
 }
 
 // handleAutoHarnessErrorAndBypass handles a harness-level error from an
-// auto-routed dispatch. It logs the error, persists the failed attempt,
-// attempts a raw-text bypass, and on bypass failure calls consultRoute.
+// auto-routed dispatch. It persists the failed attempt as a HARNESS_ERROR row,
+// attempts a raw-text bypass, then lets the engine re-dispatch while the
+// HARNESS_ERROR budget lasts and otherwise calls consultRoute.
 //
 // Returns: (response, step, done, cont, out, err). On bypass success, done and
 // cont are both false and the returned response/step are the bypass values.
@@ -229,64 +236,42 @@ func (s *sessionImpl) handleAutoHarnessErrorAndBypass(ctx context.Context, rs *r
 	if ctx.Err() != nil {
 		return domain.ProtocolResponse{}, step, true, false, domain.RunOutcome{Status: domain.RunStopped, Message: "run stopped: context cancelled"}, nil
 	}
-	s.deps.Debug.Log(domain.EventSessionHarnessError, invokeErr.Error(),
-		domain.F("agent", step.Request.AgentInstanceID),
-	)
-	harnessResp := domain.HarnessErrorResponse(step.Request.AgentInstanceID, rs.config.RunID, invokeErr)
-	deviationInfo := domain.DeviationInfo{
-		Kind:          domain.DeviationNonSuccess,
-		Response:      harnessResp,
-		CurrentRow:    step.RowIndex,
-		CurrentPhase:  step.Phase,
-		CurrentStage:  step.Stage,
-		ArtifactState: rs.state,
+	if isForceStopped(invokeErr) {
+		done, out, err := s.autoForceStop(ctx, rs, attemptOfStep(step, step.Request), step.Retry == domain.RetryNone)
+		return domain.ProtocolResponse{}, step, done, true, out, err
 	}
-	// Persist a record of the failed dispatch attempt.
-	failedStep := domain.CompletedStep{
-		Seq:           rs.state.GlobalSequence + 1,
-		AgentInstance: step.Request.AgentInstanceID,
-		Phase:         step.Phase,
-		Stage:         step.Stage,
-		WorkflowRow:   domain.WorkflowRowFromIndex(step.RowIndex),
-		Status:        domain.StatusBLOCKED,
-		ErrorCode:     domain.ErrorTOOL_UNAVAILABLE,
-		Summary:       invokeErr.Error(),
-		Timestamp:     s.deps.Clock.Now(),
-		Inputs:        formatInputs(step.Request.InputArtifacts),
+	attempt := failedAttempt{agent: step.Agent, req: step.Request, phase: step.Phase, stage: step.Stage, rowIndex: step.RowIndex}
+	harnessResp, recErr := s.recordHarnessFailure(ctx, &rs.state, attempt, invokeErr)
+	if recErr != nil {
+		return domain.ProtocolResponse{}, step, true, false, domain.RunOutcome{Status: domain.RunFailed, Message: recErr.Error()}, recErr
 	}
-	newState, applyErr := s.applyAndAnnounce(ctx, rs.state, failedStep)
-	if applyErr != nil {
-		s.deps.Debug.Log(domain.EventSessionApplyFailed, applyErr.Error())
-		return domain.ProtocolResponse{}, step, true, false, domain.RunOutcome{Status: domain.RunFailed, Message: applyErr.Error()}, applyErr
-	}
-	rs.state = newState
 	rs.seq = rs.state.GlobalSequence
 	if s.deps.Routing == nil {
-		msg := fmt.Sprintf("harness error: no routing consultant configured: %s", invokeErr.Error())
+		msg := fmt.Sprintf("harness error: no routing consultant configured: %s", harnessResp.StatusMessage)
 		s.deps.Debug.Log(domain.EventSessionDeviationUnresolved, msg)
 		return domain.ProtocolResponse{}, step, true, false, domain.RunOutcome{Status: domain.RunDeviationUnresolved, Message: msg}, nil
 	}
-	// Raw-text bypass: one direct retry (one attempt of the E501 budget in the
-	// mechanical-retry modes) before the next step is decided.
-	if isRawTextHarnessError(invokeErr) && bypassPermitted(rs.state, rs.table, step.RowIndex, step.Stage, step.Agent.Identifier, &rs.antiLoop) {
-		bypassSeq := rs.state.GlobalSequence + 1
-		bypassReq := step.Request
-		bypassReq.AgentInstanceID = fmt.Sprintf("%s#%d", step.Agent.Identifier, bypassSeq)
-		bypassResp, bypassErr := s.invokeAndLog(ctx, step.Agent, bypassReq)
-		if bypassErr == nil {
-			step.Request = bypassReq
-			return bypassResp, step, false, false, domain.RunOutcome{}, nil
-		}
-		if recErr := s.recordFailedBypass(ctx, &rs.state, bypassReq, step.Phase, step.Stage, step.RowIndex, bypassErr); recErr != nil {
-			return domain.ProtocolResponse{}, step, true, false, domain.RunOutcome{Status: domain.RunFailed, Message: recErr.Error()}, recErr
-		}
+	// Raw-text bypass: one direct retry (one attempt of the HARNESS_ERROR
+	// budget in the mechanical-retry modes) before the next step is decided.
+	bypass := s.attemptRawTextBypass(ctx, &rs.state, rs.table, attempt, invokeErr, &rs.antiLoop)
+	switch bypass.kind {
+	case bypassSucceeded:
+		step.Request = bypass.req
+		return bypass.resp, step, false, false, domain.RunOutcome{}, nil
+	case bypassForceStopped:
+		done, out, err := s.autoForceStop(ctx, rs, attemptOfStep(step, bypass.req), true)
+		return domain.ProtocolResponse{}, step, done, true, out, err
+	case bypassRecordFailed:
+		return domain.ProtocolResponse{}, step, true, false, domain.RunOutcome{Status: domain.RunFailed, Message: bypass.err.Error()}, bypass.err
+	case bypassFailed:
 		rs.seq = rs.state.GlobalSequence
 	}
 	rs.lastResponse = &harnessResp
-	if isMechanicalRetryMode(rs.state.Mode) && e501BudgetLeft(rs.state, rs.table, step.RowIndex, step.Stage) {
+	if isMechanicalRetryMode(rs.state.Mode) && harnessErrorBudgetLeft(rs.state, rs.table, step.RowIndex, step.Stage) {
 		// Budget remains: the engine decision re-dispatches the same row and stage.
 		return domain.ProtocolResponse{}, step, false, true, domain.RunOutcome{}, nil
 	}
+	deviationInfo := harnessErrorDeviation(attempt, harnessResp, rs.state)
 	done, out, outErr := s.consultRoute(ctx, &deviationInfo, &rs.state, &rs.seq,
 		&rs.lastResponse, &rs.prevWorkflowStep, &rs.stages,
 		rs.table, rs.agents, rs.config, rs.declaredInfraAgents, rs.admitted, &rs.antiLoop)
@@ -368,6 +353,11 @@ func (s *sessionImpl) postDispatchTriggers(ctx context.Context, rs *runStartCtx,
 		return domain.RunOutcome{Status: domain.RunStopped, Message: "run stopped: graceful stop confirmed"}, true, nil
 	}
 	if halt {
+		if done, out, handled, err := s.followUpInfraForceStop(&rs.lastResponse, func() (bool, domain.RunOutcome, error) {
+			return s.routeFromRS(ctx, rs)
+		}); handled {
+			return out, done, err
+		}
 		return domain.RunOutcome{Status: domain.RunStopped, Message: "infrastructure agent halted the run"}, true, nil
 	}
 	cp := completedStep

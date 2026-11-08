@@ -163,7 +163,7 @@ class TestGroupWideToolsRunnerMode(WorkspaceTestCase):
         path = write_transcript(self.workspace, self.fixture_records())
         with runner_env(self.workspace, role="subagent", run_id=RUNNER_RUN_ID,
                         instance_id=INSTANCE_ID):
-            fire(self.workspace, "UserPromptSubmit", user_prompt="go",
+            fire(self.workspace, "UserPromptSubmit", prompt="go",
                  transcript_path=path)
             fire(self.workspace, "SessionEnd", reason="other",
                  transcript_path=path)

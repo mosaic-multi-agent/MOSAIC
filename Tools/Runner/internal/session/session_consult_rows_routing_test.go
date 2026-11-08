@@ -54,7 +54,7 @@ func TestConsultAnnounce_Deviation_HarnessErrorBudgetExhausted_AnnouncesTheKind(
 		t.Run(string(mode), func(t *testing.T) {
 			rig := newLinearConsultRig(t)
 			rig.consult.queueStop("giving up")
-			queueRepeated(rig.f, "agent-a", engine.E501AttemptLimit, failEntry("harness: subprocess timed out"))
+			queueRepeated(rig.f, "agent-a", engine.HarnessErrorAttemptLimit, failEntry("harness: subprocess timed out"))
 
 			got, err := rig.ses.Start(context.Background(), configForMode(rig.orchPath, mode))
 

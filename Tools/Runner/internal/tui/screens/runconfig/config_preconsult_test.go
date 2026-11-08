@@ -68,7 +68,7 @@ func TestConfigScreen_BackNav_PreConsultSkipped_WhenModeOrchestrated(t *testing.
 	s.SetDeclaredAgents(nil)
 
 	driveConfigScreenModeSelect(s, 0) // orchestrated
-	pressKey(s, tea.KeyEnter)          // harness
+	pressKey(s, tea.KeyEnter)         // harness
 	advanceConfigScreenTimeout(s)
 	pressKey(s, tea.KeyEnter) // version drift
 	pressKey(s, tea.KeyEnter) // checkpoints
@@ -95,7 +95,7 @@ func TestConfigScreen_BackNav_PreConsultStepReachable_WhenModeAuto(t *testing.T)
 	s.SetDeclaredAgents(nil)
 
 	driveConfigScreenModeSelect(s, 1) // auto
-	pressKey(s, tea.KeyEnter)          // harness
+	pressKey(s, tea.KeyEnter)         // harness
 	advanceConfigScreenTimeout(s)
 	pressKey(s, tea.KeyEnter) // version drift
 	pressKey(s, tea.KeyEnter) // checkpoints
@@ -242,10 +242,10 @@ func TestConfigScreen_PreConsultStep_CursorDefaultsToYes_ForwardEntryViaCommitBr
 	})
 
 	driveConfigScreenModeSelect(s, 1) // auto
-	pressKey(s, tea.KeyEnter)          // harness
-	advanceConfigScreenTimeout(s)      // timeout
-	pressKey(s, tea.KeyEnter)          // version drift
-	pressKey(s, tea.KeyEnter)          // checkpoints
+	pressKey(s, tea.KeyEnter)         // harness
+	advanceConfigScreenTimeout(s)     // timeout
+	pressKey(s, tea.KeyEnter)         // version drift
+	pressKey(s, tea.KeyEnter)         // checkpoints
 	// Commits step: move cursor to enabled (cursor 1) and confirm.
 	pressKey(s, tea.KeyDown)  // cursor → 1 (enabled)
 	pressKey(s, tea.KeyEnter) // commit-branch step now
@@ -262,4 +262,3 @@ func TestConfigScreen_PreConsultStep_CursorDefaultsToYes_ForwardEntryViaCommitBr
 			s.cursor)
 	}
 }
-

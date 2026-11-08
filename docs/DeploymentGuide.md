@@ -127,7 +127,11 @@ Each rebuilt workflow routing table gains a first-column `Row` (1..N), added by 
 # → Select "Update workflows"
 ```
 
-The TUI marks currently deployed workflows so you can see what you're keeping.
+The TUI marks currently deployed workflows so you can see what you're keeping. Deployed custom workflows, which the catalog stack does not supply, are listed with the hint `not in catalog; deployed only`. Like deployed catalog workflows they start unchecked: confirming without ticking one removes it, and the run summary names it. Tick the custom workflows you want to keep.
+
+**Kept custom workflows.** A custom workflow you keep stays in the orchestrator exactly as deployed. It is not updated or validated, and the run warns `<id> is not in the catalog stack; kept as deployed, not updated or validated.` `Update workspace` keeps every deployed custom workflow the same way. With `--workflows`, an id the catalog stack does not supply is accepted when it names a deployed custom workflow; any other unsupplied id is an unknown-workflow error. These two flows do not show the removed-layer hint for unknown ids; `deploy` still does.
+
+**Same-line workflow tags.** If a deployed orchestrator file has a line that begins with a workflow tag and carries more content on that line, the update for that file fails and nothing is written. Put the tag on a line of its own.
 
 **CLI:**
 

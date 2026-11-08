@@ -117,7 +117,7 @@ func TestSession_ConsultRoute_CrossStageDeviation_UsesTargetRowStage(t *testing.
 	// The engine auto-dispatches Stage-2/agent-a (row 2). The harness fails on
 	// every attempt until the E501 budget is used up, triggering consultRoute
 	// with deviation.CurrentStage = "2".
-	for i := 0; i < engine.E501AttemptLimit; i++ {
+	for i := 0; i < engine.HarnessErrorAttemptLimit; i++ {
 		f.Queue("agent-a", harness.ScriptedEntry{Err: errors.New("simulated harness failure on Stage-2/agent-a")})
 	}
 	// The consultant re-routes to row 2 (agent-a). The harness succeeds this time.
@@ -233,7 +233,7 @@ func TestSession_MixedRoutingPaths_SeqStrictlyMonotonic(t *testing.T) {
 	}})
 	// (b) Stage-1/agent-b: every harness error is recorded (Seq=2..4); once the
 	// E501 budget is used up the last one triggers consultRoute.
-	for i := 0; i < engine.E501AttemptLimit; i++ {
+	for i := 0; i < engine.HarnessErrorAttemptLimit; i++ {
 		f.Queue("agent-b", harness.ScriptedEntry{Err: errors.New("simulated Stage-1/agent-b harness error")})
 	}
 	// Inside consultRoute: first agent-b dispatch (HITLOverride=true).
@@ -371,8 +371,8 @@ func TestSession_ConsultRoute_HarnessErrorThenRedispatch_SeqConsecutive(t *testi
 		t.Fatalf("want 2 applied rows (harness error, retry), got %d: %+v", len(store.Applied), store.Applied)
 	}
 	requireInstanceIDsMatchRecordedSeq(t, store)
-	if got := store.Applied[0]; got.Status != domain.StatusBLOCKED {
-		t.Errorf("want the harness-error row recorded as BLOCKED, got %q", got.Status)
+	if got := store.Applied[0]; got.Status != domain.StatusHARNESS_ERROR {
+		t.Errorf("want the harness-error row recorded as HARNESS_ERROR, got %q", got.Status)
 	}
 }
 

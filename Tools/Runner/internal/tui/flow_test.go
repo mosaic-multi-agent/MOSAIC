@@ -467,6 +467,7 @@ func driveConfigStepTimeout(s *runconfig.ConfigScreen) {
 	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
 	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 	s.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	answerHITLTimeoutOnScreen(s) // the HITL timeout follows the timeout
 }
 
 // ---------------------------------------------------------------------------
