@@ -55,6 +55,7 @@ type ProgressScreen struct {
 	rows              []ProgressRow
 	runningIdx        int // index of currently running row, or -1
 	consultation      *domain.ConsultationActivity
+	repairOutcomes    []domain.RepairOutcome
 	startTime         time.Time
 	stopRequest       bool
 	confirmPending    bool
@@ -217,6 +218,10 @@ func (s *ProgressScreen) View() string {
 	if s.consultation != nil && contentH > 1 {
 		contentH--
 	}
+	contentH -= len(s.repairOutcomes)
+	if contentH < 1 {
+		contentH = 1
+	}
 	start := 0
 	if len(s.rows) > contentH {
 		start = len(s.rows) - contentH
@@ -254,6 +259,12 @@ func (s *ProgressScreen) View() string {
 			rowsBuilder.WriteByte('\n')
 		}
 		rowsBuilder.WriteString(line)
+	}
+	if lines := s.repairOutcomeLines(); lines != "" {
+		if rowsBuilder.Len() > 0 {
+			rowsBuilder.WriteString("\n")
+		}
+		rowsBuilder.WriteString(lines)
 	}
 	if line := s.consultationLine(); line != "" {
 		if rowsBuilder.Len() > 0 {

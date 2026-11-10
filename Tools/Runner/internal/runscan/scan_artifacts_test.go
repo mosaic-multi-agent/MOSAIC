@@ -34,9 +34,9 @@ func TestScan_MissingArtifact_TreatedAsResumable(t *testing.T) {
 	}
 }
 
-func TestScan_UnparseableArtifact_TreatedAsResumable(t *testing.T) {
-	// A folder with a corrupt / unparseable Orchestration.md must appear as
-	// a resumable candidate with a non-nil ParseError.
+func TestScan_UnparseableArtifact_IsUnresumableAsDamagedFrontmatter(t *testing.T) {
+	// A folder whose Orchestration.md has no readable frontmatter records
+	// nothing to resume from, so it is unresumable as damaged frontmatter.
 	rootDir := t.TempDir()
 	folder := newTestRunFolder(t, rootDir, runID1)
 	// Write garbage content that artifact.Parse will reject.
@@ -50,15 +50,14 @@ func TestScan_UnparseableArtifact_TreatedAsResumable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Scan() unexpected error: %v", err)
 	}
-	if len(result.Candidates) != 1 {
-		t.Errorf("Candidates = %d, want 1 (unparseable artifact treated as resumable)", len(result.Candidates))
-		return
+	if len(result.Candidates) != 0 {
+		t.Errorf("Candidates = %d, want 0 (an artifact with no readable frontmatter is not resumable)", len(result.Candidates))
 	}
-	if result.Candidates[0].ParseError == nil {
-		t.Error("ParseError is nil, want non-nil (unparseable Orchestration.md must set ParseError)")
+	if len(result.Unresumable) != 1 {
+		t.Fatalf("Unresumable = %d, want 1", len(result.Unresumable))
 	}
-	if len(result.Unresumable) != 0 {
-		t.Errorf("Unresumable = %d, want 0 (unparseable artifact must remain resumable, not unresumable)", len(result.Unresumable))
+	if got := result.Unresumable[0].Reason; got != runscan.ReasonDamagedFrontmatter {
+		t.Errorf("Reason = %q, want %q", got, runscan.ReasonDamagedFrontmatter)
 	}
 }
 

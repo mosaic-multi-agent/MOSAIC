@@ -107,6 +107,11 @@ func (s *sessionImpl) setupInfraAndStages(ctx context.Context, rs *runStartCtx) 
 			return s.scheduleRefusal(readErr), true, nil
 		}
 		rs.stages = schedules
+		if rs.startDamage != nil {
+			if outcome, done, err := s.repairReadDamage(ctx, rs); done {
+				return outcome, true, err
+			}
+		}
 	}
 
 	// Step 6b: enumerate declared infrastructure agents.
@@ -174,7 +179,12 @@ func (s *sessionImpl) setupInfraAndStages(ctx context.Context, rs *runStartCtx) 
 
 	// Record adopted runner settings once, before any dispatch.
 	if adoptRunnerSettings {
-		adopted, err := s.deps.Store.AdoptRunnerSettings(ctx, rs.config.Mode, rs.config.PreConsultation, rs.config.ManualResolution, s.deps.Clock.Now())
+		adopted, outcome, ended, err := s.writeRepairingDamage(ctx, rs, rs.existingState, func() (domain.ArtifactState, error) {
+			return s.deps.Store.AdoptRunnerSettings(ctx, rs.config.Mode, rs.config.PreConsultation, rs.config.ManualResolution, s.deps.Clock.Now())
+		})
+		if ended {
+			return outcome, true, nil
+		}
 		if err != nil {
 			return domain.RunOutcome{Status: domain.RunFailed, Message: err.Error()}, true, err
 		}
@@ -256,7 +266,7 @@ func (s *sessionImpl) createOrResumeArtifact(ctx context.Context, rs *runStartCt
 	// Step 8b: commit setup (new runs with commits enabled, and resumed runs
 	// with commits enabled and no commit_branch).
 	if rs.config.Commits && needsCommitSetup(rs.state) {
-		state, outcome, done, err := s.runCommitSetup(ctx, setupAgent, rs.state, rs.config.RunID)
+		state, outcome, done, err := s.runCommitSetup(ctx, rs, setupAgent, rs.state)
 		rs.state = state
 		if done {
 			return outcome, true, err
@@ -309,6 +319,9 @@ func (s *sessionImpl) createNewRunArtifact(ctx context.Context, rs *runStartCtx)
 // which already includes any retried commit setup row).
 // Called by createOrResumeArtifact on the resume path.
 func (s *sessionImpl) resumeRunArtifact(ctx context.Context, rs *runStartCtx) (domain.RunOutcome, bool, error) {
+	if rs.startRepair != nil {
+		return s.resumeFromRepair(rs)
+	}
 	state := rs.existingState
 	resume, resumeErr := engine.ResumePointFromSchedules(rs.admitted, rs.stages, state, domain.NewInfraAgentSet(rs.declaredInfraAgents, s.orchRef.Identifier))
 	if resumeErr != nil {

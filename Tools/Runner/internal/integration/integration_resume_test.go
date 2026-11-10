@@ -14,7 +14,7 @@ import (
 
 // TestIntegration_InterruptedRun_ResumesFromRerunLast verifies that when an
 // existing Orchestration.md reflects a mid-invocation interruption — the
-// current_state.last_agent is one step ahead of the execution log's last entry
+// current_state.last_agent is one step behind the execution log's last entry
 // — the session re-dispatches the interrupted row (FR-33 RerunLast) and then
 // continues normally, using the real file-based artifact store.
 //
@@ -29,8 +29,8 @@ func TestIntegration_InterruptedRun_ResumesFromRerunLast(t *testing.T) {
 	writeAgentFile(t, dir, "agent-b")
 
 	// Write an artifact that simulates a mid-invocation interruption:
-	//   - Execution log: only agent-a#1 has been recorded (global_sequence=1).
-	//   - current_state.last_agent: "agent-b#2" — one step ahead of the log.
+	//   - Execution log: agent-a#1 and agent-b#2 have been recorded (global_sequence=2).
+	//   - current_state.last_agent: "agent-a#1" — one step behind the log.
 	//
 	// When current_state.last_agent differs from the execution log's last entry,
 	// engine.ResumePoint detects an interruption (RerunLast=true) and returns
@@ -44,7 +44,7 @@ workflow_version: "1.0"
 task: "test task"
 started: 2026-01-01T00:00:00Z
 last_updated: 2026-01-01T00:00:00Z
-global_sequence: 1
+global_sequence: 2
 runner_mode: auto
 runner_pre_consultation: disabled
 runner_manual_resolution: disabled
@@ -53,7 +53,7 @@ current_state:
   phase: PLANNING
   iteration: null
   last_status: SUCCESS
-  last_agent: "agent-b#2"
+  last_agent: "agent-a#1"
   error_code: null
 ---
 
@@ -61,6 +61,7 @@ current_state:
 | Seq | Agent     | Phase    | Iteration | Status  | Timestamp            | Summary       | Checkpoint |
 | --- | --------- | -------- | ----- | ------- | -------------------- | ------------- | ---------- |
 | 1   | agent-a#1 | PLANNING | -     | SUCCESS | 2026-01-01T00:00:00Z | planning done | -          |
+| 2   | agent-b#2 | PLANNING | -     | SUCCESS | 2026-01-01T00:00:00Z | result written | -         |
 </ExecutionLog>
 
 <Artifacts type="core">
@@ -81,16 +82,11 @@ current_state:
 	}
 
 	f := harness.NewMockAdapter()
-	// agent-a is re-dispatched first (RerunLast), then agent-b completes the run.
-	f.Queue("agent-a", harness.ScriptedEntry{Response: &domain.ProtocolResponse{
-		AgentInstanceID: "agent-a#2",
-		StatusCode:      domain.StatusSUCCESS,
-		StatusMessage:   "re-done after interruption",
-	}})
+	// agent-b is re-dispatched (RerunLast), which completes the run.
 	f.Queue("agent-b", harness.ScriptedEntry{Response: &domain.ProtocolResponse{
 		AgentInstanceID: "agent-b#3",
 		StatusCode:      domain.StatusSUCCESS,
-		StatusMessage:   "done",
+		StatusMessage:   "re-done after interruption",
 	}})
 
 	sess := newSession(f, artifactPath)
@@ -107,17 +103,14 @@ current_state:
 	got, err := sess.Start(context.Background(), cfg)
 	requireRunStatus(t, got, err, domain.RunCompleted)
 
-	// Two harness invocations: agent-a (re-run of interrupted row) then agent-b.
+	// One harness invocation: agent-b (re-run of the interrupted row).
 	invs := f.Invocations()
-	if len(invs) != 2 {
-		t.Errorf("want 2 harness invocations (agent-a re-run + agent-b), got %d", len(invs))
+	if len(invs) != 1 {
+		t.Fatalf("want 1 harness invocation (agent-b re-run), got %d", len(invs))
 	}
-	if len(invs) >= 1 && invs[0].Agent.Identifier != "agent-a" {
-		t.Errorf("want first invocation to re-run agent-a (interrupted row), got %q",
+	if invs[0].Agent.Identifier != "agent-b" {
+		t.Errorf("want the invocation to re-run agent-b (interrupted row), got %q",
 			invs[0].Agent.Identifier)
-	}
-	if len(invs) >= 2 && invs[1].Agent.Identifier != "agent-b" {
-		t.Errorf("want second invocation to be agent-b, got %q", invs[1].Agent.Identifier)
 	}
 }
 
@@ -228,10 +221,11 @@ current_state:
 // the interrupted step before continuing, using settings read from the artifact
 // frontmatter, without re-asking the user for any configuration.
 //
-// The interruption signature: the execution log ends at agent-a#1 but
-// current_state.last_agent is already agent-b#2, meaning agent-b was dispatched
-// but the runner was interrupted before recording its result. ResumePoint
-// detects this as RerunLast=true and the session re-dispatches agent-a.
+// The interruption signature: the execution log ends at agent-b#2 but
+// current_state.last_agent is still agent-a#1, meaning agent-b's row was
+// logged but the runner was interrupted before current_state caught up.
+// ResumePoint detects this as RerunLast=true and the session re-dispatches
+// agent-b.
 func TestIntegration_Resume_InterruptedStep_ReDispatched(t *testing.T) {
 	dir := t.TempDir()
 	orchPath := copyFile(t, dir, "orchestrator.md",
@@ -247,7 +241,7 @@ workflow_version: "1.0"
 task: "interrupted task"
 started: 2026-01-01T00:00:00Z
 last_updated: 2026-01-01T00:00:00Z
-global_sequence: 1
+global_sequence: 2
 runner_mode: auto
 runner_pre_consultation: disabled
 runner_manual_resolution: disabled
@@ -257,7 +251,7 @@ current_state:
   phase: PLANNING
   iteration: null
   last_status: SUCCESS
-  last_agent: "agent-b#2"
+  last_agent: "agent-a#1"
   error_code: null
 ---
 
@@ -265,6 +259,7 @@ current_state:
 | Seq | Agent     | Phase    | Iteration | Status  | Timestamp            | Summary       | Checkpoint |
 | --- | --------- | -------- | ----- | ------- | -------------------- | ------------- | ---------- |
 | 1   | agent-a#1 | PLANNING | -     | SUCCESS | 2026-01-01T00:00:00Z | planning done | -          |
+| 2   | agent-b#2 | PLANNING | -     | SUCCESS | 2026-01-01T00:00:00Z | result written | -         |
 </ExecutionLog>
 
 <Artifacts type="core">
@@ -285,17 +280,12 @@ current_state:
 	}
 
 	f := harness.NewMockAdapter()
-	// agent-a is re-dispatched (RerunLast for the interrupted row), then
-	// agent-b completes the run.
-	f.Queue("agent-a", harness.ScriptedEntry{Response: &domain.ProtocolResponse{
-		AgentInstanceID: "agent-a#2",
-		StatusCode:      domain.StatusSUCCESS,
-		StatusMessage:   "re-done after interruption",
-	}})
+	// agent-b is re-dispatched (RerunLast for the interrupted row), which
+	// completes the run.
 	f.Queue("agent-b", harness.ScriptedEntry{Response: &domain.ProtocolResponse{
 		AgentInstanceID: "agent-b#3",
 		StatusCode:      domain.StatusSUCCESS,
-		StatusMessage:   "done",
+		StatusMessage:   "re-done after interruption",
 	}})
 
 	// No routing consultant: mode=auto (read from frontmatter) routes autonomously.
@@ -315,14 +305,11 @@ current_state:
 	requireRunStatus(t, got, err, domain.RunCompleted)
 
 	invs := f.Invocations()
-	if len(invs) != 2 {
-		t.Errorf("want 2 harness invocations (agent-a re-run + agent-b), got %d", len(invs))
+	if len(invs) != 1 {
+		t.Fatalf("want 1 harness invocation (agent-b re-run), got %d", len(invs))
 	}
-	if len(invs) >= 1 && invs[0].Agent.Identifier != "agent-a" {
-		t.Errorf("want first invocation to re-run agent-a (interrupted row), got %q",
+	if invs[0].Agent.Identifier != "agent-b" {
+		t.Errorf("want the invocation to re-run agent-b (interrupted row), got %q",
 			invs[0].Agent.Identifier)
-	}
-	if len(invs) >= 2 && invs[1].Agent.Identifier != "agent-b" {
-		t.Errorf("want second invocation to be agent-b, got %q", invs[1].Agent.Identifier)
 	}
 }

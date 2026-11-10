@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -48,8 +49,29 @@ func (s *sessionImpl) consultRoute(
 	if selErr != nil || selDone {
 		return selDone, selOut, selErr
 	}
-	dispInstr := instr.Dispatch
+	return s.consultCarryOut(ctx, instr.Dispatch, state, seq, lastResponse, prevWorkflowStep,
+		stages, table, agents, config, declaredInfraAgents, admitted, antiLoop)
+}
 
+// consultCarryOut carries out a dispatch instruction the routing consultant
+// returned and the session validated: it resolves the target, re-reads the
+// artifact, invokes the agent and applies the response. Returns done=true with
+// a final outcome when the run should terminate.
+func (s *sessionImpl) consultCarryOut(
+	ctx context.Context,
+	dispInstr *domain.DispatchInstruction,
+	state *domain.ArtifactState,
+	seq *int,
+	lastResponse **domain.ProtocolResponse,
+	prevWorkflowStep **domain.CompletedStep,
+	stages *domain.BlockSchedules,
+	table domain.RoutingTable,
+	agents map[string]domain.AgentReference,
+	config domain.RunConfig,
+	declaredInfraAgents []domain.DeclaredInfraAgent,
+	admitted domain.AdmittedWorkflow,
+	antiLoop *antiLoopState,
+) (done bool, outcome domain.RunOutcome, outErr error) {
 	// The row and stage to record come from the validated instruction.
 	row, effectiveStage, tDone, tOut := s.resolveConsultTarget(table, dispInstr, agents, admitted, *stages)
 	if tDone {
@@ -65,7 +87,14 @@ func (s *sessionImpl) consultRoute(
 	// row, no global_sequence advance, no current_state change. Re-read the
 	// artifact so any Workflow Notes the orchestrator appended directly during
 	// its deliberation are visible to the session before any later state write.
-	s.consultReread(ctx, state, seq)
+	if rereadErr := s.consultReread(ctx, state, seq); rereadErr != nil {
+		s.deps.Debug.Log(domain.EventSessionConsultFailed, "artifact unreadable after the consultation: "+rereadErr.Error())
+		return true, domain.RunOutcome{
+			Status:  domain.RunFailed,
+			Message: "artifact unreadable after the consultation: " + rereadErr.Error(),
+			Cause:   rereadErr,
+		}, nil
+	}
 
 	// Resolve the artifacts and HITL: row defaults as the engine resolves them,
 	// explicit overrides verbatim. A resolution failure ends the run unrecorded.
@@ -207,6 +236,19 @@ func (s *sessionImpl) consultSelectResolver(ctx context.Context, req domain.Cons
 	for consultErr == nil && !stop && instr.AskOrchestrator != nil {
 		instr, stop, consultErr = s.consultPrimary(ctx, withUserMessage(req, instr.AskOrchestrator.UserMessage), config)
 	}
+	// The artifact is read after every routing consultation, whatever its
+	// outcome. Damage is repaired before the consultation's own result counts.
+	var dc *damagedConsultation
+	if !errors.As(consultErr, &dc) {
+		dc = s.damageAfterConsult(ctx, consultErr)
+	}
+	if dc != nil {
+		repaired, repairOut, ended := s.repairDamage(ctx, req, config, dc)
+		if ended {
+			return instr, true, repairOut, nil
+		}
+		instr, stop, consultErr = repaired, false, nil
+	}
 	if stop {
 		return instr, true, forceStopStopOutcome(consultationSubject), nil
 	}
@@ -214,24 +256,34 @@ func (s *sessionImpl) consultSelectResolver(ctx context.Context, req domain.Cons
 		s.deps.Debug.Log(domain.EventSessionConsultFailed, consultErr.Error())
 		return instr, true, consultFailureOutcome(consultErr), nil
 	}
+	if out, ended := s.endingInstruction(instr); ended {
+		return instr, true, out, nil
+	}
+	return instr, false, domain.RunOutcome{}, nil
+}
+
+// endingInstruction returns the outcome of a consultant instruction that ends
+// the run: a stop, or an instruction with neither stop nor dispatch. ended is
+// false for a dispatch.
+func (s *sessionImpl) endingInstruction(instr domain.RoutingInstruction) (out domain.RunOutcome, ended bool) {
 	if instr.Stop != nil {
 		s.deps.Debug.Log(domain.EventSessionConsultStop, "consultant stop instruction",
 			domain.F("reason", instr.Stop.Reason),
 		)
-		return instr, true, domain.RunOutcome{
+		return domain.RunOutcome{
 			Status:     domain.RunStoppedByConsultant,
 			Message:    "consultant stop: " + instr.Stop.Reason,
 			StopReason: instr.Stop.Reason,
-		}, nil
+		}, true
 	}
 	if instr.Dispatch == nil {
 		s.deps.Debug.Log(domain.EventSessionConsultFailed, "instruction has neither stop nor dispatch")
-		return instr, true, domain.RunOutcome{
+		return domain.RunOutcome{
 			Status:  domain.RunStoppedByConsultant,
 			Message: "consultation failed: instruction has neither stop nor dispatch",
-		}, nil
+		}, true
 	}
-	return instr, false, domain.RunOutcome{}, nil
+	return domain.RunOutcome{}, false
 }
 
 // consultReread re-reads the artifact after a successful routing consultation
@@ -242,11 +294,17 @@ func (s *sessionImpl) consultSelectResolver(ctx context.Context, req domain.Cons
 // move current_state. The session's local sequence follows the re-read
 // artifact's global_sequence directly, so the agent the consultation
 // dispatches takes the next Seq with no collision from a consultation row.
-func (s *sessionImpl) consultReread(ctx context.Context, state *domain.ArtifactState, seq *int) {
-	if freshState, readErr := s.deps.Store.Read(ctx); readErr == nil {
-		*state = freshState
+//
+// The read is strict: an artifact that cannot be read ends the run, as no
+// state write may follow a read that failed.
+func (s *sessionImpl) consultReread(ctx context.Context, state *domain.ArtifactState, seq *int) error {
+	freshState, readErr := s.deps.Store.Read(ctx)
+	if readErr != nil {
+		return readErr
 	}
+	*state = freshState
 	*seq = state.GlobalSequence
+	return nil
 }
 
 // buildConsultAgentRequest resolves the dispatched agent reference and builds

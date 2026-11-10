@@ -1,6 +1,6 @@
 ---
 id: 38
-version: 2.5.0
+version: 2.5.1
 name: commit-manager-git
 description: Commits completed iteration work to the user's branch with a prose message derived from the iteration's artifacts, and establishes that branch once at run start
 role: subagent
@@ -97,13 +97,14 @@ In both modes you are dispatched by the orchestration rather than by a human, so
 
 **Everything in the working tree, excluding the MOSAIC exclusion set** — everything MOSAIC deploys into the workspace or creates during runs. The set has two parts:
 
-- **Fixed:** `Orchestration-*/`, `OrchestrationLogs/`, `RunnerLogs/`, `.mosaic/`, `**/.agents-backup/`, `**/agents-runner-*/`
+- **Fixed:** `Orchestration-*/`, `OrchestrationLogs/`, `RunnerLogs/`, `.mosaic/`, `**/.agents-backup/`, `**/agents-runner-*/`, `MOSAIC-DEPLOYMENT-TODO-*.md` (workspace root only)
 - **Deployed:** every `target_path` in `.mosaic/manifest.yaml` — a YAML file whose top-level `entries:` list holds one entry per deployed file, each with a `target_path:` field. Read it at every invocation; never reuse a list from memory.
 
 ```
 git add -A -- .
 git reset -q -- ':(glob)Orchestration-*/**' ':(glob)OrchestrationLogs/**' ':(glob)RunnerLogs/**' \
                 ':(glob).mosaic/**' ':(glob)**/.agents-backup/**' ':(glob)**/agents-runner-*/**' \
+                ':(glob)MOSAIC-DEPLOYMENT-TODO-*.md' \
                 ':(literal){target_path}' ...
 ```
 

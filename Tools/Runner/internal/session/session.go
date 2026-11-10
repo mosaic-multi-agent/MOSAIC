@@ -240,6 +240,12 @@ type Deps struct {
 	// (an injectable error seam on BackupState) so that Cleanup can be forced
 	// to fail without relying on filesystem tricks. Nil in production.
 	BackupStateHook func(*lockprotocol.BackupState)
+
+	// Evidence gives access to the last-good artifact copy and saves damaged
+	// copies for diagnosis. Optional: nil is normalised in New to Store when it
+	// implements domain.ArtifactEvidence, otherwise to
+	// domain.NopArtifactEvidence{}.
+	Evidence domain.ArtifactEvidence
 }
 
 // New creates a new Session with the given port dependencies.
@@ -284,6 +290,13 @@ func New(deps Deps) Session {
 	}
 	if deps.Guidance == nil {
 		deps.Guidance = NewStandingGuidance()
+	}
+	if deps.Evidence == nil {
+		if ev, ok := deps.Store.(domain.ArtifactEvidence); ok {
+			deps.Evidence = ev
+		} else {
+			deps.Evidence = domain.NopArtifactEvidence{}
+		}
 	}
 	return &sessionImpl{deps: deps}
 }

@@ -1,3 +1,18 @@
+# Unreleased
+
+> **To upgrade:** Runner v1.12.0 is released together with the matching `orchestrator-script` update, which the repair of a damaged run needs. Run `Update workspace` once it is available.
+
+## Tools
+
+### Runner v1.12.0
+#### Changes
+- A damaged `Orchestration.md` is detected on every read: a table that ends before its closing tag, a row with too few cells, an execution log `Seq` that is not an integer or not increasing, an `Agent` cell that does not match `{AgentName}#{Seq}`, or a `last_agent` with no log row. Harmless variations (CRLF, a closing tag after content, a lagging `global_sequence`, gaps in `Seq`) are still accepted
+- The Runner never writes the artifact after a read that found damage, so a damaged table is not rewritten into permanent data loss
+- After every successful write the Runner keeps a last-good copy of the artifact outside the run folder (`RunnerLogs/{run_id}/Orchestration.last-good.md`), and saves the damaged file next to it before the first repair attempt
+- The orchestrator repairs the damage through a routing consultation, then routes. The Runner verifies the repair (strict read, last-good rows unchanged, consistent with the dispatch log) before acting on the reply, tries at most 2 times, and stops the run if the repair does not succeed or a repair consultation fails
+- The progress screen and debug log show the damage and whether the repair was accepted
+- A damaged run stays listed and resumable on the pre-run screens, marked damaged. A run whose frontmatter is damaged recovers its values from the last-good copy; without a usable copy it is listed as unresumable and refused
+
 # 0.7.4 (2026-11-08)
 
 > **To upgrade:** run `Update workspace` to get the updated `orchestrator-script` and `mosaic-logger` hook. Runner v1.11.1 needs `orchestrator-script` v3.5.0.

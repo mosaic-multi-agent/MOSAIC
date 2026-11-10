@@ -28,8 +28,8 @@ func TestRead_NonExistentFile_ReturnsErrNotExist(t *testing.T) {
 	}
 }
 
-func TestRead_NonCanonicalFile_ReturnsRefusalError(t *testing.T) {
-	// A file that exists but is not canonical must return a RefusalError, not os.ErrNotExist.
+func TestRead_NonCanonicalFile_ReturnsDamageError(t *testing.T) {
+	// A file that exists but is not canonical must return a damage error, not os.ErrNotExist.
 	store := artifact.NewFileStore(fixturePath("no-type.md"))
 	ctx := context.Background()
 
@@ -38,20 +38,20 @@ func TestRead_NonCanonicalFile_ReturnsRefusalError(t *testing.T) {
 	if err == nil {
 		t.Fatal("Read must return an error for a non-canonical file")
 	}
-	asRefusalError(t, err)
+	asDamageError(t, err)
 }
 
-func TestRead_RefusalError_ResourceNamesFilePath(t *testing.T) {
-	// RefusalError.Resource must name the file path so the user can locate the problem.
+func TestRead_DamageError_ResourceNamesFilePath(t *testing.T) {
+	// ArtifactDamageError.Resource must name the file path so the user can locate the problem.
 	path := fixturePath("no-type.md")
 	store := artifact.NewFileStore(path)
 	ctx := context.Background()
 
 	_, err := store.Read(ctx)
 
-	re := asRefusalError(t, err)
-	if re.Resource == "" {
-		t.Error("RefusalError.Resource must name the file path, not be empty")
+	d := asDamageError(t, err)
+	if d.Resource != path {
+		t.Errorf("ArtifactDamageError.Resource = %q, want the file path %q", d.Resource, path)
 	}
 }
 

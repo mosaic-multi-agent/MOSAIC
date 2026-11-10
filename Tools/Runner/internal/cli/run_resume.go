@@ -27,9 +27,13 @@ type resumePreflight struct {
 // exit code to end with. The session keeps its own run-start checks as the
 // final guard, so a deployment that cannot be enumerated here is left to it.
 func runResumePreflight(runID, runFolder, harnessFlag string, infraFilter []string, errOut io.Writer) (pre resumePreflight, exitCode int, ok bool) {
-	data, readErr := os.ReadFile(filepath.Join(runFolder, "Orchestration.md"))
+	artifactPath := filepath.Join(runFolder, "Orchestration.md")
+	data, readErr := os.ReadFile(artifactPath)
 	if readErr == nil {
-		pre.state, readErr = artifact.ParseAt(filepath.Join(runFolder, "Orchestration.md"), data)
+		pre.state, readErr = artifact.ParseAt(artifactPath, data)
+		if recorded, damaged := artifact.DamagedRunFrontmatter(artifactPath, readErr); damaged {
+			pre.state = recorded
+		}
 	}
 	if err := resumecheck.CheckArtifact(runID, pre.state, readErr); err != nil {
 		return pre, reportEarlyRefusal(err, errOut), false

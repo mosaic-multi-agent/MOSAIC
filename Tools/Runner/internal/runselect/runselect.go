@@ -84,6 +84,10 @@ type Identity struct {
 	// records no commit branch, so the resume must retry commit setup. Always
 	// false when IsNewRun is true.
 	CommitSetupPending bool
+
+	// Damaged is true for a resumed run whose artifact is damaged; it is
+	// repaired when the run starts. Always false for a new run.
+	Damaged bool
 }
 
 // Decision is the outcome of Resolve. Exactly one field is non-nil.
@@ -125,7 +129,8 @@ type Choice struct {
 	Reason runscan.UnresumableReason
 
 	// Detail is the refusal reason text for a run refused with
-	// runscan.ReasonInvalidRunIdentity. Empty otherwise.
+	// runscan.ReasonInvalidRunIdentity or runscan.ReasonDamagedFrontmatter.
+	// Empty otherwise.
 	Detail string
 }
 
@@ -169,7 +174,7 @@ func Resolve(req Request, mint Minter) (Decision, error) {
 		}
 		for _, u := range req.Scan.Unresumable {
 			if u.RunID == req.RunIDFlag {
-				if u.Reason == runscan.ReasonInvalidRunIdentity {
+				if u.Reason == runscan.ReasonInvalidRunIdentity || u.Reason == runscan.ReasonDamagedFrontmatter {
 					return Decision{}, fmt.Errorf("%w: run %s cannot be resumed: %s", ErrUsage, req.RunIDFlag, u.Detail)
 				}
 				return Decision{}, fmt.Errorf("%w: run %s is %s and cannot be resumed", ErrUsage, req.RunIDFlag, u.Reason)
@@ -186,6 +191,7 @@ func Resolve(req Request, mint Minter) (Decision, error) {
 				id.Workflow = workflowFromPosition(id.Position)
 				id.NeedsRunnerAdoption = !c.RunnerSettingsRecorded
 				id.CommitSetupPending = c.CommitSetupPending
+				id.Damaged = c.Damaged
 				break
 			}
 		}
@@ -290,6 +296,7 @@ func Answer(q Question, choiceID string, mint Minter) (Identity, error) {
 
 			NeedsRunnerAdoption: !c.Run.RunnerSettingsRecorded,
 			CommitSetupPending:  c.Run.CommitSetupPending,
+			Damaged:             c.Run.Damaged,
 		}, nil
 	}
 	return Identity{}, fmt.Errorf("no such choice %q", choiceID)
@@ -318,6 +325,9 @@ func Announce(id Identity) string {
 			fmt.Fprintf(&sb, " iteration=%s", id.Position.Stage)
 		}
 		fmt.Fprintf(&sb, " last_agent=%s)", id.Position.LastAgent)
+	}
+	if id.Damaged {
+		sb.WriteString("; its artifact is damaged and is repaired when the run starts")
 	}
 	return sb.String()
 }

@@ -92,6 +92,10 @@ type RunInfo struct {
 	// CommitSetupPending is true when the artifact enables commits but records
 	// no commit_branch, so a resume must retry the commit setup dispatch.
 	CommitSetupPending bool
+
+	// Damaged is true when reading the run's artifact reported
+	// *domain.ArtifactDamageError. A damaged run is still offered for resumption.
+	Damaged bool
 }
 
 // RunCandidate represents one resumable run folder found during scanning.
@@ -128,6 +132,12 @@ const ReasonCompleted UnresumableReason = "completed"
 // never offered for resumption.
 const ReasonInvalidRunIdentity UnresumableReason = "invalid-run-identity"
 
+// ReasonDamagedFrontmatter marks a run folder whose artifact is damaged and for
+// which artifact.DamagedRunFrontmatter finds no recorded state: its frontmatter
+// is damaged and no usable last-good copy exists. Without the recorded workflow
+// no repair can be routed. Detail carries the damage error's text.
+const ReasonDamagedFrontmatter UnresumableReason = "damaged-frontmatter"
+
 // Description returns a human-readable phrase for display next to the run,
 // suitable for both a TUI list row and a CLI line. Never empty, including
 // for an unrecognised value.
@@ -137,6 +147,8 @@ func (r UnresumableReason) Description() string {
 		return "completed"
 	case ReasonInvalidRunIdentity:
 		return "invalid run identity"
+	case ReasonDamagedFrontmatter:
+		return "damaged frontmatter"
 	default:
 		return "unresumable"
 	}
@@ -203,9 +215,28 @@ func (s *dirScanner) Scan(rootDir string) (ScanResult, error) {
 				result.Unresumable = append(result.Unresumable, refusedRun(runID, folderPath, detail))
 				continue
 			}
+			var damageErr *domain.ArtifactDamageError
+			if !errors.As(parseErr, &damageErr) {
+				candidate.ParseError = parseErr
+				result.Candidates = append(result.Candidates, candidate)
+				continue
+			}
+			// A damaged artifact stays a resumable candidate, marked damaged.
+			// Its frontmatter values are used when the frontmatter is intact.
+			candidate.Damaged = true
 			candidate.ParseError = parseErr
-			result.Candidates = append(result.Candidates, candidate)
-			continue
+			// The recorded values are the artifact's own frontmatter or the
+			// last-good copy's; with neither, no repair can be routed.
+			recovered, ok := artifact.DamagedRunFrontmatter(artifactPath, parseErr)
+			if !ok {
+				result.Unresumable = append(result.Unresumable, UnresumableRun{
+					RunInfo: RunInfo{RunID: runID, FolderPath: folderPath, Damaged: true},
+					Reason:  ReasonDamagedFrontmatter,
+					Detail:  damageErr.Error(),
+				})
+				continue
+			}
+			state = recovered
 		}
 
 		if state.RunID != runID {

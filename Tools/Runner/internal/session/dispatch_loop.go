@@ -34,6 +34,12 @@ func (s *sessionImpl) runDispatchLoop(ctx context.Context, rs *runStartCtx) (dom
 			}
 			continue
 		}
+		if out, done, handled, err := s.runRepairDispatch(ctx, rs); handled {
+			if done {
+				return out, err
+			}
+			continue
+		}
 		if out, done, handled, err := s.runResumeRedispatch(ctx, rs); handled {
 			if done {
 				return out, err

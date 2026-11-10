@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"mosaic-run/internal/domain"
@@ -51,6 +52,9 @@ func IsRunScopedArtifactPath(path string) bool {
 // fileStore is the file-backed implementation of domain.ArtifactStore.
 type fileStore struct {
 	path string
+
+	mu     sync.Mutex
+	damage *domain.ArtifactDamageError // set by a read that found damage
 }
 
 func (f *fileStore) Read(ctx context.Context) (domain.ArtifactState, error) {
@@ -61,16 +65,9 @@ func (f *fileStore) Read(ctx context.Context) (domain.ArtifactState, error) {
 		}
 		return domain.ArtifactState{}, err
 	}
-	state, err := Parse(data)
-	if err != nil {
-		// Set the Resource to the file path in RefusalErrors.
-		var re *domain.RefusalError
-		if errors.As(err, &re) {
-			re.Resource = f.path
-		}
-		return domain.ArtifactState{}, err
-	}
-	return state, nil
+	state, err := ParseAt(f.path, data)
+	f.noteRead(err)
+	return state, err
 }
 
 func (f *fileStore) Create(ctx context.Context, info domain.WorkflowInfo, task string, settings domain.RunSettings, now time.Time, runID string) (domain.ArtifactState, error) {
@@ -125,11 +122,16 @@ func (f *fileStore) Create(ctx context.Context, info domain.WorkflowInfo, task s
 	if err := os.WriteFile(f.path, data, 0644); err != nil {
 		return domain.ArtifactState{}, err
 	}
+	f.refreshLastGood(data)
 
 	return state, nil
 }
 
 func (f *fileStore) Apply(ctx context.Context, state domain.ArtifactState, step domain.CompletedStep) (domain.ArtifactState, error) {
+	// Apply renders from the caller's state, which may predate a damaged read.
+	if err := f.guardedDamage(); err != nil {
+		return domain.ArtifactState{}, err
+	}
 	// Sequence numbers are strictly increasing and name their invocation.
 	for _, e := range state.ExecutionLog {
 		if step.Seq <= e.Seq {
@@ -209,7 +211,7 @@ func (f *fileStore) Apply(ctx context.Context, state domain.ArtifactState, step 
 	if err != nil {
 		return domain.ArtifactState{}, err
 	}
-	if err := atomicWrite(f.path, data); err != nil {
+	if err := f.writeArtifact(data); err != nil {
 		return domain.ArtifactState{}, err
 	}
 

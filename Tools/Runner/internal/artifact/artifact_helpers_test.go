@@ -31,6 +31,65 @@ func asRefusalError(t *testing.T, err error) *domain.RefusalError {
 	return re
 }
 
+// asDamageError asserts that err is (or wraps) a *domain.ArtifactDamageError,
+// that it is neither a refusal nor a position-unresolved error, and that it lists
+// at least one problem. Calls t.Fatal on failure.
+func asDamageError(t *testing.T, err error) *domain.ArtifactDamageError {
+	t.Helper()
+	var d *domain.ArtifactDamageError
+	if !errors.As(err, &d) {
+		t.Fatalf("want *domain.ArtifactDamageError, got %T: %v", err, err)
+	}
+	var re *domain.RefusalError
+	if errors.As(err, &re) {
+		t.Errorf("a damage error must not be a *domain.RefusalError: %v", err)
+	}
+	var pu *domain.PositionUnresolvedError
+	if errors.As(err, &pu) {
+		t.Errorf("a damage error must not be a *domain.PositionUnresolvedError: %v", err)
+	}
+	if len(d.Problems) == 0 {
+		t.Fatal("ArtifactDamageError lists no problems")
+	}
+	return d
+}
+
+// requireDamageProblem asserts that d lists a problem in the section at the line.
+func requireDamageProblem(t *testing.T, d *domain.ArtifactDamageError, section string, line int) {
+	t.Helper()
+	for _, p := range d.Problems {
+		if p.Section == section && p.Line == line {
+			if p.Problem == "" {
+				t.Errorf("problem in %s at line %d has no description", section, line)
+			}
+			return
+		}
+	}
+	t.Errorf("no problem in section %q at line %d; problems: %+v", section, line, d.Problems)
+}
+
+// requireFrontmatterDamage asserts that err is a damage error with a problem in
+// the frontmatter section.
+func requireFrontmatterDamage(t *testing.T, err error) *domain.ArtifactDamageError {
+	t.Helper()
+	d := asDamageError(t, err)
+	if len(problemLines(d, "frontmatter")) == 0 {
+		t.Errorf("no problem in section frontmatter: %+v", d.Problems)
+	}
+	return d
+}
+
+// problemLines returns the lines of the problems reported in a section, in report order.
+func problemLines(d *domain.ArtifactDamageError, section string) []int {
+	var lines []int
+	for _, p := range d.Problems {
+		if p.Section == section {
+			lines = append(lines, p.Line)
+		}
+	}
+	return lines
+}
+
 // mustReadCanonical parses the canonical.md fixture and returns the ArtifactState.
 func mustReadCanonical(t *testing.T) domain.ArtifactState {
 	t.Helper()

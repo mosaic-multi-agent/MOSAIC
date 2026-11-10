@@ -50,13 +50,16 @@ type OrchestratorConsultant struct {
 // retried like a malformed one and, once the attempts are spent, fails with
 // ConsultFailMalformedJSON.
 func (c *OrchestratorConsultant) ConsultRouting(ctx context.Context, req domain.ConsultationRequest) (domain.RoutingInstruction, error) {
-	wr := wireRequest{
-		OrchestrationArtifact: req.OrchestrationArtifact,
-		Context:               string(req.Context),
-		LastStatus:            statusWire(req.LastStatus),
-		LastStatusMessage:     req.LastStatusMessage,
-		LastErrorReason:       req.LastErrorReason,
-		UserMessage:           req.UserMessage,
+	wr := wireRoutingRequest{
+		wireRequest: wireRequest{
+			OrchestrationArtifact: req.OrchestrationArtifact,
+			Context:               string(req.Context),
+			LastStatus:            statusWire(req.LastStatus),
+			LastStatusMessage:     req.LastStatusMessage,
+			LastErrorReason:       req.LastErrorReason,
+			UserMessage:           req.UserMessage,
+		},
+		ArtifactDamage: damageWire(req.ArtifactDamage),
 	}
 	payload, err := json.Marshal(wr)
 	if err != nil {

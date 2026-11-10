@@ -155,6 +155,11 @@ func recordedWorkflowOf(runFolder string) string {
 		return ""
 	}
 	state, err := artifact.ParseAt(artifactPath, data)
+	if recorded, damaged := artifact.DamagedRunFrontmatter(artifactPath, err); damaged {
+		// The session repairs a damaged artifact; the recorded values (its own
+		// frontmatter or its last-good copy's) still name the workflow.
+		return string(recorded.Workflow)
+	}
 	if err != nil {
 		return ""
 	}

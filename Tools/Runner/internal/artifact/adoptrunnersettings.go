@@ -23,7 +23,7 @@ func (f *fileStore) AdoptRunnerSettings(_ context.Context, mode domain.Execution
 	if err != nil {
 		return domain.ArtifactState{}, fmt.Errorf("AdoptRunnerSettings: read: %w", err)
 	}
-	current, err := Parse(data)
+	current, err := f.readForWrite(data)
 	if err != nil {
 		return domain.ArtifactState{}, fmt.Errorf("AdoptRunnerSettings: parse: %w", err)
 	}
@@ -40,7 +40,7 @@ func (f *fileStore) AdoptRunnerSettings(_ context.Context, mode domain.Execution
 	if err != nil {
 		return domain.ArtifactState{}, fmt.Errorf("AdoptRunnerSettings: render: %w", err)
 	}
-	if err := atomicWrite(f.path, rendered); err != nil {
+	if err := f.writeArtifact(rendered); err != nil {
 		return domain.ArtifactState{}, fmt.Errorf("AdoptRunnerSettings: write: %w", err)
 	}
 	return current, nil

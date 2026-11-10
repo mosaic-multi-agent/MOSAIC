@@ -33,6 +33,11 @@ func withUserMessage(req domain.ConsultationRequest, msg *string) domain.Consult
 func (s *sessionImpl) consultPrimary(ctx context.Context, req domain.ConsultationRequest, config domain.RunConfig) (instr domain.RoutingInstruction, stop bool, err error) {
 	req.OfferAskOrchestrator = false
 	instr, err = s.consultOrchestratorAgent(ctx, req)
+	// A consultation that left the artifact damaged is repaired before its
+	// reply or failure is acted on: no fallback, no force-stop dialogue.
+	if dc := s.damageAfterConsult(ctx, err); dc != nil {
+		return domain.RoutingInstruction{}, false, dc
+	}
 	if isForceStopped(err) {
 		return s.consultForceStopped(ctx, req)
 	}

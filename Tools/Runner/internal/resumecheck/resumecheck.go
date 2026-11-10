@@ -60,7 +60,7 @@ func Pre30LayoutReason(runID string) string {
 // error) is returned unchanged. A workflow version mismatch is not checked.
 func CheckArtifact(runID string, state domain.ArtifactState, readErr error) error {
 	if readErr != nil {
-		return artifactReadRefusal(runID, readErr)
+		return artifactReadRefusal(runID, state, readErr)
 	}
 	if state.Workflow == "" {
 		return noWorkflowRefusal(runID)
@@ -68,7 +68,7 @@ func CheckArtifact(runID string, state domain.ArtifactState, readErr error) erro
 	return nil
 }
 
-func artifactReadRefusal(runID string, readErr error) error {
+func artifactReadRefusal(runID string, state domain.ArtifactState, readErr error) error {
 	if errors.Is(readErr, artifact.ErrPre30Layout) {
 		refusal := &domain.RefusalError{
 			Component: "session",
@@ -77,6 +77,26 @@ func artifactReadRefusal(runID string, readErr error) error {
 			Cause:     readErr,
 		}
 		return &Refusal{Message: refusal.Error(), Cause: refusal}
+	}
+	var damage *domain.ArtifactDamageError
+	if errors.As(readErr, &damage) {
+		// The session repairs the damage at start; only the recorded workflow
+		// is needed here. The recorded state is the caller's (own or last-good
+		// copy's values), else the damage error's own frontmatter.
+		recorded := state
+		if recorded.RunID == "" && damage.Frontmatter != nil {
+			recorded = *damage.Frontmatter
+		}
+		if recorded.RunID == "" {
+			return &Refusal{
+				Message: damage.Error() + "; no usable last-good copy records the run's workflow",
+				Cause:   damage,
+			}
+		}
+		if recorded.Workflow == "" {
+			return noWorkflowRefusal(runID)
+		}
+		return nil
 	}
 	var refusal *domain.RefusalError
 	if errors.As(readErr, &refusal) {

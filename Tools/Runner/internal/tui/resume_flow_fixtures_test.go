@@ -43,6 +43,10 @@ type flowArtifact struct {
 	branch   string // commit branch recorded after commit setup; "" for none
 	missing  bool   // write no artifact at all
 	garbage  bool   // write an artifact that is not in the canonical format
+
+	damaged            bool // damage the Execution Log; the frontmatter stays intact
+	damagedFrontmatter bool // damage the frontmatter itself
+	lastGoodCopy       bool // keep the artifact as written as the run's last-good copy before damaging it
 }
 
 // recordedSettings is a run that records every setting the wizard used to ask.
@@ -137,7 +141,74 @@ func writeFlowArtifact(t *testing.T, a flowArtifact) string {
 			t.Fatalf("record commit branch: %v", err)
 		}
 	}
+	damageFlowArtifact(t, path, a)
 	return folder
+}
+
+// damageFlowArtifact damages the artifact written at path as a describes:
+// a stray line ends the Execution Log table early, or a frontmatter value is
+// left unclosed. The recorded values are those the artifact was created with.
+func damageFlowArtifact(t *testing.T, path string, a flowArtifact) {
+	t.Helper()
+	if !a.damaged && !a.damagedFrontmatter {
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read artifact to damage: %v", err)
+	}
+	text := string(data)
+	if a.lastGoodCopy {
+		writeFlowLastGoodCopy(t, path, data)
+	} else if a.damagedFrontmatter {
+		// The real store keeps a last-good copy current; a run without one has none.
+		removeFlowLastGoodCopy(t, path)
+	}
+	switch {
+	case a.damagedFrontmatter:
+		text = strings.Replace(text, "workflow: ", "workflow: [", 1)
+	default:
+		text = strings.Replace(text, "</ExecutionLog>", "a stray line that is not a table row\n</ExecutionLog>", 1)
+	}
+	if text == string(data) {
+		t.Fatalf("test setup: nothing to damage in the artifact:\n%s", text)
+	}
+	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+		t.Fatalf("write damaged artifact: %v", err)
+	}
+	if _, err := artifact.ParseAt(path, []byte(text)); err == nil {
+		t.Fatal("test setup: the damaged artifact still reads cleanly")
+	}
+}
+
+// removeFlowLastGoodCopy deletes any last-good copy the store kept for the run
+// whose artifact is at artifactPath.
+func removeFlowLastGoodCopy(t *testing.T, artifactPath string) {
+	t.Helper()
+	evidenceDir, ok := artifact.EvidenceDir(artifactPath)
+	if !ok {
+		return
+	}
+	err := os.Remove(filepath.Join(evidenceDir, "Orchestration.last-good.md"))
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("remove last-good copy: %v", err)
+	}
+}
+
+// writeFlowLastGoodCopy stores data as the last-good copy of the run whose
+// artifact is at artifactPath, where the Runner keeps its run evidence.
+func writeFlowLastGoodCopy(t *testing.T, artifactPath string, data []byte) {
+	t.Helper()
+	evidenceDir, ok := artifact.EvidenceDir(artifactPath)
+	if !ok {
+		t.Fatalf("test setup: no evidence location for %s", artifactPath)
+	}
+	if err := os.MkdirAll(evidenceDir, 0o755); err != nil {
+		t.Fatalf("create evidence dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(evidenceDir, "Orchestration.last-good.md"), data, 0o600); err != nil {
+		t.Fatalf("write last-good copy: %v", err)
+	}
 }
 
 // resumeFlow is a TUI standing on the run-selection screen, offering one run to
@@ -171,6 +242,7 @@ func newResumeFlow(t *testing.T, a flowArtifact, o flowOrchestrator) *resumeFlow
 	candidate.RunInfo.Workflow = string(workflow)
 	candidate.RunInfo.LastUpdated = time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
 	candidate.RunInfo.FolderPath = f.folder
+	candidate.RunInfo.Damaged = a.damaged || a.damagedFrontmatter
 	sess := newCapturingSession()
 	f.m = newRootModel(context.Background(), sess, Options{
 		Theme:      tuicommon.DefaultTheme(),

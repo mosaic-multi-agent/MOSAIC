@@ -70,7 +70,13 @@ func resolveRunIdentityByRunID(workDir, runIDFlag string, errOut io.Writer) (run
 	// parse errors are treated as resumable (the session layer will surface
 	// any real parse issues). A successful parse also yields the recorded
 	// position directly, so the announcement need not read the artifact again.
-	state, parseErr := artifact.ParseAt(filepath.Join(runFolder, "Orchestration.md"), data)
+	state, parseErr := artifact.ParseAt(artifactPath, data)
+	if recorded, damaged := artifact.DamagedRunFrontmatter(artifactPath, parseErr); damaged {
+		// A damaged artifact is checked and announced by the values it
+		// records (its own frontmatter or its last-good copy's); the session
+		// repairs it.
+		state, parseErr = recorded, nil
+	}
 	var idErr *domain.RunIdentityError
 	if errors.As(parseErr, &idErr) {
 		reason := idErr.Error()
@@ -183,15 +189,20 @@ func formatSelectionRefusal(q runselect.Question) string {
 // runselect.Announce handles without panicking.
 func announceIdentity(runID, runFolder string, isNewRun bool, position *runselect.Position) runselect.Identity {
 	id := runselect.Identity{RunID: runID, RunFolder: runFolder, IsNewRun: isNewRun, Position: position}
-	if isNewRun || position != nil {
+	if isNewRun {
 		return id
 	}
-	data, err := os.ReadFile(filepath.Join(runFolder, "Orchestration.md"))
+	artifactPath := filepath.Join(runFolder, "Orchestration.md")
+	data, err := os.ReadFile(artifactPath)
 	if err != nil {
 		return id
 	}
-	state, err := artifact.ParseAt(filepath.Join(runFolder, "Orchestration.md"), data)
-	if err != nil {
+	state, err := artifact.ParseAt(artifactPath, data)
+	id.Damaged = domain.IsArtifactDamage(err)
+	if recorded, damaged := artifact.DamagedRunFrontmatter(artifactPath, err); damaged {
+		state, err = recorded, nil
+	}
+	if err != nil || id.Position != nil {
 		return id
 	}
 	id.Position = &runselect.Position{

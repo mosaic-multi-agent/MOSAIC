@@ -1,8 +1,9 @@
 package artifact_test
 
-// Tests that every artifact refusal names the section, the file path (through
-// ParseAt and the store) and, where the parser can tell, the line; and that a
-// present but unreadable WorkflowNotes section is refused.
+// Tests that every structural damage the reader finds is reported as an
+// artifact damage error naming the section, the file path (through ParseAt and
+// the store) and, where the parser can tell, the line; and that a present but
+// unreadable WorkflowNotes section is reported, not dropped.
 
 import (
 	"context"
@@ -70,7 +71,7 @@ func canonicalMutated(t *testing.T, c refusalCase) string {
 	return doc
 }
 
-func TestParseAt_Refusal_NamesPathAndSection(t *testing.T) {
+func TestParseAt_Damage_NamesPathAndSection(t *testing.T) {
 	for _, c := range refusalCases {
 		t.Run(c.name, func(t *testing.T) {
 			doc := canonicalMutated(t, c)
@@ -78,22 +79,16 @@ func TestParseAt_Refusal_NamesPathAndSection(t *testing.T) {
 			_, err := artifact.ParseAt(refusalPath, []byte(doc))
 
 			if err == nil {
-				t.Fatal("ParseAt succeeded, want a refusal")
+				t.Fatal("ParseAt succeeded, want a damage error")
 			}
-			re, ok := err.(*domain.RefusalError)
-			if !ok {
-				t.Fatalf("error is %T, want *domain.RefusalError returned unwrapped", err)
+			d := asDamageError(t, err)
+			if d.Resource != refusalPath {
+				t.Errorf("Resource = %q, want %q", d.Resource, refusalPath)
 			}
-			if re.Resource != refusalPath {
-				t.Errorf("Resource = %q, want %q", re.Resource, refusalPath)
+			if len(problemLines(d, c.section)) == 0 {
+				t.Errorf("no problem in section %q: %+v", c.section, d.Problems)
 			}
-			if re.Section != c.section {
-				t.Errorf("Section = %q, want %q", re.Section, c.section)
-			}
-			if re.Reason == "" {
-				t.Error("Reason is empty")
-			}
-			for _, want := range []string{refusalPath, " [section " + c.section + "]"} {
+			for _, want := range []string{refusalPath, c.section} {
 				if !strings.Contains(err.Error(), want) {
 					t.Errorf("error text %q does not contain %q", err.Error(), want)
 				}
@@ -102,26 +97,26 @@ func TestParseAt_Refusal_NamesPathAndSection(t *testing.T) {
 	}
 }
 
-func TestParse_Refusal_HasSectionAndNoPath(t *testing.T) {
+func TestParse_Damage_HasSectionAndNoPath(t *testing.T) {
 	for _, c := range refusalCases {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := artifact.Parse([]byte(canonicalMutated(t, c)))
 
 			if err == nil {
-				t.Fatal("Parse succeeded, want a refusal")
+				t.Fatal("Parse succeeded, want a damage error")
 			}
-			re := asRefusalError(t, err)
-			if re.Section != c.section {
-				t.Errorf("Section = %q, want %q", re.Section, c.section)
+			d := asDamageError(t, err)
+			if len(problemLines(d, c.section)) == 0 {
+				t.Errorf("no problem in section %q: %+v", c.section, d.Problems)
 			}
-			if re.Resource != "" {
-				t.Errorf("Resource = %q, want empty from Parse", re.Resource)
+			if d.Resource != "" {
+				t.Errorf("Resource = %q, want empty from Parse", d.Resource)
 			}
 		})
 	}
 }
 
-func TestParseAt_Refusal_LineIsTheOffendingRow(t *testing.T) {
+func TestParseAt_Damage_LineIsTheOffendingRow(t *testing.T) {
 	for _, c := range refusalCases {
 		if c.lineNeedle == "" {
 			continue
@@ -132,30 +127,22 @@ func TestParseAt_Refusal_LineIsTheOffendingRow(t *testing.T) {
 
 			_, err := artifact.ParseAt(refusalPath, []byte(doc))
 
-			re := asRefusalError(t, err)
-			if re.Line != want {
-				t.Errorf("Line = %d, want %d", re.Line, want)
-			}
-			if !strings.Contains(err.Error(), "line") {
-				t.Errorf("error text %q does not mention the line", err.Error())
-			}
+			requireDamageProblem(t, asDamageError(t, err), c.section, want)
 		})
 	}
 }
 
-func TestParseAt_Refusal_LineIsTheSameForCRLF(t *testing.T) {
+func TestParseAt_Damage_LineIsTheSameForCRLF(t *testing.T) {
 	c := refusalCases[3]
 	doc := canonicalMutated(t, c)
 	want := lineOf(t, doc, c.lineNeedle)
 
 	_, err := artifact.ParseAt(refusalPath, []byte(lineEndings[1].conv(doc)))
 
-	if re := asRefusalError(t, err); re.Line != want {
-		t.Errorf("Line = %d, want %d", re.Line, want)
-	}
+	requireDamageProblem(t, asDamageError(t, err), c.section, want)
 }
 
-func TestParse_UnreadableWorkflowNotes_IsRefusedNotDropped(t *testing.T) {
+func TestParse_UnreadableWorkflowNotes_IsReportedNotDropped(t *testing.T) {
 	// An opening tag with nothing that can close it used to read as "no notes".
 	doc := canonicalCloseTags(loadCloseTagFixture(t))
 	doc = removeCloseTag("WorkflowNotes")(doc)
@@ -163,10 +150,11 @@ func TestParse_UnreadableWorkflowNotes_IsRefusedNotDropped(t *testing.T) {
 	state, err := artifact.Parse([]byte(doc))
 
 	if err == nil {
-		t.Fatalf("Parse succeeded with %d notes, want a WorkflowNotes refusal", len(state.WorkflowNotes))
+		t.Fatalf("Parse succeeded with %d notes, want a WorkflowNotes damage error", len(state.WorkflowNotes))
 	}
-	if re := asRefusalError(t, err); re.Section != "WorkflowNotes" {
-		t.Errorf("Section = %q, want WorkflowNotes", re.Section)
+	d := asDamageError(t, err)
+	if len(problemLines(d, "WorkflowNotes")) == 0 {
+		t.Errorf("no problem in WorkflowNotes: %+v", d.Problems)
 	}
 }
 
@@ -187,7 +175,7 @@ func TestParse_AbsentWorkflowNotes_MeansNoNotes(t *testing.T) {
 	}
 }
 
-func TestParseAt_ExistingFixtureRefusals_NameTheirPathAndSection(t *testing.T) {
+func TestParseAt_ExistingFixtureDamage_NamesItsPathAndSection(t *testing.T) {
 	fixtures := []struct{ name, section string }{
 		{"no-type.md", "frontmatter"},
 		{"truncated.md", "ExecutionLog"},
@@ -202,26 +190,12 @@ func TestParseAt_ExistingFixtureRefusals_NameTheirPathAndSection(t *testing.T) {
 
 			_, perr := artifact.ParseAt(path, data)
 
-			re := asRefusalError(t, perr)
-			if re.Resource != path {
-				t.Errorf("Resource = %q, want %q", re.Resource, path)
+			d := asDamageError(t, perr)
+			if d.Resource != path {
+				t.Errorf("Resource = %q, want %q", d.Resource, path)
 			}
-			if re.Section != f.section {
-				t.Errorf("Section = %q, want %q", re.Section, f.section)
-			}
-		})
-	}
-}
-
-func TestParseAt_MissingClosingTag_HasNoLine(t *testing.T) {
-	// There is no tag to point at, so the line is unknown (0), not a guess.
-	for _, c := range refusalCases[:3] {
-		t.Run(c.name, func(t *testing.T) {
-			_, err := artifact.ParseAt(refusalPath, []byte(canonicalMutated(t, c)))
-
-			re := asRefusalError(t, err)
-			if re.Line != 0 {
-				t.Errorf("Line = %d, want 0 when the closing tag is missing", re.Line)
+			if len(problemLines(d, f.section)) == 0 {
+				t.Errorf("no problem in section %q: %+v", f.section, d.Problems)
 			}
 		})
 	}
@@ -243,7 +217,7 @@ func TestRefusalError_Error_AppendsSectionAndLineOnlyWhenSet(t *testing.T) {
 	}
 }
 
-func TestParseAt_FrontmatterRefusals_AreSectionFrontmatter(t *testing.T) {
+func TestParseAt_FrontmatterDamage_IsSectionFrontmatter(t *testing.T) {
 	path := fixturePath("no-type.md")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -252,16 +226,16 @@ func TestParseAt_FrontmatterRefusals_AreSectionFrontmatter(t *testing.T) {
 
 	_, perr := artifact.ParseAt(path, data)
 
-	re := asRefusalError(t, perr)
-	if re.Section != "frontmatter" {
-		t.Errorf("Section = %q, want frontmatter", re.Section)
+	d := asDamageError(t, perr)
+	if len(problemLines(d, "frontmatter")) == 0 {
+		t.Errorf("no problem in section frontmatter: %+v", d.Problems)
 	}
-	if re.Resource != path {
-		t.Errorf("Resource = %q, want %q", re.Resource, path)
+	if d.Resource != path {
+		t.Errorf("Resource = %q, want %q", d.Resource, path)
 	}
 }
 
-func TestParseAt_NonRefusalErrorsAreNotAltered(t *testing.T) {
+func TestParseAt_NonDamageResultsAreNotAltered(t *testing.T) {
 	// A success must stay a success and carry the same state as Parse.
 	doc := []byte(canonicalCloseTags(loadCloseTagFixture(t)))
 
@@ -276,7 +250,7 @@ func TestParseAt_NonRefusalErrorsAreNotAltered(t *testing.T) {
 	}
 }
 
-func TestStoreRead_UnreadableSection_RefusalNamesFileAndSection(t *testing.T) {
+func TestStoreRead_UnreadableSection_DamageNamesFileAndSection(t *testing.T) {
 	doc := removeCloseTag("WorkflowNotes")(canonicalCloseTags(loadCloseTagFixture(t)))
 	path := filepath.Join(t.TempDir(), "Orchestration.md")
 	if err := os.WriteFile(path, []byte(doc), 0o644); err != nil {
@@ -285,8 +259,11 @@ func TestStoreRead_UnreadableSection_RefusalNamesFileAndSection(t *testing.T) {
 
 	_, err := artifact.NewFileStore(path).Read(context.Background())
 
-	re := asRefusalError(t, err)
-	if re.Resource != path || re.Section != "WorkflowNotes" {
-		t.Errorf("Resource/Section = %q/%q, want %q/WorkflowNotes", re.Resource, re.Section, path)
+	d := asDamageError(t, err)
+	if d.Resource != path {
+		t.Errorf("Resource = %q, want %q", d.Resource, path)
+	}
+	if len(problemLines(d, "WorkflowNotes")) == 0 {
+		t.Errorf("no problem in WorkflowNotes: %+v", d.Problems)
 	}
 }

@@ -6,22 +6,14 @@ package artifact_test
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"mosaic-common/mdtable"
 	"mosaic-run/internal/artifact"
 	"mosaic-run/internal/domain"
-)
-
-const (
-	notesRefusalPrefix = "failed to parse workflow notes: "
-	logRefusalPrefix   = "failed to parse execution log: "
-	registryPrefix     = "failed to parse artifact registry: "
 )
 
 // renderAndParse renders state and parses the result.
@@ -138,7 +130,9 @@ func TestParse_RepeatedNotesSeqAreKeptInFileOrder(t *testing.T) {
 
 // artifactWithSections builds an artifact whose three section bodies are given verbatim.
 func artifactWithSections(execLog, registry, notes string) []byte {
-	return []byte(toleranceFrontmatter() + "\n" +
+	// No instance has been recorded in these logs, so the state names none.
+	front := strings.Replace(toleranceFrontmatter(), `last_agent: "builder#2"`, "last_agent: null", 1)
+	return []byte(front + "\n" +
 		"<ExecutionLog type=\"core\">\n" + execLog + "</ExecutionLog>\n\n" +
 		"<Artifacts type=\"core\">\n" + registry + "</Artifacts>\n\n" +
 		"<WorkflowNotes type=\"core\">\n" + notes + "</WorkflowNotes>\n")
@@ -162,14 +156,11 @@ func TestParse_CorruptWorkflowNotesAreRefusedNotDropped(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			_, err := artifact.Parse(artifactWithSections(validExecLog, validRegistry, notes))
 			if err == nil {
-				t.Fatal("Parse succeeded, want a refusal (notes must not become an empty list)")
+				t.Fatal("Parse succeeded, want a damage error (notes must not become an empty list)")
 			}
-			re := asRefusalError(t, err)
-			if !strings.HasPrefix(re.Reason, notesRefusalPrefix) {
-				t.Errorf("Reason = %q, want prefix %q", re.Reason, notesRefusalPrefix)
-			}
-			if re.Cause == nil {
-				t.Error("Cause is nil, want the underlying error")
+			d := asDamageError(t, err)
+			if len(problemLines(d, "WorkflowNotes")) == 0 {
+				t.Errorf("no problem reported in WorkflowNotes: %+v", d.Problems)
 			}
 		})
 	}
@@ -188,36 +179,28 @@ func TestParse_AbsentOrBlankWorkflowNotesMeanNoNotes(t *testing.T) {
 	}
 }
 
-func TestParse_ExtraCellsInExecutionLogOrRegistryAreRefusedWithRepairHint(t *testing.T) {
+func TestParse_ExtraCellsInExecutionLogOrRegistryAreReportedAsDamageAtTheirLine(t *testing.T) {
 	extraLog := validExecLog +
 		"| 1 | a#1 | P | - | SUCCESS | 2026-01-01T00:00:00Z | ok | - | - |\n" +
 		"| 2 | a#2 | P | - | SUCCESS | 2026-01-01T00:00:00Z | x | y | - | - |\n"
 	extraRegistry := validRegistry + "| A.md | P | a#1 |\n| B.md | P | a#2 | extra |\n"
 	cases := []struct {
-		name   string
-		data   []byte
-		prefix string
+		name    string
+		data    []byte
+		section string
+		needle  string // text of the row with the extra cell
 	}{
-		{"execution log", artifactWithSections(extraLog, validRegistry, validNotesHead), logRefusalPrefix},
-		{"artifact registry", artifactWithSections(validExecLog, extraRegistry, validNotesHead), registryPrefix},
+		{"execution log", artifactWithSections(extraLog, validRegistry, validNotesHead), "ExecutionLog", "| x | y |"},
+		{"artifact registry", artifactWithSections(validExecLog, extraRegistry, validNotesHead), "Artifacts", "| B.md |"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := artifact.Parse(c.data)
 			if err == nil {
-				t.Fatal("Parse succeeded, want a refusal instead of silently cutting the extra cell")
+				t.Fatal("Parse succeeded, want a damage error instead of silently cutting the extra cell")
 			}
-			re := asRefusalError(t, err)
-			if !strings.HasPrefix(re.Reason, c.prefix) {
-				t.Errorf("Reason = %q, want prefix %q", re.Reason, c.prefix)
-			}
-			var se *mdtable.StructureError
-			if !errors.As(err, &se) {
-				t.Fatalf("error %v does not wrap *mdtable.StructureError", err)
-			}
-			if !strings.Contains(re.Reason, "data row 1") || !strings.Contains(re.Reason, "line ") {
-				t.Errorf("Reason = %q, want the data-row index and the line number", re.Reason)
-			}
+			d := asDamageError(t, err)
+			requireDamageProblem(t, d, c.section, lineOf(t, string(c.data), c.needle))
 		})
 	}
 }
