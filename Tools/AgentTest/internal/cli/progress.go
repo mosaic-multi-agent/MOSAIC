@@ -74,12 +74,11 @@ func (s *lineSink) Emit(ev domain.ProgressEvent) {
 //	ProgressSuiteStarted  -> "suite <suite-id> started: <n> tests"
 //	ProgressTestStarted   -> "[<runID>] test <test-id> [<rep>/<reps>] started"
 //	ProgressInvocation    -> "[<runID>]   #<seq> <identity-key> -> <outcome>"
-//	ProgressTestFinished  -> "[<runID>] test <test-id> [<rep>/<reps>] <verdict> (<duration>, <cost>)"
-//	ProgressSuiteFinished -> "suite finished: <counts> (<total cost>)"
+//	ProgressTestFinished  -> "[<runID>] test <test-id> [<rep>/<reps>] <verdict> (<duration>)"
+//	ProgressSuiteFinished -> "suite finished: <counts> [<model verdict>]"
 //
 // The prefix is what makes lines from interleaved runs individually readable
-// under concurrency. A cost whose attribution is not domain.AttributionAttributed
-// renders as its attribution word, never as a currency amount.
+// under concurrency. Cost is deliberately not shown in progress lines.
 func FormatEvent(ev domain.ProgressEvent) string {
 	// runPrefix returns the attribution prefix for a per-run event whose
 	// run identity is non-empty, or the empty string when none is set.
@@ -99,22 +98,28 @@ func FormatEvent(ev domain.ProgressEvent) string {
 	case domain.ProgressInvocation:
 		return fmt.Sprintf("%s  #%d %s -> %s", runPrefix(ev.Run.RunID), ev.Seq, ev.Identity.Key(), ev.Outcome)
 	case domain.ProgressTestFinished:
-		return fmt.Sprintf("%stest %s [%d/%d] %s (%s, %s)", runPrefix(ev.Run.RunID), ev.TestID, ev.Repetition, ev.Repetitions, ev.Verdict, ev.Duration, formatCost(ev.Cost))
+		return fmt.Sprintf("%stest %s [%d/%d] %s (%s)", runPrefix(ev.Run.RunID), ev.TestID, ev.Repetition, ev.Repetitions, ev.Verdict, ev.Duration)
 	case domain.ProgressSuiteFinished:
-		return fmt.Sprintf("suite finished: %s (%s)", formatCounts(ev.Counts), formatCost(ev.TotalCost))
+		return fmt.Sprintf("suite finished: %s%s", formatCounts(ev.Counts), modelVerdictSuffix(ev))
 	default:
 		return ""
 	}
 }
 
-// formatCost renders a cost as a dollar amount when its attribution is
-// trustworthy, and as the attribution word otherwise — never a currency
-// figure that would read as a misleadingly genuine zero.
-func formatCost(c domain.CostReport) string {
-	if c.Attribution != domain.AttributionAttributed {
-		return string(c.Attribution)
+// modelVerdictSuffix is the suite-finished line's model statement: the observed
+// model label for a verified suite, the invalid verdict (never a label) for an
+// unverified one, nothing for an event from a producer that set neither.
+func modelVerdictSuffix(ev domain.ProgressEvent) string {
+	switch ev.ModelVerdict {
+	case domain.ModelVerdictVerified:
+		if ev.ModelLabel == "" {
+			return ""
+		}
+		return " [model " + ev.ModelLabel + "]"
+	case domain.ModelVerdictUnverified:
+		return " [MODEL UNVERIFIED]"
 	}
-	return fmt.Sprintf("$%.2f", c.TotalUSD)
+	return ""
 }
 
 // formatCounts renders a verdict-count map in a stable, alphabetically

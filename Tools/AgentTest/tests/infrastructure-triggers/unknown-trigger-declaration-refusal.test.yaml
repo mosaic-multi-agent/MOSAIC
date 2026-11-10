@@ -1,0 +1,70 @@
+schema_version: 1
+name: unknown-trigger-declaration-refusal
+id: 82
+version: 1
+changelog:
+  - version: 1
+    date: "2026-10-12"
+    changes: "Initial."
+description: >
+  I-8: An unknown trigger in the <InfrastructureAgents type="managed">
+  declaration region refuses the resume. checkpoint-stage-end is a
+  checkpoint-class agent whose deployed declaration row names the retired
+  trigger STAGE_END (no alias exists; the deploy tool does not validate trigger
+  names, so the row reaches the orchestrator verbatim). The seeded run has
+  checkpoints: enabled, so the checkpoint-class precondition is satisfied and
+  the only failing precondition is the trigger vocabulary (Configuration
+  Preconditions 6). The orchestrator must refuse to resume - telling the user
+  STAGE_END is now ITERATION_END and that redeploying the orchestrator
+  regenerates the region - and dispatch nothing. Proceeding would dispatch
+  implementation-review at once (Stage 1 is mid-Implementation), so zero
+  dispatches distinguishes the refusal from silently treating STAGE_END as a
+  trigger that never fires. The refusal wording itself is not observable to
+  AgentTest.
+layer: orchestrator
+negative: false
+
+subject:
+  identity: orchestrator
+  agent: orchestrator
+  workflows: [brownfield-tdd]
+  infrastructure_agents: [checkpoint-stage-end]
+  opening_message: |
+    Continue the existing workflow run. Read the Orchestration.md in the
+    run-scoped folder and resume from where it left off. Do not ask me any
+    further questions - proceed immediately and autonomously.
+  invocation_kind: orchestrator
+  allowed_tools: [Task, Read, Write, Edit, Bash, Glob, Grep]
+
+stub_registry: unknown-trigger-declaration-refusal.stubs.json
+
+timeout: 5m
+turn_limit: 10
+stop_after_invocations: 1
+
+seed_files:
+  - path: Orchestration-{run_id}/Orchestration.md
+    ref: stage1-impl-done.md
+  - path: Orchestration-{run_id}/Plan.md
+    ref: Plan.md
+  - path: Orchestration-{run_id}/Research.md
+    ref: Research.md
+  - path: Orchestration-{run_id}/Requirements.md
+    ref: Requirements.md
+  - path: Orchestration-{run_id}/ContractsDesign.md
+    ref: ContractsDesign.md
+  - path: Orchestration-{run_id}/Stage-1/Plan.md
+    ref: Stage-1-Plan.md
+  - path: Orchestration-{run_id}/Stage-1/PlanProgress.md
+    ref: Stage-1-PlanProgress.md
+  - path: Orchestration-{run_id}/Stage-1/tests-review-tdd.md
+    ref: Stage-1-tests-review-tdd.md
+  - path: Orchestration-{run_id}/Stage-2/Plan.md
+    ref: Stage-2-Plan.md
+  - path: Orchestration-{run_id}/Stage-2/PlanProgress.md
+    ref: Stage-2-PlanProgress.md
+
+assertions:
+  invocation_sequence:
+    exact: true
+    steps: []

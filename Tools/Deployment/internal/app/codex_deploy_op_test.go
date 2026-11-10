@@ -1,53 +1,43 @@
 package app_test
 
-// codex_deploy_op_test.go covers the TDD RED phase for Stage 1: Codex Op field derivation.
+// codex_deploy_op_test.go covers Op derivation for Codex harness flows.
 //
-// The Codex TOML encoder rejects Op == OpUnspecified. Two code paths currently leave Op at
-// its zero value (OpUnspecified) when no prior deployed file exists:
-//
-//   1. buildContent's Content closure in resolve.go (Deploy workspace, Deploy agents, hooks)
-//   2. renderAgent's transform.Request assembly in render_service_impl.go
-//
-// These tests assert the expected post-fix behaviour; they fail in the current codebase
-// (RED state) because neither fix has been applied yet.
+// The Codex TOML encoder rejects Op == OpUnspecified, so every flow that builds agent
+// content must set the Op explicitly: Deploy workspace and Deploy agents from the planned
+// action, RenderAgent as a create.
 //
 // Covered scenarios:
 //
-//   DeployNew + Codex harness (T1.1):
-//     - ActionCreate succeeds (Content returns bytes without error after fix)
-//     - ActionUpdate fails with ErrMissingPriorBytes (accepted limitation, see
-//       CODEX-DEPLOY-UPDATE-LIMITATION-20260921.md; INVERT assertion when prior bytes
-//       are threaded into Deploy flows)
-//     - ActionConflict-overwrite fails with ErrMissingPriorBytes (same limitation as Update;
-//       INVERT assertion when prior bytes are threaded into Deploy flows)
+//   DeployNew + Codex harness:
+//     - ActionCreate succeeds (Content returns bytes without error)
 //
-//   DeployAgents + Codex harness (T1.2):
+//   DeployAgents + Codex harness:
 //     - ActionCreate succeeds
-//     - ActionUpdate fails with ErrMissingPriorBytes (same limitation)
 //
-//   RenderAgent + Codex harness (T1.3):
-//     - Fresh destination succeeds (no ErrUnspecifiedOperation after fix)
+//   RenderAgent + Codex harness:
+//     - Fresh destination succeeds (no ErrUnspecifiedOperation)
 //     - Overwrite=true over an existing destination succeeds
 //
-//   DeployHooks + Codex harness (T1.4):
+//   DeployHooks + Codex harness:
 //     - A DeployHooks run with a Codex harness completes without error; hook items
 //       bypass buildContent and never reach the Codex encoder.
 //
-//   DeployAgents idempotency (T1.5):
+//   DeployAgents idempotency:
 //     - A second DeployAgents run with a pre-deployed Codex .toml that matches the
 //       source version stamp classifies the item as ActionUnchanged; the executor is
 //       never called with Content for that item (no ErrMissingPriorBytes, no write).
+//
+// Update and conflict-overwrite over an existing Codex agent file are covered in
+// codex_deploy_existing_test.go.
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	_ "mosaic-deploy/internal/agentformat/all"
-	"mosaic-deploy/internal/agentformat"
 	"mosaic-deploy/internal/app"
 	"mosaic-deploy/internal/app/interactiontest"
 	"mosaic-deploy/internal/deploy"
@@ -294,15 +284,13 @@ func codexOpDeployAgentsRequest(workspace string) app.DeployAgentsRequest {
 }
 
 // ---------------------------------------------------------------------------
-// T1.1 — DeployNew with Codex harness: Op derivation for each action type
+// DeployNew with Codex harness: Op derivation for each action type
 // ---------------------------------------------------------------------------
 
 // TestCodexDeployNew_ActionCreate_ContentSucceeds verifies that DeployNew with a Codex
 // harness and an ActionCreate plan item returns no error when Content is called. After the
 // fix, buildContent derives Op=OpCreate from item.Action when no deployedReader is present,
 // satisfying the Codex encoder (OpCreate + nil PriorDeployed = success).
-//
-// RED state: Op is left at OpUnspecified; the Codex encoder returns ErrUnspecifiedOperation.
 func TestCodexDeployNew_ActionCreate_ContentSucceeds(t *testing.T) {
 	// Arrange
 	stub := interactiontest.NewBuilder().AnswerReview(true).Build()
@@ -323,86 +311,13 @@ func TestCodexDeployNew_ActionCreate_ContentSucceeds(t *testing.T) {
 	}
 }
 
-// TestCodexDeployNew_ActionUpdate_FailsWithErrMissingPriorBytes documents the accepted
-// limitation described in CODEX-DEPLOY-UPDATE-LIMITATION-20260921.md: DeployNew supplies
-// no deployedReader, so ActionUpdate items cannot provide PriorDeployed bytes. After the
-// fix, buildContent derives Op=OpUpdate via actionToOp, and the Codex encoder rejects
-// OpUpdate with nil PriorDeployed with ErrMissingPriorBytes.
-//
-// If prior bytes are ever threaded into Deploy flows, INVERT this assertion.
-//
-// RED state: Op is OpUnspecified; the current error is ErrUnspecifiedOperation, not
-// ErrMissingPriorBytes, so errors.Is(err, ErrMissingPriorBytes) is false.
-func TestCodexDeployNew_ActionUpdate_FailsWithErrMissingPriorBytes(t *testing.T) {
-	// See CODEX-DEPLOY-UPDATE-LIMITATION-20260921.md.
-	// If prior bytes are threaded into DeployNew, INVERT this assertion.
-
-	// Arrange
-	stub := interactiontest.NewBuilder().AnswerReview(true).Build()
-	deps, workspace := newCodexOpDeps(t, stub)
-	deps.Planner = &stubPlanner{plan: newCodexOpAgentPlan(workspace, domain.ActionUpdate)}
-	deps.Executor = &codexOpContentExecutor{}
-	svc := app.New(deps)
-
-	// Act
-	_, err := svc.DeployNew(context.Background(), codexOpDeployRequest(workspace))
-
-	// Assert
-	if !errors.Is(err, agentformat.ErrMissingPriorBytes) {
-		t.Errorf("DeployNew with Codex harness and ActionUpdate: error = %v, "+
-			"want errors.Is(err, ErrMissingPriorBytes); "+
-			"buildContent must derive Op=OpUpdate from item.Action, and the Codex encoder "+
-			"must reject OpUpdate with nil PriorDeployed with ErrMissingPriorBytes "+
-			"(see CODEX-DEPLOY-UPDATE-LIMITATION-20260921.md)",
-			err)
-	}
-}
-
-// TestCodexDeployNew_ActionConflictOverwrite_FailsWithErrMissingPriorBytes documents the
-// same limitation as ActionUpdate but for ActionConflict-overwrite: conflict-overwrite maps
-// to OpUpdate via actionToOp, and without prior bytes the Codex encoder raises
-// ErrMissingPriorBytes. This is the same limitation as Update.
-//
-// If prior bytes are ever threaded into Deploy flows, INVERT this assertion.
-//
-// RED state: same as ActionUpdate — wrong error type until the fix is applied.
-func TestCodexDeployNew_ActionConflictOverwrite_FailsWithErrMissingPriorBytes(t *testing.T) {
-	// See CODEX-DEPLOY-UPDATE-LIMITATION-20260921.md.
-	// If prior bytes are threaded into DeployNew, INVERT this assertion.
-
-	// Arrange
-	stub := interactiontest.NewBuilder().AnswerReview(true).Build()
-	deps, workspace := newCodexOpDeps(t, stub)
-	deps.Planner = &stubPlanner{plan: newCodexOpAgentPlan(workspace, domain.ActionConflict)}
-	deps.Executor = &codexOpContentExecutor{}
-	svc := app.New(deps)
-
-	req := codexOpDeployRequest(workspace)
-	req.ConflictDefault = domain.DecisionOverwrite
-
-	// Act
-	_, err := svc.DeployNew(context.Background(), req)
-
-	// Assert
-	if !errors.Is(err, agentformat.ErrMissingPriorBytes) {
-		t.Errorf("DeployNew with Codex harness and ActionConflict-overwrite: error = %v, "+
-			"want errors.Is(err, ErrMissingPriorBytes); "+
-			"conflict-overwrite maps to OpUpdate via actionToOp, and without prior bytes the "+
-			"Codex encoder must raise ErrMissingPriorBytes (same limitation as ActionUpdate; "+
-			"see CODEX-DEPLOY-UPDATE-LIMITATION-20260921.md)",
-			err)
-	}
-}
-
 // ---------------------------------------------------------------------------
-// T1.2 — DeployAgents with Codex harness: Op derivation for each action type
+// DeployAgents with Codex harness: Op derivation for each action type
 // ---------------------------------------------------------------------------
 
 // TestCodexDeployAgents_ActionCreate_ContentSucceeds verifies that DeployAgents with a
 // Codex harness and an ActionCreate plan item returns no error when Content is called.
 // deployagents_service.go also passes nil deployedReader, so the same fix applies.
-//
-// RED state: Op=OpUnspecified; ErrUnspecifiedOperation is returned.
 func TestCodexDeployAgents_ActionCreate_ContentSucceeds(t *testing.T) {
 	// Arrange
 	stub := interactiontest.NewBuilder().AnswerReview(true).Build()
@@ -423,40 +338,8 @@ func TestCodexDeployAgents_ActionCreate_ContentSucceeds(t *testing.T) {
 	}
 }
 
-// TestCodexDeployAgents_ActionUpdate_FailsWithErrMissingPriorBytes documents that
-// deployagents_service.go also passes nil deployedReader, so ActionUpdate items suffer the
-// same limitation as in DeployNew.
-//
-// If prior bytes are threaded into DeployAgents, INVERT this assertion.
-//
-// RED state: wrong error type until the fix is applied.
-func TestCodexDeployAgents_ActionUpdate_FailsWithErrMissingPriorBytes(t *testing.T) {
-	// See CODEX-DEPLOY-UPDATE-LIMITATION-20260921.md.
-	// If prior bytes are threaded into DeployAgents, INVERT this assertion.
-
-	// Arrange
-	stub := interactiontest.NewBuilder().AnswerReview(true).Build()
-	deps, workspace := newCodexOpDeps(t, stub)
-	deps.Planner = &stubPlanner{plan: newCodexOpAgentDeployAgentsPlan(workspace, domain.ActionUpdate)}
-	deps.Executor = &codexOpContentExecutor{}
-	svc := app.New(deps)
-
-	// Act
-	_, err := svc.DeployAgents(context.Background(), codexOpDeployAgentsRequest(workspace))
-
-	// Assert
-	if !errors.Is(err, agentformat.ErrMissingPriorBytes) {
-		t.Errorf("DeployAgents with Codex harness and ActionUpdate: error = %v, "+
-			"want errors.Is(err, ErrMissingPriorBytes); "+
-			"deployagents_service.go:357 passes nil deployedReader, so ActionUpdate must "+
-			"derive Op=OpUpdate and the Codex encoder must raise ErrMissingPriorBytes "+
-			"(see CODEX-DEPLOY-UPDATE-LIMITATION-20260921.md)",
-			err)
-	}
-}
-
 // ---------------------------------------------------------------------------
-// T1.3 — RenderAgent with Codex harness: Op=OpCreate supplied by render_service_impl.go
+// RenderAgent with Codex harness: Op=OpCreate supplied by render_service_impl.go
 // ---------------------------------------------------------------------------
 
 // newCodexRenderDeps returns app.Deps wired for RenderAgent Codex tests. It substitutes
@@ -473,9 +356,6 @@ func newCodexRenderDeps(t *testing.T) app.Deps {
 // TestCodexRenderAgent_FreshDestination_Succeeds verifies that RenderAgent with a Codex
 // harness renders to a fresh destination without error. After the fix, render_service_impl.go
 // supplies Op=agentformat.OpCreate in the transform.Request, satisfying the Codex encoder.
-//
-// RED state: Op=OpUnspecified; the Codex encoder returns ErrUnspecifiedOperation, wrapped
-// in "transform failed: ...".
 func TestCodexRenderAgent_FreshDestination_Succeeds(t *testing.T) {
 	// Arrange
 	deps := newCodexRenderDeps(t)
@@ -511,8 +391,6 @@ func TestCodexRenderAgent_FreshDestination_Succeeds(t *testing.T) {
 // governs whether the destination file may be replaced; it does NOT change the operation:
 // render always produces content from source alone, with no prior bytes, so Op=OpCreate is
 // always correct regardless of whether the destination already exists.
-//
-// RED state: same as fresh-destination case — ErrUnspecifiedOperation until Op is supplied.
 func TestCodexRenderAgent_OverwriteExistingDestination_Succeeds(t *testing.T) {
 	// Arrange
 	deps := newCodexRenderDeps(t)
@@ -551,7 +429,7 @@ func TestCodexRenderAgent_OverwriteExistingDestination_Succeeds(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// T1.4 — Deploy hooks flow is not affected by Op derivation changes
+// Deploy hooks flow is not affected by Op derivation changes
 // ---------------------------------------------------------------------------
 
 // TestCodexDeployHooks_HooksNotBrokenByOpChanges verifies that a DeployHooks run with a
@@ -613,7 +491,7 @@ func TestCodexDeployHooks_HooksNotBrokenByOpChanges(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// T1.5 — DeployAgents idempotency with pre-deployed Codex .toml
+// DeployAgents idempotency with pre-deployed Codex .toml
 // ---------------------------------------------------------------------------
 
 // TestCodexDeployAgents_RealPlanner_PreDeployedToml_ActionUnchanged verifies that a second

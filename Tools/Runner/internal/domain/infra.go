@@ -6,25 +6,25 @@ import "strings"
 // declaration (parsed from the deployed orchestrator file) or in an
 // infrastructure_overrides entry (parsed from Orchestration.md frontmatter).
 //
-// Trigger is drawn from the closed vocabulary: "STAGE_END",
-// "INVOCATION_INTERVAL", "PHASE_END", "MANUAL".
+// Trigger is drawn from the closed vocabulary: "INVOCATION_INTERVAL",
+// "ITERATION_END", "PHASE_END", "MANUAL" (see InfraTriggerVocabulary).
 //
 // Param holds the trigger's parameter value (e.g. an interval count for
 // INVOCATION_INTERVAL). Empty string when the trigger takes no parameter.
 // The YAML field name for Param is "trigger_param".
 type DeclaredInfraTrigger struct {
-	Trigger string // e.g. "STAGE_END", "INVOCATION_INTERVAL", "PHASE_END", "MANUAL"
+	Trigger string // e.g. "INVOCATION_INTERVAL", "ITERATION_END", "PHASE_END", "MANUAL"
 	Param   string // trigger parameter; empty when the trigger takes no parameter
 }
 
 // DeclaredInfraAgent represents one infrastructure agent parsed from the
-// deployed orchestrator's <InfrastructureAgents type="project"> region.
+// deployed orchestrator's <InfrastructureAgents type="managed"> region.
 type DeclaredInfraAgent struct {
-	Name      string                // agent name (from section identifier)
-	Class     string                // "checkpoint", "commit", "review", "restore"
+	Name      string // agent name (from section identifier)
+	Class     string // "checkpoint", "commit", "review", "restore"
 	Triggers  []DeclaredInfraTrigger
-	OnFailure string                // "halt" or "continue"
-	Version   string                // from the region's version attribute; reserved for future use
+	OnFailure string // "halt" or "continue"
+	Version   string // from the region's version attribute; reserved for future use
 }
 
 // InfraDispatchResult carries the outcome of an infrastructure agent dispatch.
@@ -58,10 +58,11 @@ type infraAgentSet struct {
 
 // NewInfraAgentSet builds an InfraAgentSet from the run's declared
 // infrastructure agents. extraNames registers additional agent identifiers
-// (e.g. "orchestrator-script") so that consultation rows recorded under
-// those identifiers are classified as infrastructure steps on resume.
-// An empty or nil declared slice with no extraNames yields a set that
-// reports false for every agent.
+// (e.g. "orchestrator-script") so that non-workflow rows recorded under those
+// identifiers -- such as a commit setup row, or a legacy consultation row
+// left by an artifact from before consultations stopped being recorded -- are
+// classified as infrastructure steps on resume. An empty or nil declared
+// slice with no extraNames yields a set that reports false for every agent.
 func NewInfraAgentSet(declared []DeclaredInfraAgent, extraNames ...string) InfraAgentSet {
 	if len(declared) == 0 && len(extraNames) == 0 {
 		return (*infraAgentSet)(nil)
@@ -132,6 +133,9 @@ func (NopDispatchLogger) LogResponse(resp ProtocolResponse) {}
 
 // LogError implements DispatchLogger. It discards the entry.
 func (NopDispatchLogger) LogError(agentInstanceID string, errText string) {}
+
+// LogHarnessError implements DispatchLogger. It discards the entry.
+func (NopDispatchLogger) LogHarnessError(agentInstanceID string, f HarnessFailure, errText string) {}
 
 // SetRunID implements DispatchLogger. It is a no-op.
 func (NopDispatchLogger) SetRunID(runID string) {}

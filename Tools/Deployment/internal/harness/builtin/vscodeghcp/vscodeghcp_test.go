@@ -17,15 +17,12 @@ package vscodeghcp_test
 //     mapping as test-runner plus execute/runInTerminal; skill maps to empty.
 //   - A transform of the generic orchestrator ({tool-permissions} placeholder) produces the
 //     full placeholder expansion including edit/createDirectory and agent.
-//   - All VS Code GHCP agents use the .md extension (see file extension decision below).
+//   - All VS Code GHCP agents use the .agent.md extension (see file extension decision below).
 //
-//   File extension decision (AC13.6):
-//   - The descriptor declares ".md" as the agent extension, matching the CodebaseAgnostic
-//     canonical reference set (Agents/VS code GHCP/CodebaseAgnostic/Agents/*.md).
-//   - Agents/VS code GHCP/UtilityAgents/*.agent.md use .agent.md, but those files were
-//     authored outside the deployment tool and represent a deviation from the declared extension.
-//   - VS Code GHCP recognises both .md and .agent.md files in .github/agents/; the deployment
-//     tool emits .md to match the canonical reference.
+//   File extension decision:
+//   - The descriptor declares ".agent.md" as the agent extension, the same name the GHCP CLI
+//     target uses, so both GHCP targets name agents .github/agents/<key>.agent.md.
+//   - VS Code GHCP recognises both .md and .agent.md files in .github/agents/.
 //
 //   Hierarchical tool path generation (one-to-many expansion and by-convention tools):
 //   - file_write maps to BOTH edit/createFile AND edit/editFiles (one-to-many expansion).
@@ -38,30 +35,25 @@ package vscodeghcp_test
 //   - The tool field is flow-style with single-quoted items: ['read/readFile', 'edit/createFile']
 //
 //   Human-readable model format:
-//   - The VS Code GHCP descriptor's ModelCatalog.FormatHint is "display-name" (human-readable
-//     names with spaces, e.g. "Claude Sonnet 4.6").
+//   - The "display-name" format hint (human-readable names with spaces, e.g.
+//     "Claude Sonnet 4.6") comes from the shared model catalog, not the descriptor.
 //   - A ModelSelection with ModelID "Claude Sonnet 4.6" is emitted verbatim as that string.
 //   - A custom ModelID is also emitted verbatim with no reformatting (AC13.3, FR-11).
 //
 //   Project-scope path resolution:
-//   - Project-scoped agent path is ".github/agents/<key>.md"
+//   - Project-scoped agent path is ".github/agents/<key>.agent.md"
 //   - Project-scoped skill path is ".github/skills/<key>/SKILL.md" (key subdirectory)
-//   - Hook artifact paths resolve relative to .claude/hooks/ (reuses Claude Code convention)
+//   - Hook artifact paths resolve relative to .github/hooks/, the directory the bundle's
+//     hook registration runs its script from
 //   - Any non-project scope returns domain.ErrUnsupportedScope (via the shared contracttest universal invariant)
 //
-//   Hook variant reuse:
-//   - The vscode-ghcp hook variant declares reuses: claude-code in hook.yaml.
-//   - The catalog resolves this before calling HookPlan: the HookPlanRequest carries
-//     the vscode-ghcp variant's Files already populated from the claude-code variant.
-//   - HookPlan.Files matches the claude-code file set (no duplicated files on disk).
-//   - HookPlan.Registration contains the vscode-ghcp variant's own registration steps.
-//
-//   Always-TODO registration step (user-level editor setting):
-//   - The vscode-ghcp variant declares an "enable-chat-hooks" registration step with
-//     performable: false and an empty target_path. The deployment tool cannot write
-//     user-level VS Code settings; the step is always a TODO item.
-//   - HookPlan.Registration contains this step with Performable: false.
-//   - The step is present with a non-empty Instruction so the TODO checklist can render it.
+//   Hook plan:
+//   - The vscode-ghcp hook variant lists its own files in the bundle manifest; the catalog hands them
+//     to HookPlan in the HookPlanRequest.
+//   - HookPlan.TargetDir is ".github/hooks" and HookPlan.Files carries the variant's files
+//     unchanged, without duplicates.
+//   - HookPlan.Registration carries the variant's registration steps unchanged, including
+//     steps that are not performable by the tool.
 //
 //   Harness-level injection content and injections_version:
 //   - HarnessConstraints is filled with the file-reading behavioral constraint text followed
@@ -172,10 +164,10 @@ func agentFixturesDir(t *testing.T) string {
 	return abs
 }
 
-// frozenCatalogRoot returns the absolute path to the frozen Catalog fixture tree. This tree
-// is a snapshot of the protocol source document and all HarnessInjections files at the time
-// the golden files were last regenerated. Golden-file tests must use this root instead of the
-// live repo root so they remain immune to Catalog evolution (version bumps, prose edits, etc.).
+// frozenCatalogRoot returns the absolute path to the frozen MOSAIC-root-shaped fixture tree.
+// It snapshots Catalog/CommunicationProtocol.md and Catalog/HarnessInjections/ as of the last
+// golden regeneration. Golden-file tests must use this root instead of the live repo root so
+// they remain immune to Catalog evolution (version bumps, prose edits, etc.).
 func frozenCatalogRoot(t *testing.T) string {
 	t.Helper()
 	// testdata/frozen-catalog/ is at Tools/Deployment/testdata/frozen-catalog/
@@ -191,7 +183,7 @@ func frozenCatalogRoot(t *testing.T) string {
 // test immediately if construction fails.
 func newModule(t *testing.T) domain.HarnessModule {
 	t.Helper()
-	mod, err := vscodeghcp.New(registry.BuiltinOptions{MosaicRoot: repoRoot(t)})
+	mod, err := vscodeghcp.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("vscodeghcp.New(): %v", err)
 	}
@@ -203,7 +195,7 @@ func newModule(t *testing.T) domain.HarnessModule {
 // files in Catalog/ do not affect the committed golden files.
 func newModuleFromFrozen(t *testing.T) domain.HarnessModule {
 	t.Helper()
-	mod, err := vscodeghcp.New(registry.BuiltinOptions{MosaicRoot: frozenCatalogRoot(t)})
+	mod, err := vscodeghcp.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("vscodeghcp.New() from frozen catalog: %v", err)
 	}
@@ -215,7 +207,7 @@ func newModuleFromFrozen(t *testing.T) domain.HarnessModule {
 // must be populated for every transform.Apply call that processes those source files.
 func loadProtocol(t *testing.T, root string) domain.ProtocolContent {
 	t.Helper()
-	content, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	content, err := catalog.FileProtocolLoader{}.LoadProtocol(filepath.Join(root, "Catalog"))
 	if err != nil {
 		t.Fatalf("load protocol from %s: %v", root, err)
 	}
@@ -870,11 +862,10 @@ func TestModel_DescriptorDeclares_ModelKey(t *testing.T) {
 // normalise the ModelID (AC13.3, FR-11).
 func TestModel_CustomModelIDEmittedVerbatim(t *testing.T) {
 	mod := newModule(t)
-	root := repoRoot(t)
-	protocol := loadProtocol(t, root)
+	protocol := loadProtocol(t, frozenCatalogRoot(t))
 
 
-	srcPath := filepath.Join(root, "Catalog", "Subagents", "Execution", "test-runner.md")
+	srcPath := filepath.Join(agentFixturesDir(t), "test-runner.md")
 	src, err := os.ReadFile(srcPath)
 	if err != nil {
 		t.Skipf("generic test-runner agent not found at %s: %v", srcPath, err)
@@ -906,27 +897,12 @@ func TestModel_CustomModelIDEmittedVerbatim(t *testing.T) {
 	}
 }
 
-// TestModel_DescriptorFormatHintIsDisplayName verifies that the descriptor declares a format
-// hint indicating human-readable display names are expected for this harness.
-func TestModel_DescriptorFormatHintIsDisplayName(t *testing.T) {
-	mod := newModule(t)
-	d := mod.Descriptor()
-	if d == nil {
-		t.Fatal("Descriptor() returned nil")
-	}
-	// The format hint is display-only but must signal to the TUI that this harness expects
-	// human-readable names like "Claude Opus 4.6", not provider IDs like "claude-opus-4-6".
-	if d.Models.FormatHint == "" {
-		t.Error("Descriptor().Models.FormatHint is empty; VS Code GHCP should declare a format hint to guide model selection UI")
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Project-scope path resolution tests
 // ---------------------------------------------------------------------------
 
 // TestTargetPath_VSCodeGHCP_AgentProjectScope verifies that an agent deployed to project scope
-// lands at ".github/agents/<key>.md".
+// lands at ".github/agents/<key>.agent.md".
 func TestTargetPath_VSCodeGHCP_AgentProjectScope(t *testing.T) {
 	mod := newModule(t)
 	path, err := mod.TargetPath(domain.TargetPathRequest{
@@ -938,7 +914,7 @@ func TestTargetPath_VSCodeGHCP_AgentProjectScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TargetPath: %v", err)
 	}
-	want := ".github/agents/test-runner.md"
+	want := ".github/agents/test-runner.agent.md"
 	if path != want {
 		t.Errorf("TargetPath = %q, want %q", path, want)
 	}
@@ -966,8 +942,7 @@ func TestTargetPath_VSCodeGHCP_SkillProjectScope(t *testing.T) {
 }
 
 // TestTargetPath_VSCodeGHCP_HookProjectScope verifies that hooks are deployed to
-// ".claude/hooks/<filename>". VS Code GHCP reuses the Claude Code hook file set; deploying
-// hooks to the same .claude/hooks/ location makes them available to both platforms.
+// ".github/hooks/<filename>", the directory the bundle's hook registration runs its script from.
 func TestTargetPath_VSCodeGHCP_HookProjectScope(t *testing.T) {
 	mod := newModule(t)
 	path, err := mod.TargetPath(domain.TargetPathRequest{
@@ -980,7 +955,7 @@ func TestTargetPath_VSCodeGHCP_HookProjectScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TargetPath: %v", err)
 	}
-	want := ".claude/hooks/subagent-logger.ps1"
+	want := ".github/hooks/subagent-logger.ps1"
 	if path != want {
 		t.Errorf("TargetPath = %q, want %q", path, want)
 	}
@@ -991,15 +966,12 @@ func TestTargetPath_VSCodeGHCP_HookProjectScope(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestHookPlan_VSCodeGHCP_ReusesClaudeCodeFiles verifies that the VS Code GHCP hook plan
-// returns the claude-code variant's files (resolved by the catalog before the call) without
-// duplicating them. The vscode-ghcp hook.yaml variant declares reuses: claude-code; the
-// catalog resolves this and provides the actual file list in the HookPlanRequest.
+// returns the variant's files, as given by the catalog in the HookPlanRequest, without
+// duplicating them, and places them in the .github/hooks directory.
 func TestHookPlan_VSCodeGHCP_ReusesClaudeCodeFiles(t *testing.T) {
 	mod := newModule(t)
 
-	// Simulate the catalog's pre-resolved bundle: the vscode-ghcp variant already has the
-	// claude-code file list (after reuse resolution). No claude-code variant is present because
-	// the catalog replaces reuses references with the concrete file list.
+	// Simulate the catalog's bundle: the vscode-ghcp variant carries its own file list.
 	bundle := domain.HookBundle{
 		Key:     "subagent-logger",
 		Version: "1.0.0",
@@ -1007,7 +979,6 @@ func TestHookPlan_VSCodeGHCP_ReusesClaudeCodeFiles(t *testing.T) {
 			"vscode-ghcp": {
 				HarnessID: "vscode-ghcp",
 				Supported: true,
-				// Files already resolved from claude-code via reuses (catalog responsibility).
 				Files: []domain.HookFile{
 					{SourcePath: "/repo/Hooks/subagent-logger/claude-code/subagent-logger.ps1", TargetName: "subagent-logger.ps1"},
 					{SourcePath: "/repo/Hooks/subagent-logger/claude-code/config.json", TargetName: "subagent-logger.json"},
@@ -1043,17 +1014,21 @@ func TestHookPlan_VSCodeGHCP_ReusesClaudeCodeFiles(t *testing.T) {
 		t.Fatalf("HookPlan.Supported = false, want true; VS Code GHCP declares hook support")
 	}
 	if len(plan.Files) != 2 {
-		t.Errorf("HookPlan.Files count = %d, want 2 (resolved from claude-code reuse)", len(plan.Files))
+		t.Errorf("HookPlan.Files count = %d, want 2", len(plan.Files))
 	}
 
-	// Verify that no file appears more than once (no duplicated reuse).
+	if plan.TargetDir != ".github/hooks" {
+		t.Errorf("HookPlan.TargetDir = %q, want %q (the directory the registration runs the script from)", plan.TargetDir, ".github/hooks")
+	}
+
+	// Verify that no file appears more than once.
 	seenTargets := make(map[string]int)
 	for _, f := range plan.Files {
 		seenTargets[f.TargetName]++
 	}
 	for name, count := range seenTargets {
 		if count > 1 {
-			t.Errorf("HookPlan.Files contains %q %d times; reuse must not duplicate files", name, count)
+			t.Errorf("HookPlan.Files contains %q %d times; files must not be duplicated", name, count)
 		}
 	}
 }
@@ -1079,7 +1054,7 @@ func TestHookPlan_VSCodeGHCP_Supported(t *testing.T) {
 		t.Fatalf("HookPlan: %v", err)
 	}
 	if !plan.Supported {
-		t.Error("HookPlan.Supported = false; VS Code GHCP supports hooks via claude-code file reuse")
+		t.Error("HookPlan.Supported = false; VS Code GHCP supports hooks")
 	}
 }
 
@@ -1088,8 +1063,8 @@ func TestHookPlan_VSCodeGHCP_Supported(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestHookPlan_VSCodeGHCP_AlwaysTODORegistrationStep verifies that the enable-chat-hooks
-// registration step is present with Performable: false. The deployment tool cannot write
-// user-level VS Code settings ("chat.hooks.enabled": true); this step is always a TODO item.
+// registration step is passed through unchanged with Performable: false, so a step the
+// deployment tool cannot perform still reaches the TODO checklist.
 func TestHookPlan_VSCodeGHCP_AlwaysTODORegistrationStep(t *testing.T) {
 	mod := newModule(t)
 
@@ -1143,9 +1118,8 @@ func TestHookPlan_VSCodeGHCP_AlwaysTODORegistrationStep(t *testing.T) {
 }
 
 // TestHookPlan_VSCodeGHCP_EnableChatHooksNeverAttempted verifies that the enable-chat-hooks
-// step is reported as an unperformable action (Performable: false) rather than attempted.
-// This is the behavioural contract: the deployment tool reports the requirement and never
-// writes to user-level VS Code settings (AC13.5).
+// step stays an unperformable action (Performable: false) rather than being attempted: the
+// deployment tool reports such a requirement and never writes user-level VS Code settings.
 func TestHookPlan_VSCodeGHCP_EnableChatHooksNeverAttempted(t *testing.T) {
 	mod := newModule(t)
 
@@ -1262,14 +1236,14 @@ func TestInjection_VSCodeGHCP_ProjectInjectionsNotFilled(t *testing.T) {
 }
 
 // TestInjection_VSCodeGHCP_InjectionsVersion verifies that the module's descriptor carries
-// injections_version "1.3.0" per the HarnessInjections.md reference.
+// the frontmatter version of the frozen catalog's HarnessInjections.md ("1.4.0").
 func TestInjection_VSCodeGHCP_InjectionsVersion(t *testing.T) {
 	mod := newModule(t)
 	d := mod.Descriptor()
 	if d == nil {
 		t.Fatal("Descriptor() returned nil")
 	}
-	want := "1.3.0"
+	want := "1.4.0"
 	if d.InjectionsVersion != want {
 		t.Errorf("Descriptor().InjectionsVersion = %q, want %q", d.InjectionsVersion, want)
 	}
@@ -1485,7 +1459,7 @@ func TestContract_VSCodeGHCP(t *testing.T) {
 						{Key: "disable-model-invocation", Value: domain.ScalarValue("false", domain.QuotePlain)},
 						{Key: "user-invocable", Value: domain.ScalarValue("false", domain.QuotePlain)},
 					},
-					Remove:   []string{"recommended_tier", "tier_rationale", "required_skills"},
+					Remove:   []string{"recommended_tier", "tier_rationale", "required_skills", "infrastructure", "triggers", "on_failure"},
 					KeyOrder: []string{"mosaic_id", "version", "mosaic_transform_version", "mosaic_injections_version", "name", "description", "model", "tools", "disable-model-invocation", "user-invocable"},
 				},
 			},
@@ -1514,7 +1488,7 @@ func TestContract_VSCodeGHCP(t *testing.T) {
 						{Key: "disable-model-invocation", Value: domain.ScalarValue("false", domain.QuotePlain)},
 						{Key: "user-invocable", Value: domain.ScalarValue("true", domain.QuotePlain)},
 					},
-					Remove:   []string{"recommended_tier", "tier_rationale", "required_skills"},
+					Remove:   []string{"recommended_tier", "tier_rationale", "required_skills", "infrastructure", "triggers", "on_failure"},
 					KeyOrder: []string{"mosaic_id", "version", "mosaic_transform_version", "mosaic_injections_version", "name", "description", "model", "tools", "disable-model-invocation", "user-invocable"},
 				},
 			},
@@ -1575,7 +1549,7 @@ func TestContract_VSCodeGHCP(t *testing.T) {
 			{
 				Name:     "agent_project_linux",
 				Request:  domain.TargetPathRequest{Kind: domain.ArtifactAgent, Key: "test-runner", Scope: domain.ScopeProject, GOOS: "linux"},
-				Expected: ".github/agents/test-runner.md",
+				Expected: ".github/agents/test-runner.agent.md",
 			},
 			{
 				Name:     "skill_project_linux",
@@ -1585,7 +1559,7 @@ func TestContract_VSCodeGHCP(t *testing.T) {
 			{
 				Name:     "hook_project_linux",
 				Request:  domain.TargetPathRequest{Kind: domain.ArtifactHook, Key: "subagent-logger", FileName: "subagent-logger.ps1", Scope: domain.ScopeProject, GOOS: "linux"},
-				Expected: ".claude/hooks/subagent-logger.ps1",
+				Expected: ".github/hooks/subagent-logger.ps1",
 			},
 			{
 				Name:    "unsupported_kind_returns_sentinel",
@@ -1619,7 +1593,7 @@ func TestContract_VSCodeGHCP(t *testing.T) {
 					Scope: domain.ScopeProject,
 				},
 				Supported: true,
-				TargetDir: ".claude/hooks",
+				TargetDir: ".github/hooks",
 				FileNames: []string{"subagent-logger.ps1", "subagent-logger.json"},
 				StepIDs:   []string{"settings-fragment", "enable-chat-hooks"},
 			},
@@ -1655,8 +1629,8 @@ func TestDescriptor_VSCodeGHCP_HarnessID(t *testing.T) {
 
 // TestDescriptor_VSCodeGHCP_AgentExtensionDeclaration verifies that the descriptor declares
 // the agent file extension. This test enforces that the file extension decision is recorded
-// in the descriptor rather than being implicit (AC13.6).
-// Decision: ".md" (to match the CodebaseAgnostic canonical reference set).
+// in the descriptor rather than being implicit.
+// Decision: ".agent.md", the name the GHCP CLI target also uses.
 func TestDescriptor_VSCodeGHCP_AgentExtensionDeclaration(t *testing.T) {
 	mod := newModule(t)
 	d := mod.Descriptor()
@@ -1668,14 +1642,9 @@ func TestDescriptor_VSCodeGHCP_AgentExtensionDeclaration(t *testing.T) {
 	if !ok {
 		t.Fatal("Descriptor().Extensions does not declare an extension for ArtifactAgent; the file extension decision must be explicit in the descriptor (AC13.6)")
 	}
-	// The canonical CodebaseAgnostic reference uses ".md" (not ".agent.md").
-	// Agents/VS code GHCP/UtilityAgents/*.agent.md use .agent.md but were authored separately.
-	// The descriptor declares ".md" to match the canonical reference.
-	want := ".md"
+	want := ".agent.md"
 	if ext != want {
-		t.Errorf("Descriptor().Extensions[ArtifactAgent] = %q, want %q\n"+
-			"Decision recorded here: CodebaseAgnostic canonical reference uses .md; descriptor declares .md.\n"+
-			"UtilityAgents use .agent.md but were authored outside the deployment tool.",
+		t.Errorf("Descriptor().Extensions[ArtifactAgent] = %q, want %q (both GHCP targets name agents X.agent.md)",
 			ext, want)
 	}
 }

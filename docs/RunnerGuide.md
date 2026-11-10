@@ -16,6 +16,8 @@ This guide is for **project authors** who want to run multi-agent workflows with
 | **Supported harnesses** | `claude-code`, `opencode`, `ghcp-cli` |
 | **State file** | `Orchestration-{run_id}/Orchestration.md` — atomic writes, crash-safe, resumable |
 
+> **Known issue — GHCP CLI:** Runner runs on `ghcp-cli` are currently unreliable. With recent GHCP CLI versions (observed on 1.0.91), GHCP CLI sometimes ignores the requested `--agent` and runs its default agent instead, which shows up as protocol or parsing errors in the run. The failures are intermittent and the cause is not yet confirmed. In limited testing GHCP CLI 1.0.87 did not show the problem, so pinning it may help, but this is not verified. For reliable runs, use `claude-code` or `opencode`.
+
 **Why not just use the orchestrator agent?** A persistent orchestrator session accumulates context with every dispatch — every tool call, artifact edit, and subagent response stays in the context window. Cost grows roughly quadratically with run length. The Runner offloads all mechanical work (artifact writes, sequence tracking, harness invocations) and keeps orchestrator calls bounded: each starts a fresh session reading only the compact `Orchestration.md`.
 
 ---
@@ -30,6 +32,8 @@ This guide is for **project authors** who want to run multi-agent workflows with
 
 The TUI walks you through: harness selection (which auto-discovers the orchestrator script), workflow selection, mode configuration, and then shows live progress as the run executes.
 
+Progress-screen keys: `s` graceful stop (asks for confirmation), `m` manual dispatch at the next routing decision, `h` HITL for the next agent, `g` switch the loop guard off or on for this session (see [Resuming a Run](#resuming-a-run)), `e` view and edit the standing guidance (auto modes with pre-consultation only; see [Pre-Consultation](#pre-consultation)), `a` artifact view, `ctrl+c` force quit. A failed infrastructure step (checkpoint, commit, review agent) is marked on the progress screen, and the summary at the end of the run, in the TUI and the CLI, lists every infrastructure failure of the run.
+
 ### CLI
 
 ```sh
@@ -41,7 +45,7 @@ The TUI walks you through: harness selection (which auto-discovers the orchestra
   --timeout 30m
 ```
 
-The orchestrator script is discovered automatically from the harness-convention agents directory (e.g., `.claude/agents/orchestrator-script.md` for `claude-code`). If the workspace has not been deployed for the selected harness, the Runner exits immediately with a clear error.
+The orchestrator script is discovered automatically from the harness-convention agents directory (e.g., `.claude/agents/orchestrator-script.md` for `claude-code`). The file may also be named `orchestrator-script.agent.md`; a folder holding both names is refused. If the workspace has not been deployed for the selected harness, the Runner exits immediately with a clear error.
 
 ---
 
@@ -51,9 +55,17 @@ The mode controls how much routing the Runner handles versus what it delegates t
 
 | Mode | Happy path routing | Deviation routing | Task description quality | Cost |
 |------|-------------------|-------------------|-------------------------|------|
-| **orchestrated** | Orchestrator decides every step | Orchestrator decides | High — orchestrator crafts each one | Lowest of all approaches (bounded context), but most orchestrator calls |
-| **auto** | Engine follows workflow table | Orchestrator consulted | Generic on happy path, crafted on deviation | Fewer orchestrator calls |
-| **auto-review** | Engine follows table + review loops | Orchestrator only for unresolvable deviations | Generic everywhere except deviations | Fewest orchestrator calls |
+| **orchestrated** | Orchestrator decides every step | Orchestrator decides, including after `PARTIALLY_DONE`, `BLOCKED` with `E501` and a harness error | High — orchestrator crafts each one | Lowest of all approaches (bounded context), but most orchestrator calls |
+| **auto** | Engine follows workflow table | Orchestrator consulted, except for the automatic retries below | Generic on happy path, crafted on deviation | Fewer orchestrator calls |
+| **auto-review** | Engine follows table + review loops | Orchestrator only for unresolvable deviations, with the same automatic retries | Generic everywhere except deviations | Fewest orchestrator calls |
+
+**Automatic retries (auto and auto-review).** Three outcomes are re-dispatched by the Runner itself, without consulting the orchestrator:
+
+- `PARTIALLY_DONE`: the same agent runs again on the same row, with its previous output added to its inputs and its previous status message added to its task. This happens up to 3 times in a row; after that the orchestrator is consulted.
+- `BLOCKED` with error code `E501` (the agent itself reports that a tool is unavailable): the same agent runs again, up to 3 attempts per row and iteration since the last `SUCCESS` there; once the budget is spent the orchestrator is consulted.
+- `HARNESS_ERROR`: an invocation that ended without a usable response from the agent (timeout, process failure, unparseable or empty response, GHCP agent deselected or session error). The Runner records it as `HARNESS_ERROR`, not as a `BLOCKED` of the agent; the row's `Summary` names the kind of failure, for example `timeout: ...`. A response that arrived but could not be parsed first gets one direct re-run (a failed one is counted). Then the same agent runs again, up to 3 failed attempts per row and iteration since the last `SUCCESS` there, counted separately from `E501`; once the budget is spent the orchestrator is consulted. In orchestrated mode, and when no budget is left, the orchestrator is consulted at once. A `HARNESS_ERROR` attempt is never accepted: the run does not move on, and a resume runs the same assignment again. Stopping an invocation yourself with `x` is not a harness error.
+
+Every other non-`SUCCESS` status still goes to the orchestrator, including `COMPLETED_NEEDS_ACTION` in auto mode. In auto-review mode a reviewer's `COMPLETED_NEEDS_ACTION` is routed back to its creator automatically until the review loop limit is reached, counted per reviewer, phase and stage since that reviewer's last `SUCCESS`. In orchestrated mode the orchestrator is consulted after every step and none of these shortcuts apply.
 
 ### Which mode to choose?
 
@@ -69,19 +81,21 @@ All three modes are dramatically cheaper than running the orchestrator agent man
 
 | Flag | Required | Default | Description |
 |------|----------|---------|-------------|
-| `--workflow` | Yes | — | Workflow identifier (must exist in the orchestrator file) |
-| `--task` | Yes | — | Task description for the run |
+| `--workflow` | New run | — | Workflow identifier (must exist in the orchestrator file); not needed with `--run` |
+| `--task` | New run | — | Task description for the run; not needed with `--run` |
 | `--harness` | Yes | `fake` | Harness adapter (`claude-code`, `opencode`, `ghcp-cli`) |
-| `--mode` | Yes | — | Execution mode (`orchestrated`, `auto`, `auto-review`) |
-| `--timeout` | No | `30m` | Per-invocation timeout for the harness adapter |
-| `--pre-consult` | No | `false` | One-shot environment consultation at run start (auto/auto-review only) |
-| `--manual-resolution` | No | `false` | Let the user resolve deviations interactively on consultation failure |
+| `--mode` | New run | — | Execution mode (`orchestrated`, `auto`, `auto-review`); on a resume only for a run that records no Runner settings |
+| `--timeout` | No | `30m` | Per-invocation timeout for dispatches without human-in-the-loop |
+| `--hitl-timeout` | No | `4h` | Per-invocation timeout for dispatches sent with `human_in_the_loop: true`, where a person may take long to answer |
+| `--pre-consult` | No | `true` | One-shot environment consultation at run start (auto/auto-review only); use `--pre-consult=false` to disable |
+| `--manual-resolution` | No | `false` | When a consultation fails, let the user choose the next dispatch in an interactive dialogue; needs the TUI (see [Manual routing](#manual-routing)) |
+| `--review-loop-limit` | New run | — | Maximum review loop iterations: a positive integer, or `none` for no limit. Required for a new run and fixed once the run exists |
 | `--checkpoints` | No | `disabled` | Checkpoint support (`disabled`, `enabled`) |
 | `--commits` | No | `disabled` | Commit-class infrastructure dispatch (`disabled`, `enabled`) |
 | `--commit-branch` | No | `mosaic-owned` | Commit branch variant (`mosaic-owned`, `user-own`) |
 | `--run` | No | — | Resume a specific run by run_id |
 | `--new-run` | No | `false` | Force creation of a new run |
-| `--claude-path` | No | `claude` | Path to the Claude Code CLI binary |
+| `--executable-path` | No | _(per-harness default)_ | Executable path override for the harness selected by --harness; when absent, each harness uses its own default |
 | `--infra-class` | No | — | Non-interactive agent-per-class mappings (e.g. `checkpoint=checkpoint-manager-git,commit=commit-manager-git`) |
 
 ### Orchestrator Auto-Discovery
@@ -94,28 +108,44 @@ There is no `--orchestrator-file` flag. The Runner derives the orchestrator path
 | `opencode` | `.opencode/agents/orchestrator-script.md` |
 | `ghcp-cli` | `.github/agents/orchestrator-script.md` |
 
-If the file does not exist, the Runner exits immediately with a message indicating the workspace is not properly deployed for the selected harness. Run the Deploy tool to populate the agents directory before using the Runner.
+`orchestrator-script.agent.md` is accepted in place of `orchestrator-script.md` in each of these folders, and a folder holding both is refused. If the file does not exist, the Runner exits immediately with a message indicating the workspace is not properly deployed for the selected harness. Run the Deploy tool to populate the agents directory before using the Runner.
 
 ### Agent Snapshot Directories
 
-At run start, the Runner creates a run-scoped copy of the agents directory alongside the regular one (e.g., `.claude/agents-runner-{run_id}/`). This snapshot is used for all invocations and deleted automatically when the run completes or stops gracefully. If the Runner crashes mid-run, an orphaned `agents-runner-{run_id}/` directory may remain -- it is safe to delete manually and does not affect other runs.
+At run start, the Runner creates a snapshot or backup of agent files so it can apply harness-specific transforms (e.g., `mode: primary` for OpenCode) without permanently altering the deployed agents. The strategy used depends on how the harness loads agents:
+
+**Copy-and-invoke (path-based harnesses -- Claude Code):** The Runner copies the agents directory to a run-scoped sibling directory (e.g., `.claude/agents-runner-{run_id}/`), applies transforms to the copies, and invokes agents from there. Originals are never modified. On completion, the copy is deleted automatically. If the Runner crashes mid-run, an orphaned `agents-runner-{run_id}/` directory may remain; it is safe to delete manually and does not affect other runs.
+
+**Backup-and-transform (name-based harnesses -- OpenCode, GHCP CLI):** These harnesses always resolve agents by name from their canonical directory and cannot be redirected to a copy. Instead, the Runner copies originals to a shared backup directory (e.g., `.opencode/.agents-backup/`), transforms the originals in-place, and restores from backup on completion. Multiple concurrent runs share the same backup directory and coordinate via per-run lock files inside it.
+
+**Automatic crash recovery:** If the Runner crashes mid-run while using backup-and-transform, it leaves a human-readable `RUNNER-RECOVERY.txt` marker inside the agents directory explaining what happened and providing step-by-step manual restore instructions. On the next run start, the Runner automatically detects and recovers any orphaned backup state. The `.txt` extension is used for the marker so that no harness indexes it as an agent definition.
 
 ---
 
 ## Pre-Consultation
 
-An opt-in mechanism for **auto** and **auto-review** modes. At run start, the Runner invokes the orchestrator once to collect environment-level guidance (tool paths, project conventions, harness quirks) that gets appended to every subsequent dispatch.
+A mechanism for **auto** and **auto-review** modes, on by default. At run start, the Runner invokes the orchestrator once to collect environment-level guidance (tool paths, project conventions, harness quirks) that gets appended to the dispatches the Runner routes itself (not to dispatches the orchestrator routes, nor to commit setup or infrastructure dispatches). If this call fails, the run stops before any workflow agent runs and the run folder is kept; resuming retries it.
+
+The guidance is saved as plain text in `Orchestration-{run_id}/RunnerGuidance.txt`, with a `[task_description]` and a `[constraints]` section. The Runner shows it for review once the first pre-consultation has finished: choose **Accept** or **Edit** (multi-line fields; Enter adds a line break, ctrl+s saves, Esc cancels). When you resume a run, the saved guidance is reused instead of asking the orchestrator again, and the review offers **Accept**, **Edit** or **Regenerate** (a fresh pre-consultation replaces the file). During a run, press `e` on the progress screen to view and change the guidance; the change applies to every dispatch that starts afterwards. You can also edit the file by hand while the run is stopped; the Runner reads it when the next session starts. Every change is logged. The guidance belongs to one run and is not shared with other runs.
 
 ```sh
-./mosaic-run run \
-  --mode auto \
-  --pre-consult \
-  ...
+# Disable it
+./mosaic-run run   --mode auto   --pre-consult=false   ...
 ```
 
 **What it fixes:** Subagents not knowing project-specific conventions (e.g., "use `py` not `python`", "skills are at `.claude/skills/`"). It does NOT fix the per-dispatch intelligence gap — that's the fundamental trade-off of auto modes.
 
 **Not needed in orchestrated mode** — the orchestrator already includes environment context in every crafted dispatch.
+
+---
+
+## Manual routing
+
+Normally the orchestrator decides where a run goes when the workflow table does not. With `--manual-resolution` (or the matching TUI setting), a consultation that fails (for example an unusable orchestrator reply) hands that one decision to you instead of ending the run. From the TUI stop screen, **Manual dispatch** does the same once on demand.
+
+The TUI asks you step by step: the **row** to run (or stop the run), the **iteration** for a row in a block, the **task** description, the **input** and **output** artifacts (the row's defaults are pre-checked, and you can add paths), optional **constraints**, and a **HITL** choice (default, on or off). The first question also offers **Ask the orchestrator to decide** when you asked for the dialogue yourself (not when it opened because a consultation failed), which hands that decision to the orchestrator. When you choose it, a last, optional question asks for a **message** to the orchestrator (several lines are allowed; Esc goes back to the first question). The message is sent verbatim with that one decision only: it is not stored and not sent again, and leaving it empty sends none. While the orchestrator decides, the consultation row on the progress screen shows `user message`. Esc steps back one question. A dispatch that does not fit the workflow (for example an iteration that is not in the block's schedule) is explained and you are taken back to correct it.
+
+The dialogue ends without dispatching anything, and the run stops with its state saved and resumable, when you press Esc at the first question, when the interface cannot ask questions, or when the dialogue gives up (after 3 rejected dispatches, or after 64 questions in one attempt). The non-interactive CLI cannot answer the dialogue at all: with `--manual-resolution` there, a failed consultation ends the run as a resumable stop (exit code 6) rather than dispatching or waiting for input.
 
 ---
 
@@ -131,7 +161,29 @@ Every run creates an `Orchestration-{run_id}/` folder in the working directory. 
 ./mosaic-run
 ```
 
-The Runner reads the existing `Orchestration.md`, determines where the run left off, and continues from there.
+A resume needs no settings flags: the workflow, task, mode, checkpoints, commits, review loop limit and infrastructure selections are read from the run. The TUI asks only what belongs to this session (harness, the timeout and the human-in-the-loop timeout, and, when they apply, version drift and the commit branch of a pending commit setup); the CLI needs `--run` and `--harness`. A run created by native orchestration records no Runner settings, so its first resume still needs `--mode` (the TUI asks). Before the run continues, the TUI shows and the CLI prints a summary of the recorded settings. A resume that cannot work is refused early, before you are asked anything: the run records no workflow, its workflow is no longer in the orchestrator file, or its recorded infrastructure no longer matches what is deployed.
+
+The Runner reads the existing `Orchestration.md`, determines where the run left off, and continues from there. If the last attempt was not accepted (it was interrupted, or force-stopped), the resume runs that assignment again instead of routing on its recorded status. It finds the row and iteration of the last step from the Execution Log, the same way it does while the run is live, so a resumed run continues where the live run would have. The counters behind the automatic retries (`PARTIALLY_DONE`, `E501`, `HARNESS_ERROR`) and the review loop limit are read from the log too, so they carry over; a log from an earlier Runner that recorded harness failures as `BLOCKED` with `E501` still resumes, and those rows count against the `E501` budget; only the guard against repeated identical orchestrator dispatches starts again from zero.
+
+In the TUI you do not have to leave the program to continue. After a graceful stop, **Continue** on the done screen resumes the run in place; after an orchestrator stop, **Retry** and **Manual dispatch** on the stop screen do the same. All of them resume the existing run (a run whose `Orchestration.md` exists is never restarted as new) and the progress screen shows the history of what already ran, rebuilt from the Execution Log, rather than starting empty.
+
+If the orchestrator keeps requesting a dispatch that the Runner's loop guard blocks (the same agent dispatched four times in a row on one row), the Runner asks the orchestrator again twice and then stops the run with its state saved, so you can continue it after looking at what happened. In the TUI the ending screen then offers `g  continue with loop guard off`, which resumes with the guard off for that session only. You can also switch the guard off while a run is in progress by pressing `g` on the progress screen (a red line, `LOOP GUARD OFF for this session`, stays visible until you press `g` again). It lasts for the session only and has no CLI flag. While it is off, same-agent dispatches are not limited, so watch for runaway loops; the other limits (automatic retries, review loop limit) still apply.
+
+### Live activity and force stop
+
+The progress screen shows what the running invocation is doing (tool calls and messages). Its header line shows the agent with harness and model, the elapsed time, `ctx <size>` (the context size of the latest model call), and either `running <tool> <duration>` while a tool call is under way or `quiet <duration>` since the last event; the indicator is highlighted once it passes 5 minutes, so a stalled invocation stands out. When the invocation ends the header shows the elapsed time, `ended`, the last context size and the cost in USD (Claude Code and OpenCode; GHCP reports no cost). Token totals are not shown. Press `l` to hide or show this panel. It reads `no live output available` until the invocation reports its first event. Claude Code runs in stream-json mode so that it reports activity too.
+
+Press `x` to force-stop the running invocation. A separate confirmation (`y` or `n`) comes first. Only the running invocation is killed, with everything it started; the Runner itself keeps running. The attempt is logged as not accepted (`Force-stopped by the user; attempt not accepted`), and you choose whether to stop the run (resumable) or to open the manual routing dialogue. The same whole-tree kill is used when an invocation times out.
+
+When you press stop in the TUI while the orchestrator is deciding, a decision that finishes after the stop request is discarded rather than dispatched. The Runner tells you so, and the decision is made again on resume.
+
+### Workflow table, rows and resume
+
+- **Row column.** mosaic-deploy adds a first-column `Row` (1..N) to each workflow routing table it rebuilds into an orchestrator; authors never write it. The Runner accepts tables with or without the column and refuses a table whose `Row` numbers do not match row positions, for example after a hand edit.
+- **WorkflowRow in the Execution Log.** Each workflow step records the table row it ran in a `WorkflowRow` column directly after `Iteration` (`Seq | Agent | Phase | Iteration | WorkflowRow | Status | Timestamp | Summary | Inputs | Checkpoint`). The `Iteration` column holds the iteration ID of a row in a block (`{ID}`, or `{ID}.{Group}` for a grouped row, for example `1.Test`) and `-` for a row outside every block. Infrastructure, out-of-band and ad-hoc steps record `-`. Live routing and resume identify the last row from this value for every row, in a block or not, and stop and report when the agent or group at that row no longer matches. A block row whose log entry has no iteration is refused, with a message naming the row. A run written by an earlier Runner (an Execution Log with a `Stage` column) cannot be resumed.
+- **Error marker.** A `BLOCKED` row's `Summary` ends with the error code as a marker such as `[error:E501]`. The Runner reads the marker back to count `E501` attempts, so leave it in place if you edit the log by hand. `HARNESS_ERROR` rows have no error code and no marker; the Runner counts them by their status.
+- **On Findings.** The target is the row the `On Findings` cell names, matched to a `Subagent` cell exactly (including a mode qualifier). A cell that matches no row is refused when the workflow is read.
+- **Version drift.** A run is pinned to its workflow only by the `workflow_version` string, and the table is re-read on every start, including resume. The recorded-row check catches only edits that change the agent or group at a recorded row. Workflow authors must bump the workflow version whenever they edit a routing table; the Runner then refuses to resume older runs against the changed table unless version drift is explicitly allowed (`--allow-version-drift`).
 
 ---
 
@@ -166,11 +218,12 @@ When enabled, the Runner dispatches a commit infrastructure agent to commit comp
 |------|---------|
 | 0 | Run completed successfully |
 | 1 | Unexpected infrastructure error |
-| 2 | Graceful stop (state saved, resumable) |
+| 2 | Stopped (graceful stop, or a stop by the Runner itself; state saved, resumable) |
 | 3 | Invalid arguments |
 | 4 | Workflow or artifact refused before any invocation |
 | 5 | Deviation unresolved (state saved, resumable) |
-| 6 | Stopped by orchestrator consultant (resumable) |
+| 6 | Stopped by orchestrator consultant, a failed consultation, or an ended manual routing dialogue (resumable) |
+| 7 | Commit setup or pre-consultation failed after the run folder was created (kept; resuming retries it) |
 
 ---
 
@@ -182,10 +235,12 @@ When enabled, the Runner dispatches a commit infrastructure agent to commit comp
 | Run a workflow from CLI | `mosaic-run run --workflow <id> --task "<desc>" --harness claude-code --mode orchestrated` |
 | Use the cheapest mode | `--mode auto-review` |
 | Get the best task descriptions | `--mode orchestrated` |
-| Add environment guidance in auto modes | `--pre-consult` |
+| Skip the environment guidance in auto modes | `--pre-consult=false` |
 | Resume a stopped run | `--run <run_id>` |
 | Preview without a real harness | `--harness fake` |
 | Enable checkpoints | `--checkpoints enabled --infra-class "checkpoint=checkpoint-manager-git"` |
 | Enable stage commits | `--commits enabled --infra-class "commit=commit-manager-git"` |
 | Set a longer timeout per invocation | `--timeout 1h` |
-| Resolve deviations manually | `--manual-resolution` |
+| Allow people more time to answer | `--hitl-timeout 8h` |
+| Stop the running invocation at once | `x` on the progress screen, then `y` |
+| Choose the next dispatch yourself when a consultation fails | `--manual-resolution` (needs the TUI) |

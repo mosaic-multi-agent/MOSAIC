@@ -35,6 +35,7 @@ import (
 type InfrastructureAgentScreen struct {
 	agents   []domain.Agent
 	multisel *widgets.MultiSelect
+	prov     provenanceView // catalog labels of the agents
 	detail   *widgets.DetailPane
 
 	done   bool

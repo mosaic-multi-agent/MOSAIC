@@ -348,7 +348,12 @@ func toWireHookPlanResult(plan domain.HookPlan) wireHookPlanResult {
 
 func main() {
 	mosaicRoot := os.Getenv("MOSAIC_ROOT")
-	mod, err := opencode.New(registry.BuiltinOptions{MosaicRoot: mosaicRoot})
+	// Construction needs a content directory resolver; this module keeps its behaviour of
+	// reading injection content from the MOSAIC root's Catalog/HarnessInjections directory.
+	mod, err := opencode.New(registry.BuiltinOptions{
+		MosaicRoot: mosaicRoot,
+		ContentDir: registry.MosaicRootContentDirs(mosaicRoot),
+	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "harness-opencode-module: init: %v\n", err)
 		os.Exit(1)

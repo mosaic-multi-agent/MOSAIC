@@ -8,14 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"mosaic-common/docformat"
 	"mosaic-deploy/internal/catalog/catalogpaths"
 	"mosaic-deploy/internal/domain"
 )
 
-// BundleSourceRelPath is the bundle's path relative to the MOSAIC root.
+// BundleSourceRelPath names the bundle document in loader errors. The file itself is read from
+// the catalog root the caller passes (the root of the layer the stack resolved).
 const BundleSourceRelPath = catalogpaths.MosaicRelBundleFile
 
 // Sentinel errors returned by BundleLoader.LoadBundle. Each is distinct so callers can
@@ -54,7 +54,7 @@ var (
 // payload. Implementations are stateless; the app layer calls LoadBundle once per run,
 // before any file is written.
 type BundleLoader interface {
-	// LoadBundle reads <mosaicRoot>/Catalog/DeployedSections.md, extracts the
+	// LoadBundle reads <catalogRoot>/DeployedSections.md, extracts the
 	// frontmatter `bundle_version` scalar and every entry of the frontmatter `blocks`
 	// list, and for each entry extracts the body region named by that entry's `name`
 	// via doc.Body().SectionDeep(name).
@@ -65,7 +65,7 @@ type BundleLoader interface {
 	// Every returned error wraps exactly one sentinel above and names BundleSourceRelPath.
 	// A non-nil error is returned with a zero-value BundleContent — the loader is
 	// all-or-nothing and never returns partial content.
-	LoadBundle(mosaicRoot string) (domain.BundleContent, error)
+	LoadBundle(catalogRoot string) (domain.BundleContent, error)
 }
 
 // FileBundleLoader is the filesystem-backed implementation of BundleLoader.
@@ -73,9 +73,9 @@ type FileBundleLoader struct{}
 
 // LoadBundle reads the bundle source document and returns the version and all declared blocks.
 // It is all-or-nothing: any error returns a zero-value BundleContent.
-func (FileBundleLoader) LoadBundle(mosaicRoot string) (domain.BundleContent, error) {
+func (FileBundleLoader) LoadBundle(catalogRoot string) (domain.BundleContent, error) {
 	relPath := BundleSourceRelPath
-	absPath := filepath.Join(mosaicRoot, relPath)
+	absPath := catalogpaths.BundleFile(catalogRoot)
 
 	data, err := os.ReadFile(absPath)
 	if err != nil {

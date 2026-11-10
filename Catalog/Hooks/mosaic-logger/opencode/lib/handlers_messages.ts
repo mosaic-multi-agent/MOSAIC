@@ -23,6 +23,7 @@
 import type { HandlerDependencies, MessageInfo, OpenCodeEvent } from "./handlers_session.js";
 import { currentTimestamp } from "./core.js";
 import { extractTextFromParts } from "./handlers_invocation.js";
+import { RequestedToolsTracker } from "./requested_tools.js";
 
 // ---------------------------------------------------------------------------
 // Public factory
@@ -37,6 +38,7 @@ export function createMessageHandlers(deps: HandlerDependencies): {
   handleMessageEvent: (event: OpenCodeEvent) => Promise<void>;
 } {
   const { store, paths, buildEvent, appendEvent } = deps;
+  const requestedTools = deps.requestedTools ?? new RequestedToolsTracker();
 
   async function handleMessageEvent(event: OpenCodeEvent): Promise<void> {
     try {
@@ -126,34 +128,39 @@ export function createMessageHandlers(deps: HandlerDependencies): {
             ? info.modelID
             : undefined;
 
-        // PROVISIONAL MAPPING — needs verification against a live OpenCode install.
-        // info.mode (e.g. "build", "plan") appears to be OpenCode's agent operating
-        // mode, which may differ from the API billing service_tier concept (e.g.
-        // "standard"/"priority"/"batch") used by the claude-code adapter's homonymous
-        // field. If OpenCode does not expose a billing-tier field, omit service_tier
-        // rather than carrying an unrelated value; this mapping is kept here only until
-        // the field semantics can be confirmed. Per the design's field-drift policy,
-        // "never emit a wrong value" — if mode turns out not to be a billing tier,
-        // remove this line and leave service_tier absent.
-        const serviceTier =
-          typeof info.mode === "string" && info.mode !== "" ? info.mode : undefined;
+        // Provider is copied verbatim from the same message; never part of `model`.
+        const provider =
+          typeof info.providerID === "string" && info.providerID !== ""
+            ? info.providerID
+            : undefined;
 
         // Token usage object — omitted entirely when nothing is resolvable.
         const tokenUsage = buildTokenUsage(info);
 
+        // Tools requested by this message so far, from message.part.updated and
+        // from this observation's parts; absent when the message has no id.
+        let requested: Record<string, number> | undefined;
+        if (messageId) {
+          requestedTools.recordParts(sessionId, messageId, partsRaw);
+          requested = requestedTools.snapshot(sessionId, messageId);
+        }
+
         const usageEvent = buildEvent(
           "usage_record",
-          { sessionId, runId, timestamp: ts },
+          { sessionId, runId, timestamp: callStartTimestamp(createdAt) ?? ts },
           {
             record_id: recordId,
             record_index: recordIndex,
             source,
             agent_instance_id: agentInstanceId, // undefined → omitted by buildEvent
             model,                               // undefined → omitted by buildEvent
-            service_tier: serviceTier,           // undefined → omitted by buildEvent
+            provider,                            // undefined → omitted by buildEvent
             token_usage: tokenUsage,             // undefined → omitted by buildEvent
           },
         );
+        // Set after buildEvent: its pruning would drop an empty object, but an
+        // empty requested_tools is meaningful (the message requested no tools).
+        if (requested) usageEvent["requested_tools"] = requested;
         await appendEvent(sink, usageEvent);
       }
     } catch {
@@ -169,6 +176,21 @@ export function createMessageHandlers(deps: HandlerDependencies): {
 // ---------------------------------------------------------------------------
 
 /**
+ * ISO 8601 UTC timestamp (ms precision, `Z`) for a message's start time, or
+ * `undefined` when it is not usable.
+ *
+ * `info.time.created` is read as epoch milliseconds (OpenCode's SDK convention;
+ * not verified against the host here). It is usable when it is a finite number
+ * greater than zero and before the year 10000. The value is fixed at message
+ * creation, so every re-observation of a message yields the same timestamp.
+ */
+export function callStartTimestamp(createdAt: number | undefined): string | undefined {
+  if (createdAt === undefined || !Number.isFinite(createdAt)) return undefined;
+  if (createdAt <= 0 || createdAt >= 253402300800000) return undefined;
+  return new Date(createdAt).toISOString();
+}
+
+/**
  * Build the `token_usage` object from an assistant message's `info.tokens` field.
  *
  * Rules:
@@ -180,7 +202,10 @@ export function createMessageHandlers(deps: HandlerDependencies): {
  *
  * Sub-field mapping:
  *   - `input_tokens`          ← `info.tokens.input`
- *   - `output_tokens`         ← `info.tokens.output`
+ *   - `output_tokens`         ← `info.tokens.output` + `info.tokens.reasoning`
+ *                               (reasoning is billed as output; a missing reasoning
+ *                               value means no reasoning; omitted without `output`)
+ *   - `reasoning_tokens`      ← `info.tokens.reasoning` (omitted when not a number)
  *   - `cache_read_tokens`     ← `info.tokens.cache.read`
  *   - `cache_creation_tokens` ← `info.tokens.cache.write`
  *
@@ -194,6 +219,7 @@ export function buildTokenUsage(
       output_tokens?: number;
       cache_read_tokens?: number;
       cache_creation_tokens?: number;
+      reasoning_tokens?: number;
     }
   | undefined {
   if (!info) return undefined;
@@ -206,13 +232,18 @@ export function buildTokenUsage(
     output_tokens?: number;
     cache_read_tokens?: number;
     cache_creation_tokens?: number;
+    reasoning_tokens?: number;
   } = {};
 
+  const reasoning = typeof tokens.reasoning === "number" ? tokens.reasoning : undefined;
   if (typeof tokens.input === "number") {
     result.input_tokens = tokens.input;
   }
   if (typeof tokens.output === "number") {
-    result.output_tokens = tokens.output;
+    result.output_tokens = tokens.output + (reasoning ?? 0);
+  }
+  if (reasoning !== undefined) {
+    result.reasoning_tokens = reasoning;
   }
 
   const cache = tokens.cache;

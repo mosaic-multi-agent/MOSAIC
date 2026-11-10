@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-10-27T12:04:33.217Z",
+  "hook_event_name": "PostToolUse",
+  "session_id": "ece89a93-a783-49b8-80be-08407e3e1ce2",
+  "transcript_path": "/nonexistent/GitHub.copilot-chat/transcripts/ece89a93-a783-49b8-80be-08407e3e1ce2.jsonl",
+  "tool_name": "runSubagent",
+  "tool_input": {
+    "agentName": "requirements-refinement",
+    "description": "Refine requirements",
+    "prompt": "{\"agent_instance_id\":\"requirements-refinement#4\",\"run_id\":\"20261027T100000Z-b7c4\",\"task_description\":\"Refine the requirements using the research findings.\"}"
+  },
+  "tool_response": "{\"agent_instance_id\":\"requirements-refinement#4\",\"run_id\":\"20261027T100000Z-b7c4\",\"status_code\":\"SUCCESS\",\"status_message\":\"Rewrote Requirements.md with the refined scope.\"}",
+  "tool_use_id": "toolu_017pWWTUCtf17bR6MDKoNcMw__vscode-1793098349285",
+  "cwd": "<workspace>"
+}

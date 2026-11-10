@@ -15,13 +15,16 @@ import (
 
 	"mosaic-log-analyzer/internal/app"
 	"mosaic-log-analyzer/internal/cli"
+	"mosaic-log-analyzer/internal/digest"
 	"mosaic-log-analyzer/internal/logread"
 	"mosaic-log-analyzer/internal/logscan"
+	"mosaic-log-analyzer/internal/otelusage"
 	"mosaic-log-analyzer/internal/pricing"
+	"mosaic-log-analyzer/internal/settings"
 	"mosaic-log-analyzer/internal/tui"
 )
 
-const ToolVersion = "1.0.0"
+const ToolVersion = "1.2.1"
 
 // valueFlagNames are the flags that consume a following token in space-separated
 // form (--flag value). Boolean flags like --tui are NOT in this set.
@@ -29,6 +32,7 @@ var valueFlagNames = map[string]bool{
 	"--path":   true,
 	"--run":    true,
 	"--format": true,
+	"--out":    true,
 }
 
 // wantsTUI reports whether the composition root should launch the interactive TUI.
@@ -136,8 +140,13 @@ func main() {
 	// where concrete implementations are instantiated.
 	scanner := logscan.NewScanner()
 	reader := logread.NewReader()
-	pricingStore := pricing.NewStore(workDir)
+	globalDir := globalConfigDir()
+	pricingStore := pricing.NewStore(globalDir, workDir)
+	settingsStore := settings.NewStore(globalDir, workDir)
+	ensureGlobalFiles(pricingStore, settingsStore)
 	clock := &realClock{}
+	digestStore := digest.NewStore()
+	usageIngest := otelusage.New()
 
 	if wantsTUI(args, isatty.IsTerminal) {
 		// TUI mode: create the TUI interaction first so it can be shared between
@@ -149,9 +158,14 @@ func main() {
 			Source:      scanner,
 			Reader:      reader,
 			Pricing:     pricingStore,
+			Settings:    settingsStore,
+			Digests:     digestStore,
+			ToolVersion: ToolVersion,
 			Clock:       clock,
 			Interaction: tuiInteract,
 			WorkDir:     workDir,
+			IngestProbe: usageIngest,
+			Alarms:      scanner,
 		})
 
 		os.Exit(tui.Run(tui.Options{
@@ -172,9 +186,15 @@ func main() {
 		Source:      scanner,
 		Reader:      reader,
 		Pricing:     pricingStore,
+		Settings:    settingsStore,
+		Digests:     digestStore,
+		ToolVersion: ToolVersion,
 		Clock:       clock,
 		Interaction: interact,
 		WorkDir:     workDir,
+		Ingester:    usageIngest,
+		IngestProbe: usageIngest,
+		Alarms:      scanner,
 	})
 
 	os.Exit(cli.Execute(cli.Options{
@@ -182,5 +202,6 @@ func main() {
 		Stdout:  os.Stdout,
 		Stderr:  os.Stderr,
 		Version: ToolVersion,
+		Getenv:  os.Getenv,
 	}, args))
 }

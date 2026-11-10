@@ -382,3 +382,39 @@ export function sessionCompactingPayload(
     ...overrides,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Tool part bus event builder
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a `message.part.updated` bus event carrying a tool part, in the shape
+ * verified on OpenCode 1.18.18:
+ *   { type: "message.part.updated", properties: { part: { type: "tool", callID, tool, sessionID, state } } }
+ * `error` is only attached to the state when provided.
+ */
+export function toolPartUpdatedEvent(params: {
+  callID?: string;
+  tool?: string;
+  sessionID?: string;
+  status: string;
+  error?: unknown;
+}): OpenCodeEvent {
+  return {
+    type: "message.part.updated",
+    properties: {
+      part: {
+        id: "part-tool-1",
+        messageID: "msg-tool-1",
+        type: "tool",
+        ...(params.callID !== undefined ? { callID: params.callID } : {}),
+        ...(params.tool !== undefined ? { tool: params.tool } : {}),
+        ...(params.sessionID !== undefined ? { sessionID: params.sessionID } : {}),
+        state: {
+          status: params.status,
+          ...(params.error !== undefined ? { error: params.error } : {}),
+        },
+      },
+    },
+  };
+}

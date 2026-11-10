@@ -4,6 +4,9 @@ package app
 // result and the accumulated todo collector, so both frontends render identical information.
 
 import (
+	"os"
+	"path/filepath"
+
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 )
@@ -46,7 +49,15 @@ func (s *service) buildSummary(mode domain.RunMode, harness domain.HarnessRef, w
 	}
 }
 
-// readDeployedFile has been removed. Its functionality is now provided by
-// readDeployedArtifact (Layer 2 of the decode funnel in deployed_read.go), which
-// returns a DeployedRead carrying both the raw bytes and the decoded canonical bytes,
-// along with presence and error information that readDeployedFile discarded.
+// readDeployedFile returns the raw on-disk bytes of the file at <workspace>/<targetPath>, or
+// nil when the file cannot be read (absent on first deploy). The bytes are in the harness's
+// deployed format, NOT canonical form: callers that interpret content must decode them
+// through the funnel (decodeDeployedBytes / readDeployedArtifact in deployed_read.go).
+// deployedBytes uses it only to choose and capture bytes before decoding them.
+func readDeployedFile(workspace, targetPath string) []byte {
+	data, err := os.ReadFile(filepath.Join(workspace, targetPath))
+	if err != nil {
+		return nil
+	}
+	return data
+}

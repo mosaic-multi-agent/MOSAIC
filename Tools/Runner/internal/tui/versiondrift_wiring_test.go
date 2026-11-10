@@ -18,7 +18,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"mosaic-run/internal/domain"
-	"mosaic-run/internal/tui/screens"
+	"mosaic-run/internal/tui/screens/setup"
 )
 
 // versionDriftPrompt is the prompt text the configuration screen renders when it
@@ -35,7 +35,7 @@ func driveModelToConfigScreen(t *testing.T, m *rootModel, wf domain.WorkflowRegi
 	style := stylesFromTheme(m.theme)
 	workflows := []domain.WorkflowRegion{wf}
 	m.workflows = workflows
-	m.workflowScreen = screens.NewWorkflowSelectScreen(workflows, m.width, m.height, style)
+	m.workflowScreen = setup.NewWorkflowSelectScreen(workflows, m.width, m.height, style)
 	m.screen = screenSetupWorkflow
 
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select the workflow
@@ -63,6 +63,7 @@ func driveConfigScreenPastTimeout(m *rootModel) {
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // confirm timeout
+	answerHITLTimeoutOnModel(m) // HITL timeout
 }
 
 // TestSetupFlow_NewRun_NeverPromptsForVersionDrift verifies that a new run driven
@@ -116,8 +117,12 @@ func TestSetupFlow_ResumedRun_WorkflowVersionUnmatchedByRecord_PromptsForVersion
 		t.Fatalf("after the harness question on a resumed run: screen = %v, want screenSetupConfig", m.screen)
 	}
 
-	// Act
-	driveConfigScreenPastTimeout(m)
+	// Act: a resume asks both timeouts first, then the drift question.
+	for _, r := range "30m" {
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	answerHITLTimeoutOnModel(m)
 
 	// Assert
 	if view := m.configScreen.View(); !containsStr(view, versionDriftPrompt) {

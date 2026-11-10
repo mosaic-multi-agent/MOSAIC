@@ -5,9 +5,9 @@
 
 ## Overview
 
-A "harness" (Claude Code, Codex, GitHub Copilot CLI, OpenCode, VS Code GHCP,
-or a third-party harness someone else authors) is anything that can implement
-the single `domain.HarnessModule` port: map generic tools to harness-specific
+A "harness" (Claude Code, Codex, GHCP CLI / VS Code GHCP Copilot, OpenCode, VS Code GHCP Local, or a
+third-party harness someone else authors) is anything that can implement the
+single `domain.HarnessModule` port: map generic tools to harness-specific
 ones, shape frontmatter, resolve deployment paths, supply injection content,
 and plan hook deployment. This area exists so that `transform`, `plan`, and
 `deploy` never need to know *how* a harness is provided — only that they hold
@@ -108,6 +108,11 @@ plan shape over JSON).
    re-checks the same gate independently of how the entry was listed, so no
    caller can obtain an external module purely by discovering it first.
 
+### Injection content source and the external-harness boundary
+A built-in module does not own a fixed MOSAIC-root path for its injection files. `registry.BuiltinOptions.ContentDir` is a per-harness resolver (`func(harnessDirName string) (string, error)`); each built-in asks it once, with its own `catalogpaths.HarnessDirName*` value, and reads injections only from the directory it returns. `Options.BuiltinContentDir` supplies the resolver to every built-in factory; when nil, `Discover` uses `MosaicRootContentDirs(mosaicRoot)` (`<mosaicRoot>/Catalog/HarnessInjections/<dir>`), which keeps existing callers and tests unchanged. `cmd/mosaic-deploy` passes a resolver backed by `stack.Catalog.HarnessInjections()` (`registry.StackContentDirs`, `DiscoverForStack`), so the injections of a built-in come, per harness directory and as one unit with no per-file fallback, from the highest catalog layer that has `HarnessInjections/<dir>`. When the active stack changes (the TUI stack screen), `RebuildForStack` re-runs only the built-in factories against the new stack's result and carries every other entry over unchanged. A built-in whose directory no layer supplies stays listed with `Usable: false`; `Resolve` returns an error wrapping `*injections.NotSuppliedError`.
+
+**Boundary.** Only the built-in tier resolves its injections through the stack. Descriptor-only and external harnesses (under `<MosaicRoot>/MosaicDeploy/harnesses/`) keep loading injections next to their descriptors, whatever stack is in effect, and `StackService.CheckHarnessInjections` returns nil for a usable one. `cmd/harness-opencode-module` is unchanged: it passes `registry.MosaicRootContentDirs(mosaicRoot)` and reads `<mosaicRoot>/Catalog/HarnessInjections`.
+
 ### External module protocol (client side)
 `external.New(execPath, descriptor, opts)` spawns the executable over
 anonymous pipes, sends a `handshake` request carrying `ProtocolVersion`
@@ -145,10 +150,10 @@ things its descriptor genuinely cannot express and that require Go code:
 | Harness | Descriptor-inexpressible behaviour |
 |---------|-------------------------------------|
 | **claudecode** | Tools rendered as a comma-separated scalar (not a YAML list); skill path key-subdirectory composition; version stamps applied later by transform, not by the module. |
+| **ghcpcli** | Tools rendered as a flow-style, single-quoted YAML sequence (descriptor `FieldValue` has no combined flow+per-item-quote option); same skill-subdirectory and version-stamp notes; agents are named `X.agent.md` (descriptor extension), hooks use the `ghcp-cli` variant in `.github/hooks`. |
 | **codex** | Agent files are TOML, not Markdown — the descriptor declares `agent_format_id: codex-toml` and all encode/decode goes through the Codex TOML translator. No `tools` key is emitted; tool grants are expressed via `sandbox_mode = "read-only"` (always emitted). Skills are resolved from a shared `.agents/skills` root rather than a harness-local directory. Deploy-path normalisations (name forcing, description fallback, sandbox_mode fallback, foreign-key drop) are applied by the translator's `Encode` method. Hooks are unsupported. |
-| **ghcpcli** | Tools rendered as a flow-style, single-quoted YAML sequence (descriptor `FieldValue` has no combined flow+per-item-quote option); same skill-subdirectory and version-stamp notes; hooks supported — hooks are `.sh` scripts installed under `.github/hooks/`; GHCP CLI hooks are supported and declared in the descriptor. |
 | **opencode** | Tools replaced by a full permission mapping; `mode: subagent` vs `mode: primary` depends on whether the agent is the orchestrator (inspects `AgentKey`, which a static descriptor `Add` field cannot do); distinct key order; hooks deployed as plugins with no registration steps. Explicitly designed with no in-process-only assumptions so the identical logic can run as the external reference module (`cmd/harness-opencode-module`). |
-| **vscodeghcp** | Same flow-style/single-quote tool rendering and skill-subdirectory notes as ghcpcli; hook variant reuses the `claude-code` variant's files (resolved upstream by the catalog, not by module code); the "enable chat hooks" registration step is always `Performable: false` because it requires a user-level VS Code setting the tool cannot write, so it always surfaces as a TODO item. |
+| **vscodeghcp** | Same flow-style/single-quote tool rendering and skill-subdirectory notes as ghcpcli; agents are named `X.agent.md` like ghcpcli; hooks use the `vscode-ghcp` variant in `.github/hooks`; the "enable chat hooks" registration step is always `Performable: false` because it requires a user-level VS Code setting the tool cannot write, so it always surfaces as a TODO item. |
 
 ### Contract testing
 Every built-in, the descriptor-only adapter, and the external adapter are
@@ -173,9 +178,10 @@ claim independently.
 |----------|-----|
 | **domain** | The only port interfaces (`HarnessModule`, tool/frontmatter/path/hook request-response shapes) and the tag-free `HarnessDescriptor`/`FieldValue` vocabulary this whole area is built around. |
 | **docformat** | `contracttest` imports `docformat.CanonicalInjections` to assert unknown injection names are correctly rejected by every tier. |
-| **catalog** | Resolves hook variant reuse (e.g. `vscode-ghcp` reusing `claude-code`'s files) before calling a module's `HookPlan`, so modules never implement reuse logic themselves. |
+| **catalog** | Resolves hook variant reuse (a variant that declares it reuses another variant's files) before calling a module's `HookPlan`, so modules never implement reuse logic themselves. |
 | **transform / plan / deploy** | Obtain a `HarnessModule` exclusively through `registry.Resolve`; never construct or import a `builtin/*` package directly. |
-| **cmd/mosaic-deploy** | The only place `registry.Discover` is called in production, wiring `AllowExternal` from the CLI flag or `tool-config.yaml`. |
+| **cmd/mosaic-deploy** | The only place `registry.Discover` is called in production, wiring `AllowExternal` from the CLI flag or `tool-config.yaml` and the stack-backed injection resolver for the built-ins. |
+| **catalog/stack/injections** | Resolves per harness directory which catalog layer supplies injections; the registry consumes its result only through the content-directory resolver and never imports `stack`. |
 | **cmd/harness-opencode-module** | A standalone binary that imports `opencode.New()` and speaks the `external` package's protocol server-side, serving as the reference implementation for anyone authoring a real external module. |
 
 ## Key Concepts
@@ -192,7 +198,7 @@ claim independently.
 ## Boundaries
 
 - **Owns:** the `HarnessModule` abstraction itself; descriptor parsing/validation; the three shared descriptor-driven algorithms; tier discovery and precedence; the external protocol's client-side wire format and error taxonomy; contract verification shared across tiers.
-- **Does not own:** applying a `FrontmatterPlan` to an actual document (that's `transform` + `docformat`); reading MOSAIC source files or resolving hook-variant reuse (that's `catalog`); writing any file to disk (that's `deploy`); deciding which harness the user picks or presenting the selection UI (that's `app`/frontends).
+- **Does not own:** choosing which catalog layer supplies a built-in's injections (the stack, via the content-directory resolver); injection loading for descriptor-only and external harnesses is its own and stays next to their descriptors. Also not owned: applying a `FrontmatterPlan` to an actual document (that's `transform` + `docformat`); reading MOSAIC source files or resolving hook-variant reuse (that's `catalog`); writing any file to disk (that's `deploy`); deciding which harness the user picks or presenting the selection UI (that's `app`/frontends).
 
 ## Invariants & Conventions
 

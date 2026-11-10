@@ -3,9 +3,9 @@
 
 An authored workflow declared directly with type="core" (NodeSection shape).
 
-| Phase | Subagent | HITL | Input | Output |
-|-------|----------|:----:|-------|--------|
-| PLANNING | planner | TRUE | - | Plan.md |
+| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
+|-------|----------|:----:|------------|-------------|-------|--------|
+| PLANNING | planner | TRUE | COMPLETE | - | - | Plan.md |
 </Workflow>
 
 <Workflow type="managed" name="managed-workflow" version="5.1">
@@ -13,7 +13,7 @@ An authored workflow declared directly with type="core" (NodeSection shape).
 
 A deploy-managed workflow declared with type="managed" (NodeDeployed shape).
 
-| Phase | Subagent | HITL | Input | Output |
-|-------|----------|:----:|-------|--------|
-| EXECUTION | implementer | FALSE | Plan.md | Result.md |
+| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
+|-------|----------|:----:|------------|-------------|-------|--------|
+| EXECUTION | implementer | FALSE | COMPLETE | - | Plan.md | Result.md |
 </Workflow>

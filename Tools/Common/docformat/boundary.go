@@ -38,7 +38,7 @@ type textSpan struct {
 	raw []byte
 }
 
-func (s *textSpan) bodyBytes() []byte               { return s.raw }
+func (s *textSpan) bodyBytes() []byte              { return s.raw }
 func (s *textSpan) visitInjections(_ func(*Node))  {}
 func (s *textSpan) visitSections(_ func(*Node))    {}
 func (s *textSpan) visitDeployed(_ func(*Node))    {}

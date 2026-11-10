@@ -1,0 +1,319 @@
+package artifact
+
+import (
+	"bytes"
+	"fmt"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"mosaic-common/docformat"
+	"mosaic-common/mdtable"
+	"mosaic-run/internal/domain"
+)
+
+// Render serialises an ArtifactState to the canonical markdown bytes.
+//
+// Iteration (the Stage field) and Checkpoint fields that are "" in the
+// ArtifactState are rendered as "-" in the execution log table. No other component ever sees or produces "-".
+//
+// Tables are written compact (no column padding) with every cell sanitised, so
+// line length follows row content and a cell can never break its table.
+func Render(state domain.ArtifactState) ([]byte, error) {
+	var buf bytes.Buffer
+
+	if !domain.IsValidRunID(state.RunID) {
+		return nil, &domain.RefusalError{
+			Component: "artifact",
+			Reason:    "cannot render an artifact without a valid run_id",
+			Cause:     &domain.RunIdentityError{Problem: runIDProblem(state.RunID), RunID: state.RunID},
+		}
+	}
+
+	// --- Frontmatter ---
+	buf.WriteString("---\n")
+	buf.WriteString("type: orchestration-artifact\n")
+	buf.WriteString("run_id: " + state.RunID + "\n")
+	buf.WriteString("workflow: " + string(state.Workflow) + "\n")
+	buf.WriteString("workflow_version: \"" + string(state.WorkflowVersion) + "\"\n")
+	buf.WriteString("task: \"" + state.Task + "\"\n")
+	buf.WriteString("started: " + state.Started.UTC().Format(time.RFC3339) + "\n")
+	buf.WriteString("last_updated: " + state.LastUpdated.UTC().Format(time.RFC3339) + "\n")
+	buf.WriteString("global_sequence: " + strconv.Itoa(state.GlobalSequence) + "\n")
+	if state.Dispatch.Present {
+		buf.WriteString("dispatch: " + renderDispatchValue(state.Dispatch.Value) + "\n")
+	}
+	if state.Checkpoints {
+		buf.WriteString("checkpoints: enabled\n")
+	} else {
+		buf.WriteString("checkpoints: disabled\n")
+	}
+	if state.Commits {
+		buf.WriteString("commits: enabled\n")
+	} else {
+		buf.WriteString("commits: disabled\n")
+	}
+	if state.CommitBranch != "" {
+		buf.WriteString("commit_branch: " + state.CommitBranch + "\n")
+	}
+	if state.ReviewLoopLimit > 0 {
+		buf.WriteString("review_loop_limit: " + strconv.Itoa(state.ReviewLoopLimit) + "\n")
+	}
+	if len(state.InfrastructureOverrides) > 0 {
+		buf.WriteString("infrastructure_overrides:\n")
+		for _, ov := range state.InfrastructureOverrides {
+			buf.WriteString("  " + ov.AgentName + ":\n")
+			buf.WriteString("    triggers:\n")
+			for _, tr := range ov.Triggers {
+				buf.WriteString("      - trigger: " + tr.Trigger + "\n")
+				if tr.Param != "" {
+					buf.WriteString("        trigger_param: " + tr.Param + "\n")
+				}
+			}
+		}
+	}
+	if len(state.InfraClassSelections) > 0 {
+		buf.WriteString("infrastructure_selections:\n")
+		classes := make([]string, 0, len(state.InfraClassSelections))
+		for class := range state.InfraClassSelections {
+			classes = append(classes, class)
+		}
+		sort.Slice(classes, func(i, j int) bool {
+			return infraClassRank(classes[i]) < infraClassRank(classes[j]) || (infraClassRank(classes[i]) == infraClassRank(classes[j]) && classes[i] < classes[j])
+		})
+		for _, class := range classes {
+			buf.WriteString("  " + class + ": " + state.InfraClassSelections[class] + "\n")
+		}
+	}
+	if state.Mode != domain.ExecutionModeUnset {
+		buf.WriteString("runner_mode: " + string(state.Mode) + "\n")
+		buf.WriteString("runner_pre_consultation: " + enabledDisabled(state.PreConsultation) + "\n")
+		buf.WriteString("runner_manual_resolution: " + enabledDisabled(state.ManualResolution) + "\n")
+	}
+	for _, entry := range state.UnknownFrontmatter {
+		for _, line := range entry.Lines {
+			buf.WriteString(line + "\n")
+		}
+	}
+	buf.WriteString("current_state:\n")
+	cs := state.CurrentState
+	buf.WriteString("  phase: " + renderNullable(cs.Phase) + "\n")
+	buf.WriteString("  iteration: " + renderNullableQuoted(cs.Stage) + "\n")
+	buf.WriteString("  last_status: " + renderNullable(string(cs.LastStatus)) + "\n")
+	buf.WriteString("  last_agent: " + renderNullableQuoted(cs.LastAgent) + "\n")
+	buf.WriteString("  error_code: " + renderNullable(string(cs.ErrorCode)) + "\n")
+	buf.WriteString("---\n")
+
+	// --- Body ---
+	buf.WriteString("\n")
+
+	// ExecutionLog section
+	execLogOpen, err := docformat.RenderOpenTagLine(docformat.NodeSection, "ExecutionLog", "")
+	if err != nil {
+		return nil, fmt.Errorf("artifact: render ExecutionLog open tag: %w", err)
+	}
+	execLogClose, err := docformat.RenderCloseTagLine("ExecutionLog")
+	if err != nil {
+		return nil, fmt.Errorf("artifact: render ExecutionLog close tag: %w", err)
+	}
+	writeSection(&buf, execLogOpen, renderExecutionLog(state.ExecutionLog), execLogClose)
+
+	buf.WriteString("\n")
+
+	// Artifacts section
+	artifactsOpen, err := docformat.RenderOpenTagLine(docformat.NodeSection, "Artifacts", "")
+	if err != nil {
+		return nil, fmt.Errorf("artifact: render Artifacts open tag: %w", err)
+	}
+	artifactsClose, err := docformat.RenderCloseTagLine("Artifacts")
+	if err != nil {
+		return nil, fmt.Errorf("artifact: render Artifacts close tag: %w", err)
+	}
+	writeSection(&buf, artifactsOpen, renderArtifactRegistry(state.ArtifactRegistry), artifactsClose)
+
+	buf.WriteString("\n")
+
+	// WorkflowNotes section
+	workflowNotesOpen, err := docformat.RenderOpenTagLine(docformat.NodeSection, "WorkflowNotes", "")
+	if err != nil {
+		return nil, fmt.Errorf("artifact: render WorkflowNotes open tag: %w", err)
+	}
+	workflowNotesClose, err := docformat.RenderCloseTagLine("WorkflowNotes")
+	if err != nil {
+		return nil, fmt.Errorf("artifact: render WorkflowNotes close tag: %w", err)
+	}
+	writeSection(&buf, workflowNotesOpen, renderWorkflowNotes(state.WorkflowNotes), workflowNotesClose)
+
+	return buf.Bytes(), nil
+}
+
+// renderDispatchValue writes a dispatch value so that the parser reads it back
+// verbatim: values the parser would otherwise trim, read as null or unwrap are
+// wrapped in double quotes.
+func renderDispatchValue(v string) string {
+	wrapped := len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"'
+	if v == "" || v == "null" || strings.TrimSpace(v) != v || wrapped {
+		return `"` + v + `"`
+	}
+	return v
+}
+
+// writeSection writes a region open tag, a blank line, the table, a blank line
+// and the close tag, so the table renders as a table in CommonMark viewers.
+func writeSection(buf *bytes.Buffer, open, table, closeTag []byte) {
+	buf.Write(open)
+	buf.WriteString("\n")
+	buf.Write(table)
+	buf.WriteString("\n")
+	buf.Write(closeTag)
+}
+
+// Summary truncation limits, counted in characters (runes).
+const (
+	// summaryMaxChars is the longest summary kept whole.
+	summaryMaxChars = 150
+	// summaryHeadChars and summaryTailChars are the parts kept of a longer summary.
+	summaryHeadChars = 50
+	summaryTailChars = 100
+)
+
+// TruncateSummary applies the head-50 + tail-100 truncation rule from the
+// artifact format spec to the given summary string.
+//
+// Pipe characters ("|") and newlines are stripped first because they are
+// invalid inside a markdown table cell; the limits are counted on the
+// already-clean string. A result of 150 characters or fewer is returned
+// unchanged. A longer one becomes its first 50 characters, " ... " (space,
+// three periods, space) and its last 100 characters, so the rendered artifact
+// stays ASCII.
+//
+// Characters are counted as runes, not bytes, so a cut never splits a UTF-8
+// sequence; for ASCII input runes equal bytes.
+func TruncateSummary(s string) string {
+	clean := strings.NewReplacer("|", "", "\n", "", "\r", "").Replace(s)
+
+	runes := []rune(clean)
+	if len(runes) <= summaryMaxChars {
+		return clean
+	}
+
+	head := string(runes[:summaryHeadChars])
+	tail := string(runes[len(runes)-summaryTailChars:])
+	return head + " ... " + tail
+}
+
+// ExecLogWorkflowRowHeader is the Execution Log column holding the 1-based
+// routing-table row of the step, or "-" for steps without a row.
+const ExecLogWorkflowRowHeader = "WorkflowRow"
+
+// renderExecutionLog renders the execution log entries as a markdown table.
+func renderExecutionLog(entries []domain.ExecutionLogEntry) []byte {
+	headers := []string{"Seq", "Agent", "Phase", "Iteration", ExecLogWorkflowRowHeader, "Status", "Timestamp", "Summary", "Inputs", "Checkpoint"}
+	t := mdtable.Table{Header: headers}
+
+	for _, e := range entries {
+		stage := e.Stage
+		if stage == "" {
+			stage = "-"
+		}
+		inputs := e.Inputs
+		if inputs == "" {
+			inputs = "-"
+		}
+		workflowRow := "-"
+		if e.WorkflowRow != domain.NoWorkflowRow {
+			workflowRow = strconv.Itoa(int(e.WorkflowRow))
+		}
+		checkpoint := e.Checkpoint
+		if checkpoint == "" {
+			checkpoint = "-"
+		}
+		row := sanitizeCells(
+			strconv.Itoa(e.Seq),
+			e.Agent,
+			e.Phase,
+			stage,
+			workflowRow,
+			string(e.Status),
+			e.Timestamp.UTC().Format(time.RFC3339),
+			renderSummaryCell(e),
+			inputs,
+			checkpoint,
+		)
+		t = t.AppendRow(row)
+	}
+
+	return t.RenderCompact()
+}
+
+// renderArtifactRegistry renders the artifact registry entries as a markdown table.
+func renderArtifactRegistry(entries []domain.ArtifactRegistryEntry) []byte {
+	headers := []string{"Artifact", "Created In", "Created By"}
+	t := mdtable.Table{Header: headers}
+
+	for _, e := range entries {
+		row := sanitizeCells(e.Artifact, e.CreatedIn, e.CreatedBy)
+		t = t.AppendRow(row)
+	}
+
+	return t.RenderCompact()
+}
+
+// renderWorkflowNotes renders the workflow notes as a markdown table.
+func renderWorkflowNotes(notes []domain.WorkflowNote) []byte {
+	headers := []string{"Seq", "Note"}
+	t := mdtable.Table{Header: headers}
+
+	for _, n := range notes {
+		row := sanitizeCells(strconv.Itoa(n.Seq), n.Note)
+		t = t.AppendRow(row)
+	}
+
+	return t.RenderCompact()
+}
+
+// enabledDisabled renders a boolean as the "enabled"/"disabled" frontmatter value.
+func enabledDisabled(b bool) string {
+	if b {
+		return "enabled"
+	}
+	return "disabled"
+}
+
+// infraClassRank orders infrastructure_selections keys checkpoint, commit, restore.
+func infraClassRank(class string) int {
+	switch class {
+	case "checkpoint":
+		return 0
+	case "commit":
+		return 1
+	case "restore":
+		return 2
+	}
+	return 3
+}
+
+// runIDProblem classifies an unusable run_id.
+func runIDProblem(runID string) domain.RunIdentityProblem {
+	if runID == "" {
+		return domain.RunIdentityEmpty
+	}
+	return domain.RunIdentityMalformed
+}
+
+// renderNullable renders a string value, replacing "" with "null".
+func renderNullable(s string) string {
+	if s == "" {
+		return "null"
+	}
+	return s
+}
+
+// renderNullableQuoted renders a string value as double-quoted YAML, replacing "" with "null".
+func renderNullableQuoted(s string) string {
+	if s == "" {
+		return "null"
+	}
+	return `"` + s + `"`
+}

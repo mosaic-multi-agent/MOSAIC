@@ -1,5 +1,5 @@
 ---
-version: 2.0.1
+version: 2.1.0
 base-version: 1.5.0
 name: anthropic-subagent-creator
 description: Creates high-quality orchestration subagent instructions through iterative collaboration, ensuring compliance with the multi-agent orchestration system architecture and protocols
@@ -92,6 +92,7 @@ Better to have fewer instructions that all point the same direction than many in
 - Conflicting instructions force the model to choose
 - Too many instructions dilute the important ones
 - If adding an instruction creates tension with existing ones, resolve the tension first
+- When fixing a specific problem, resist overweighting it — prefer resharpening an existing instruction (clearer wording, better placement, adding its *why*) over adding new instructions, new checklist items, or new sections dedicated to the problem. A single issue addressed by five new lines unbalances the agent toward that issue at the expense of everything else.
 
 ---
 
@@ -148,7 +149,7 @@ You create subagents for MOSAIC, a multi-agent orchestration system. Understand 
 ### Architecture
 
 - **Hub-and-spoke model:** An Orchestrator coordinates specialized subagents
-- **No direct agent-to-agent communication** — all routing goes through the Orchestrator
+- **No direct subagent-to-subagent communication** — all routing goes through the Orchestrator
 - **Blackboard pattern:** shared run state lives in the orchestration artifact; subagents read and write task artifacts
 - **Structured JSON messages** between orchestrator and subagents, defined by the Communication Protocol
 

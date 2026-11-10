@@ -7,10 +7,10 @@
 | PLANNING | agent-b | FALSE | COMPLETE | - | plan.md | result.md |
 </Workflow>
 
-<InfrastructureAgents type="project">
+<InfrastructureAgents type="managed">
 <InfrastructureAgent type="core" name="checkpoint-manager-git" version="1.0.0">
 | Class | Trigger | Param | On Failure | Description |
 |-------|---------|-------|------------|-------------|
-| checkpoint | STAGE_END | - | halt | Git checkpoint manager |
+| checkpoint | ITERATION_END | - | halt | Git checkpoint manager |
 </InfrastructureAgent>
 </InfrastructureAgents>

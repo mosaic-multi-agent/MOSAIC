@@ -1,13 +1,28 @@
 package domain
 
-import "sort"
+import (
+	"sort"
+	"time"
+)
 
 // InvocationUsage is the pricing unit. Tier selection is per invocation, never
 // per run, so per-invocation records are retained rather than pre-summed.
 type InvocationUsage struct {
-	Model   ModelID // empty when the event carried no model
-	Harness Harness
-	Usage   TokenUsage
+	Model    ModelID    // empty when the event carried no model
+	Provider ProviderID // "" when the source event carried none
+	Effort   string     // usage_record only; "" otherwise
+	Harness  Harness
+	Usage    TokenUsage
+
+	RecordID    string    // usage_record record_id; "" for legacy entries or when not logged
+	At          time.Time // timestamp of the usage_record / turn / invocation_end; zero when unparseable
+	ServiceTier string    // usage_record only; "" otherwise or when absent
+
+	Kind      CallKind // CallMain for every non-usage_record source
+	Label     string
+	SessionID string // envelope session_id; "" when absent
+
+	RequestedTools RequestedTools // usage_record only; zero = not provided
 }
 
 // ActorAggregate holds one actor's invocation records within one run.
@@ -43,6 +58,17 @@ type RunAggregate struct {
 	Provisional  bool
 	Orchestrator ActorAggregate
 	Agents       []ActorAggregate // sorted by instance id
+	// Activity is the run model: invocations, tool calls and compactions.
+	Activity RunActivity
+
+	Facts         RunFacts
+	Sessions      []RunSession   // in feed order of the first event naming each session id
+	Turns         []Turn         // feed order, every stream, user and assistant
+	Notifications []Notification // feed order, every stream
+
+	// Unattributed holds the run-level usage_records of 00_unattributed_events.jsonl;
+	// nil when the run has none.
+	Unattributed *ActorAggregate
 }
 
 // Totals returns the combined token usage across all actors in the run.
@@ -50,6 +76,9 @@ func (r RunAggregate) Totals() TokenUsage {
 	result := r.Orchestrator.Totals()
 	for _, agent := range r.Agents {
 		result = result.Add(agent.Totals())
+	}
+	if r.Unattributed != nil {
+		result = result.Add(r.Unattributed.Totals())
 	}
 	return result
 }
@@ -62,6 +91,11 @@ func (r RunAggregate) Models() []ModelID {
 	}
 	for _, agent := range r.Agents {
 		for _, id := range agent.Models() {
+			seen[id] = true
+		}
+	}
+	if r.Unattributed != nil {
+		for _, id := range r.Unattributed.Models() {
 			seen[id] = true
 		}
 	}

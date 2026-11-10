@@ -18,8 +18,8 @@ package tui
 //   - m.ctx is reused unchanged -- the same pointer, not a freshly derived
 //     context -- because Stage 2 stopped cancelling ctx on graceful stop,
 //     making the existing ctx valid for reuse.
-//   - A fresh ProgressScreen is constructed unconditionally (the old screen
-//     still holds the prior run's row history and stop notice).
+//   - The existing ProgressScreen is kept; its stop state is reset and its
+//     rows are replaced by the run history.
 //   - For every non-RunStopped terminal status, the 'q' / enter / esc exit
 //     path is unaffected; the continue path does not activate.
 
@@ -32,7 +32,7 @@ import (
 	tuicommon "mosaic-common/tui"
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/session"
-	"mosaic-run/internal/tui/screens"
+	"mosaic-run/internal/tui/screens/runconfig"
 )
 
 // ---------------------------------------------------------------------------
@@ -53,7 +53,7 @@ func newResumeModel(outcome domain.RunOutcome) *rootModel {
 // the given outcome and whose SessionFactory is the supplied function.
 func newResumeModelWithFactory(
 	outcome domain.RunOutcome,
-	factory func(string, bool, string, screens.ConfigSelection) session.Session,
+	factory func(string, bool, string, runconfig.ConfigSelection) session.Session,
 ) *rootModel {
 	sess := &stubNavSession{outcome: outcome}
 	return newRootModel(context.Background(), sess, Options{
@@ -121,13 +121,17 @@ func TestResume_RunStopped_ContinueTransitionsToProgressScreen(t *testing.T) {
 	}
 }
 
-// TestResume_RunStopped_ContinueConstructsNewProgressScreen asserts that the
-// resume handler always constructs a new ProgressScreen, discarding the old
-// one that still carries the prior run's rows and stop notice.
-func TestResume_RunStopped_ContinueConstructsNewProgressScreen(t *testing.T) {
+// TestResume_RunStopped_ContinueKeepsProgressScreenAndClearsStopState asserts
+// that the resume handler keeps the existing ProgressScreen instead of
+// building a new one, and that the kept screen carries neither the stop
+// notice nor the stop latch of the run that ended. Its rows are replaced by
+// the run history (see history_rebuild_test.go), so keeping the instance
+// shows nothing twice.
+func TestResume_RunStopped_ContinueKeepsProgressScreenAndClearsStopState(t *testing.T) {
 	m := newResumeModel(domain.RunOutcome{Status: domain.RunStopped})
 	m.progressScreen = newProgressScreen(m)
 	m.screen = screenProgress
+	triggerGracefulStop(m)
 
 	oldProgressScreen := m.progressScreen
 
@@ -135,12 +139,17 @@ func TestResume_RunStopped_ContinueConstructsNewProgressScreen(t *testing.T) {
 	pressContinue(m)
 
 	if m.progressScreen == nil {
-		t.Fatal("progressScreen = nil after resume; must be constructed")
+		t.Fatal("progressScreen = nil after resume; must remain set")
 	}
-	if m.progressScreen == oldProgressScreen {
-		t.Error("progressScreen is the same instance after resume; " +
-			"the resume handler must construct a new ProgressScreen, not reuse the old one " +
-			"(which still holds prior run row history and the stop notice)")
+	if m.progressScreen != oldProgressScreen {
+		t.Error("progressScreen is a new instance after resume; " +
+			"the resume handler must keep the existing ProgressScreen across restarts")
+	}
+	if m.progressScreen.GracefulStop() {
+		t.Error("the kept progress screen still latches the previous run's stop")
+	}
+	if containsStr(m.progressScreen.View(), "Stopping after current step completes") {
+		t.Error("the kept progress screen still shows the previous run's stop notice")
 	}
 }
 
@@ -158,7 +167,7 @@ func TestResume_RunStopped_CallsSessionFactory(t *testing.T) {
 
 	m := newResumeModelWithFactory(
 		domain.RunOutcome{Status: domain.RunStopped},
-		func(runFolder string, isNewRun bool, orchFile string, cfg screens.ConfigSelection) session.Session {
+		func(runFolder string, isNewRun bool, orchFile string, cfg runconfig.ConfigSelection) session.Session {
 			factoryCalled = true
 			return returnSess
 		},
@@ -189,7 +198,7 @@ func TestResume_RunStopped_FactoryReceivesExistingRunIdentity(t *testing.T) {
 
 	m := newResumeModelWithFactory(
 		domain.RunOutcome{Status: domain.RunStopped},
-		func(runFolder string, isNewRun bool, orchFile string, cfg screens.ConfigSelection) session.Session {
+		func(runFolder string, isNewRun bool, orchFile string, cfg runconfig.ConfigSelection) session.Session {
 			capturedFolder = runFolder
 			capturedOrchFile = orchFile
 			capturedIsNewRun = isNewRun

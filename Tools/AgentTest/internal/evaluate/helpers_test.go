@@ -120,7 +120,19 @@ func baseEvidence() domain.RunEvidence {
 		Duration:                  5 * time.Second,
 		LogRoot:                   "/sandbox/subject/OrchestrationLogs/20260807T120000Z-aaaa",
 		LogsProduced:              true,
+		SubjectModel:              selectedModel,
+		ObservedSubjectModels:     observedModel(selectedModel),
 	}
+}
+
+// selectedModel is the subject model baseEvidence selects and, by default,
+// observes, so a run built on it has a verified model.
+const selectedModel = "model-a"
+
+// observedModel is evidence of a subject session that used exactly the given
+// models.
+func observedModel(models ...string) domain.ObservedModelEvidence {
+	return domain.ObservedModelEvidence{Models: models}
 }
 
 const wellFormedResponse = `{

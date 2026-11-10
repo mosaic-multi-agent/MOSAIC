@@ -6,7 +6,7 @@ package resultsummary_test
 //   - No [partial] suffix appears in any table output.
 //   - No Avg Duration column in Model Results.
 //   - Section order is Model Comparison, then Harness Comparison, then Model Results.
-//   - Cost cells show per-100-tests format ($X.XX/100t).
+//   - No cost column or cost value appears in any table.
 //
 // All tests in this file are in TDD RED phase: they compile and fail against
 // the current implementation, and pass once the implementation is corrected.
@@ -160,43 +160,23 @@ func TestRenderUserSummary_MarkerOrder(t *testing.T) {
 	}
 }
 
-// TestRenderUserSummary_CostPerHundredTests asserts that cost cells in
-// all tables show the per-100-tests format (suffix "/100t"). The fixture has
-// TotalCost=1.50 and TestCount=10, so the normalized value is $15.00/100t.
-// This fails against the current implementation which shows "$1.50" without
-// normalization.
-func TestRenderUserSummary_CostPerHundredTests(t *testing.T) {
+// TestRenderUserSummary_NoCostPerHundredTests asserts that no table shows a
+// per-100-tests cost value or a Cost column, although the fixture carries
+// TotalCost=1.50 for 10 tests.
+func TestRenderUserSummary_NoCostPerHundredTests(t *testing.T) {
 	v := stage1VersionSummary()
 	out := resultsummary.RenderUserSummary(v)
 
-	if !strings.Contains(out, "/100t") {
-		t.Errorf("output has no \"/100t\" suffix in cost cells; all cost cells must use per-100-tests format.\ngot:\n%s", out)
-	}
-	// The raw absolute total $1.50 must not appear as a standalone cost value.
-	if strings.Contains(out, "$1.50") {
-		t.Errorf("output shows absolute cost $1.50 without per-100-tests normalization; cost must be normalized.\ngot:\n%s", out)
+	assertNoCost(t, "user summary", out)
+	if strings.Contains(out, "15.00") || strings.Contains(out, "1.50") {
+		t.Errorf("output shows a cost figure derived from TotalCost: %s", out)
 	}
 }
 
-// TestRenderUserSummary_CostPerHundredTests_CorrectValue asserts that the
-// normalized cost value is computed correctly. TotalCost=1.50, TestCount=10 ->
-// 1.50/10*100 = $15.00/100t.
-func TestRenderUserSummary_CostPerHundredTests_CorrectValue(t *testing.T) {
+// TestRenderUserSummary_CostWarning_ShowsNoMarker asserts that stats flagged
+// with a cost warning render without any cost marker.
+func TestRenderUserSummary_CostWarning_ShowsNoMarker(t *testing.T) {
 	v := stage1VersionSummary()
-	out := resultsummary.RenderUserSummary(v)
-
-	if !strings.Contains(out, "$15.00/100t") {
-		t.Errorf("expected normalized cost \"$15.00/100t\" (1.50 / 10 tests * 100) in output.\ngot:\n%s", out)
-	}
-}
-
-// TestRenderUserSummary_CostWarningPreserved_StillShowsMarker asserts
-// that when CostWarning is true, the "[cost?]" warning marker is still used
-// instead of any computed per-100-tests value. The warning takes priority.
-func TestRenderUserSummary_CostWarningPreserved_StillShowsMarker(t *testing.T) {
-	v := stage1VersionSummary()
-
-	// Set CostWarning on both ByModel and BySuite entries.
 	warningStats := resultsummary.HarnessModelStats{
 		Harness:     "claude-code",
 		Model:       "claude-sonnet-4-6",
@@ -213,12 +193,7 @@ func TestRenderUserSummary_CostWarningPreserved_StillShowsMarker(t *testing.T) {
 
 	out := resultsummary.RenderUserSummary(v)
 
-	if !strings.Contains(out, "[cost?]") {
-		t.Errorf("output missing [cost?] warning marker when CostWarning=true; warning must take priority over per-100-tests computation.\ngot:\n%s", out)
-	}
-	if strings.Contains(out, "/100t") {
-		t.Errorf("output should not show /100t format when CostWarning=true; [cost?] must be shown instead.\ngot:\n%s", out)
-	}
+	assertNoCost(t, "user summary", out)
 }
 
 // TestRenderUserSummary_NoDurationInOutput_Regression asserts that the

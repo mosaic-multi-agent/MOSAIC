@@ -298,12 +298,12 @@ func TestUpdate_DecisionOverwrite_ProducesTakenUpdated(t *testing.T) {
 		Build()
 	deps, workspace := newBaseDeps(t, stub)
 	deps.Planner = &stubPlanner{plan: domain.Plan{
-		Mode:      domain.ModeUpdateWorkspace,
-		Harness:   minimalHarness,
+		Mode:          domain.ModeUpdateWorkspace,
+		Harness:       minimalHarness,
 		WorkspacePath: workspace,
-		Scope:     domain.ScopeProject,
-		Items:     []domain.PlanItem{conflictItem},
-		Workflows: []string{"quick-fix"},
+		Scope:         domain.ScopeProject,
+		Items:         []domain.PlanItem{conflictItem},
+		Workflows:     []string{"quick-fix"},
 	}}
 	deps.Executor = &stubExecutor{result: deploy.ExecResult{
 		DeploymentRoot: workspace,
@@ -355,12 +355,12 @@ func TestUpdate_DecisionSkip_ProducesTakenSkipped(t *testing.T) {
 		Build()
 	deps, workspace := newBaseDeps(t, stub)
 	deps.Planner = &stubPlanner{plan: domain.Plan{
-		Mode:      domain.ModeUpdateWorkspace,
-		Harness:   minimalHarness,
+		Mode:          domain.ModeUpdateWorkspace,
+		Harness:       minimalHarness,
 		WorkspacePath: workspace,
-		Scope:     domain.ScopeProject,
-		Items:     []domain.PlanItem{conflictItem},
-		Workflows: []string{"quick-fix"},
+		Scope:         domain.ScopeProject,
+		Items:         []domain.PlanItem{conflictItem},
+		Workflows:     []string{"quick-fix"},
 	}}
 	deps.Executor = &stubExecutor{result: deploy.ExecResult{
 		DeploymentRoot: workspace,
@@ -581,12 +581,12 @@ func TestUpdate_DecisionBackupThenOverwrite_ProducesTakenBackedUp(t *testing.T) 
 		Build()
 	deps, workspace := newBaseDeps(t, stub)
 	deps.Planner = &stubPlanner{plan: domain.Plan{
-		Mode:      domain.ModeUpdateWorkspace,
-		Harness:   minimalHarness,
+		Mode:          domain.ModeUpdateWorkspace,
+		Harness:       minimalHarness,
 		WorkspacePath: workspace,
-		Scope:     domain.ScopeProject,
-		Items:     []domain.PlanItem{conflictItem},
-		Workflows: []string{"quick-fix"},
+		Scope:         domain.ScopeProject,
+		Items:         []domain.PlanItem{conflictItem},
+		Workflows:     []string{"quick-fix"},
 	}}
 	deps.Executor = &stubExecutor{result: deploy.ExecResult{
 		DeploymentRoot: workspace,

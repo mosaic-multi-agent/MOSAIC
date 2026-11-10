@@ -3,7 +3,7 @@
 Owns: omit-absent event serializer, path layout, filename sanitization,
 atomic replace, JSONL append, adapter version reading, debug sink.
 
-Has no bundle dependencies (stdlib only) and must remain importable in isolation.
+Depends only on the sibling provider module (stdlib only) and must remain importable in isolation.
 """
 
 import datetime
@@ -14,11 +14,14 @@ import re
 import sys
 import tempfile
 
+import mosaic_logger_locked_append
+import mosaic_logger_provider
+import mosaic_logger_schema
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.1.0"
 HARNESS = "claude-code"
 LOGS_DIRNAME = "OrchestrationLogs"
 AGENT_MAP_DIRNAME = ".agent-map"
@@ -29,6 +32,7 @@ RESERVED_FILENAME_CHARS = '<>:"/\\|?*'
 DEBUG_ENV_VAR = "MOSAIC_LOGGER_DEBUG"
 WORKSPACE_ENV_VAR = "CLAUDE_PROJECT_DIR"
 USAGE_STATE_DIRNAME = ".usage-state"
+COMPLETION_CLAIM_DIRNAME = ".completion"
 
 # ---------------------------------------------------------------------------
 # Timestamp helpers (module-internal; used by core and callers)
@@ -121,7 +125,7 @@ def build_event(event: str, ctx: "HookContext", **fields) -> dict:
     pruned recursively; a dict empty after pruning is itself dropped.
     """
     result: dict = {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": mosaic_logger_schema.schema_version_for(event),
         "event": event,
         "timestamp": ctx.timestamp,
         "harness": HARNESS,
@@ -135,6 +139,11 @@ def build_event(event: str, ctx: "HookContext", **fields) -> dict:
         pv, keep = _prune(v)
         if keep:
             result[k] = pv
+
+    if "model" in result:
+        provider = mosaic_logger_provider.derive_provider()
+        if provider:
+            result["provider"] = provider
 
     return result
 
@@ -164,13 +173,13 @@ def effective_run_id(ctx: "HookContext") -> str:
 def append_event(path: pathlib.Path, event: dict) -> None:
     """Append one JSON object as one line to a JSONL file, creating parent dirs.
 
-    Opens in append mode, writes one line, closes. No size cap. Swallows errors.
+    Appends the whole line under the file's exclusive lock. No size cap. Swallows errors; a
+    writer that cannot get the lock in time drops the event and writes a debug message.
     """
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(event, ensure_ascii=False) + "\n"
-        with open(path, "a", encoding="utf-8") as fh:
-            fh.write(line)
+        line = (json.dumps(event, ensure_ascii=False) + "\n").encode("utf-8")
+        mosaic_logger_locked_append.locked_append(path, line, lambda _m, e: debug_log(
+            f"append_event {'dropped (lock wait limit)' if e is None else 'failed'} for {path}", e))
     except Exception as exc:
         debug_log(f"append_event failed for {path}", exc)
 
@@ -228,8 +237,11 @@ class LogPaths:
     this class.
     """
 
-    def __init__(self, workspace_root: pathlib.Path):
+    def __init__(self, workspace_root: pathlib.Path,
+                 scope_orchestrator_transcript: bool = False):
         self.root: pathlib.Path = workspace_root / LOGS_DIRNAME
+        # Runner mode: every orchestrator session keeps its own transcript.
+        self.scope_orchestrator_transcript = scope_orchestrator_transcript
 
     def run_root(self, run_id: str) -> pathlib.Path:
         return self.root / run_id
@@ -244,7 +256,8 @@ class LogPaths:
         return self.run_root(run_id) / "00_orchestrator_events.jsonl"
 
     def orchestrator_raw(self, run_id: str, session_id: "str | None" = None) -> pathlib.Path:
-        if run_id == "unknown-run" and session_id:
+        if session_id and (self.scope_orchestrator_transcript
+                           or run_id == "unknown-run"):
             scope = transcript_scope_segment(HARNESS, session_id)
             return self.run_root(run_id) / f"00_orchestrator_session__{scope}.raw"
         return self.run_root(run_id) / "00_orchestrator_session.raw"
@@ -340,10 +353,26 @@ class LogPaths:
         """
         return self.usage_state_dir(run_id) / f"{sanitize_component(stream_key)}.json"
 
+    def completion_claim_dir(self, run_id: str) -> pathlib.Path:
+        """<root>/<run_id>/.completion/
 
-def build_paths(workspace_root: pathlib.Path) -> LogPaths:
+        Run-scoped, dot-prefixed so the analyzer's directory scan skips it.
+        """
+        return self.run_root(run_id) / COMPLETION_CLAIM_DIRNAME
+
+    def completion_claim_entry(self, run_id: str, agent_id: str) -> pathlib.Path:
+        """<...>/.completion/<sanitize_component(agent_id)>.json
+
+        One file per agent_id: whoever creates it owns the completion of the
+        agent's current cycle.
+        """
+        return self.completion_claim_dir(run_id) / f"{sanitize_component(agent_id)}.json"
+
+
+def build_paths(workspace_root: pathlib.Path,
+                scope_orchestrator_transcript: bool = False) -> LogPaths:
     """Construct the LogPaths tree. Creates no directories."""
-    return LogPaths(workspace_root)
+    return LogPaths(workspace_root, scope_orchestrator_transcript)
 
 
 # ---------------------------------------------------------------------------
@@ -399,49 +428,6 @@ def event_sink_for(ctx: "HookContext", agent_instance_id: "str | None") -> pathl
     if agent_instance_id is None:
         return ctx.paths.orchestrator_events(run_id)
     return ctx.paths.invocation_events(run_id, agent_instance_id)
-
-
-# ---------------------------------------------------------------------------
-# Adapter version
-# ---------------------------------------------------------------------------
-
-_VERSION_RE = re.compile(r"^version:\s*(.+?)\s*$")
-
-
-def read_adapter_version(hook_yaml_path: pathlib.Path) -> "str | None":
-    """Extract the top-level version value from hook.yaml without a YAML parser.
-
-    Matches only zero-indented lines. Returns None on any ambiguity. Never raises.
-    """
-    try:
-        matches = []
-        with open(hook_yaml_path, "r", encoding="utf-8", errors="replace") as fh:
-            for line in fh:
-                # Skip blank lines, comments, and indented lines
-                if not line or line[0] in ("#", " ", "\t"):
-                    continue
-                m = _VERSION_RE.match(line.rstrip("\r\n"))
-                if m:
-                    value = m.group(1)
-                    # Strip one layer of surrounding single or double quotes
-                    if len(value) >= 2 and (
-                        (value[0] == '"' and value[-1] == '"') or
-                        (value[0] == "'" and value[-1] == "'")
-                    ):
-                        value = value[1:-1]
-                    if value:
-                        matches.append(value)
-        if len(matches) == 1:
-            return matches[0]
-        return None
-    except Exception:
-        return None
-
-
-def adapter_version(ctx: "HookContext") -> "str | None":
-    """Read version from the hook.yaml deployed alongside the adapter scripts."""
-    hook_yaml = pathlib.Path(__file__).parent / "hook.yaml"
-    return read_adapter_version(hook_yaml)
 
 
 # ---------------------------------------------------------------------------

@@ -18,4 +18,4 @@ A single stage, so each of the three EXECUTION rows runs exactly once and each p
 
 One stage is deliberate. Repeating the stage would repeat identical payloads and add invocations without adding coverage — each payload class is already isolated in its own row.
 
-The `Approach` column is populated but ignored: `payload-stress` is a bare workflow with no execution groups.
+The `Approach` column is populated but ignored: the `Stage` block of `payload-stress` has no groups.

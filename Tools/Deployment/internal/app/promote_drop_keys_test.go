@@ -300,8 +300,8 @@ func TestPromoteHarnessDropKeys_ProtectedGenericKeysExcluded(t *testing.T) {
 			},
 		},
 		planSet: []domain.FrontmatterField{
-			{Key: "version", Value: domain.ScalarValue("3.0.0", domain.QuotePlain)}, // collides
-			{Key: "name", Value: domain.ScalarValue("bad", domain.QuotePlain)},       // collides
+			{Key: "version", Value: domain.ScalarValue("3.0.0", domain.QuotePlain)},     // collides
+			{Key: "name", Value: domain.ScalarValue("bad", domain.QuotePlain)},          // collides
 			{Key: "role", Value: domain.ScalarValue("orchestrator", domain.QuotePlain)}, // collides
 		},
 	}
@@ -570,7 +570,7 @@ func TestPromoteHarnessDropKeys_EmptyPlanSetKey_Ignored(t *testing.T) {
 			},
 		},
 		planSet: []domain.FrontmatterField{
-			{Key: "", Value: domain.ScalarValue("nokey", domain.QuotePlain)},  // empty key — must be ignored
+			{Key: "", Value: domain.ScalarValue("nokey", domain.QuotePlain)}, // empty key — must be ignored
 			{Key: "valid_key", Value: domain.ScalarValue("value", domain.QuotePlain)},
 		},
 	}
@@ -761,6 +761,40 @@ func TestPromoteHarnessDropKeys_ReturnedSetIsUsableByBuildGenericAgent(t *testin
 	for _, key := range []string{"description", "name"} {
 		if _, present := fm.Get(key); !present {
 			t.Errorf("generic field %q is absent from generated frontmatter; it must not be removed by the harness-derived drop set", key)
+		}
+	}
+}
+
+// TestPromoteHarnessDropKeys_InfrastructureFieldsInDropListExcluded verifies that the three
+// infrastructure-agent fields, when a harness lists them in FrontmatterSpec.Drop and
+// FrontmatterPlan.Remove, do not enter the harness-derived promote drop set. They are
+// removed from deployed files by the harness, not added by it, so promote must not treat
+// them as harness-only keys.
+func TestPromoteHarnessDropKeys_InfrastructureFieldsInDropListExcluded(t *testing.T) {
+	infra := []string{"infrastructure", "triggers", "on_failure"}
+	mod := &configuredFrontmatterModule{
+		desc: domain.HarnessDescriptor{
+			Frontmatter: domain.FrontmatterSpec{
+				ModelKey: "llm_model",
+				ToolsKey: "tool_list",
+				Drop:     append([]string{"recommended_tier", "tier_rationale", "required_skills"}, infra...),
+			},
+		},
+		planSet:    []domain.FrontmatterField{{Key: "agent_mode", Value: domain.ScalarValue("fast", domain.QuotePlain)}},
+		planRemove: infra,
+	}
+
+	got, err := promoteHarnessDropKeys(mod, domain.ArtifactAgent, "infra-agent")
+	if err != nil {
+		t.Fatalf("promoteHarnessDropKeys returned unexpected error: %v", err)
+	}
+
+	if !got["agent_mode"] {
+		t.Fatal("guard: drop set is missing the harness's own plan key; cannot trust exclusion assertions")
+	}
+	for _, key := range infra {
+		if got[key] {
+			t.Errorf("drop set contains infrastructure field %q; it must not be treated as a harness-only key", key)
 		}
 	}
 }

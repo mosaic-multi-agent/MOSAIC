@@ -602,7 +602,6 @@ func TestCatalog_ReadSource_InventedPath_ReturnsError(t *testing.T) {
 	}
 }
 
-
 // ---------------------------------------------------------------------------
 // Infrastructure agent frontmatter parsing — T3.1
 // ---------------------------------------------------------------------------
@@ -654,7 +653,7 @@ func TestInfrastructureAgent_TwoTriggers_InfrastructureAndFirstTriggerParsed(t *
 	root := makeTempMosaicRoot(t)
 	writeInfrastructureAgentFile(t, root, "Infrastructure", "sample-checkpoint-agent", "checkpoint", "halt",
 		[]domain.InfrastructureTrigger{
-			{Trigger: "STAGE_END", TriggerParam: ""},
+			{Trigger: "ITERATION_END", TriggerParam: ""},
 			{Trigger: "INVOCATION_INTERVAL", TriggerParam: "10"},
 		})
 
@@ -672,8 +671,8 @@ func TestInfrastructureAgent_TwoTriggers_InfrastructureAndFirstTriggerParsed(t *
 	if len(a.Triggers) != 2 {
 		t.Fatalf("has %d triggers, want 2; triggers: %+v", len(a.Triggers), a.Triggers)
 	}
-	if a.Triggers[0].Trigger != "STAGE_END" {
-		t.Errorf("Triggers[0].Trigger = %q, want %q", a.Triggers[0].Trigger, "STAGE_END")
+	if a.Triggers[0].Trigger != "ITERATION_END" {
+		t.Errorf("Triggers[0].Trigger = %q, want %q", a.Triggers[0].Trigger, "ITERATION_END")
 	}
 	if a.Triggers[0].TriggerParam != "" {
 		t.Errorf("Triggers[0].TriggerParam = %q, want empty string (null trigger_param)", a.Triggers[0].TriggerParam)
@@ -687,7 +686,7 @@ func TestInfrastructureAgent_TwoTriggers_SecondTriggerAndOnFailureParsed(t *test
 	root := makeTempMosaicRoot(t)
 	writeInfrastructureAgentFile(t, root, "Infrastructure", "sample-checkpoint-agent", "checkpoint", "halt",
 		[]domain.InfrastructureTrigger{
-			{Trigger: "STAGE_END", TriggerParam: ""},
+			{Trigger: "ITERATION_END", TriggerParam: ""},
 			{Trigger: "INVOCATION_INTERVAL", TriggerParam: "10"},
 		})
 
@@ -719,7 +718,7 @@ func TestInfrastructureAgent_TwoTriggers_SecondTriggerAndOnFailureParsed(t *test
 func TestInfrastructureAgent_SingleNullTrigger_NormalisesToEmptyString(t *testing.T) {
 	root := makeTempMosaicRoot(t)
 	writeInfrastructureAgentFile(t, root, "Infrastructure", "sample-commit-agent", "commit", "halt",
-		[]domain.InfrastructureTrigger{{Trigger: "STAGE_END", TriggerParam: ""}})
+		[]domain.InfrastructureTrigger{{Trigger: "ITERATION_END", TriggerParam: ""}})
 
 	cat, err := catalog.Load(root, "")
 	if err != nil {

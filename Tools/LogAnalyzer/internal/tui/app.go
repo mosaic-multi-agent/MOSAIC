@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -84,6 +83,9 @@ type Model struct {
 	sourceScreen    *screens.SourceScreen
 	runsScreen      *screens.RunsScreen
 	runDetailScreen *screens.RunDetailScreen
+	runView         screens.RunView // the active per-run view
+	viewRunID       string          // run shown by the per-run views
+	sessionOpener   screens.RunView // the view the Session screen was opened from, kept while it is shown
 	pricingScreen   *screens.PricingScreen
 	noDataScreen    *screens.NoDataScreen
 
@@ -91,6 +93,9 @@ type Model struct {
 	pendingQuestion *Pending
 	selectOverlay   *overlaySelectOne
 	textOverlay     *overlayText
+
+	// Digest export action state.
+	export exportFlow
 
 	// Status shown on loading/error screen.
 	errMsg string
@@ -207,6 +212,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if sz, ok := msg.(tea.WindowSizeMsg); ok {
 		m.width = sz.Width
 		m.height = sz.Height
+		if m.textOverlay != nil {
+			m.textOverlay.setWidth(sz.Width)
+		}
 		return m, nil
 	}
 
@@ -218,6 +226,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Pricing editor complete.
 	if done, ok := msg.(pricingEditDoneMsg); ok {
 		return m.handlePricingEditDone(done)
+	}
+
+	if done, ok := msg.(settingsEditDoneMsg); ok {
+		return m.handleSettingsEditDone(done)
+	}
+
+	// Digest export complete.
+	if done, ok := msg.(exportDoneMsg); ok {
+		return m.handleExportDone(done)
+	}
+
+	// Export action keys and the export screen.
+	var exportCmd tea.Cmd
+	var exportHandled bool
+	m, exportCmd, exportHandled = m.exportKeyHook(msg)
+	if exportHandled {
+		return m, exportCmd
 	}
 
 	// Pending question from the Interaction port.
@@ -233,8 +258,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateSource(msg)
 	case screenRuns:
 		return m.updateRuns(msg)
-	case screenRunDetail:
-		return m.updateRunDetail(msg)
+	case screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline, screenContext, screenSession, screenAcrossRuns, screenCompare:
+		return m.updateRunView(msg)
 	case screenPricing:
 		return m.updatePricing(msg)
 	case screenNoData:
@@ -262,12 +287,13 @@ func (m Model) handleAnalysisDone(done analysisDoneMsg) (tea.Model, tea.Cmd) {
 	switch done.result.Outcome {
 	case app.OutcomeReport:
 		m.report = done.result.Report
-		style := stylesFromTheme(m.theme)
+		style := m.screenStyles()
 		m.runsScreen = screens.NewRunsScreen(m.report, m.width, m.height, style)
 		m.screen = screenRuns
+		m = m.withGapSavedStatus(done.result)
 
 	case app.OutcomeNoData:
-		style := stylesFromTheme(m.theme)
+		style := m.screenStyles()
 		m.noDataScreen = screens.NewNoDataScreen(done.result.Source, m.width, m.height, style)
 		m.screen = screenNoData
 		m.exitCode = 2
@@ -295,7 +321,7 @@ func (m Model) handlePending(p Pending) (tea.Model, tea.Cmd) {
 	case pendingAskText:
 		if p.id == app.QuestionLogSourcePath {
 			// Surface the source screen for the log-source path question.
-			style := stylesFromTheme(m.theme)
+			style := m.screenStyles()
 			m.sourceScreen = screens.NewSourceScreen(m.width, m.height, style)
 			m.sourceScreen.SetVersion(m.opts.Version)
 			m.screen = screenSource
@@ -305,7 +331,8 @@ func (m Model) handlePending(p Pending) (tea.Model, tea.Cmd) {
 			)
 		}
 		// Generic text overlay for all other text questions (pricing rates, threshold).
-		m.textOverlay = newOverlayText(p.textQ, m.theme, m.width, m.height)
+		m.textOverlay = newOverlayText(p.textQ, stylesFromTheme(m.theme).Theme)
+		m.textOverlay.setWidth(m.width)
 		m.screen = screenQuestion
 		return m, tea.Batch(
 			m.textOverlay.init(),
@@ -316,7 +343,7 @@ func (m Model) handlePending(p Pending) (tea.Model, tea.Cmd) {
 		if p.id == app.QuestionPricingAction && m.result != nil {
 			// Show pricing context screen first, then overlay on top.
 			// TODO I5.6: verify background renders sensibly with reworked screen.
-			style := stylesFromTheme(m.theme)
+			style := m.screenStyles()
 			var modelStates []app.ModelPricingStatus
 			if m.session != nil {
 				modelStates = app.ModelPricingStates(m.report, m.session.Table())
@@ -328,7 +355,7 @@ func (m Model) handlePending(p Pending) (tea.Model, tea.Cmd) {
 			)
 			_ = m.pricingScreen // set for View
 		}
-		m.selectOverlay = newOverlaySelectOne(p.choiceQ, m.theme, m.width, m.height)
+		m.selectOverlay = newOverlaySelectOne(p.choiceQ, stylesFromTheme(m.theme).Theme)
 		m.screen = screenQuestion
 		return m, waitForPending(m.questions, m.interact.done)
 
@@ -399,9 +426,10 @@ func (m Model) updateRuns(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.runsScreen == nil {
 		return m, nil
 	}
-	// Intercept 's' to open the source-path entry screen from the Runs list.
-	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "s" {
-		style := stylesFromTheme(m.theme)
+	// The open help overlay takes every key, so none of the list's own keys below applies.
+	if key, ok := msg.(tea.KeyMsg); ok && !m.runsScreen.HelpOpen() && key.String() == "s" {
+		// Intercept 's' to open the source-path entry screen from the Runs list.
+		style := m.screenStyles()
 		m.sourceScreen = screens.NewSourceScreen(m.width, m.height, style)
 		m.sourceScreen.SetVersion(m.opts.Version)
 		m.sourceFromRuns = true
@@ -409,13 +437,18 @@ func (m Model) updateRuns(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.sourceScreen.Init()
 	}
 
+	// Intercept 'a' to open the across-runs view.
+	if key, ok := msg.(tea.KeyMsg); ok && !m.runsScreen.HelpOpen() && key.String() == screens.KeyAcrossRuns {
+		return m.openAcrossRuns(), nil
+	}
+
 	// Intercept 'p' for pricing navigation.
 	// Guard: require an active session; do nothing if analysis has not yet produced one.
-	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "p" {
+	if key, ok := msg.(tea.KeyMsg); ok && !m.runsScreen.HelpOpen() && key.String() == "p" {
 		if m.result == nil || m.result.Session == nil {
 			return m, nil
 		}
-		style := stylesFromTheme(m.theme)
+		style := m.screenStyles()
 		modelStates := app.ModelPricingStates(m.report, m.result.Session.Table())
 		m.pricingScreen = screens.NewPricingScreen(
 			modelStates,
@@ -433,30 +466,16 @@ func (m Model) updateRuns(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.interact.Close()
 		return m, tea.Quit
 	}
+	if idA, idB, ok := m.runsScreen.CompareRequested(); ok {
+		m.runsScreen.Reset()
+		return m.openCompare(idA, idB), cmd
+	}
 	if m.runsScreen.Done() {
 		runID := m.runsScreen.SelectedRunID()
 		m.runsScreen.Reset()
 		if runID != "" {
-			if run, ok := m.report.FindRun(runID); ok {
-				style := stylesFromTheme(m.theme)
-				m.runDetailScreen = screens.NewRunDetailScreen(run, m.width, m.height, style)
-				m.screen = screenRunDetail
-			}
+			m = m.openRunView(runID, screens.ScreenRunDetail)
 		}
-	}
-	return m, cmd
-}
-
-func (m Model) updateRunDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.runDetailScreen == nil {
-		return m, nil
-	}
-	updated, cmd := m.runDetailScreen.Update(msg)
-	m.runDetailScreen = updated.(*screens.RunDetailScreen)
-	if m.runDetailScreen.Back() {
-		m.runDetailScreen.Reset()
-		m.screen = screenRuns
-		return m, nil
 	}
 	return m, cmd
 }
@@ -474,7 +493,7 @@ func (m Model) updatePricing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.pricingScreen.Done() {
-		selected := m.pricingScreen.SelectedModel()
+		selected := m.pricingScreen.SelectedKey()
 		m.pricingScreen.Reset()
 		m.screen = screenLoading
 		return m, m.buildPricingEditCmd(selected)
@@ -488,13 +507,13 @@ func (m Model) updatePricing(msg tea.Msg) (tea.Model, tea.Cmd) {
 // Binding rule: it returns ONLY that message. It must NOT start a second
 // waitForPending goroutine — the single long-lived waiter delivers the
 // editor's rate questions.
-func (m Model) buildPricingEditCmd(model domain.ModelID) tea.Cmd {
+func (m Model) buildPricingEditCmd(key domain.PricingKey) tea.Cmd {
 	svc := m.opts.Service
 	sess := m.session
 	report := m.report
 	ctx := m.ctx
 	return func() tea.Msg {
-		result, err := svc.EditModelPricing(ctx, sess, report, model)
+		result, err := svc.EditModelPricing(ctx, sess, report, key)
 		return pricingEditDoneMsg{result: result, err: err}
 	}
 }
@@ -518,11 +537,28 @@ func (m Model) handlePricingEditDone(done pricingEditDoneMsg) (tea.Model, tea.Cm
 	}
 
 	if result.Outcome == app.PricingEditSaved && m.pricingScreen != nil {
-		m.pricingScreen.SetStatus("Price written to " + result.ConfigPath)
+		m.pricingScreen.SetStatus("Price written to " + result.ConfigPath +
+			" (rates in " + string(m.writtenFileCurrency(result)) + ")")
 	}
 
 	m.screen = screenRuns
 	return m, nil
+}
+
+// writtenFileCurrency is the currency of the pricing file a save wrote: the
+// currency that file states, else the effective currency of the report.
+func (m Model) writtenFileCurrency(result app.PricingEditResult) domain.CurrencyCode {
+	if m.opts.Service != nil {
+		paths := m.opts.Service.PricingPaths()
+		file := paths.Project
+		if result.ConfigLevel == domain.LevelGlobal {
+			file = paths.Global
+		}
+		if file.Currency != "" {
+			return file.Currency
+		}
+	}
+	return screens.CurrencyOrDefault(result.Report.Currency)
 }
 
 func (m Model) updateNoData(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -561,7 +597,7 @@ func (m Model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if m.textOverlay != nil {
 		cmd := m.textOverlay.update(msg)
-		if m.textOverlay.done || m.textOverlay.back {
+		if m.textOverlay.finished() {
 			ans := m.textOverlay.answer()
 			m.replyToPending(answerMsg{textAns: ans})
 			m.textOverlay = nil
@@ -585,6 +621,7 @@ func (m Model) updateError(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the current screen to a string.
 func (m Model) View() string {
+	m.syncConfigHelp()
 	switch m.screen {
 	case screenLoading:
 		return m.theme.Style(tuicommon.RoleMuted).Render("Analyzing logs…")
@@ -596,13 +633,14 @@ func (m Model) View() string {
 
 	case screenRuns:
 		if m.runsScreen != nil {
-			return m.runsScreen.View(m.width, m.height)
+			return m.withExportStatus(func(h int) string { return m.runsScreen.View(m.width, h) })
 		}
 
-	case screenRunDetail:
-		if m.runDetailScreen != nil {
-			return m.runDetailScreen.View(m.width, m.height)
-		}
+	case screenExport:
+		return m.viewExport()
+
+	case screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline, screenContext, screenSession, screenAcrossRuns, screenCompare:
+		return m.viewRunView()
 
 	case screenPricing:
 		if m.pricingScreen != nil {
@@ -618,12 +656,7 @@ func (m Model) View() string {
 		return m.viewQuestion()
 
 	case screenError:
-		return strings.Join([]string{
-			m.theme.Style(tuicommon.RoleTitle).Render("Log Analyzer — Error"),
-			m.theme.Style(tuicommon.RoleError).Render(m.errMsg),
-			"",
-			m.theme.Style(tuicommon.RoleHelp).Render("Press any key to quit."),
-		}, "\n")
+		return m.viewError()
 	}
 	return ""
 }
@@ -631,31 +664,10 @@ func (m Model) View() string {
 // viewQuestion renders the active overlay (on top of any background screen).
 func (m Model) viewQuestion() string {
 	if m.selectOverlay != nil {
-		return m.selectOverlay.view()
+		return m.selectOverlay.view(m.width, m.height)
 	}
 	if m.textOverlay != nil {
-		return m.textOverlay.view()
+		return m.textOverlay.view(m.width, m.height)
 	}
 	return m.theme.Style(tuicommon.RoleMuted).Render("Waiting for input…")
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-// stylesFromTheme converts a tuicommon.Theme to a screens.Styles.
-func stylesFromTheme(t tuicommon.Theme) screens.Styles {
-	return screens.Styles{
-		Title:    t.Style(tuicommon.RoleTitle),
-		Subtitle: t.Style(tuicommon.RoleSubtitle),
-		Body:     t.Style(tuicommon.RoleBody),
-		Muted:    t.Style(tuicommon.RoleMuted),
-		Selected: t.Style(tuicommon.RoleSelected),
-		Checked:  t.Style(tuicommon.RoleChecked),
-		Success:  t.Style(tuicommon.RoleSuccess),
-		Warning:  t.Style(tuicommon.RoleWarning),
-		Error:    t.Style(tuicommon.RoleError),
-		Help:     t.Style(tuicommon.RoleHelp),
-		Border:   t.Style(tuicommon.RoleBorder),
-	}
 }

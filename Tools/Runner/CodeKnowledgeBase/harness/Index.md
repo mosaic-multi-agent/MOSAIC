@@ -1,11 +1,19 @@
+---
+last_updated: "2026-10-08"
+---
+
 # Harness Package
 
 > Part of: mosaic-run
-> Responsibility: Implements the `domain.HarnessAdapter` port for all three supported harnesses (Claude Code, GHCP CLI, OpenCode) plus a `FakeAdapter` for test use, and provides protocol serialization helpers.
+> Responsibility: Implements the `domain.HarnessAdapter` port for all three supported harnesses (Claude Code, GHCP CLI, OpenCode) plus a `MockAdapter` for test use, and provides protocol serialization helpers.
 
 ## Overview
 
+The package root holds the `MockAdapter` and the protocol helpers (`MarshalRequest` / `UnmarshalResponse`, Communication Protocol v1.12). The three production adapters live in sub-packages (`claudecode`, `ghcpcli`, `opencode`) and share the `cliexec` subprocess helper, the `roleenv` role-environment options, and `mosaic-common/harness` for argument construction and output parsing. `cmd/mosaic-run` builds the chosen adapter in `buildAdapter`.
+
 The `harness` package is a thin adapter layer. Each concrete adapter converts `domain.AgentReference` and `domain.ProtocolRequest` into the neutral `mosaic-common/harness.SpawnRequest` type, delegates subprocess spawning to the shared `mosaic-common/harness` package (which owns CLI argument construction, subprocess lifecycle, and output-envelope parsing), and converts results back to `domain.ProtocolResponse`.
+
+Each adapter carries two invocation timeouts: a non-HITL timeout (default 30m, `--timeout`) and a HITL timeout (default 4h, `--hitl-timeout`) used for dispatches sent with `human_in_the_loop: true` (`WithHITLTimeout`). An optional activity observer (`WithActivityObserver`) receives live activity for the TUI panel. A timeout and a force stop kill the whole descendant process tree of the invocation.
 
 All three production adapters share the same `mosaic-common/harness` spawner infrastructure and the same error taxonomy (`ErrExecutableNotFound`, `ErrNonZeroExit`, `ErrTimeout`, `ErrEmptyResponse`, `ErrMalformedJSON`, `ErrMalformedOutput`). Adapter-specific sentinels are aliased onto the shared module's constants so `errors.Is` works across the package boundary.
 
@@ -13,11 +21,11 @@ All three production adapters share the same `mosaic-common/harness` spawner inf
 
 | Component | Purpose |
 |-----------|---------|
-| `ClaudeCodeAdapter` | Spawns Claude Code CLI per invocation. Extracts the agent's `tools` frontmatter field before spawning and passes tool names to `BuildArgs` via `SpawnRequest.DerivedTools`. Uses `--permission-mode dontAsk` + `--allowedTools` when tools are present; rejects the invocation before spawning when the tools field is missing or empty. |
-| `GHCPCLIAdapter` | Spawns GHCP CLI per invocation. Supports two permission modes: Blanket (`--yolo --no-ask-user`) and Partial Allowlist (`--allow-tool` entries from `SpawnRequest.DerivedTools` + `--no-ask-user`). Mode is resolved once at adapter construction and stored on the struct. |
+| `ClaudeCodeAdapter` | Spawns Claude Code CLI per invocation. Extracts the agent's `tools` frontmatter field before spawning and passes tool names to `BuildArgs` via `SpawnRequest.DerivedTools`. Sets `SpawnRequest.ToolsDerived=true` after a successful extraction call so `BuildArgs` knows derivation was performed. Uses `--permission-mode dontAsk` + `--allowedTools` when tools are present; uses `--permission-mode dontAsk` with no `--allowedTools` when the tools field is empty (strict mode, no tools permitted); rejects the invocation before spawning only when the tools field is missing. Runs in stream-json mode, so progress is observable while the invocation runs. |
+| `GHCPCLIAdapter` | Spawns GHCP CLI per invocation. Supports two permission modes: Blanket (`--yolo --no-ask-user`) and Partial Allowlist (`--allow-tool` entries from `SpawnRequest.DerivedTools` + `--no-ask-user`). Mode is resolved once at adapter construction and stored on the struct. The whole JSON event stream is scanned: `subagent.deselected` and `session.error` fail the invocation (harness errors) wherever they sit relative to the result event. Each invocation's closing debug-log entry carries a `ghcp_version` field read from `pkg/<platform>/<version>` paths in the stdout (`commonharness.GHCPCLIVersions`). |
 | `OpenCodeAdapter` | Spawns OpenCode per invocation. Always passes `--auto`, which converts every `ask` permission to `allow` for that invocation while leaving explicitly-denied capabilities unchanged. No per-tool allowlist is extracted or needed. |
-| `FakeAdapter` | Test double. Queues scripted `ProtocolResponse`, `error`, or raw JSON payloads per agent identifier (FIFO). Records all invocations so tests can assert call order and arguments. |
-| Protocol helpers | `MarshalRequest` / `UnmarshalResponse` encode and decode Communication Protocol v1.8 JSON messages. |
+| `MockAdapter` | Test double. Queues scripted `ProtocolResponse`, `error`, or raw JSON payloads per agent identifier (FIFO). Records all invocations so tests can assert call order and arguments. |
+| Protocol helpers | `MarshalRequest` / `UnmarshalResponse` encode and decode Communication Protocol v1.12 JSON messages. |
 
 ## Permission-Mode Implementation
 
@@ -27,9 +35,10 @@ All three production adapters share the same `mosaic-common/harness` spawner inf
 
 **After:**
 - `ClaudeCodeAdapter.Invoke` and `InvokeRaw` call `ExtractClaudeCodeTools(agent.DefinitionPath)` (from `mosaic-common/harness`) before building the `SpawnRequest`.
-- The returned tool names are placed in `SpawnRequest.DerivedTools`. `BuildArgs` reads `DerivedTools` (never `AllowedTools`) and emits `--permission-mode dontAsk` followed by `--allowedTools <name>` for each entry.
-- When `ExtractClaudeCodeTools` returns `ErrToolsMissing` or `ErrToolsEmpty`, the adapter returns a wrapped error **before spawning any process**. The error message includes the agent identifier and definition path.
-- Backward compatibility for non-Runner callers (AgentTest): `BuildArgs` falls back to `--permission-mode auto` when `DerivedTools` is nil/empty, so AgentTest's invocations are unaffected without any code change on its side.
+- The returned tool names are placed in `SpawnRequest.DerivedTools`, and `SpawnRequest.ToolsDerived` is set to `true`. `BuildArgs` reads `DerivedTools` (never `AllowedTools`) and emits `--permission-mode dontAsk` followed by `--allowedTools <name>` for each entry. When `DerivedTools` is empty but `ToolsDerived` is `true`, `BuildArgs` still emits `--permission-mode dontAsk` with zero `--allowedTools` entries (strict mode, no tools permitted -- the intended behavior for agents with all-ungated or empty tool lists).
+- When `ExtractClaudeCodeTools` returns `ErrToolsMissing`, the adapter returns a wrapped error **before spawning any process**. The error message includes the agent identifier and definition path.
+- When `ExtractClaudeCodeTools` returns `([]string{}, nil)` for an empty tools field, the invocation proceeds normally with `ToolsDerived=true` and an empty `DerivedTools` slice.
+- Backward compatibility for non-Runner callers (AgentTest): `BuildArgs` falls back to `--permission-mode auto` when `DerivedTools` is nil/empty AND `ToolsDerived` is `false` (the zero value), so AgentTest's invocations are unaffected without any code change on its side.
 - `--dangerously-skip-permissions` is never used.
 
 **Non-collision guarantee:** `SpawnRequest.AllowedTools` (populated by AgentTest from a test-authored `allowed_tools` value) and `SpawnRequest.DerivedTools` (populated by Runner from the agent's deployed frontmatter) are separate fields. No builder reads both. This structural separation guarantees that Runner's deterministic permission mode cannot alter AgentTest's invocation behavior.
@@ -45,7 +54,7 @@ All three production adapters share the same `mosaic-common/harness` spawner inf
   - **Blanket** (`GHCPCLIModeBlanket`): `--yolo --no-ask-user` -- identical to prior behavior. `DerivedTools` is ignored.
   - **Partial Allowlist** (`GHCPCLIModePartialAllowlist`): per-tool `--allow-tool <kind>` entries from `DerivedTools` + `--no-ask-user`. `--yolo` is absent.
   - **Unresolved** (zero value): `BuildGHCPCLIArgs` returns `ErrGHCPCLIModeUnresolved` immediately, before building any args. The Runner rejects a GHCP CLI run that reaches this point without a resolved mode.
-- When Partial Allowlist mode is active and `DerivedTools` is nil/empty, `BuildGHCPCLIArgs` returns `ErrGHCPCLIAllowlistEmpty` (defense-in-depth; the adapter layer also rejects this earlier via `ErrToolsMissing`/`ErrToolsEmpty`).
+- When Partial Allowlist mode is active, the adapter always sets `SpawnRequest.ToolsDerived=true` after a successful extraction call. When `DerivedTools` is empty and `ToolsDerived` is `true` (all-ungated or explicitly empty tools list), `BuildGHCPCLIArgs` emits `--no-ask-user` with zero `--allow-tool` entries -- this is valid. When `DerivedTools` is nil/empty AND `ToolsDerived` is `false`, `BuildGHCPCLIArgs` returns `ErrGHCPCLIAllowlistEmpty` (defense-in-depth guard for callers that did not perform derivation, e.g., if the extraction step was somehow bypassed).
 
 **Mode resolution path:**
 - Interactive (TUI): A GHCP CLI mode-selection screen presents Blanket / Partial Allowlist to the user. The selection is stored in `ConfigSelection.GHCPCLIMode`.
@@ -74,12 +83,14 @@ OpenCode does not require a per-tool allowlist. `BuildOpenCodeArgs` always emits
 | Constructor | Description |
 |-------------|-------------|
 | `NewClaudeCodeAdapter(path, timeout)` | Logging disabled. Default behavior. |
-| `NewClaudeCodeAdapterWithLogger(path, timeout, logger)` | Adds debug logging. |
+| `NewClaudeCodeAdapterWithLogger(path, timeout, logger, opts...)` | Adds debug logging. |
 | `NewGHCPCLIAdapter(path, timeout)` | Logging disabled. Defaults to `GHCPCLIModeBlanket`. |
 | `NewGHCPCLIAdapterWithLogger(path, timeout, logger)` | Adds debug logging. Defaults to `GHCPCLIModeBlanket`. |
-| `NewGHCPCLIAdapterWithMode(path, timeout, logger, mode)` | Explicit permission-mode selection. Used by `cmd/mosaic-run` for all new runs. |
+| `NewGHCPCLIAdapterWithMode(path, timeout, logger, mode, opts...)` | Explicit permission-mode selection. Used by `cmd/mosaic-run` for all new runs. |
 | `NewOpenCodeAdapter(path, timeout)` | Logging disabled. |
-| `NewOpenCodeAdapterWithLogger(path, timeout, logger)` | Adds debug logging. |
+| `NewOpenCodeAdapterWithLogger(path, timeout, logger, opts...)` | Adds debug logging. |
+
+The trailing `opts` are `roleenv` options (the role environment handed to the spawned process); `NewGHCPCLIAdapterWithLogger` takes none.
 
 ## Error Taxonomy
 
@@ -102,15 +113,26 @@ Additional sentinels:
 | `ErrStreamIncomplete` | OpenCode | Stream ended without a terminal event. |
 | `ErrGHCPCLIStreamError` | GHCP CLI | Terminal result event reported the run failed. |
 | `ErrGHCPCLIStreamIncomplete` | GHCP CLI | Stream ended without a terminal result event. |
+| `ErrGHCPCLIAgentDeselected` | GHCP CLI | Stream held `subagent.deselected`: GHCP ran its default agent instead of the requested one. Wrapped by the spawner and the adapter's raw invocation so the message names the requested agent. |
+| `ErrGHCPCLISessionError` | GHCP CLI | Stream held `session.error` (for example an exhausted quota); the message carries the event's type, code, status and message. |
 | `ErrToolsMissing` | Claude Code, GHCP CLI (Partial) | Agent definition has no `tools` field in frontmatter. |
-| `ErrToolsEmpty` | Claude Code, GHCP CLI (Partial) | `tools` field is present but resolves to zero entries. |
+| `ErrToolsEmpty` | Claude Code, GHCP CLI (Partial) | `tools` field is present but has a wrong shape (not the expected kind) or contains only unrecognised names (misconfiguration). An empty tools field is no longer an error -- it returns `([]string{}, nil)` and the adapter proceeds with `ToolsDerived=true`. |
 | `ErrGHCPCLIModeUnresolved` | GHCP CLI | `GHCPCLIMode` is zero (mode not resolved before spawning). |
-| `ErrGHCPCLIAllowlistEmpty` | GHCP CLI | Partial Allowlist mode but `DerivedTools` is nil/empty. |
+| `ErrGHCPCLIAllowlistEmpty` | GHCP CLI | Partial Allowlist mode, `DerivedTools` is nil/empty, AND `ToolsDerived` is `false`. Guards against callers that skipped tool derivation entirely. |
 
 ## Key Invariants
 
 - No adapter ever uses `--dangerously-skip-permissions` (Claude Code) or any equivalent blanket bypass.
 - `SpawnRequest.AllowedTools` is never read by any arg builder. Only `DerivedTools` is read (when the builder supports it).
 - The OpenCode adapter never calls `ExtractClaudeCodeTools` or `ExtractGHCPCLITools`. Permission handling is fully covered by `--auto`.
-- A missing or empty `tools` field causes a pre-spawn rejection (`ErrToolsMissing`/`ErrToolsEmpty`) for Claude Code and for GHCP CLI in Partial Allowlist mode, but is a no-op for GHCP CLI in Blanket mode and entirely irrelevant for OpenCode.
+- A missing `tools` field causes a pre-spawn rejection (`ErrToolsMissing`) for Claude Code and for GHCP CLI in Partial Allowlist mode, but is a no-op for GHCP CLI in Blanket mode and entirely irrelevant for OpenCode. An empty `tools` field (empty scalar, zero-item list) is accepted for both Claude Code and GHCP CLI Partial Allowlist: the adapter sets `ToolsDerived=true` and the invocation proceeds in strict dontAsk/no-ask-user mode with no tool entries.
+- `SpawnRequest.ToolsDerived` disambiguates an empty `DerivedTools` slice: `true` means derivation ran and produced no gated tools (valid); `false` (zero value) means derivation was not performed (backward-compatible guard applies). AgentTest never sets `ToolsDerived` and is unaffected by this signal. Note: OI-7 (Claude Code dontAsk with empty --allowedTools actually denies all tools) is an unverified assumption at implementation time. If Claude Code treats an empty allowlist differently (e.g., grants all tools), the symptom would be unexpected tool access rather than a crash. Surface this during manual testing if agent behavior seems inconsistent with the intent.
 - Context cancellation always returns `ctx.Err()` to the caller, regardless of which harness-level error was originally produced, preserving Runner's existing cancellation semantics.
+
+## OpenCode kill verification
+
+Question: does killing the `opencode run` process (the whole-descendant `taskkill /F /T` used for timeout and force stop) stop the agent's session, or does a shared background server keep it running?
+
+Method (Windows, OpenCode 1.18.18, model `github-copilot/claude-haiku-4.5`): started `opencode run --format json --auto` with a prompt demanding 60 sequential bash tool calls, each appending a line to a file and sleeping 3 seconds. After 40 seconds (8 tool calls done, 32 stream events, every event carrying a `sessionID`), killed the process tree with `taskkill /F /T /PID`. The process had no descendants at that moment; it was the only OpenCode process the invocation created. The progress file stayed at 8 lines for the following 25 seconds (several tool-call periods).
+
+Result: the session does no further work after the kill. `opencode run` hosts the session in-process, so no shared server outlives it and no session abort through the server API is needed. The adapter therefore makes no server API call. Re-verify if OpenCode changes `run` to attach to a persistent server by default (`--attach`).

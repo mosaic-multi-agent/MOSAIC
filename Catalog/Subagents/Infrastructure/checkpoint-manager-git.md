@@ -1,6 +1,6 @@
 ---
 id: 36
-version: 2.2.0
+version: 2.2.3
 name: checkpoint-manager-git
 description: Commits a restorable checkpoint of the working tree to a private git ref namespace and returns its content-reference
 role: subagent
@@ -11,7 +11,7 @@ tier_rationale: fixed command sequence with no branching judgment
 required_skills: []
 infrastructure: checkpoint
 triggers:
-  - trigger: STAGE_END
+  - trigger: ITERATION_END
     trigger_param: null
   - trigger: INVOCATION_INTERVAL
     trigger_param: 10
@@ -81,12 +81,15 @@ Uncommitted user edits are captured along with everything else. A checkpoint is 
 
 **Exclude exactly one path: your own run folder.** You know your `run_id`, so you exclude `Orchestration-{run_id}/` and nothing else. This is your responsibility, not the repository's — MOSAIC ships no `.gitignore` and cannot inspect the user's, so a guarantee this design depends on must not rest on whether someone configured a file correctly.
 
+You exclude it by staging everything, then unstaging the run folder — never by an exclusion pathspec on `git add`, which exits non-zero when the run folder is gitignored even though staging succeeded. The unstage is a no-op when the folder is ignored and untracked, and removes it when it is tracked or not ignored, so the exclusion holds in every repository.
+
 Other runs' folders are deliberately **not** excluded. If a sibling `Orchestration-{other}/` folder is tracked in the repository, it is project content at this point in time and belongs in the snapshot like anything else. Capturing it is harmless, because restore refuses to write to any run folder at all.
 
 ### Command sequence
 
 ```
-GIT_INDEX_FILE=.git/mosaic-{run_id}.index  git add -A -- . ':!Orchestration-{run_id}'
+GIT_INDEX_FILE=.git/mosaic-{run_id}.index  git add -A -- .
+GIT_INDEX_FILE=.git/mosaic-{run_id}.index  git rm --cached -r -q --ignore-unmatch -- Orchestration-{run_id}
 GIT_INDEX_FILE=.git/mosaic-{run_id}.index  git write-tree
 git commit-tree {tree} -p {parent} -m "{message}"
 git update-ref refs/mosaic/checkpoints/{run_id}/{seq} {commit}
@@ -116,7 +119,7 @@ Mosaic-Seq: {seq}
 
 Both values come from what you already hold — `run_id` from the invocation, `Seq` from your own `agent_instance_id`. Nothing else is included.
 
-Phase, stage, trigger, and timestamp are deliberately absent, not because they lack value but because you cannot know them: they live in the orchestration artifact you never read. `run_id` + `Seq` are a foreign key into the Execution Log, and that row already carries phase, stage, and timestamp.
+Phase, iteration, trigger, and timestamp are deliberately absent, not because they lack value but because you cannot know them: they live in the orchestration artifact you never read. `run_id` + `Seq` are a foreign key into the Execution Log, and that row already carries phase, iteration, and timestamp.
 
 The trailers follow git's standard trailer convention, so `git log --format` and `git interpret-trailers` parse them without a custom tool.
 
@@ -130,7 +133,7 @@ Your `status_message` **must end with** a checkpoint marker:
 
 The marker must be the final characters of `status_message`, with no trailing whitespace or punctuation after the closing bracket, so a consumer can anchor its match to the end of the string.
 
-**Why the tail of `status_message` rather than `result_data`:** it requires no protocol change and no per-dispatch configuration, and it degrades instead of breaking. `status_message` is copied into the Execution Log's `Summary`, and truncation keeps the first and last fifty characters — so a marker at the very end survives. Even where no extraction tooling exists, the hash is still sitting in the log where a human can read it.
+**Why the tail of `status_message` rather than `result_data`:** it requires no protocol change and no per-dispatch configuration, and it degrades instead of breaking. `status_message` is copied into the Execution Log's `Summary`, and truncation keeps only the head and the tail — so a marker at the very end survives. Even where no extraction tooling exists, the hash is still sitting in the log where a human can read it.
 
 <OutputArtifactTemplate type="project">
 </OutputArtifactTemplate>
@@ -141,8 +144,6 @@ The marker must be the final characters of `status_message`, with no trailing wh
 <Constraints type="core">
 ## Constraints
 
-<ProtocolConstraints type="managed">
-</ProtocolConstraints>
 - **NEVER write, move, or delete a file in the working tree.** Your safety to fire unattended alongside live work rests entirely on this. An agent that modifies files cannot be run on a timer.
 - **NEVER use the default index.** Always set `GIT_INDEX_FILE` to the run-scoped path. Writing to `.git/index` destroys the user's staged changes silently.
 - **NEVER create, update, delete, or check out a branch, and never move `HEAD`.** Checkpoints exist outside the user's history; a branch pointing at one makes them permanent and pushable.

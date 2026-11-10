@@ -38,7 +38,7 @@ Run the following from the `Tools/AgentTest/` directory.
 
 Each `dist:*` task:
 1. Cross-compiles the binary for its target platform into `dist/`.
-2. Runs `stage:bundle` — copies `hook.yaml` and the `claude-code/` Python files from `.claude/hooks/` into `dist/logger-bundle/`.
+2. Runs `stage:bundle` — copies `Catalog/Hooks/mosaic-logger` (`hook.yaml` and the harness variant files, e.g. `claude-code/*.py`) into `dist/logger-bundle/`.
 3. Copies the cost-analysis tool from `../LogAnalyzer/dist/` into `dist/`.
 4. Copies the deployment tool from `../Deployment/dist/` into `dist/`.
 
@@ -65,7 +65,7 @@ dist/
 
 `logger-bundle/hook.yaml` is the manifest file the harness provisioner reads at startup. The `claude-code/` subdirectory holds the harness-specific Python scripts. If the bundle directory is absent or the manifest is unreadable, the tool reports a pre-flight environment failure naming what it searched for and which override changes the path.
 
-Note: the logger bundle sources live at `.claude/hooks/` in the repository and are **only copied into `dist/`** by the `stage:bundle` task. Running the binary from any location that does not have a staged `logger-bundle/` beside it will fail pre-flight.
+Note: the logger bundle source is `Catalog/Hooks/mosaic-logger/` in the repository and is **only copied into `dist/`** by the `stage:bundle` task. The default is `<selfDir>/logger-bundle`, overridden by `--logger-bundle` or `MOSAIC_AGENT_TEST_LOGGER_BUNDLE`. Running the binary from any location that does not have a staged `logger-bundle/` beside it (and no override) will fail pre-flight.
 
 ---
 
@@ -141,6 +141,8 @@ Tools\AgentTest\dist\mosaic-agent-test.exe validate <suite-file>
 
 The CLI exits with a structured result and is suitable for scripted use, CI, and cases where stdout must carry the machine-readable report (`--format json`).
 
+**`--subject-model <id>`** is required on every `run` and `validate`. A run without a subject model selection is rejected by preflight before anything is deployed or spawned; the harness default model never stands in. `--stub-model <id>` is optional and defaults to the subject model. In the TUI the same selection is made on the model screen. Preflight also rejects a test catalogue whose agents declare a `recommended_tier` other than `TEST-SUBJECT` or `TEST-STUB`.
+
 **`--max-concurrent-runs <n>`** sets how many tests × repetitions run concurrently across the entire suite. The default is `4` (see the Max concurrent runs section under the TUI settings above for the full rationale). A value of `1` is strictly sequential. Values below `1` are rejected as a usage error.
 
 ```
@@ -165,7 +167,7 @@ The precedence is enforced in `resolveConfiguredPath` in `cmd/mosaic-agent-test/
 
 **`--mosaic-root`** redirects the entire MOSAIC root, including the protocol document, skill folders, and bundle specifications that the deploy tool reads. Use it with care: a root that is missing these resources will cause the deploy tool to fail on them, not on the catalogue.
 
-**`--catalog-folder`** redirects only the catalogue source directories (where agents and workflows are scanned from) while leaving all other root-relative resources at the real MOSAIC root. This is the right override for pointing AgentTest at a test catalogue without duplicating the full MOSAIC root structure.
+**`--catalog-folder`** names the test catalogue as a standalone catalogue stack: agents, workflows, the protocol, the bundle and the built-in harnesses' injections all come from that folder (the shipped `Tools/AgentTest/catalog` carries its own copies), not from the real MOSAIC root. This is the right override for pointing AgentTest at a test catalogue without duplicating the full MOSAIC root structure. Do not combine it with the default-layer flag: the AgentTest catalogue's agent ids (1-25) collide with the default catalogue's.
 
 **`[.exe]`** in the default column means the binary appends `.exe` on Windows and nothing on Linux, matching the platform convention for executables.
 
@@ -200,7 +202,7 @@ C:\Catalog\HarnessInjections\Claude Code\HarnessInjections.md: The system cannot
 The two defaults that break are computed differently:
 
 - `LoggerBundleDir` = `selfDir/logger-bundle` → `C:\AI\MOSAIC\MOSAIC\logger-bundle`
-  This directory does not exist. The logger bundle source lives at `.claude/hooks/` and is only copied into `dist/logger-bundle/` by the `stage:bundle` task. There is no `logger-bundle/` folder at the repository root.
+  This directory does not exist. The logger bundle source is `Catalog/Hooks/mosaic-logger/` and is only copied into `dist/logger-bundle/` by the `stage:bundle` task. There is no `logger-bundle/` folder at the repository root.
 
 - `MosaicRoot` = `selfDir/../../..` → `C:\`
   Three `..` segments above the repository root reach the drive root on Windows. The deploy tool then looks for `C:\Catalog\HarnessInjections\...`, which does not exist, producing the second error.
@@ -344,6 +346,8 @@ MOSAIC_AGENT_TEST_MOSAIC_ROOT=D:\my-config-root
 **Option 1 is the standard path.**
 
 ### 8.3 Cost Attribution Diagnostics
+
+Cost is computed and recorded in report files (`total_cost`, per-run `cost`), but it is not shown in any summary or display: not in the text report, CLI progress lines, the TUI, or the generated summary markdown.
 
 A run's cost report can produce one of four attribution values. Each names a distinct failure cause:
 

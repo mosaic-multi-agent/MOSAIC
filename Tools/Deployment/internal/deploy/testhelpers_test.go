@@ -26,12 +26,12 @@ type spyLogger struct {
 
 func newSpyLogger() *spyLogger { return &spyLogger{} }
 
-func (l *spyLogger) StartRun(rc logging.RunContext)  { l.starts = append(l.starts, rc) }
-func (l *spyLogger) Event(e logging.Event)           { l.events = append(l.events, e) }
-func (l *spyLogger) Action(ar domain.ActionRecord)   { l.actions = append(l.actions, ar) }
-func (l *spyLogger) EndRun(outcome domain.Outcome)   { l.ends = append(l.ends, outcome) }
-func (l *spyLogger) Paths() domain.LogPaths          { return domain.LogPaths{} }
-func (l *spyLogger) Degraded() []error               { return nil }
+func (l *spyLogger) StartRun(rc logging.RunContext) { l.starts = append(l.starts, rc) }
+func (l *spyLogger) Event(e logging.Event)          { l.events = append(l.events, e) }
+func (l *spyLogger) Action(ar domain.ActionRecord)  { l.actions = append(l.actions, ar) }
+func (l *spyLogger) EndRun(outcome domain.Outcome)  { l.ends = append(l.ends, outcome) }
+func (l *spyLogger) Paths() domain.LogPaths         { return domain.LogPaths{} }
+func (l *spyLogger) Degraded() []error              { return nil }
 
 // actionTakens returns the ActionTaken values from all recorded actions, in order.
 func (l *spyLogger) actionTakens() []domain.ActionTaken {
@@ -53,12 +53,12 @@ type spyCollector struct {
 
 func newSpyCollector() *spyCollector { return &spyCollector{} }
 
-func (c *spyCollector) Add(item domain.TodoItem)  { c.items = append(c.items, item) }
-func (c *spyCollector) AddGap(g domain.Gap)       { c.gaps = append(c.gaps, g) }
-func (c *spyCollector) Items() []domain.TodoItem  { return c.items }
-func (c *spyCollector) Groups() []todo.Group      { return nil }
-func (c *spyCollector) Empty() bool               { return len(c.items) == 0 && len(c.gaps) == 0 }
-func (c *spyCollector) Reset()                    { c.items = c.items[:0]; c.gaps = c.gaps[:0] }
+func (c *spyCollector) Add(item domain.TodoItem) { c.items = append(c.items, item) }
+func (c *spyCollector) AddGap(g domain.Gap)      { c.gaps = append(c.gaps, g) }
+func (c *spyCollector) Items() []domain.TodoItem { return c.items }
+func (c *spyCollector) Groups() []todo.Group     { return nil }
+func (c *spyCollector) Empty() bool              { return len(c.items) == 0 && len(c.gaps) == 0 }
+func (c *spyCollector) Reset()                   { c.items = c.items[:0]; c.gaps = c.gaps[:0] }
 
 // hasGapKind reports whether any gap of the given kind was collected.
 func (c *spyCollector) hasGapKind(kind domain.GapKind) bool {

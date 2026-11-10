@@ -9,6 +9,7 @@ import (
 	"sort"
 	"sync"
 
+	"mosaic-deploy/internal/catalog/stack/injections"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
 	"mosaic-deploy/internal/harness/external"
@@ -63,9 +64,9 @@ type Options struct {
 	// returns the effective catalog for that module.
 	//
 	// Returning a catalog with an empty IDs list means "no shared entry for this harness; keep
-	// the descriptor's own declared catalog unchanged" — which is what keeps a non-CLI-backed
-	// builtin, a descriptor-tier harness and an external harness on their own model data rather
-	// than emptying them.
+	// the descriptor's own declared catalog unchanged" — which is what keeps a descriptor-tier or
+	// external harness (one the shared catalog does not know) on its own model data rather than
+	// emptying it.
 	//
 	// A non-nil return with a non-empty IDs list installs that catalog on the module's
 	// Descriptor(), through the same shallow-copy shim the ToolMappings hook uses: the inner
@@ -75,6 +76,14 @@ type Options struct {
 	// is: it keeps the registry independent of where the data comes from, and lets a test drive
 	// the fallback path with a catalog of its own.
 	ModelCatalog func(harnessID string, declared domain.ModelCatalog) domain.ModelCatalog
+
+	// BuiltinContentDir is passed to every built-in factory as BuiltinOptions.ContentDir. Nil
+	// means MosaicRootContentDirs(MosaicRoot).
+	BuiltinContentDir func(harnessDirName string) (string, error)
+
+	// injectionLookup is set by the stack-backed constructors; it names the layer supplying a
+	// harness directory so a built-in's injection load failure can be attributed to it.
+	injectionLookup func(harnessDirName string) injections.Resolution
 }
 
 // Registry is the resolved set of harnesses available in a run. It is produced by Discover
@@ -279,6 +288,10 @@ func (m *refOverrideModule) HookPlan(req domain.HookPlanRequest) (domain.HookPla
 type harnessEntry struct {
 	ref domain.HarnessRef
 	mod domain.HarnessModule // nil when not resolvable
+	err error                // construction failure of a built-in, nil otherwise
+	// injectionDir is the HarnessInjections directory name a built-in asked its content
+	// resolver for; empty for other tiers and for built-ins that asked for none.
+	injectionDir string
 }
 
 // registryImpl is the concrete Registry returned by Discover.
@@ -286,6 +299,7 @@ type registryImpl struct {
 	allowExternal bool
 	entries       map[string]harnessEntry
 	refs          []domain.HarnessRef // deterministically ordered for List()
+	opts          *Options            // set by DiscoverForStack so built-ins can be rebuilt
 }
 
 func (r *registryImpl) List() []domain.HarnessRef {
@@ -303,7 +317,7 @@ func (r *registryImpl) Resolve(id string) (domain.HarnessModule, error) {
 	}
 	if e.mod == nil {
 		// Harness exists but is not usable (e.g. invalid descriptor).
-		return nil, fmt.Errorf("harness %q is not usable: %s", id, e.ref.UnusableReason)
+		return nil, e.unusableError(id)
 	}
 	return e.mod, nil
 }
@@ -337,32 +351,9 @@ func Discover(opts Options) (Registry, error) {
 
 	// Step 1 — Built-ins (lowest precedence). Invoke each factory now to obtain the ref
 	// needed for List(); built-in factories are cheap, in-memory constructions.
-	builtinOpts := BuiltinOptions{MosaicRoot: opts.MosaicRoot}
+	builtinOpts := BuiltinOptions{MosaicRoot: opts.MosaicRoot, ContentDir: opts.builtinContentDirs()}
 	for id, factory := range factories {
-		mod, err := factory(builtinOpts)
-		if err != nil {
-			candidates[id] = entryWithTier{
-				entry: harnessEntry{
-					ref: domain.HarnessRef{
-						ID:             id,
-						Tier:           domain.TierBuiltin,
-						Usable:         false,
-						UnusableReason: fmt.Sprintf("failed to initialise built-in: %v", err),
-					},
-				},
-				tier: domain.TierBuiltin,
-			}
-			continue
-		}
-		// Apply the ToolMappings hook then the ModelCatalog hook to each successfully
-		// constructed built-in module, wrapping it with descriptor copies so the original
-		// descriptor is not mutated.
-		wrapped := applyToolMappingsHook(id, mod, opts.ToolMappings)
-		wrapped = applyModelCatalogHook(id, wrapped, opts.ModelCatalog)
-		candidates[id] = entryWithTier{
-			entry: harnessEntry{ref: wrapped.Ref(), mod: wrapped},
-			tier:  domain.TierBuiltin,
-		}
+		candidates[id] = entryWithTier{entry: constructBuiltin(id, factory, builtinOpts, opts), tier: domain.TierBuiltin}
 	}
 
 	// Step 2 — On-disk harnesses (descriptor-only and external tiers).
@@ -425,13 +416,16 @@ func Discover(opts Options) (Registry, error) {
 				// Load orchestrator injection version from HarnessInjectionsOrchestrator.md so
 				// the descriptor carries the correct version before being forwarded to the
 				// subprocess during the protocol handshake.
-				_, extOrchVersion, _ := loadOrchInjections(h.yamlPath)
-				h.desc.OrchestratorInjectionsVersion = extOrchVersion
+				extInj, extInjErr := loadTierInjections(h.yamlPath)
+				h.desc.InjectionsVersion = extInj.sharedVersion
+				h.desc.OrchestratorInjectionsVersion = extInj.orchVersion
 				// Spawn the subprocess and perform the JSON-over-stdio protocol handshake.
 				// If the executable is missing, non-executable, or does not speak the protocol,
 				// the error is captured and the harness is marked unusable with a clear reason.
-				var constructErr error
-				mod, constructErr = external.New(h.execPath, h.desc, external.Options{MosaicRoot: opts.MosaicRoot})
+				constructErr := extInjErr
+				if constructErr == nil {
+					mod, constructErr = external.New(h.execPath, h.desc, external.Options{MosaicRoot: opts.MosaicRoot})
+				}
 				if constructErr != nil {
 					ref.Usable = false
 					ref.UnusableReason = fmt.Sprintf("external module construction failed: %v", constructErr)
@@ -453,12 +447,9 @@ func Discover(opts Options) (Registry, error) {
 			// Descriptor-only: always usable when the descriptor is valid.
 			// Load injection content from HarnessInjections.md and HarnessInjectionsOrchestrator.md
 			// in the same directory. Absence of either file is treated as no injections (empty map).
-			injections, injErr := loadInjections(h.yamlPath)
-			if injErr != nil {
-				injections = make(map[string]string)
-			}
-			orchInjections, orchVersion, _ := loadOrchInjections(h.yamlPath)
-			h.desc.OrchestratorInjectionsVersion = orchVersion
+			tierInj, tierErr := loadTierInjections(h.yamlPath)
+			h.desc.InjectionsVersion = tierInj.sharedVersion
+			h.desc.OrchestratorInjectionsVersion = tierInj.orchVersion
 			ref := domain.HarnessRef{
 				ID:          id,
 				DisplayName: h.desc.DisplayName,
@@ -466,7 +457,13 @@ func Discover(opts Options) (Registry, error) {
 				SourcePath:  h.yamlPath,
 				Usable:      true,
 			}
-			mod := newRuntimeModule(ref, h.desc, injections, orchInjections)
+			if tierErr != nil {
+				ref.Usable = false
+				ref.UnusableReason = tierErr.Error()
+				newEntry = harnessEntry{ref: ref}
+				break
+			}
+			mod := newRuntimeModule(ref, h.desc, tierInj.shared, tierInj.orch)
 			// Apply the ToolMappings hook then the ModelCatalog hook, wrapping the
 			// descriptor-only module with descriptor copies carrying the effective values.
 			wrapped := applyToolMappingsHook(id, mod, opts.ToolMappings)
@@ -509,6 +506,7 @@ func Discover(opts Options) (Registry, error) {
 		allowExternal: opts.AllowExternal,
 		entries:       flat,
 		refs:          refs,
+		opts:          &opts,
 	}, nil
 }
 

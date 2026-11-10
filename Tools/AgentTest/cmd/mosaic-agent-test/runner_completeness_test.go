@@ -105,6 +105,8 @@ func minimalRunnerRequest(testID string) runner.Request {
 					OpeningMessage: "start",
 				},
 			},
+			// A real adapter refuses a subject with no selected model.
+			Models:   domain.ModelSelection{Subject: "anthropic/claude-sonnet-4-5"},
 			Registry: domain.StubRegistry{TestID: testID},
 		},
 	}

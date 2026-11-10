@@ -1,8 +1,8 @@
 package app_test
 
-// codex_promote_source_test.go covers T8.3.
+// codex_promote_source_test.go covers Promote of a Codex source file.
 //
-// T8.3 -- Promote and retarget locate and read a Codex source file:
+// Behaviours:
 //   - A Codex .toml source file that satisfies both harness-only eligibility signals is
 //     successfully read, decoded, and promoted without a read or decode error.
 //   - The agent key derived from a Codex source is the filename with the .toml extension
@@ -245,139 +245,6 @@ func TestPromote_CodexSource_DestinationFileExistsAndIsMarkdown(t *testing.T) {
 	// Assert: destination carries the name sourced from the Codex file.
 	if !strings.Contains(string(destBytes), "name: my-codex-agent") {
 		t.Errorf("destination file does not contain \"name: my-codex-agent\"; got:\n%s", string(destBytes))
-	}
-}
-
-// ---------------------------------------------------------------------------
-// T8.3 -- Markdown source symmetry: existing Markdown path not regressed
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// T8.3 -- Retarget loop: Codex source agent key derivation and canonical bytes
-// ---------------------------------------------------------------------------
-
-// eligibleCodexTomlRetargetBytes returns the minimal Codex TOML bytes for a retarget test.
-// The file carries only a stamp block (mosaic_transform_version, eligibility signal one) and
-// developer_instructions with an Identity region (eligibility signal two). No harness-specific
-// TOML keys (sandbox_mode, name, etc.) are present so that DetectHarnessMatch finds no
-// ClassUnknown fields and returns HarnessMatchIndeterminate -- allowing the retarget to proceed.
-func eligibleCodexTomlRetargetBytes() []byte {
-	return []byte(
-		"# mosaic_transform_version: 2.1.0\n" +
-			"\n" +
-			"developer_instructions = \"\"\"\n" +
-			"<Identity type=\"core\">\n" +
-			"You are a Codex retarget test agent.\n" +
-			"</Identity>\n" +
-			"\"\"\"\n",
-	)
-}
-
-// newCodexRetargetDeps builds Deps for a Codex-source retarget test. The registry has two
-// harnesses: "codex-harness" as the source (Codex .toml format) and "stub-target-harness"
-// as the target (stub Markdown module). Both are Usable so the TransformHarness flow does
-// not reject them when building the target-harness option list.
-func newCodexRetargetDeps(t *testing.T, stub *interactiontest.Stub) (app.Deps, string) {
-	t.Helper()
-	deps, workspace := newBaseDeps(t, stub)
-	srcMod := newCodexPromoteModule()
-	tgtMod := &stubHarnessModule{
-		ref: domain.HarnessRef{
-			ID:          "stub-target-harness",
-			DisplayName: "Stub Target Harness",
-			Usable:      true,
-		},
-		descriptor: domain.HarnessDescriptor{
-			ID:          "stub-target-harness",
-			DisplayName: "Stub Target Harness",
-			Paths: domain.PathSpec{
-				Agents: domain.ScopedPaths{
-					Supported: true,
-					Project:   "agents",
-				},
-			},
-			Extensions: map[domain.ArtifactKind]string{
-				domain.ArtifactAgent: ".md",
-			},
-		},
-	}
-	deps.Registry = &stubRegistry{
-		list: []domain.HarnessRef{
-			{ID: "codex-harness", DisplayName: "Codex Harness", Usable: true},
-			{ID: "stub-target-harness", DisplayName: "Stub Target Harness", Usable: true},
-		},
-		modules: map[string]domain.HarnessModule{
-			"codex-harness":       srcMod,
-			"stub-target-harness": tgtMod,
-		},
-	}
-	return deps, workspace
-}
-
-// TestTransformHarness_CodexSource_AgentKeyStripsTomlExtension verifies that the retarget
-// batch loop in transform_service_impl.go correctly handles a Codex .toml source file on
-// both the key-derivation and the bytes-dispatch dimensions:
-//
-//  1. Agent-key derivation: the agent key produced from "my-codex-agent.toml" must be
-//     "my-codex-agent" -- the ".toml" extension is stripped using the source harness's
-//     declared extension, not the generic ".md" suffix.
-//
-//  2. Canonical bytes dispatched to DetectHarnessMatch: IndexSourceModels stores canonical
-//     (decoded Markdown) bytes in sf.Content. If raw TOML bytes were dispatched instead,
-//     eligibleHarnessOnly would find no transform_version in Markdown frontmatter and
-//     return ineligible, so DetectHarnessMatch would return HarnessMatchNotAgent and the
-//     outcome would be StatusSkippedNotAgent rather than a successful transform.
-func TestTransformHarness_CodexSource_AgentKeyStripsTomlExtension(t *testing.T) {
-	// Arrange: write a minimal eligible Codex TOML file.
-	dir := t.TempDir()
-	srcFile := writeTransformFile(t, dir, "my-codex-agent.toml", eligibleCodexTomlRetargetBytes())
-
-	stub := interactiontest.NewBuilder().Build()
-	deps, _ := newCodexRetargetDeps(t, stub)
-	svc := app.New(deps)
-
-	req := app.TransformHarnessRequest{
-		SourceHarnessID: "codex-harness",
-		TargetHarnessID: "stub-target-harness",
-		Path:            srcFile,
-		TargetModel:     "target-model",
-		Overwrite:       true, // overwrite if destination exists
-		DryRun:          true, // do not write any files to disk
-	}
-
-	// Act
-	result, err := svc.TransformHarness(context.Background(), req)
-
-	// Assert
-	if err != nil {
-		t.Fatalf("TransformHarness: unexpected error: %v", err)
-	}
-	if len(result.Files) != 1 {
-		t.Fatalf("len(result.Files) = %d, want 1; expected one outcome for the single source file",
-			len(result.Files))
-	}
-	out := result.Files[0]
-
-	// StatusSkippedNotAgent is evidence that DetectHarnessMatch received raw TOML bytes:
-	// raw TOML has no Markdown frontmatter with transform_version and no canonical section
-	// tags, so eligibleHarnessOnly would return ineligible. A non-skipped status proves
-	// that canonical Markdown bytes (which carry both signals) were dispatched.
-	if out.Status == app.StatusSkippedNotAgent {
-		t.Errorf("Status == StatusSkippedNotAgent; DetectHarnessMatch received raw TOML bytes "+
-			"instead of canonical Markdown bytes from IndexSourceModels; "+
-			"reason: %s", out.Reason)
-	}
-
-	// The agent key must have the ".toml" suffix stripped by the retarget loop.
-	if strings.HasSuffix(out.AgentKey, ".toml") {
-		t.Errorf("AgentKey = %q; .toml extension must be stripped by the retarget batch loop "+
-			"using the source harness's declared extension, not carried into the agent key",
-			out.AgentKey)
-	}
-	wantKey := "my-codex-agent"
-	if out.AgentKey != wantKey {
-		t.Errorf("AgentKey = %q, want %q; filename %q with .toml stripped should yield %q",
-			out.AgentKey, wantKey, filepath.Base(srcFile), wantKey)
 	}
 }
 

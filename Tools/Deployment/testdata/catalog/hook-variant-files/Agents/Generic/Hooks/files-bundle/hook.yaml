@@ -1,0 +1,17 @@
+schema_version: "1"
+id: files-bundle
+version: 1.0.0
+description: Fixture bundle declaring a known set of variant files with differing source and target names.
+placeholder: false
+
+variants:
+  test-harness:
+    supported: true
+    files:
+      - source: alpha.sh
+        target: alpha.sh
+      - source: beta-source.sh
+        target: beta-target.sh
+      - source: settings.yaml
+        target: settings.yaml
+    registration: []

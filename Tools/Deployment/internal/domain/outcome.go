@@ -45,6 +45,11 @@ type ActionRecord struct {
 	// Populated for agent artifacts when the source declares one; empty otherwise.
 	// This is distinct from Stale, which records staleness deltas, not the declared version.
 	SourceVersion string
+
+	// FormatChange is non-nil when this write replaced an existing file whose BOM presence or
+	// line-ending style differs from the written bytes. nil when nothing changed, the target
+	// did not exist, the write failed, or the write path is excluded from reporting.
+	FormatChange *FormatChange
 }
 
 // ExternalModuleInfo carries identity information about the external harness process, for logging
@@ -94,4 +99,12 @@ type RunSummary struct {
 	// Non-empty only when one or more artifacts were conflict-classified and had parseable
 	// deployed bytes. Empty on every ordinary run and when all conflicts are resolved by skip.
 	OwnedKeyDifferences []OwnedKeyDifference
+	// ConflictReport is the catalog-stack conflict report of the run; empty without shadowing.
+	// It is a value field on purpose (this struct has no omitempty fields), unlike the pointer
+	// on app.RenderAgentResult. Do not unify the two.
+	ConflictReport ConflictReport
+
+	// DryRunPlan is the plan a dry run reviewed; nil for every run that is not a dry run.
+	// Not serialised: the JSON document keeps its shape.
+	DryRunPlan *Plan `json:"-"`
 }

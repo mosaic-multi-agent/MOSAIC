@@ -35,7 +35,6 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 	// Global persistent flags, shared by all subcommands.
 	var verbose bool
 	var mosaicRoot string
-	var catalogFolder string
 	var logDir string
 	var allowExternal bool
 
@@ -45,7 +44,7 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 		SilenceUsage:  true,
 		// RunE on root handles the case where no subcommand is provided.
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return fmt.Errorf("a subcommand is required: deploy, update, or workflows")
+			return fmt.Errorf("a subcommand is required: agents, check-index, deploy, hooks, promote, render, transform, update, workflows")
 		},
 	}
 	// Redirect cobra's own output (help, usage, errors) to errOut so it does not
@@ -55,8 +54,7 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 
 	root.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
 	root.PersistentFlags().StringVar(&mosaicRoot, "mosaic-root", "", "Override the MOSAIC root directory")
-	root.PersistentFlags().StringVar(&catalogFolder, "catalog-folder", "",
-		"Catalogue directory supplying agents and workflows (default: <mosaic-root>/Catalog)")
+	registerStackFlags(root)
 	root.PersistentFlags().StringVar(&logDir, "log-dir", "",
 		"Override the directory run logs are written to (default: <mosaic-root>/MosaicDeploy/logs)")
 	root.PersistentFlags().BoolVar(&allowExternal, "allow-external", false, "Enable external harness modules")
@@ -65,15 +63,18 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 	// deploy subcommand
 	// ------------------------------------------------------------------
 	var (
-		deployHarness      string
-		deployWorkspace    string
-		deploySelections   string
-		deployOutput       string
-		deployConflict     string
-		deployWorkflowsStr string
-		deployWorkflowsSet bool
-		deployDryRun       bool
-		deployAutoConfirm  bool
+		deployHarness           string
+		deployWorkspace         string
+		deploySelections        string
+		deployOutput            string
+		deployConflict          string
+		deployWorkflowsStr      string
+		deployWorkflowsSet      bool
+		deployInfrastructureStr string
+		deployInfrastructureSet bool
+		deployDryRun            bool
+		deployAutoConfirm       bool
+		deployStrictModels      bool
 	)
 
 	deployCmd := &cobra.Command{
@@ -81,10 +82,12 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		PreRunE: func(cmd *cobra.Command, _ []string) error {
-			// Record whether --workflows was explicitly set, so the nil/non-nil distinction
-			// is preserved in the request: an absent flag yields nil ("not specified"),
-			// an explicitly provided flag (even with an empty value) yields a non-nil slice.
+			// Record whether --workflows and --infrastructure were explicitly set, so the
+			// nil/non-nil distinction is preserved in the request: an absent flag yields nil
+			// ("not specified"), an explicitly provided flag (even with an empty value) yields
+			// a non-nil slice.
 			deployWorkflowsSet = cmd.Flags().Changed("workflows")
+			deployInfrastructureSet = cmd.Flags().Changed("infrastructure")
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -109,6 +112,7 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 				Scope:           domain.ScopeProject,
 				DryRun:          deployDryRun,
 				AutoConfirmPlan: deployAutoConfirm,
+				StrictModels:    deployStrictModels,
 			}
 
 			// Only set ConflictDefault when the flag was explicitly provided; an absent
@@ -141,8 +145,16 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 				req.WorkflowIDs = splitTrimmedParts(deployWorkflowsStr)
 			}
 
+			// Infrastructure flag: nil when absent ("not specified"), non-nil when explicitly
+			// provided ("explicitly none" for an empty value, or the named ids).
+			// When set, this wins over the selections file's infrastructure_agents: key.
+			if deployInfrastructureSet {
+				req.InfrastructureAgentIDs = splitTrimmedParts(deployInfrastructureStr)
+			}
+
 			summary, svcErr := svc.DeployNew(ctx, req)
-			exitCode = renderOutput(out, errOut, deployOutput, summary, svcErr)
+			out := withRunStackInEffect(out, svc, deployOutput)
+			exitCode = renderDeployOutput(out, errOut, deployOutput, summary, svcErr)
 			return nil
 		},
 	}
@@ -151,10 +163,12 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 	deployCmd.Flags().StringVar(&deployWorkspace, "workspace", "", "Workspace path")
 	deployCmd.Flags().StringVar(&deploySelections, "selections", "", "Path to selections YAML file")
 	deployCmd.Flags().StringVar(&deployOutput, "output", "", "Output format (json)")
-	deployCmd.Flags().StringVar(&deployConflict, "conflict", "", "How to handle locally-modified files (skip|overwrite|backup)")
+	deployCmd.Flags().StringVar(&deployConflict, "conflict", "", "How to handle files the tool cannot confirm as its own (skip|overwrite|backup)")
 	deployCmd.Flags().StringVar(&deployWorkflowsStr, "workflows", "", "Comma-separated workflow ids; absent = not specified (nil), empty string = explicitly none")
+	deployCmd.Flags().StringVar(&deployInfrastructureStr, "infrastructure", "", "Comma-separated infrastructure agent ids; absent = ask interactively, empty = explicitly none")
 	deployCmd.Flags().BoolVar(&deployDryRun, "dry-run", false, "Dry run mode; no files are written")
 	deployCmd.Flags().BoolVar(&deployAutoConfirm, "auto-confirm", false, "Auto-confirm the deployment plan without prompting")
+	deployCmd.Flags().BoolVar(&deployStrictModels, "strict-models", false, "Fail the run when any agent would be deployed without a resolved model")
 
 	// ------------------------------------------------------------------
 	// update subcommand
@@ -169,7 +183,13 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 	)
 
 	updateCmd := &cobra.Command{
-		Use:           "update",
+		Use:   "update",
+		Short: "Update a deployed workspace to the latest catalog versions",
+		Long: `Update a deployed workspace to the latest catalog versions.
+
+Infrastructure agent declarations in the orchestrator are refreshed when their version,
+class, triggers or on-failure changed in the catalog. New declarations are never added and
+hand-added declarations are never touched.`,
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -197,6 +217,7 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 			}
 
 			summary, svcErr := svc.Update(ctx, req)
+			out := withRunStackInEffect(out, svc, updateOutput)
 			exitCode = renderOutput(out, errOut, updateOutput, summary, svcErr)
 			return nil
 		},
@@ -204,7 +225,7 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 
 	updateCmd.Flags().StringVar(&updateHarness, "harness", "", "Harness ID")
 	updateCmd.Flags().StringVar(&updateWorkspace, "workspace", "", "Workspace path")
-	updateCmd.Flags().StringVar(&updateConflict, "conflict", "", "How to handle locally-modified files (skip|overwrite|backup)")
+	updateCmd.Flags().StringVar(&updateConflict, "conflict", "", "How to handle files the tool cannot confirm as its own (skip|overwrite|backup)")
 	updateCmd.Flags().StringVar(&updateOutput, "output", "", "Output format (json)")
 	updateCmd.Flags().BoolVar(&updateDryRun, "dry-run", false, "Dry run mode; no files are written")
 	updateCmd.Flags().BoolVar(&updateAutoConfirm, "auto-confirm", false, "Auto-confirm the deployment plan without prompting")
@@ -268,6 +289,7 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 			}
 
 			summary, svcErr := svc.UpdateWorkflows(ctx, req)
+			out := withRunStackInEffect(out, svc, workflowsOutput)
 			exitCode = renderOutput(out, errOut, workflowsOutput, summary, svcErr)
 			return nil
 		},
@@ -276,7 +298,7 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 	workflowsCmd.Flags().StringVar(&workflowsHarness, "harness", "", "Harness ID")
 	workflowsCmd.Flags().StringVar(&workflowsWorkspace, "workspace", "", "Workspace path")
 	workflowsCmd.Flags().StringVar(&workflowsWorkflows, "workflows", "", "Comma-separated workflow IDs to deploy (replaces the current set)")
-	workflowsCmd.Flags().StringVar(&workflowsConflict, "conflict", "", "How to handle locally-modified files (skip|overwrite|backup)")
+	workflowsCmd.Flags().StringVar(&workflowsConflict, "conflict", "", "How to handle files the tool cannot confirm as its own (skip|overwrite|backup)")
 	workflowsCmd.Flags().StringVar(&workflowsOutput, "output", "", "Output format (json)")
 	workflowsCmd.Flags().BoolVar(&workflowsDryRun, "dry-run", false, "Dry run mode; no files are written")
 	workflowsCmd.Flags().BoolVar(&workflowsAutoConfirm, "auto-confirm", false, "Auto-confirm the deployment plan without prompting")
@@ -291,6 +313,7 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 		promoteOverwrite bool
 		promoteDryRun    bool
 		promoteOutput    string
+		promoteTarget    string
 	)
 
 	promoteCmd := &cobra.Command{
@@ -315,9 +338,12 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 				Category:  promoteCategory,
 				Overwrite: promoteOverwrite,
 				DryRun:    promoteDryRun,
+
+				TargetCatalogID: promoteTarget,
 			}
 
 			result, svcErr := svc.Promote(ctx, req)
+			out := withDocStackInEffect(out, svc, promoteOutput)
 			exitCode = renderPromoteOutput(out, errOut, promoteOutput, result, svcErr)
 			return nil
 		},
@@ -329,91 +355,9 @@ func Run(ctx context.Context, args []string, svc app.Service, out, errOut io.Wri
 	promoteCmd.Flags().BoolVar(&promoteOverwrite, "overwrite", false, "Overwrite an existing generic agent at the destination path")
 	promoteCmd.Flags().BoolVar(&promoteDryRun, "dry-run", false, "Validate and compute without writing any file")
 	promoteCmd.Flags().StringVar(&promoteOutput, "output", "", "Output format (json)")
+	registerPromoteTargetFlag(promoteCmd, &promoteTarget)
 
-	// ------------------------------------------------------------------
-	// transform subcommand
-	// ------------------------------------------------------------------
-	var (
-		transformHarness       string
-		transformTargetHarness string
-		transformPath          string
-		transformTargetModel   string
-		transformModelMap      []string
-		transformOverwrite     bool
-		transformDryRun        bool
-		transformOutput        string
-	)
-
-	transformCmd := &cobra.Command{
-		Use:   "transform",
-		Short: "Convert deployed agent files from one harness to another",
-		Long: `Transform one or more deployed agent files from a source harness to a target harness.
-
-Input may be a single agent file or a directory of agent files. Directory enumeration is
-non-recursive — only files directly under the given directory are processed; subdirectories
-are not descended into.`,
-		SilenceErrors: true,
-		SilenceUsage:  true,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			if transformHarness == "" {
-				fmt.Fprintf(errOut, "error: --harness is required for the transform subcommand\n")
-				exitCode = ExitUsage
-				return nil
-			}
-			if transformTargetHarness == "" {
-				fmt.Fprintf(errOut, "error: --target-harness is required for the transform subcommand\n")
-				exitCode = ExitUsage
-				return nil
-			}
-			if transformPath == "" {
-				fmt.Fprintf(errOut, "error: --path is required for the transform subcommand\n")
-				exitCode = ExitUsage
-				return nil
-			}
-
-			req := app.TransformHarnessRequest{
-				SourceHarnessID: transformHarness,
-				TargetHarnessID: transformTargetHarness,
-				Path:            pathinput.Unquote(strings.TrimSpace(transformPath)),
-				TargetModel:     transformTargetModel,
-				Overwrite:       transformOverwrite,
-				DryRun:          transformDryRun,
-			}
-
-			if len(transformModelMap) > 0 {
-				parsed, parseErr := parseModelMap(transformModelMap)
-				if parseErr != nil {
-					fmt.Fprintf(errOut, "error: %s\n", parseErr)
-					exitCode = ExitUsage
-					return nil
-				}
-				req.ModelMap = parsed
-				if req.SkipAll == nil {
-					req.SkipAll = make(map[domain.QuestionID]bool)
-				}
-				req.SkipAll[domain.QTransformTargetModel] = true
-			}
-
-			result, svcErr := svc.TransformHarness(ctx, req)
-			exitCode = renderTransformOutput(out, errOut, transformOutput, result, svcErr)
-			return nil
-		},
-	}
-
-	transformCmd.Flags().StringVar(&transformHarness, "harness", "", "Source harness ID (required)")
-	transformCmd.Flags().StringVar(&transformTargetHarness, "target-harness", "", "Target harness ID (required)")
-	transformCmd.Flags().StringVar(&transformPath, "path", "", "Agent file or folder of agent files (required); non-recursive for directories")
-	transformCmd.Flags().StringArrayVar(&transformModelMap, "model-map", nil,
-		"Map a source model to a target model as sourceModel=targetModel; repeat once per "+
-			"source model. Use an empty source (=targetModel) for agents with no model set. "+
-			"Source models not mapped here fall back to --target-model, and are left empty when "+
-			"--target-model is absent.")
-	transformCmd.Flags().StringVar(&transformTargetModel, "target-model", "",
-		"Default target model for source models not covered by --model-map; absent means "+
-			"those agents' model field is left empty")
-	transformCmd.Flags().BoolVar(&transformOverwrite, "overwrite", false, "Overwrite an existing destination file")
-	transformCmd.Flags().BoolVar(&transformDryRun, "dry-run", false, "Compute outcomes without writing any file")
-	transformCmd.Flags().StringVar(&transformOutput, "output", "", "Output format (json)")
+	transformCmd := newTransformCmd(ctx, svc, out, errOut, &exitCode)
 
 	// ------------------------------------------------------------------
 	// render subcommand
@@ -505,6 +449,7 @@ a prompt.`,
 			}
 
 			result, svcErr := svc.RenderAgent(ctx, req)
+			out := withDocStackInEffect(out, svc, renderOutput)
 			exitCode = renderRenderAgentOutput(out, errOut, renderOutput, result, svcErr)
 			return nil
 		},
@@ -527,12 +472,16 @@ a prompt.`,
 	var checkIndexOutput string
 
 	checkIndexCmd := &cobra.Command{
-		Use:           "check-index",
-		Short:         "Report drift between Catalog/Workflows/Index.md and the workflow files on disk",
+		Use:   "check-index",
+		Short: "Report drift between Catalog/Workflows/Index.md and the workflow files on disk",
+		Long: "Report drift between each catalog's Workflows/Index.md and its workflow files on disk.\n" +
+			"Findings are grouped per catalog; with --output json they are in the \"catalogs\" array.\n" +
+			"check-index has no workspace and never reuses a persisted stack: it uses its stack flags, or the default catalogue alone.",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			result, svcErr := svc.CheckWorkflowIndex(ctx)
+			out := withDocStackInEffect(out, svc, checkIndexOutput)
 			exitCode = renderCheckIndexOutput(out, errOut, checkIndexOutput, result, svcErr)
 			return nil
 		},
@@ -566,7 +515,13 @@ a prompt.`,
 		Long: `Deploy a chosen mix of subagents, utility agents, and standalone agents plus the skills they require.
 
 Presents a single browsable list spanning all subagents, utility agents, and standalone
-agents. No workflow, hook, or orchestrator work is performed.
+agents. No workflow or hook work is performed.
+
+If an orchestrator file (orchestrator.md, orchestrator-script.md) is already present,
+declarations for newly deployed infrastructure agents are added to it. Existing
+declarations, including hand-added ones, are kept, and a re-deployed agent is refreshed in
+place. An orchestrator the tool cannot confirm as its own follows --conflict; when skipped, a TODO entry
+explains the manual step. No orchestrator is created, and its workflows are not changed.
 
 The four per-class flags (--subagents, --utility, --infra, --standalone) pre-answer the
 merged agent selection. If any per-class flag is given, the interactive question is skipped
@@ -644,6 +599,7 @@ entirely and the unspecified classes are treated as explicitly empty.`,
 			// When no per-class flag is set, all four slices remain nil → QDeployAgents is asked.
 
 			summary, svcErr := svc.DeployAgents(ctx, req)
+			out := withRunStackInEffect(out, svc, agentsOutput)
 			exitCode = renderAgentsOutput(out, errOut, agentsOutput, agentsDryRun, summary, svcErr)
 			return nil
 		},
@@ -655,7 +611,7 @@ entirely and the unspecified classes are treated as explicitly empty.`,
 	agentsCmd.Flags().StringVar(&agentsUtility, "utility", "", "Comma-separated utility agent ids (absent = ask; empty = none)")
 	agentsCmd.Flags().StringVar(&agentsInfra, "infra", "", "Comma-separated infrastructure agent ids (absent = ask; empty = none)")
 	agentsCmd.Flags().StringVar(&agentsStandalone, "standalone", "", "Comma-separated standalone agent ids (absent = ask; empty = none)")
-	agentsCmd.Flags().StringVar(&agentsConflict, "conflict", "", "Default decision for locally-modified files (skip|overwrite|backup)")
+	agentsCmd.Flags().StringVar(&agentsConflict, "conflict", "", "Default decision for files the tool cannot confirm as its own (skip|overwrite|backup)")
 	agentsCmd.Flags().StringVar(&agentsOutput, "output", "", "Output format (json)")
 	agentsCmd.Flags().BoolVar(&agentsDryRun, "dry-run", false, "Compute and report without writing any file")
 	agentsCmd.Flags().BoolVar(&agentsAutoConfirm, "yes", false, "Auto-confirm the deployment plan without prompting")
@@ -729,6 +685,7 @@ configuration, or orchestrator rewriting is performed.`,
 			}
 
 			summary, svcErr := svc.DeployHooks(ctx, req)
+			out := withRunStackInEffect(out, svc, hooksOutput)
 			exitCode = renderHooksOutput(out, errOut, hooksOutput, hooksDryRun, summary, svcErr)
 			return nil
 		},
@@ -737,7 +694,7 @@ configuration, or orchestrator rewriting is performed.`,
 	hooksCmd.Flags().StringVar(&hooksHarness, "harness", "", "Harness ID (required)")
 	hooksCmd.Flags().StringVar(&hooksWorkspace, "workspace", "", "Workspace directory (required)")
 	hooksCmd.Flags().StringVar(&hooksHooks, "hooks", "", "Comma-separated hook bundle ids (absent = ask; empty = none)")
-	hooksCmd.Flags().StringVar(&hooksConflict, "conflict", "", "Default decision for locally-modified files (skip|overwrite|backup)")
+	hooksCmd.Flags().StringVar(&hooksConflict, "conflict", "", "Default decision for files the tool cannot confirm as its own (skip|overwrite|backup)")
 	hooksCmd.Flags().StringVar(&hooksOutput, "output", "", "Output format (json)")
 	hooksCmd.Flags().BoolVar(&hooksDryRun, "dry-run", false, "Compute and report without writing any file")
 	hooksCmd.Flags().BoolVar(&hooksAutoConfirm, "yes", false, "Auto-confirm the deployment plan without prompting")
@@ -747,6 +704,7 @@ configuration, or orchestrator rewriting is performed.`,
 
 	if err := root.Execute(); err != nil {
 		// cobra failed to parse flags or find a subcommand (including root.RunE error).
+		fmt.Fprintln(errOut, "error:", err)
 		return ExitUsage
 	}
 	return exitCode

@@ -1,5 +1,6 @@
 ---
 type: orchestration-artifact
+run_id: 20260727T170000Z-a3f9
 workflow: quick-fix
 workflow_version: "3.0"
 task: "Fix the authentication timeout bug"
@@ -9,7 +10,7 @@ global_sequence: 1
 checkpoints: disabled
 current_state:
   phase: PLANNING
-  stage: null
+  iteration: null
   last_status: SUCCESS
   last_agent: "planner-tdd-soft#1"
   error_code: null

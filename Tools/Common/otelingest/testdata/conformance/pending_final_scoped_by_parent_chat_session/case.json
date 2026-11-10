@@ -1,0 +1,37 @@
+{
+  "description": "VS Code dialect: a final ingest scoped to a parent chat session id finalises the pending span that belongs to it even though its own conversation id is not in the scope; a scope that names nothing it holds leaves it pending.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "early",
+      "otel": "otel/early.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    },
+    {
+      "name": "other_scope",
+      "otel": "otel/other_scope.jsonl",
+      "logs": null,
+      "final": true,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": [
+        "unrelated-session"
+      ]
+    },
+    {
+      "name": "parent_scope",
+      "otel": "otel/parent_scope.jsonl",
+      "logs": null,
+      "final": true,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": [
+        "vsc-session-7"
+      ]
+    }
+  ]
+}

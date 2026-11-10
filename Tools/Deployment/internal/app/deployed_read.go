@@ -26,125 +26,55 @@ package app
 //
 // # Read-site inventory
 //
-// This block inventories every application-layer call site that reads deployed
-// agent bytes or branches on a file extension, and records the stage that
-// converts each site to funnel-routed reads. Scope: internal/app.
+// This block inventories every application-layer site in internal/app that reads
+// deployed agent bytes. Each one routes through the funnel.
 //
-// CONVERTED BY THIS STAGE (Stage 7):
-//   - readDeployedFile in summary.go: absorbed into readDeployedArtifact (Layer 2).
-//     Both callers (the deployedReader closures in update.go and workflow_update.go)
-//     now route through readDeployedPlanItem (Layer 3).
+// FUNNEL-ROUTED READS:
+//   - deployed_bytes.go (deployedBytes.funnelReader): the per-item deployed-bytes rule
+//     shared by Deploy, Deploy agents, Update and Update workflows. It reads through
+//     readDeployedArtifact (or decodeDeployedBytes for bytes captured before a migration)
+//     and derives the operation from the plan item action, so the encoder always receives
+//     the prior deployed bytes it needs for an update.
+//   - deployed_bytes_migration.go: captures the raw bytes of a recorded legacy file; the
+//     funnelReader decodes them through decodeDeployedBytes.
+//   - deployedstate.go (probeDeployedArtifact): readDeployedArtifact.
+//   - deployed_agent_index.go: decodeDeployedBytes on files matching the harness-declared
+//     agent extension.
+//   - deployed_decode_problem.go: readDeployedArtifact.
+//   - deployed_parse_check.go: readDeployedArtifact.
+//   - harness_only_discovery.go (scanHarnessOnlyAgents): readDeployedArtifact.
+//   - workspace_agent_scan.go: decodeDeployedBytes in the scan.
+//   - update_kept_workflows.go: readDeployedArtifact.
+//   - promote_service.go (Promote): readDeployedArtifact.
+//   - transform_source_models.go (ReadSourceModel, IndexSourceModels): decodeDeployedBytes.
+//   - transform_plan_discovery.go: readDeployedArtifact.
+//   - transform_run_build.go: readDeployedArtifact on the destination, so the encoder
+//     receives the destination's prior bytes.
+//   - rebuild.go, rebuild_destination.go, rebuild_source.go: decodeDeployedBytes on the
+//     rebuild source and the destination.
 //
-// CONVERTED BY STAGE 8 (extension-driven read for deployed-state probes, index, source models):
-//   - probeDeployedArtifact in deployedstate.go: now routes through readDeployedArtifact
-//     (Layer 2). Signature extended with kind and src; callers pass pp.Ref.Kind and
-//     module.Descriptor() so the correct decoder is selected per harness.
-//   - deployed_agent_index.go: now uses decodeDeployedBytes (Layer 1) via the declared
-//     extension. Files not matching the harness-declared extension are skipped.
-//   - transform_source_models.go (ReadSourceModel, IndexSourceModels): ReadSourceModel
-//     decodes through decodeDeployedBytes before frontmatter parse; IndexSourceModels
-//     stores canonical bytes in SourceFile.Content for the retarget batch loop.
-//   - promote_service.go (Promote): source is read via readDeployedArtifact (Layer 2);
-//     all downstream promote logic receives canonical bytes.
-//   - transform_service_impl.go (retarget loop): no change to the loop itself; it already
-//     consumed sf.Content canonically. The pre-pass (IndexSourceModels) now stores
-//     canonical bytes, so the loop implicitly benefits.
+// Harness-only refresh (harness_only_refresh.go) receives canonical bytes from the funnel
+// and threads DeployedRaw as the prior-bytes channel for the encode step, so user-owned
+// keys survive in the harness's own format.
 //
-// CONVERTED BY STAGE 9 (extension-driven harness-only discovery):
-//   - harness_only_discovery.go (scanHarnessOnlyAgents): converted to readDeployedArtifact
-//     (Layer 2). The scan now accepts a HarnessDescriptor, filters by the declared agent
-//     extension, strips the declared extension in agentKeyFromFileName, and derives the
-//     orchestrator exclusion set via mosaicOrchestratorFileNames. Decode report notices are
-//     returned as a second value for the caller to surface. Convert count: 1 site.
+// GENERIC-SOURCE PARSES:
+//   Calls to the raw docformat entry points operate on canonical bytes (already decoded
+//   through the funnel) or on generic MOSAIC source files, and go through
+//   ParseGenericSource in parse_generic_source.go, the second permitted caller of those
+//   entry points besides this file. Examples: bundle_conformance.go, protocol_version.go,
+//   promote.go, promote_service.go, harness_only_refresh.go, render_service_impl.go
+//   (always a generic-form source, never a deployed native file).
 //
-// CONVERTED BY STAGE 10 (harness-only refresh encode):
-//   - workspace_agent_scan.go: converted in Stage 8 (extension-driven scan and funnel
-//     decode). Harness-only eligibility now runs on canonical bytes.
-//   - harness_only_refresh.go: receives decoded canonical bytes from the funnel via
-//     buildContent (Stage 7); region and marker inspection operates on the canonical form.
-//     The encode step added in Stage 10 converts the refreshed canonical bytes back into
-//     the harness's own format (identity for Markdown; Codex TOML for the Codex harness).
-//     DeployedRaw (the funnel's raw on-disk bytes) is threaded as the prior-bytes channel
-//     so user-owned keys survive. Hashing and change detection remain on encoded bytes.
-//     Convert count: 15 read sites in harness_only_refresh.go, all operating on canonical
-//     bytes received from the funnel. No pending application-layer entries remain.
+// NOT DEPLOYED AGENT READS (outside the funnel's scope):
+//   - readDeployedFile in summary.go: returns raw on-disk bytes for non-agent uses
+//     (hooks and skills pass through undecoded).
+//   - internal/harness/injectionfile/deployed.go: parses deployed harness injection files.
+//   - internal/registry/descriptoronly.go: reads harness descriptor files.
 //
-// SKILLS-ROOT INDEPENDENCE AUDIT (Stage 8, I8.5):
-//   None of the sites converted in Stage 8 derive the skills path from the agents path.
-//   The Codex harness declares agents at ".codex/agents" and skills at ".agents/skills"
-//   (different parent directories). Every site that resolves target paths calls
-//   module.TargetPath(domain.TargetPathRequest{...}), which reads from the descriptor's
-//   Paths.Agents and Paths.Skills independently. The deployedAgentIndex, workspace scan,
-//   and probe sites all receive agentsDir from module.Descriptor().Paths.Agents.Project
-//   and never touch the skills path. Audit: clean.
+// Paths come from the descriptor: the agents and skills locations are resolved
+// independently through module.TargetPath, so no site derives one from the other.
 //
-// OUT OF SCOPE (not deployed agent reads in the funnel's sense):
-//   - internal/harness/injectionfile/deployed.go: parses deployed harness injection
-//     files (YAML/Markdown injection content, not agent files). This is not a deployed
-//     agent read and is legitimately outside the funnel's scope.
-//   - internal/registry/descriptoronly.go: reads harness descriptor files, not deployed
-//     agent files.
-//   - .md and extension literals outside internal/app: no .agent.md or format-specific
-//     extension literals were found in deployed-agent read paths outside internal/app
-//     after inspection of the two known candidates above.
-//
-// Count after Stage 8: 2 pending sites in internal/app (harness_only_discovery.go,
-// harness_only_refresh.go); 2 confirmed out-of-scope sites outside internal/app.
-//
-// GENERIC-SOURCE CATEGORISATION (Stage 11):
-//   After the conversion stages the remaining docformat.Parse and docformat.SplitFrontmatter
-//   calls in internal/app operate on canonical bytes (already decoded through the funnel).
-//   These are categorised as generic-source reads and migrated to ParseGenericSource in
-//   parse_generic_source.go. The named operation is the second permitted caller of the
-//   raw-bytes docformat entry points alongside this file (deployed_read.go).
-//
-//   GENERIC-SOURCE (migrated to ParseGenericSource in parse_generic_source.go):
-//     - bundle_conformance.go: rawBody bytes from deployedBodies map (canonical after
-//       funnel decoding upstream; read to check role and bundle region content).
-//     - deployedstate.go (probeDeployedArtifact): canonical bytes from dr.Canonical
-//       (funnel-decoded) — reads version stamps, model ID, injection version.
-//     - deployedstate.go (extractDeployedInjectionVersion): canonical bytes passed in
-//       from probeDeployedArtifact.
-//     - deployedstate.go (extractDeployedWorkflows): canonical bytes passed in from
-//       probeDeployedArtifact.
-//     - deployed_agent_index.go: dr.Canonical after decodeDeployedBytes — reads numeric ID.
-//     - harness_only_discovery.go: src (canonical bytes from readDeployedArtifact) —
-//       validates harness-only eligibility.
-//     - harness_only_refresh.go: req.Deployed (canonical bytes received from the funnel
-//       via buildContent in the Update flow) — parses regions for refresh.
-//     - promote.go (eligibleHarnessOnly): src from readDeployedArtifact (canonical).
-//     - promote.go (buildGenericAgent): in.Source (canonical bytes from promote path).
-//     - promote_service.go: src from the promote service (canonical after funnel decode).
-//     - protocol_version.go: canonical bytes from probeDeployedArtifact chain.
-//     - render_service_impl.go: srcBytes from catalog or path — always a generic-form
-//       MOSAIC source file (Markdown+YAML), not a deployed file in native format.
-//     - retarget.go (matchHarnessTarget): src from retarget path (canonical).
-//     - retarget.go (retargetItem): in.Source (canonical).
-//     - transform_source_models.go (ReadSourceModel): dr.Canonical after decodeDeployedBytes
-//       — reads model key from canonical form. NOTE: ReadSourceModel is categorised
-//       FUNNEL-ROUTED because its primary read (the raw deployed bytes via content
-//       parameter) goes through decodeDeployedBytes before the parse. The subsequent
-//       ParseGenericSource call is on canonical bytes only, which is safe. Migrating the
-//       canonical-bytes parse to ParseGenericSource does not exempt the original deployed
-//       read from the guard; that read is already funnel-routed.
-//     - workspace_agent_scan.go: canonical bytes from decodeDeployedBytes in the scan.
-//
-//   FUNNEL-ROUTED (reads through decodeDeployedBytes/readDeployedArtifact/readDeployedPlanItem):
-//     - All sites listed in CONVERTED BY STAGE 7, 8, 9, 10 above.
-//     - transform_source_models.go (ReadSourceModel, IndexSourceModels): primary deployed
-//       read is through decodeDeployedBytes — FUNNEL-ROUTED. The secondary canonical-bytes
-//       parse is generic-source.
-//
-//   bodyStartPos (SplitFrontmatter call) confirmation:
-//     - The SplitFrontmatter call in bodyStartPos is on currentBytes = doc.Bytes(), where
-//       doc was parsed from req.Deployed (canonical bytes from the funnel). By the time
-//       insertTopLevelDeployedRegion is called, currentBytes carries only canonical
-//       Markdown+YAML bytes. VERDICT: canonical bytes confirmed. bodyStartPos has been
-//       moved to parse_generic_source.go where it is a permitted caller.
-//
-// Count after Stage 11: 0 pending application-layer sites. Every site is either
-// funnel-routed or generic-source, and both categories are enforced by the read-boundary
-// guard rule in tools/importcheck/main.go.
+// Both categories are enforced by the read-boundary guard rule in tools/importcheck/main.go.
 
 import (
 	"fmt"

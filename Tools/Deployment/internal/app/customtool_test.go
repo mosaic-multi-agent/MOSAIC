@@ -42,7 +42,7 @@ func TestDeployNew_UnmappedTool_AsksQCustomTool(t *testing.T) {
 	cat := newMinimalCatalog()
 	// The test-runner agent has tool "bash"; make the harness report it as unmapped
 	mod := &unmappedToolModule{
-		base: newMinimalModule(),
+		base:          newMinimalModule(),
 		unmappedTools: []string{"bash"},
 	}
 	reg := newMinimalRegistry(nil)
@@ -417,7 +417,7 @@ type unmappedToolModule struct {
 	unmappedTools []string
 }
 
-func (m *unmappedToolModule) Ref() domain.HarnessRef              { return m.base.Ref() }
+func (m *unmappedToolModule) Ref() domain.HarnessRef                { return m.base.Ref() }
 func (m *unmappedToolModule) Descriptor() *domain.HarnessDescriptor { return m.base.Descriptor() }
 func (m *unmappedToolModule) Tools(req domain.ToolRequest) (domain.ToolResult, error) {
 	resolutions := make([]domain.ToolResolution, len(req.Generic))
@@ -439,7 +439,9 @@ func (m *unmappedToolModule) Frontmatter(req domain.FrontmatterRequest) (domain.
 func (m *unmappedToolModule) TargetPath(req domain.TargetPathRequest) (string, error) {
 	return m.base.TargetPath(req)
 }
-func (m *unmappedToolModule) Injection(req domain.InjectionRequest) (string, bool) { return m.base.Injection(req) }
+func (m *unmappedToolModule) Injection(req domain.InjectionRequest) (string, bool) {
+	return m.base.Injection(req)
+}
 func (m *unmappedToolModule) HookPlan(req domain.HookPlanRequest) (domain.HookPlan, error) {
 	return m.base.HookPlan(req)
 }

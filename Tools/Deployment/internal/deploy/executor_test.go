@@ -304,9 +304,9 @@ func TestSimulateAction_AgentArtifact_DeclaredVersion_PopulatesSourceVersion(t *
 func TestSimulateAction_AgentArtifact_NoDeclaredVersion_SourceVersionIsEmpty(t *testing.T) {
 	// Arrange
 	item := domain.PlanItem{
-		Ref:    domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "unversioned-agent"},
+		Ref:        domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "unversioned-agent"},
 		TargetPath: "agents/unversioned-agent.md",
-		Action: domain.ActionCreate,
+		Action:     domain.ActionCreate,
 		// SourceVersion deliberately absent (zero value "")
 	}
 	req := ExecRequest{DryRun: true}

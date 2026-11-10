@@ -68,13 +68,13 @@ var mediumTierAgent = domain.Agent{
 
 // noTierAgent is a worker that declares no RecommendedTier.
 var noTierAgent = domain.Agent{
-	Key:         "no-tier-worker",
-	NumericID:   "12",
-	Version:     "1.0",
-	Name:        "No Tier Worker",
-	Role:        domain.RoleWorker,
-	Category:    "Execution",
-	Tools:       []string{"bash"},
+	Key:       "no-tier-worker",
+	NumericID: "12",
+	Version:   "1.0",
+	Name:      "No Tier Worker",
+	Role:      domain.RoleWorker,
+	Category:  "Execution",
+	Tools:     []string{"bash"},
 }
 
 // lowOnlyWorkflow references only the LOW-tier agent.
@@ -449,8 +449,8 @@ func TestTierScoping_Update_SingleTierAgentGetsModel(t *testing.T) {
 	// interactive tier prompts in Update, but the filter must also exclude them from
 	// the iteration to avoid any pre-answer side effects for MEDIUM/HIGH).
 	if stub.WasAsked(domain.QTierModel, "MEDIUM") || stub.WasAsked(domain.QTierModel, "HIGH") {
-		t.Error("QTierModel was asked for an unselected tier during Update; "+
-			"resolveModels must limit tier iteration to tiers present in the agents parameter "+
+		t.Error("QTierModel was asked for an unselected tier during Update; " +
+			"resolveModels must limit tier iteration to tiers present in the agents parameter " +
 			"(update.go call site, I2.1)")
 	}
 }
@@ -522,13 +522,13 @@ func TestTierScoping_WorkflowUpdate_UnselectedTiersNotPrompted(t *testing.T) {
 
 	// MEDIUM and HIGH must not be prompted even though the catalog lists them.
 	if stub.WasAsked(domain.QTierModel, "MEDIUM") {
-		t.Error("QTierModel for \"MEDIUM\" was asked even though no selected agent uses that tier; "+
-			"resolveModels must skip tiers absent from the agents parameter "+
+		t.Error("QTierModel for \"MEDIUM\" was asked even though no selected agent uses that tier; " +
+			"resolveModels must skip tiers absent from the agents parameter " +
 			"(workflow_update.go call site, I2.1)")
 	}
 	if stub.WasAsked(domain.QTierModel, "HIGH") {
-		t.Error("QTierModel for \"HIGH\" was asked even though no selected agent uses that tier; "+
-			"resolveModels must skip tiers absent from the agents parameter "+
+		t.Error("QTierModel for \"HIGH\" was asked even though no selected agent uses that tier; " +
+			"resolveModels must skip tiers absent from the agents parameter " +
 			"(workflow_update.go call site, I2.1)")
 	}
 }

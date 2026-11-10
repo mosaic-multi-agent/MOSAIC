@@ -2,11 +2,8 @@ package pricing
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"path/filepath"
 
-	"github.com/goccy/go-yaml"
 	"mosaic-log-analyzer/internal/domain"
 )
 
@@ -15,14 +12,17 @@ const ConfigRelPath = "MosaicLogAnalyzer/config/pricing.yaml"
 
 // Store owns the external YAML pricing file end to end.
 type Store struct {
-	path string
+	globalDir string // "" = global level unavailable
+	path      string // project file
 }
 
-// NewStore returns a store rooted at the given MOSAIC runtime root.
-// The pricing file is resolved as <mosaicRoot>/MosaicLogAnalyzer/config/pricing.yaml.
-func NewStore(mosaicRoot string) *Store {
+// NewStore returns a store with the given global folder ("" = global level
+// unavailable) and project root (the folder LogAnalyzer is started from).
+// The project file is <projectRoot>/MosaicLogAnalyzer/config/pricing.yaml.
+func NewStore(globalDir, projectRoot string) *Store {
 	return &Store{
-		path: filepath.Join(mosaicRoot, ConfigRelPath),
+		globalDir: globalDir,
+		path:      filepath.Join(projectRoot, ConfigRelPath),
 	}
 }
 
@@ -32,57 +32,42 @@ func (s *Store) Path() string {
 	return s.path
 }
 
-// Load reads the pricing table from the YAML file.
+// Load reads the pricing table: global entries first, then project entries
+// replacing global ones for the same (provider, model). Each entry carries the
+// level it came from.
 //
-// Absent file contract: a missing file yields an empty table and a nil error,
-// following the same convention as the Deployment tool's config store.
+// Absent file contract: a missing file at either level contributes nothing and is
+// not an error, following the same convention as the Deployment tool's config
+// store. A comments-only file is a valid empty table.
+//
+// Currency: the table's currency is the project file's currency key, else the
+// global file's, else USD. When both files state different currencies the global
+// entries are ignored and one pricing_currency_mismatch warning is raised.
 //
 // Per-entry isolation: an entry that fails rate parsing or domain.ModelPricing.Validate
 // is skipped and reported as a domain.FindingInvalidPricingEntry naming the model;
-// the remaining entries still load. An error is returned only when the document
-// itself cannot be parsed.
+// the remaining entries still load. An error is returned only when a document
+// itself cannot be parsed; it names that file.
 func (s *Store) Load(_ context.Context) (domain.PricingTable, []domain.Finding, error) {
-	data, err := os.ReadFile(s.path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return domain.EmptyPricingTable(), nil, nil
+	var global, project loadedFile
+	var err error
+	if gp := s.globalPath(); gp != "" {
+		if global, err = loadFile(gp, domain.LevelGlobal); err != nil {
+			return domain.EmptyPricingTable(), nil, err
 		}
-		return domain.EmptyPricingTable(), nil, fmt.Errorf("read pricing file: %w", err)
 	}
-
-	var raw pricingFileYAML
-	if err := yaml.Unmarshal(data, &raw); err != nil {
-		return domain.EmptyPricingTable(), nil, fmt.Errorf("parse pricing file: %w", err)
+	if project, err = loadFile(s.path, domain.LevelProject); err != nil {
+		return domain.EmptyPricingTable(), nil, err
 	}
+	table, findings := resolveLevels(global, project, s.globalPath(), s.path)
+	return table, findings, nil
+}
 
-	if len(raw.Models) == 0 {
-		// Comments-only file or genuinely empty file — both are valid empty tables.
-		return domain.EmptyPricingTable(), nil, nil
+// entryLabel names an entry in a finding: the bare model ID for the top-level
+// section, provider/model otherwise.
+func entryLabel(provider, model string) string {
+	if provider == "" {
+		return model
 	}
-
-	var entries []domain.ModelPricing
-	var findings []domain.Finding
-
-	for modelID, wireEntry := range raw.Models {
-		entry, convErr := wireEntry.toDomain(modelID)
-		if convErr != nil {
-			findings = append(findings, domain.Finding{
-				Kind:     domain.FindingInvalidPricingEntry,
-				Severity: domain.SeverityWarning,
-				Detail:   fmt.Sprintf("invalid pricing entry for %s: %v", modelID, convErr),
-			})
-			continue
-		}
-		if valErr := entry.Validate(); valErr != nil {
-			findings = append(findings, domain.Finding{
-				Kind:     domain.FindingInvalidPricingEntry,
-				Severity: domain.SeverityWarning,
-				Detail:   fmt.Sprintf("invalid pricing entry for %s: %v", modelID, valErr),
-			})
-			continue
-		}
-		entries = append(entries, entry)
-	}
-
-	return domain.NewPricingTable(entries), findings, nil
+	return provider + "/" + model
 }

@@ -1,6 +1,8 @@
 package domain
 
-// StatusCode is a Communication Protocol v1.8 status code.
+import "encoding/json"
+
+// StatusCode is a Communication Protocol v1.12 status code.
 type StatusCode string
 
 const (
@@ -10,13 +12,30 @@ const (
 	StatusNEEDS_CLARIFICATION    StatusCode = "NEEDS_CLARIFICATION"
 	StatusCAPABILITY_EXCEEDED    StatusCode = "CAPABILITY_EXCEEDED"
 	StatusBLOCKED                StatusCode = "BLOCKED"
+
+	// StatusHARNESS_ERROR records an invocation that ended without a usable
+	// subagent response. Runner-recorded only: it is not a Communication
+	// Protocol status and no subagent ever returns it.
+	StatusHARNESS_ERROR StatusCode = "HARNESS_ERROR"
+
+	// StatusCONFIG_ERROR records an infrastructure agent that could not be
+	// dispatched because its definition cannot be resolved. Runner-recorded
+	// only: it is not a Communication Protocol status.
+	StatusCONFIG_ERROR StatusCode = "CONFIG_ERROR"
 )
 
-// ErrorCode is a Communication Protocol v1.8 error code (BLOCKED only).
+// IsRunnerRecorded reports whether s is a status only the Runner records
+// (StatusHARNESS_ERROR or StatusCONFIG_ERROR), never one a subagent returned.
+func (s StatusCode) IsRunnerRecorded() bool {
+	return s == StatusHARNESS_ERROR || s == StatusCONFIG_ERROR
+}
+
+// ErrorCode is a Communication Protocol v1.12 error code (BLOCKED only).
 type ErrorCode string
 
 const (
 	ErrorNone               ErrorCode = ""
+	ErrorINVALID_INVOCATION ErrorCode = "E100"
 	ErrorINPUT_NOT_FOUND    ErrorCode = "E101"
 	ErrorDEPENDENCY_MISSING ErrorCode = "E401"
 	ErrorTOOL_UNAVAILABLE   ErrorCode = "E501"
@@ -24,7 +43,7 @@ const (
 	ErrorUSER_CONTACT       ErrorCode = "E503"
 )
 
-// ProtocolRequest is the Communication Protocol v1.8 invocation message
+// ProtocolRequest is the Communication Protocol v1.12 invocation message
 // sent to a subagent.
 type ProtocolRequest struct {
 	AgentInstanceID      string   `json:"agent_instance_id"`
@@ -39,7 +58,24 @@ type ProtocolRequest struct {
 	HumanInTheLoop       bool     `json:"human_in_the_loop"`
 }
 
-// ProtocolResponse is the Communication Protocol v1.8 response from a subagent.
+// MarshalJSON emits the request exactly as the default struct encoding does,
+// except that a nil InputArtifacts or OutputArtifacts is written as [] rather
+// than null, as the Communication Protocol requires arrays. The receiver is
+// not modified.
+func (r ProtocolRequest) MarshalJSON() ([]byte, error) {
+	// plain has the same fields and tags but no methods, so Marshal does not recurse.
+	type plain ProtocolRequest
+	p := plain(r)
+	if p.InputArtifacts == nil {
+		p.InputArtifacts = []string{}
+	}
+	if p.OutputArtifacts == nil {
+		p.OutputArtifacts = []string{}
+	}
+	return json.Marshal(p)
+}
+
+// ProtocolResponse is the Communication Protocol v1.12 response from a subagent.
 type ProtocolResponse struct {
 	AgentInstanceID string     `json:"agent_instance_id"`
 	RunID           string     `json:"run_id,omitempty"`
@@ -78,10 +114,11 @@ type AgentReference struct {
 
 // DispatchStep is everything the session needs to execute one invocation.
 type DispatchStep struct {
-	RowIndex      int            // which routing table row this invocation is for
+	RowIndex      int // which routing table row this invocation is for
 	Agent         AgentReference
 	Request       ProtocolRequest
-	EffectiveHITL bool   // the computed HITL value, or an override
-	Phase         string // the phase to record in the artifact
-	Stage         string // "Stage-N" or "" -- what to write to the artifact
+	EffectiveHITL bool      // the computed HITL value, or an override
+	Phase         string    // the phase to record in the artifact
+	Stage         string    // recorded OAF 3.0 iteration value (domain.FormatIterationValue, e.g. "1.Test") or "" -- what to write to the artifact
+	Retry         RetryKind // RetryNone for every non-retry dispatch
 }

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"mosaic-common/docformat"
+	"mosaic-deploy/internal/agentkey"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -55,6 +55,7 @@ func (c *catalogImpl) loadWorkflows(root string) []Issue {
 
 		wf, err := parseWorkflowFile(absPath, category)
 		if err != nil {
+			c.failures.addFailure(absPath, SourceKindWorkflow, err)
 			continue
 		}
 
@@ -132,11 +133,7 @@ func scanWorkflowDiskFiles(wfRoot string) map[string]string {
 //   - Category: the category parameter, verbatim.
 //   - SourcePath: path, verbatim.
 func parseWorkflowFile(path, category string) (domain.Workflow, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return domain.Workflow{}, err
-	}
-	doc, err := docformat.Parse(data)
+	doc, err := readAndParse(path)
 	if err != nil {
 		return domain.Workflow{}, err
 	}
@@ -149,7 +146,7 @@ func parseWorkflowFile(path, category string) (domain.Workflow, error) {
 	}
 	if id == "" {
 		base := filepath.Base(path)
-		id = strings.TrimSuffix(base, ".md")
+		id = agentkey.FromFileName(base)
 	}
 
 	wf := domain.Workflow{

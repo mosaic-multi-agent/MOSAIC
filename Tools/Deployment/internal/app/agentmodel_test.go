@@ -311,7 +311,7 @@ func TestDeployNew_AgentModelSelection_NeverSavedToUserConfig(t *testing.T) {
 				// Tier keys are tier strings like "HIGH", "MEDIUM". Agent keys are slugs like
 				// "test-runner". Verify no agent key appears as a tier key.
 				if string(tier) == "test-runner" {
-					t.Errorf("agent key \"test-runner\" found as a tier key in saved UserConfig.TierModels; "+
+					t.Errorf("agent key \"test-runner\" found as a tier key in saved UserConfig.TierModels; " +
 						"per-agent model selections must never appear in config types (AC18.3)")
 				}
 			}
@@ -352,7 +352,7 @@ func (c *agentModelCapture) Review(_ context.Context, p domain.Plan) (domain.Con
 
 // skipAllAgentInteraction returns SkippedAll on the first QAgentModel call.
 type skipAllAgentInteraction struct {
-	calls         []struct{ id domain.QuestionID }
+	calls          []struct{ id domain.QuestionID }
 	skippedAllSent bool
 }
 

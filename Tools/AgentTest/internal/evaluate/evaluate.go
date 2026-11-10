@@ -34,7 +34,7 @@ func Evaluate(ev domain.RunEvidence) domain.TestResult {
 			assertions[i].Outcome = domain.AssertionNotEvaluated
 			assertions[i].Detail = cause
 		}
-		return domain.TestResult{
+		return applyModelValidity(domain.TestResult{
 			Key:                 ev.Key,
 			Verdict:             domain.VerdictFail,
 			Reasons:             []domain.FailureReason{domain.ReasonInfrastructure},
@@ -48,10 +48,11 @@ func Evaluate(ev domain.RunEvidence) domain.TestResult {
 			SubjectModel:        ev.SubjectModel,
 			StubModel:           ev.StubModel,
 			HarnessID:           ev.HarnessID,
+			HarnessVersion:      ev.HarnessVersion,
 			TerminationReason:   string(ev.SubjectResult.Disposition),
 			Version:             ev.Definition.Version,
 			NumericID:           ev.Definition.NumericID,
-		}
+		}, ev)
 	}
 
 	negative := ev.Definition.Negative
@@ -111,7 +112,7 @@ func Evaluate(ev domain.RunEvidence) domain.TestResult {
 		verdict = domain.VerdictFail
 	}
 
-	return domain.TestResult{
+	return applyModelValidity(domain.TestResult{
 		Key:                 ev.Key,
 		Verdict:             verdict,
 		Reasons:             reasons,
@@ -126,10 +127,11 @@ func Evaluate(ev domain.RunEvidence) domain.TestResult {
 		SubjectModel:        ev.SubjectModel,
 		StubModel:           ev.StubModel,
 		HarnessID:           ev.HarnessID,
+		HarnessVersion:      ev.HarnessVersion,
 		TerminationReason:   string(ev.SubjectResult.Disposition),
 		Version:             ev.Definition.Version,
 		NumericID:           ev.Definition.NumericID,
-	}
+	}, ev)
 }
 
 // invertAssertions flips each declared assertion's outcome in place.
@@ -173,7 +175,11 @@ func hasRunEvent(records []domain.LogRecord, kind domain.RunEventKind) bool {
 //
 // NeedsRetry(r) is true exactly when ExclusionOf(r) is non-empty.
 func NeedsRetry(r domain.TestResult) bool {
-	return ExclusionOf(r) != ""
+	switch ExclusionOf(r) {
+	case "", domain.ExclusionModelMismatch, domain.ExclusionModelEvidenceMissing:
+		return false
+	}
+	return true
 }
 
 // findConditionDetail returns the Detail of the first condition matching kind,

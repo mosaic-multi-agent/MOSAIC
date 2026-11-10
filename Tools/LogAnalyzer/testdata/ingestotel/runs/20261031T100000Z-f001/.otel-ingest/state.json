@@ -1,0 +1,26 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 356,
+    "head_len": 356,
+    "head_sha256": "57631f29f88894cf0472ea8b113c482c8dac21a5823c2fd2e527c2257942ca58"
+  },
+  "placements": {},
+  "pending": [
+    {
+      "record": {
+        "record_id": "chat-sub-1",
+        "record_index": 0,
+        "model": "m-sub",
+        "provider": "github-copilot",
+        "token_usage": {
+          "input_tokens": 100,
+          "output_tokens": 10
+        }
+      },
+      "conversation_id": "vsc-session-6",
+      "chat_session_id": "sub-chat-session"
+    }
+  ],
+  "links": {}
+}

@@ -47,11 +47,13 @@ func makeTempMosaicRoot(t *testing.T) string {
 	return root
 }
 
-// writeProtocolDoc writes the given content to the canonical protocol source path inside root.
+// writeProtocolDoc writes the given content to Catalog/CommunicationProtocol.md inside root.
+// The location is a literal, not taken from the loader's own constant, so the tests
+// specify the location independently of the implementation.
 func writeProtocolDoc(t *testing.T, root string, content []byte) {
 	t.Helper()
-	mustMkdir(t, root, "Development", "Designs")
-	mustWriteFile(t, root, catalog.ProtocolSourceRelPath, content)
+	mustMkdir(t, root, "Catalog")
+	mustWriteFile(t, root, "Catalog/CommunicationProtocol.md", content)
 }
 
 // mustMkdir creates a directory (and all parents) under root. Fails the test on error.
@@ -117,7 +119,7 @@ func TestProtocolLoader_WellFormedDoc_ReturnsNoError(t *testing.T) {
 	root := makeTempMosaicRoot(t)
 	writeProtocolDoc(t, root, []byte(wellFormedProtocolDoc))
 
-	_, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	_, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 
 	if err != nil {
 		t.Errorf("LoadProtocol returned unexpected error for a well-formed document: %v", err)
@@ -130,7 +132,7 @@ func TestProtocolLoader_WellFormedDoc_ReturnsSourceVersion(t *testing.T) {
 	root := makeTempMosaicRoot(t)
 	writeProtocolDoc(t, root, []byte(wellFormedProtocolDoc))
 
-	content, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	content, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 	if err != nil {
 		t.Fatalf("LoadProtocol error: %v", err)
 	}
@@ -146,7 +148,7 @@ func TestProtocolLoader_WellFormedDoc_BothBlocksPresent(t *testing.T) {
 	root := makeTempMosaicRoot(t)
 	writeProtocolDoc(t, root, []byte(wellFormedProtocolDoc))
 
-	content, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	content, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 	if err != nil {
 		t.Fatalf("LoadProtocol error: %v", err)
 	}
@@ -162,7 +164,7 @@ func TestProtocolLoader_WellFormedDoc_SubagentBlockContainsExpectedContent(t *te
 	root := makeTempMosaicRoot(t)
 	writeProtocolDoc(t, root, []byte(wellFormedProtocolDoc))
 
-	content, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	content, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 	if err != nil {
 		t.Fatalf("LoadProtocol error: %v", err)
 	}
@@ -185,7 +187,7 @@ func TestProtocolLoader_WellFormedDoc_OrchestratorBlockContainsExpectedContent(t
 	root := makeTempMosaicRoot(t)
 	writeProtocolDoc(t, root, []byte(wellFormedProtocolDoc))
 
-	content, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	content, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 	if err != nil {
 		t.Fatalf("LoadProtocol error: %v", err)
 	}
@@ -209,7 +211,7 @@ func TestProtocolLoader_WellFormedDoc_OuterTextNotInSubagentBlock(t *testing.T) 
 	root := makeTempMosaicRoot(t)
 	writeProtocolDoc(t, root, []byte(wellFormedProtocolDoc))
 
-	content, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	content, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 	if err != nil {
 		t.Fatalf("LoadProtocol error: %v", err)
 	}
@@ -232,7 +234,7 @@ func TestProtocolLoader_WellFormedDoc_OuterTextNotInOrchestratorBlock(t *testing
 	root := makeTempMosaicRoot(t)
 	writeProtocolDoc(t, root, []byte(wellFormedProtocolDoc))
 
-	content, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	content, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 	if err != nil {
 		t.Fatalf("LoadProtocol error: %v", err)
 	}
@@ -257,7 +259,7 @@ func TestProtocolLoader_WellFormedDoc_SubagentBlockDoesNotContainBoundaryTags(t 
 	root := makeTempMosaicRoot(t)
 	writeProtocolDoc(t, root, []byte(wellFormedProtocolDoc))
 
-	content, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	content, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 	if err != nil {
 		t.Fatalf("LoadProtocol error: %v", err)
 	}
@@ -282,7 +284,7 @@ func TestProtocolLoader_WellFormedDoc_BlocksAreNonEmpty(t *testing.T) {
 	root := makeTempMosaicRoot(t)
 	writeProtocolDoc(t, root, []byte(wellFormedProtocolDoc))
 
-	content, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	content, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 	if err != nil {
 		t.Fatalf("LoadProtocol error: %v", err)
 	}
@@ -306,7 +308,7 @@ func TestProtocolLoader_MissingFile_ReturnsErrProtocolSourceMissing(t *testing.T
 	root := makeTempMosaicRoot(t)
 	// Deliberately do NOT write the protocol document.
 
-	_, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	_, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 
 	if err == nil {
 		t.Fatal("LoadProtocol returned nil error for a missing protocol file; expected ErrProtocolSourceMissing")
@@ -331,7 +333,7 @@ func TestProtocolLoader_UnparseableDocument_ReturnsErrProtocolSourceUnparseable(
 	unparseable := []byte("---\nversion: \"1.9\"\nversion: \"duplicate\"\n---\nBody text.\n")
 	writeProtocolDoc(t, root, unparseable)
 
-	_, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	_, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 
 	if err == nil {
 		t.Fatal("LoadProtocol returned nil error for an unparseable document; expected ErrProtocolSourceUnparseable")
@@ -362,7 +364,7 @@ Orchestrator content.
 `)
 	writeProtocolDoc(t, root, docMissingSubagent)
 
-	_, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	_, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 
 	if err == nil {
 		t.Fatal("LoadProtocol returned nil error when Subagent block is absent; expected ErrProtocolBlockMissing")
@@ -393,7 +395,7 @@ Subagent content.
 `)
 	writeProtocolDoc(t, root, docMissingOrchestrator)
 
-	_, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	_, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 
 	if err == nil {
 		t.Fatal("LoadProtocol returned nil error when Orchestrator block is absent; expected ErrProtocolBlockMissing")
@@ -423,7 +425,7 @@ Orchestrator content.
 `)
 	writeProtocolDoc(t, root, docEmptySubagent)
 
-	_, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	_, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 
 	if err == nil {
 		t.Fatal("LoadProtocol returned nil error for an empty Subagent block; expected ErrProtocolBlockEmpty")
@@ -455,7 +457,7 @@ Subagent content.
 `)
 	writeProtocolDoc(t, root, docEmptyOrchestrator)
 
-	_, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	_, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 
 	if err == nil {
 		t.Fatal("LoadProtocol returned nil error for an empty Orchestrator block; expected ErrProtocolBlockEmpty")
@@ -475,11 +477,11 @@ func TestProtocolLoader_WhitespaceOnlySubagentBlock_ReturnsErrProtocolBlockEmpty
 		"<CommunicationProtocol type=\"core\" name=\"Orchestrator\">\nOrchestrator content.\n</CommunicationProtocol>\n")
 	writeProtocolDoc(t, root, docWhitespaceOnly)
 
-	_, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	_, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 
 	if err == nil {
-		t.Fatal("LoadProtocol returned nil error for a whitespace-only Subagent block; "+
-			"whitespace-only content must be treated as empty (ErrProtocolBlockEmpty)", )
+		t.Fatal("LoadProtocol returned nil error for a whitespace-only Subagent block; " +
+			"whitespace-only content must be treated as empty (ErrProtocolBlockEmpty)")
 	}
 	if !errors.Is(err, catalog.ErrProtocolBlockEmpty) {
 		t.Errorf("error = %v; want an error wrapping catalog.ErrProtocolBlockEmpty", err)
@@ -497,7 +499,7 @@ func TestProtocolLoader_WhitespaceOnlyOrchestratorBlock_ReturnsErrProtocolBlockE
 		"<CommunicationProtocol type=\"core\" name=\"Orchestrator\">\n   \n\t\n\n</CommunicationProtocol>\n")
 	writeProtocolDoc(t, root, docWhitespaceOrchestrator)
 
-	_, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	_, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 
 	if err == nil {
 		t.Fatal("LoadProtocol returned nil error for a whitespace-only Orchestrator block; " +
@@ -533,7 +535,7 @@ Orchestrator content.
 `)
 	writeProtocolDoc(t, root, docNoVersion)
 
-	_, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	_, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 
 	if err == nil {
 		t.Fatal("LoadProtocol returned nil error when frontmatter version is missing; expected ErrProtocolVersionMissing")
@@ -570,7 +572,7 @@ Subagent content.
 `)
 	writeProtocolDoc(t, root, docMissingOrchestrator)
 
-	content, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	content, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 
 	// The error must be ErrProtocolBlockMissing, not a generic placeholder.
 	if err == nil {
@@ -589,7 +591,7 @@ Subagent content.
 }
 
 // TestProtocolLoader_RealProtocolDocument_CanBeLoaded verifies that the actual
-// Development/Designs/CommunicationProtocol.md in the MOSAIC repository is loadable.
+// Catalog/CommunicationProtocol.md in the MOSAIC repository is loadable.
 // This confirms that the implementation handles the real document's structure correctly
 // and that the source document has not drifted out of the loader's expected format.
 func TestProtocolLoader_RealProtocolDocument_CanBeLoaded(t *testing.T) {
@@ -598,7 +600,7 @@ func TestProtocolLoader_RealProtocolDocument_CanBeLoaded(t *testing.T) {
 		t.Fatalf("ResolveRoot: %v — cannot locate MOSAIC repository root for integration test", err)
 	}
 
-	content, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	content, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
 
 	if err != nil {
 		t.Fatalf("LoadProtocol(real repository root): %v; "+

@@ -1,5 +1,5 @@
 ---
-version: 1.0.0
+version: 1.0.1
 name: orchestrator
 description: Harness conformance test fixture — placeholder conversational orchestrator, never invoked by mosaic-run
 role: orchestrator

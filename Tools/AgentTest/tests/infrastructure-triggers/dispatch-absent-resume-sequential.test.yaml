@@ -1,0 +1,83 @@
+schema_version: 1
+name: dispatch-absent-resume-sequential
+id: 85
+version: 1
+changelog:
+  - version: 1
+    date: "2026-10-12"
+    changes: "Initial."
+description: >
+  D-2: Resuming an artifact with no dispatch field proceeds, reading it as
+  dispatch: sequential. The seed sits at the Stage block entry
+  (contracts-review SUCCESS) and Plan.md declares two stages that do not
+  depend on each other, so both iterations are eligible at once - the one
+  position where sequential and parallel dispatch differ observably.
+  Sequential means: do not refuse the resume over the missing field, start
+  Stage 1 (block-schedule order), and run that iteration's rows one at a time
+  before starting Stage 2 - so test-writer-tdd (Stage 1) is followed by
+  tests-review-tdd (Stage 1), not by test-writer-tdd for Stage 2. A refusal
+  fails with zero dispatches; parallel behaviour fails with a second
+  test-writer-tdd.
+layer: orchestrator
+negative: false
+
+subject:
+  identity: orchestrator
+  agent: orchestrator
+  workflows: [brownfield-tdd]
+  infrastructure_agents: []
+  opening_message: |
+    Continue the existing workflow run. Read the Orchestration.md in the
+    run-scoped folder and resume from where it left off. Do not ask me any
+    further questions - proceed immediately and autonomously.
+  invocation_kind: orchestrator
+  allowed_tools: [Task, Read, Write, Edit, Bash, Glob, Grep]
+
+stub_registry: dispatch-absent-resume-sequential.stubs.json
+
+timeout: 10m
+turn_limit: 15
+stop_after_invocations: 2
+
+seed_files:
+  - path: Orchestration-{run_id}/Orchestration.md
+    ref: design-done-no-dispatch-field.md
+  - path: Orchestration-{run_id}/Plan.md
+    ref: Plan-independent-stages.md
+  - path: Orchestration-{run_id}/Research.md
+    ref: Research.md
+  - path: Orchestration-{run_id}/Requirements.md
+    ref: Requirements.md
+  - path: Orchestration-{run_id}/ContractsDesign.md
+    ref: ContractsDesign.md
+  - path: Orchestration-{run_id}/Stage-1/Plan.md
+    ref: Stage-1-Plan.md
+  - path: Orchestration-{run_id}/Stage-1/PlanProgress.md
+    ref: Stage-1-PlanProgress.md
+  - path: Orchestration-{run_id}/Stage-2/Plan.md
+    ref: Stage-2-Plan-quiet.md
+  - path: Orchestration-{run_id}/Stage-2/PlanProgress.md
+    ref: Stage-2-PlanProgress.md
+
+assertions:
+  invocation_sequence:
+    exact: true
+    steps:
+      - { tool: dispatch, agent: test-writer-tdd }
+      - { tool: dispatch, agent: tests-review-tdd }
+
+  task_messages:
+    - at: 1
+      identity: { tool: dispatch, agent: test-writer-tdd }
+      required_input_artifacts:
+        - Orchestration-{run_id}/Stage-1/Plan.md
+      optional_input_artifacts:
+        - Orchestration-{run_id}/ContractsDesign.md
+        - Orchestration-{run_id}/Stage-1/PlanProgress.md
+    - at: 2
+      identity: { tool: dispatch, agent: tests-review-tdd }
+      required_input_artifacts:
+        - Orchestration-{run_id}/Stage-1/Plan.md
+      optional_input_artifacts:
+        - Orchestration-{run_id}/ContractsDesign.md
+        - Orchestration-{run_id}/Stage-1/PlanProgress.md

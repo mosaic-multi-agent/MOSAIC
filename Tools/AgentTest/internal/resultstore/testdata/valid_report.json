@@ -21,6 +21,8 @@
         {
           "subject_version": "v1.2.3",
           "subject_model": "github-copilot/claude-sonnet-4.6",
+          "observed_subject_models": ["github-copilot/claude-sonnet-4.6"],
+          "model_verification": "verified",
           "harness_id": "claude-code",
           "verdict": "pass",
           "duration_ms": 5000,

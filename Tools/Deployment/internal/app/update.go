@@ -14,16 +14,18 @@ package app
 // workflow-set drift reporting and the workflow_update "currently deployed" hint. It no
 // longer gates which non-orchestrator agents are checked.
 //
+// Hook membership rule: a Catalog hook bundle is refreshed only when at least one file of the
+// harness's hook variant is already on disk (see deployedHookIDs); hooks are never added, and
+// a manifest entry without files does not make a hook deployed. Only hooks the update writes
+// reach the executor, so up-to-date and skipped hooks are not rewritten or re-registered.
+//
 // The manifest is a complementary per-item lookup (content hashes, recorded versions) and
 // is not consulted for set membership. An agent present in the workspace but absent from
 // the manifest is still staleness-checked.
 
 import (
 	"context"
-	"path/filepath"
-	"strings"
 
-	"mosaic-deploy/internal/agentformat"
 	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
@@ -94,6 +96,14 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 		workspace = ws
 	}
 
+	if err := requireExistingWorkspace(workspace); err != nil {
+		return domain.RunSummary{}, err
+	}
+
+	if err := s.checkGhcpTarget(harnessID, workspace); err != nil {
+		return domain.RunSummary{}, err
+	}
+
 	scope := domain.ScopeProject
 
 	// Load the protocol source once for the run. Failure aborts before any file is written.
@@ -147,12 +157,12 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	if orchPath, pathErr := module.TargetPath(domain.TargetPathRequest{
 		Kind:     domain.ArtifactAgent,
 		Key:      orchestrator.Key,
-		FileName: filepath.Base(orchestrator.SourcePath),
+		FileName: plan.AgentFileName(module, orchestrator),
 		Scope:    scope,
 		GOOS:     s.deps.GOOS,
 	}); pathErr == nil {
 		orchTargetPath = orchPath
-		orchState = probeDeployedArtifact(workspace, orchTargetPath, module.Descriptor().Frontmatter.ModelKey, domain.ArtifactAgent, module.Descriptor())
+		orchState = probeAgentWithRecordedLegacy(workspace, module, snap, orchestrator.Key, orchTargetPath)
 	}
 
 	// When this mode excludes orchestrators from force-inclusion, the orchestrator enters the
@@ -169,17 +179,19 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	// if found present on disk.
 	var orchScriptState domain.DeployedArtifactState
 	var orchScriptTargetPath string
+	var orchScriptAgent domain.Agent
 	if plan.OrchestratorExcludedFor(domain.ModeUpdateWorkspace) {
 		if script, ok := s.deps.Catalog.OrchestratorScript(); ok {
 			if scriptPath, pathErr := module.TargetPath(domain.TargetPathRequest{
 				Kind:     domain.ArtifactAgent,
 				Key:      script.Key,
-				FileName: filepath.Base(script.SourcePath),
+				FileName: plan.AgentFileName(module, script),
 				Scope:    scope,
 				GOOS:     s.deps.GOOS,
 			}); pathErr == nil {
 				orchScriptTargetPath = scriptPath
-				orchScriptState = probeDeployedArtifact(workspace, orchScriptTargetPath, module.Descriptor().Frontmatter.ModelKey, domain.ArtifactAgent, module.Descriptor())
+				orchScriptAgent = script
+				orchScriptState = probeAgentWithRecordedLegacy(workspace, module, snap, script.Key, orchScriptTargetPath)
 				if orchScriptState.Present {
 					scannedAgentKeys = append(scannedAgentKeys, script.Key)
 				}
@@ -188,14 +200,29 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	}
 
 	existing := discoverExistingWorkflows(orchState)
-	workflowIDs := unionPreserveOrder(existing, req.AddWorkflowIDs)
+	kept, err := readKeptWorkflows(workspace, module.Descriptor(), s.deps.Catalog, []deployedOrchestratorFile{
+		{TargetPath: orchTargetPath, Present: orchState.Present},
+		{TargetPath: orchScriptTargetPath, Present: orchScriptState.Present},
+	})
+	if err != nil {
+		return domain.RunSummary{}, err
+	}
+	// Only catalog-supplied ids reach the strict resolvers; deployed custom ids are kept as deployed.
+	workflowIDs, _, err := classifyExplicitWorkflowIDs(s.deps.Catalog, unionPreserveOrder(existing, req.AddWorkflowIDs), kept.customIDSet())
+	if err != nil {
+		return domain.RunSummary{}, err
+	}
+	s.recordKeptWorkflowWarnings(kept.ids)
 
 	// Resolve the artifact set from both the discovered workflow IDs and the workspace-scan
 	// matched keys. Both sources union into the same set; this call is the app layer's own
 	// probe-preparation step. plan.Build's internal resolution receives the identical values
 	// via plan.Input.ScannedAgentKeys to ensure the probe map and the built plan agree.
+	hookIDs := s.deployedHookIDs(module, workspace, scope)
 	set, err := plan.ResolveArtifactsFrom(s.deps.Catalog, plan.Selection{
+		HookIDs:             hookIDs,
 		WorkflowIDs:         workflowIDs,
+		KeptWorkflowIDs:     kept.ids,
 		ScannedAgentKeys:    scannedAgentKeys,
 		ExcludeOrchestrator: plan.OrchestratorExcludedFor(domain.ModeUpdateWorkspace),
 	})
@@ -238,6 +265,9 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 			s.deps.Logger.Event(logging.Event{Level: logging.LevelWarn, Kind: "decode", Message: notice})
 		}
 	}
+
+	applyHookPresence(workspace, deployedState, hookPlansByTargetPath(module, set.Hooks, plannedPaths, scope))
+	legacyAgentPaths := applyRecordedLegacyAgents(workspace, module, snap, plannedPaths, deployedState)
 
 	modelSelections := deployedModelSelections(set.Agents, plannedPaths, deployedState)
 
@@ -293,26 +323,33 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	}
 	toolMappingsVersion := config.HashToolDestinations(toolCfg.ToolDestinations, userCfg.ToolDestinations)
 
+	// Already-declared catalog-backed infrastructure agents are refreshed; none is ever added.
+	orchRefresh := s.orchestratorRefresh([]probedOrchestrator{
+		{Agent: orchestrator, TargetPath: orchTargetPath, State: orchState},
+		{Agent: orchScriptAgent, TargetPath: orchScriptTargetPath, State: orchScriptState},
+	})
+
 	planInput := plan.Input{
 		Catalog: s.deps.Catalog, Module: module, Mode: domain.ModeUpdateWorkspace,
 		WorkspacePath: workspace, Scope: scope, GOOS: s.deps.GOOS,
-		Manifest: snap, WorkflowIDs: workflowIDs,
+		Manifest: snap, WorkflowIDs: workflowIDs, KeptWorkflowIDs: kept.ids, HookIDs: hookIDs,
 		// ScannedAgentKeys carries the same slice used for the app layer's ResolveArtifactsFrom
 		// call above, ensuring the probe map and the built plan resolve the identical artifact set.
-		ScannedAgentKeys:    scannedAgentKeys,
-		DeployedState:       deployedState,
-		Models:              allModels,
-		ToolMappingsVersion: toolMappingsVersion,
-		ProtocolVersion:     protocol.Version,
-		BundleVersion:       bundle.Version,
+		ScannedAgentKeys:                scannedAgentKeys,
+		DeployedState:                   deployedState,
+		LegacyAgentPaths:                legacyAgentPaths,
+		Models:                          allModels,
+		ToolMappingsVersion:             toolMappingsVersion,
+		ProtocolVersion:                 protocol.Version,
+		BundleVersion:                   bundle.Version,
+		InfrastructureDeclarations:      refreshIntent(),
+		OrchestratorRegionUndeliverable: orchestratorRegionUndeliverable(s.deps.Catalog, module, set.Agents),
 	}
 	p, err := s.deps.Planner.Build(ctx, planInput)
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
-	for _, g := range p.Gaps {
-		s.deps.Todo.AddGap(g)
-	}
+	migrateLegacyGhcpAgents(&p, snap)
 
 	conflicts := map[string]domain.ConflictDecision{}
 	var latchedDecision domain.ConflictDecision
@@ -340,130 +377,57 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 				Kind: domain.GapSkippedFile, Subject: item.Ref.Key,
 				Detail: "file was locally modified and the user chose to skip it",
 			})
+			if gap, ok := orchRefresh.skipGap(item); ok {
+				s.deps.Todo.AddGap(gap)
+			}
 		}
 	}
 
-	// Build the harness-only refresh plan. Each eligible agent is asked once for its scope,
-	// with apply-to-all latching mirroring the conflict loop's applyToAllLatch pattern.
-	//
-	// Consent contract: the refresh-scope prompt is the sole consent mechanism for
-	// harness-only agents (they bypass the local-modification conflict prompt by design).
-	// Only an explicit answer (Answered status) authorises a refresh. A declined outcome
-	// — SkippedOne, SkippedAll, Cancelled, or transport error — produces no plan item and
-	// no content-plan entry; the file is left byte-identical on disk.
-	//
-	// Prompt guard: the scope question is suppressed entirely when no eligible agent exists.
-	// Never prompt for an empty set.
-	//
-	// Conflict-loop interaction: harness-only agents never enter the conflict loop above.
-	// They are appended here with ActionUpdate only when the user explicitly answered the
-	// scope prompt. A harness-only agent is user-authored by definition, so it would trip
-	// the local-modification prompt on every run; the refresh-scope prompt replaces that
-	// mechanism entirely with explicit consent.
-	//
-	// Version-stamping decision: no entry is added to versionStamps for harness-only agents.
-	// Stamping implies a source version to stamp from; there is none for a harness-only
-	// agent, and inventing a stamp would make the file appear catalog-backed on the next run.
-	//
-	// Manifest decision: harness-only agents remain manifest-invisible; detection stays
-	// purely the two-signal rule.
-	//
-	// Dry-run decision: discovery and prompting still occur when DryRun is true; no byte is
-	// written because DryRun is forwarded to the executor via ExecRequest.DryRun.
-	harnessOnlyPlan := make(map[string]harnessOnlyContentPlan, len(harnessOnlyAgents))
-	if len(harnessOnlyAgents) > 0 {
-		var latchedDecision RefreshDecision
-		harnessApplyToAllLatch := false
-		for _, agent := range harnessOnlyAgents {
-			var decision RefreshDecision
-			if harnessApplyToAllLatch {
-				decision = latchedDecision
-			} else {
-				decision = s.askHarnessOnlyRefreshScope(ctx, agent)
-				if decision.ApplyToAll {
-					harnessApplyToAllLatch = true
-					latchedDecision = decision
-				}
-			}
-
-			// Consent gate: a declined outcome means no plan item and no content-plan entry.
-			// The file is left byte-identical on disk.
-			if !decision.Refresh {
-				continue
-			}
-
-			harnessOnlyPlan[agent.TargetPath] = harnessOnlyContentPlan{Agent: agent, Scope: decision.Scope}
-
-			// Emit an observability event identifying this agent as harness-only and its scope.
-			// Only emitted when the user explicitly authorised a refresh; declined agents must
-			// not be reported with a scope that was never applied.
-			// The harness_only and scope fields are the contract a caller or a test reads to
-			// determine which agents received degraded-quality treatment and at what breadth.
-			s.deps.Logger.Event(logging.Event{
-				Kind:    "transform",
-				Subject: agent.TargetPath,
-				Message: "harness-only agent refreshed (degraded: no generic counterpart)",
-				Fields: map[string]string{
-					"harness_only": "true",
-					"scope":        string(decision.Scope),
-					"regions":      strings.Join(decision.Scope.Regions(), ","),
-				},
-			})
-
-			// Append the harness-only agent to the plan. SourcePath is deliberately empty:
-			// it is the visible marker that this item has no catalog source and must never
-			// be passed to Catalog.ReadSource.
-			p.Items = append(p.Items, domain.PlanItem{
-				Ref:        domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: agent.Key},
-				SourcePath: "",
-				TargetPath: agent.TargetPath,
-				Action:     domain.ActionUpdate,
-				Reason:     "harness-only agent (no generic counterpart): refreshing " + string(decision.Scope),
-			})
-		}
+	// Only hooks the update writes keep their registration gaps and steps; the executor is
+	// handed the same set, so unchanged and skipped hooks are neither rewritten nor re-registered.
+	writtenHooks := writtenHookBundles(set.Hooks, p.Items, conflicts)
+	dropUnwrittenHookRegistrations(&p, module, set.Hooks, writtenHooks, scope)
+	for _, g := range p.Gaps {
+		s.deps.Todo.AddGap(g)
 	}
 
+	harnessOnlyPlan := s.planHarnessOnlyRefresh(ctx, harnessOnlyAgents, &p)
+
+	report := s.conflictReportFor(module.Ref().ID, workflowIDs, unionPreserveOrder(existing, orchScriptState.Workflows.IDs()), req.AutoConfirmPlan)
 	// Review is always shown; AutoConfirmPlan only controls whether a decline/cancel answer
 	// aborts the run (see deploy.go for the same rationale).
+	p.ConflictReport = report
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {
 		return domain.RunSummary{}, rerr
 	}
-	if !req.AutoConfirmPlan && (ans.Status == domain.Cancelled || !ans.Confirm) {
-		return domain.RunSummary{}, ErrPlanNotConfirmed
+	if !req.AutoConfirmPlan && !req.DryRun && (ans.Status == domain.Cancelled || !ans.Confirm) {
+		return domain.RunSummary{ConflictReport: report}, ErrPlanNotConfirmed
 	}
 
 	agentByKey := make(map[string]domain.Agent, len(set.Agents))
 	for _, a := range set.Agents {
 		agentByKey[a.Key] = a
 	}
-	hookPlans := buildHookPlans(module, set.Hooks, scope)
+	hookPlans := buildHookPlans(module, writtenHooks, scope)
 
 	workflowBlocks := s.buildWorkflowBlocks(workflowIDs)
-	desc := module.Descriptor()
-	deployedReader := func(item domain.PlanItem) (DeployedRead, agentformat.Operation, error) {
-		return readDeployedPlanItem(workspace, desc, item)
-	}
-	// Infrastructure agent selection is intentionally omitted from the update flow.
-	// Update re-deploys whatever was already deployed; it does not re-prompt for
-	// infrastructure agent choices. The InfrastructureAgents region is preserved
-	// byte-for-byte from the deployed file by applyInfrastructureRegion's
-	// deployed-content fallback: when InfrastructureAgents is empty and req.Deployed
-	// is non-nil, applyInfrastructureRegion parses the deployed file and lifts the
-	// region content directly. This is an InjectionInfrastructure-class managed region
-	// and is never a member of buildDeployedRegionMap/deployedContent.
+	deployedRule := newDeployedBytes(workspace, nil).withMigratedAgents(p)
 	var ownedKeyDiffs []domain.OwnedKeyDifference
-	contentFn := s.buildContent(module, agentByKey, allModels, req.CustomTools, nil, workflowBlocks, nil, scope, deployedReader, toolMappingsVersion, protocol, bundle, harnessOnlyPlan, &ownedKeyDiffs)
+	// Update never asks about or adds infrastructure declarations; it refreshes stale
+	// catalog-backed ones in place (refresh-only merge), leaving all others byte-identical.
+	contentFn := s.buildContent(module, agentByKey, allModels, req.CustomTools, nil, workflowBlocks, nil, scope, deployedRule.funnelReader(module.Descriptor()), toolMappingsVersion, protocol, bundle, harnessOnlyPlan, &ownedKeyDiffs, append(orchRefresh.refreshContentOptions(s), withKeptWorkflows(kept.byPath))...)
 
-	versionStamps := buildVersionStamps(set.Agents, set.Skills, set.Hooks, p.Items, module.Descriptor(), toolMappingsVersion)
+	versionStamps := s.withProvenance(buildVersionStamps(set.Agents, set.Skills, set.Hooks, p.Items, module.Descriptor(), toolMappingsVersion), p.Items)
 
 	now := s.now()
 	execReq := deploy.ExecRequest{
 		Plan:          p,
 		MosaicRoot:    s.deps.MosaicRoot,
-		Content:       contentFn,
+		Content:       deployedRule.keepingUnchangedMigrations(p, contentFn),
 		Conflicts:     conflicts,
 		VersionStamps: versionStamps,
+		ManifestMeta:  s.fullRunManifestMeta(),
 		Hooks:         hookPlans,
 		TodoItems:     s.deps.Todo.Items,
 		TodoMeta: todo.Meta{
@@ -476,6 +440,10 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 		// excluded from reversal by the executor and keep today's non-atomic semantics.
 		Atomic:      true,
 		ToolVersion: s.deps.ToolVersion,
+	}
+
+	if err := s.supplyStack(&execReq); err != nil {
+		return domain.RunSummary{}, err
 	}
 
 	result, err := s.deps.Executor.Execute(ctx, execReq)
@@ -509,5 +477,5 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 
 	summary := s.buildSummary(domain.ModeUpdateWorkspace, harnessRef, workspace, result)
 	summary.OwnedKeyDifferences = ownedKeyDiffs
-	return summary, nil
+	return withDryRunPlan(withConflictReport(summary, report), req.DryRun, p), nil
 }

@@ -40,6 +40,8 @@ type Input struct {
 	GOOS            string
 	Manifest        manifest.Snapshot
 	WorkflowIDs            []string                         // selection order is preserved into Plan.Workflows
+	// KeptWorkflowIDs are workflow ids the caller keeps as deployed; the catalog does not supply them.
+	KeptWorkflowIDs        []string
 	// SubagentIDs are ordinary (non-infrastructure) subagents named directly, populated only by
 	// ModeDeployAgents. The planner forwards them into Selection.SubagentIDs; nil in every other
 	// mode.
@@ -90,6 +92,20 @@ type Input struct {
 	// own ResolveArtifactsFrom call. If the two diverge, the probe map and the built plan
 	// describe different artifact sets and the plan is wrong.
 	ScannedAgentKeys []string
+
+	// InfrastructureDeclarations is the caller's intent for the infrastructure declarations of
+	// orchestrator-role items. The zero value disables infrastructure drift.
+	InfrastructureDeclarations InfrastructureDeclarationIntent
+
+	// LegacyAgentPaths maps a planned agent target path to the manifest-recorded legacy path
+	// its deployed state was probed from (the recorded-legacy probe). nil: no migrating
+	// agents; classification is as before.
+	LegacyAgentPaths map[string]string
+
+	// OrchestratorRegionUndeliverable names orchestrator-role agent keys whose source has no
+	// OrchestratorHarnessConstraints marker while the harness has no orchestrator content.
+	// For these the expected orchestrator_injections_version is "". nil: compare as before.
+	OrchestratorRegionUndeliverable map[string]bool
 }
 
 // ArtifactSet is the derived deployment set: the union of referenced agents across all
@@ -104,11 +120,12 @@ type ArtifactSet struct {
 
 var (
 	// ErrUnknownWorkflow is returned by ResolveArtifacts when a workflow ID is not found
-	// in the catalog.
+	// in the catalog. The wrapping message names the id and the catalogs searched.
 	ErrUnknownWorkflow = errors.New("workflow not found")
 
 	// ErrUnknownAgent is returned by ResolveArtifacts when a workflow references an agent
-	// that does not exist in the catalog. The error is not silent: the caller must handle
+	// that does not exist in the catalog, and (as a RequestedAgentNotFoundError) when an
+	// agent requested directly is not found. The error is not silent: the caller must handle
 	// it rather than deploying a subtly incomplete artifact set.
 	ErrUnknownAgent = errors.New("workflow references an agent that does not exist")
 

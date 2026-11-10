@@ -5,7 +5,6 @@ package app
 // deploy-new and update flows to populate plan.Input.DeployedState before calling Build.
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -16,7 +15,6 @@ import (
 	"mosaic-deploy/internal/manifest"
 	"mosaic-deploy/internal/plan"
 )
-
 
 // probeDeployedArtifact reads a single deployed artifact at <workspace>/<targetPath> and
 // reports its state. modelKey is the harness's model frontmatter key
@@ -94,8 +92,15 @@ func probeDeployedArtifact(workspace, targetPath, modelKey string, kind domain.A
 	// this signal determines whether AgentStaleness should compare InjectionsVersion at all.
 	state.InjectionsVersion, state.HasInjectionRegion = extractDeployedInjectionVersion(canonical, "injections_version")
 
+	// Read the orchestrator injection version from the OrchestratorHarnessConstraints region tag.
+	// No frontmatter fallback: an untagged second region reads as present with an empty version.
+	state.OrchestratorInjectionsVersion, state.HasOrchestratorInjectionRegion = extractDeployedOrchestratorInjectionVersion(canonical)
+
 	// Extract workflow section markers; nil when none are present.
 	state.Workflows = extractDeployedWorkflows(canonical)
+
+	// Extract the infrastructure agent declarations; nil when the file declares none.
+	state.InfrastructureDeclarations = extractDeployedInfrastructure(canonical)
 
 	// Extract the protocol version from the deployed <CommunicationProtocol type="managed"> region.
 	// Returns "" when the region is absent or carries no version attribute; both are treated as
@@ -123,8 +128,28 @@ func readDeployedStamp(fm *docformat.Frontmatter, legacyKey string) string {
 	return ""
 }
 
+// extractDeployedOrchestratorInjectionVersion returns the version attribute of the deployed
+// OrchestratorHarnessConstraints region and whether that region is present at all. The version
+// is empty for an untagged region; the region is found wherever it sits in the body.
+func extractDeployedOrchestratorInjectionVersion(data []byte) (version string, found bool) {
+	if len(data) == 0 {
+		return "", false
+	}
+	doc, err := ParseGenericSource(data)
+	if err != nil {
+		return "", false
+	}
+	for _, node := range doc.Body().DeployedRegions() {
+		if node.Name() == docformat.OrchestratorHarnessRegionName {
+			return node.Version(), true
+		}
+	}
+	return "", false
+}
+
 // extractDeployedInjectionVersion parses a deployed agent file and returns the version
-// attribute from the first InjectionHarness-class region found, and whether such a region
+// attribute from the first shared InjectionHarness-class region found (every harness region
+// except the orchestrator region, which has its own reader), and whether such a region
 // was present at all. found is true whenever at least one InjectionHarness-class region
 // exists in the body, regardless of whether that region carries a version attribute.
 //
@@ -136,7 +161,7 @@ func readDeployedStamp(fm *docformat.Frontmatter, legacyKey string) string {
 // legacyFrontmatterKey is the agentfields registry key used for the frontmatter fallback
 // (e.g., "injections_version"). The primary path reads the tag version from whichever
 // InjectionHarness-class region it finds first, since all harness regions in a file share
-// the same version value (written by applyHarnessRegion with a single role-selected value).
+// the same version value (the shared injections version, written by applyHarnessRegion).
 func extractDeployedInjectionVersion(data []byte, legacyFrontmatterKey string) (version string, found bool) {
 	if len(data) == 0 {
 		return "", false
@@ -153,7 +178,7 @@ func extractDeployedInjectionVersion(data []byte, legacyFrontmatterKey string) (
 		if classErr != nil {
 			continue // skip unclassified or error regions
 		}
-		if class == mosaic.InjectionHarness {
+		if class == mosaic.InjectionHarness && node.Name() != docformat.OrchestratorHarnessRegionName {
 			v := node.Version()
 			if v != "" {
 				// Region found with a version attribute: return immediately.
@@ -175,43 +200,6 @@ func extractDeployedInjectionVersion(data []byte, legacyFrontmatterKey string) (
 		return readDeployedStamp(doc.Frontmatter(), legacyFrontmatterKey), foundRegion
 	}
 	return "", foundRegion
-}
-
-// probeDeployedHookBundle reports the on-disk state of a hook bundle, whose target path is a
-// directory rather than a file. Present is true when <workspace>/<targetPath> exists, is a
-// directory, and contains at least one regular file directly within it; false in every other
-// case, including an unreadable path, a file at that path, and an empty directory.
-//
-// ContentHash is manifest.Hash(nil) whenever Present is true, matching the executor's hook
-// manifest convention (hook bundles are recorded with a nil content hash), so an untouched
-// bundle does not classify as a local modification. Every version field is left empty: a hook
-// bundle carries no in-file version marker.
-//
-// It never returns an error; any I/O failure yields Present: false.
-func probeDeployedHookBundle(workspace, targetPath string) domain.DeployedArtifactState {
-	fullPath := filepath.Join(workspace, targetPath)
-
-	entries, err := os.ReadDir(fullPath)
-	if err != nil {
-		// Path absent, unreadable, or is not a directory.
-		return domain.DeployedArtifactState{Present: false}
-	}
-
-	// A hook bundle is present only when at least one regular file exists directly inside
-	// the directory. Subdirectories and other non-regular entries do not count.
-	for _, entry := range entries {
-		if !entry.IsDir() && entry.Type().IsRegular() {
-			return domain.DeployedArtifactState{
-				Present:     true,
-				ContentHash: manifest.Hash(nil),
-				// All version fields left empty: a hook bundle directory carries no in-file
-				// version marker. The manifest entry's recorded Version is the only version
-				// signal for hooks; classifyHookItem reads it via HookStalenessFromRecorded.
-			}
-		}
-	}
-
-	return domain.DeployedArtifactState{Present: false}
 }
 
 // probeDeployedState probes every path in paths, passing modelKey and src to each
@@ -304,11 +292,11 @@ func probeDeployedStateWithIndex(
 			continue
 		}
 
-		// Hook artifacts deploy to a directory, not a file. Use the directory-oriented probe
-		// so that a non-empty hook bundle directory is observed as present. probeDeployedArtifact
-		// always yields Present: false for directories and must not be used for hooks.
+		// Hook bundles deploy as files directly in the hooks directory, not at the planned
+		// <hooks dir>/<key> path, so a read at that path cannot observe them. Record absent here;
+		// callers that plan hooks apply the layout-aware presence post-pass (applyHookPresence).
 		if pp.Ref.Kind == domain.ArtifactHook {
-			result[pp.TargetPath] = probeDeployedHookBundle(workspace, pp.TargetPath)
+			result[pp.TargetPath] = domain.DeployedArtifactState{}
 			continue
 		}
 
@@ -320,26 +308,15 @@ func probeDeployedStateWithIndex(
 					return nil, err
 				}
 				if resolved == "" {
-					// Agent has a numeric id but no deployed file matches in the index.
-					// Probe at the planned target path when that path is not already claimed
-					// by another agent's indexed file. A claimed path carries a mosaic_id that
-					// does not match this agent, so it must not be treated as belonging to it.
-					// An unclaimed path may hold a file written without an ID stamp (e.g. a
-					// Codex TOML file from a first deploy or from a tool that omits the stamp),
-					// and probing it gives the planner the version information it needs for
-					// idempotency. If the file is absent, probeDeployedArtifact returns
-					// Present: false — the same outcome as the old unconditional Present: false.
-					normalizedTargetPath := filepath.FromSlash(pp.TargetPath)
-					if claimedPaths[normalizedTargetPath] {
-						// The file at this path is owned by a different agent; do not probe.
-						result[pp.TargetPath] = domain.DeployedArtifactState{Present: false}
-					} else {
-						fallback := probeDeployedArtifact(workspace, pp.TargetPath, modelKey, pp.Ref.Kind, src)
-						if fallback.Present && parseFailedPaths[pp.TargetPath] {
-							fallback.ParseFailed = true
-						}
-						result[pp.TargetPath] = fallback
-					}
+					// Agent has a numeric id but no deployed file matches in the index:
+					// probe the planned path (see probeAgentAtPlannedPath for the rules).
+					result[pp.TargetPath] = probeAgentAtPlannedPath(workspace, pp.TargetPath, modelKey, src,
+						claimedPaths[filepath.FromSlash(pp.TargetPath)], parseFailedPaths[pp.TargetPath])
+				} else if isLegacySiblingPath(resolved, pp.TargetPath) {
+					// A legacy X.md found by id is not the X.agent.md this run writes: the
+					// planned path is probed, so the agent is deployed as X.agent.md.
+					result[pp.TargetPath] = probeAgentAtPlannedPath(workspace, pp.TargetPath, modelKey, src,
+						claimedPaths[filepath.FromSlash(pp.TargetPath)], parseFailedPaths[pp.TargetPath])
 				} else {
 					// Probe at the id-resolved path (may differ from planned path if renamed).
 					result[pp.TargetPath] = probeDeployedArtifact(workspace, resolved, modelKey, pp.Ref.Kind, src)

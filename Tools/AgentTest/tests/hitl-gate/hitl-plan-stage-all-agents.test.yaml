@@ -7,7 +7,7 @@ changelog:
     date: "2026-01-01"
     changes: "Initial."
 description: >
-  Scenario H-3. Plan stage table marks stage 1 with HITL=Yes. The first
+  Scenario H-3. Plan stage table marks stage 1 with HITL=TRUE. The first
   agent (test-writer-tdd) already completed. The orchestrator must dispatch
   the second agent in the same stage (tests-review-tdd) also with
   human_in_the_loop: true — stage HITL applies to ALL agents, not just

@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "test_id": "dispatch-absent-resume-sequential",
+  "on_unmatched": "halt",
+  "stubs": [
+    {
+      "match": { "tool": "dispatch", "agent": "test-writer-tdd", "invocation": 1 },
+      "response": {
+        "agent_instance_id": "test-writer-tdd#8",
+        "run_id": "{run_id}",
+        "status_code": "SUCCESS",
+        "status_message": "Tests written for stage 1 verbose flag parsing."
+      }
+    },
+    {
+      "match": { "tool": "dispatch", "agent": "test-writer-tdd", "invocation": 2 },
+      "response": {
+        "agent_instance_id": "test-writer-tdd#9",
+        "run_id": "{run_id}",
+        "status_code": "SUCCESS",
+        "status_message": "Tests written for stage 2 quiet flag."
+      }
+    },
+    {
+      "match": { "tool": "dispatch", "agent": "tests-review-tdd", "invocation": 1 },
+      "response": {
+        "agent_instance_id": "tests-review-tdd#9",
+        "run_id": "{run_id}",
+        "status_code": "SUCCESS",
+        "status_message": "Tests review passed for stage 1, no findings."
+      },
+      "side_effects": {
+        "create_files": [
+          {
+            "path": "Orchestration-{run_id}/Stage-1/tests-review-tdd.md",
+            "content": "---\nrun_id: {run_id}\ncreated_by: tests-review-tdd#9\nhuman_approved: false\n---\n# Tests Review - Stage 1\n\nNo findings.\n"
+          }
+        ]
+      }
+    }
+  ]
+}

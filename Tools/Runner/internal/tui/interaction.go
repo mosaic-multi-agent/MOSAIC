@@ -14,7 +14,7 @@ type questionKind int
 
 const (
 	questionSelectOne  questionKind = iota
-	questionSelectMany              // currently unused in runner, kept for interface compliance
+	questionSelectMany
 	questionAskText
 	questionConfirm
 	questionNotice
@@ -54,6 +54,7 @@ type answerMsg struct {
 //	err := tui.Run(ctx, workflows, sess, tui.Options{Interaction: ref})
 type ProgramRef struct {
 	prog atomic.Pointer[tea.Program]
+	act  activitySender
 }
 
 // NewProgramRef returns a ProgramRef that implements interaction.Interaction. Pass it as
@@ -84,9 +85,17 @@ func (r *ProgramRef) SelectOne(_ context.Context, q interaction.ChoiceQuestion) 
 	return ans.choiceAns, ans.err
 }
 
-// SelectMany is not used by the runner's session; it returns immediately with no selection.
-func (r *ProgramRef) SelectMany(_ context.Context, _ interaction.ChoiceQuestion) (interaction.MultiChoiceAnswer, error) {
-	return interaction.MultiChoiceAnswer{Status: interaction.Answered}, nil
+// SelectMany sends a multi-select question to the TUI and blocks until the user answers.
+// Without a wired program it answers SkippedOne so no caller waits forever.
+func (r *ProgramRef) SelectMany(_ context.Context, q interaction.ChoiceQuestion) (interaction.MultiChoiceAnswer, error) {
+	p := r.program()
+	if p == nil {
+		return interaction.MultiChoiceAnswer{Status: interaction.SkippedOne}, nil
+	}
+	reply := make(chan answerMsg, 1)
+	p.Send(questionMsg{kind: questionSelectMany, choiceQ: q, reply: reply})
+	ans := <-reply
+	return ans.multiChoiceAns, ans.err
 }
 
 // AskText sends a text question to the TUI and blocks until the user answers.

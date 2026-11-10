@@ -208,11 +208,11 @@ class TestUnknownRunRoutingSessionEvents(unittest.TestCase):
         )
 
     def test_user_prompt_submit_without_run_id_routes_to_unknown_run(self):
-        """UserPromptSubmit whose user_prompt has no run_id routes to unknown-run/."""
+        """UserPromptSubmit whose prompt has no run_id routes to unknown-run/."""
         payload = {
             "hook_event_name": "UserPromptSubmit",
             "session_id": "unknown-route-sess-005",
-            "user_prompt": "Hello, no run_id in this message",
+            "prompt": "Hello, no run_id in this message",
         }
         _dispatch_with_env(payload, self.tmp_path)
 
@@ -475,7 +475,7 @@ class TestNoCrashOnExtractionFailure(unittest.TestCase):
             {"hook_event_name": "SessionStart", "session_id": "s1"},
             {"hook_event_name": "SessionEnd", "session_id": "s1"},
             {"hook_event_name": "UserPromptSubmit", "session_id": "s1",
-             "user_prompt": "no run id here"},
+             "prompt": "no run id here"},
             {"hook_event_name": "Stop", "session_id": "s1",
              "last_assistant_message": "done"},
             {"hook_event_name": "Notification", "session_id": "s1",
@@ -483,7 +483,7 @@ class TestNoCrashOnExtractionFailure(unittest.TestCase):
             {"hook_event_name": "PreToolUse", "session_id": "s1",
              "tool_name": "Bash", "tool_input": {}},
             {"hook_event_name": "PostToolUse", "session_id": "s1",
-             "tool_name": "Bash", "tool_output": "output"},
+             "tool_name": "Bash", "tool_response": "output"},
             {"hook_event_name": "PostToolUseFailure", "session_id": "s1",
              "tool_name": "Bash", "tool_error": "error"},
             {"hook_event_name": "SubagentStart", "session_id": "s1",
@@ -543,7 +543,7 @@ class TestNoCrashOnExtractionFailure(unittest.TestCase):
                 "hook_event_name": "PostToolUse",
                 "session_id": "no-drop-tool-001",
                 "tool_name": "Bash",
-                "tool_output": "hi",
+                "tool_response": "hi",
             },
             {
                 "hook_event_name": "PostToolUseFailure",
@@ -577,13 +577,10 @@ class TestNoCrashOnExtractionFailure(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestKnownRunIdUnknownAgentRouting(unittest.TestCase):
-    """SubagentStart where run_id is successfully extracted from agent_prompt but
-    agent_instance_id extraction fails routes to
-    OrchestrationLogs/{run_id}/unknown-agent/.
-
-    This is routing case 4 from the design's routing table (ContractsDesign.md,
-    Log routing rules section):
-      run_id extracted, agent_instance_id extraction fails → {run_id}/unknown-agent/
+    """SubagentStart whose agent_prompt names a run id but carries no agent
+    instance id is not a MOSAIC dispatch: it does not bind the session, so it
+    routes to OrchestrationLogs/unknown-run/unknown-agent/ and nothing is
+    written under the named run's folder.
     """
 
     def setUp(self):
@@ -595,7 +592,7 @@ class TestKnownRunIdUnknownAgentRouting(unittest.TestCase):
 
     def test_subagent_start_with_run_id_but_no_agent_id_creates_unknown_agent_folder(self):
         """SubagentStart carrying a valid run_id but no extractable agent_instance_id
-        must create OrchestrationLogs/{run_id}/unknown-agent/."""
+        must create OrchestrationLogs/unknown-run/unknown-agent/ and no run folder."""
         payload = {
             "hook_event_name": "SubagentStart",
             "session_id": "known-run-unknown-agent-001",
@@ -606,17 +603,21 @@ class TestKnownRunIdUnknownAgentRouting(unittest.TestCase):
         _dispatch_with_env(payload, self.tmp_path)
 
         unknown_agent_dir = (
-            self.tmp_path / "OrchestrationLogs" / VALID_RUN_ID / "unknown-agent"
+            self.tmp_path / "OrchestrationLogs" / "unknown-run" / "unknown-agent"
         )
         self.assertTrue(
             unknown_agent_dir.exists(),
-            f"OrchestrationLogs/{VALID_RUN_ID}/unknown-agent/ was not created when "
-            "run_id extraction succeeded but agent_instance_id extraction failed"
+            "OrchestrationLogs/unknown-run/unknown-agent/ was not created for a "
+            "SubagentStart prompt without an agent instance id"
+        )
+        self.assertFalse(
+            (self.tmp_path / "OrchestrationLogs" / VALID_RUN_ID).exists(),
+            "A prompt without an agent instance id must not bind to its run id"
         )
 
     def test_subagent_start_events_file_at_run_id_unknown_agent(self):
         """The invocation_start event lands in
-        OrchestrationLogs/{run_id}/unknown-agent/03_events.jsonl."""
+        OrchestrationLogs/unknown-run/unknown-agent/03_events.jsonl."""
         payload = {
             "hook_event_name": "SubagentStart",
             "session_id": "known-run-unknown-agent-002",
@@ -626,23 +627,23 @@ class TestKnownRunIdUnknownAgentRouting(unittest.TestCase):
         _dispatch_with_env(payload, self.tmp_path)
 
         events_file = (
-            self.tmp_path / "OrchestrationLogs" / VALID_RUN_ID /
+            self.tmp_path / "OrchestrationLogs" / "unknown-run" /
             "unknown-agent" / "03_events.jsonl"
         )
         self.assertTrue(
             events_file.exists(),
-            f"03_events.jsonl not found at OrchestrationLogs/{VALID_RUN_ID}/unknown-agent/"
+            "03_events.jsonl not found at OrchestrationLogs/unknown-run/unknown-agent/"
         )
         events = _read_events(events_file)
         event_types = [e["event"] for e in events]
         self.assertIn(
             "invocation_start", event_types,
-            f"invocation_start not found in {VALID_RUN_ID}/unknown-agent/03_events.jsonl"
+            "invocation_start not found in unknown-run/unknown-agent/03_events.jsonl"
         )
 
-    def test_subagent_start_does_not_create_unknown_run_when_run_id_extracted(self):
-        """When run_id extraction succeeds, logs must NOT go to unknown-run/.
-        They should use the extracted run_id folder even when agent_instance_id fails."""
+    def test_subagent_start_without_instance_id_does_not_route_to_the_named_run(self):
+        """A run id in a prompt without an agent instance id is not a binding
+        source, so the named run's folder is not created."""
         payload = {
             "hook_event_name": "SubagentStart",
             "session_id": "known-run-unknown-agent-003",
@@ -651,15 +652,11 @@ class TestKnownRunIdUnknownAgentRouting(unittest.TestCase):
         }
         _dispatch_with_env(payload, self.tmp_path)
 
-        unknown_run_invocation = (
-            self.tmp_path / "OrchestrationLogs" / "unknown-run"
-        )
-        # If unknown-run/ is created at all, it should not contain any invocation folder
-        # for this event — the event should route to {run_id}/unknown-agent/ instead
         run_id_dir = self.tmp_path / "OrchestrationLogs" / VALID_RUN_ID
-        self.assertTrue(
+        self.assertFalse(
             run_id_dir.exists(),
-            f"OrchestrationLogs/{VALID_RUN_ID}/ not created — event routed to wrong bucket"
+            f"OrchestrationLogs/{VALID_RUN_ID}/ was created from a prompt without "
+            "an agent instance id"
         )
 
     def test_no_none_string_in_path_when_agent_id_missing_but_run_id_extracted(self):

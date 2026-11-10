@@ -11,7 +11,7 @@ the stages compose in one fixed direction — no stage reaches backward into an 
 
 ```mermaid
 flowchart LR
-    A[catalog\nread MOSAIC sources] --> B[plan\ncompute domain.Plan]
+    A[catalog + catalog/stack\nread and resolve the catalog stack] --> B[plan\ncompute domain.Plan]
     M[manifest\nprior deployment state] --> B
     B --> C[transform\napply harness shaping]
     C --> D[deploy\nwrite files + hooks]
@@ -30,7 +30,8 @@ to make anything happen on disk.
 
 | Component | Purpose |
 |-----------|---------|
-| **catalog** | Reads the MOSAIC repository tree exactly once per run and exposes agents, skills, hook bundles, workflows, and tiers as typed, immutable values. The only package that opens MOSAIC source files for reading. |
+| **catalog** | The per-layer loader: reads exactly one catalog root (`LoadSingleRoot`; `Load` delegates to it and never merges the default catalog) and exposes agents, skills, hook bundles, workflows, and tiers as typed, immutable values. With `docformat`, the only code that opens catalog source files for reading. There is no default skills/hooks merge for custom catalogs any more. |
+| **catalog/stack** | Composes an ordered list of single-root layers (highest first, each with a `catalog-identity.yaml` read by `catalog/identity`) into one resolved catalog that satisfies `catalog.Catalog`. Resolves keyed items (agents, workflows, skills, hooks) from the highest layer having the key, the orchestrator pair as one unit, and, through the pure sub-packages `systemfile` and `injections`, `CommunicationProtocol.md`, `DeployedSections.md` and per-harness injection directories as whole units with no fallback. Reports provenance and shadow records, per-layer `check-index`, and validates the stack (`stackerr`: empty stack, invalid layer, load or identity failure, duplicate catalog id, incomplete orchestrator pair, numeric-id collision). `app` takes the protocol and bundle from `SystemFiles()` and builds the conflict report and manifest provenance from `Shadows()` and `Provenance()`. |
 | **docformat** | The single authority on the MOSAIC document format (YAML-like frontmatter + markdown body with `<Name type="core">` / `<Name type="project">` boundary tags). Parses and serialises with byte-exact fidelity — untouched regions of a document round-trip unchanged. Used by both `catalog` (to extract workflow sections) and `transform` (to mutate frontmatter and injection regions). |
 | **plan** | Computes a complete `domain.Plan` — what would happen to every selected artifact — by resolving the artifact set, deriving each target path via the harness module, and classifying each item against the manifest snapshot and current on-disk hashes. Performs no I/O; the caller supplies all catalog/manifest reads and on-disk hash lookups as plain data. |
 | **transform** | A pure function (`Apply`): given one generic source file's bytes plus a harness module and request context, produces the harness-shaped output bytes and an audit `Report`. Drives all frontmatter field shaping and injection-region content through the harness module — no harness-specific logic lives in this package. |
@@ -44,7 +45,9 @@ to make anything happen on disk.
 
 ### Plan Computation (catalog → plan)
 
-1. The caller (app layer) loads the `catalog.Catalog` and a `manifest.Snapshot` for the
+1. The caller (app layer) takes the `catalog.Catalog` the composition root built from the
+   catalog stack (a `stack.Catalog`; the plain single-root catalog only in unit tests) and
+   loads a `manifest.Snapshot` for the
    target workspace, then probes every planned target path on disk to produce a
    `map[string]domain.DeployedArtifactState` (`plan.Input.DeployedState`). The state carries
    presence, a content hash, and the version stamps read directly from the deployed file's
@@ -57,7 +60,8 @@ to make anything happen on disk.
    closure of the selected agents only, because skills are collected from the included agent
    set. In every other mode: agents are pulled in transitively from every selected workflow
    plus explicitly selected utility agents; skills are pulled in transitively from every
-   included agent's `RequiredSkills`; hook bundles come from the explicit hook selection.
+   included agent's `RequiredSkills`; hook bundles come from the explicit hook selection,
+   except in Update, where they are the hooks already deployed (see Hook deployment below).
    Everything is deduplicated and sorted by key for determinism.
 3. For each artifact, `Build` asks the harness module (via `domain.HarnessModule.TargetPath`)
    where it would land in the target workspace, then classifies the item into one of four
@@ -83,7 +87,10 @@ to make anything happen on disk.
    `GapUnmappedTool`; a hook registration step whose target file already exists in the
    workspace produces `GapHookRegistration`.
 5. The returned `domain.Plan` is fully renderable — both frontends show it to the user for
-   review before anything is written (`--dry-run` on the CLI stops here).
+   review before anything is written. `--dry-run` needs no plan confirmation on any write
+   command: the write flows skip the refusal for an unconfirmed review, stop before writing,
+   and carry the reviewed plan on `RunSummary.DryRunPlan` (not serialised to JSON). A real
+   non-interactive run without `--auto-confirm` still returns `ErrPlanNotConfirmed`.
 
 ### Staleness Model
 
@@ -102,7 +109,22 @@ Staleness is evaluated per-field, never as a single "is this stale" boolean:
   carry the bare `role` key, which is accepted as a legacy fallback at every read site. A file
   carrying only the bare `role` key is **not** classified as stale on that basis alone —
   key-name migration is not a staleness input, only version-stamp and content comparisons are.
+- **Orchestrator harness region.** Orchestrator-role agents also compare
+  `orchestrator_injections_version`, read from the deployed `OrchestratorHarnessConstraints`
+  region. When the source has no such marker and the harness supplies no (or blank)
+  orchestrator content, the region can never be written, so the app layer
+  (`orchestratorRegionUndeliverable`) lists that agent key in
+  `plan.Input.OrchestratorRegionUndeliverable` and the planner expects an empty orchestrator
+  version for it (`descriptorForAgent`): the file compares clean after one write. A markerless
+  source on a harness that does have orchestrator content is unchanged: it stays stale and the
+  undelivered-content warning repeats on every update. With the marker, a deployed file lacking
+  the region is stale once, then clean. Nothing injects the region forcefully.
 - **Skills** and **hook bundles** compare a single `version` field each.
+- **Catalog change.** Every agent, skill file and hook bundle with a manifest entry is also
+  stale when the catalog id recorded in its entry and the id of the catalog that supplies it
+  now are both known and differ (`plan.CatalogStaleness`, delta field `source_catalog`). The
+  reason names both ids and comes last. An unknown side (pre-stack manifest, non-stack
+  catalog) contributes nothing.
 
 Each mismatching field produces a `VersionDelta` (field name, deployed value, source value);
 the plan item's `Reason` is a human-readable join of all deltas. This granularity lets the
@@ -113,6 +135,34 @@ TODO/summary views and the log explain *why* something is stale, not just *that*
 `transform.Apply` is invoked once per Create/Update/conflict-overwrite plan item, always as
 a pure function: source bytes + harness module + request context in, output bytes + audit
 `Report` out.
+
+**Deployed bytes (`internal/app/deployed_bytes.go`).** All four flows (`update`, `workflows`,
+`deploy`, `agents`) hand the content step the bytes of the file being rewritten through one
+rule, `deployedBytes`; `readPathFor` is the single place that decides which file an item is read
+from (its target path, or a flow-supplied override such as a recorded legacy file). With
+deployed bytes, project regions, custom regions and tool choices are kept; without them an item
+is rendered as a create. `deploy` and `agents` also keep a rewritten agent's deployed model
+unless the run resolved one for it (`keepDeployedModels`, `rerun_models.go`; `deploy` counts persisted tier mappings as run-supplied, `agents` does not). `deploy` keeps the
+deployed `InfrastructureAgents` declarations only when the request made no infrastructure
+selection; any selection, including an empty one, replaces them (`Request.ClearInfrastructureAgents`).
+
+**GHCP legacy agents in plan and review (`ghcp_agent_legacy_paths.go`, `plan/build_legacy_agent.go`).**
+Workspaces from earlier releases hold agents as `X.md`; the current build writes `X.agent.md`.
+In all four flows `applyRecordedLegacyAgents` runs right after the deployed-state probe (and, in
+`deploy` and `agents`, before model resolution): an agent whose `X.agent.md` is absent while the
+manifest records its `X.md` and that file exists gets the `X.md` state as its deployed state, and
+its target path -> legacy path lands in `plan.Input.LegacyAgentPaths`. It works from planned paths,
+so agents without a `NumericID` are covered; an `X.md` without a manifest record is ignored.
+`classifyAgentItemLegacyAware` then classifies such an agent against the manifest record of the
+legacy path and plans it as an update with `PlanItem.RenamedFrom` set and the reason
+`renamed from <X.md>` (plus `; stale: ...` when stale), never as a create or conflict.
+`migrateLegacyGhcpAgents` keeps the planner's action and reason for these items and only adds the
+`X.md` removal. `deploy` and `agents` ask no agent model question for a migrating agent and ask a
+tier only when a non-migrating agent uses it (`splitMigratingAgents`, `resolveMigratingModels`); the
+legacy file's model is kept unless the run supplied one. The content step receives the legacy `X.md` bytes for these items: `deployedBytes.withMigratedAgents`
+(`deployed_bytes_migration.go`) captures them read-only when the rule is built (after review, before the
+executor removes `X.md`), never from `.mosaic/backups/`; a rename with nothing stale keeps the legacy bytes
+verbatim (`keepingUnchangedMigrations`).
 
 1. **Frontmatter shaping** — the harness module's `Frontmatter` method returns a plan of
    field removals, field sets, and key order; `Apply` executes it in a fixed order (remove →
@@ -164,12 +214,26 @@ a pure function: source bytes + harness module + request context in, output byte
      `Overwrite` / `BackupThenOverwrite`); a missing decision for any conflict item is a
      programming error (`ErrUndecidedConflict`) — the app layer must resolve every conflict
      before calling `Execute`.
+   - `Plan.Removals` and `Plan.Replacements` are handled before the per-item writes: each
+     removed file (and its manifest entry, when `DropEntry` is set) and each replaced file
+     is first backed up under `.mosaic/backups/`, and the result reports both lists. They
+     are used for the GHCP agent migration from `X.md` to `X.agent.md` in the deploy flows
+     and for the GHCP-pair Transform, which replaces the source deployment; every other
+     run leaves them empty. In atomic mode a failure reverses the journaled writes.
    - `BackupThenOverwrite` copies the current on-disk file to
      `<workspace>/.mosaic/backups/<relative-path>.<RFC3339-compact-with-nanoseconds>.bak`
      before writing the new content, so repeated backups of the same file in the same run
      never collide.
 3. **Hook deployment and registration** — hook bundle files are copied to the harness's
-   declared target directory. Registration steps (edits to files the tool doesn't own, e.g.
+   declared target directory; claude-code uses `.claude/hooks/`, while ghcp-cli and
+   vscode-ghcp both use `.github/hooks/` (a workspace holds only one of the two GHCP
+   targets, decided by the manifest `harness_id`). In Update,
+   hook membership is not a selection: a Catalog hook is included when at least one file of
+   the harness's hook variant is on disk (`deployedHookIDs` in update_hooks.go, using the
+   layout-aware `probeHookPlanPresence`), and its deployed version comes from the manifest.
+   A deployed hook with no manifest record is a conflict. Hooks never deployed are never
+   added; refreshed files are overwritten and files the new version dropped stay.
+   Registration steps (edits to files the tool doesn't own, e.g.
    `.claude/settings.json`) follow a fixed policy: not performable → always a manual-step
    gap; performable and target absent → write the fragment silently; performable and target
    present → never modify it, always emit a registration gap so the user pastes it in by
@@ -208,7 +272,7 @@ recorded is a real, detectable local modification, not noise to be smoothed over
 | Plan item action | One of Create / Update / Unchanged / Conflict — the single classification a plan item carries into execution. |
 | Version delta | An independent per-field staleness signal (`version`, `mosaic_transform_version`, `mosaic_injections_version` for agents; a single `version` for skills/hooks). Deployed field names carry the `mosaic_` prefix; legacy unprefixed names are accepted as fallback (prefixed wins when both present). The `role` field follows the same pattern: deployed as `mosaic_role`, legacy bare `role` accepted as fallback; key-name difference alone is not a staleness signal. |
 | Orchestrator inclusion rule | The orchestrator is included unconditionally in every run mode except standalone-only. `OrchestratorExcludedFor(mode)` is the single authority for the mode → boolean decision; both the artifact-probe path and `plan.Build` derive `sel.ExcludeOrchestrator` from it, so the two paths cannot disagree. |
-| Update set-membership rule | In `ModeUpdateWorkspace`, which agents to staleness-check is determined by a workspace scan of the harness's deployed-agents directory (`scanWorkspaceAgents`), not by workflow discovery. Every `.md` file found there is classified in one pass: catalog-matched files (by numeric id first, filename key second) enter `plan.Selection.ScannedAgentKeys` and the full staleness pipeline; unmatched but two-signal-eligible files enter the harness-only consent path; neither-classified files are left byte-identical with no plan item. The scope is agents only — skills and hooks keep their current derivation. Workflow discovery feeds `plan.Input.WorkflowIDs` for orchestrator workflow-set drift reporting only; it no longer gates which non-orchestrator agents are checked. The manifest is a complementary per-item lookup, not an inclusion gate: an agent present in the workspace but absent from the manifest is still staleness-checked. No reconciliation pass adds catalog agents missing from the workspace — Update only updates what is deployed. |
+| Update set-membership rule | In `ModeUpdateWorkspace`, which agents to staleness-check is determined by a workspace scan of the harness's deployed-agents directory (`scanWorkspaceAgents`), not by workflow discovery. Every `.md` file found there is classified in one pass: catalog-matched files (by numeric id first, filename key second) enter `plan.Selection.ScannedAgentKeys` and the full staleness pipeline; unmatched but two-signal-eligible files enter the harness-only consent path; neither-classified files are left byte-identical with no plan item. The scope is agents only — skills keep their current derivation, and hooks are the already-deployed set (see Hook deployment, step 3). Workflow discovery feeds `plan.Input.WorkflowIDs` for orchestrator workflow-set drift reporting only; it no longer gates which non-orchestrator agents are checked. The manifest is a complementary per-item lookup, not an inclusion gate: an agent present in the workspace but absent from the manifest is still staleness-checked. No reconciliation pass adds catalog agents missing from the workspace — Update only updates what is deployed. |
 | Injection class | Harness / Project / Workflow — determines whether region content is always refreshed, preserved-then-refreshed, or fully reassembled. |
 | Gap | A structured "this needed a human decision or couldn't be automated" signal, produced at any of the plan/transform/deploy stages and funneled into `todo`. |
 | Fallback tier | Workspace / MOSAIC-root / OS-temp — the three-tier writability chain resolved exactly once per run. |
@@ -216,7 +280,7 @@ recorded is a real, detectable local modification, not noise to be smoothed over
 
 ## Boundaries
 
-- **Owns:** Reading MOSAIC sources; computing what a run would do; shaping generic content
+- **Owns:** Reading catalog sources (every layer of the stack; the protocol and bundle come from the layer that supplies them, not a fixed MOSAIC-root path); computing what a run would do; shaping generic content
   into harness-specific bytes; performing the actual writes, backups, hook registration, and
   manifest/TODO/log persistence for one run.
 - **Does Not Own:** Deciding *which* harness, workspace, workflows, or agents to use (that's
@@ -240,8 +304,28 @@ recorded is a real, detectable local modification, not noise to be smoothed over
   an absent target or defer to a manual TODO item.
 - The manifest written after execution reflects actual on-disk state, including through a
   partial failure — it is never derived purely from the pre-execution plan.
+- Catalog ids are unique within a stack, and the numeric agent ids of the resolved agents are
+  unique across it; a violation is a composition error raised before any plan is built.
+- Conflict-report lines (either severity) and the stack in effect never change a run's outcome
+  or exit code. The persisted stack is written to the manifest only by runs given stack input,
+  as `catalog_stack`; manifest entries carry the supplying catalog, and workflows (embedded in
+  the orchestrator, no manifest entries) get provenance per resolved item in the stack.
 - Every gap raised anywhere in the pipeline (plan, transform, deploy) flows into exactly one
   `todo.Collector`, so the TODO file and on-screen summary are always in agreement.
+- The collector stores a gap once per identity until `Reset` (`internal/todo/gap_identity.go`).
+  `AddGap` copies the gap kind into `TodoItem.Kind` (not serialised), which lets the CLI pick
+  out the undelivered-orchestrator-content and role-forbidden-region warnings for console output.
+  The planner and the transform both report a missing model and an unmapped tool, so for
+  `GapNoModel` the identity is the agent (Subject) and for `GapUnmappedTool` it is agent (Owner)
+  plus tool (Subject); wording, detail and fragment do not matter and the first report wins.
+  Every other kind is identified by all fields, so gaps that differ in detail or fragment are
+  all kept. Both sources set Owner = agent and Subject = tool for unmapped tools; a skipped
+  custom tool is reported only by the transform and still gets its entry. `--strict-models`
+  reads the plan's own gaps and is unaffected.
+
+## Kept custom workflows
+
+During `update` and `workflows`, a deployed workflow the catalog stack does not supply is a kept workflow. `plan.ResolveArtifacts` resolves only catalog-supplied workflow ids; kept ids are carried separately (`plan/resolve_kept.go`) and their agents are not pulled in. In the Workflow-class region (`AvailableWorkflows`) kept blocks are emitted byte-for-byte in selection order: `transform` marks them `Kept`, skips line-ending conversion for them, and does not place a custom region nested in a kept block a second time (`transform/workflow_kept_region.go`). Kept blocks are found by `transform.KeptWorkflowBlocks`; a line that begins with a workflow tag and carries more content on that line fails the call, so nothing is written for that file. Each kept id yields a `GapWorkflowKept` warning once, even when both orchestrator-role files hold it. The unknown-workflow removed-layer hint belongs to `deploy` only.
 
 ## Known Complexity
 
@@ -254,3 +338,8 @@ consumers working directly on document mutation logic, that would be the next ca
 deeper tier — it was not split out here because no flow in this pipeline requires understanding
 its internal parsing algorithm, only its documented guarantees (byte-exact round-trip,
 section/injection boundary recognition).
+
+## Input validation notes
+
+- An unknown hook id in the selection makes `plan.ResolveArtifactsFrom` return `*plan.UnknownHookError` (matches `plan.ErrUnknownHook`, names the searched catalogs), like unknown workflow and agent ids, before any write. A known hook the harness has no target for is still skipped silently in `Build`.
+- `update` and `workflows` call `requireExistingWorkspace` (app/workspace_exists.go) before any write: a missing or non-directory path returns `app.ErrWorkspaceNotFound` (exit 1). `deploy` still creates a new folder.

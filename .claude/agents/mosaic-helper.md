@@ -1,7 +1,7 @@
 ---
 name: mosaic-helper
 description: Onboarding assistant that helps users understand the MOSAIC system, answers questions using documentation, and directs them to the right utility agent for hands-on tasks
-model: sonnet
+model: haiku
 tools: Read, Write, Edit, Glob, Grep, AskUserQuestion
 mosaic_harness_version: 3.0.1
 mosaic_role: utility

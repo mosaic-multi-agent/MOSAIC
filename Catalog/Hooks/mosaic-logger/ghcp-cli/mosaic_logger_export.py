@@ -11,6 +11,9 @@ import mosaic_logger_core as core
 # Data structures
 # ---------------------------------------------------------------------------
 
+FOREIGN_SESSION_REASON = "target transcript belongs to a different session"
+
+
 class ExportResult:
     """Outcome of an export_transcript call."""
 
@@ -46,12 +49,26 @@ def _sidecar_path(raw_path: pathlib.Path) -> pathlib.Path:
 # Public API
 # ---------------------------------------------------------------------------
 
+def _recorded_owner(target_raw: pathlib.Path) -> "str | None":
+    """Session recorded in the target sidecar; None when unowned (no sidecar,
+    unreadable, not an object, or no non-empty session_id)."""
+    try:
+        doc = json.loads(_sidecar_path(target_raw).read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(doc, dict):
+        return None
+    owner = doc.get("session_id")
+    return owner if isinstance(owner, str) and owner else None
+
+
 def build_sidecar(source_path: str,
                   source_mechanism: str,
-                  byte_count: int) -> dict:
+                  byte_count: int,
+                  owner_session_id: "str | None" = None) -> dict:
     """Build the sidecar document with harness='ghcp-cli' and
     native_format='ghcp-cli-transcript-jsonl'."""
-    return {
+    doc = {
         "harness": core.HARNESS,
         "native_format": "ghcp-cli-transcript-jsonl",
         "source_path": source_path,
@@ -59,13 +76,19 @@ def build_sidecar(source_path: str,
         "captured_at": _now_iso(),
         "byte_count": byte_count,
     }
+    if owner_session_id:
+        doc["session_id"] = owner_session_id
+    return doc
 
 
 def export_transcript(source_path: "str | None",
                       target_raw: pathlib.Path,
-                      source_mechanism: str) -> ExportResult:
+                      source_mechanism: str,
+                      owner_session_id: "str | None" = None) -> ExportResult:
     """Copy transcript byte-for-byte via atomic replace. Write sidecar on success.
-    Never raises."""
+    With owner_session_id, a target whose sidecar names a different session is
+    kept (ok=False, FOREIGN_SESSION_REASON); an unowned target is replaced and
+    the sidecar records the exporting session. Never raises."""
     try:
         if not source_path:
             return ExportResult(ok=False, reason="empty or None source_path")
@@ -77,13 +100,22 @@ def export_transcript(source_path: "str | None",
             core.debug_log(f"export_transcript: cannot read {source_path}", exc)
             return ExportResult(ok=False, reason=f"unreadable: {exc}")
 
+        if owner_session_id:
+            existing = _recorded_owner(target_raw)
+            if existing and existing != owner_session_id:
+                core.debug_log(
+                    f"export_transcript: {target_raw.name} belongs to session "
+                    f"{existing!r}; not replacing with session {owner_session_id!r}")
+                return ExportResult(ok=False, reason=FOREIGN_SESSION_REASON)
+
         byte_count = len(data)
         target_raw.parent.mkdir(parents=True, exist_ok=True)
         ok = core.atomic_replace(target_raw, data)
         if not ok:
             return ExportResult(ok=False, reason="atomic_replace failed for raw file")
 
-        sidecar_doc = build_sidecar(source_path, source_mechanism, byte_count)
+        sidecar_doc = build_sidecar(source_path, source_mechanism, byte_count,
+                                   owner_session_id)
         sidecar_json = json.dumps(sidecar_doc, ensure_ascii=False).encode("utf-8")
         meta_path = _sidecar_path(target_raw)
         core.atomic_replace(meta_path, sidecar_json)

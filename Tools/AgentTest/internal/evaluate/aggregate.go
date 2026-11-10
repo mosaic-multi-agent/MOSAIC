@@ -49,7 +49,7 @@ func Aggregate(results []domain.TestResult, policy domain.RepetitionPolicy) doma
 			// below) no longer reaches these runs because they continue before
 			// that block. Setting the flag here ensures InfrastructureFailure
 			// is still set when an infra-only run is excluded.
-			if reason == domain.ExclusionInfrastructure {
+			if reason == domain.ExclusionInfrastructure || isModelExclusion(reason) {
 				infrastructureReason = true
 			}
 			out.Excluded++
@@ -111,6 +111,8 @@ func Aggregate(results []domain.TestResult, policy domain.RepetitionPolicy) doma
 // retained sandbox. Never returns the empty string.
 func exclusionDetail(r domain.TestResult, reason domain.ExclusionReason) string {
 	switch reason {
+	case domain.ExclusionModelMismatch, domain.ExclusionModelEvidenceMissing:
+		return r.ModelValidityDetail
 	case domain.ExclusionSpawnFailed:
 		if r.SubjectResult.Stderr != "" {
 			return "harness process exited non-zero: " + r.SubjectResult.Stderr
@@ -163,4 +165,11 @@ func hasReason(reasons []domain.FailureReason, want domain.FailureReason) bool {
 		}
 	}
 	return false
+}
+
+// isModelExclusion reports whether reason is one of the invalid-subject-model
+// exclusions, which are infrastructure failures on their own and are never
+// retried, so no recurrence threshold applies.
+func isModelExclusion(reason domain.ExclusionReason) bool {
+	return reason == domain.ExclusionModelMismatch || reason == domain.ExclusionModelEvidenceMissing
 }

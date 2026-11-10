@@ -51,7 +51,7 @@ func fieldKeys(fields []domain.FrontmatterField) []string {
 // This is the critical test for convertFieldsToScalar: it must be narrowly scoped to the
 // key identified by Descriptor().Frontmatter.ToolsKey and must not touch any other field.
 func TestClaudeCode_Tools_DestFieldNotConvertedToScalar(t *testing.T) {
-	mod, err := claudecode.New(registry.BuiltinOptions{MosaicRoot: repoRoot(t)})
+	mod, err := claudecode.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("claudecode.New(): %v", err)
 	}
@@ -143,7 +143,7 @@ func TestClaudeCode_Tools_DestFieldNotConvertedToScalar(t *testing.T) {
 // comma-separated scalar format. Adding a DestField destination must not suppress the
 // Claude Code-specific scalar conversion that applies to the main tools field.
 func TestClaudeCode_Tools_MainToolsFieldConvertedToScalarWithDestField(t *testing.T) {
-	mod, err := claudecode.New(registry.BuiltinOptions{MosaicRoot: repoRoot(t)})
+	mod, err := claudecode.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("claudecode.New(): %v", err)
 	}
@@ -193,7 +193,7 @@ func TestClaudeCode_Tools_MainToolsFieldConvertedToScalarWithDestField(t *testin
 // different field), both produced fields pass through convertFieldsToScalar as KindList
 // values without being converted to scalar.
 func TestClaudeCode_Tools_MultipleDestFieldsAllPassThroughUntouched(t *testing.T) {
-	mod, err := claudecode.New(registry.BuiltinOptions{MosaicRoot: repoRoot(t)})
+	mod, err := claudecode.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("claudecode.New(): %v", err)
 	}
@@ -256,7 +256,7 @@ func TestClaudeCode_Tools_MultipleDestFieldsAllPassThroughUntouched(t *testing.T
 // once claude-code.yaml declares custom_tool_template: "mcp__%s__*" with the custom tool
 // destination set to main (or omitted, since main is the default).
 func TestClaudeCode_CustomTool_RoutesToMainToolsAsWildcard(t *testing.T) {
-	mod, err := claudecode.New(registry.BuiltinOptions{MosaicRoot: repoRoot(t)})
+	mod, err := claudecode.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("claudecode.New(): %v", err)
 	}
@@ -318,7 +318,7 @@ func TestClaudeCode_CustomTool_RoutesToMainToolsAsWildcard(t *testing.T) {
 // mcpServers) and turns GREEN once claude-code.yaml declares custom_tool_template and
 // routes custom tools to the main field.
 func TestClaudeCode_CustomTool_BothMappedAndCustomToolRoutedToMainScalar(t *testing.T) {
-	mod, err := claudecode.New(registry.BuiltinOptions{MosaicRoot: repoRoot(t)})
+	mod, err := claudecode.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("claudecode.New(): %v", err)
 	}
@@ -389,7 +389,7 @@ func TestClaudeCode_CustomTool_BothMappedAndCustomToolRoutedToMainScalar(t *test
 // claude-code.yaml declares custom_tool_template: "mcp__%s__*" with custom tools
 // directed to the main field.
 func TestClaudeCode_ScalarConversion_CustomToolWildcardInMainScalar(t *testing.T) {
-	mod, err := claudecode.New(registry.BuiltinOptions{MosaicRoot: repoRoot(t)})
+	mod, err := claudecode.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("claudecode.New(): %v", err)
 	}

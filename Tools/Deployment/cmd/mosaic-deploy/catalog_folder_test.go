@@ -115,7 +115,7 @@ func TestResolveCatalogFolder_AbsentFlag_DifferentMosaicRoots_YieldDifferentDefa
 // DefaultCatalogRoot(mosaicRoot).
 func TestResolveCatalogFolder_ExplicitValue_WinsOverDefault(t *testing.T) {
 	mosaicRoot := t.TempDir()
-	explicitCatalog := t.TempDir() // valid directory; distinct from mosaicRoot/Catalog
+	explicitCatalog := newIdentifiedCatalogRoot(t, "explicit-catalog") // valid directory; distinct from mosaicRoot/Catalog
 
 	got, err := resolveCatalogFolder(mosaicRoot, explicitCatalog)
 	if err != nil {
@@ -142,7 +142,7 @@ func TestResolveCatalogFolder_ExplicitValue_WinsOverDefault(t *testing.T) {
 // of whether flagValue itself was relative or absolute.
 func TestResolveCatalogFolder_ExplicitValue_ReturnsAbsolutePath(t *testing.T) {
 	mosaicRoot := t.TempDir()
-	explicitCatalog := t.TempDir()
+	explicitCatalog := newIdentifiedCatalogRoot(t, "explicit-catalog")
 
 	got, err := resolveCatalogFolder(mosaicRoot, explicitCatalog)
 	if err != nil {
@@ -160,7 +160,7 @@ func TestResolveCatalogFolder_ExplicitValue_ReturnsAbsolutePath(t *testing.T) {
 // flagValue is an existing directory.
 func TestResolveCatalogFolder_ExplicitValue_ByteEqualToAbsOfInput(t *testing.T) {
 	mosaicRoot := t.TempDir()
-	explicitCatalog := t.TempDir()
+	explicitCatalog := newIdentifiedCatalogRoot(t, "explicit-catalog")
 	absExplicit, _ := filepath.Abs(explicitCatalog)
 
 	got, err := resolveCatalogFolder(mosaicRoot, explicitCatalog)

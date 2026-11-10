@@ -22,6 +22,7 @@ from the templates in `Tools/Deployment/config/` by `task install`.
   - [Worked examples](#worked-examples)
   - [Validation errors](#validation-errors)
   - [Effect on update staleness](#effect-on-update-staleness)
+- [Catalog stack and catalog identity](#catalog-stack-and-catalog-identity)
 - [What is NOT configurable here](#what-is-not-configurable-here)
 - [Harness IDs and generic tool names](#harness-ids-and-generic-tool-names)
 
@@ -41,7 +42,7 @@ template at `Tools/Deployment/config/tool-config.yaml` instead.
 Both files are optional:
 
 - If `tool-config.yaml` is **absent**, built-in defaults apply — including an
-  allow-list enabling all six shipped utility agents.
+  allow-list offering only `injections-helper`.
 - If `tool-config.yaml` is **present**, its values are authoritative. An omitted
   key takes its zero value, which for `utility_agent_allow_list` means *no*
   utility agents, not *all* of them. This is the one place where "absent file"
@@ -64,7 +65,7 @@ startup error.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `schema_version` | string | `"1"` | Config schema version. Do not change. |
-| `utility_agent_allow_list` | list of strings | see below | Utility agent keys selectable during deployment. |
+| `utility_agent_allow_list` | list of strings | `[injections-helper]` | Utility agent keys selectable during deployment. |
 | `allow_external_modules` | bool | `false` | Whether external harness module binaries may run. |
 | `log_retention_runs` | int | `0` | Max history log entries; `0` = unbounded. |
 | `tool_destinations` | map | `{}` | Generic-tool → harness-tool mappings. See [tool_destinations](#tool_destinations). |
@@ -81,26 +82,18 @@ Only agents whose key — the file base name without extension — appears in th
 list are offered in the utility-agent selection UI. Everything else is omitted
 regardless of what the catalog contains.
 
-The six shipped utility agent keys:
-
-```
-anthropic-subagent-creator
-harness-bug-hunter
-orchestration-architect
-system-prompt-capturer
-transformation
-workflow-creator
-```
-
-When the whole config file is absent, all six are enabled by default: opting out
-of one agent is simpler UX than opting in to six, and none of these agents
-performs arbitrary user-defined actions. Once the file exists, `[]` genuinely
-means "none".
+When the whole config file is absent, the built-in default offers only
+`injections-helper`, the one utility agent that applies outside the MOSAIC
+repository. The creator agents (`subagent-creator`, `workflow-creator`) are left
+out because they depend on files that exist only in the MOSAIC repository and
+ship at MOSAIC root. The Deploy agents flow is not filtered by this list: it
+still offers every utility agent on disk, creators included. Once the file
+exists, `[]` genuinely means "none".
 
 ```yaml
 utility_agent_allow_list:
-  - orchestration-architect
-  - workflow-creator
+  - injections-helper
+  - system-prompt-capturer
 ```
 
 ### allow_external_modules
@@ -469,6 +462,48 @@ author or edit:
 
 ---
 
+## Catalog stack and catalog identity
+
+Neither `tool-config.yaml` nor `user-config.yaml` holds the catalog stack (the ordered list of catalogs a deployment draws from; see `docs/DeploymentGuide.md`, "Catalog Stacks"). Two other files carry the related state.
+
+### Where the stack is persisted
+
+The stack is stored **per workspace**, in the deployment manifest `<workspace>/.mosaic/manifest.yaml`, under the additive key `catalog_stack` (manifest schema stays `"1"`):
+
+```yaml
+catalog_stack:              # highest layer first
+  - {path: /abs/team-catalog, catalog_id: team-catalog}
+  - {default: true}         # the MOSAIC default catalog, resolved against the current MOSAIC root
+```
+
+- User layers are stored as absolute, cleaned paths with the catalog id they had when stored. The default layer is an entry with `default: true` and no path, always the last entry.
+- A run that writes (`deploy`, `update`, `workflows`, `agents`, `hooks`) stores the stack only when it was given stack input (`--catalog-folder` / `--include-default-catalog` flags, or a stack changed on the TUI stack screen). It replaces the stored list whole. Runs without stack input leave it as it is, and reuse it.
+- `promote`, `transform`, `render` and `check-index` never write it.
+- The stored stack is per machine. A layer whose folder moved or whose catalog id changed fails with an error naming the stored path; a list that breaks the structure above (for example the default entry not last) is rejected, never repaired. Passing new stack flags replaces it.
+- The same manifest records `protocol_source` and `bundle_source` (the catalogs that supplied the protocol and bundle in the last full `deploy` or `update`) and a `catalog` identity on every entry. They are provenance only; they are not read back as configuration. A manifest without these keys is valid.
+
+### The catalog identity file
+
+Every catalog used as a stack layer has `catalog-identity.yaml` at its root, next to its content folders:
+
+```yaml
+id: team-catalog              # required; ^[a-z0-9][a-z0-9._-]*$; unique within a stack
+name: Team Catalog            # required
+version: "1.2"                # required; kept as written
+overrides:                    # optional
+  agents: [code-reviewer]
+  workflows: [feature-dev]
+  skills: [efficient-file-reading]
+  hooks: [pre-commit-guard]
+  orchestrator_pair: true     # the single declaration for orchestrator + orchestrator-script
+  harness_injections: ["Claude Code"]
+  system_files: [CommunicationProtocol.md, DeployedSections.md]
+```
+
+`overrides` lists items the catalog replaces on purpose; a declared override is reported as `info` in the conflict report, an undeclared one as `warning`. The format and validation rules are in `Catalog/CatalogFilesFormat.md` (identity section). The shipped catalogs use the ids `mosaic-default` (`Catalog/`), `runner-test-catalog` (`Tools/Runner/TestCatalog/`) and `agenttest-catalog` (`Tools/AgentTest/catalog/`).
+
+---
+
 ## What is NOT configurable here
 
 These files tune *mappings and selection*. They cannot change a harness's tool
@@ -484,7 +519,10 @@ Discovery precedence is `external > descriptor-only > built-in`, and the `id:`
 field inside the YAML is authoritative — not the folder name. So a descriptor
 declaring `id: "claude-code"` **overrides the compiled-in built-in entirely, at
 runtime, with no rebuild**. You may place `HarnessInjections.md` and
-`HarnessInjectionsOrchestrator.md` alongside it.
+`HarnessInjectionsOrchestrator.md` alongside it. Those injection files are read
+from next to the descriptor: only the four built-in harnesses take their
+injections from the catalog stack, and a descriptor-only or external harness
+(including a descriptor that overrides a built-in id) keeps its own.
 
 Trade-off: a descriptor-only override loses any Go-side behaviour the built-in
 module adds beyond the shared descriptor algorithms. Prefer `tool_destinations`
@@ -504,8 +542,8 @@ Built-in harness IDs, for use as `tool_destinations` keys:
 |----|--------------|-----------|
 | `claude-code` | Claude Code | list; emitted as a comma-separated scalar |
 | `opencode` | OpenCode | permission (allow/deny map) |
-| `ghcp-cli` | GitHub Copilot CLI | list |
-| `vscode-ghcp` | VS Code GitHub Copilot | list |
+| `ghcp-cli` | GHCP CLI / VS Code GHCP Copilot | list |
+| `vscode-ghcp` | VS Code GHCP Local | list |
 | `codex` | Codex | no tools key; tool grants expressed via sandbox_mode |
 
 A descriptor-only or external harness uses the `id:` declared in its

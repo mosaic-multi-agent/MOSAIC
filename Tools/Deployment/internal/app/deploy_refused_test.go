@@ -91,7 +91,6 @@ func fsChanged(before, after map[string]refusedFileState) (changed bool, descrip
 	return false, ""
 }
 
-
 // ---------------------------------------------------------------------------
 // spyExecutor — records whether Execute was called; used in refused-deployment tests
 // ---------------------------------------------------------------------------
@@ -170,7 +169,7 @@ func TestDeployNew_OrchestratorlessCatalogue_ReturnsErrMissingOrchestrator(t *te
 			"proceeding to execution would produce a deployment action with an empty agent key")
 	}
 	if !errors.Is(err, plan.ErrMissingOrchestrator) {
-		t.Errorf("DeployNew returned error %v; want errors.Is(err, plan.ErrMissingOrchestrator); " +
+		t.Errorf("DeployNew returned error %v; want errors.Is(err, plan.ErrMissingOrchestrator); "+
 			"the error must wrap ErrMissingOrchestrator so the CLI can report a meaningful message "+
 			"naming what is missing and where it was sought",
 			err)

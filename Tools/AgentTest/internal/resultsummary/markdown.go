@@ -23,21 +23,6 @@ func formatSampleSize(counted, excluded int) string {
 	return fmt.Sprintf("(%d)", counted)
 }
 
-// formatCost formats a cost value normalized to per-100-tests. When warning is
-// true the cost is unresolved and the marker "[cost?]" is returned instead of
-// a computed value. testCount is the denominator; if zero the per-100-tests
-// value is computed as zero.
-func formatCost(cost float64, testCount int, warning bool) string {
-	if warning {
-		return "[cost?]"
-	}
-	var normalized float64
-	if testCount > 0 {
-		normalized = cost / float64(testCount) * 100
-	}
-	return fmt.Sprintf("$%.2f/100t", normalized)
-}
-
 // formatDuration formats a duration for display. Zero duration returns "-".
 func formatDuration(d time.Duration) string {
 	if d == 0 {
@@ -63,8 +48,8 @@ func renderModelResultsSection(sb *strings.Builder, v VersionSummary) {
 	for _, model := range v.Models { // v.Models is already sorted
 		sb.WriteString(fmt.Sprintf("### %s\n\n", model))
 
-		sb.WriteString("| Suite | Harness | Tests | Pass Rate | Cost |\n")
-		sb.WriteString("|-------|---------|-------|-----------|------|\n")
+		sb.WriteString("| Suite | Harness | Tests | Pass Rate |\n")
+		sb.WriteString("|-------|---------|-------|-----------|\n")
 
 		// Iterate suites in sorted order for determinism.
 		for _, suite := range v.Suites { // v.Suites is already sorted
@@ -86,12 +71,11 @@ func renderModelResultsSection(sb *strings.Builder, v VersionSummary) {
 
 			for _, harness := range harnesses {
 				stats := byHarness[harness]
-				sb.WriteString(fmt.Sprintf("| %s | %s | %d | %s %s | %s |\n",
+				sb.WriteString(fmt.Sprintf("| %s | %s | %d | %s %s |\n",
 					suite, harness,
 					stats.TestCount,
 					formatPassRate(stats.PassRate),
 					formatSampleSize(stats.TestCount, stats.ExcludedCount),
-					formatCost(stats.TotalCost, stats.TestCount, stats.CostWarning),
 				))
 			}
 		}
@@ -101,8 +85,8 @@ func renderModelResultsSection(sb *strings.Builder, v VersionSummary) {
 
 func renderModelComparisonSection(sb *strings.Builder, v VersionSummary) {
 	sb.WriteString("## Model Comparison\n\n")
-	sb.WriteString("| Model | Tests | Pass Rate | Cost |\n")
-	sb.WriteString("|-------|-------|-----------|------|\n")
+	sb.WriteString("| Model | Tests | Pass Rate |\n")
+	sb.WriteString("|-------|-------|-----------|\n")
 
 	for _, model := range v.Models { // already sorted
 		byHarness := v.ByModel[model]
@@ -115,18 +99,12 @@ func renderModelComparisonSection(sb *strings.Builder, v VersionSummary) {
 		sort.Strings(harnesses)
 
 		var testCount, passCount, excludedCount int
-		var totalCost float64
-		var costWarning bool
 
 		for _, harness := range harnesses {
 			s := byHarness[harness]
 			testCount += s.TestCount
 			passCount += s.PassCount
 			excludedCount += s.ExcludedCount
-			totalCost += s.TotalCost
-			if s.CostWarning {
-				costWarning = true
-			}
 		}
 
 		var passRate float64
@@ -134,11 +112,10 @@ func renderModelComparisonSection(sb *strings.Builder, v VersionSummary) {
 			passRate = float64(passCount) / float64(testCount)
 		}
 
-		sb.WriteString(fmt.Sprintf("| %s | %d | %s %s | %s |\n",
+		sb.WriteString(fmt.Sprintf("| %s | %d | %s %s |\n",
 			model, testCount,
 			formatPassRate(passRate),
 			formatSampleSize(testCount, excludedCount),
-			formatCost(totalCost, testCount, costWarning),
 		))
 	}
 	sb.WriteString("\n")
@@ -146,16 +123,14 @@ func renderModelComparisonSection(sb *strings.Builder, v VersionSummary) {
 
 func renderHarnessComparisonSection(sb *strings.Builder, v VersionSummary) {
 	sb.WriteString("## Harness Comparison\n\n")
-	sb.WriteString("| Harness | Tests | Pass Rate | Cost |\n")
-	sb.WriteString("|---------|-------|-----------|------|\n")
+	sb.WriteString("| Harness | Tests | Pass Rate |\n")
+	sb.WriteString("|---------|-------|-----------|\n")
 
 	// Aggregate per-harness across all models.
 	type hAgg struct {
 		testCount     int
 		passCount     int
 		excludedCount int
-		totalCost     float64
-		costWarning   bool
 	}
 	aggMap := make(map[string]*hAgg)
 
@@ -173,10 +148,6 @@ func renderHarnessComparisonSection(sb *strings.Builder, v VersionSummary) {
 			a.testCount += s.TestCount
 			a.passCount += s.PassCount
 			a.excludedCount += s.ExcludedCount
-			a.totalCost += s.TotalCost
-			if s.CostWarning {
-				a.costWarning = true
-			}
 		}
 	}
 
@@ -189,11 +160,10 @@ func renderHarnessComparisonSection(sb *strings.Builder, v VersionSummary) {
 		if a.testCount > 0 {
 			passRate = float64(a.passCount) / float64(a.testCount)
 		}
-		sb.WriteString(fmt.Sprintf("| %s | %d | %s %s | %s |\n",
+		sb.WriteString(fmt.Sprintf("| %s | %d | %s %s |\n",
 			harness, a.testCount,
 			formatPassRate(passRate),
 			formatSampleSize(a.testCount, a.excludedCount),
-			formatCost(a.totalCost, a.testCount, a.costWarning),
 		))
 	}
 	sb.WriteString("\n")
@@ -288,8 +258,8 @@ func RenderUserSummary(v VersionSummary) string {
 // pass-rate cells show percentage only.
 func renderModelComparisonSectionUser(sb *strings.Builder, v VersionSummary) {
 	sb.WriteString("## Model Comparison\n\n")
-	sb.WriteString("| Model | Tests | Pass Rate | Cost |\n")
-	sb.WriteString("|-------|-------|-----------|------|\n")
+	sb.WriteString("| Model | Tests | Pass Rate |\n")
+	sb.WriteString("|-------|-------|-----------|\n")
 
 	for _, model := range v.Models { // already sorted
 		byHarness := v.ByModel[model]
@@ -301,17 +271,11 @@ func renderModelComparisonSectionUser(sb *strings.Builder, v VersionSummary) {
 		sort.Strings(harnesses)
 
 		var testCount, passCount int
-		var totalCost float64
-		var costWarning bool
 
 		for _, harness := range harnesses {
 			s := byHarness[harness]
 			testCount += s.TestCount
 			passCount += s.PassCount
-			totalCost += s.TotalCost
-			if s.CostWarning {
-				costWarning = true
-			}
 		}
 
 		var passRate float64
@@ -319,10 +283,9 @@ func renderModelComparisonSectionUser(sb *strings.Builder, v VersionSummary) {
 			passRate = float64(passCount) / float64(testCount)
 		}
 
-		sb.WriteString(fmt.Sprintf("| %s | %d | %s | %s |\n",
+		sb.WriteString(fmt.Sprintf("| %s | %d | %s |\n",
 			model, testCount,
 			formatPassRate(passRate),
-			formatCost(totalCost, testCount, costWarning),
 		))
 	}
 	sb.WriteString("\n")
@@ -333,14 +296,12 @@ func renderModelComparisonSectionUser(sb *strings.Builder, v VersionSummary) {
 // pass-rate cells show percentage only.
 func renderHarnessComparisonSectionUser(sb *strings.Builder, v VersionSummary) {
 	sb.WriteString("## Harness Comparison\n\n")
-	sb.WriteString("| Harness | Tests | Pass Rate | Cost |\n")
-	sb.WriteString("|---------|-------|-----------|------|\n")
+	sb.WriteString("| Harness | Tests | Pass Rate |\n")
+	sb.WriteString("|---------|-------|-----------|\n")
 
 	type hAgg struct {
-		testCount   int
-		passCount   int
-		totalCost   float64
-		costWarning bool
+		testCount int
+		passCount int
 	}
 	aggMap := make(map[string]*hAgg)
 
@@ -357,10 +318,6 @@ func renderHarnessComparisonSectionUser(sb *strings.Builder, v VersionSummary) {
 			a := aggMap[harness]
 			a.testCount += s.TestCount
 			a.passCount += s.PassCount
-			a.totalCost += s.TotalCost
-			if s.CostWarning {
-				a.costWarning = true
-			}
 		}
 	}
 
@@ -373,10 +330,9 @@ func renderHarnessComparisonSectionUser(sb *strings.Builder, v VersionSummary) {
 		if a.testCount > 0 {
 			passRate = float64(a.passCount) / float64(a.testCount)
 		}
-		sb.WriteString(fmt.Sprintf("| %s | %d | %s | %s |\n",
+		sb.WriteString(fmt.Sprintf("| %s | %d | %s |\n",
 			harness, a.testCount,
 			formatPassRate(passRate),
-			formatCost(a.totalCost, a.testCount, a.costWarning),
 		))
 	}
 	sb.WriteString("\n")
@@ -391,8 +347,8 @@ func renderModelResultsSectionUser(sb *strings.Builder, v VersionSummary) {
 	for _, model := range v.Models { // v.Models is already sorted
 		sb.WriteString(fmt.Sprintf("### %s\n\n", model))
 
-		sb.WriteString("| Suite | Harness | Tests | Pass Rate | Cost |\n")
-		sb.WriteString("|-------|---------|-------|-----------|------|\n")
+		sb.WriteString("| Suite | Harness | Tests | Pass Rate |\n")
+		sb.WriteString("|-------|---------|-------|-----------|\n")
 
 		for _, suite := range v.Suites { // v.Suites is already sorted
 			byModel, ok := v.BySuite[suite]
@@ -412,11 +368,10 @@ func renderModelResultsSectionUser(sb *strings.Builder, v VersionSummary) {
 
 			for _, harness := range harnesses {
 				stats := byHarness[harness]
-				sb.WriteString(fmt.Sprintf("| %s | %s | %d | %s | %s |\n",
+				sb.WriteString(fmt.Sprintf("| %s | %s | %d | %s |\n",
 					suite, harness,
 					stats.TestCount,
 					formatPassRate(stats.PassRate),
-					formatCost(stats.TotalCost, stats.TestCount, stats.CostWarning),
 				))
 			}
 		}

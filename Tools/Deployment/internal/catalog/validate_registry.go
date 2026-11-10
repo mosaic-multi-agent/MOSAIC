@@ -22,12 +22,14 @@ import (
 //     by key-sort order wins the slot in the numeric-id index).
 func ValidateRegistry(c Catalog) []Issue {
 	var issues []Issue
+	reporter, _ := c.(ProvenanceReporter)
 
 	// Rule 5: every required_skills entry must correspond to an existing skill.
 	for _, agent := range c.Agents() {
 		for _, skillKey := range agent.RequiredSkills {
 			if _, ok := c.Skill(skillKey); !ok {
 				issues = append(issues, Issue{
+					Catalog:  issueCatalog(reporter, agent.Key),
 					Severity: docformat.SeverityError,
 					Code:     "missing-skill-folder",
 					Subject:  agent.Key,
@@ -68,10 +70,28 @@ func ValidateRegistry(c Catalog) []Issue {
 	return issues
 }
 
+// issueCatalog returns the identity of the catalog that supplies the agent, or the zero identity
+// when the catalog reports no provenance.
+func issueCatalog(r ProvenanceReporter, agentKey string) domain.CatalogIdentity {
+	if r == nil {
+		return domain.CatalogIdentity{}
+	}
+	layer, ok := r.Provenance(domain.CatalogItem{Kind: domain.CatalogItemAgent, Key: agentKey})
+	if !ok {
+		return domain.CatalogIdentity{}
+	}
+	return layer.Identity
+}
+
 // ValidateBundleDeclarations checks rule 20: every declared bundle block must name a target
 // in docformat.CanonicalDeployed, an applies_to in {"subagent","orchestrator"}, and a
 // specified_in path that exists on disk under the MOSAIC root. All violations are
 // accumulated; the function returns all issues found.
+//
+// specified_in is deliberately resolved against the MOSAIC root, not against the catalog layer
+// that supplied the bundle: the specification documents live in the MOSAIC repository. The
+// function has no production call site; its semantics are unchanged by stack-resolved bundle
+// loading.
 func ValidateBundleDeclarations(b domain.BundleContent, root string) []Issue {
 	var issues []Issue
 

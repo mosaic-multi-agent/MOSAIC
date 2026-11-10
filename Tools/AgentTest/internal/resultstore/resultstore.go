@@ -80,6 +80,10 @@ type StoreResult struct {
 	SkippedNonReport int
 	SkippedUnknown   int
 	SkippedDuplicate int
+
+	// SkippedUnverifiedModel counts reports refused because a run lacks an
+	// observed subject model or has one that differs from the selected model.
+	SkippedUnverifiedModel int
 }
 
 // SummaryLine returns the human-readable summary, e.g.
@@ -87,7 +91,7 @@ type StoreResult struct {
 // When there are no skips, it returns "Stored N reports".
 // The count is always plural ("N reports") regardless of N.
 func (r StoreResult) SummaryLine() string {
-	total := r.SkippedNonReport + r.SkippedUnknown + r.SkippedDuplicate
+	total := r.SkippedNonReport + r.SkippedUnknown + r.SkippedDuplicate + r.SkippedUnverifiedModel
 	if total == 0 {
 		return fmt.Sprintf("Stored %d reports", r.Stored)
 	}
@@ -101,6 +105,9 @@ func (r StoreResult) SummaryLine() string {
 	}
 	if r.SkippedDuplicate > 0 {
 		parts = append(parts, fmt.Sprintf("%d duplicate", r.SkippedDuplicate))
+	}
+	if r.SkippedUnverifiedModel > 0 {
+		parts = append(parts, fmt.Sprintf("%d refused", r.SkippedUnverifiedModel))
 	}
 	return fmt.Sprintf("Stored %d reports (%d skipped: %s)",
 		r.Stored, total, strings.Join(parts, ", "))
@@ -216,6 +223,9 @@ type AggregateWire struct {
 type RunReportWire struct {
 	SubjectVersion    string          `json:"subject_version"`
 	SubjectModel      string          `json:"subject_model"`
+	// ObservedSubjectModels are the subject model(s) the run's logs show.
+	// Absent in reports stored before the field existed (decodes to nil).
+	ObservedSubjectModels []string `json:"observed_subject_models"`
 	HarnessID         string          `json:"harness_id"`
 	Verdict           string          `json:"verdict"`
 	DurationMS        int64           `json:"duration_ms"`
@@ -273,14 +283,20 @@ func ParseAndValidate(data []byte) (ParsedReport, error) {
 	}
 
 	run0 := wire.Tests[0].Runs[0]
-	ms := ModelShort(run0.SubjectModel)
+	// New reports are labelled by the observed model; reports stored before
+	// the field existed fall back to the selected model.
+	model := run0.SubjectModel
+	if obs := observedModel(run0); obs != "" {
+		model = obs
+	}
+	ms := ModelShort(model)
 
 	return ParsedReport{
 		Raw:            wire,
 		SubjectVersion: run0.SubjectVersion,
 		SuiteID:        wire.SuiteID,
 		HarnessID:      run0.HarnessID,
-		SubjectModel:   run0.SubjectModel,
+		SubjectModel:   model,
 		ModelShort:     ms,
 		Timestamp:      wire.StartedAt,
 	}, nil
@@ -309,6 +325,17 @@ func Store(fs FileSystem, req StoreRequest) (StoreResult, error) {
 				Skipped:    true,
 				SkipReason: SkipNotReport,
 				Message:    parseErr.Error(),
+			})
+			continue
+		}
+
+		if reason := unverifiedModelReason(parsed.Raw); reason != "" {
+			result.SkippedUnverifiedModel++
+			result.Reports = append(result.Reports, StoredReport{
+				SourcePath: srcPath,
+				Skipped:    true,
+				SkipReason: SkipUnverifiedModel,
+				Message:    reason,
 			})
 			continue
 		}

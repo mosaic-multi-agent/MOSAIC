@@ -60,6 +60,12 @@ type Session struct {
 	// Outcome is the three-state classification of the session.
 	Outcome SessionOutcome
 
+	// ModelVerdict, ModelLabel and UnverifiedRuns are the session-level model
+	// verdict combined from the suites: derived once here, rendered by frontends.
+	ModelVerdict   domain.ModelVerdict
+	ModelLabel     string
+	UnverifiedRuns int
+
 	// Errors is the combined report-level errors across all executed suites.
 	// Renders as [] (never null) on the wire.
 	Errors []ReportError
@@ -105,7 +111,12 @@ func NewSession(suites []Result, unrunSuites []string, aborted bool) Session {
 		outcome = SessionPassed
 	}
 
+	modelVerdict, modelLabel, unverifiedRuns := sessionModelSummary(suites)
+
 	return Session{
+		ModelVerdict:           modelVerdict,
+		ModelLabel:             modelLabel,
+		UnverifiedRuns:         unverifiedRuns,
 		Suites:                 suites,
 		UnrunSuites:            unrunSuites,
 		Aborted:                aborted,

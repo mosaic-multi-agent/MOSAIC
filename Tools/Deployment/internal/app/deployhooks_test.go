@@ -38,6 +38,7 @@ import (
 	"testing"
 
 	"mosaic-deploy/internal/app"
+	"mosaic-deploy/internal/app/stackservicetest"
 	"mosaic-deploy/internal/app/interactiontest"
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
@@ -1027,7 +1028,7 @@ var (
 // hooksPlannerSmokeCheck is a minimal struct that must satisfy app.Service. It exists only
 // to verify at compile time that app.Service includes the DeployHooks method. It is never
 // constructed or used at runtime.
-type hooksPlannerSmokeCheck struct{}
+type hooksPlannerSmokeCheck struct{ stackservicetest.MockStackService }
 
 func (h *hooksPlannerSmokeCheck) ListHarnesses() []domain.HarnessRef { return nil }
 func (h *hooksPlannerSmokeCheck) DeployNew(_ context.Context, _ app.DeployRequest) (domain.RunSummary, error) {

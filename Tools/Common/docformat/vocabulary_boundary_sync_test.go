@@ -59,7 +59,6 @@ func TestClassifyRegion_AllBundleNames_UnderInjection_ReturnMarkerMismatch(t *te
 	bundleNames := []string{
 		"AuthorityHierarchy",
 		"ClosingProcedure",
-		"ProtocolConstraints",
 		"ErrorHandlingCommon",
 		"ExecutionPhilosophyCommon",
 	}
@@ -291,7 +290,7 @@ func TestVocabulary_CanonicalOrder_ExactSixSlotSequence(t *testing.T) {
 	}
 }
 
-func TestVocabulary_CanonicalDeployed_ExactNineNameSequence(t *testing.T) {
+func TestVocabulary_CanonicalDeployed_ExactEightNameSequence(t *testing.T) {
 	// Authoritative 9-name closed set. Order matters for cross-copy comparison.
 	// LanguagePatterns and CustomConstraints are removed from the tool-managed
 	// vocabulary; LanguagePatterns moves to the advisory InjectionParent catalogue,
@@ -303,8 +302,8 @@ func TestVocabulary_CanonicalDeployed_ExactNineNameSequence(t *testing.T) {
 		"ClosingProcedure",
 		"AvailableWorkflows",
 		"InfrastructureAgents",
-		"ProtocolConstraints",
 		"HarnessConstraints",
+		"OrchestratorHarnessConstraints",
 		"ErrorHandlingCommon",
 		"ExecutionPhilosophyCommon",
 	}
@@ -319,21 +318,21 @@ func TestVocabulary_CanonicalDeployed_ExactNineNameSequence(t *testing.T) {
 	}
 }
 
-func TestVocabulary_DeployedParent_ExactNineEntryMap(t *testing.T) {
+func TestVocabulary_DeployedParent_ExactEightEntryMap(t *testing.T) {
 	// Authoritative 9-entry parent map. Values are the primary drift signal: a wrong
 	// parent silently misroutes validation without any other symptom.
 	// LanguagePatterns and CustomConstraints are removed.
 	// Any deviation is a drift from boundary_constants.py (where "" in Go is None in Python).
 	want := map[string]string{
-		"CommunicationProtocol":     "", // top level
-		"AuthorityHierarchy":        "Identity",
-		"ClosingProcedure":          "Identity",
-		"AvailableWorkflows":        "Identity",
-		"InfrastructureAgents":      "Identity",
-		"ProtocolConstraints":       "Constraints",
-		"HarnessConstraints":        "Constraints",
-		"ErrorHandlingCommon":       "ErrorHandling",
-		"ExecutionPhilosophyCommon": "ExecutionPhilosophy",
+		"CommunicationProtocol":          "", // top level
+		"AuthorityHierarchy":             "Identity",
+		"ClosingProcedure":               "Identity",
+		"AvailableWorkflows":             "Identity",
+		"InfrastructureAgents":           "Identity",
+		"HarnessConstraints":             "Constraints",
+		"OrchestratorHarnessConstraints": "Constraints",
+		"ErrorHandlingCommon":            "ErrorHandling",
+		"ExecutionPhilosophyCommon":      "ExecutionPhilosophy",
 	}
 	got := docformat.DeployedParent
 	if got == nil {
@@ -358,8 +357,8 @@ func TestVocabulary_DeployedParent_ExactNineEntryMap(t *testing.T) {
 	}
 }
 
-func TestVocabulary_InjectionParent_ExactEightEntryAdvisoryMap(t *testing.T) {
-	// Authoritative 8-entry advisory map. InjectionParent is no longer an allowlist;
+func TestVocabulary_InjectionParent_ExactSixEntryAdvisoryMap(t *testing.T) {
+	// Authoritative 6-entry advisory map. InjectionParent is no longer an allowlist;
 	// an absent name is preserved, never flagged. The values are the drift signal.
 	// ProtocolExtension is removed in Stage 2: projects use [[CUSTOM:ProtocolExtension]]
 	// instead — MOSAIC defines [[INJECTION:]] slots; projects invent [[CUSTOM:]] ones.
@@ -367,13 +366,11 @@ func TestVocabulary_InjectionParent_ExactEightEntryAdvisoryMap(t *testing.T) {
 	// set to this advisory catalogue, keeping its Capabilities parent.
 	// Any deviation is a drift from boundary_constants.py (where "" in Go is None in Python).
 	want := map[string]string{
-		"IdentityExtension":      "Identity",
 		"CodebaseContext":        "Capabilities",
 		"LanguagePatterns":       "Capabilities", // moved from CanonicalDeployed
 		"OutputArtifactTemplate": "Capabilities",
 		"SeverityThresholds":     "Capabilities",
 		"SeverityDefinitions":    "Capabilities",
-		"ErrorHandlingExtension": "ErrorHandling",
 		"ContextLimits":          "ExecutionPhilosophy",
 	}
 	got := docformat.InjectionParent
@@ -465,7 +462,7 @@ func TestVocabulary_CanonicalDeployed_LanguagePatternsAndCustomConstraints_AreAb
 			if n == name {
 				t.Errorf(
 					"CanonicalDeployed must not contain %q — it is removed from the "+
-						"nine-name tool-managed vocabulary", name,
+						"eight-name tool-managed vocabulary", name,
 				)
 			}
 		}
@@ -482,7 +479,7 @@ func TestVocabulary_DeployedParent_LanguagePatternsAndCustomConstraints_AreAbsen
 	for _, name := range staleNames {
 		if _, ok := got[name]; ok {
 			t.Errorf(
-				"DeployedParent must not contain %q — it is removed from the nine-name "+
+				"DeployedParent must not contain %q — it is removed from the eight-name "+
 					"tool-managed vocabulary", name,
 			)
 		}

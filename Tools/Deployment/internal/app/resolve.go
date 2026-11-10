@@ -568,7 +568,7 @@ func (s *service) resolveModels(
 			q := domain.ChoiceQuestion{
 				Question: domain.Question{
 					ID: domain.QAgentModel, Subject: agent.Key,
-					Title: "Select a model for " + agent.Key,
+					Title:     "Select a model for " + agent.Key,
 					AllowSkip: true, AllowSkipAll: true, AllowCustom: true,
 				},
 				Options: options,
@@ -976,7 +976,19 @@ func (s *service) buildContent(
 	// Nil means no collection. Non-nil callers must merge the resulting slice into the
 	// RunSummary after the executor returns.
 	ownedKeyDiffSink *[]domain.OwnedKeyDifference,
+	// opts adjust individual orchestrator-role files by target path; none leaves behaviour as is.
+	opts ...buildContentOption,
 ) func(domain.PlanItem) ([]byte, error) {
+	itemOpts := newBuildContentOptions(opts)
+	undeliveredOnce := newGapOnce()
+	roleRegionOnce := newGapOnce()
+	reportRoleRegion := func(doc []byte, role domain.AgentRole, key string) {
+		for _, g := range roleRegionGaps(doc, role, key) {
+			if roleRegionOnce.first(g) {
+				s.deps.Todo.AddGap(g)
+			}
+		}
+	}
 	return func(item domain.PlanItem) ([]byte, error) {
 		// Harness-only route: checked first, before the artifact-kind switch. A harness-only
 		// agent has no catalog entry and no SourcePath. Catalog.ReadSource is deliberately
@@ -1001,6 +1013,7 @@ func (s *service) buildContent(
 					return nil, read.DecodeErr
 				}
 			}
+			reportRoleRegion(read.Canonical, plan.Agent.Role, plan.Agent.Key)
 			res, err := refreshHarnessOnly(HarnessOnlyRefreshRequest{
 				Deployed:    read.Canonical,
 				DeployedRaw: read.Raw,
@@ -1036,6 +1049,7 @@ func (s *service) buildContent(
 		if err != nil {
 			return nil, err
 		}
+		reportRoleRegion(src, agent.Role, agent.Key)
 
 		// Read the deployed file through the decode funnel (Layer 3). This provides both
 		// the raw on-disk bytes (DeployedRaw, for the translator's preservation channel)
@@ -1077,13 +1091,12 @@ func (s *service) buildContent(
 		}
 
 		if deployedReader == nil {
-			// No deployed reader means no prior file on disk (Deploy workspace, Deploy agents,
-			// Deploy hooks). Derive the operation from the plan item's Action so the
-			// agentformat layer receives an explicit Op rather than OpUnspecified.
-			// Deployed and DeployedRaw stay nil: supplying prior bytes here is out of scope
-			// (it would change behaviour for existing Markdown harnesses and reopen the
-			// accepted Codex Update limitation documented in
-			// CODEX-DEPLOY-UPDATE-LIMITATION-20260921.md).
+			// No deployed reader (Deploy hooks) means this request carries no prior file
+			// bytes. Deploy workspace and Deploy agents pass a funnel reader, so over an
+			// existing agent file they take the branch above and supply the prior bytes.
+			// Derive the operation from the plan item's Action so the agentformat layer
+			// receives an explicit Op rather than OpUnspecified.
+			// Deployed and DeployedRaw stay nil: with no reader there are no prior bytes.
 			var opErr error
 			op, opErr = actionToOp(item.Action)
 			if opErr != nil {
@@ -1118,7 +1131,7 @@ func (s *service) buildContent(
 		}
 
 		desc := module.Descriptor()
-		res, err := transform.Apply(transform.Request{
+		tReq := transform.Request{
 			Source: src, Kind: domain.ArtifactAgent, Key: agent.Key, Module: module,
 			Model: models[agent.Key], CustomTools: customTools, SkippedTools: skippedTools,
 			Scope: scope, Deployed: deployedCanonical, DeployedRaw: deployedRaw, Op: op,
@@ -1132,7 +1145,11 @@ func (s *service) buildContent(
 			Timestamp:                     s.now().UTC().Format(time.RFC3339),
 			InjectionsVersion:             desc.InjectionsVersion,
 			OrchestratorInjectionsVersion: desc.OrchestratorInjectionsVersion,
-		})
+		}
+		if agent.Role == domain.RoleOrchestrator {
+			itemOpts.applyTo(item.TargetPath, &tReq)
+		}
+		res, err := transform.Apply(tReq)
 		if err != nil {
 			return nil, err
 		}
@@ -1144,6 +1161,9 @@ func (s *service) buildContent(
 		mergeDecodeReport(&res.Report, decodeReport)
 		// Forward all gaps (transform + merged decode) to the todo collector.
 		for _, g := range res.Report.Gaps {
+			if g.Kind == domain.GapUndeliveredOrchestratorInjection && !undeliveredOnce.first(g) {
+				continue
+			}
 			s.deps.Todo.AddGap(g)
 		}
 		// Collect owned-key differences for surfacing in the run report. Only populated

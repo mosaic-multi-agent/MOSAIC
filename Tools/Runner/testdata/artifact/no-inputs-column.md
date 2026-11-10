@@ -1,5 +1,6 @@
 ---
 type: orchestration-artifact
+run_id: 20260727T170000Z-a3f9
 workflow: test-compat
 workflow_version: "1.0"
 task: "backward compat test"
@@ -9,14 +10,14 @@ global_sequence: 1
 checkpoints: disabled
 current_state:
   phase: PLANNING
-  stage: null
+  iteration: null
   last_status: SUCCESS
   last_agent: "planner#1"
   error_code: null
 ---
 
 <ExecutionLog type="core">
-| Seq | Agent     | Phase    | Stage | Status  | Timestamp            | Summary      | Checkpoint |
+| Seq | Agent     | Phase    | Iteration | Status  | Timestamp            | Summary      | Checkpoint |
 | --- | --------- | -------- | ----- | ------- | -------------------- | ------------ | ---------- |
 | 1   | planner#1 | PLANNING | -     | SUCCESS | 2026-01-01T01:00:00Z | Plan created | -          |
 </ExecutionLog>

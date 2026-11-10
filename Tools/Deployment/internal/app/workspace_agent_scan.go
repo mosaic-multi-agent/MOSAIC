@@ -24,7 +24,9 @@ import (
 	"sort"
 	"strings"
 
+	"mosaic-common/docformat"
 	"mosaic-deploy/internal/agentfields"
+	"mosaic-deploy/internal/agentkey"
 	"mosaic-deploy/internal/catalog"
 	"mosaic-deploy/internal/domain"
 )
@@ -169,8 +171,10 @@ func scanWorkspaceAgents(workspace, agentsDir string, c catalog.Catalog, src *do
 
 		name := entry.Name()
 
-		// Only files with the declared extension.
-		if !strings.HasSuffix(name, agentExt) {
+		// Only files with the declared extension's file suffix: a harness declaring
+		// ".agent.md" also has its legacy plain ".md" agent files scanned, so a deployed
+		// legacy file still enters the artifact set and can be migrated.
+		if !strings.HasSuffix(name, agentExt[max(strings.LastIndex(agentExt, "."), 0):]) {
 			continue
 		}
 
@@ -181,9 +185,9 @@ func scanWorkspaceAgents(workspace, agentsDir string, c catalog.Catalog, src *do
 			continue
 		}
 
-		// Derive the agent key from the file name using the generalised agentKeyFromFileName,
-		// which strips the declared extension and its ".agent.<suffix>" variant.
-		fileKey := agentKeyFromFileName(name, agentExt)
+		// Derive the agent key from the file name; the shared derivation strips the declared
+		// extension and its ".agent.<suffix>" variant.
+		fileKey := agentkey.FromFileNameExt(name, agentExt)
 
 		// Decode through the funnel. Undecodable files trigger a filename-key fallback
 		// before skipping, mirroring the parse-failure path for Markdown files.
@@ -209,10 +213,15 @@ func scanWorkspaceAgents(workspace, agentsDir string, c catalog.Catalog, src *do
 
 		canonical := dr.Canonical
 
-		// Parse frontmatter from canonical bytes. Parse failure triggers filename-key fallback.
+		// Parse frontmatter from canonical bytes. A parse failure or a document without
+		// frontmatter triggers the filename-key fallback.
 		doc, parseErr := ParseGenericSource(canonical)
-		if parseErr != nil {
-			// Parse failed — attempt filename-key fallback before skipping.
+		var fm *docformat.Frontmatter
+		if parseErr == nil {
+			fm = doc.Frontmatter()
+		}
+		if parseErr != nil || !fm.Present() {
+			// Parse failed or no frontmatter — attempt filename-key fallback before skipping.
 			if agent, ok := c.Agent(fileKey); ok {
 				targetPath := filepath.Join(agentsDir, name)
 				matched = append(matched, ScannedAgentMatch{
@@ -224,12 +233,6 @@ func scanWorkspaceAgents(workspace, agentsDir string, c catalog.Catalog, src *do
 					ParseFailed: true,
 				})
 			}
-			continue
-		}
-
-		fm := doc.Frontmatter()
-		if !fm.Present() {
-			// No frontmatter block — skip silently.
 			continue
 		}
 

@@ -27,25 +27,25 @@ import (
 // ---------------------------------------------------------------------------
 
 type stubCatalog struct {
-	root          string
+	root string
 	// catalogRoot, when non-empty, is returned by CatalogRoot(). When empty, CatalogRoot()
 	// returns root. Separate from root so tests can model a session whose MOSAIC root and
 	// active catalogue root differ — the production state after Stage 4.
-	catalogRoot        string
-	agents             []domain.Agent
-	orchestrator       domain.Agent
-	orchestratorScript domain.Agent // script orchestrator; zero value when absent
-	orchestratorScriptOK bool       // true when OrchestratorScript should report present
-	utilityAgents      []domain.Agent
-	infraAgents        []domain.Agent // agents with non-empty Infrastructure field
-	standaloneAgents   []domain.Agent // agents deployed only by the standalone mode
-	skills             []domain.Skill
-	hooks              []domain.HookBundle
-	workflows          []domain.Workflow
-	categories         []domain.WorkflowCategory
-	tiers              []domain.TierInfo
-	sections           map[string][]byte
-	sources            map[string][]byte
+	catalogRoot          string
+	agents               []domain.Agent
+	orchestrator         domain.Agent
+	orchestratorScript   domain.Agent // script orchestrator; zero value when absent
+	orchestratorScriptOK bool         // true when OrchestratorScript should report present
+	utilityAgents        []domain.Agent
+	infraAgents          []domain.Agent // agents with non-empty Infrastructure field
+	standaloneAgents     []domain.Agent // agents deployed only by the standalone mode
+	skills               []domain.Skill
+	hooks                []domain.HookBundle
+	workflows            []domain.Workflow
+	categories           []domain.WorkflowCategory
+	tiers                []domain.TierInfo
+	sections             map[string][]byte
+	sources              map[string][]byte
 }
 
 func (c *stubCatalog) Root() string { return c.root }
@@ -55,7 +55,7 @@ func (c *stubCatalog) CatalogRoot() string {
 	}
 	return c.root
 }
-func (c *stubCatalog) Agents() []domain.Agent                             { return c.agents }
+func (c *stubCatalog) Agents() []domain.Agent { return c.agents }
 func (c *stubCatalog) Agent(key string) (domain.Agent, bool) {
 	all := append(c.agents, append(c.utilityAgents, append(c.infraAgents, append(c.standaloneAgents, c.orchestrator)...)...)...)
 	if c.orchestratorScriptOK {
@@ -72,10 +72,10 @@ func (c *stubCatalog) Orchestrator() domain.Agent { return c.orchestrator }
 func (c *stubCatalog) OrchestratorScript() (domain.Agent, bool) {
 	return c.orchestratorScript, c.orchestratorScriptOK
 }
-func (c *stubCatalog) UtilityAgents() []domain.Agent                      { return c.utilityAgents }
-func (c *stubCatalog) InfrastructureAgents() []domain.Agent               { return c.infraAgents }
-func (c *stubCatalog) StandaloneAgents() []domain.Agent                   { return c.standaloneAgents }
-func (c *stubCatalog) Skills() []domain.Skill                             { return c.skills }
+func (c *stubCatalog) UtilityAgents() []domain.Agent        { return c.utilityAgents }
+func (c *stubCatalog) InfrastructureAgents() []domain.Agent { return c.infraAgents }
+func (c *stubCatalog) StandaloneAgents() []domain.Agent     { return c.standaloneAgents }
+func (c *stubCatalog) Skills() []domain.Skill               { return c.skills }
 func (c *stubCatalog) Skill(key string) (domain.Skill, bool) {
 	for _, sk := range c.skills {
 		if sk.Key == key {
@@ -84,7 +84,7 @@ func (c *stubCatalog) Skill(key string) (domain.Skill, bool) {
 	}
 	return domain.Skill{}, false
 }
-func (c *stubCatalog) Hooks() []domain.HookBundle                         { return c.hooks }
+func (c *stubCatalog) Hooks() []domain.HookBundle { return c.hooks }
 func (c *stubCatalog) Hook(key string) (domain.HookBundle, bool) {
 	for _, h := range c.hooks {
 		if h.Key == key {
@@ -93,7 +93,7 @@ func (c *stubCatalog) Hook(key string) (domain.HookBundle, bool) {
 	}
 	return domain.HookBundle{}, false
 }
-func (c *stubCatalog) Workflows() []domain.Workflow                       { return c.workflows }
+func (c *stubCatalog) Workflows() []domain.Workflow { return c.workflows }
 func (c *stubCatalog) Workflow(id string) (domain.Workflow, bool) {
 	for _, w := range c.workflows {
 		if w.ID == id {
@@ -102,8 +102,8 @@ func (c *stubCatalog) Workflow(id string) (domain.Workflow, bool) {
 	}
 	return domain.Workflow{}, false
 }
-func (c *stubCatalog) WorkflowCategories() []domain.WorkflowCategory      { return c.categories }
-func (c *stubCatalog) Tiers() []domain.TierInfo                           { return c.tiers }
+func (c *stubCatalog) WorkflowCategories() []domain.WorkflowCategory { return c.categories }
+func (c *stubCatalog) Tiers() []domain.TierInfo                      { return c.tiers }
 func (c *stubCatalog) WorkflowSection(id string) ([]byte, error) {
 	if c.sections != nil {
 		if b, ok := c.sections[id]; ok {
@@ -143,8 +143,8 @@ type stubHarnessModule struct {
 	descriptor domain.HarnessDescriptor
 }
 
-func (m *stubHarnessModule) Ref() domain.HarnessRef                       { return m.ref }
-func (m *stubHarnessModule) Descriptor() *domain.HarnessDescriptor        { return &m.descriptor }
+func (m *stubHarnessModule) Ref() domain.HarnessRef                { return m.ref }
+func (m *stubHarnessModule) Descriptor() *domain.HarnessDescriptor { return &m.descriptor }
 func (m *stubHarnessModule) Tools(req domain.ToolRequest) (domain.ToolResult, error) {
 	resolutions := make([]domain.ToolResolution, len(req.Generic))
 	for i, g := range req.Generic {
@@ -325,12 +325,12 @@ func (s *spyUserConfig) WithLock(fn func() error) error {
 
 type stubLogger struct{}
 
-func (l *stubLogger) StartRun(rc logging.RunContext)  {}
-func (l *stubLogger) Event(e logging.Event)           {}
-func (l *stubLogger) Action(ar domain.ActionRecord)   {}
-func (l *stubLogger) EndRun(outcome domain.Outcome)   {}
-func (l *stubLogger) Paths() domain.LogPaths          { return domain.LogPaths{} }
-func (l *stubLogger) Degraded() []error               { return nil }
+func (l *stubLogger) StartRun(rc logging.RunContext) {}
+func (l *stubLogger) Event(e logging.Event)          {}
+func (l *stubLogger) Action(ar domain.ActionRecord)  {}
+func (l *stubLogger) EndRun(outcome domain.Outcome)  {}
+func (l *stubLogger) Paths() domain.LogPaths         { return domain.LogPaths{} }
+func (l *stubLogger) Degraded() []error              { return nil }
 
 // ---------------------------------------------------------------------------
 // spyTodo — satisfies todo.Collector and records items and gaps
@@ -341,12 +341,12 @@ type spyTodo struct {
 	gaps  []domain.Gap
 }
 
-func (c *spyTodo) Add(item domain.TodoItem)  { c.items = append(c.items, item) }
-func (c *spyTodo) AddGap(g domain.Gap)       { c.gaps = append(c.gaps, g) }
-func (c *spyTodo) Items() []domain.TodoItem  { return c.items }
-func (c *spyTodo) Groups() []todo.Group      { return nil }
-func (c *spyTodo) Empty() bool               { return len(c.items) == 0 && len(c.gaps) == 0 }
-func (c *spyTodo) Reset()                    { c.items = nil; c.gaps = nil }
+func (c *spyTodo) Add(item domain.TodoItem) { c.items = append(c.items, item) }
+func (c *spyTodo) AddGap(g domain.Gap)      { c.gaps = append(c.gaps, g) }
+func (c *spyTodo) Items() []domain.TodoItem { return c.items }
+func (c *spyTodo) Groups() []todo.Group     { return nil }
+func (c *spyTodo) Empty() bool              { return len(c.items) == 0 && len(c.gaps) == 0 }
+func (c *spyTodo) Reset()                   { c.items = nil; c.gaps = nil }
 
 // hasGapKind reports whether any recorded gap has the given kind.
 func (c *spyTodo) hasGapKind(kind domain.GapKind) bool {
@@ -525,10 +525,10 @@ func newBaseDeps(t *testing.T, stub *interactiontest.Stub) (app.Deps, string) {
 // pre-answering the question sequence to drive the flow headlessly without interaction.
 func newDeployRequest(workspace, harnessID string, workflowIDs []string) app.DeployRequest {
 	return app.DeployRequest{
-		HarnessID:     harnessID,
-		WorkspacePath: workspace,
-		Scope:         domain.ScopeProject,
-		WorkflowIDs:   workflowIDs,
+		HarnessID:       harnessID,
+		WorkspacePath:   workspace,
+		Scope:           domain.ScopeProject,
+		WorkflowIDs:     workflowIDs,
 		AutoConfirmPlan: true,
 	}
 }

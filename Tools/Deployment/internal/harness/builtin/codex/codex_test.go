@@ -53,7 +53,8 @@ package codex_test
 //
 //   Injection content (T5.6):
 //   - HarnessConstraints is filled from module-local fixtures for a regular request.
-//   - Orchestrator request returns shared + orchestrator merged content.
+//   - Orchestrator-role requests for a shared region get shared content only (see
+//     injection_one_file_test.go).
 //   - Unknown injection names return ok=false.
 //   - Project-class injections all return ok=false.
 //
@@ -107,7 +108,7 @@ const (
 		"Tool access is controlled by the sandbox_mode field set during deployment."
 
 	// codexLocalOrchestratorConstraints is the HarnessConstraints region content in
-	// testdata/Catalog/HarnessInjections/Codex/HarnessInjectionsOrchestrator.md.
+	// testdata/Catalog/HarnessInjections/Codex/HarnessInjectionsOrchestrator.md (OrchestratorHarnessConstraints region).
 	codexLocalOrchestratorConstraints = "As an orchestrator in Codex, you may spawn subagents " +
 		"and perform workspace writes within the declared sandbox."
 )
@@ -115,18 +116,6 @@ const (
 // ---------------------------------------------------------------------------
 // Module construction helpers
 // ---------------------------------------------------------------------------
-
-// repoRoot returns the absolute path to the repository root. Package is at
-// Tools/Deployment/internal/harness/builtin/codex/ -- six levels below the repo root.
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	rel := filepath.Join("..", "..", "..", "..", "..", "..")
-	abs, err := filepath.Abs(rel)
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
-	return abs
-}
 
 // frozenCatalogRoot returns the absolute path to the frozen Catalog fixture tree.
 // Collapse, resolution, frontmatter, target-path, hook, and contract-suite tests
@@ -142,13 +131,10 @@ func frozenCatalogRoot(t *testing.T) string {
 }
 
 // localFixturesRoot returns the absolute path to the module-local testdata directory.
-// The codex module's New() function looks for injection content at
-//
-//	localFixturesRoot(t) + "/" + codex.RepoContentDir
-//
-// which resolves to testdata/Catalog/HarnessInjections/Codex/. Use this root for T5.6
-// injection tests only; it is not suitable for the collapse or frontmatter tests, which
-// need a fully formed Codex module but have no injection-content assertions.
+// Paired with contentDirsUnder, injection content resolves to
+// testdata/Catalog/HarnessInjections/Codex/. Use this root for injection tests only; it
+// is not suitable for the collapse or frontmatter tests, which need a fully formed Codex
+// module but have no injection-content assertions.
 func localFixturesRoot(t *testing.T) string {
 	t.Helper()
 	abs, err := filepath.Abs("testdata")
@@ -158,22 +144,12 @@ func localFixturesRoot(t *testing.T) string {
 	return abs
 }
 
-// newModule constructs the Codex module against the real repository root.
-func newModule(t *testing.T) domain.HarnessModule {
-	t.Helper()
-	mod, err := codex.New(registry.BuiltinOptions{MosaicRoot: repoRoot(t)})
-	if err != nil {
-		t.Fatalf("codex.New() against real repo root: %v", err)
-	}
-	return mod
-}
-
 // newModuleFromFrozen constructs the Codex module against the frozen Catalog fixture root.
 // This is the preferred constructor for tests that do not make injection-content assertions,
 // so the tests remain immune to live Catalog changes.
 func newModuleFromFrozen(t *testing.T) domain.HarnessModule {
 	t.Helper()
-	mod, err := codex.New(registry.BuiltinOptions{MosaicRoot: frozenCatalogRoot(t)})
+	mod, err := codex.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("codex.New() from frozen catalog: %v", err)
 	}
@@ -184,7 +160,7 @@ func newModuleFromFrozen(t *testing.T) domain.HarnessModule {
 // testdata fixtures. Used exclusively for T5.6 injection content tests.
 func newModuleWithLocalFixtures(t *testing.T) domain.HarnessModule {
 	t.Helper()
-	mod, err := codex.New(registry.BuiltinOptions{MosaicRoot: localFixturesRoot(t)})
+	mod, err := codex.New(registry.BuiltinOptions{ContentDir: contentDirsUnder(localFixturesRoot(t))})
 	if err != nil {
 		t.Fatalf("codex.New() with local fixtures: %v", err)
 	}
@@ -1047,26 +1023,6 @@ func TestInjection_SharedRequest_HarnessConstraintsFilled(t *testing.T) {
 	}
 }
 
-// TestInjection_OrchestratorRequest_ReturnsMergedContent verifies that an orchestrator
-// role request returns the merged (shared + orchestrator) content for HarnessConstraints.
-func TestInjection_OrchestratorRequest_ReturnsMergedContent(t *testing.T) {
-	mod := newModuleWithLocalFixtures(t)
-	content, ok := mod.Injection(domain.InjectionRequest{
-		Name:     "HarnessConstraints",
-		AgentKey: "orchestrator",
-		Role:     domain.RoleOrchestrator,
-	})
-	if !ok {
-		t.Fatal("Injection(\"HarnessConstraints\", orchestrator) returned ok=false; " +
-			"merged injection must be filled for orchestrator requests")
-	}
-	want := codexLocalHarnessConstraints + "\n\n" + codexLocalOrchestratorConstraints
-	if content != want {
-		t.Errorf("Injection(\"HarnessConstraints\", orchestrator):\n  got:  %q\n  want: %q",
-			content, want)
-	}
-}
-
 // TestInjection_UnknownName_ReturnsFalse verifies that an unknown injection name returns
 // ok=false so the caller correctly treats it as unmanaged.
 func TestInjection_UnknownName_ReturnsFalse(t *testing.T) {
@@ -1363,25 +1319,5 @@ func TestDescriptor_TransformVersion_NonEmpty(t *testing.T) {
 			"codex.yaml must declare transform_version: \"1.0.0\" so that applyVersionStamp "+
 			"writes a '# mosaic_harness_version:' comment in every deployed Codex agent file; "+
 			"an empty TransformVersion silently omits the harness version stamp (FR-9 violation)")
-	}
-}
-
-// TestDescriptor_InjectionsVersion_NonEmpty verifies that the Codex descriptor parsed via
-// codex.New (through DescriptorForTesting) has a non-empty InjectionsVersion field.
-//
-// This pins the defect location (codex.yaml missing injections_version) independently of
-// the transform-level assertion in TestCodexTransform_InjectionsVersionOnRegionTag.
-// A regression that removes injections_version from codex.yaml fails here immediately,
-// without requiring a source with injection regions to detect the absence.
-//
-// This test is RED until I18.2 adds injections_version: "1.0.0" to codex.yaml.
-func TestDescriptor_InjectionsVersion_NonEmpty(t *testing.T) {
-	d := codex.DescriptorForTesting(t)
-	if d.InjectionsVersion == "" {
-		t.Errorf("Descriptor.InjectionsVersion is empty; "+
-			"codex.yaml must declare injections_version: \"1.0.0\" so that applyHarnessRegion "+
-			"stamps the version attribute on InjectionHarness-class region tags; "+
-			"the staleness and manifest paths read the injection version from the region tag, "+
-			"not from frontmatter; an empty InjectionsVersion silently omits this attribute (FR-9 violation)")
 	}
 }

@@ -1,5 +1,5 @@
 ---
-version: "0.2"
+version: "1.0"
 name: "Quick Fix Workflow"
 description: "Small changes, bug fixes, or well-understood modifications. Skips research and design."
 hint: "Reference anti-pattern, not a recommendation — kept to show what 'fast' costs. Skipping test-writer means bug fixes ship with no regression test; skipping requirements means 'well-understood' is never actually verified. Never used in practice. Prefer brownfield-tdd sized down for real small fixes."
@@ -15,12 +15,12 @@ artifacts:
   - Stage-*/Plan.md
   - Stage-*/PlanProgress.md
   - plan-review.md
-  - Stage-{StageNumber}/Plan.md
-  - Stage-{StageNumber}/PlanProgress.md
+  - Stage-{Stage}/Plan.md
+  - Stage-{Stage}/PlanProgress.md
   - TestResults.md
 ---
 
-<Workflow type="core" name="quick-fix" version="0.2">
+<Workflow type="core" name="quick-fix" version="1.0">
 ## Quick Fix Workflow
 
 **Use when:** Small changes, bug fixes, or well-understood modifications. Skips research and design.
@@ -28,13 +28,15 @@ artifacts:
 | Phase | Subagent | HITL | On Success | On Findings | Input | Output |
 |-------|----------|:----:|------------|-------------|-------|--------|
 | PLANNING | planner-tdd-soft | TRUE | plan-review | - | - | Plan.md, Stage-*/Plan.md, Stage-*/PlanProgress.md |
-| PLANNING | plan-review | FALSE | implementation-tdd | planner-tdd-soft | Plan.md, Stage-*/Plan.md, Stage-*/PlanProgress.md | plan-review.md |
-| EXECUTION.[StageNumber] | implementation-tdd | FALSE | test-runner | - | Stage-{StageNumber}/Plan.md, Stage-{StageNumber}/PlanProgress.md | Stage-{StageNumber}/PlanProgress.md |
-| REVIEW | test-runner | FALSE | COMPLETE | implementation-tdd | - | TestResults.md |
+| PLANNING | plan-review | FALSE | [Stage] | planner-tdd-soft | Plan.md, Stage-*/Plan.md, Stage-*/PlanProgress.md | plan-review.md |
+| EXECUTION.[Stage] | implementation-tdd | FALSE | COMPLETE | - | Stage-{Stage}/Plan.md, Stage-{Stage}/PlanProgress.md | Stage-{Stage}/PlanProgress.md |
+| REVIEW | test-runner | FALSE | COMPLETE | planner-tdd-soft | - | TestResults.md |
 
-**Notes:**
-- Single-stage plans use Stage-1/ folder for consistency (Decision 15)
+**Blocks:**
 
+| Block | Source | Section |
+|-------|--------|---------|
+| Stage | Plan.md | Stages |
 </Workflow>
 
 ---
@@ -45,6 +47,10 @@ Put together quickly as a theoretical fast path for small, well-understood chang
 
 The structural gap it demonstrates: EXECUTION goes straight to `implementation-tdd` with no `test-writer-tdd`/`tests-review-tdd` step ahead of it, so a bug fix under this workflow ships without a regression test proving the bug is fixed and stays fixed. Compounding that, there's no RESEARCH phase and `Requirements.md` isn't even in the artifact list — the workflow has no gate ensuring the "well-understood modification" is actually well understood before planning starts. Both gaps together show why the two things a small-fix workflow is tempted to cut — requirements clarity and regression coverage — are exactly the two things that catch the failure modes small fixes are most prone to. Worth keeping as the negative example for anyone designing a lighter-weight workflow in the future: this is what "lighter" looks like when it cuts the wrong things.
 
+**The Stage block is ungrouped.** Every stage runs `implementation-tdd` alone, so the `Approach` column `planner-tdd-soft` writes into `Plan.md` is ignored here (an ungrouped block ignores `Approach`). A plan that schedules test work still gets only implementation — another face of the missing test step.
+
+**Fix targets.** `test-runner` runs after the Stage block has exited, so its fix target is `planner-tdd-soft` rather than the block row `implementation-tdd`: completed stages are frozen, and the planner adds a fix stage, which runs when the block is entered again. Single-stage plans still use the `Stage-1/` folder; that is the planner's own convention.
+
 ---
 
 ## Changelog
@@ -53,6 +59,7 @@ The structural gap it demonstrates: EXECUTION goes straight to `implementation-t
 |---------|------|--------|---------|
 | 0.1 | 2026-08-17 | MOSAIC | Changelog tracking begins here; earlier revisions predate this record. |
 | 0.2 | 2026-08-26 | MOSAIC | Replace Unicode emoji with ASCII tokens in HITL column (TRUE/FALSE). |
+| 1.0 | 2026-10-10 | MOSAIC | Migrated to WorkflowFormat 2.16: `[StageNumber]` → declared block `[Stage]` (`**Blocks:**` table). Routing made scope-correct: `plan-review` enters `[Stage]`; `implementation-tdd` ends its iteration with `COMPLETE` and the block's exit continues to `test-runner`; `test-runner` fix target is `planner-tdd-soft` (was the block row `implementation-tdd`). Note about `Stage-1/` removed (planner convention, moved to Design Rationale). |
 
 ---
 

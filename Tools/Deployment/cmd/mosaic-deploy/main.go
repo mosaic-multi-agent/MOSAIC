@@ -21,6 +21,7 @@ import (
 	"github.com/mattn/go-isatty"
 
 	"mosaic-deploy/internal/app"
+	"mosaic-deploy/internal/app/stackconfig"
 	"mosaic-deploy/internal/catalog"
 	"mosaic-deploy/internal/cli"
 	"mosaic-deploy/internal/config"
@@ -52,7 +53,7 @@ import (
 	_ "mosaic-deploy/internal/agentformat/all"
 )
 
-const ToolVersion = "1.1.0"
+const ToolVersion = "1.7.0"
 
 // wantsTUI reports whether mosaic-deploy should launch the interactive TUI: no subcommand
 // was given, and both stdin and stdout are attached to a real terminal (not a pipe/redirect).
@@ -116,7 +117,7 @@ func main() {
 	// absent, the default {mosaic-root}/Catalog is used without validation. When
 	// it is explicitly supplied, the path is made absolute and validated fail-fast
 	// before any further dependency construction.
-	catalogFolder, err := resolveCatalogFolder(mosaicRoot, catalogFolderFlag)
+	_, err := resolveCatalogFolder(mosaicRoot, catalogFolderFlag)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(cli.ExitFailure)
@@ -149,7 +150,7 @@ func main() {
 	// Step 5: Load the MOSAIC source catalog. The resolved catalogFolder is the
 	// exclusive source for agents and workflows; bundle and protocol always come
 	// from mosaicRoot.
-	cat, err := catalog.Load(mosaicRoot, catalogFolder)
+	cat, stackDesc, stackOrigin, err := loadRunStack(mosaicRoot, args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: load catalog: %v\n", err)
 		os.Exit(cli.ExitFailure)
@@ -160,11 +161,12 @@ func main() {
 	// hook wires config-declared tool-destination mappings into each harness module's
 	// descriptor at construction time, so that destination fields are emitted on every
 	// deploy and update without any further module-level knowledge of config stores.
-	// The ModelCatalog hook overlays the shared catalog's model data onto the three
-	// CLI-backed harnesses, so Descriptor().Models reflects the single source of truth
-	// for model IDs and format hints; any harness the shared catalog does not know keeps
+	// The ModelCatalog hook overlays the shared catalog's model data onto every
+	// harness the catalog knows, builtin VS Code GHCP included, so
+	// Descriptor().Models reflects the single source of truth for model IDs and
+	// format hints; any harness the shared catalog does not know keeps
 	// its own descriptor-sourced catalog unchanged.
-	reg, err := registry.Discover(registry.Options{
+	reg, err := registry.DiscoverForStack(registry.Options{
 		MosaicRoot:    mosaicRoot,
 		AllowExternal: allowExternal || toolCfg.AllowExternalModules,
 		GOOS:          runtime.GOOS,
@@ -178,7 +180,7 @@ func main() {
 			}
 			return domain.ModelCatalog{IDs: cat.IDs, FormatHint: cat.FormatHint}
 		},
-	})
+	}, cat.HarnessInjections())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: discover harnesses: %v\n", err)
 		os.Exit(cli.ExitFailure)
@@ -209,17 +211,23 @@ func main() {
 		ProtocolLoader: catalog.FileProtocolLoader{},
 		BundleLoader:   catalog.FileBundleLoader{},
 		ToolVersion:    ToolVersion,
+
+		StackDescription: stackDesc,
+		StackFromInput:   stackOrigin == stackconfig.OriginStackInput,
+		StackOrigin:      stackOrigin,
 	}
 
 	if wantsTUI(args) {
 		ref := tui.NewInteraction()
 		deps.Interaction = ref
 		reloadFunc := buildReloadFunc(mosaicRoot, deps)
+		launchStack, launchGiven := tuiLaunchStack(args)
 		if err := tui.Run(context.Background(), app.New(deps), tui.Options{
-			Interaction:   ref,
-			CatalogFolder: catalogFolder,
-			ReloadCatalog: reloadFunc,
-			ToolVersion:   ToolVersion,
+			Interaction:      ref,
+			LaunchStack:      launchStack,
+			LaunchStackGiven: launchGiven,
+			ReloadCatalog:    reloadFunc,
+			ToolVersion:      ToolVersion,
 		}); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(cli.ExitFailure)
@@ -275,23 +283,6 @@ func scanGlobalFlags(args []string) (mosaicRoot, catalogFolder, logDir string, a
 		}
 	}
 	return
-}
-
-// buildReloadFunc constructs the catalogue reload capability supplied to the TUI.
-// When the user confirms a catalogue folder different from the one loaded at startup,
-// the TUI calls the returned function to reload the catalogue from the new folder and
-// rebuild the service around it. All other dependencies (registry, logger, config stores,
-// manifest store, todo collector, interaction) are reused unchanged from baseDeps.
-func buildReloadFunc(mosaicRoot string, baseDeps app.Deps) tui.CatalogReloadFunc {
-	return func(catalogFolder string) (app.Service, error) {
-		newCat, err := catalog.Load(mosaicRoot, catalogFolder)
-		if err != nil {
-			return nil, err
-		}
-		newDeps := baseDeps
-		newDeps.Catalog = newCat
-		return app.New(newDeps), nil
-	}
 }
 
 // buildPreAnswers pre-scans args for --selections and, when present, parses the file

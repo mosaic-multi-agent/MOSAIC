@@ -22,25 +22,10 @@ const (
 	PathKindDirectory PathKind = iota
 	// PathKindFile accepts an existing, readable regular file.
 	PathKindFile
-	// PathKindFileOrDirectory accepts either an existing readable regular file or an
-	// existing readable directory. Used by the harness-transform mode, whose input may be
-	// a single agent file or a folder of them.
-	//
-	// Screen wording: label "Agent file or folder path:", placeholder
-	// "/path/to/agent.md or /path/to/folder". Validation: non-empty after quote stripping;
-	// the path exists; it is a readable regular file or a readable directory. Writability
-	// is not required — this mode's output goes to the target harness's own resolved path.
-	PathKindFileOrDirectory
-
-	// PathKindCatalogFolder accepts an existing, READABLE directory. Writability is NOT
-	// required — a catalogue is only ever read by the deploy flow.
-	//
-	// Screen wording: title "Catalogue Folder", label "Catalogue folder path:",
-	// placeholder "/path/to/catalog". Guidance states that the folder supplies the agents
-	// and workflows offered in this session and may override individual skills and hooks by
-	// supplying same-keyed ones, and that the protocol document, the deployed-sections
-	// bundle, and CatalogFilesFormat.md always come from the MOSAIC root regardless.
-	PathKindCatalogFolder
+	// PathKindTransformWorkspace accepts the workspace root whose whole deployment the
+	// harness-transform mode moves to another harness. Validation is that of
+	// PathKindDirectory (an existing, writable directory); the wording describes the move.
+	PathKindTransformWorkspace
 )
 
 // WorkspaceScreen prompts the user for a workspace directory path and validates it before
@@ -55,11 +40,6 @@ const (
 //   1. Path must not be empty.
 //   2. Path must point to an existing regular file (not a directory).
 //   3. The file must be readable (checked by opening it for reading).
-//
-// Validation rules (PathKindCatalogFolder):
-//   1. Path must not be empty.
-//   2. Path must point to an existing directory (not a file).
-//   3. The directory must be readable. Writability is NOT required.
 //
 // Navigation contract:
 //   - Enter on a valid path -> Done() == true, WorkspacePath() returns the entered path.
@@ -123,14 +103,10 @@ func (s *WorkspaceScreen) SetPathKind(kind PathKind) {
 		label = "Agent file path:"
 		placeholder = "/path/to/agent.md"
 		validateFn = validateFilePath
-	case PathKindFileOrDirectory:
-		label = "Agent file or folder path:"
-		placeholder = "/path/to/agent.md or /path/to/folder"
-		validateFn = validateFileOrDirPath
-	case PathKindCatalogFolder:
-		label = "Catalogue folder path:"
-		placeholder = "/path/to/catalog"
-		validateFn = validateCatalogFolderPath
+	case PathKindTransformWorkspace:
+		label = "Workspace root path:"
+		placeholder = "/path/to/workspace"
+		validateFn = validateWorkspacePath
 	default: // PathKindDirectory
 		label = "Workspace directory path:"
 		placeholder = "/path/to/workspace"
@@ -211,47 +187,6 @@ func validateFilePath(path string) error {
 	return nil
 }
 
-// validateFileOrDirPath runs validation for PathKindFileOrDirectory: the path must be
-// non-empty, exist on disk, and be either a readable regular file or a readable directory.
-// Writability is not required — the transform mode writes to the target harness's own path.
-func validateFileOrDirPath(path string) error {
-	path = pathinput.Unquote(strings.TrimSpace(path))
-	if path == "" {
-		return errors.New("path cannot be empty")
-	}
-
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return errors.New("path is not valid: " + err.Error())
-	}
-
-	info, err := os.Stat(abs)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return errors.New("path does not exist: " + abs)
-		}
-		return errors.New("cannot access path: " + err.Error())
-	}
-
-	if info.IsDir() {
-		// Directory: probe readability by opening it.
-		f, openErr := os.Open(abs)
-		if openErr != nil {
-			return errors.New("directory is not readable: " + abs)
-		}
-		f.Close()
-		return nil
-	}
-
-	// Regular file: probe readability by opening for reading.
-	f, openErr := os.Open(abs)
-	if openErr != nil {
-		return errors.New("file is not readable: " + abs)
-	}
-	f.Close()
-	return nil
-}
-
 // validateCatalogFolderPath validates that the path is an existing, readable directory.
 // Writability is not checked — a catalogue folder is only ever read by the deploy flow.
 func validateCatalogFolderPath(path string) error {
@@ -305,18 +240,11 @@ func (s *WorkspaceScreen) View() string {
 		subtitle = "Enter the path to the harness-only agent file to promote."
 		guidanceText = "The path must be an existing, readable regular file.\n" +
 			"This is typically a .md file describing the agent.\n"
-	case PathKindFileOrDirectory:
-		title = "Agent File or Folder Path"
-		subtitle = "Enter the path to an agent file or a folder of agent files."
-		guidanceText = "The path must be an existing, readable file or directory.\n" +
-			"For a folder, only files directly under it are processed (non-recursive).\n"
-	case PathKindCatalogFolder:
-		title = "Catalogue Folder"
-		subtitle = "Enter the catalogue directory supplying agents and workflows for this session."
-		guidanceText = "The folder supplies the agents and workflows offered in this session.\n" +
-			"It may also override individual skills and hooks by supplying same-keyed ones.\n" +
-			"The protocol document, the deployed-sections bundle, and CatalogFilesFormat.md\n" +
-			"always come from the MOSAIC root regardless of the catalogue folder.\n"
+	case PathKindTransformWorkspace:
+		title = "Workspace Path"
+		subtitle = "Enter the workspace root whose deployment is moved to another harness."
+		guidanceText = "The workspace must be an existing, writable directory.\n" +
+			"Its agents, skills and hooks are planned together; the plan is shown before anything is written.\n"
 	default: // PathKindDirectory
 		title = "Workspace Path"
 		subtitle = "Enter the directory where agents will be deployed."
@@ -377,8 +305,7 @@ func (s *WorkspaceScreen) Reset() { s.input.Reset() }
 func (s *WorkspaceScreen) InputInit() tea.Cmd { return s.input.Init() }
 
 // SetExternalError displays msg as the screen's inline error and holds the user on the
-// screen. Used to surface a failure that only the caller can detect — a failed catalogue
-// reload. The message is cleared on the next Update call.
+// screen. Used to surface a failure that only the caller can detect. The message is cleared on the next Update call.
 func (s *WorkspaceScreen) SetExternalError(msg string) {
 	s.externalError = msg
 }

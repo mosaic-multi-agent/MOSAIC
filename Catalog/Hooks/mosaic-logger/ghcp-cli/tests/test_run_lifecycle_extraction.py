@@ -1,18 +1,18 @@
-"""Tests for the extraction-based run lifecycle in mosaic_logger (ghcp-cli variant).
+"""Tests for the dispatch-based run lifecycle in mosaic_logger (ghcp-cli variant).
 
 Key differences from the claude-code variant:
 - resolve_run_identity uses GHCP CLI camelCase event names and payload fields
-- _RUN_ID_PROMPT_FIELDS mapping: subagentStart->agentPrompt, subagentStop->response,
-  userPromptSubmitted->prompt, notification->message
-- agentStop is intentionally absent from _RUN_ID_PROMPT_FIELDS: GHCP CLI's
-  agentStop payload does not carry a last_assistant_message equivalent
+- Only a subagentStart agentPrompt that carries an agent instance id (and a run
+  id) binds a session through resolve_run_identity; a subagentStop response, a
+  userPromptSubmitted prompt and a notification message never bind
+- agentStop's payload does not carry a last_assistant_message equivalent
 - Workspace root is resolved from payload 'cwd', not CLAUDE_PROJECT_DIR
 
 Covers:
-- resolve_run_identity: per-event extraction from event-specific prompt fields
+- resolve_run_identity: subagentStart dispatch binds; other prompt-bearing
+  fields that merely quote a run id leave ctx.run_id unset
 - Events with no prompt-bearing field (sessionStart, sessionEnd, preToolUse,
   postToolUse, postToolUseFailure, preCompact, agentStop) yield ctx.run_id = None
-- agentStop specifically must NOT attempt run_id extraction
 - End-to-end: subagentStart with run_id in agentPrompt writes logs to
   OrchestrationLogs/{run_id}/{agent_instance_id}/
 - run_start emitted on sessionStart; run_end emitted on sessionEnd
@@ -83,8 +83,8 @@ class TestResolveRunIdentityPerEvent(unittest.TestCase):
         mosaic_logger.resolve_run_identity(ctx)
         self.assertEqual(VALID_RUN_ID, ctx.run_id)
 
-    def test_subagent_stop_extracts_from_response(self):
-        """subagentStop: run_id is extracted from the 'response' field."""
+    def test_subagent_stop_response_does_not_bind(self):
+        """subagentStop: a run id in the 'response' field is just a quote."""
         ctx = _make_ctx(
             "subagentStop",
             response=(
@@ -94,26 +94,26 @@ class TestResolveRunIdentityPerEvent(unittest.TestCase):
             ),
         )
         mosaic_logger.resolve_run_identity(ctx)
-        self.assertEqual(VALID_RUN_ID, ctx.run_id)
+        self.assertIsNone(ctx.run_id)
 
-    def test_user_prompt_submitted_extracts_from_prompt(self):
-        """userPromptSubmitted: run_id is extracted from the 'prompt' field."""
+    def test_user_prompt_submitted_prompt_does_not_bind(self):
+        """userPromptSubmitted: a run id in the 'prompt' field is just a quote."""
         ctx = _make_ctx(
             "userPromptSubmitted",
             prompt=f'"run_id": "{VALID_RUN_ID}" — process this please',
         )
         mosaic_logger.resolve_run_identity(ctx)
-        self.assertEqual(VALID_RUN_ID, ctx.run_id)
+        self.assertIsNone(ctx.run_id)
 
-    def test_notification_extracts_from_message_field(self):
-        """notification: run_id is extracted from the 'message' field."""
+    def test_notification_message_does_not_bind(self):
+        """notification: a run id in the 'message' field is just a quote."""
         ctx = _make_ctx(
             "notification",
             notificationType="info",
             message=f"Dispatch complete for run_id: {VALID_RUN_ID}",
         )
         mosaic_logger.resolve_run_identity(ctx)
-        self.assertEqual(VALID_RUN_ID, ctx.run_id)
+        self.assertIsNone(ctx.run_id)
 
     def test_session_start_yields_none_no_prompt_bearing_field(self):
         """sessionStart has no prompt-bearing field; ctx.run_id stays None."""
@@ -153,22 +153,17 @@ class TestResolveRunIdentityPerEvent(unittest.TestCase):
         self.assertIsNone(ctx.run_id)
 
     def test_agent_stop_yields_none(self):
-        """agentStop is intentionally absent from _RUN_ID_PROMPT_FIELDS.
+        """agentStop carries no run id source.
 
         GHCP CLI's agentStop payload does not carry a 'last_assistant_message'
-        or equivalent text field. Unlike claude-code's Stop event, agentStop
-        cannot provide a run_id via prompt-field extraction. ctx.run_id must
-        remain None and writes must go to the 'unknown-run' fallback bucket.
+        or equivalent text field. ctx.run_id must remain None and writes must
+        go to the 'unknown-run' fallback bucket.
         """
         ctx = _make_ctx("agentStop",
                         transcriptPath="/path/to/transcript.jsonl",
                         stopReason="end_turn")
         mosaic_logger.resolve_run_identity(ctx)
         self.assertIsNone(ctx.run_id)
-
-    def test_agent_stop_not_in_run_id_prompt_fields(self):
-        """Explicit check: agentStop must not be in _RUN_ID_PROMPT_FIELDS."""
-        self.assertNotIn("agentStop", mosaic_logger._RUN_ID_PROMPT_FIELDS)
 
     def test_subagent_start_with_no_run_id_in_prompt_yields_none(self):
         """subagentStart where agentPrompt has no valid run_id yields None."""
@@ -200,17 +195,6 @@ class TestResolveRunIdentityPerEvent(unittest.TestCase):
             mosaic_logger.resolve_run_identity(ctx)
         except Exception as e:
             self.fail(f"resolve_run_identity raised on malformed content: {e}")
-
-    def test_ghcp_cli_prompt_field_names_are_camelcase(self):
-        """The field names in _RUN_ID_PROMPT_FIELDS are camelCase GHCP CLI names."""
-        for event, field in mosaic_logger._RUN_ID_PROMPT_FIELDS.items():
-            # camelCase: first char lowercase, no underscores in field names
-            # (agent_prompt would be claude-code style; agentPrompt is correct)
-            self.assertFalse(
-                "_" in field,
-                f"Field name '{field}' for event '{event}' contains underscore "
-                "— should be camelCase (e.g., 'agentPrompt', not 'agent_prompt')"
-            )
 
 
 class TestExtractionBasedDispatch(unittest.TestCase):
@@ -281,9 +265,9 @@ class TestExtractionBasedDispatch(unittest.TestCase):
             "run_id in invocation_start event does not match the extracted run_id"
         )
 
-    def test_user_prompt_submitted_with_run_id_writes_to_extracted_folder(self):
-        """userPromptSubmitted where prompt contains a valid run_id writes to the
-        extracted run_id's orchestrator events file."""
+    def test_user_prompt_submitted_quoting_a_run_id_writes_nothing_to_that_run(self):
+        """userPromptSubmitted whose prompt merely quotes a run id does not write
+        into that run's folder; the session stays unbound (unknown-run)."""
         payload = {
             "sessionId": "extraction-sess-003",
             "prompt": f'"run_id": "{VALID_RUN_ID}" -- please process this task',
@@ -291,18 +275,14 @@ class TestExtractionBasedDispatch(unittest.TestCase):
         }
         mosaic_logger.dispatch("userPromptSubmitted", json.dumps(payload))
 
-        events_file = (
-            self.tmp_path / "OrchestrationLogs" / VALID_RUN_ID /
-            "00_orchestrator_events.jsonl"
-        )
+        self.assertFalse((self.tmp_path / "OrchestrationLogs" / VALID_RUN_ID).exists())
         self.assertTrue(
-            events_file.exists(),
-            f"00_orchestrator_events.jsonl not found in OrchestrationLogs/{VALID_RUN_ID}/"
-        )
+            (self.tmp_path / "OrchestrationLogs" / "unknown-run" /
+             "00_orchestrator_events.jsonl").exists())
 
     def test_agent_stop_writes_to_unknown_run_fallback(self):
-        """agentStop cannot extract run_id (absent from _RUN_ID_PROMPT_FIELDS),
-        so all writes go to the 'unknown-run' fallback bucket."""
+        """agentStop carries no run id source, so all writes go to the
+        'unknown-run' fallback bucket."""
         payload = {
             "sessionId": "extraction-sess-004",
             "transcriptPath": "/nonexistent/transcript.jsonl",
@@ -438,10 +418,9 @@ class TestRunStartRunEndEventBased(unittest.TestCase):
 class TestAgentStopBehavior(unittest.TestCase):
     """Specific behavior tests for agentStop vs. claude-code Stop.
 
-    agentStop MUST NOT attempt run_id extraction (it is absent from
-    _RUN_ID_PROMPT_FIELDS). Unlike claude-code's Stop event which carries
-    last_assistant_message, GHCP CLI's agentStop only has transcriptPath
-    and stopReason.
+    agentStop has no run id source. Unlike claude-code's Stop event which
+    carries last_assistant_message, GHCP CLI's agentStop only has
+    transcriptPath and stopReason.
     """
 
     def setUp(self):
@@ -504,7 +483,7 @@ class TestAgentStopBehavior(unittest.TestCase):
         mosaic_logger.resolve_run_identity(ctx)
         self.assertIsNone(ctx.run_id,
                           "ctx.run_id must remain None for agentStop after "
-                          "resolve_run_identity (agentStop absent from _RUN_ID_PROMPT_FIELDS)")
+                          "resolve_run_identity (agentStop carries no run id source)")
 
 
 if __name__ == "__main__":

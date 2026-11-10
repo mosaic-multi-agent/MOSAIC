@@ -1,0 +1,8 @@
+{"type":"session.skills_loaded","data":{"skills":[]}}
+{"type":"assistant.usage","data":{"model":"gpt-5","inputTokens":100,"outputTokens":5,"cacheReadTokens":50,"cacheWriteTokens":10}}
+{"type":"tool.execution_start","data":{"toolCallId":"t1","toolName":"view","arguments":{"path":"a.go"}}}
+{"type":"tool.execution_start","data":{"toolCallId":"t9","toolName":"grep","arguments":{"pattern":"x"},"parentToolCallId":"tsub"}}
+{"type":"assistant.usage","data":{"model":"sub-model","inputTokens":9000,"outputTokens":1,"cacheReadTokens":9000,"parentToolCallId":"tsub"}}
+{"type":"tool.execution_complete","data":{"toolCallId":"t1","success":true}}
+{"type":"assistant.usage","data":{"model":"gpt-5","inputTokens":40,"outputTokens":7,"cacheReadTokens":300}}
+{"type":"result","exitCode":0,"usage":{"premiumRequests":1,"sessionDurationMs":1000}}

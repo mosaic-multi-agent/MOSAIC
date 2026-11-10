@@ -1,0 +1,7 @@
+{"type":"system","subtype":"init","session_id":"s1","tools":["Read","Task"]}
+{"type":"assistant","message":{"id":"msg_1","role":"assistant","content":[{"type":"text","text":"I will read the file first."}],"usage":{"input_tokens":120,"output_tokens":15}},"session_id":"s1"}
+{"type":"assistant","message":{"id":"msg_1","role":"assistant","content":[{"type":"tool_use","id":"tu_1","name":"Read","input":{"file_path":"src/main.go"}}],"usage":{"input_tokens":120,"output_tokens":15}},"session_id":"s1"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"tu_1","content":"package main"}]},"session_id":"s1"}
+{"type":"assistant","message":{"id":"msg_2","role":"assistant","content":[{"type":"tool_use","id":"tu_2","name":"Task","input":{"subagent_type":"reviewer","description":"Review the change","prompt":"Please review src/main.go"}}],"usage":{"input_tokens":200,"output_tokens":40}},"session_id":"s1"}
+{"type":"assistant","message":{"id":"msg_3","role":"assistant","content":[{"type":"text","text":"Done."}]},"session_id":"s1"}
+{"type":"result","subtype":"success","is_error":false,"result":"Done.","session_id":"s1","total_cost_usd":0.02}

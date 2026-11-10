@@ -78,7 +78,7 @@ Test workflows and test orchestrator variants do not belong in the product catal
 
 `--mosaic-root` replaces the **entire** MOSAIC root, not just the catalogue. The deploy tool reads non-catalogue resources from the root too:
 
-- `Development/Designs/CommunicationProtocol.md` — the protocol document injected into every agent
+- `Catalog/CommunicationProtocol.md` — the protocol text injected into every agent (rationale in `Development/Designs/CommunicationProtocol.md`)
 - `Catalog/CatalogFilesFormat.md` — the bundle spec
 - Skill folders under `Catalog/Skills/`
 
@@ -86,9 +86,9 @@ A test catalogue used as `--mosaic-root` would need copies of all of these, or p
 
 ### 3.2 `--catalog-folder`
 
-The deploy tool supports `--catalog-folder <dir>` as a persistent flag on all subcommands. It redirects only the **catalogue source directories** — where agents and workflows are scanned from — while keeping everything else (protocol, bundles, skills, harness descriptors) resolved from the real MOSAIC root.
+The deploy tool supports `--catalog-folder <dir>` as a persistent, repeatable flag on all subcommands. Each occurrence adds one layer to a **catalogue stack**; one `--catalog-folder` without `--include-default-catalog` is a stack of that folder alone, and the default catalogue (`{mosaicRoot}/Catalog`) is left out. Agents, workflows, skills and hooks, and also the protocol (`CommunicationProtocol.md`), the bundle (`DeployedSections.md`) and the harness injections (`HarnessInjections/<Harness>/`) of the built-in harnesses, all come from the stack's layers. The test catalogue therefore supplies its own copies of the protocol, bundle and harness injections; they do not come from the real MOSAIC root. Harness descriptors (external and descriptor-only harnesses) are not part of the stack.
 
-`catalog.Load(mosaicRoot, catalogFolder)` takes the two roots as separate arguments. When `--catalog-folder` is absent, the default `{mosaicRoot}/Catalog` is used. When present, agents and workflows resolve against the supplied folder while protocol, bundles, and other root-relative resources stay at the real root.
+Each layer is one catalogue root with a `catalog-identity.yaml`. When `--catalog-folder` is absent, the stack is the default `{mosaicRoot}/Catalog` alone (or the stack persisted with the workspace).
 
 For AgentTest, this means the test catalogue is a simple directory:
 
@@ -120,7 +120,9 @@ The second is heavier but fully parallel and automatable. The first is the commo
 
 AgentTest's `agentdeploy` port needs two additions: a `CatalogFolder` field in `Options` (emitting `--catalog-folder` to the subprocess), and a `Deploy` method that calls the `deploy` subcommand instead of `render`. The wiring through `WiringConfig` is identical to the existing `MosaicRoot` pattern.
 
-The net effect: the test author recreates just the agents/workflows directory structure, puts their orchestrator and test workflows there, and points the tool at it. Everything else — protocol injection, bundle loading, harness transformation — comes from the real MOSAIC root as it always has.
+The net effect: the test author recreates the agents/workflows directory structure, puts their orchestrator and test workflows there, and points the tool at it. Protocol injection, bundle loading and the built-in harnesses' injections come from the same catalogue stack, so the test catalogue carries its own copies; harness transformation itself is the tool's.
+
+**Maintenance obligation.** The copies of `CommunicationProtocol.md`, `DeployedSections.md`, `HarnessInjections/` and `Orchestrator/orchestrator-script.md` in `Tools/AgentTest/catalog` (and in `Tools/Runner/TestCatalog`) must be synced when the default ones in `Catalog/` change. The synced `Orchestrator/orchestrator-script.md` must keep `recommended_tier: TEST-SUBJECT` (the default declares `HIGH`); preflight rejects any catalogue agent whose tier is outside `TEST-SUBJECT` / `TEST-STUB`. The frozen golden fixture `Tools/Deployment/testdata/frozen-catalog/Catalog` is a deliberate snapshot and is not synced. `Tools/AgentTest/catalog` uses agent ids 1-25, which overlap the default catalogue's ids, so a stack of the default layer plus the AgentTest catalogue fails composition with a numeric-id collision. This is correct behaviour: the test catalogue is meant to deploy standalone, without the default-layer flag, and is not a defect.
 
 ### 3.4 Why Not Reuse the Product Catalogue
 
@@ -211,8 +213,10 @@ To test whether an orchestrator handles a specific routing condition correctly:
 ```
 
 1. **Preflight** dry-runs the deploy call to catch catalogue misses, bad workflow IDs, and missing agent definitions before any sandbox is created.
-2. **Setup** creates a fresh sandbox, deploys the orchestrator and all referenced agents into it via a single `mosaic-deploy deploy --catalog-folder <test-catalogue>` call (or via per-agent `render` calls when using the `stub_agents` path), seeds declared files, provisions the interception hooks. The deploy tool resolves agents and workflows from the test catalogue while loading protocol, bundles, and skills from the real MOSAIC root.
+2. **Setup** creates a fresh sandbox, deploys the orchestrator and all referenced agents into it via a single `mosaic-deploy deploy --catalog-folder <test-catalogue>` call (or via per-agent `render` calls when using the `stub_agents` path), seeds declared files, provisions the interception hooks. The deploy tool resolves agents, workflows, protocol, bundle and harness injections from the test catalogue (a stack of that one folder), not from the real MOSAIC root.
 3. **Launch** starts the orchestrator through the harness CLI. The orchestrator sees a real harness environment with its workflow(s) baked into its system prompt.
+
+**Model pinning.** The subject runs the selected subject model by explicit launch argument (`--model <selected>` for Claude Code, `--model provider/model` for OpenCode), never a harness default. The launch-time argument takes precedence over the definition's `model` field in both harnesses (versions, evidence and the Claude Code subagent order for stubs are recorded in `HarnessKnowledge/KnownIssues/CrossHarnessComparison.md`, section 10). Between setup and launch the runner also reads every deployed definition (subject and stubs) back through the adapter and aborts the run as an infrastructure failure if its `model` field is missing or differs from the model selected for its tier. The tier is the one each agent declares (`recommended_tier`) in the test catalogue files the deployer is given, joined to the deployed agent by agent key (the file name without `.md`), never taken from the deploy tool's output and never inferred from which agent is the subject. A deployed agent with no catalogue file, no declared tier, a tier without a selected model, or a key matching more than one catalogue file fails the check (fail closed). Every `stub_agents` entry is treated as declaring the stub tier.
 4. **Interception** — every time the orchestrator dispatches a collaborator, the harness routes the call through the interception pipeline. The pipeline matches the collaborator identity against the stub registry and returns the declared response. The orchestrator receives it as if a real collaborator produced it.
 5. **Snapshot** captures the invocation log, the orchestration document the orchestrator wrote, and any side effects, while the sandbox still exists.
 6. **Evaluate** is a pure function from evidence to verdict: did the orchestrator dispatch the right agents in the right order? Did it reach the expected final state? Did the invocation sequence match? Did echo fidelity hold?
@@ -273,6 +277,11 @@ The report JSON emitted after a suite run carries the test identity and versioni
 - `test_version` — the test definition's `version` at the time the run was executed
 - `test_id` (integer) — the test definition's numeric `id`
 
+**Model fields (additive):**
+- Per-run `observed_subject_models` — the subject model(s) the run's logs show (always an array) — and `model_verification` (`verified`, `mismatch`, `no_evidence`, `not_assessed`). `subject_model` and `stub_model` keep their names and meaning: they are the **selected** models, not labels.
+- Top-level `model_verdict` (`MODEL_VERIFIED` only when at least one run exists and every run is verified, `MODEL_UNVERIFIED` otherwise), `model_label` (the runs' common observed model when verified, `""` otherwise) and `unverified_runs` (count of runs that are not verified). The verdict is derived once in the report model and rendered by the JSON and text reports, the CLI progress line and the TUI results and detail screens.
+- Labels are by the observed model only. An invalid run or suite carries no model label in any heading or summary, only the `MODEL UNVERIFIED` verdict; the selected and observed values appear only in the exclusion detail. The text report prints `observed subject model:` and `selected stub model:` lines for verified runs only. The CLI exit code is unchanged: an invalid run already fails its test as an infrastructure failure. The report file name never carries the selected model.
+
 These fields feed the results storage and summary system. The numeric `test_id` allows the summary generator to track a test across renames (when `test_name` changes but `test_id` stays the same). The `test_version` allows the summary generator to flag stored results that were collected against an older version of a test's assertions.
 
 ---
@@ -296,6 +305,8 @@ There is no grace period. The subject process ends as soon as the supervisor obs
 3. The supervisor observes the sentinel and terminates the subject process.
 
 Termination is therefore guaranteed even under asynchronous completion: the sentinel is written at step 2, not at pre-invocation of the (N+1)th call. The (N+1)th dispatch will appear in the evidence (its start record is written at step 1), but its own completion and any subject bookkeeping it triggers may be absent — the subject is terminated before either can complete.
+
+**Completion point on Claude Code.** On Claude Code 2.1.271+ in auto mode a collaborator delivers its result through a `SubagentHandback` tool call, and the caller receives it just before the hand-back's `PostToolUse` fires. The pipeline therefore treats that `PostToolUse` (its `tool_input.message`) as the completion event: echo comparison, the completion record and the `stop_after_invocations` cutoff all happen there. A later `SubagentStop` (whose `last_assistant_message` is only post-hand-back commentary) and any second hand-back from the same agent are ignored. Without a hand-back (older CLI, non-auto mode, or Haiku as the main model, which silently falls back from auto to default) `SubagentStop` remains the completion event. Each run's report also records the harness version (`harness_version`).
 
 **No refusal of over-threshold calls.** The interception pipeline never refuses a call at or beyond the threshold at the pre-invocation point solely because the threshold was reached. Refusing at the pre-invocation point would cause the harness to observe a failed hook rather than a valid reply, damaging the run this tool is measuring. The only refusals that occur are those the registered stubs or the unmatched-halt policy already specify, and those fire for the same reasons they would without a threshold. The sentinel, written after the Nth reply is delivered, is the only mechanism that stops the subject — no call is refused for being over-threshold.
 
@@ -345,6 +356,19 @@ A subject that **never dispatches a collaborator using the documented protocol e
 - A subject that dispatches at least one collaborator before the cutoff will generally have its events attributed correctly, because the protocol-envelope binding fires on the first dispatch.
 
 ---
+
+### 5.7 Observed-Model Verification and Run Validity
+
+The evidence carries two things for the subject model: the **selected** model (what the run was configured to use) and the **observed** model(s) (what the run's logs say the subject session used). After the subject finishes and before teardown, the runner asks the observed-model port, which delegates to `mosaic-log-analyzer report`, for the observed models. A missing port or a port error is recorded as "no evidence"; the selection is never substituted for an observation. Models used by stub invocations are neither verified nor recorded.
+
+A run is **valid** only when every observed subject model equals the selected subject model by exact string equality (an alias, a case difference or a suffix difference is a mismatch). Otherwise the run is invalid:
+
+- **Mismatch:** an observed model differs from the selection.
+- **No evidence:** the subject model could not be determined (missing, empty, unparseable, tool failure, or a harness whose logs carry no subject model).
+
+An invalid run fails with the `MODEL_UNVERIFIED` reason, is excluded from pass rates (`model_mismatch` or `model_evidence_missing`), and marks the test as an infrastructure failure on its own, with a detail naming both the selected and the observed values. Precedence between exclusions: a mismatch outranks every other reason; state integrity and spawn failure outrank missing evidence; missing evidence outranks echo mismatch and infrastructure.
+
+Invalid-model runs are **not retried**: they are reported immediately. The state-integrity and spawn-failure retry rules for other exclusion reasons are unchanged.
 
 ## 6. Design Decisions
 
@@ -416,7 +440,7 @@ The `render` subcommand (single-agent rendering) remains available for edge case
 
 ### 7.3 Implementation Path
 
-The deploy tool's `--catalog-folder` is implemented. `catalog.Load(mosaicRoot, catalogFolder)` already separates catalogue loading from protocol/bundle loading.
+The deploy tool's `--catalog-folder` is implemented. With it, the catalogue stack (here the test catalogue alone) supplies the protocol, bundle and harness injections as well as agents and workflows.
 
 AgentTest's `agentdeploy` port needs:
 1. A `CatalogFolder` field in `Options`, emitting `--catalog-folder` when non-empty.

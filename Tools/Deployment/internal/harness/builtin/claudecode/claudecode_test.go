@@ -20,7 +20,7 @@ package claudecode_test
 //   - Any non-project scope returns domain.ErrUnsupportedScope (via the shared contracttest universal invariant)
 //
 //   Harness-level injections:
-//   - HarnessConstraints injection is filled with empty content (Claude Code has no constraint)
+//   - HarnessConstraints injection is filled with the output-artifacts constraint text
 //   - LanguagePatterns is not filled — it is a project-authored injection name, not declared
 //     by this harness
 //   - injections_version is stamped from the descriptor's injections_version field
@@ -43,6 +43,10 @@ import (
 	"mosaic-deploy/internal/harness/registry"
 	"mosaic-deploy/internal/transform"
 )
+
+// claudeHarnessConstraints is the expected shared content of the HarnessConstraints injection
+// in the frozen fixture catalog: the Claude Code harness declares the block with empty content.
+const claudeHarnessConstraints = ""
 
 // updateGolden regenerates the golden files from current engine output when -update is passed.
 // Run: go test ./internal/harness/builtin/claudecode/... -run TestGoldenFile -update
@@ -96,10 +100,10 @@ func agentFixturesDir(t *testing.T) string {
 	return abs
 }
 
-// frozenCatalogRoot returns the absolute path to the frozen Catalog fixture tree. This tree
-// is a snapshot of the protocol source document and all HarnessInjections files at the time
-// the golden files were last regenerated. Golden-file tests must use this root instead of the
-// live repo root so they remain immune to Catalog evolution (version bumps, prose edits, etc.).
+// frozenCatalogRoot returns the absolute path to the frozen MOSAIC-root-shaped fixture tree.
+// It snapshots Catalog/CommunicationProtocol.md and Catalog/HarnessInjections/ as of the last
+// golden regeneration. Golden-file tests must use this root instead of the live repo root so
+// they remain immune to Catalog evolution (version bumps, prose edits, etc.).
 func frozenCatalogRoot(t *testing.T) string {
 	t.Helper()
 	// testdata/frozen-catalog/ is at Tools/Deployment/testdata/frozen-catalog/
@@ -115,7 +119,7 @@ func frozenCatalogRoot(t *testing.T) string {
 // test immediately if construction fails.
 func newModule(t *testing.T) domain.HarnessModule {
 	t.Helper()
-	mod, err := claudecode.New(registry.BuiltinOptions{MosaicRoot: repoRoot(t)})
+	mod, err := claudecode.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("claudecode.New(): %v", err)
 	}
@@ -127,7 +131,7 @@ func newModule(t *testing.T) domain.HarnessModule {
 // files in Catalog/ do not affect the committed golden files.
 func newModuleFromFrozen(t *testing.T) domain.HarnessModule {
 	t.Helper()
-	mod, err := claudecode.New(registry.BuiltinOptions{MosaicRoot: frozenCatalogRoot(t)})
+	mod, err := claudecode.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("claudecode.New() from frozen catalog: %v", err)
 	}
@@ -139,7 +143,7 @@ func newModuleFromFrozen(t *testing.T) domain.HarnessModule {
 // must be populated for every transform.Apply call that processes those source files.
 func loadProtocol(t *testing.T, root string) domain.ProtocolContent {
 	t.Helper()
-	content, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	content, err := catalog.FileProtocolLoader{}.LoadProtocol(filepath.Join(root, "Catalog"))
 	if err != nil {
 		t.Fatalf("load protocol from %s: %v", root, err)
 	}
@@ -419,16 +423,16 @@ func TestTargetPath_ClaudeCode_HookProjectScope(t *testing.T) {
 // Harness-level injection tests
 // ---------------------------------------------------------------------------
 
-// TestInjection_ClaudeCode_HarnessConstraintsIsEmpty verifies that Claude Code declares
-// HarnessConstraints with empty content (no constraint injection).
-func TestInjection_ClaudeCode_HarnessConstraintsIsEmpty(t *testing.T) {
+// TestInjection_ClaudeCode_HarnessConstraintsFilled verifies that Claude Code provides the
+// output-artifacts constraint in its shared HarnessConstraints injection.
+func TestInjection_ClaudeCode_HarnessConstraintsFilled(t *testing.T) {
 	mod := newModule(t)
 	content, ok := mod.Injection(domain.InjectionRequest{Name: "HarnessConstraints", AgentKey: ""})
 	if !ok {
 		t.Fatal("Injection(\"HarnessConstraints\") returned ok=false; Claude Code must declare this injection")
 	}
-	if content != "" {
-		t.Errorf("Injection(\"HarnessConstraints\") = %q; want empty string (Claude Code has no constraint injection)", content)
+	if content != claudeHarnessConstraints {
+		t.Errorf("Injection(\"HarnessConstraints\"):\n  got:  %q\n  want: %q", content, claudeHarnessConstraints)
 	}
 }
 
@@ -457,14 +461,14 @@ func TestInjection_ClaudeCode_ProjectInjectionsNotFilled(t *testing.T) {
 }
 
 // TestInjection_ClaudeCode_InjectionsVersion verifies that the module's descriptor carries
-// the correct injections_version "1.1.0" for Claude Code.
+// the frontmatter version of the frozen catalog's HarnessInjections.md ("1.2.0") for Claude Code.
 func TestInjection_ClaudeCode_InjectionsVersion(t *testing.T) {
 	mod := newModule(t)
 	d := mod.Descriptor()
 	if d == nil {
 		t.Fatal("Descriptor() returned nil")
 	}
-	want := "1.1.0"
+	want := "1.2.0"
 	if d.InjectionsVersion != want {
 		t.Errorf("Descriptor().InjectionsVersion = %q, want %q", d.InjectionsVersion, want)
 	}
@@ -578,7 +582,7 @@ func TestContract_ClaudeCode(t *testing.T) {
 				},
 				Expected: domain.FrontmatterPlan{
 					Set:      nil,
-					Remove:   []string{"recommended_tier", "tier_rationale", "required_skills"},
+					Remove:   []string{"recommended_tier", "tier_rationale", "required_skills", "infrastructure", "triggers", "on_failure"},
 					KeyOrder: []string{"mosaic_id", "version", "mosaic_transform_version", "mosaic_injections_version", "name", "description", "model", "tools"},
 				},
 			},
@@ -587,12 +591,12 @@ func TestContract_ClaudeCode(t *testing.T) {
 		AgentInjectionCases: []contracttest.InjectionCase{
 			{
 				// subagent_shared_content: a non-orchestrator agent receives only shared content.
-				// For Claude Code, HarnessConstraints shared content is empty (declared-but-empty).
+				// For Claude Code, HarnessConstraints shared content is the output-artifacts constraint.
 				Name:    "subagent_shared_content",
 				AgentKey: "some-subagent",
 				// Role is zero value (non-orchestrator)
 				Filled: map[string]string{
-					"HarnessConstraints": "",
+					"HarnessConstraints": claudeHarnessConstraints,
 				},
 				NotFilled: []string{
 					"IdentityExtension",
@@ -620,7 +624,7 @@ func TestContract_ClaudeCode(t *testing.T) {
 				// shared content only (backward compatibility with existing callers that
 				// construct InjectionRequest without Role).
 				Filled: map[string]string{
-					"HarnessConstraints": "",
+					"HarnessConstraints": claudeHarnessConstraints,
 				},
 				NotFilled: []string{
 					"IdentityExtension",

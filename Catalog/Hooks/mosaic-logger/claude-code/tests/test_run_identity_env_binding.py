@@ -501,7 +501,7 @@ class TestPreDispatchFallbackAcceptedLimit(unittest.TestCase):
             {"hook_event_name": "PreToolUse", "session_id": session_id,
              "tool_name": "Bash", "tool_input": {"command": "ls"}},
             {"hook_event_name": "PostToolUse", "session_id": session_id,
-             "tool_name": "Bash", "tool_output": "file.txt"},
+             "tool_name": "Bash", "tool_response": "file.txt"},
         ]
         for payload in payloads:
             try:
@@ -566,7 +566,7 @@ class TestNonCompliantSessionDegradation(unittest.TestCase):
         payloads = [
             {"hook_event_name": "SessionStart", "session_id": session_id},
             {"hook_event_name": "UserPromptSubmit", "session_id": session_id,
-             "user_prompt": "Hello, no run_id in this message"},
+             "prompt": "Hello, no run_id in this message"},
             {"hook_event_name": "Notification", "session_id": session_id,
              "notification_type": "info", "message": "plain message"},
             {"hook_event_name": "Stop", "session_id": session_id,
@@ -594,14 +594,14 @@ class TestNonCompliantSessionDegradation(unittest.TestCase):
         payloads = [
             {"hook_event_name": "SessionStart", "session_id": session_id},
             {"hook_event_name": "UserPromptSubmit", "session_id": session_id,
-             "user_prompt": "no run id here"},
+             "prompt": "no run id here"},
             {"hook_event_name": "SubagentStart", "session_id": session_id,
              "agent_id": "agt-nc-002",
              "agent_prompt": "prose dispatch without structured fields"},
             {"hook_event_name": "PreToolUse", "session_id": session_id,
              "tool_name": "Bash", "tool_input": {}},
             {"hook_event_name": "PostToolUse", "session_id": session_id,
-             "tool_name": "Bash", "tool_output": "output"},
+             "tool_name": "Bash", "tool_response": "output"},
             {"hook_event_name": "Stop", "session_id": session_id,
              "last_assistant_message": "done"},
             {"hook_event_name": "SessionEnd", "session_id": session_id,

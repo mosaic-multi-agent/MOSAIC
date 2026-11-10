@@ -299,10 +299,10 @@ func TestAskHarnessOnlyRefreshScope_SubjectIsAgentTargetPath(t *testing.T) {
 // no legacy option ID, and no misspelled variant may appear.
 func TestAskHarnessOnlyRefreshScope_NoUnexpectedOptionIDs(t *testing.T) {
 	allowedIDs := map[string]bool{
-		string(RefreshProtocolOnly):            true,
-		string(RefreshAllDeployed):             true,
-		"all:" + string(RefreshProtocolOnly):   true,
-		"all:" + string(RefreshAllDeployed):    true,
+		string(RefreshProtocolOnly):          true,
+		string(RefreshAllDeployed):           true,
+		"all:" + string(RefreshProtocolOnly): true,
+		"all:" + string(RefreshAllDeployed):  true,
 	}
 	capture := &scopePromptCapture{answer: domain.ChoiceAnswer{Status: domain.SkippedOne}}
 	svc := newScopePromptService(capture)

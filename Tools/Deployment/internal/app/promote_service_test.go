@@ -2735,7 +2735,6 @@ func TestPromote_RequiredSkillsSupplied_AppearsInRecoveredFields(t *testing.T) {
 	}
 }
 
-
 // ---------------------------------------------------------------------------
 // T5.2: Non-interactive path completes without error (AC5.6)
 // ---------------------------------------------------------------------------
@@ -2843,7 +2842,6 @@ func TestPromote_RequiredSkills_EmptyCommaEntries_Discarded(t *testing.T) {
 		t.Errorf("required_skills = %v, want %v; empty comma entries must be discarded (AD-11)", gotSkills, wantSkills)
 	}
 }
-
 
 // TestPromote_EachRecoverableField_AskedAtMostOnce verifies that each recoverable-field
 // question is asked at most once per promote invocation, even if the source lacks all three

@@ -31,13 +31,60 @@ type ConsultationRequest struct {
 	// Runner-constructed error description rather than an agent message.
 	LastStatusMessage *string
 
+	// LastStatus is the status_code of the response whose status_message is
+	// LastStatusMessage: the subagent's returned status, or StatusHARNESS_ERROR
+	// for an attempt the Runner recorded as a harness error. Nil exactly when
+	// LastStatusMessage is nil (first step of a new run, every
+	// pre-consultation). Always encoded on the wire.
+	LastStatus *StatusCode
+
+	// LastErrorReason is the error_reason of a triggering BLOCKED response, or
+	// the Runner-constructed description for a harness error. Nil - serialised
+	// as JSON null - for every other status, on the first step of a new run and
+	// for every pre-consultation. Always encoded on the wire.
+	LastErrorReason *string
+
 	// Deviation carries the engine's reason for consulting, for the benefit of
 	// the ManualResolver's prompt only. It is NEVER serialised onto the wire:
 	// the orchestrator derives its own context from the artifact. Nil when the
 	// consultation was triggered by ExecutionModeOrchestrated rather than by a
 	// deviation.
 	Deviation *DeviationInfo
+
+	// Schedules is the current schedule per block at consultation time
+	// (iterations added mid-run included). Nil when no plan has been read. Like
+	// Deviation, it is NEVER serialised onto the wire.
+	Schedules BlockSchedules
+
+	// ArtifactRegistry is the run's Artifacts registry at consultation time,
+	// paths in the recorded (unprefixed) form. Used by the ManualResolver for
+	// artifact candidates only. NEVER serialised onto the wire. Nil when empty.
+	ArtifactRegistry []ArtifactRegistryEntry
+
+	// RowDefaults resolves a row's default payload for the ManualResolver's
+	// pre-checked artifact lists and HITL default. Bound by the session to its
+	// current stage sets. NEVER serialised onto the wire. Nil: no defaults
+	// (empty lists, HITL off).
+	RowDefaults RowDefaultsFunc
+
+	// OfferAskOrchestrator makes the ManualResolver offer
+	// ManualAskOrchestratorOptionID in its row question. NEVER serialised onto
+	// the wire. False: the dialogue is exactly the one without the option.
+	OfferAskOrchestrator bool
+
+	// UserMessage is the user's message for this one routing consultation,
+	// verbatim (line breaks kept). Nil for every other consultation, for every
+	// pre-consultation and when the user left the message step empty. Always
+	// encoded on the wire. Never persisted.
+	UserMessage *string
 }
+
+// RowDefaultsFunc resolves the DispatchDefaults of row at iteration ("" for a
+// row outside every block) exactly as an engine-routed dispatch would. A non-nil error
+// names the row and either the pattern that could not be resolved or the stage
+// argument that is invalid for the row. It never returns zero defaults in place
+// of such an error.
+type RowDefaultsFunc func(row RoutingRow, iteration IterationID) (DispatchDefaults, error)
 
 // RoutingInstruction is a routing consultant's answer. Exactly one field is
 // non-nil; a value with neither or both set is a programming error and the
@@ -45,6 +92,17 @@ type ConsultationRequest struct {
 type RoutingInstruction struct {
 	Dispatch *DispatchInstruction
 	Stop     *StopInstruction
+	// AskOrchestrator is set only by the ManualResolver: the user handed the
+	// decision to the orchestrator consultant.
+	AskOrchestrator *AskOrchestratorInstruction
+}
+
+// AskOrchestratorInstruction asks the session to obtain this routing
+// decision from the orchestrator consultant.
+type AskOrchestratorInstruction struct {
+	// UserMessage is the text entered in the message step, verbatim; nil when
+	// the step was left empty (no non-whitespace character).
+	UserMessage *string
 }
 
 // DispatchInstruction directs the Runner to dispatch one agent. Optional
@@ -78,14 +136,18 @@ type DispatchInstruction struct {
 
 	// HITLOverride overrides the effective HITL when non-nil.
 	HITLOverride *bool
+
+	// Iteration is the validated iteration ID for a block row, "" for a row
+	// outside every block.
+	Iteration IterationID
 }
 
-// StopInstruction ends the run. The artifact is left exactly as it stands and
-// remains resumable.
+// StopInstruction ends the run. It is used by routing and by pre-consultation.
+// The artifact is left exactly as it stands and remains resumable.
 type StopInstruction struct {
 	// Reason is human-readable and non-empty. It is surfaced in the CLI exit
-	// message and the TUI stop screen, and recorded as the consultation row's
-	// Execution Log summary.
+	// message and the TUI stop screen. The consultation itself writes no
+	// Execution Log row, so Reason is never persisted to the artifact.
 	Reason string
 }
 
@@ -101,6 +163,11 @@ const GenericTaskDescription = "Proceed with your task."
 type PreConsultationAdvice struct {
 	TaskDescription string
 	Constraints     string
+
+	// Stop is non-nil when the orchestrator stopped the run at
+	// pre-consultation ({"action":"stop","reason":...}). When set,
+	// TaskDescription and Constraints are empty and must not be applied.
+	Stop *StopInstruction
 }
 
 // ConsultationFailure classifies why a consultation failed. Callers switch on
@@ -114,10 +181,13 @@ const (
 	// ConsultFailMalformedJSON covers a reply that is not valid JSON or not a JSON object.
 	ConsultFailMalformedJSON ConsultationFailure = "malformed-json"
 
-	// ConsultFailMissingField covers a required field that is absent or empty.
+	// ConsultFailMissingField covers a required field that is absent or empty,
+	// including the routing action and the pre-consultation stop reason.
 	ConsultFailMissingField ConsultationFailure = "missing-field"
 
-	// ConsultFailUnknownAction covers an action value that is not "dispatch" or "stop".
+	// ConsultFailUnknownAction covers an action value that is not allowed in its
+	// context: not "dispatch" or "stop" for routing, not "stop" for
+	// pre-consultation.
 	ConsultFailUnknownAction ConsultationFailure = "unknown-action"
 
 	// ConsultFailUnknownAgent covers a dispatch agent identifier absent from the routing table.
@@ -132,6 +202,16 @@ const (
 	// ConsultFailMalformedJSON, which means an object was located but its content
 	// does not unmarshal into the expected schema.
 	ConsultFailNoInstruction ConsultationFailure = "no-instruction"
+
+	// ConsultFailInteractionUnavailable: the manual resolver's Interaction could
+	// not answer a step (a status other than Answered or Cancelled, an empty
+	// answer on a required step, or an Interaction error). Ends routing at the
+	// first such answer; the session stops resumably.
+	ConsultFailInteractionUnavailable ConsultationFailure = "interaction-unavailable"
+
+	// ConsultFailManualBoundExceeded: manual routing exceeded
+	// deviation.ManualInvalidResultLimit or deviation.ManualPromptLimit.
+	ConsultFailManualBoundExceeded ConsultationFailure = "manual-bound-exceeded"
 )
 
 // ConsultationError names the failing condition. Its message always states the
@@ -152,3 +232,11 @@ func (e *ConsultationError) Error() string {
 }
 
 func (e *ConsultationError) Unwrap() error { return e.Err }
+
+// DispatchDefaults is the default dispatch payload of one routing row at one
+// stage, as an engine-routed dispatch resolves it.
+type DispatchDefaults struct {
+	InputArtifacts  []string // resolved, bare paths (Stage-* expanded)
+	OutputArtifacts []string // resolved, bare paths (Stage-* kept literal)
+	HITL            bool     // row HITL OR plan-stage HITL
+}

@@ -74,6 +74,8 @@ func (s *claudeCodeSpawner) Spawn(ctx context.Context, req SpawnRequest) (Respon
 		Stdin:      stdin,
 		Timeout:    timeout,
 		Sink:       s.cfg.sink,
+
+		OnStdoutLine: req.OnStdoutLine,
 	})
 	if err != nil {
 		return resp, err
@@ -121,14 +123,15 @@ func ResolveExecutable(path string) (Command, error) {
 // <env> block is synthesized and prepended to the stdin payload alongside the
 // prompt content.
 //
-// When req.DerivedTools is non-empty, both invocation kinds use
-// --permission-mode dontAsk and emit one --allowedTools flag per tool name
-// from DerivedTools. This is the deterministic permission path used by the
-// Runner adapter after reading the agent's deployed frontmatter.
-//
-// When req.DerivedTools is nil or empty, both invocation kinds fall back to
-// --permission-mode auto (backward-compatible with callers that do not
-// populate DerivedTools, notably AgentTest's SpawnPlan methods).
+// Permission mode selection:
+//   - When req.DerivedTools is non-empty: --permission-mode dontAsk with
+//     --allowedTools entries. (Unchanged.)
+//   - When req.ToolsDerived is true and req.DerivedTools is empty:
+//     --permission-mode dontAsk with zero --allowedTools entries. The agent
+//     runs in strict mode with no tools permitted.
+//   - When req.ToolsDerived is false and req.DerivedTools is empty:
+//     --permission-mode auto (backward-compatible fallback for callers
+//     that do not populate DerivedTools, notably AgentTest).
 //
 // --dangerously-skip-permissions is never included.
 //
@@ -143,10 +146,11 @@ func ResolveExecutable(path string) (Command, error) {
 func BuildArgs(req SpawnRequest) (args []string, stdin []byte, err error) {
 	stdinContent := req.Prompt
 
-	// Select permission mode. When DerivedTools is non-empty, use deterministic
-	// dontAsk mode; otherwise fall back to auto for backward compatibility.
+	// Select permission mode. When DerivedTools is non-empty or ToolsDerived
+	// is true, use deterministic dontAsk mode; otherwise fall back to auto
+	// for backward compatibility (e.g., AgentTest callers).
 	permMode := "auto"
-	if len(req.DerivedTools) > 0 {
+	if len(req.DerivedTools) > 0 || req.ToolsDerived {
 		permMode = "dontAsk"
 	}
 
@@ -166,6 +170,11 @@ func BuildArgs(req SpawnRequest) (args []string, stdin []byte, err error) {
 			"--output-format", req.OutputFormat,
 			"--permission-mode", permMode,
 		}
+	}
+
+	// The CLI rejects stream-json in print mode without --verbose.
+	if req.OutputFormat == "stream-json" {
+		args = append(args, "--verbose")
 	}
 
 	if !req.SessionPersistence {
@@ -235,12 +244,22 @@ func Run(ctx context.Context, cmd Command, args []string, o RunOptions) (Respons
 	}
 
 	var stdout, stderr bytes.Buffer
-	execCmd.Stdout = &stdout
+	var obs *lineObserver
+	if o.OnStdoutLine != nil {
+		obs = startLineObserver(o.OnStdoutLine)
+	}
+	execCmd.Stdout = teeStdout(&stdout, obs)
 	execCmd.Stderr = &stderr
 
+	group := newKillGroup(execCmd)
 	if err := execCmd.Start(); err != nil {
+		group.release()
+		if obs != nil {
+			obs.stop()
+		}
 		return Response{}, fmt.Errorf("%w: %v", ErrExecutableNotFound, err)
 	}
+	group.attach(execCmd.Process)
 
 	waitCh := make(chan error, 1)
 	go func() { waitCh <- execCmd.Wait() }()
@@ -253,18 +272,28 @@ func Run(ctx context.Context, cmd Command, args []string, o RunOptions) (Respons
 	var waitErr error
 	select {
 	case <-ctx.Done():
-		killProcessTree(execCmd.Process)
+		group.kill(execCmd.Process)
 		<-waitCh
+		if obs != nil {
+			obs.stop()
+		}
 		return Response{}, ErrCancelled
 	case <-time.After(timeout):
-		killProcessTree(execCmd.Process)
+		group.kill(execCmd.Process)
 		<-waitCh
+		if obs != nil {
+			obs.stop()
+		}
 		logEvent(o.Sink, "spawn.timeout", "invocation exceeded configured timeout", nil)
 		return Response{}, ErrTimeout
 	case waitErr = <-waitCh:
 	}
 
+	group.release()
 	duration := time.Since(start)
+	if obs != nil {
+		obs.finish(observerDrainGrace)
+	}
 
 	logEvent(o.Sink, "spawn.stdout", stdout.String(), []Field{{Key: "bytes", Value: strconv.Itoa(stdout.Len())}})
 	logEvent(o.Sink, "spawn.stderr", stderr.String(), []Field{{Key: "bytes", Value: strconv.Itoa(stderr.Len())}})

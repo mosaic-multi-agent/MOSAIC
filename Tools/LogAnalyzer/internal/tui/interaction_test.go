@@ -231,7 +231,7 @@ func TestPending_ID_And_Subject(t *testing.T) {
 		i.AskText(context.Background(), interaction.TextQuestion{
 			Question: interaction.Question{
 				ID:      "pricing-rate",
-				Subject: "claude-model:cache_write",
+				Subject: "claude-model:cache_write_5m",
 			},
 		})
 	}()
@@ -240,8 +240,8 @@ func TestPending_ID_And_Subject(t *testing.T) {
 	if p.ID() != "pricing-rate" {
 		t.Errorf("ID() = %q, want %q", p.ID(), "pricing-rate")
 	}
-	if p.Subject() != "claude-model:cache_write" {
-		t.Errorf("Subject() = %q, want %q", p.Subject(), "claude-model:cache_write")
+	if p.Subject() != "claude-model:cache_write_5m" {
+		t.Errorf("Subject() = %q, want %q", p.Subject(), "claude-model:cache_write_5m")
 	}
 
 	// Reply to unblock the goroutine.

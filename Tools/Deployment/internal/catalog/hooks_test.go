@@ -31,6 +31,14 @@ package catalog_test
 // silently dropping or duplicating a file without hardcoding how many files any one
 // variant happens to have today.
 //
+// TestHook_Variant_GhcpCli_Files_TargetNames (an exact list of the live ghcp-cli target
+// names) was later removed because that variant's inventory grows with the bundle (it now
+// also deploys shared modules from a sibling folder). The loader behaviour it guarded is
+// asserted on tool-local fixtures by TestHook_Variant_Files_TargetNames_MatchDeclaredSetExactly
+// and TestHook_Variant_Files_SiblingFolderSource_LoadedUnderTargetName. Whether the real
+// bundle ships every module its adapter imports is bundle content, covered by the hook's
+// own Python suites.
+//
 // This stage's explicit item list scoped T7.5 to only these two assertions. The bundle id
 // ("mosaic-logger"), its harness variant keys ("claude-code", "opencode", "vscode-ghcp",
 // "ghcp-cli"), and the exact TargetName literals elsewhere in this file remain
@@ -236,41 +244,6 @@ func TestHook_Variant_Files_AreNonEmptyAndUniquelyNamed(t *testing.T) {
 	}
 }
 
-// TestHook_Variant_ClaudeCode_Files_TargetNames verifies the exact target file names
-// for the claude-code variant: the 10 Python adapter modules plus the self-deployed hook.yaml.
-func TestHook_Variant_ClaudeCode_Files_TargetNames(t *testing.T) {
-	cat := loadRealCatalog(t)
-	h, _ := cat.Hook("mosaic-logger")
-
-	v, ok := h.Variants["claude-code"]
-	if !ok {
-		t.Fatal("mosaic-logger Variants[\"claude-code\"]: not found")
-	}
-
-	wantTargets := map[string]bool{
-		"mosaic_logger.py":                     true,
-		"mosaic_logger_core.py":                true,
-		"mosaic_logger_runstate.py":            true,
-		"mosaic_logger_export.py":              true,
-		"mosaic_logger_transcript.py":          true,
-		"mosaic_logger_handlers_session.py":    true,
-		"mosaic_logger_handlers_invocation.py": true,
-		"mosaic_logger_handlers_tools.py":      true,
-		"mosaic_logger_artifacts.py":           true,
-		"mosaic_logger_usage.py":               true,
-		"hook.yaml":                            true,
-	}
-	for _, f := range v.Files {
-		if !wantTargets[f.TargetName] {
-			t.Errorf("claude-code variant has unexpected target file %q", f.TargetName)
-		}
-		delete(wantTargets, f.TargetName)
-	}
-	for remaining := range wantTargets {
-		t.Errorf("claude-code variant is missing expected target file %q", remaining)
-	}
-}
-
 // TestHook_Variant_ClaudeCode_Files_SourcePathsExist verifies that each file listed in
 // the claude-code variant has a SourcePath that exists on disk.
 func TestHook_Variant_ClaudeCode_Files_SourcePathsExist(t *testing.T) {
@@ -327,9 +300,9 @@ func TestHook_Variant_ClaudeCode_RegistrationSteps_HaveIDs(t *testing.T) {
 	}
 }
 
-// TestHook_Variant_ClaudeCode_RegistrationSteps_HasSettingsFragment verifies that the
-// settings-fragment step is present and is marked as performable.
-func TestHook_Variant_ClaudeCode_RegistrationSteps_HasSettingsFragment(t *testing.T) {
+// TestHook_Variant_ClaudeCode_RegistrationSteps_HasRegisterStep verifies that the
+// register-mosaic-logger step is present and is marked as performable.
+func TestHook_Variant_ClaudeCode_RegistrationSteps_HasRegisterStep(t *testing.T) {
 	cat := loadRealCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 
@@ -338,17 +311,17 @@ func TestHook_Variant_ClaudeCode_RegistrationSteps_HasSettingsFragment(t *testin
 		t.Fatal("mosaic-logger Variants[\"claude-code\"]: not found")
 	}
 	for _, step := range v.Registration {
-		if step.ID == "settings-fragment" {
+		if step.ID == "register-mosaic-logger" {
 			if !step.Performable {
-				t.Error("claude-code settings-fragment step Performable = false; expected true")
+				t.Error("claude-code register-mosaic-logger step Performable = false; expected true")
 			}
 			if step.Fragment == "" {
-				t.Error("claude-code settings-fragment step Fragment is empty; expected hook JSON")
+				t.Error("claude-code register-mosaic-logger step Fragment is empty; expected hook JSON")
 			}
 			return
 		}
 	}
-	t.Error("claude-code variant missing expected registration step with id \"settings-fragment\"")
+	t.Error("claude-code variant missing expected registration step with id \"register-mosaic-logger\"")
 }
 
 // TestHook_Variant_OpenCode_RegistrationSteps_Empty verifies that the opencode variant
@@ -387,7 +360,7 @@ func TestHook_Variant_VscodeGhcp_DoesNotReuseClaudeCode(t *testing.T) {
 }
 
 // TestHook_Variant_VscodeGhcp_CarriesOwnFiles verifies that the vscode-ghcp variant carries
-// its own hook.yaml deployment manifest rather than inheriting claude-code's files.
+// its own file list rather than inheriting claude-code's files.
 func TestHook_Variant_VscodeGhcp_CarriesOwnFiles(t *testing.T) {
 	cat := loadRealCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
@@ -397,62 +370,16 @@ func TestHook_Variant_VscodeGhcp_CarriesOwnFiles(t *testing.T) {
 		t.Fatal("mosaic-logger Variants[\"vscode-ghcp\"]: not found")
 	}
 
-	// The variant must carry its own hook.yaml — proof it has its own deployment manifest.
-	hasHookYaml := false
-	for _, f := range v.Files {
-		if f.TargetName == "hook.yaml" {
-			hasHookYaml = true
-			break
-		}
-	}
-	if !hasHookYaml {
-		var names []string
-		for _, f := range v.Files {
-			names = append(names, f.TargetName)
-		}
-		t.Errorf("vscode-ghcp variant has no hook.yaml in its Files list; "+
-			"the variant must carry its own deployment manifest, not inherit another variant's files; "+
-			"got files: %v", names)
+	// The variant carries its own file list, not another variant's files.
+	if len(v.Files) == 0 {
+		t.Error("vscode-ghcp variant has an empty Files list; " +
+			"the variant must carry its own files, not inherit another variant's files")
 	}
 }
 
-// TestHook_Variant_GhcpCli_Files_TargetNames verifies the exact target file names for
-// the ghcp-cli variant: the 9 Python adapter modules plus the self-deployed hook.yaml.
-func TestHook_Variant_GhcpCli_Files_TargetNames(t *testing.T) {
-	cat := loadRealCatalog(t)
-	h, _ := cat.Hook("mosaic-logger")
-
-	v, ok := h.Variants["ghcp-cli"]
-	if !ok {
-		t.Fatal("mosaic-logger Variants[\"ghcp-cli\"]: not found")
-	}
-
-	wantTargets := map[string]bool{
-		"mosaic_logger.py":                     true,
-		"mosaic_logger_core.py":                true,
-		"mosaic_logger_runstate.py":            true,
-		"mosaic_logger_export.py":              true,
-		"mosaic_logger_transcript.py":          true,
-		"mosaic_logger_handlers_session.py":    true,
-		"mosaic_logger_handlers_invocation.py": true,
-		"mosaic_logger_handlers_tools.py":      true,
-		"mosaic_logger_artifacts.py":           true,
-		"hook.yaml":                            true,
-	}
-	for _, f := range v.Files {
-		if !wantTargets[f.TargetName] {
-			t.Errorf("ghcp-cli variant has unexpected target file %q", f.TargetName)
-		}
-		delete(wantTargets, f.TargetName)
-	}
-	for remaining := range wantTargets {
-		t.Errorf("ghcp-cli variant is missing expected target file %q", remaining)
-	}
-}
-
-// TestHook_Variant_GhcpCli_RegistrationSteps_HasSettingsFragment verifies that the
-// ghcp-cli variant has a settings-fragment registration step with a non-empty fragment.
-func TestHook_Variant_GhcpCli_RegistrationSteps_HasSettingsFragment(t *testing.T) {
+// TestHook_Variant_GhcpCli_RegistrationSteps_HasRegisterStep verifies that the
+// ghcp-cli variant has a register-mosaic-logger registration step with a non-empty fragment.
+func TestHook_Variant_GhcpCli_RegistrationSteps_HasRegisterStep(t *testing.T) {
 	cat := loadRealCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 
@@ -461,17 +388,17 @@ func TestHook_Variant_GhcpCli_RegistrationSteps_HasSettingsFragment(t *testing.T
 		t.Fatal("mosaic-logger Variants[\"ghcp-cli\"]: not found")
 	}
 	for _, step := range v.Registration {
-		if step.ID == "settings-fragment" {
+		if step.ID == "register-mosaic-logger" {
 			if !step.Performable {
-				t.Error("ghcp-cli settings-fragment step Performable = false; expected true")
+				t.Error("ghcp-cli register-mosaic-logger step Performable = false; expected true")
 			}
 			if step.Fragment == "" {
-				t.Error("ghcp-cli settings-fragment step Fragment is empty; expected hook JSON")
+				t.Error("ghcp-cli register-mosaic-logger step Fragment is empty; expected hook JSON")
 			}
 			return
 		}
 	}
-	t.Error("ghcp-cli variant missing expected registration step with id \"settings-fragment\"")
+	t.Error("ghcp-cli variant missing expected registration step with id \"register-mosaic-logger\"")
 }
 
 // ---------------------------------------------------------------------------

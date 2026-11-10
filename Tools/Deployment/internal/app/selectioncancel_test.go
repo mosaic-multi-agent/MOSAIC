@@ -402,8 +402,8 @@ func TestDeployAgents_EscAtQDeployAgents_ReturnsErrSelectionCancelled(t *testing
 
 	// Act
 	_, err := svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
 		AutoConfirmPlan: true,
 	})
 
@@ -432,8 +432,8 @@ func TestDeployAgents_EscAtQDeployAgents_DoesNotReachExecutor(t *testing.T) {
 
 	// Act
 	_, _ = svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
 		AutoConfirmPlan: true,
 	})
 
@@ -601,8 +601,8 @@ func TestDeployAgents_QDeployAgentsSkippedOne_RunProceeds(t *testing.T) {
 
 	// Act
 	_, err := svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
+		HarnessID:       "stub-harness",
+		WorkspacePath:   workspace,
 		AutoConfirmPlan: true,
 	})
 

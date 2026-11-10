@@ -78,6 +78,7 @@ import (
 
 	_ "mosaic-deploy/internal/agentformat/all"
 	"mosaic-deploy/internal/agentformat"
+	"mosaic-deploy/internal/catalog/catalogpaths"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/builtin/codex"
 	"mosaic-deploy/internal/harness/registry"
@@ -104,7 +105,7 @@ func codexFrozenCatalogRoot(t *testing.T) string {
 // codexModuleForTransform constructs the Codex module against the frozen catalog.
 func codexModuleForTransform(t *testing.T) domain.HarnessModule {
 	t.Helper()
-	mod, err := codex.New(registry.BuiltinOptions{MosaicRoot: codexFrozenCatalogRoot(t)})
+	mod, err := codex.New(registry.BuiltinOptions{ContentDir: codexFrozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("codex.New: %v", err)
 	}
@@ -713,7 +714,7 @@ Agent body.
 // produces a "# mosaic_harness_version:" comment stamp in the TOML output with a
 // non-empty value.
 //
-// This test is RED until I18.2 adds transform_version: "1.0.0" to codex.yaml.
+// The version is supplied through the request, as production builders supply it.
 // Without that field, applyVersionStamp skips the harness version stamp because
 // desc.TransformVersion is empty. After the fix, the stamp appears as
 // "# mosaic_harness_version: 1.0.0" in the leading TOML comment block.
@@ -760,10 +761,8 @@ Agent body.
 // harness injection region in the body produces a version attribute on the InjectionHarness
 // region tag, matching desc.InjectionsVersion.
 //
-// This test is RED until I18.2 adds injections_version: "1.0.0" to codex.yaml.
-// Without that field, applyHarnessRegion skips SetVersion because injVersion is empty
-// (injection.go guards: "if injVersion != \"\" { node.SetVersion(injVersion) }").
-// After the fix the HarnessConstraints region tag becomes:
+// The version is supplied through the request, as production builders supply it.
+// The HarnessConstraints region tag becomes:
 //
 //	<HarnessConstraints type="managed" version="1.0.0">
 func TestCodexTransform_InjectionsVersionOnRegionTag(t *testing.T) {
@@ -790,6 +789,9 @@ func TestCodexTransform_InjectionsVersionOnRegionTag(t *testing.T) {
 		Model:  codexTestModel,
 		Op:     agentformat.OpCreate,
 		Scope:  domain.ScopeProject,
+		// Versions are supplied on the request, as the production request builders do;
+		// the transform never falls back to the module descriptor's versions.
+		InjectionsVersion: "1.0.0",
 	})
 	if err != nil {
 		t.Fatalf("transform.Apply: %v", err)
@@ -811,7 +813,7 @@ func TestCodexTransform_InjectionsVersionOnRegionTag(t *testing.T) {
 	const wantVersionAttr = `version="1.0.0"`
 	if !strings.Contains(outputStr, wantVersionAttr) {
 		t.Errorf("InjectionHarness region tag does not carry version attribute %q; "+
-			"once injections_version: \"1.0.0\" is declared in codex.yaml (I18.2), "+
+			"the request supplies InjectionsVersion \"1.0.0\", so "+
 			"applyHarnessRegion must stamp the version on every InjectionHarness-class "+
 			"region tag so the deployed file records the injection version it was built against; "+
 			"the staleness and manifest paths read this version from the region tag, not frontmatter",
@@ -920,5 +922,61 @@ Agent body.
 			"user-owned value-carried key must survive alongside MOSAIC's owned-key writes")
 	} else if s, _ := v.(string); s != "medium" {
 		t.Errorf("reasoning_effort = %q, want %q; user-carried value must survive intact", s, "medium")
+	}
+}
+
+// TestCodexTransform_PerRegionVersionsOnRegionTags verifies that the shared harness region and
+// the orchestrator harness region of one Codex orchestrator file carry their own versions,
+// chosen by region name from the request.
+func TestCodexTransform_PerRegionVersionsOnRegionTags(t *testing.T) {
+	mod := codexModuleForTransform(t)
+
+	source := []byte("---\n" +
+		"id: 101\n" +
+		"version: 1.0.0\n" +
+		"description: Per-region version test agent.\n" +
+		"---\n" +
+		"Agent body.\n" +
+		"\n" +
+		"<HarnessConstraints type=\"managed\">\n" +
+		"</HarnessConstraints>\n" +
+		"\n" +
+		"<OrchestratorHarnessConstraints type=\"managed\">\n" +
+		"</OrchestratorHarnessConstraints>\n")
+
+	result, err := transform.Apply(transform.Request{
+		Source:                        source,
+		Kind:                          domain.ArtifactAgent,
+		Key:                           "per-region-version-agent",
+		Module:                        mod,
+		Model:                         codexTestModel,
+		Op:                            agentformat.OpCreate,
+		Scope:                         domain.ScopeProject,
+		Role:                          domain.RoleOrchestrator,
+		InjectionsVersion:             "2.0.0",
+		OrchestratorInjectionsVersion: "3.0.0",
+	})
+	if err != nil {
+		t.Fatalf("transform.Apply: %v", err)
+	}
+
+	out := string(result.Output)
+	for _, want := range []string{
+		`<HarnessConstraints type="managed" version="2.0.0">`,
+		`<OrchestratorHarnessConstraints type="managed" version="3.0.0">`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("Codex output does not contain region tag %s; output:\n%s", want, out)
+		}
+	}
+}
+
+// codexFrozenContentDirs resolves a harness's injection content directory inside the
+// frozen catalog fixture tree.
+func codexFrozenContentDirs(t *testing.T) func(string) (string, error) {
+	t.Helper()
+	catalogRoot := filepath.Join(codexFrozenCatalogRoot(t), "Catalog")
+	return func(harnessDirName string) (string, error) {
+		return catalogpaths.HarnessInjectionsDir(catalogRoot, harnessDirName), nil
 	}
 }

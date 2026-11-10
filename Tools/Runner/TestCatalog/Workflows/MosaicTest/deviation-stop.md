@@ -1,5 +1,5 @@
 ---
-version: "1.0"
+version: "1.1"
 name: "MosaicTest Deviation Stop Workflow"
 description: "Runner mode fixture — Auto mode deviation where the orchestrator stops the run instead of re-dispatching. Proves the stop path works from a deviation context and that the artifact is left in a resumable state."
 hint: "Mode 2 test — deviation followed by orchestrator stop, artifact resumability"
@@ -9,9 +9,11 @@ referenced_agents:
   - mosaictest-scripted
 artifacts:
   - MosaicTestScript/deviation-stop-fail.md
+modes:
+  - auto
 ---
 
-<Workflow type="core" name="deviation-stop" version="1.0">
+<Workflow type="core" name="deviation-stop" version="1.1">
 ## MosaicTest Deviation Stop Workflow
 
 **Use when:** Verifying that the orchestrator can stop a run after a deviation, and that the resulting artifact is left in a state where the run can be resumed later.
@@ -22,7 +24,7 @@ artifacts:
 
 **Notes:**
 - **Run this workflow in Auto mode.**
-- The script unconditionally returns `BLOCKED`/`E501`. The engine deviates. The orchestrator stops the run.
+- The script unconditionally returns `BLOCKED`/`E501`. In Auto mode the engine re-dispatches the same row until the E501 budget of three attempts is used up, then deviates. The orchestrator stops the run.
 - The run should end with `RunStoppedByConsultant`, not `RunDeviationUnresolved`.
 - After the run, the artifact's `current_state` should reflect the BLOCKED and be resumable.
 - Seed `Fixtures/deviation-stop` — the whole directory, not anything inside it.
@@ -39,7 +41,7 @@ artifacts:
 
 ### Why BLOCKED/E501
 
-`E501` (`TOOL_UNAVAILABLE`) is a fixture choice — it does not matter which error code triggers the deviation, only that BLOCKED does. `E501` is chosen because it is visually distinct from `E401` used in `deviation-blocked`, making the two workflows easy to tell apart in logs.
+`E501` (`TOOL_UNAVAILABLE`) is the one BLOCKED code the engine re-dispatches mechanically in Auto mode: up to three attempts per row and iteration, counted from the Execution Log. The deviation therefore arrives only after the third BLOCKED/E501 attempt, which makes this workflow exercise the whole budget. `deviation-blocked` uses `E401` instead, which deviates immediately.
 
 ### Resumability
 
@@ -51,16 +53,18 @@ This workflow does not test the resume itself — that is a manual procedure doc
 
 ## Expected Run
 
-One Orchestration.md log row. The stop consultation is not logged.
+Three Orchestration.md log rows, one per attempt. Pre-run consultation and the stop consultation both dispatch to the orchestrator, but neither allocates a `Seq` or leaves a row — they surface only in the dispatch log, and the stop additionally as a `session.consult.stop` RunnerLogs entry. The dispatch log shows no consultation between the three attempts: the engine re-dispatches without one.
 
-| Log `Seq` | `Agent` | Kind | `Phase` | `Status` | `Summary` shows |
-|:---:|---|---|---|---|---|
-| 1 | `mosaictest-scripted#1` | workflow step | RESEARCH | BLOCKED | fixture-declared tool unavailable, E501 |
+| Log `Seq` | `Agent` | `Phase` | `Status` | `Summary` shows |
+|:---:|---|---|---|---|
+| 1 | `mosaictest-scripted#1` | RESEARCH | BLOCKED | fixture-declared tool unavailable, E501 |
+| 2 | `mosaictest-scripted#2` | RESEARCH | BLOCKED | fixture-declared tool unavailable, E501 |
+| 3 | `mosaictest-scripted#3` | RESEARCH | BLOCKED | fixture-declared tool unavailable, E501 |
 
 **Run outcome:** stopped by the orchestrator (`RunStoppedByConsultant`), with the fixture's stop reason surfaced in the exit message.
 
 **Artifact check:** After the run, `Orchestration.md` frontmatter should show:
-- `current_state.last_agent: mosaictest-scripted#1`
+- `current_state.last_agent: mosaictest-scripted#3`
 - `current_state.last_status: BLOCKED`
 - `current_state.error_code: E501`
 
@@ -78,6 +82,9 @@ One Orchestration.md log row. The stop consultation is not logged.
 | Consultation succeeds but the run does not stop | The stop instruction was not parsed correctly — check the wire response format |
 | `current_state` does not match the last log entry | The artifact was corrupted during the stop path — the session may have written an inconsistent state |
 | No log rows at all | The BLOCKED was caught before the Execution Log was written — check that Store.Apply runs before deviation handling |
+| One `mosaictest-scripted` invocation, then the stop consultation | The engine did not re-dispatch the BLOCKED/E501 step — the retry budget is not applied in the session |
+| More than three `mosaictest-scripted` invocations | The E501 budget is not counted from the Execution Log — check that the `[error:E501]` marker is written and read back |
+| An `orchestrator-script` row appears in `Orchestration.md` | Consultations must leave no row in the artifact; a consultation wrongly called `Store.Apply` or allocated a `Seq` |
 
 ---
 
@@ -86,6 +93,7 @@ One Orchestration.md log row. The stop consultation is not logged.
 | Version | Date | Author | Summary |
 |---------|------|--------|---------|
 | 1.0 | 2026-08-17 | MOSAIC | Initial version. Deviation stop and artifact resumability. |
+| 1.1 | 2026-10-12 | MOSAIC | WorkflowFormat 2.16 wording: the E501 budget is counted per row and iteration. Routing table and dispatch sequence unchanged. |
 
 ---
 

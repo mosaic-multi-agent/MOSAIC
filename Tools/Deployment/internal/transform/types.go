@@ -10,6 +10,7 @@ import (
 type WorkflowBlock struct {
 	ID    string
 	Block []byte // the section block including its boundary tags, in source order
+	Kept  bool   // true: Block is emitted exactly as given; no retype, no Row column
 }
 
 // OriginConfidence records what the plan layer could establish about a deployed
@@ -115,6 +116,17 @@ type Request struct {
 	Op agentformat.Operation
 	Workflows            []WorkflowBlock        // non-empty only for the orchestrator agent
 	InfrastructureAgents []InfrastructureBlock  // non-empty only for the orchestrator agent
+
+	// InfrastructureMerge selects the additive merge of InfrastructureAgents blocks into the
+	// deployed region. Zero value keeps the existing replace/preserve/clear behaviour.
+	InfrastructureMerge InfrastructureMergeMode
+
+	// ClearInfrastructureAgents makes an empty InfrastructureAgents list clear the region even when
+	// deployed bytes exist, instead of keeping the deployed declarations.
+	ClearInfrastructureAgents bool
+
+	// PreserveDeployedWorkflows lifts the deployed AvailableWorkflows region when Workflows is empty.
+	PreserveDeployedWorkflows bool
 	// ToolMappingsVersion is the hash of the effective tool-destination mapping set for this
 	// run, computed by config.HashToolDestinations. It is written to the deployed file as the
 	// `tool_mappings_version` frontmatter stamp so the planner can detect staleness on
@@ -135,6 +147,29 @@ type Request struct {
 	// the app layer. Required for agents whose source declares any bundle-sourced managed
 	// region; ignored for agents that declare none.
 	Bundle domain.BundleContent
+
+	// PreserveDeployedManaged takes every protocol-sourced and bundle-sourced managed region
+	// from Deployed instead of regenerating it from Protocol/Bundle. For each such region in
+	// Source, the output region holds the canonical content of the same-named region in
+	// Deployed, its version attribute, and the nested user regions Deployed holds there
+	// (each exactly once). No ErrProtocolContentMissing or ErrBundleBlockMissingForRole is
+	// raised. The mosaic_bundle_version stamp is written only when Deployed's frontmatter
+	// carries it, with Deployed's value. Requires Deployed != nil; ignored otherwise.
+	PreserveDeployedManaged bool
+
+	// IgnoreDeployedFrontmatter computes the output frontmatter as if Deployed were nil:
+	// Deployed's tools key is not preserved, its tool names are not merged, its untouched
+	// keys are not copied, and no stamp is removed because Deployed holds it. Body
+	// processing (project, custom, workflow, infrastructure and harness regions) still uses
+	// Deployed.
+	IgnoreDeployedFrontmatter bool
+
+	// AppendTools are target-harness tool names added to the main tools field after tool
+	// resolution, in order. A name already present is not added again. Permission shape
+	// gets "<name>: allow"; an existing pair with the same name is set to allow. Names are
+	// appended the same way after a placeholder expansion. Nil adds nothing. Names are not
+	// reported in Report.Tools.
+	AppendTools []string
 
 	// InjectionRenames overrides the package-level InjectionRenames table for this call.
 	// Nil means use transform.InjectionRenames. Intended for tests so that conflict,
@@ -176,6 +211,7 @@ type Report struct {
 	Gaps                 []domain.Gap
 	Workflows            []string // workflow IDs present in the assembled injection, in emitted order
 	InfrastructureAgents []string // agent keys present in the assembled InfrastructureAgents injection, in emitted order
+	InfrastructureMerge  InfrastructureMergeResult // what the additive infrastructure merge did
 	OutputBytes          int
 
 	// OwnedKeyDifferences names MOSAIC-owned keys whose deployed value differs from

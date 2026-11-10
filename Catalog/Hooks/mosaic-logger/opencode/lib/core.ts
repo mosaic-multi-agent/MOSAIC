@@ -12,12 +12,13 @@
 import * as nodePath from "node:path";
 import * as nodeFs from "node:fs";
 import * as nodeFsPromises from "node:fs/promises";
-
+import { lockedAppend } from "./locked_append.js";
+import { DEFAULT_SCHEMA_VERSION, schemaVersionFor } from "./schema_versions.js";
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION: string = "1.0.0";
+export const SCHEMA_VERSION: string = DEFAULT_SCHEMA_VERSION;
 export const HARNESS: string = "opencode";
 export const LOGS_DIRNAME: string = "OrchestrationLogs";
 
@@ -120,7 +121,7 @@ export function buildEvent(
   fields: Record<string, unknown>,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {
-    schema_version: SCHEMA_VERSION,
+    schema_version: schemaVersionFor(event),
     event,
     timestamp: envelope.timestamp,
     harness: HARNESS,
@@ -298,10 +299,7 @@ export async function appendEvent(
   event: Record<string, unknown>,
 ): Promise<void> {
   try {
-    const dir = nodePath.dirname(filePath);
-    await nodeFsPromises.mkdir(dir, { recursive: true });
-    const line = JSON.stringify(event) + "\n";
-    await nodeFsPromises.appendFile(filePath, line, "utf-8");
+    await lockedAppend(filePath, JSON.stringify(event) + "\n", debugLog);
   } catch (err) {
     debugLog(`appendEvent failed for ${filePath}`, err);
   }
@@ -346,12 +344,15 @@ export async function atomicReplaceText(
 }
 
 /**
- * Synchronous variant of atomicReplace for use on low-frequency paths where
- * briefly blocking the event loop is acceptable (e.g. session-close marker writes).
+ * Synchronous variant of atomicReplace for paths where briefly blocking the
+ * event loop is acceptable (e.g. the transcript refresh, once per completed
+ * assistant message: ~3-4 ms for a 5 MB transcript).
  * Write data to a temp file in the target's directory, then rename over target.
- * Returns true on success, false on any failure (including rename collision on
- * Windows — callers must check whether the target already exists to distinguish
- * concurrent-write races from genuine failures). Never throws.
+ * Returns true on success, false on any failure; callers treat false as a
+ * failed write. Renaming over an existing target worked in the Windows
+ * transcript prototype, but a rename can still fail when writers collide
+ * (e.g. concurrent marker writes in correlation.ts), so callers with
+ * concurrent writers must check whether the target already exists. Never throws.
  * The target directory must already exist; this function does not create directories.
  */
 export function atomicReplaceSync(filePath: string, data: Uint8Array | Buffer): boolean {
@@ -435,63 +436,4 @@ export function safeHandler<T extends (...args: any[]) => Promise<void>>(
       debugLog(`safeHandler: error in "${name}" handler`, err);
     }
   }) as T;
-}
-
-// ---------------------------------------------------------------------------
-// Adapter version
-// ---------------------------------------------------------------------------
-
-const VERSION_RE = /^version:\s*(.+?)\s*$/;
-
-/**
- * Extract the top-level version value from hook.yaml without a YAML parser.
- * Matches only zero-indented lines. Returns undefined on any ambiguity.
- * Never throws.
- */
-export async function readAdapterVersion(
-  hookYamlPath: string,
-): Promise<string | undefined> {
-  try {
-    const content = await nodeFsPromises.readFile(hookYamlPath, "utf-8");
-    const matches: string[] = [];
-
-    for (const rawLine of content.split("\n")) {
-      const line = rawLine.replace(/\r$/, "");
-
-      // Skip blank lines, comments, and indented lines
-      if (!line || line[0] === "#" || line[0] === " " || line[0] === "\t") {
-        continue;
-      }
-
-      const m = VERSION_RE.exec(line);
-      if (!m) continue;
-
-      let value = m[1];
-
-      // Strip one layer of surrounding single or double quotes
-      if (
-        value.length >= 2 &&
-        ((value[0] === '"' && value[value.length - 1] === '"') ||
-          (value[0] === "'" && value[value.length - 1] === "'"))
-      ) {
-        value = value.slice(1, -1);
-      }
-
-      // Reject complex YAML types (objects, sequences) — ambiguous without a
-      // real YAML parser
-      if (!value || value.includes("{") || value.includes("[")) {
-        continue;
-      }
-
-      matches.push(value);
-    }
-
-    // Ambiguous if more than one match
-    if (matches.length === 1) {
-      return matches[0];
-    }
-    return undefined;
-  } catch {
-    return undefined;
-  }
 }

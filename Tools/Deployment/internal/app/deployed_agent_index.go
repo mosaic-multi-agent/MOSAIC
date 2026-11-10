@@ -169,7 +169,7 @@ func resolveDeployedPath(agent domain.Agent, index DeployedAgentIndex, fallbackP
 		return fallbackPath, nil
 	}
 
-	entries := index.Lookup(agent.NumericID)
+	entries := dropLegacySiblings(index.Lookup(agent.NumericID))
 	switch len(entries) {
 	case 0:
 		// Not deployed — return empty path, no error, no name-based fallback.

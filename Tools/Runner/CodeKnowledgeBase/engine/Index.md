@@ -1,128 +1,157 @@
 ---
 run_id: "20260801T202027Z-ad3d"
 created_by: "knowledge-base-generator#3"
+last_updated: "2026-10-12"
 ---
 
 # engine
 
-> Responsibility: The pure, side-effect-free decision core that answers "what happens next" for a run — given the admitted workflow, the stage set, and the current artifact state, it decides whether to dispatch an agent, mark the run complete, escalate a deviation, or stop.
+> Responsibility: The pure, side-effect-free decision core that answers "what happens next" for a run — given the admitted workflow, the block schedules, the execution mode and the current artifact state, it decides whether to dispatch an agent, mark the run complete, hand the decision to the routing consultant, escalate a deviation, or stop.
 
 ## Overview
 
-`engine` is the state machine at the heart of the runner. Every other package either feeds it inputs (workflow, stages, artifact state) or acts on its outputs (session, via dispatch/harness/artifact). It contains no I/O and no non-deterministic behavior — the same inputs always produce the same `EngineDecision`, which is what makes golden-file testing of full runs possible.
+`engine` is the state machine at the heart of the runner. Every other package either feeds it inputs (workflow, block schedules, artifact state) or acts on its outputs (session, via dispatch/harness/artifact/consultation). It contains no I/O and no non-deterministic behavior — the same inputs always produce the same `EngineDecision`, which is what makes golden-file testing of full runs possible.
 
-The package exposes two pure functions:
-- **`Next`** — the main per-invocation router: given the state after the most recent agent response (or no prior response at all), decide the next step.
-- **`ResumePoint`** — a separate, purely artifact-derived function used only when a run is resumed after a process restart: it reconstructs where execution left off, independent of `Next`'s response-driven routing.
+The package exposes:
+- **`Next(NextInput)`** — the per-invocation router: given the state after the most recent agent response (or no prior response at all), decide the next step. All inputs, including the execution mode, the last step's written output artifacts and the artifact registry, arrive in `NextInput`.
+- **`ResumePointFromSchedules`** — a purely artifact-derived function used once when a run is resumed after a process restart: it reconstructs where execution left off from the Execution Log and the block schedules, independent of `Next`.
+- **`ResolveRowDefaultsForIteration` / `ResolveArtifactsForIteration`** — the one routine that resolves a row's default input artifacts, output artifacts and HITL for an iteration of the row's block. The engine's own dispatch step and session's consultation-routed dispatches (and the manual routing dialogue's pre-checked lists) all use it, so a consulted dispatch defaults exactly like an engine-routed one.
+- **`IterationArtifactCandidates`** (`iteration_artifacts.go`) — pure selection of the ended iteration's own artifacts for a commit-class `ITERATION_END` dispatch: the `Input` and `Output` cell entries of the block's rows that fill in the block ID, resolved to the iteration (a `*` is kept unexpanded), de-duplicated in table order. Session expands wildcards and checks existence on disk.
+- **`E501BudgetRemaining`, `HarnessErrorBudgetRemaining`, `HarnessErrorAttemptLimit`, `PartiallyDoneRedispatchLimit`, `E501AttemptLimit`, `ScheduleDefectAttempts`, `ScheduleDefectRedispatchLimit`, `IsLastRowOfIteration`, `IsLastRowOfPhaseForIteration`** — shared helpers and bounds that session also reads. The two boundary helpers take one `BoundaryInput` (workflow, schedules, completed row, iteration, log, mode).
 
-Both functions operate entirely on the routing table shape produced by **compat** (`AdmittedWorkflow`, with its resolved pre-execution/execution/post-execution row ranges, named execution `Groups`, `GroupsDeclared` flag, and carried `ApproachTable`) and the stage list produced by **planstages** (`StageSet`, one entry per stage carrying its `Approach` and per-stage HITL flag).
+Both `Next` and `ResumePointFromSchedules` operate on the routing table shape produced by **compat** (`AdmittedWorkflow`, with its per-block model) and the per-block schedules produced by **planstages** (`BlockSchedules`, keyed by block name).
 
 ## Components / Subdomains
 
 | Component | Purpose |
 |-----------|---------|
-| **Next / routing dispatch** | Classifies the current situation (first call, non-SUCCESS response, non-EXECUTION SUCCESS, EXECUTION SUCCESS) and delegates to the matching handler. |
-| **Row location (`findCurrentRowIndex`, `findRowForLogEntry`, `findExecutionRowBySeq`)** | Maps an artifact's recorded agent/phase/stage/sequence back to a concrete routing-table row index — the inverse of dispatch. Needed because the same agent identifier can appear in multiple EXECUTION rows (e.g. a review agent used in both the test group and the implementation group). |
-| **Approach/group ordering (`orderedGroupsForStage`, `computeNextFromExecution`)** | Resolves which execution groups run and in what order for a given stage by looking up the stage's `Approach` token in the workflow's `ApproachTable`. Returns `*domain.UnresolvableApproachError` when the token has no matching table row; never falls back to any default. Also handles intra-/inter-stage advancement. |
-| **Dispatch step construction (`buildDispatchStep`, `resolveArtifacts`)** | Builds the concrete `DispatchStep` (protocol request, effective HITL, resolved artifact paths) for a target row, expanding `{StageNumber}` and `Stage-*` template variables in artifact paths. |
-| **ResumePoint** | Reconstructs a `ResumeInfo` purely from `ArtifactState` (no `lastResponse`), used at process-restart resume time before the dispatch loop's first `Next` call. |
+| **Next / mode routing** (`engine.go`, `next_input.go`, `next_branches.go`) | Selects behaviour by `NextInput.Mode`, locates the row that just ran, and classifies the situation (first call, non-SUCCESS, SUCCESS on a run-scope row, SUCCESS on a block row). |
+| **Position derivation** (`position.go`) | Derives the current row and iteration from the Execution Log entry of the step that just ran. Shared by `Next` and `ResumePointFromSchedules`, so live routing and resume cannot disagree. |
+| **Mechanical retry** (`retry.go`) | The bounded re-dispatch of a PARTIALLY_DONE, BLOCKED/E501 or HARNESS_ERROR step in auto and auto-review modes (`retry_harness_error.go` holds the HARNESS_ERROR budget). |
+| **Review loop** (`next_branches.go`, `rowlookup.go`) | Auto-review route-back of a reviewer's findings and the review loop limit. |
+| **Scope routing and iteration order** (`run_scope.go`, `block_scope.go`, `blocks.go`, `iterations.go`, `orderedGroupsForIteration`) | Routes by the typed `On Success` entry within the row's scope (the run, a group, or an ungrouped iteration), resolves which groups run and in what order for an iteration by looking up the iteration's `Approach` token in the block's approach rows, and picks the next iteration in schedule order whose `Depends On` iterations have completed (completion is derived from the Execution Log). |
+| **Dispatch step construction** (`buildDispatchStep`, `row_defaults.go`, `artifacts.go`) | Builds the concrete `DispatchStep` (protocol request, effective HITL, resolved artifact paths, recorded phase and iteration value) for a target row. |
+| **ResumePointFromSchedules** (`resume.go`, `resume_scope.go`) | Reconstructs a `ResumeInfo` purely from `ArtifactState`, skipping trailing infrastructure entries; after a clean completion the position is the one scope routing gives. |
 
 ## Key Flows
 
-### Next — the per-invocation state machine
+### Next — mode first
 
-`Next` is called once per iteration of session's dispatch loop, after an agent has (or has not yet) responded. Its routing branches, in order:
-
-1. **First call ever** (`state.CurrentState.LastAgent == ""`): calls `initialDispatch`, which picks the very first row to run — the first pre-execution row if any exist, otherwise the first row of a non-staged workflow, otherwise the first row of stage 1's first execution group (ordered per that stage's approach).
-2. **Non-SUCCESS response**, two sub-cases:
-   - `COMPLETED_NEEDS_ACTION` **with an unambiguous `On Findings` hint** (a plain agent identifier or `COMPLETE`, no spaces/parentheses): treated as a deliberate loop-back — dispatches directly to the named agent's row rather than escalating.
-   - **Everything else non-SUCCESS** (including ambiguous/absent `On Findings`): returns a `Deviation` decision carrying the full response and current position, for session/deviation to resolve.
-3. **SUCCESS on a non-EXECUTION row**: routes via the row's `On Success` hint (`handleNonExecutionSuccess`). An unambiguous hint of `COMPLETE` ends the run; an unambiguous hint naming an agent that lives inside an EXECUTION row is treated as "entering the EXECUTION phase" — the actual first row dispatched is determined by stage 1's approach-table group ordering, not literally the named agent's row (the named agent in the routing table reflects the workflow author's documented ordering for humans, not a routing directive). An unambiguous hint naming a non-EXECUTION agent dispatches that row directly. An ambiguous/absent hint returns a `Deviation` (`DeviationAmbiguousRoute`).
-4. **SUCCESS on an EXECUTION row**: routes via `handleExecutionSuccess`/`computeNextFromExecution`, ignoring `On Success` entirely (`On Success` is intentionally not consulted inside EXECUTION — see Boundaries below).
+1. **`ExecutionModeUnset`** (a programming error): returns a Deviation of kind `DeviationAmbiguousRoute`; never coerces to another mode.
+2. **`orchestrated`**: the engine never routes. Every call, including the first of a new run, returns a **Consult** decision (`ConsultTriggerOrchestratedMode`) carrying the current row (`-1` on the first decision), phase and iteration. Position-resolution errors are ignored here because the orchestrator reads the artifact itself.
+3. **`auto` / `auto-review`**: the routing below.
 
 ```mermaid
 flowchart TD
-    A[Next called] --> B{LastAgent empty?}
+    A[Next called] --> M{mode}
+    M -- unset --> DV[Deviation: ambiguous route]
+    M -- orchestrated --> CO[Consult]
+    M -- auto / auto-review --> B{LastAgent empty?}
     B -- yes --> C[initialDispatch]
-    B -- no --> D{status == SUCCESS?}
-    D -- no --> E{CNA + unambiguous On Findings?}
-    E -- yes --> F[Dispatch: loop-back to hinted agent]
-    E -- no --> G[Deviation]
-    D -- yes --> H{current row is EXECUTION?}
-    H -- no --> I[handleNonExecutionSuccess: route via On Success]
-    H -- yes --> J[handleExecutionSuccess: route via group/stage progression]
-    I --> K{hint COMPLETE?}
-    K -- yes --> L[Complete]
-    K -- no, entering EXECUTION --> M[Dispatch: first row of stage 1's ordered groups]
-    K -- no, non-EXECUTION target --> N[Dispatch: named row]
-    K -- ambiguous/absent --> G
-    J --> O{more rows in group/stage/workflow?}
-    O -- yes --> P[Dispatch: next row]
-    O -- no --> L
+    B -- no --> P[currentPosition]
+    P -- unresolved --> ST[Stop with typed error]
+    P -- row found --> D{status == SUCCESS?}
+    D -- no --> R{PARTIALLY_DONE or E501 and bound left?}
+    R -- yes --> RD[Dispatch: same row and iteration again]
+    R -- no --> F{auto-review, CNA, unambiguous On Findings, limit not reached?}
+    F -- yes --> FB[Dispatch: the row the On Findings entry names]
+    F -- no --> G[Deviation: non-success or review-loop-limit]
+    D -- yes --> H{current row in a block?}
+    H -- no --> I[run scope: route via typed On Success]
+    H -- yes --> J[block scope: group and iteration progression]
 ```
 
-### EXECUTION group/stage progression (`computeNextFromExecution`)
+Details for the auto modes:
 
-This is the core state-machine logic for the staged EXECUTION phase, used by both `handleExecutionSuccess` (in `Next`) and indirectly mirrored by `ResumePoint`'s resume-after-restart logic:
+1. **First call** (`state.CurrentState.LastAgent == ""`): `initialDispatch` enters row 1, entering the block it begins when it begins one. A block without a schedule stops, with a `*domain.MissingScheduleError` whose reason names the path its schedule was looked for (and whether it was supposed to be seeded); an empty schedule is not an error and the block exits at once.
+2. **Non-SUCCESS response**, in this order: mechanical retry (below); in `auto-review` only, a COMPLETED_NEEDS_ACTION whose row has an `On Findings` target routes back, unless the review loop limit is reached; everything else returns a **Deviation** carrying the response and position. In `auto` mode COMPLETED_NEEDS_ACTION is always a deviation.
+3. **SUCCESS on a run-scope row** (`routeSuccess`): routes via the row's typed `On Success` entry. A target dispatches exactly the row it names; `NEXT` dispatches the row below, entering the block it begins, and completes the run past the last row; `[Name]` enters that block; `COMPLETE` ends the run. An entry the engine cannot route (a zero kind hand-built into a table, or a fork outside Mode 1) returns a Stop with a `*domain.UnroutableEntryError`. Every dispatch a SUCCESS produces, on a run-scope or a block row, then passes the finished-work check (`finishedWorkDeviation`): a single-step dispatch whose row and iteration value already have a `SUCCESS` in the Execution Log (recorded `WorkflowRow` equal, iteration value equal; entries with no row or an unreadable iteration value never count) is replaced by a `DeviationFinishedWork` deviation whose `PlannedContinuation` is that step. The kind is internal and never serialised; on resume the response in the deviation is the zero value.
+4. **SUCCESS on a block row** (`afterScopeRow`): the typed `On Success` entry is read within the row's scope: a target dispatches that row of the group (or ungrouped iteration), `NEXT` the row below when it is in the scope, `COMPLETE` ends the scope. Ending a group starts the next group the iteration's approach lists; after the last group the iteration has completed and the next iteration is chosen, or the block exits to the row below it.
 
-1. Determine the ordered group list for the current stage via `orderedGroupsForStage`. For bare workflows (`GroupsDeclared = false`), the approach is ignored entirely and the single implicit group is returned. For grouped workflows, the stage's `Approach` token is looked up verbatim and case-sensitively in the workflow's `ApproachTable`; if no row matches, `*domain.UnresolvableApproachError` is returned and execution stops — there is no default approach and no fallback order.
-2. If the current row is not the last row of its group, advance to the next row within the same group.
-3. If it is the last row of its group but another group remains in the same stage, jump to the start of the next group.
-4. If it is the last row of the last group in the stage, look up the next stage number in the `StageSet` and, if found, jump to the first row of that stage's first ordered group (each stage's approach can differ, so group ordering is re-derived per stage).
-5. If no next stage exists, dispatch the first post-execution row if the workflow has one; otherwise the run is `Complete`.
+### Position derivation
 
-### Row identification by sequence (`findExecutionRowBySeq`)
+`currentPosition` takes the last Execution Log entry of the exact instance recorded as `LastAgent` (or an entry synthesised from `current_state`, which records no row). `resolvePosition` then applies one rule for both live routing and resume:
 
-Because the same agent can appear in more than one EXECUTION row (e.g. a review agent shared by both groups), `Next` cannot always identify "which row just ran" by agent name and phase alone. When an agent has multiple EXECUTION-row matches, the engine falls back to reconstructing the row from the artifact's `global_sequence` number: it sums the number of active rows contributed by every stage before the current one (each stage's row count depends on its own approach), then walks the current stage's ordered groups to find the row at the resulting 1-indexed position. This assumes contiguous sequence numbering with no gaps from prior deviations within the same stage.
+- An entry that records a **workflow row** (`WorkflowRow`, the 1-based Row number) is positioned at that row for every row type, validated against the table: the row exists and holds the entry's agent; for a block row the entry must also record an `Iteration` value the row accepts (`{ID}`, or `{ID}.{Group}` with the row's own group when the row is grouped).
+- Only an entry that records **no row** falls back to resolving by agent and phase (bare agent id): the first row with that agent and phase for a row outside every block, the agent's single block row for a block entry.
+- Nothing is ever guessed. The failures are `*domain.PositionUnresolvedError` with a cause: agent not a workflow participant, agent fills several rows of its phase and the entry records no row, recorded row invalid (outside the table, other agent, other group), or a block row whose entry records no iteration or one the row does not accept. `Next` turns it into a **Stop** decision whose `Err` carries the typed error (`Reason == Err.Error()`); `ResumePointFromSchedules` returns it wrapped.
 
-### ResumePoint — reconstructing position after a restart
+Recorded iterations use the OAF 3.0 form (`1.Test` for a grouped row, `A` or `1` for an ungrouped one, via `domain.FormatIterationValue`; `-` outside every block); the pre-3.0 forms are no longer read: parsing reports `artifact.ErrPre30Layout` for the `Stage` column and `current_state.stage`, the row-aware read (`domain.ReadIterationValue`) refuses `{Group}.{ID}` on a grouped row and does not strip `Stage-` (so `Stage-1` is the ID `Stage-1`), and resume refuses such runs before dispatch. Recorded phases are the bare phase name (`EXECUTION`), never the table's qualified string.
 
-`ResumePoint` is independent of `Next` and is called once, at session run-start, before the dispatch loop begins:
+### Mechanical retry (auto and auto-review)
 
-- **No execution log entries**: fresh start, resume from row 0.
-- **Log's last entry matches `CurrentState.LastAgent`**: clean completion, resume from the row after the last completed one (using the same non-EXECUTION vs. EXECUTION group/stage advancement logic as `computeNextFromExecution`, but restricted to a single-step lookahead rather than full deviation-aware routing).
-- **Log's last entry does NOT match `CurrentState.LastAgent`**: interruption detected — the last dispatch was recorded in the execution log but never confirmed in `CurrentState`, meaning the process died mid-invocation. `ResumeInfo.RerunLast` is set to `true` and the same row is re-dispatched (this is the FR-33 requirement referenced in the source).
+`mechanicalRetry` re-dispatches the same row and iteration (the step is marked `Retry`) for two cases, with all counting taken from the Execution Log:
+
+- **PARTIALLY_DONE**: with k the length of the trailing run of PARTIALLY_DONE rows at the row and iteration (rows with no recorded workflow row are skipped), re-dispatch while `k <= PartiallyDoneRedispatchLimit` (3) and deviate when k exceeds it. The re-dispatch hands over the previous output artifacts as inputs and appends the previous status message to the task description (`PartiallyDoneContextPrefix`). This bound is Runner-only; the native orchestrator policy has no cap.
+- **BLOCKED with E501**: `E501BudgetRemaining` is `E501AttemptLimit` (3) minus the E501 rows at the row and iteration since the last SUCCESS there; re-dispatch while it is above zero. The error code of the last step comes from the live response, or from the recorded log entry on resume. Old synthetic BLOCKED/E501 rows for harness errors count here.
+- **HARNESS_ERROR**: `HarnessErrorBudgetRemaining` is `HarnessErrorAttemptLimit` (3) minus the HARNESS_ERROR rows at the row and iteration since the last SUCCESS there (force-stopped rows ignored); re-dispatch while it is above zero, otherwise deviate. A HARNESS_ERROR attempt never moved `current_state`, so `harnessErrorDecision` takes its row and iteration from the attempt's own log entry. The budget is separate from the E501 budget.
+
+In orchestrated mode neither applies: every such failure is a consultation.
+
+### Review loop (auto-review)
+
+On COMPLETED_NEEDS_ACTION with an `On Findings` target, `findingsRouteBack` dispatches **the row the typed entry names** (resolved at parse time by whole-cell match of a `Subagent` cell, so there is no nearest-row search). A target in the block of the reviewer's row keeps the current iteration; any other target runs outside an iteration. An entry of kind none (`-`) is a Deviation. The dispatched step's inputs are the row's own, plus the reviewer's written output artifacts (`LastOutputArtifacts`), plus the target agent's own earlier outputs found in the artifact registry (matched against the step's resolved output paths), deduplicated with run-prefixed and unprefixed forms treated as equal. A SUCCESS-routed dispatch never carries injected artifacts.
+
+`review_loop_limit` (0 = none, persisted in the artifact frontmatter) bounds this: `reviewLoopLimitReached` counts the reviewer's COMPLETED_NEEDS_ACTION rows keyed by reviewer, phase and iteration value (not by row) since that reviewer's last SUCCESS there. A COMPLETED_NEEDS_ACTION directly following the same reviewer's own COMPLETED_NEEDS_ACTION is a re-dispatch of the same round and is not counted again; a reviewer SUCCESS directly following its own COMPLETED_NEEDS_ACTION is a gate-discharging re-dispatch, not a pass, and does not reset the count. When the count reaches the limit the engine returns a Deviation of kind `DeviationReviewLoopLimit` instead of routing back.
+
+### Block group and iteration progression (`afterScopeRow`, `router`)
+
+1. Determine the ordered group list for the current iteration via `orderedGroupsForIteration`. For an ungrouped block the approach is ignored and the single implicit group is returned. For a grouped block the iteration's `Approach` token is looked up verbatim and case-sensitively in the block's approach rows; no match returns `*domain.UnresolvableApproachError` (no default approach, no fallback).
+2. The row's own `On Success` entry decides inside the group: a target dispatches that row, `NEXT` the row below while it is in the group. A row that is in none of the ordered groups returns `*domain.RowNotInGroupError`.
+3. When the entry ends the group's scope (`COMPLETE`, or `NEXT` from its last row) and another group remains in the iteration, jump to the next group's first row.
+4. When the last group's scope ends, the iteration is complete; move to the next iteration in schedule order whose `Depends On` iterations have completed (group order re-derived from that iteration's approach). Completion is derived from the Execution Log alone, so a re-entered block runs only its uncompleted iterations.
+5. If no runnable iteration remains, the block exits: the row below the block is dispatched (entering the block it begins), or the run completes when the block ends the table.
+
+### ResumePointFromSchedules — reconstructing position after a restart
+
+Called once at run start, before the dispatch loop:
+
+- It looks at the last **workflow** entry of the log, skipping trailing infrastructure entries (agents absent from the routing table and present in the `InfraAgentSet`). An entry that is neither a workflow participant nor infrastructure is a `PositionUnresolvedError`. No workflow entry at all means a fresh start from row 0.
+- **Last workflow entry matches `CurrentState.LastAgent`**: clean completion; resume from the position scope routing gives for the completed row's declared `On Success` over the iterations the log shows completed (`resumeAfterScopedRow`) — the same position `Next` dispatches at in `auto` and `auto-review`. A block with no schedule yet resumes at the block's first row and `Next` then stops with the missing-schedule reason.
+- **Last workflow entry does NOT match**: the process died mid-invocation; `ResumeInfo.RerunLast` is set and the same row is re-dispatched.
+- Position resolution uses the same recorded-row rule as `Next`; an entry whose row cannot be identified is an error, never a guess.
 
 ### Dispatch step construction
 
-Whenever a row is selected for dispatch (by any of the flows above), `buildDispatchStep` assembles the `DispatchStep`:
-- **Effective HITL** = row-level HITL OR (if inside an EXECUTION row) that stage's HITL flag from the `StageSet` entry.
-- **Artifact path resolution** (`resolveArtifacts`): `{StageNumber}` is substituted with the numeric stage value (only valid when inside a staged EXECUTION row — otherwise an unresolvable-template error surfaces as a `Stop`). `Stage-*` in **input** artifacts expands into one path per stage entry in the effective stage set (using `refreshedStages` instead of the run-start `stages` when available and the row is non-EXECUTION — this lets re-derived stage lists feed a re-planning step). `Stage-*` in **output** artifacts is passed through unexpanded (the agent itself decides which stage's file to write).
-- **Agent instance ID** is `{agentIdentifier}#{seq+1}` — `seq` is incremented before use, so instance numbering is 1-based per agent across the run.
+`buildDispatchStep` assembles the `DispatchStep` for a row:
+- **Effective HITL** = row-level HITL OR (for a block row) that iteration's HITL flag from the block's schedule.
+- **Artifact paths** (`ResolveArtifactsForIteration`): the fill-in `{Name}` of the row's block (for example `{Stage}` for block `Stage`) is replaced with the iteration ID verbatim in Input and Output entries (an iteration is required, otherwise an unresolvable-template error becomes a `Stop`). An entry containing `*` is passed through unchanged; the session expands Input wildcards against the run folder and passes Output wildcards literally.
+- **Agent instance ID** is `{bareAgentID}#{seq+1}`; a row with a mode qualifier is dispatched under its bare agent id and its task description gains a focus paragraph (`QualifierFocusPrefix`).
+- The step records `Phase` (bare name) and the iteration value (`Stage` field of the step, written to the log's `Iteration` column) for the artifact.
 
 ## Relationships
 
 | Talks To | For |
 |----------|-----|
-| **domain** | Sole internal import — all types (`AdmittedWorkflow`, `StageSet`, `ArtifactState`, `ProtocolResponse`, `EngineDecision` and its variants, `ResumeInfo`) come from here. `engine` imports nothing else internal. |
-| **session** | The exclusive consumer. Session calls `ResumePoint` once at run-start, then calls `Next` in a loop, translating each `EngineDecision` into I/O: dispatching via `harness`, writing via `artifact`, or invoking `deviation`. |
-| **compat** (indirect, via inputs) | Supplies the `AdmittedWorkflow` shape (pre-execution/execution/post-execution row ranges, `Groups`, `GroupsDeclared`, `ApproachTable`, `HasStagedPhase`) that all of the group/stage logic depends on. |
-| **planstages** (indirect, via inputs) | Supplies the `StageSet` (`Approach` and HITL per stage) that drives approach-based group ordering and effective HITL computation. |
+| **domain** | Sole internal import — all types (`AdmittedWorkflow`, `BlockSchedules`, `ArtifactState`, `ProtocolResponse`, `EngineDecision` and its variants, `ResumeInfo`, `WorkflowRow`) come from here. `engine` imports nothing else internal and no I/O packages. |
+| **session** | The exclusive consumer. Session calls `ResumePointFromSchedules` once at run-start, then `Next` in a loop, translating each `EngineDecision` into I/O. It also calls `ResolveRowDefaultsForIteration`, `E501BudgetRemaining`, `ScheduleDefectAttempts`, `IterationArtifactCandidates` and the boundary helpers. |
+| **compat** (indirect, via inputs) | Supplies the `AdmittedWorkflow` shape (`Blocks` with row ranges, `Groups`, `Approaches`, seed classification). |
+| **planstages** (indirect, via inputs) | Supplies each block's `BlockSchedule` (iteration IDs, `Approach`, `HITL` and `Depends On` per iteration). |
 
 ## Key Concepts
 
 | Concept | Meaning |
 |---------|---------|
-| **EngineDecision** | The tagged-union return type of `Next`: exactly one of `Dispatch`, `Complete`, `Deviation`, `Stop` is non-nil. |
-| **Unambiguous hint** | An `On Success`/`On Findings` column value is "unambiguous" when the column is present, non-empty, and contains no spaces or parentheses — i.e. a bare agent identifier or the literal keyword `COMPLETE`. Anything else (free-form text, absent column) cannot be routed deterministically and produces a `Deviation`. |
-| **On Success is ignored inside EXECUTION** | Routing between EXECUTION rows is governed entirely by group/stage/approach progression, never by the `On Success` column value — that column's agent reference in EXECUTION rows exists only to describe the ordering for humans reading the workflow table, not to drive the engine. |
-| **Ordered groups per approach** | For grouped workflows (`GroupsDeclared = true`), the stage's `Approach` token is matched verbatim against the workflow's `ApproachTable` to determine which groups run and in what order for that stage; this lookup is repeated per stage since different stages may declare different approaches. A token with no matching table row produces `*domain.UnresolvableApproachError` — there is no TDD default and no fallback. For bare workflows the approach is ignored and the single implicit group is always returned. |
-| **Deviation kinds** | `DeviationNonSuccess` (any non-SUCCESS response without an unambiguous loop-back hint), `DeviationAmbiguousRoute` (a SUCCESS response whose `On Success` hint can't be resolved), `DeviationHarnessError` (declared in domain but not produced anywhere inside `engine` itself — it originates from session/harness before `Next` is even called). |
-| **Interruption / RerunLast** | Detected by `ResumePoint` when the last execution-log entry's agent doesn't match `CurrentState.LastAgent` — signals the process died between logging a dispatch and recording its completed response; the interrupted row must be re-dispatched rather than advanced past. |
+| **EngineDecision** | Exactly one of `Dispatch`, `Complete`, `Deviation`, `Consult`, `Stop` is non-nil. |
+| **Consult vs. Deviation** | Both end in the same session routine and a consultation request. A Deviation means the engine tried and could not decide; a Consult means it was never entitled to decide (orchestrated mode). |
+| **Typed routing entries** | The parser resolves every `On Success` (target, `[Name]` block entry, fork, `NEXT`, `COMPLETE`) and `On Findings` (target or none) cell to a typed entry with a row index, so the engine never interprets cell text. |
+| **Scopes** | A row routes within its scope: the run, a group of one iteration, or an ungrouped iteration. A target never leaves the scope; ending a scope moves to the next group, the next iteration, or the block's exit (WorkflowFormat 2.16 sec. 6.5). |
+| **Deviation kinds** | `DeviationNonSuccess` (non-SUCCESS without a usable retry or route-back), `DeviationAmbiguousRoute` (unroutable entry or unset mode), `DeviationReviewLoopLimit` (auto-review limit reached), `DeviationHarnessError` (declared in domain, never produced inside `engine`; session raises it when a consultation-routed HITL re-dispatch hits a harness error), `DeviationFinishedWork` (an engine-routed SUCCESS whose next step already finished; the manual resolver pre-selects `PlannedContinuation`). |
+| **Interruption / RerunLast** | Detected by `ResumePointFromSchedules` when the last workflow log entry's agent differs from `CurrentState.LastAgent`; the interrupted row is re-dispatched rather than advanced past. |
 
 ## Boundaries
 
-- **Owns:** The routing decision logic itself — what row runs next, in what order, with what effective HITL, and with what resolved artifact paths; and resume-position reconstruction after a restart.
-- **Does Not Own:** Parsing or validating the workflow/stage/artifact inputs (that's orchfile/workflow/compat/planstages/artifact); performing the actual dispatch, I/O, or clock reads (that's session and its adapters); resolving deviations once flagged (that's deviation); constructing `AgentReference` values (that's agentresolve — engine only looks them up by identifier in the map it's given).
+- **Owns:** the routing decision logic — what row runs next, in what order, with what effective HITL and resolved artifact paths; the mechanical retry bounds; the review loop limit; position derivation from the log; resume-position reconstruction.
+- **Does Not Own:** parsing or validating the workflow/schedule/artifact inputs; performing dispatch, I/O or clock reads (session and its adapters); resolving a Consult or Deviation (session and `deviation`); anti-loop protection of consultant-requested dispatches (session); constructing `AgentReference` values (agentresolve).
 
 ## Invariants & Conventions
 
-- No I/O, no filesystem/network/random access, no `time.Now()` calls anywhere in this package — the `time.Time` parameter to `Next`/`buildDispatchStep` is currently accepted but not inspected by any routing logic (reserved for future use).
-- Exactly one field of `EngineDecision` is non-nil per call.
-- `DispatchDecision.Steps` always contains exactly one element today (see project-level invariant); the slice shape exists to reserve room for future parallel dispatch.
-- `On Success` is never consulted while routing within the EXECUTION phase; `On Findings` is only consulted for `COMPLETED_NEEDS_ACTION` responses, never for other non-SUCCESS statuses.
-- Row and stage lookups always prefer a unique agent+phase match; sequence-based (`findExecutionRowBySeq`) matching is only used as a fallback when an agent appears in more than one EXECUTION row, and it assumes contiguous per-stage sequence numbering.
+- No I/O, no filesystem/network/random access, no `time.Now()` anywhere in this package — the `time.Time` in `NextInput` is accepted but not inspected by any routing logic.
+- Exactly one field of `EngineDecision` is non-nil per call. `DispatchDecision.Steps` always holds exactly one element.
+- A row's `On Success` is routed within its own scope in `auto` and `auto-review`; `On Findings` is only consulted for COMPLETED_NEEDS_ACTION in `auto-review`.
+- Row and iteration always come from the recorded `WorkflowRow` when the log entry has one; a mismatch between the entry and the table is an error, not a fallback.
+- Mechanical retries are counted from the Execution Log, never from in-memory state, so they hold across a restart.
 
 ## Known Complexity
 
-None identified beyond what this document captures — the sequence-based row disambiguation (`findExecutionRowBySeq`) and the approach-driven group/stage progression (`computeNextFromExecution`) are the most intricate parts of the package, but their behavior is fully described above and is exercised extensively by the package's own golden/unit tests. No deeper-tier document is recommended for this package.
+The position derivation (`position.go`) and the review loop counting (`reviewLoopLimitReached`) are the most intricate parts; both are described above and covered by dedicated test files in the package. No deeper-tier document is recommended.

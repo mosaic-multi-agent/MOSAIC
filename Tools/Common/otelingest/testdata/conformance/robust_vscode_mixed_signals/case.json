@@ -1,0 +1,15 @@
+{
+  "description": "VS Code export with all signal kinds mixed: metrics, log records carrying usage attributes, execute_hook and execute_tool spans and a background chat without any conversation id are consumed without records and without a skipped-line diagnostic; the one chat span of the conversation produces its record.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

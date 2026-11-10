@@ -1166,7 +1166,7 @@ func TestProbeDeployedStateWithIndex_NilParseFailedPaths_NoPanic(t *testing.T) {
 	}
 	// With nil parseFailedPaths, ParseFailed must be false (no parse failure was signalled).
 	if state.ParseFailed {
-		t.Errorf("state.ParseFailed = true, want false; "+
+		t.Errorf("state.ParseFailed = true, want false; " +
 			"ParseFailed must not be set when parseFailedPaths is nil (non-Update call sites)")
 	}
 }
@@ -1210,8 +1210,8 @@ func TestProbeDeployedStateWithIndex_ParseFailedPathsNotContainingAgentPath_Pars
 	// Assert
 	state := result[targetPath]
 	if state.ParseFailed {
-		t.Errorf("state.ParseFailed = true, want false; "+
-			"ParseFailed must only be set for paths that appear in parseFailedPaths, "+
+		t.Errorf("state.ParseFailed = true, want false; " +
+			"ParseFailed must only be set for paths that appear in parseFailedPaths, " +
 			"not for all paths when parseFailedPaths is non-nil")
 	}
 }
@@ -1266,19 +1266,19 @@ func TestProbeDeployedStateWithIndex_ParseFailedPathPresent_StateHasParseFailedT
 
 	// The file exists on disk — Present must be true, not false.
 	if !state.Present {
-		t.Errorf("state.Present = false, want true; "+
-			"a parse-failed file exists on disk at the planned path — "+
-			"probeDeployedStateWithIndex must detect it via a fallback probe and return Present: true. "+
-			"The current implementation returns Present: false when resolved == \"\" (no index entry), "+
-			"which misclassifies the file as CREATE instead of CONFLICT. "+
+		t.Errorf("state.Present = false, want true; " +
+			"a parse-failed file exists on disk at the planned path — " +
+			"probeDeployedStateWithIndex must detect it via a fallback probe and return Present: true. " +
+			"The current implementation returns Present: false when resolved == \"\" (no index entry), " +
+			"which misclassifies the file as CREATE instead of CONFLICT. " +
 			"I2.3 must add the fallback probe to fix this.")
 	}
 
 	// ParseFailed must be set to carry the signal to classifyAgentItem.
 	if !state.ParseFailed {
-		t.Errorf("state.ParseFailed = false, want true; "+
-			"when the file's target path is in parseFailedPaths and the file exists on disk, "+
-			"ParseFailed must be set so classifyAgentItem can classify it as CONFLICT "+
+		t.Errorf("state.ParseFailed = false, want true; " +
+			"when the file's target path is in parseFailedPaths and the file exists on disk, " +
+			"ParseFailed must be set so classifyAgentItem can classify it as CONFLICT " +
 			"with the distinct parse-failure reason (FR-1, FR-2)")
 	}
 }
@@ -1320,9 +1320,9 @@ func TestProbeDeployedStateWithIndex_ParseFailedPathAbsentFile_PresentFalse(t *t
 	// Assert — file is absent so Present must be false.
 	state := result[targetPath]
 	if state.Present {
-		t.Errorf("state.Present = true, want false; "+
-			"a genuinely absent file must remain Present: false even when its path is in parseFailedPaths. "+
-			"The fallback probe calls probeDeployedArtifact at the planned path; "+
+		t.Errorf("state.Present = true, want false; " +
+			"a genuinely absent file must remain Present: false even when its path is in parseFailedPaths. " +
+			"The fallback probe calls probeDeployedArtifact at the planned path; " +
 			"probeDeployedArtifact returns Present: false when the file does not exist.")
 	}
 }

@@ -172,7 +172,7 @@ func TestSeamAppReplay_ClaudeCode_CreateAndUpdate(t *testing.T) {
 	fixturesDir := seamReplayAgentFixturesDir(t)
 
 	// Load protocol from the frozen catalog root (required by transform.Apply for agents).
-	protocol, err := catalog.FileProtocolLoader{}.LoadProtocol(frozenRoot)
+	protocol, err := catalog.FileProtocolLoader{}.LoadProtocol(filepath.Join(frozenRoot, "Catalog"))
 	if err != nil {
 		t.Fatalf("load protocol from frozen catalog: %v", err)
 	}

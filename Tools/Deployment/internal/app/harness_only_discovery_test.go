@@ -139,27 +139,41 @@ type miniCatalog struct {
 	scriptOrchestratorOK bool
 }
 
-func (c *miniCatalog) Root() string                                  { return "" }
-func (c *miniCatalog) CatalogRoot() string                           { return "" }
-func (c *miniCatalog) Agents() []domain.Agent                        { return c.workers }
-func (c *miniCatalog) Orchestrator() domain.Agent                    { return c.orchestrator }
-func (c *miniCatalog) OrchestratorScript() (domain.Agent, bool)      { return c.scriptOrchestrator, c.scriptOrchestratorOK }
-func (c *miniCatalog) UtilityAgents() []domain.Agent                 { return c.utilities }
-func (c *miniCatalog) StandaloneAgents() []domain.Agent              { return nil }
-func (c *miniCatalog) Agent(key string) (domain.Agent, bool)         { panic("miniCatalog: Agent not used") }
-func (c *miniCatalog) InfrastructureAgents() []domain.Agent          { panic("miniCatalog: InfrastructureAgents not used") }
-func (c *miniCatalog) Skills() []domain.Skill                        { panic("miniCatalog: Skills not used") }
-func (c *miniCatalog) Skill(key string) (domain.Skill, bool)         { panic("miniCatalog: Skill not used") }
-func (c *miniCatalog) Hooks() []domain.HookBundle                    { panic("miniCatalog: Hooks not used") }
-func (c *miniCatalog) Hook(key string) (domain.HookBundle, bool)     { panic("miniCatalog: Hook not used") }
-func (c *miniCatalog) Workflows() []domain.Workflow                  { panic("miniCatalog: Workflows not used") }
-func (c *miniCatalog) Workflow(id string) (domain.Workflow, bool)    { panic("miniCatalog: Workflow not used") }
-func (c *miniCatalog) WorkflowCategories() []domain.WorkflowCategory { panic("miniCatalog: WorkflowCategories not used") }
-func (c *miniCatalog) Tiers() []domain.TierInfo                      { panic("miniCatalog: Tiers not used") }
-func (c *miniCatalog) WorkflowSection(id string) ([]byte, error)     { panic("miniCatalog: WorkflowSection not used") }
-func (c *miniCatalog) ReadSource(path string) ([]byte, error)        { panic("miniCatalog: ReadSource not used") }
-func (c *miniCatalog) Issues() []catalog.Issue                       { return nil }
-func (c *miniCatalog) AgentByNumericID(id string) (domain.Agent, bool) { panic("miniCatalog: AgentByNumericID not used") }
+func (c *miniCatalog) Root() string               { return "" }
+func (c *miniCatalog) CatalogRoot() string        { return "" }
+func (c *miniCatalog) Agents() []domain.Agent     { return c.workers }
+func (c *miniCatalog) Orchestrator() domain.Agent { return c.orchestrator }
+func (c *miniCatalog) OrchestratorScript() (domain.Agent, bool) {
+	return c.scriptOrchestrator, c.scriptOrchestratorOK
+}
+func (c *miniCatalog) UtilityAgents() []domain.Agent         { return c.utilities }
+func (c *miniCatalog) StandaloneAgents() []domain.Agent      { return nil }
+func (c *miniCatalog) Agent(key string) (domain.Agent, bool) { panic("miniCatalog: Agent not used") }
+func (c *miniCatalog) InfrastructureAgents() []domain.Agent {
+	panic("miniCatalog: InfrastructureAgents not used")
+}
+func (c *miniCatalog) Skills() []domain.Skill                    { panic("miniCatalog: Skills not used") }
+func (c *miniCatalog) Skill(key string) (domain.Skill, bool)     { panic("miniCatalog: Skill not used") }
+func (c *miniCatalog) Hooks() []domain.HookBundle                { panic("miniCatalog: Hooks not used") }
+func (c *miniCatalog) Hook(key string) (domain.HookBundle, bool) { panic("miniCatalog: Hook not used") }
+func (c *miniCatalog) Workflows() []domain.Workflow              { panic("miniCatalog: Workflows not used") }
+func (c *miniCatalog) Workflow(id string) (domain.Workflow, bool) {
+	panic("miniCatalog: Workflow not used")
+}
+func (c *miniCatalog) WorkflowCategories() []domain.WorkflowCategory {
+	panic("miniCatalog: WorkflowCategories not used")
+}
+func (c *miniCatalog) Tiers() []domain.TierInfo { panic("miniCatalog: Tiers not used") }
+func (c *miniCatalog) WorkflowSection(id string) ([]byte, error) {
+	panic("miniCatalog: WorkflowSection not used")
+}
+func (c *miniCatalog) ReadSource(path string) ([]byte, error) {
+	panic("miniCatalog: ReadSource not used")
+}
+func (c *miniCatalog) Issues() []catalog.Issue { return nil }
+func (c *miniCatalog) AgentByNumericID(id string) (domain.Agent, bool) {
+	panic("miniCatalog: AgentByNumericID not used")
+}
 
 // writeHarnessOnlyAgentFile writes the given content to filepath.Join(dir, filename) and
 // creates the directory if needed. It is used to set up eligible harness-only agent files

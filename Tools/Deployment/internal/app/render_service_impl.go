@@ -16,10 +16,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"mosaic-deploy/internal/agentformat"
 	"mosaic-deploy/internal/config"
+	"mosaic-deploy/internal/agentkey"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/transform"
 )
@@ -28,10 +28,11 @@ import (
 //
 // Validation order (so the caller gets the most actionable message and nothing is read or
 // written before the request is known to be coherent):
-//   source arity → destination arity → harness required → harness resolvable →
-//   source exists/resolvable → source parseable → role/version derived →
-//   workflow applicability → workflow ids resolvable →
-//   destination resolution → overwrite check → render → write.
+//
+//	source arity → destination arity → harness required → harness resolvable →
+//	source exists/resolvable → source parseable → role/version derived →
+//	workflow applicability → workflow ids resolvable →
+//	destination resolution → overwrite check → render → write.
 func renderAgent(_ context.Context, s *service, req RenderAgentRequest) (RenderAgentResult, error) {
 	// -----------------------------------------------------------------------
 	// 1. Source arity
@@ -65,7 +66,7 @@ func renderAgent(_ context.Context, s *service, req RenderAgentRequest) (RenderA
 	// -----------------------------------------------------------------------
 	module, err := s.deps.Registry.Resolve(req.TargetHarnessID)
 	if err != nil {
-		return RenderAgentResult{}, fmt.Errorf("%w: %v", ErrRenderHarnessUnresolvable, err)
+		return RenderAgentResult{}, fmt.Errorf("%w: %w", ErrRenderHarnessUnresolvable, err)
 	}
 	defer module.Close()
 
@@ -92,9 +93,9 @@ func renderAgent(_ context.Context, s *service, req RenderAgentRequest) (RenderA
 		}
 
 		sourcePath = req.SourcePath
-		// Agent key: base name without extension (strips .md or any other extension).
+		// Agent key: base name without a trailing .agent.md or .md.
 		base := filepath.Base(req.SourcePath)
-		agentKey = strings.TrimSuffix(base, filepath.Ext(base))
+		agentKey = agentkey.FromFileName(base)
 	} else {
 		// Source from catalogue.
 		agent, ok := s.deps.Catalog.Agent(req.SourceAgentKey)
@@ -115,7 +116,7 @@ func renderAgent(_ context.Context, s *service, req RenderAgentRequest) (RenderA
 	// -----------------------------------------------------------------------
 	doc, parseErr := ParseGenericSource(srcBytes)
 	if parseErr != nil {
-		return RenderAgentResult{}, fmt.Errorf("%w: %v", ErrRenderSourceNotGeneric, parseErr)
+		return RenderAgentResult{}, fmt.Errorf("%w: %s: %v", ErrRenderSourceNotGeneric, sourcePath, parseErr)
 	}
 	fm := doc.Frontmatter()
 
@@ -183,8 +184,8 @@ func renderAgent(_ context.Context, s *service, req RenderAgentRequest) (RenderA
 			}
 			wfBlocks = append(wfBlocks, transform.WorkflowBlock{ID: id, Block: section})
 		}
-	// else: req.Workflows == nil && role != RoleOrchestrator — wfBlocks stays nil;
-	// the source has no AvailableWorkflows region so no workflow handling is needed.
+		// else: req.Workflows == nil && role != RoleOrchestrator — wfBlocks stays nil;
+		// the source has no AvailableWorkflows region so no workflow handling is needed.
 	}
 
 	// Assemble infrastructure blocks. nil InfrastructureAgents = not specified.
@@ -332,6 +333,7 @@ func renderAgent(_ context.Context, s *service, req RenderAgentRequest) (RenderA
 		InfrastructureAgents:  resultInfraAgents,
 		Tools:                 tools,
 		DryRun:                req.DryRun,
+		ConflictReport:        s.renderConflictReport(req.TargetHarnessID, resultWorkflows),
 	}, nil
 }
 

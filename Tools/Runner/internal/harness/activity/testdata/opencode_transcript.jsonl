@@ -1,0 +1,8 @@
+{"type":"step_start","sessionID":"ses_1","part":{"type":"step-start"}}
+{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"Running the tests."}}
+{"type":"tool_use","sessionID":"ses_1","part":{"type":"tool","callID":"c1","tool":"bash","state":{"status":"completed","input":{"command":"go test ./..."},"output":"ok","title":"go test"}}}
+{"type":"step_finish","sessionID":"ses_1","part":{"type":"step-finish","reason":"tool-calls","cost":0.004,"tokens":{"input":300,"output":50,"reasoning":0,"cache":{"read":0,"write":0}}}}
+{"type":"step_start","sessionID":"ses_1","part":{"type":"step-start"}}
+{"type":"tool_use","sessionID":"ses_1","part":{"type":"tool","callID":"c2","tool":"task","state":{"status":"completed","input":{"subagent_type":"reviewer","description":"Review the change","prompt":"Please review"},"output":""}}}
+{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"All done."}}
+{"type":"step_finish","sessionID":"ses_1","part":{"type":"step-finish","reason":"stop","cost":0.002,"tokens":{"input":80,"output":10,"reasoning":0,"cache":{"read":0,"write":0}}}}

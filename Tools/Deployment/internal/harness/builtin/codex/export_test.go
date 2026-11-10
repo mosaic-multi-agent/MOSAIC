@@ -16,9 +16,9 @@ import (
 // NewWithOptsForTesting calls New(opts) and returns the module. It is the test-facing
 // entry point for the run-time construction path:
 //
-//	opts.MosaicRoot must point to a directory containing
-//	<MosaicRoot>/Catalog/HarnessInjections/Codex/HarnessInjections.md and
-//	<MosaicRoot>/Catalog/HarnessInjections/Codex/HarnessInjectionsOrchestrator.md.
+//	opts.ContentDir must resolve the Codex harness directory name to a directory containing
+//	HarnessInjections.md and
+//	HarnessInjectionsOrchestrator.md.
 func NewWithOptsForTesting(_ testing.TB, opts registry.BuiltinOptions) (domain.HarnessModule, error) {
 	return New(opts)
 }

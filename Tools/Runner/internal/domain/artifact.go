@@ -15,24 +15,45 @@ type InfrastructureOverride struct {
 	Triggers  []DeclaredInfraTrigger // replacement trigger list
 }
 
+// Values of the run artifact's dispatch frontmatter field
+// (OrchestrationArtifactFormat section 4).
+const (
+	DispatchSequential = "sequential"
+	DispatchParallel   = "parallel"
+)
+
+// DispatchField is the recorded dispatch frontmatter field. Presence is
+// modelled separately from the value so a present-but-blank key is never
+// confused with an absent one.
+type DispatchField struct {
+	Present bool   // the key exists in the frontmatter
+	Value   string // the value as parsed; meaningful only when Present
+}
+
 // ArtifactState is the parsed content of Orchestration.md.
 // It is the runner's only durable state.
 type ArtifactState struct {
 	// Frontmatter (Tier 1)
-	RunID           string          // set once at creation, never modified; empty for pre-v1.8 artifacts
-	Type            string          // "orchestration-artifact"
+	RunID           string // set once at creation, never modified; required and always a valid run id
+	Type            string // "orchestration-artifact"
 	Workflow        WorkflowID
 	WorkflowVersion WorkflowVersion
 	Task            string
 	Started         time.Time
 	LastUpdated     time.Time
-	GlobalSequence  int
+	GlobalSequence  int // last allocated invocation number
+
+	// Dispatch is the dispatch frontmatter field. Zero value = absent (read as
+	// sequential). Set to sequential only by Store.Create; otherwise preserved
+	// exactly (Present and Value) by every rewrite.
+	Dispatch DispatchField
 
 	// RunSettings holds every run-configuration decision that is settled at run
 	// start, immutable for the run, and persisted in the artifact frontmatter so
 	// a resumed run reads it back instead of re-asking. Embedding promotes all
-	// seven fields (Mode, Checkpoints, Commits, CommitBranchVariant, CommitBranch,
-	// PreConsultation, ManualResolution) directly onto ArtifactState.
+	// fields (Mode, Checkpoints, Commits, CommitBranchVariant, CommitBranch,
+	// PreConsultation, ManualResolution, ReviewLoopLimit, InfraClassSelections)
+	// directly onto ArtifactState.
 	RunSettings
 
 	// InfrastructureOverrides carries the optional infrastructure_overrides
@@ -40,6 +61,10 @@ type ArtifactState struct {
 	// Each entry replaces the named agent's declared trigger list at run start.
 	InfrastructureOverrides []InfrastructureOverride
 	CurrentState            CurrentState
+
+	// UnknownFrontmatter preserves, in file order, every top-level frontmatter
+	// key this version does not model, verbatim, so rewrites never drop them.
+	UnknownFrontmatter []FrontmatterEntry
 
 	// Structured sections (Tier 2)
 	ExecutionLog     []ExecutionLogEntry
@@ -49,10 +74,16 @@ type ArtifactState struct {
 	WorkflowNotes []WorkflowNote
 }
 
+// FrontmatterEntry is one preserved top-level frontmatter key.
+type FrontmatterEntry struct {
+	Key   string   // the top-level key
+	Lines []string // the key's line and every indented continuation line, verbatim, without trailing newlines
+}
+
 // CurrentState is the mutable nested block in the frontmatter.
 type CurrentState struct {
 	Phase      string     // standard workflow phase
-	Stage      string     // "Stage-N" during EXECUTION with stages, "" otherwise
+	Stage      string     // recorded OAF 3.0 iteration value (domain.FormatIterationValue, e.g. "1.Test") during EXECUTION with blocks, "" otherwise
 	LastStatus StatusCode // zero value before any invocation
 	LastAgent  string     // "{AgentName}#{Seq}", "" before any invocation
 	ErrorCode  ErrorCode  // populated only when LastStatus is BLOCKED
@@ -60,13 +91,19 @@ type CurrentState struct {
 
 // ExecutionLogEntry is one row of the Execution Log table (append-only).
 type ExecutionLogEntry struct {
-	Seq        int
-	Agent      string     // "{AgentName}#{Seq}"
-	Phase      string
-	Stage      string     // "Stage-N" during EXECUTION, "" otherwise
-	Status     StatusCode
-	Timestamp  time.Time
-	Summary    string // from ProtocolResponse.StatusMessage, truncated
+	Seq   int
+	Agent string // "{AgentName}#{Seq}"
+	Phase string
+	Stage string // recorded OAF 3.0 iteration value (domain.FormatIterationValue, e.g. "1.Test") during EXECUTION, "" otherwise
+	// WorkflowRow is the 1-based routing-table row the step ran; NoWorkflowRow
+	// when absent, "-" or non-canonical in the table.
+	WorkflowRow WorkflowRow
+	Status      StatusCode
+	Timestamp   time.Time
+	Summary     string // from ProtocolResponse.StatusMessage, truncated
+	// ErrorCode is the step's error code; ErrorNone unless Status is BLOCKED.
+	// Persisted as a trailing "[error:CODE]" marker on the Summary cell.
+	ErrorCode  ErrorCode
 	Inputs     string // comma-separated input_artifacts, or "" if none; "-" in the table
 	Checkpoint string // "" unless a checkpoint was taken
 }

@@ -119,9 +119,9 @@ func TestDeployedModelSelections_AgentWithEmbeddedModel_SelectionIsResolved(t *t
 		t.Fatal("agent-a is absent from result map; prerequisite for the Resolved() check")
 	}
 	if !sel.Resolved() {
-		t.Errorf("result[\"agent-a\"].Resolved() = false, want true; "+
-			"the selection for an agent with an embedded model must be resolved so the "+
-			"planner does not emit a spurious GapNoModel gap and the transform preserves "+
+		t.Errorf("result[\"agent-a\"].Resolved() = false, want true; " +
+			"the selection for an agent with an embedded model must be resolved so the " +
+			"planner does not emit a spurious GapNoModel gap and the transform preserves " +
 			"the model key in regenerated content")
 	}
 }
@@ -257,7 +257,7 @@ func TestDeployedModelSelections_AgentTargetPathNotInPaths_AbsentFromResult(t *t
 
 	if _, ok := result["agent-a"]; ok {
 		t.Error("agent-a is present in result map, want absent; " +
-			"an agent whose target path is not in PlannedPaths must be absent from the result map "+
+			"an agent whose target path is not in PlannedPaths must be absent from the result map " +
 			"(PlannedPaths.Path is the canonical path lookup; a missing entry means no planned path)")
 	}
 }
@@ -309,8 +309,8 @@ func TestDeployedModelSelections_MultipleAgentsMixedState_CorrectCombination(t *
 	}
 	deployedState := map[string]domain.DeployedArtifactState{
 		"with-model.md":  {Present: true, ModelID: "claude-opus-4-5"},
-		"no-model.md":    {Present: true, ModelID: ""},   // present but no model
-		"absent-file.md": {Present: false, ModelID: ""},  // file does not exist
+		"no-model.md":    {Present: true, ModelID: ""},  // present but no model
+		"absent-file.md": {Present: false, ModelID: ""}, // file does not exist
 	}
 
 	result := deployedModelSelections(agents, paths, deployedState)

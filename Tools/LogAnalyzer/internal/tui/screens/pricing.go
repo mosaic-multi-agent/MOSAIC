@@ -2,9 +2,11 @@ package screens
 
 import (
 	"fmt"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	tuicommon "mosaic-common/tui"
+	"mosaic-common/tui/kit/table"
 
 	"mosaic-log-analyzer/internal/app"
 	"mosaic-log-analyzer/internal/domain"
@@ -24,11 +26,13 @@ type PricingScreen struct {
 	configPath string
 	statusMsg  string
 	cursor     int
+	offset     int // scroll offset, clamped inside View
 	width      int
 	height     int
 	styles     Styles
 	done       bool
 	back       bool
+	pageChrome
 }
 
 // NewPricingScreen creates the pricing screen over the given per-model pricing
@@ -76,6 +80,25 @@ func (s *PricingScreen) SelectedModel() domain.ModelID {
 	return s.models[s.cursor].Model
 }
 
+// SelectedKey returns the highlighted (provider, model). Only meaningful when
+// Done() is true; the zero key when the list is empty or the cursor is out of
+// range.
+func (s *PricingScreen) SelectedKey() domain.PricingKey {
+	if len(s.models) == 0 || s.cursor < 0 || s.cursor >= len(s.models) {
+		return domain.PricingKey{}
+	}
+	return statusKey(s.models[s.cursor])
+}
+
+// statusKey is the row's (provider, model); rows built without a Key identify
+// their model only.
+func statusKey(m app.ModelPricingStatus) domain.PricingKey {
+	if m.Key.Model == "" {
+		return domain.PricingKey{Model: m.Model}
+	}
+	return m.Key
+}
+
 // Back reports whether the user pressed Esc.
 func (s *PricingScreen) Back() bool { return s.back }
 
@@ -91,7 +114,11 @@ func (s *PricingScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	if !ok {
 		return s, nil
 	}
-	switch key.String() {
+	k := key.String()
+	if s.help.handle(k) {
+		return s, nil
+	}
+	switch k {
 	case "esc", "q":
 		s.back = true
 	case "up", "k":
@@ -110,61 +137,37 @@ func (s *PricingScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	return s, nil
 }
 
-// View renders the pricing screen. Stub: shows model names; priced/unpriced
-// distinction and full selectable-list rendering are added in I5.1.
+// View renders the pricing screen: one row per (provider, model) with its
+// priced or unpriced state, then the config file and the last status message.
 func (s *PricingScreen) View(width, height int) string {
 	s.width = width
 	s.height = height
+	st := s.styles
 
-	var sb strings.Builder
-	sep := s.styles.Border.Width(width).Render(strings.Repeat("─", width))
-
-	sb.WriteString(s.styles.Title.Width(width).Render("Log Analyzer — Pricing"))
-	sb.WriteByte('\n')
-	sb.WriteString(s.styles.Subtitle.Width(width).Render(
-		fmt.Sprintf("%d model(s) in report", len(s.models)),
-	))
-	sb.WriteByte('\n')
-	sb.WriteString(sep)
-	sb.WriteByte('\n')
-	sb.WriteByte('\n')
-
-	// List models with priced/unpriced distinction.
-	for i, m := range s.models {
-		prefix := "  "
-		if i == s.cursor {
-			prefix = "> "
-		}
-		var status string
-		if m.Priced {
-			status = "  (priced)"
-		} else {
-			status = "  " + AbsentMarker + " unpriced"
-		}
-		sb.WriteString(s.styles.Body.Width(width).Render(prefix + string(m.Model) + status))
-		sb.WriteByte('\n')
-	}
-
+	head := []string{st.Subtitle.Render(fmt.Sprintf("%d model(s) in report", len(s.models))) +
+		st.Body.Render("  currency "+string(CurrencyOrDefault(st.Currency)))}
+	var tail []string
 	if s.configPath != "" {
-		sb.WriteByte('\n')
-		sb.WriteString(s.styles.Muted.Width(width).Render("Config file: " + s.configPath))
-		sb.WriteByte('\n')
+		tail = append(tail, st.Muted.Render("Config file: "+s.configPath))
 	}
-
 	if s.statusMsg != "" {
-		sb.WriteByte('\n')
-		sb.WriteString(s.styles.Success.Width(width).Render(s.statusMsg))
-		sb.WriteByte('\n')
+		tail = append(tail, st.Theme.Style(tuicommon.RoleSignalGood).Render(s.statusMsg))
 	}
 
-	sb.WriteString(sep)
-	sb.WriteByte('\n')
-	sb.WriteString(s.styles.Help.Width(width).Render("↑/↓ select  enter price  esc back  ctrl+c quit"))
+	rows := make([][]table.Cell, len(s.models))
+	for i, m := range s.models {
+		rows[i] = pricingCells(m)
+	}
+	budget := PageBodyHeight(height) - len(head) - len(tail) - 1
+	t := table.Table{Columns: pricingColumns(), Rows: rows, Cursor: s.cursor, SortColumn: table.NoSort}
+	w := ScrollWindow(s.offset, s.cursor, len(rows), budget-extraHeaderLines(t, width))
+	s.offset = w.Offset
+	t.Offset = w.Offset
+	body := append(append(head, renderTableLines(t, width, w.Count, st)...), tail...)
 
-	return sb.String()
+	page := Page{Title: pricingTitle, Keys: pricingKeys, Help: true, Hint: FormatScrollHint(w, len(rows))}
+	return s.render(page, withLegend(pricingOverlayGroups(), pricingLegend()...), body, width, height, st)
 }
 
 // Help returns the key hints for this screen.
-func (s *PricingScreen) Help() string {
-	return "↑/↓ select  enter price  esc back  ctrl+c quit"
-}
+func (s *PricingScreen) Help() string { return leadHelp("", pricingKeys) }

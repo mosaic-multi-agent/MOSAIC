@@ -42,6 +42,7 @@ package app
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -183,7 +184,7 @@ func TestSeamPriorBytes_ReadErr_FailsArtifactViaCallback(t *testing.T) {
 
 	// Load protocol from frozen catalog so the content path does not fail on a nil protocol.
 	frozenRoot := seamReplayFrozenCatalogRoot(t)
-	protocol, err := catalog.FileProtocolLoader{}.LoadProtocol(frozenRoot)
+	protocol, err := catalog.FileProtocolLoader{}.LoadProtocol(filepath.Join(frozenRoot, "Catalog"))
 	if err != nil {
 		t.Fatalf("load protocol: %v", err)
 	}

@@ -2,13 +2,13 @@ package domain
 
 // RunConfig carries all user-supplied configuration for a run.
 type RunConfig struct {
-	OrchestratorFilePath string        // path to the orchestrator agent file
-	WorkflowID           WorkflowID    // selected workflow identifier
-	Task                 string        // task description
-	RunID                string        // resolved run_id (minted or from scan); empty triggers minting
-	RunFolder            string        // resolved run-scoped folder path (absolute, e.g. "/workspace/Orchestration-20260727T170000Z-a3f9")
-	AllowVersionDrift    bool          // override version check
-	IsNewRun             bool          // true = create new artifact; false = resume existing
+	OrchestratorFilePath string     // path to the orchestrator agent file
+	WorkflowID           WorkflowID // selected workflow identifier
+	Task                 string     // task description
+	RunID                string     // resolved run_id (minted or from scan); always a valid run_id, the session never mints one
+	RunFolder            string     // resolved run-scoped folder path (absolute, e.g. "/workspace/Orchestration-20260727T170000Z-a3f9")
+	AllowVersionDrift    bool       // override version check
+	IsNewRun             bool       // true = create new artifact; false = resume existing
 
 	// HarnessID is the stable harness identity selected by the user
 	// (e.g. "opencode", "claude-code", "ghcp-cli", "fake"). Populated by
@@ -20,21 +20,16 @@ type RunConfig struct {
 	// RunSettings holds every run-configuration decision that is settled at run
 	// start, immutable for the run, and persisted in the artifact frontmatter so
 	// a resumed run reads it back instead of re-asking. Embedding promotes all
-	// seven fields (Mode, Checkpoints, Commits, CommitBranchVariant, CommitBranch,
-	// PreConsultation, ManualResolution) directly onto RunConfig.
+	// fields (Mode, Checkpoints, Commits, CommitBranchVariant, CommitBranch,
+	// PreConsultation, ManualResolution, ReviewLoopLimit, InfraClassSelections)
+	// directly onto RunConfig.
 	RunSettings
 
-	// InfraClassSelections maps gated infrastructure class names to the selected
-	// agent name for this run. Only populated when multiple agents of the same
-	// gated class are declared. The TUI ConfigScreen wizard step and the CLI
-	// --infra-class flag both populate this before calling session.Start.
-	//
-	// When a gated class has exactly one declared agent, that agent is auto-
-	// selected and does not appear in this map.
-	//
-	// Non-gated classes (e.g. "review") are never in this map; all declared
-	// agents of non-gated classes have their triggers evaluated unconditionally.
-	InfraClassSelections map[string]string
+	// Supplied records which run-configuration values the frontend received
+	// explicitly for this Start call (CLI: flag Changed(); TUI: prompt
+	// answered). On a resume, only supplied values are compared against the
+	// artifact.
+	Supplied SuppliedSettings
 
 	// SeedInputs holds user-supplied seed source paths, each naming a file or a
 	// directory, in the order the user gave them. They are copied into the run
@@ -57,13 +52,21 @@ type RunConfig struct {
 	// false (the default and for normal Retry), the configured consultant handles
 	// all routing decisions from the start.
 	ManualDispatch bool
+
+	// InfrastructureFilter controls which declared infrastructure agents are
+	// active for this run. Follows nil/empty/populated semantics:
+	//   - nil:       not passed; all declared agents active (backwards-compatible)
+	//   - []string{}: passed empty; no agents active
+	//   - populated: only named agents active
+	// Populated by CLI from --infrastructure flag (Stage 5).
+	InfrastructureFilter []string
 }
 
 // RunSettings carries every run-configuration decision that is settled at run
 // start, immutable for the run, and persisted in the artifact frontmatter so a
 // resumed run reads it back instead of re-asking.
 //
-// It is passed to ArtifactStore.Create so all six decisions are recorded in
+// It is passed to ArtifactStore.Create so every decision is recorded in
 // the Orchestration.md frontmatter on run creation.
 type RunSettings struct {
 	// Mode is required. ExecutionModeUnset is a refusal at run start, both for
@@ -77,7 +80,8 @@ type RunSettings struct {
 	Commits bool
 
 	// CommitBranchVariant selects which branch a commits-enabled run commits to.
-	// Defaults to CommitBranchMOSAICOwned.
+	// In-memory only: it is never written to the artifact. Parse derives it
+	// from CommitBranch and the run id; a frontend supplies it for a new run.
 	CommitBranchVariant CommitBranchVariant
 
 	// CommitBranch is the branch name the commit setup dispatch reported.
@@ -89,6 +93,29 @@ type RunSettings struct {
 
 	// ManualResolution puts the user in the resolver's place.
 	ManualResolution bool
+
+	// ReviewLoopLimit is the review_loop_limit frontmatter value. 0 means no
+	// limit (the key is absent).
+	ReviewLoopLimit int
+
+	// InfraClassSelections is the infrastructure_selections frontmatter map:
+	// gated class (checkpoint, commit, restore) to selected declared agent name.
+	// Nil or empty when absent.
+	InfraClassSelections map[string]string
+}
+
+// SuppliedSettings records which run-configuration values the frontend
+// received explicitly for this Start call. Each bool is the sole "supplied"
+// signal for its value: the content of the corresponding RunSettings field
+// (for example an empty selections map) never changes whether it counts as
+// supplied.
+type SuppliedSettings struct {
+	Mode                 bool
+	PreConsultation      bool
+	ManualResolution     bool
+	ReviewLoopLimit      bool
+	InfraClassSelections bool
+	CommitBranchVariant  bool
 }
 
 // RunOutcome is the result of a session run.
@@ -116,6 +143,31 @@ type RunOutcome struct {
 	// Message remains the human-readable text; Cause is for identity checks
 	// (errors.Is / errors.As) only. Neither is derived from the other.
 	Cause error
+
+	// PreConsultationStop is true when Status is RunStoppedByConsultant
+	// because the orchestrator returned a stop in its pre-consultation reply.
+	// False for every other outcome, including routing stops. Frontends use
+	// it to offer pre-consultation recovery; exit code and CLI text do not
+	// depend on it.
+	PreConsultationStop bool
+
+	// InfraFailures lists every infrastructure-agent failure recorded in the run's
+	// Execution Log (all sessions), from ListInfraFailures. It is populated on every
+	// outcome returned after the session read (resume) or created (new run) the
+	// artifact, including outcomes returned with a non-nil error. It is nil for
+	// outcomes returned earlier (for example refusals before the artifact read) and
+	// when there are no failures.
+	InfraFailures []InfraFailure
+
+	// AntiLoopStop is true exactly for these two endings:
+	//   - the guard escalation limit was exhausted (Status RunStopped, message
+	//     "anti-loop guard: the consultant kept requesting the dispatch of ...");
+	//   - the guard blocked a HITL re-dispatch with no routing consultant configured
+	//     (Status RunDeviationUnresolved, message
+	//     "anti-loop guard: no routing consultant configured").
+	// It is false for every other outcome. Frontends use it to offer a resume with
+	// the guard off; exit code and CLI text do not depend on it.
+	AntiLoopStop bool
 }
 
 // RunStatus classifies the run's outcome for exit code mapping.
@@ -128,9 +180,16 @@ const (
 	RunRefused             RunStatus = "refused"              // workflow or artifact refused before any invocation
 	RunFailed              RunStatus = "failed"               // unexpected error
 
-	// RunStoppedByConsultant: the routing consultant returned a stop instruction,
-	// or an orchestrator failure ended the run. The artifact is left resumable.
+	// RunStoppedByConsultant: the orchestrator returned a stop instruction at
+	// routing or at pre-consultation (see RunOutcome.PreConsultationStop), or an
+	// orchestrator failure ended the run. The artifact is left resumable.
 	// The CLI prints StopReason and exits non-zero; the TUI presents StopReason
 	// with retry and manual-dispatch recovery.
 	RunStoppedByConsultant RunStatus = "stopped-by-consultant"
+
+	// RunStartFailed: commit setup or pre-consultation failed after the
+	// artifact was created. The artifact and any commit setup row are kept and
+	// a resume retries the failed step. A pre-consultation stop is not a start
+	// failure; it is RunStoppedByConsultant.
+	RunStartFailed RunStatus = "start-failed"
 )

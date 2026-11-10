@@ -313,9 +313,9 @@ func TestDeployNew_OrchestratorWorkflowExpanded_YieldsUpdateItem(t *testing.T) {
 				HarnessID:     "stub-harness",
 				Entries: []domain.ManifestEntry{
 					{
-						Ref:        domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "orchestrator"},
-						TargetPath: "orchestrator.md",
-						Version:    "1.0",
+						Ref:         domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "orchestrator"},
+						TargetPath:  "orchestrator.md",
+						Version:     "1.0",
 						ContentHash: orchHash,
 					},
 				},
@@ -402,9 +402,9 @@ func TestUpdate_OrchestratorWorkflowExpanded_YieldsUpdateItem(t *testing.T) {
 				HarnessID:     "stub-harness",
 				Entries: []domain.ManifestEntry{
 					{
-						Ref:        domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "orchestrator"},
-						TargetPath: "orchestrator.md",
-						Version:    "1.0",
+						Ref:         domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "orchestrator"},
+						TargetPath:  "orchestrator.md",
+						Version:     "1.0",
 						ContentHash: orchHash,
 					},
 				},
@@ -496,9 +496,9 @@ func TestDeployNew_OrchestratorWorkflowVersionBumped_YieldsUpdateItem(t *testing
 				HarnessID:     "stub-harness",
 				Entries: []domain.ManifestEntry{
 					{
-						Ref:        domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "orchestrator"},
-						TargetPath: "orchestrator.md",
-						Version:    "1.0",
+						Ref:         domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "orchestrator"},
+						TargetPath:  "orchestrator.md",
+						Version:     "1.0",
 						ContentHash: orchHash,
 					},
 				},

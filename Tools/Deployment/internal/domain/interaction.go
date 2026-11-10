@@ -66,6 +66,11 @@ const (
 	// the catalog root's Subagents/ directory, plus the UtilityAgents sentinel.
 	QPromoteCategory QuestionID = "promote-category"
 
+	// QPromoteTargetCatalog is asked when a new item is promoted into a stack of two or
+	// more layers and no target layer was given. Options list every active layer, highest
+	// first: ID is the catalog id, Label "<name> (<id> <version>)", Description the root.
+	QPromoteTargetCatalog QuestionID = "promote-target-catalog"
+
 	// QPromoteCustomTool is asked once per distinct harness-side tool entry that has no
 	// reverse mapping to a generic tool. It is the inverse of QCustomTool: that question
 	// asks for a harness-side name given a generic tool, this one asks for a generic name

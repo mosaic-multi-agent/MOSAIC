@@ -1,0 +1,6 @@
+{"type":"session.mcp_server_status_changed","data":{"serverName":"github-mcp-server","status":"connected"},"ephemeral":true,"id":"id-01","timestamp":"2026-10-06T21:00:41.000Z","parentId":"pid-01"}
+{"type":"subagent.deselected","data":{},"id":"id-02","timestamp":"2026-10-06T21:00:41.360Z","parentId":"pid-01"}
+{"type":"session.skills_loaded","data":{"skills":[{"name":"example-skill","description":"Example skill","source":"builtin","path":"C:\\Users\\someuser\\AppData\\Local\\copilot\\pkg\\win32-x64\\1.0.91\\builtin\\example-skill\\SKILL.md"}]},"ephemeral":true,"id":"id-03","timestamp":"2026-10-06T21:00:41.400Z","parentId":"pid-01"}
+{"type":"user.message","data":{"content":"Proceed with your task."},"id":"id-04","timestamp":"2026-10-06T21:00:41.500Z","parentId":"pid-01"}
+{"type":"assistant.message","data":{"messageId":"m-01","model":"example-model","content":"{\"agent_instance_id\":\"example-agent#1\",\"status_code\":\"SUCCESS\",\"status_message\":\"done\"}"},"id":"id-05","timestamp":"2026-10-06T21:00:56.000Z","parentId":"id-04"}
+{"type":"result","timestamp":"2026-10-06T21:00:56.950Z","sessionId":"sess-02","exitCode":0,"usage":{"premiumRequests":0.33,"totalApiDurationMs":14745,"sessionDurationMs":16220}}

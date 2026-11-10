@@ -1,0 +1,118 @@
+package session
+
+import (
+	"context"
+	"fmt"
+
+	"mosaic-run/internal/agentresolve"
+	"mosaic-run/internal/domain"
+)
+
+// dispatchInfraAgent dispatches a single infrastructure agent that has fired
+// its trigger (matched names every trigger that matched in this pass) and
+// records the result in the Execution Log. It returns (halt, stop,
+// reviewSignal, err) matching the semantics of evaluateTriggers.
+func (s *sessionImpl) dispatchInfraAgent(
+	ctx context.Context,
+	state *domain.ArtifactState,
+	seq *int,
+	completedStep domain.CompletedStep,
+	agent domain.DeclaredInfraAgent,
+	matched []string,
+	config domain.RunConfig,
+	orchDir string,
+	boundaries triggerBoundaries,
+) (haltRun bool, stopRequested bool, reviewSignal *reviewConsultSignal, err error) {
+	infraSeq := *seq + 1
+	instanceID := fmt.Sprintf("%s#%d", agent.Name, infraSeq)
+	if agent.Class == "commit" && containsTrigger(matched, domain.InfraTriggerIterationEnd) && state.CommitBranch == "" {
+		return true, false, nil, fmt.Errorf("commit branch is missing: not dispatching %s without a recorded commit branch", agent.Name)
+	}
+	req := buildInfraRequest(agent, matched, instanceID, state.RunID, config.RunFolder, state.CommitBranch, completedStep, boundaries)
+
+	agentRef, resolveErr := agentresolve.ResolveOne(orchDir, agent.Name)
+	var response domain.ProtocolResponse
+	if resolveErr != nil {
+		// Cannot locate the agent definition file: a configuration error, not
+		// a harness failure. Treated as non-SUCCESS; the on_failure policy
+		// applies without dispatching.
+		response = domain.ConfigErrorResponse(req.AgentInstanceID, state.RunID, resolveErr)
+	} else {
+		// Graceful-stop checkpoint before dispatching.
+		if s.deps.StopRequested() {
+			s.deps.Debug.Log(domain.EventSessionStopObserved, "graceful stop observed; not dispatching",
+				domain.F("checkpoint", StopCheckpointInfraDispatch),
+			)
+			return false, true, nil, nil
+		}
+
+		var invokeErr error
+		response, invokeErr = s.invokeAndLog(ctx, agentRef, req)
+		if invokeErr != nil {
+			if ctx.Err() != nil {
+				return true, false, nil, ctx.Err()
+			}
+			if isForceStopped(invokeErr) {
+				attempt := forcedAttempt{req: req, phase: completedStep.Phase, stage: completedStep.Stage, row: domain.NoWorkflowRow}
+				if err := s.infraForceStop(ctx, state, seq, attempt); err != nil {
+					return false, false, nil, err
+				}
+				return true, false, nil, nil
+			}
+			// Harness-level error: treat as non-SUCCESS and apply on_failure policy.
+			failure := classifyHarnessFailure(invokeErr)
+			s.deps.Debug.Log(domain.EventSessionHarnessError, failure.Summary(),
+				domain.F("agent", req.AgentInstanceID),
+				domain.F("status", string(domain.StatusHARNESS_ERROR)),
+				domain.F("kind", string(failure.Kind)),
+			)
+			response = domain.HarnessFailureResponse(req.AgentInstanceID, state.RunID, failure)
+		}
+	}
+
+	// Extract a checkpoint content-reference from checkpoint-class responses.
+	checkpoint := ""
+	if agent.Class == "checkpoint" {
+		checkpoint = extractCheckpointRef(response.StatusMessage)
+	}
+
+	// Record the completed infrastructure step in the Execution Log.
+	infraStep := domain.CompletedStep{
+		Seq:              infraSeq,
+		AgentInstance:    req.AgentInstanceID,
+		Phase:            completedStep.Phase,
+		Stage:            completedStep.Stage,
+		Status:           response.StatusCode,
+		Inputs:           formatInputs(req.InputArtifacts),
+		Summary:          response.StatusMessage,
+		Timestamp:        s.deps.Clock.Now(),
+		Checkpoint:       checkpoint,
+		IsInfrastructure: true,
+	}
+	if response.StatusCode == domain.StatusBLOCKED {
+		infraStep.ErrorCode = response.ErrorCode
+	}
+	newState, applyErr := s.applyAndAnnounce(ctx, *state, infraStep)
+	if applyErr != nil {
+		return false, false, nil, applyErr
+	}
+	*state = newState
+	*seq = infraSeq
+	s.reportInfraStepDone(infraStep, agent.Class)
+	if response.StatusCode != domain.StatusSUCCESS {
+		s.reportInfraFailure(infraStep, agent.Class, matched, infraPolicy(agent), failureReason(response))
+	}
+
+	// Apply on_failure policy for non-SUCCESS outcomes.
+	if response.StatusCode != domain.StatusSUCCESS {
+		if agent.OnFailure == "halt" {
+			return true, false, nil, nil
+		}
+		// continue policy: record the failure and proceed.
+	} else if agent.Class == "review" {
+		// Accumulate review signal: overwrite on each successful review so
+		// the last successful review's message is used for the consultation.
+		reviewSignal = &reviewConsultSignal{StatusMessage: response.StatusMessage}
+	}
+	return false, false, reviewSignal, nil
+}

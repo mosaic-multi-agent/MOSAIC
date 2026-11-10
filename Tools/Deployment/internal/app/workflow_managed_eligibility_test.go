@@ -132,7 +132,7 @@ func TestEligibleHarnessOnly_Stage4_UnrecognisedManagedName_StillIneligible(t *t
 	verdict := eligibleHarnessOnly(src)
 
 	if verdict.Eligible {
-		t.Errorf("eligibleHarnessOnly: Eligible=true for agent with unrecognised managed name; "+
+		t.Errorf("eligibleHarnessOnly: Eligible=true for agent with unrecognised managed name; " +
 			"Stage 4 must not suppress unknown-deployed for names outside CanonicalManagedBlocks")
 	}
 	if !strings.Contains(verdict.Reason, "unknown-deployed") {

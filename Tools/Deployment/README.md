@@ -6,13 +6,16 @@ target AI harness workspace. It handles several operations:
 - **Deploy** — create a new workspace from scratch by selecting agents, skills,
   workflows, and model assignments, then writing every file in one pass.
 - **Update** — bring an existing workspace up to date with the latest agent
-  versions, preserving locally-modified files as you choose.
-- **Utility/infrastructure only** — deploy only Utility and Infrastructure
-  agents and their required skills, without touching workflows, hooks, or
-  orchestrator configuration.
+  versions, preserving project and custom regions, models and tool choices; also refreshes
+  hook bundles that are already deployed.
+- **Deploy agents** — deploy a chosen mix of subagents, utility,
+  infrastructure and standalone agents and their required skills, without
+  touching workflows or hooks; declarations for new infrastructure agents are
+  added to an existing orchestrator.
 
-The tool reads from the MOSAIC source tree (generic agents, skills, hook bundles,
-workflow definitions) and writes harness-specific files to a workspace you own.
+The tool reads from a stack of catalogs (generic agents, skills, hook bundles,
+workflow definitions; by default the MOSAIC default catalog alone, see
+[Catalog stacks](#catalog-stacks)) and writes harness-specific files to a workspace you own.
 It never modifies MOSAIC sources.
 
 ---
@@ -31,6 +34,7 @@ It never modifies MOSAIC sources.
   - [Refresh-scope prompt](#refresh-scope-prompt)
   - [What is never touched](#what-is-never-touched)
   - [Version staleness](#version-staleness)
+- [Catalog stacks](#catalog-stacks)
 - [Promote — generate a generic agent from a harness-only file](#promote--generate-a-generic-agent-from-a-harness-only-file)
 - [Config file reference](#config-file-reference)
   - [tool-config.yaml](#tool-configyaml)
@@ -104,8 +108,8 @@ From the MOSAIC root, with the binary installed:
 # CLI — update an existing workspace
 ./mosaic-deploy update --harness claude-code --workspace /path/to/my-project --auto-confirm
 
-# CLI — deploy only utility and infrastructure agents
-./mosaic-deploy utility-infra --harness claude-code --workspace /path/to/my-project --auto-confirm
+# CLI — deploy a chosen mix of agents
+./mosaic-deploy agents --harness claude-code --workspace /path/to/my-project --yes
 ```
 
 On Windows, use `.\mosaic-deploy.exe` instead of `./mosaic-deploy`.
@@ -141,7 +145,6 @@ need manual attention (empty injection sections, unmapped tools, hook registrati
 ./mosaic-deploy deploy \
   --harness claude-code \
   --workspace /path/to/my-project \
-  --scope project \
   --selections selections.yaml \
   --auto-confirm
 ```
@@ -166,18 +169,43 @@ Pass `--dry-run` to see the plan without writing any files.
 The update flow updates an existing workspace to the latest agent versions. It:
 
 1. Reads the deployment manifest (written by the previous deploy/update)
-2. Computes which files are stale (version, transform_version, or injections_version changed)
-3. Identifies files that have been locally modified since deployment
+2. Computes which files are stale (version, transform_version, or an injection version changed)
+3. Identifies files it cannot confirm as its own: unparsable, or with no manifest record
 4. Shows a plan for review
-5. Applies updates, using your chosen conflict resolution strategy for modified files
+5. Applies updates, using your chosen conflict resolution strategy for those files
 
 **Conflict resolution (`--conflict`):**
 
 | Value | Behaviour |
 |-------|-----------|
-| `skip` (default) | Leave the modified file unchanged; add it to the TODO checklist |
-| `overwrite` | Replace with the latest version (local edits are lost) |
-| `backup` | Copy the local file to `<name>.backup` before overwriting |
+| `skip` (default) | Leave the file unchanged; add it to the TODO checklist |
+| `overwrite` | Replace with the latest version |
+| `backup` | Copy the file to `.mosaic/backups/<path>.<timestamp>.bak`, then overwrite |
+
+**What an update keeps.** Only project and custom regions, models and tool choices survive an update. Edits elsewhere in an agent or skill file are replaced the next time the file is rewritten, and `--conflict` does not protect them. Keep your own content in project and custom regions.
+
+**Hook refresh:** Update also refreshes hook bundles that are already deployed in
+the workspace (files of the harness's hook variant found on disk) when the Catalog
+version is newer than the version recorded in the manifest. Up-to-date hooks are
+reported unchanged and are not rewritten. Update never adds a hook that is not
+deployed; use Deploy or the deploy-hooks mode for that.
+
+- Refreshed hook files are overwritten with the Catalog version (local edits are
+  lost); files the new version no longer has are left in place.
+- An existing registration target (for example `.claude/settings.json` or
+  `.github/hooks/mosaic-logger.json`) is never modified. For every refreshed hook
+  whose registration target exists, the update reports a TODO with the registration
+  fragment, whether or not the fragment changed. A missing registration target is
+  created. Up-to-date hooks and hooks skipped in a conflict produce no registration
+  TODO. The TODO is produced when the update is applied; it is not listed in the plan
+  review and `--dry-run` reports none.
+- A deployed hook with no manifest record is treated as a conflict:
+  `--conflict skip` leaves it as is, `overwrite` and `backup` refresh it.
+- Both GHCP harnesses (`ghcp-cli` and `vscode-ghcp`) use `.github/hooks`, and
+  `claude-code` uses `.claude/hooks`; Update refreshes the hook folder of the
+  harness it runs for.
+- For a GHCP workspace, Update also migrates agents the manifest records as `X.md`
+  to `X.agent.md`, with backups under `.mosaic/backups/`.
 
 **CLI example:**
 
@@ -189,38 +217,40 @@ The update flow updates an existing workspace to the latest agent versions. It:
   --auto-confirm
 ```
 
-### Utility/infrastructure only — deploy a subset without workflows
+### Agents only — deploy a subset without workflows
 
-The utility-infra flow deploys only Utility and Infrastructure agents and the skills they require. It never asks about workflows, hooks, or the orchestrator. Use it when you want to add or refresh these agent groups in a workspace that already has its orchestrator and workflows configured.
+The agents flow deploys a chosen mix of subagents, utility agents, infrastructure agents, and standalone agents plus the skills they require. It never asks about workflows or hooks. Use it when you want to add or refresh agents in a workspace that already has its orchestrator and workflows configured.
 
-The flow:
+If an orchestrator file (`orchestrator.md`, `orchestrator-script.md`) is already present, declarations for newly deployed infrastructure agents are added to it. Existing declarations, including hand-added ones, are kept, and a re-deployed agent is refreshed in place, keeping its project and custom regions, models and tool choices. An orchestrator the tool cannot confirm as its own follows `--conflict`; when skipped, a TODO entry explains the manual step. No orchestrator is created when none is present, and its workflows are not changed: injecting infrastructure agents keeps the deployed workflow tables exactly as they are, and does not add the `Row` column described below.
 
-1. Asks you to select utility agents (or pre-answer with `--utility`)
-2. Asks you to select infrastructure agents (or pre-answer with `--infrastructure`)
-3. Resolves models for infrastructure agents using the same two-batch logic as the full deploy, including the skip/gap path
-4. Shows a plan for review
-5. Writes only the selected agents and the skills they require
+### Workflow `Row` column
 
-Workflow-driven agents, the orchestrator, and hook bundles are not touched.
+Whenever mosaic-deploy rebuilds workflows into an orchestrator (a full deploy or `mosaic-deploy workflows`), it adds a first-column `Row` (1..N) to each workflow routing table. Catalog workflow sources never contain it and authors do not write it. The Runner accepts tables with or without the column, and refuses a table whose `Row` numbers do not match row positions, for example after a hand edit. Orchestrators deployed before this column existed gain it only when their workflows are next redeployed, for example with `mosaic-deploy workflows`. A version stamp does not trigger it.
+
+The update flow likewise refreshes catalog-backed infrastructure declarations in the orchestrator when their definition changed in the catalog; it never adds new declarations or touches hand-added ones.
+
+### Kept custom workflows
+
+`update` and `workflows` keep deployed custom workflows that the catalog stack does not supply. A kept workflow stays in the orchestrator exactly as deployed and is not updated or validated; the run warns `<id> is not in the catalog stack; kept as deployed, not updated or validated.` In the `workflows` checklist these appear with the hint `not in catalog; deployed only` and start unchecked, like deployed catalog workflows: confirming without ticking one removes it, and the run summary names it. `update` keeps all of them. An explicit `--workflows` id the catalog does not supply is accepted only when it names a deployed custom workflow; any other is an unknown-workflow error. These two flows do not show the removed-layer hint for unknown ids; `deploy` does. If a deployed orchestrator file has a line that begins with a workflow tag and carries more content on that line, the update for that file fails and nothing is written.
 
 **CLI example:**
 
 ```sh
 # Ask interactively which agents to deploy.
-./mosaic-deploy utility-infra \
+./mosaic-deploy agents \
   --harness claude-code \
   --workspace /path/to/my-project
 
-# Non-interactive: pre-answer both selections.
-./mosaic-deploy utility-infra \
+# Non-interactive: pre-answer the selection (unspecified classes are empty).
+./mosaic-deploy agents \
   --harness claude-code \
   --workspace /path/to/my-project \
   --utility "code-reviewer,test-runner" \
-  --infrastructure "docker-manager" \
-  --auto-confirm
+  --infra "docker-manager" \
+  --yes
 ```
 
-Pass `--dry-run` to see the plan without writing any files. See the [CLI Reference](docs/cli.md#utility-infra-subcommand) for the full flag list and nil/empty pre-answer convention.
+Pass `--dry-run` to see the plan without writing any files. See the [CLI Reference](docs/cli.md#agents-subcommand) for the full flag list and pre-answer convention.
 
 ### Runner deployment
 
@@ -230,42 +260,32 @@ invocation of agents deployed with restrictive frontmatter — for example,
 OpenCode refuses to run agents marked `mode: subagent` from the command line
 because that mode is reserved for agents spawned as child tasks by another agent.
 
-Runner deployment produces a **second parallel directory** of agent files with
-Runner-compatible transformations applied. Both the deploy and update flows
-support this via the `--runner` flag:
-
-```sh
-# First deploy — opt in to Runner support.
-./mosaic-deploy deploy \
-  --harness opencode \
-  --workspace /path/to/my-project \
-  --runner \
-  --selections selections.yaml \
-  --auto-confirm
-
-# Subsequent updates — auto-detected (no --runner needed).
-./mosaic-deploy update \
-  --harness opencode \
-  --workspace /path/to/my-project \
-  --auto-confirm
-```
+Runner deployment places the script-mode orchestrator alongside the regular
+agents in the harness's standard agents directory. No flag is needed: every
+deploy writes it when the catalog has one, and update refreshes it when it is
+present in the workspace.
 
 **What changes:**
 
-| | Regular directory | Runner directory |
+| | Regular directory | Notes |
 |---|---|---|
-| **Path** | `.opencode/agents/` | `.opencode/agents-runner/` |
-| **Subagents** | Standard frontmatter (e.g., `mode: subagent`) | Runner-compatible frontmatter (e.g., `mode: primary`) |
-| **Orchestrator** | Regular orchestrator | Script-mode orchestrator only |
+| **Path** | `.opencode/agents/` | Single directory; Runner reads from here |
+| **Subagents** | Standard frontmatter (e.g., `mode: subagent`) | Runner transforms these at runtime (see below) |
+| **Orchestrator** | Both regular and script-mode orchestrator | `orchestrator-script.md` added alongside the regular orchestrator |
 
-The regular directory is unchanged — interactive orchestration works exactly as
-before. The runner directory is invisible to the harness's interactive agent
-selection because harnesses only discover agents in their standard directory.
+The regular directory is unchanged for interactive orchestration. The Runner
+applies harness-specific transforms to agent files at runtime without modifying
+the deployed files permanently — it backs up the originals, transforms in-place
+for the run, and restores on completion. See the Runner's agent snapshot
+documentation for details.
 
-**Auto-detection on update:** Once a runner directory exists in the workspace,
-the deploy tool automatically includes it in every subsequent deploy and update
-run. No repeated `--runner` flag is needed — directory presence is the opt-in
-signal. This prevents stale runner agents when you forget the flag.
+**Note on runtime directories:** The Runner creates a `.agents-backup/` sibling
+directory (e.g., `.opencode/.agents-backup/`) at runtime for name-based harnesses
+(OpenCode, GHCP CLI) as a safety backup during active runs. This directory is
+created and deleted by the Runner and is not a deployment artifact. For
+path-based harnesses (Claude Code), the Runner creates a run-scoped
+`agents-runner-{run_id}/` directory at runtime; these are also not deployment
+artifacts and are safe to delete if orphaned.
 
 **Known Runner-specific transformations:**
 
@@ -295,10 +315,12 @@ Before running the conflict loop, the Update flow scans the active harness's
 deployed-agents directory. A file is recognised as a harness-only agent only when
 **both** detection signals are present:
 
-1. **`transform_version` in frontmatter.** This field is stamped by
-   `Tools/OldAgentsTransform/boundary_transformer.py` on every file it
-   processes. A hand-authored file that was never run through that tool lacks
-   this field and is left completely untouched.
+1. **A MOSAIC version stamp in frontmatter.** Either the current
+   `harness_version` stamp (written by `mosaic-deploy`) or the older
+   `transform_version` stamp (written by
+   `Tools/OldAgentsTransform/boundary_transformer.py`), in the `mosaic_`-prefixed
+   or unprefixed form. A hand-authored file that carries neither is left
+   completely untouched.
 
 2. **A structurally valid set of canonical boundary tags.** The body must
    contain at least one `<Name type="core">` tag whose name is in the MOSAIC
@@ -313,7 +335,8 @@ implication.
 **Prerequisite:** a hand-authored agent file must be run through
 `Tools/OldAgentsTransform/boundary_transformer.py` before `mosaic-deploy update`
 will recognise and maintain it. The transform stamps `transform_version` and
-adds the boundary tag structure that satisfies signal two. Without that step the
+adds the boundary tag structure that satisfies signal two (files deployed by
+`mosaic-deploy` already carry the `harness_version` stamp). Without that step the
 file is invisible to the Update flow.
 
 ### Refresh-scope prompt
@@ -373,6 +396,27 @@ file is written.
 
 ---
 
+## Catalog stacks
+
+The tool reads its sources from a **catalog stack**: an ordered list of catalogs, highest layer first. By default the stack is the MOSAIC default catalog (`<mosaic-root>/Catalog`) alone. `--catalog-folder <dir>` (repeatable; first is highest) adds user layers; `--include-default-catalog` adds the default catalog as the bottom layer. A CLI run that names a user catalog leaves the default catalog out unless `--include-default-catalog` is given, and that flag alone means the default catalog alone. The TUI shows a stack screen after the path screen in every mode. The user-facing walkthrough (TUI keys, conflict report, provenance, persistence, reset to default-only, migration notice) is in [docs/DeploymentGuide.md](../../docs/DeploymentGuide.md#catalog-stacks); flags and output are in [docs/cli.md](docs/cli.md#catalog-stack-flags).
+
+Resolution rules:
+
+- Keyed items (agents of every role, workflows, skills, hook bundles) come from the highest layer that has the key; a skill or hook bundle is replaced whole.
+- The orchestrator pair (`orchestrator` + `orchestrator-script`) comes from one layer, the highest that supplies the pair. A layer supplying only one of the two is a composition error. The pair is declared as an override with the single flag `orchestrator_pair: true`.
+- `CommunicationProtocol.md` and `DeployedSections.md` are each taken whole from the highest layer that has the file.
+- Harness injections are resolved per harness directory (`HarnessInjections/<Harness>/`): the highest layer having the directory supplies all of that harness's files, with no fallback to lower layers.
+- There is no merge of the default catalog's skills and hooks into a custom catalog any more; skills and hooks come only from the layers.
+- Every layer needs a `catalog-identity.yaml` (id, name, version, optional declared overrides). Stack validation (before anything is written) fails on: an empty stack, an invalid layer list, a layer that fails to load or has no valid identity, a duplicate catalog id, an incomplete orchestrator pair, and a numeric agent id used by two different resolved agents (a numeric-id collision is a composition error). `check-index` reports each layer in its own block.
+
+**Boundary for harness injections.** Only the four built-in harnesses (`claude-code`, `opencode`, `ghcp-cli`, `vscode-ghcp`) resolve their injections through the stack. Descriptor-only and external harnesses (under `<mosaic-root>/MosaicDeploy/harnesses/`) keep loading their injections next to their descriptors, and `cmd/harness-opencode-module` keeps reading `<mosaic-root>/Catalog/HarnessInjections`. A built-in harness whose injections no layer supplies is listed as not usable, and resolving it fails with an error naming the missing `HarnessInjections/<Harness>`. If the winning layer's directory exists but lacks `HarnessInjections.md` or `HarnessInjectionsOrchestrator.md`, or holds a file that cannot be parsed, the run fails and writes nothing; the error names the layer (id and root), the harness directory and the file, and says that injections are not merged across layers, so the layer must supply a valid file or drop the directory.
+
+**Reports and provenance.** Items a higher layer shadows are listed in a conflict report (`info` when the winner declares the override, `warning` otherwise; it never changes the exit code). Harness-injection shadows are reported only for the harness the run deploys to. The manifest records the supplying catalog per entry (and the protocol and bundle suppliers); workflows have no manifest entries, so their provenance is per resolved item in the stack. A change of supplying catalog makes an item stale: when the catalog recorded for an agent, skill file or hook differs from the catalog that supplies it now, `deploy` and `update` replace the file from the current catalog and the reason names both catalogs (an unknown recorded or current catalog, e.g. a manifest written before stacks, changes nothing). CLI output reports the stack in effect (layers in precedence order and whether it came from stack input, the persisted stack, or the default alone).
+
+**Persistence.** A write run (`deploy`, `update`, `workflows`, `agents`, `hooks`) given stack input stores the stack in the workspace manifest; later runs reuse it unless new stack flags are given (they replace it, never merge). `promote` reuses the stack of the workspace containing its file, `transform` that of its `--workspace`, and neither persists; `check-index` never reuses. `--include-default-catalog` alone resets a workspace to the default catalog.
+
+---
+
 ## Promote — generate a generic agent from a harness-only file
 
 The `promote` command produces a generic source file from a harness-only agent,
@@ -383,7 +427,7 @@ by an Update run.
 ### Eligibility
 
 The source file must satisfy the same two-signal detection rule the Update flow
-uses: `transform_version` in frontmatter and a structurally valid set of
+uses: a `harness_version` or `transform_version` stamp in frontmatter and a structurally valid set of
 canonical boundary tags. An ineligible file is rejected with an error; nothing
 is written.
 
@@ -403,16 +447,18 @@ The generated generic file:
   from the source as-is.**
 - **Writes frontmatter per a defined field policy:**
   - `id` — assigned automatically as one greater than the largest numeric id
-    currently in the catalog.
+    across all agents of the catalog stack in effect.
   - `version` — taken from the source file's `version` field, or `"1.0.0"`
     when the field is absent (common in hand-authored harness-only agents).
   - `name` — taken from the source `name` field when present; otherwise derived
     from the output filename.
   - `role` — taken from the source `role` field.
+  - Source-only keys `infrastructure`, `triggers` and `on_failure` are in the
+    default drop set of every builtin harness and never appear in deployed files.
   - All other source fields not in the drop set are carried over verbatim (e.g.
     `description`, `recommended_tier`, `tools`, `required_skills`).
   - Deployment and transform stamps are **dropped**: `transform_version`,
-    `injections_version`, `bundle_version`, `protocol_version`,
+    `injections_version` (a legacy stamp, distinct from the removed descriptor field of the same name), `bundle_version`, `protocol_version`,
     `tool_mappings_version`, `model`. These are per-deployment artifacts that
     have no place in a generic source. See "The `tool_mappings_version` stamp"
     in `docs/configuration.md` for what that particular field is and where it
@@ -424,9 +470,18 @@ The source (harness-only) file is **never modified or deleted**.
 
 The target category is required and is never inferred from the source file.
 The tool asks interactively when `--category` is absent. Available categories
-are derived from the subdirectories present under `Catalog/Subagents/`, plus
-a special `UtilityAgents` option that places the file under
-`Catalog/UtilityAgents/`.
+are derived from the subdirectories present under the target layer's
+`Subagents/` folder (`Catalog/Subagents/` for the default catalog), plus
+a special `UtilityAgents` option that places the file under the layer's
+`UtilityAgents/` folder.
+
+### Target layer
+
+With a catalog stack, promote writes into one layer. An agent whose key already
+resolves in the stack goes to the layer that supplies it. A **new** agent in a
+stack of two or more layers needs a target layer: `--target-catalog <catalog id>`
+on the CLI (the command fails and writes nothing without it), or a choice the TUI
+asks for; the default layer is a valid target. With one layer there is no choice.
 
 Registration is automatic: writing a well-formed file into the chosen directory
 IS the registration — the catalog discovers agents by scanning those directories.
@@ -450,13 +505,14 @@ workspace is a separate, user-initiated step:
 ### CLI
 
 ```
-mosaic-deploy promote --file <path> [--category <category>] [--overwrite] [--dry-run] [--output json]
+mosaic-deploy promote --file <path> [--category <category>] [--target-catalog <catalog id>] [--overwrite] [--dry-run] [--output json]
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--file <path>` | Path to a single harness-only agent file to promote. Must be an existing regular file, not a directory. Required. |
 | `--category <name>` | Destination category. When absent, the tool asks interactively. |
+| `--target-catalog <catalog id>` | Catalog id of the stack layer that receives a new agent. Required when promoting a new agent non-interactively into a stack of two or more layers. |
 | `--overwrite` | Replace an existing generic file at the destination path. |
 | `--dry-run` | Validate and compute everything; write no file. |
 | `--output json` | Emit the result as a single JSON document instead of human-readable text. |
@@ -492,7 +548,7 @@ all team members share the same settings.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `schema_version` | string | `"1"` | Config schema version. Do not change. |
-| `utility_agent_allow_list` | list of strings | `[]` | Keys of utility agents that may be selected during deployment. An empty list means no utility agents are offered. |
+| `utility_agent_allow_list` | list of strings | `[injections-helper]` | Keys of utility agents that may be selected during deployment. An empty list means no utility agents are offered. |
 | `allow_external_modules` | bool | `false` | Whether external harness modules in `MosaicDeploy/harnesses/` may be used. Must be `true` for the external harness module tier to work. |
 | `log_retention_runs` | int | `0` | Maximum history log entries to keep. `0` means keep all. |
 | `tool_destinations` | map | `{}` | Generic-tool → harness-tool mappings, keyed by harness id. Declaring a tool here permanently answers the "custom tool" prompt for it. See [docs/configuration.md](docs/configuration.md#tool_destinations). |
@@ -514,8 +570,10 @@ tool_destinations:
           names: ["mcp__mosaic-kb__search"]
 ```
 
-> **Note on defaults:** when this file is absent entirely, all six shipped
-> utility agents are enabled by default. Once the file exists, its values are
+> **Note on defaults:** when this file is absent entirely, only
+> `injections-helper` is offered by default; the creator agents ship at MOSAIC
+> root and remain available through the Deploy agents flow. Once the file
+> exists, its values are
 > authoritative — `utility_agent_allow_list: []` really does mean "none".
 
 ### user-config.yaml
@@ -594,16 +652,18 @@ an executable and a `harness.yaml` descriptor. See [docs/harness-contributor-gui
 
 Five built-in harnesses are compiled into the binary:
 
-| ID | Display name | Notes |
-|----|--------------|-------|
-| `claude-code` | Claude Code | |
-| `opencode` | OpenCode | |
-| `ghcp-cli` | GitHub Copilot CLI | |
-| `vscode-ghcp` | VS Code GitHub Copilot | |
+| ID | Display name |
+|----|--------------|
+| `claude-code` | Claude Code |
+| `opencode` | OpenCode |
+| `ghcp-cli` | GHCP CLI / VS Code GHCP Copilot |
+| `vscode-ghcp` | VS Code GHCP Local |
 | `codex` | Codex | Two departures from the Markdown norm: agent files are TOML (not Markdown), and skills are resolved from a shared `.agents/skills` root rather than a harness-local skills directory. |
+Use `ghcp-cli` for the terminal and for VS Code's default chat harness, and `vscode-ghcp` only for VS Code's Local harness. A workspace holds one GHCP target at a time. See [Choosing a GHCP target](../../docs/DeploymentGuide.md#choosing-a-ghcp-target).
 
-To add a harness without writing Go code, create a descriptor YAML file and
-pass it with `--harness /path/to/harness.yaml`. See [docs/descriptor-schema.md](docs/descriptor-schema.md).
+To add a harness without writing Go code, create a `harness.yaml` descriptor in a
+subfolder of `MosaicDeploy/harnesses/` and select it with `--harness <id>`. See
+[docs/descriptor-schema.md](docs/descriptor-schema.md).
 
 To build a fully custom harness, implement the external module protocol. See
 [docs/harness-contributor-guide.md](docs/harness-contributor-guide.md) and
@@ -740,11 +800,15 @@ The harness ID you specified is not recognised. Check the available harnesses:
 ./mosaic-deploy deploy --help
 ```
 
-For a custom descriptor file, pass the full path:
+For a custom descriptor under `MosaicDeploy/harnesses/`, pass its id:
 
 ```sh
-./mosaic-deploy deploy --harness /path/to/my-harness.yaml ...
+./mosaic-deploy deploy --harness my-harness ...
 ```
+
+### Catalog stack errors
+
+A stack that cannot be built stops the run before anything is written (exit code 1). The message names the layer. Typical causes: no valid `catalog-identity.yaml` in a `--catalog-folder`, two layers with the same catalog id, a layer with only one orchestrator file, two resolved agents with the same numeric id, no layer supplying `CommunicationProtocol.md`, `DeployedSections.md` or a built-in harness's `HarnessInjections/<Harness>/`, or a persisted layer whose folder moved (pass new stack flags to replace it). See [docs/cli.md](docs/cli.md#catalog-stack-flags).
 
 ### "external harness modules require explicit opt-in"
 
@@ -798,8 +862,10 @@ Omitting `--log-dir` preserves the existing behaviour exactly.
 
 ### TODO file
 
-After deploy or update, a `TODO.md` file is written to the workspace root.
+After deploy or update, a `MOSAIC-DEPLOYMENT-TODO-<timestamp>.md` file is written
+to the workspace root.
 It lists every item that needs manual attention: model selections that were
 skipped, unmapped tools, injection sections that need project-specific content,
 hook registration steps, and skipped files. Work through the checklist before
-using the workspace.
+using the workspace. Deploy and update also print two warnings on the console:
+orchestrator content with no region to go into, and a region a role may not carry.

@@ -10,12 +10,13 @@ const (
 	HarnessClaudeCode Harness = "claude-code"
 	HarnessOpenCode   Harness = "opencode"
 	HarnessVSCodeGHCP Harness = "vscode-ghcp"
+	HarnessGHCPCLI    Harness = "ghcp-cli"
 )
 
 // IsRecognised reports whether the harness value is one of the known adapters.
 // Unrecognised harness values are tolerated (not rejected) by the decoder.
 func (h Harness) IsRecognised() bool {
-	return h == HarnessClaudeCode || h == HarnessOpenCode || h == HarnessVSCodeGHCP
+	return h == HarnessClaudeCode || h == HarnessOpenCode || h == HarnessVSCodeGHCP || h == HarnessGHCPCLI
 }
 
 // ModelID is a model identifier as it appears in the logs and as it keys the
@@ -24,6 +25,12 @@ type ModelID string
 
 // IsEmpty reports whether the model identifier is the empty string.
 func (m ModelID) IsEmpty() bool { return m == "" }
+
+// ProviderID is a models.dev provider identifier as logged ("" = not logged).
+type ProviderID string
+
+// IsEmpty reports whether no provider was logged.
+func (p ProviderID) IsEmpty() bool { return p == "" }
 
 // AgentInstanceID is the "{AgentName}#{Number}" instance identifier.
 type AgentInstanceID string
@@ -73,8 +80,9 @@ func IsRunID(s string) bool { return runIDPattern.MatchString(s) }
 type ActorKind uint8
 
 const (
-	ActorOrchestrator  ActorKind = iota
+	ActorOrchestrator ActorKind = iota
 	ActorAgentInstance
+	ActorUnattributed
 )
 
 // ActorRef identifies whose cost a figure belongs to within a run.
@@ -92,10 +100,18 @@ func AgentInstance(id AgentInstanceID) ActorRef {
 	return ActorRef{Kind: ActorAgentInstance, Instance: id}
 }
 
+// Unattributed constructs an ActorRef for usage inside a named run that belongs to
+// neither its orchestrator nor one of its invocations. Label() is "unattributed".
+// Only named runs hold such usage; the unknown-run bucket never carries the stream.
+func Unattributed() ActorRef { return ActorRef{Kind: ActorUnattributed} }
+
 // Label returns a human-readable label for the actor.
 func (a ActorRef) Label() string {
 	if a.Kind == ActorOrchestrator {
 		return "orchestrator"
+	}
+	if a.Kind == ActorUnattributed {
+		return "unattributed"
 	}
 	return string(a.Instance)
 }

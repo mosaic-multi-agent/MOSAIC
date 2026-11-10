@@ -10,9 +10,7 @@ package runner_test
 //   - Catalogue-path setup calls Deploy once and no Render (T7.1)
 //   - Stub-agents-path setup calls Render, not Deploy (T7.1)
 //   - Deploy's ledger is appended before subsequent steps run (T7.2)
-//   - Deploy receives a tier-model map covering both the subject and stub
-//     tiers, keyed by the domain tier constants (T7.6)
-//   - An absent StubModel falls back to the subject's Model (T7.6)
+//   - The tier-model map sent on Deploy is covered in the tier-map test files
 //   - Subject version is threaded from the Deploy result when the agent
 //     declares a version (T7.7)
 //   - Subject version is empty when the agent declares no version (T7.7)
@@ -280,124 +278,6 @@ func TestSetup_CataloguePathLedger_RecordedBeforeProvisionFailure(t *testing.T) 
 type errSetupFailure struct{ msg string }
 
 func (e errSetupFailure) Error() string { return "test-injected: " + e.msg }
-
-// --- T7.6: tier-model map ---
-
-// TestSetup_CataloguePathDeployCarriesTierModelMap asserts that the Deploy
-// call carries a TierModels map with an entry for the subject tier
-// (domain.TierTestSubject) set to the definition's Subject.Model, and an
-// entry for the stub tier (domain.TierTestStub) set to the definition's
-// Subject.StubModel. The domain tier constants must be used — no literal
-// tier strings.
-func TestSetup_CataloguePathDeployCarriesTierModelMap(t *testing.T) {
-	h := newHarness(t)
-	req := catalogueRequest("catalogue-tier-model-map")
-	req.Test.Definition.Subject.Model = "claude-opus-4-5"
-	req.Test.Definition.Subject.StubModel = "claude-haiku-3-5"
-
-	if _, err := runner.Run(context.Background(), h.Deps, req, nil); err != nil {
-		t.Fatalf("Run returned unexpected error: %v", err)
-	}
-
-	deployCalls := h.Deployer.allDeployCalls()
-	if len(deployCalls) == 0 {
-		t.Fatal("Deploy was never called; want exactly one Deploy call for a catalogue-path test")
-	}
-
-	tm := deployCalls[0].TierModels
-	if tm == nil {
-		t.Fatal("Deploy TierModels is nil; want a map with entries for subject and stub tiers — " +
-			"a nil map means no model pre-answering, which leaves agents with unresolved model placeholders")
-	}
-
-	subjectModel, hasSubject := tm[domain.TierTestSubject]
-	if !hasSubject {
-		t.Errorf("Deploy TierModels missing key %q (domain.TierTestSubject); "+
-			"the subject tier must be answered so the catalogue orchestrator gets a usable model.\n"+
-			"got TierModels: %v", domain.TierTestSubject, tm)
-	} else if subjectModel != "claude-opus-4-5" {
-		t.Errorf("Deploy TierModels[%q] = %q, want %q; "+
-			"the subject tier entry must equal the definition's Subject.Model",
-			domain.TierTestSubject, subjectModel, "claude-opus-4-5")
-	}
-
-	stubModel, hasStub := tm[domain.TierTestStub]
-	if !hasStub {
-		t.Errorf("Deploy TierModels missing key %q (domain.TierTestStub); "+
-			"the stub tier must always be answered — two entries, always.\n"+
-			"got TierModels: %v", domain.TierTestStub, tm)
-	} else if stubModel != "claude-haiku-3-5" {
-		t.Errorf("Deploy TierModels[%q] = %q, want %q; "+
-			"the stub tier entry must equal the definition's Subject.StubModel when non-empty",
-			domain.TierTestStub, stubModel, "claude-haiku-3-5")
-	}
-}
-
-// TestSetup_CataloguePathDeploy_AbsentStubModelFallsBackToSubjectModel asserts
-// that when Subject.StubModel is empty, the stub tier entry falls back to
-// Subject.Model rather than being left unanswered. An absent StubModel is a
-// deliberate "use the subject's model for stubs" — working but expensive, not
-// broken.
-func TestSetup_CataloguePathDeploy_AbsentStubModelFallsBackToSubjectModel(t *testing.T) {
-	h := newHarness(t)
-	req := catalogueRequest("catalogue-stub-model-fallback")
-	req.Test.Definition.Subject.Model = "claude-opus-4-5"
-	req.Test.Definition.Subject.StubModel = "" // absent — fallback case
-
-	if _, err := runner.Run(context.Background(), h.Deps, req, nil); err != nil {
-		t.Fatalf("Run returned unexpected error: %v", err)
-	}
-
-	deployCalls := h.Deployer.allDeployCalls()
-	if len(deployCalls) == 0 {
-		t.Fatal("Deploy was never called; want exactly one Deploy call for a catalogue-path test")
-	}
-
-	tm := deployCalls[0].TierModels
-	if tm == nil {
-		t.Fatal("Deploy TierModels is nil; want a two-entry map even when StubModel is absent")
-	}
-
-	stubModel, hasStub := tm[domain.TierTestStub]
-	if !hasStub {
-		t.Errorf("Deploy TierModels missing key %q when StubModel is absent; "+
-			"the stub tier must still be answered — two entries, always.\n"+
-			"got TierModels: %v", domain.TierTestStub, tm)
-	} else if stubModel != "claude-opus-4-5" {
-		t.Errorf("Deploy TierModels[%q] = %q, want %q (Subject.Model fallback); "+
-			"an absent StubModel must fall back to Subject.Model so the run degrades "+
-			"to expensive-but-working rather than broken-and-free",
-			domain.TierTestStub, stubModel, "claude-opus-4-5")
-	}
-}
-
-// TestSetup_CataloguePathDeploy_TierMapHasExactlyTwoEntries asserts that the
-// TierModels map always carries exactly two entries — one per tier — never
-// more, never fewer. A partial map is a silent failure: the unmapped tier
-// deploys with an unresolved model placeholder on a run that still reports
-// success.
-func TestSetup_CataloguePathDeploy_TierMapHasExactlyTwoEntries(t *testing.T) {
-	h := newHarness(t)
-	req := catalogueRequest("catalogue-tier-map-count")
-	req.Test.Definition.Subject.Model = "claude-opus-4-5"
-	req.Test.Definition.Subject.StubModel = "claude-haiku-3-5"
-
-	if _, err := runner.Run(context.Background(), h.Deps, req, nil); err != nil {
-		t.Fatalf("Run returned unexpected error: %v", err)
-	}
-
-	deployCalls := h.Deployer.allDeployCalls()
-	if len(deployCalls) == 0 {
-		t.Fatal("Deploy was never called; want exactly one Deploy call for a catalogue-path test")
-	}
-
-	tm := deployCalls[0].TierModels
-	if len(tm) != 2 {
-		t.Errorf("Deploy TierModels has %d entries, want exactly 2 (one per tier); "+
-			"the map must be total over the test catalogue's two tiers.\n"+
-			"got TierModels: %v", len(tm), tm)
-	}
-}
 
 // --- T7.7: subject version and definition path on the catalogue path ---
 

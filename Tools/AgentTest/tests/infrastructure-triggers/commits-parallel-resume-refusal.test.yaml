@@ -1,0 +1,65 @@
+schema_version: 1
+name: commits-parallel-resume-refusal
+id: 84
+version: 1
+changelog:
+  - version: 1
+    date: "2026-10-12"
+    changes: "Initial."
+description: >
+  D-1: Resuming an artifact that records commits: enabled together with
+  dispatch: parallel is a configuration error (Configuration Preconditions 3:
+  commits: enabled requires dispatch: sequential). commit-manager-git is
+  declared, so the commit-class precondition is otherwise satisfied, and
+  checkpoints are disabled so no checkpoint precondition is involved. The
+  orchestrator must refuse to resume and dispatch nothing - it must not
+  silently downgrade to sequential, and must not drop commits to keep
+  parallel. Proceeding would dispatch implementation-review at once. The
+  refusal wording itself is not observable to AgentTest.
+layer: orchestrator
+negative: false
+
+subject:
+  identity: orchestrator
+  agent: orchestrator
+  workflows: [brownfield-tdd]
+  infrastructure_agents: [commit-manager-git]
+  opening_message: |
+    Continue the existing workflow run. Read the Orchestration.md in the
+    run-scoped folder and resume from where it left off. Do not ask me any
+    further questions - proceed immediately and autonomously.
+  invocation_kind: orchestrator
+  allowed_tools: [Task, Read, Write, Edit, Bash, Glob, Grep]
+
+stub_registry: commits-parallel-resume-refusal.stubs.json
+
+timeout: 5m
+turn_limit: 10
+stop_after_invocations: 1
+
+seed_files:
+  - path: Orchestration-{run_id}/Orchestration.md
+    ref: stage1-impl-done-commits-parallel.md
+  - path: Orchestration-{run_id}/Plan.md
+    ref: Plan.md
+  - path: Orchestration-{run_id}/Research.md
+    ref: Research.md
+  - path: Orchestration-{run_id}/Requirements.md
+    ref: Requirements.md
+  - path: Orchestration-{run_id}/ContractsDesign.md
+    ref: ContractsDesign.md
+  - path: Orchestration-{run_id}/Stage-1/Plan.md
+    ref: Stage-1-Plan.md
+  - path: Orchestration-{run_id}/Stage-1/PlanProgress.md
+    ref: Stage-1-PlanProgress.md
+  - path: Orchestration-{run_id}/Stage-1/tests-review-tdd.md
+    ref: Stage-1-tests-review-tdd.md
+  - path: Orchestration-{run_id}/Stage-2/Plan.md
+    ref: Stage-2-Plan.md
+  - path: Orchestration-{run_id}/Stage-2/PlanProgress.md
+    ref: Stage-2-PlanProgress.md
+
+assertions:
+  invocation_sequence:
+    exact: true
+    steps: []

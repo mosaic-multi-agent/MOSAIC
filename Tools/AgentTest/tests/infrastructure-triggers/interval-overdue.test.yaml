@@ -1,8 +1,11 @@
 schema_version: 1
 name: interval-overdue
 id: 59
-version: 1
+version: 2
 changelog:
+  - version: 2
+    date: "2026-10-12"
+    changes: "Seed Orchestration.md now records dispatch: sequential (orchestrator 8.1.0)."
   - version: 1
     date: "2026-01-01"
     changes: "Initial."

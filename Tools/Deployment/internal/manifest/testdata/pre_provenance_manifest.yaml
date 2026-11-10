@@ -1,0 +1,23 @@
+schema_version: "1"
+harness_id: claude-code
+updated_at: "2024-06-15T12:30:00Z"
+tool_version: 0.6.0
+entries:
+  - ref:
+      kind: agent
+      key: code-reviewer
+    target_path: .claude/agents/code-reviewer.md
+    version: "1.2.3"
+    harness_version: "2.0.0"
+    injections_version: "3.1.0"
+    content_hash: sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890
+    deployed_at: "2024-06-15T12:00:00Z"
+  - ref:
+      kind: skill
+      key: efficient-file-reading
+    target_path: .claude/skills/efficient-file-reading/SKILL.md
+    version: "1.0.0"
+    harness_version: ""
+    injections_version: ""
+    content_hash: sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
+    deployed_at: "2024-06-15T12:00:00Z"

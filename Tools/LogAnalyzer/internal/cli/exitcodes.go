@@ -22,3 +22,7 @@ const (
 	// logs tree (SourceUnusable).
 	ExitUnusable = 4
 )
+
+// ExitIngestSkipped indicates ingest-otel did nothing because the run's ingest
+// is locked by another process or its state is of an unknown version.
+const ExitIngestSkipped = 5

@@ -1,0 +1,9 @@
+{"schema_version":"1.2.0","event":"invocation_start","timestamp":"2026-10-21T12:01:00.000Z","harness":"claude-code","session_id":"s-rm","run_id":"20261021T120000Z-rm01","agent_instance_id":"coder#1","agent_type":"coder"}
+{"schema_version":"1.2.0","event":"tool_call_start","timestamp":"2026-10-21T12:01:10.000Z","harness":"claude-code","session_id":"s-rm","run_id":"20261021T120000Z-rm01","call_id":"p1","tool_name":"Read"}
+{"schema_version":"1.2.0","event":"tool_call_start","timestamp":"2026-10-21T12:01:10.100Z","harness":"claude-code","session_id":"s-rm","run_id":"20261021T120000Z-rm01","call_id":"p2","tool_name":"Read"}
+{"schema_version":"1.2.0","event":"tool_call_end","timestamp":"2026-10-21T12:01:12.000Z","harness":"claude-code","session_id":"s-rm","run_id":"20261021T120000Z-rm01","call_id":"p2","status":"success"}
+{"schema_version":"1.2.0","event":"tool_call_end","timestamp":"2026-10-21T12:01:11.000Z","harness":"claude-code","session_id":"s-rm","run_id":"20261021T120000Z-rm01","call_id":"p1","status":"error"}
+{"schema_version":"1.2.0","event":"tool_call_end","timestamp":"2026-10-21T12:01:20.000Z","harness":"claude-code","session_id":"s-rm","run_id":"20261021T120000Z-rm01","call_id":"p-orphan","status":"success"}
+{"schema_version":"1.2.0","event":"usage_record","timestamp":"2026-10-21T12:01:30.000Z","harness":"claude-code","session_id":"s-rm","run_id":"20261021T120000Z-rm01","agent_instance_id":"coder#1","record_id":"r1","model":"model-a","token_usage":{"input_tokens":1000,"output_tokens":100}}
+{"schema_version":"1.2.0","event":"compaction","timestamp":"2026-10-21T12:01:40.000Z","harness":"claude-code","session_id":"s-rm","run_id":"20261021T120000Z-rm01","trigger":"manual"}
+{"schema_version":"1.2.0","event":"invocation_end","timestamp":"2026-10-21T12:02:30.000Z","harness":"claude-code","session_id":"s-rm","run_id":"20261021T120000Z-rm01","agent_instance_id":"coder#1","status_code":"SUCCESS","model":"model-a"}

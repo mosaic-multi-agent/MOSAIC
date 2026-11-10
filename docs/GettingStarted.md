@@ -10,7 +10,7 @@ This guide walks you through the **golden path**: one minimal deployment, one ze
 
 You need an AI coding tool already installed, configured, and working with model access:
 
-- **Claude Code**, **OpenCode**, **VS Code GitHub Copilot**, **GitHub Copilot CLI**, or **Codex**
+- **Claude Code**, **OpenCode**, **GitHub Copilot in VS Code**, **GitHub Copilot CLI**, or **Codex*
 
 MOSAIC deploys agents *into* these tools — it doesn't replace them. If you can already have a working conversation with your AI coding tool, you're ready.
 
@@ -64,7 +64,7 @@ On Linux: `./mosaic-deploy`
 
 The interactive TUI walks you through:
 
-1. **Pick a harness** — which AI coding tool you use (Claude Code, OpenCode, VS Code GHCP, GHCP CLI, or Codex)
+1. **Pick a harness** — which AI coding tool you use (Claude Code, OpenCode, "GHCP CLI / VS Code GHCP Copilot", "VS Code GHCP Local" or Codex). For GitHub Copilot, pick "GHCP CLI / VS Code GHCP Copilot" for the terminal CLI and for VS Code's default chat harness; pick "VS Code GHCP Local" only if your VS Code chat uses the Local harness, which is being retired. To check, look below the chat prompt input: the `Set session target` control on the left switches between Local and Copilot. A workspace holds one of the two GHCP targets at a time. See the [Deployment Guide](DeploymentGuide.md#choosing-a-ghcp-target).
 2. **Pick workflows** — select **only `kb-generation`** for now (you'll add more later)
 3. **Skip utility agents** — you don't need them for your first run
 4. **Assign models** — the TUI asks you to map each model tier (HIGH, MEDIUM-HIGH, etc.) to a specific model ID available in your setup. If you have one strong model and one cheaper model, use the strong one for the upper tiers and the cheaper one for the lower tiers. If you only have one model available, use it for everything — you can always redeploy with different assignments later.
@@ -109,12 +109,24 @@ When the workflow completes, the orchestrator reports a summary and the run fold
 
 You've seen the system work. Now make it work *well* for your specific codebase.
 
-### Fill project injections
+### Add a workflow and fill project injections
 
-Deploy again — this time add the `brownfield-tdd` workflow and the `injections-helper` utility agent:
+Now add the `brownfield-tdd` workflow to your existing deployment. Run the deploy tool and choose **Update workflows** — this rewrites only the orchestrator with your new workflow set, without disturbing agents or injections you've already configured:
 
 ```sh
 .\mosaic-deploy.exe
+# → Select "Update workflows"
+# → Select both kb-generation and brownfield-tdd
+```
+
+If the new workflow requires agents that aren't deployed yet, the tool deploys them automatically in the same run.
+
+Next, add the `injections-helper` utility agent. Run the deploy tool again and choose **Deploy agents**:
+
+```sh
+.\mosaic-deploy.exe
+# → Select "Deploy agents"
+# → Find injections-helper under the Utility Agents category
 ```
 
 After deployment, you'll find a `MOSAIC-DEPLOYMENT-TODO-<timestamp>.md` in your workspace root. This checklist tells you exactly what needs attention — most importantly, **project injection points** to fill.
@@ -141,7 +153,7 @@ Build: `py -m pytest`. CI runs on GitHub Actions.
 
 Pick a small, well-scoped feature for your first real run. This is the main workhorse workflow — it takes a requirement, researches the codebase, plans the implementation with TDD, and executes it. With injections filled, agents understand your conventions and produce code that fits your codebase.
 
-Unlike kb-generation, brownfield-tdd uses **approval gates** — HITL (human-in-the-loop) steps where agents pause for your approval at key points (e.g. before starting implementation). These are different from orchestrator checkpoints (which pause between workflow stages). Approval gates require a **user interaction tool** that subagents can call. Not every harness provides this automatically — for example, Claude Code's `ask_user_questions` built-in tool is only available to the primary agent, not to subagents dispatched via the task tool. If you hit this, check `HarnessKnowledge/KnownIssues/{your-harness}/` for harness-specific setup guidance.
+Unlike kb-generation, brownfield-tdd uses **approval gates** — HITL (human-in-the-loop) steps where agents pause for your approval at key points (e.g. before starting implementation). These are different from orchestrator checkpoints (which pause between workflow stages). Approval gates require a **user interaction tool** that subagents can call. Not every harness provides this automatically — for example, Claude Code's built-in `AskUserQuestion` tool is only available to the primary agent, not to subagents dispatched via the task tool. If you hit this, check `HarnessKnowledge/KnownIssues/{your-harness}/` for harness-specific setup guidance.
 
 For your first brownfield-tdd run, disable orchestrator checkpoints to keep things simple:
 
@@ -154,6 +166,23 @@ Checkpoints disabled.
 
 ---
 
+## See What Your Runs Cost
+
+To log your runs, deploy the `mosaic-logger` hook: run the deploy tool and choose **Deploy hooks**. Runs then appear in `OrchestrationLogs/` in your project, and running `mosaic-log-analyzer` there shows their token usage, cost and context size.
+
+What each harness needs:
+
+| Harness | Needs |
+|---------|-------|
+| Claude Code | Python 3 |
+| OpenCode | Nothing extra |
+| GHCP CLI / VS Code GHCP Copilot | Python 3. The GHCP CLI runs hooks only in a [trusted folder](../Catalog/Hooks/mosaic-logger/ghcp-cli/README.md); elsewhere it logs nothing and shows no warning |
+| VS Code GHCP Local | Python 3 and [one environment variable](LogAnalyzerGuide.md#token-usage-on-vs-code-ghcp-local) for token usage |
+
+The [LogAnalyzer Guide](LogAnalyzerGuide.md) explains the views, the pricing and how to share runs without their content.
+
+---
+
 ## Where to Go from Here
 
 You've deployed, run workflows, and seen the orchestration in action. Here's what to explore next:
@@ -163,7 +192,8 @@ You've deployed, run workflows, and seen the orchestration in action. Here's wha
 | Understand deployment operations in depth | [Deployment Guide](DeploymentGuide.md) |
 | Learn run configuration, checkpoints, parallel runs | [Orchestration Guide](OrchestrationGuide.md) |
 | Automate workflows with the Runner | [Runner Guide](RunnerGuide.md) |
+| Read token, cost, context and compaction views; configure pricing | [LogAnalyzer Guide](LogAnalyzerGuide.md) |
 | Customize agents for your codebase | [Agent Customization Guide](AgentCustomizationGuide.md) |
 | Browse available workflows | `Catalog/Workflows/Index.md` |
-| Create your own subagents or workflows | Deploy utility agents via `mosaic-deploy` (separate mode — see [Deployment Guide](DeploymentGuide.md)) — `anthropic-subagent-creator` helps design agents, `workflow-creator` helps author workflows |
+| Create your own subagents or workflows | Open your harness in the MOSAIC repository root (not your project workspace) and use `subagent-creator` to design agents or `workflow-creator` to author workflows — they ship there ready to use. Then deploy the result with `mosaic-deploy` |
 | Understand the full architecture | `README.md` at the repository root |

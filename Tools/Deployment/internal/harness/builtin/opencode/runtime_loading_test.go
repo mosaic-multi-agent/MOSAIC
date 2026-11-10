@@ -15,7 +15,7 @@ package opencode_test
 //
 //   Run-time loading from declared directory (T6.2):
 //   - An opencode module constructed against a temporary root reads HarnessInjections.md
-//     and HarnessInjectionsOrchestrator.md from <MosaicRoot>/Catalog/HarnessInjections/OpenCode/.
+//     and HarnessInjectionsOrchestrator.md from the directory given by opts.ContentDir.
 //   - The injected content comes from those on-disk files, not from embedded bytes.
 //
 //   Failure modes (T6.3):
@@ -31,7 +31,7 @@ package opencode_test
 //   Orchestrator/subagent content merging preserved (T6.5):
 //   - Shared-only: subagent receives it.
 //   - Orchestrator-only: subagent receives nothing (ok=false).
-//   - Both non-empty: orchestrator receives sharedContent + "\n\n" + orchContent.
+//   - Both non-empty: each region name returns exactly its own file's content (no merge).
 //   - Undeclared in both: ok=false.
 //
 // RED STATE:
@@ -53,9 +53,14 @@ import (
 // Test helpers
 // ---------------------------------------------------------------------------
 
-// writeOpenCodeContentFile writes src to dir/filename, failing the test on any error.
+// writeOpenCodeContentFile writes src to dir/filename, failing the test on any error. A
+// HarnessInjections.md written without any frontmatter gets a default version, because loading
+// requires one; sources that start with frontmatter are written unchanged.
 func writeOpenCodeContentFile(t *testing.T, dir, filename, src string) {
 	t.Helper()
+	if filename == "HarnessInjections.md" && !strings.HasPrefix(src, "---") {
+		src = "---\nversion: \"1.0.0\"\n---\n" + src
+	}
 	if err := os.WriteFile(filepath.Join(dir, filename), []byte(src), 0o644); err != nil {
 		t.Fatalf("write %s: %v", filename, err)
 	}
@@ -79,7 +84,7 @@ func makeTempRootForOpenCode(t *testing.T) (root string, contentDir string) {
 // RED: Fails via NewWithOptsForTesting returning an error until I6.4 implements New(opts).
 func newOpenCodeModuleFromOpts(t *testing.T, root string) domain.HarnessModule {
 	t.Helper()
-	mod, err := opencode.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	mod, err := opencode.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err != nil {
 		t.Fatalf("opencode.New(opts): %v", err) // RED: fails until I6.4 implemented
 	}
@@ -127,7 +132,7 @@ func TestRepoContentDir_OpenCode_IsCorrect(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestOpenCode_ReadsDeclaredDirectory verifies that constructing an opencode module with a
-// MosaicRoot reads content from <MosaicRoot>/<RepoContentDir>/.
+// MosaicRoot reads content from the directory returned by opts.ContentDir.
 func TestOpenCode_ReadsDeclaredDirectory(t *testing.T) {
 	root, contentDir := makeTempRootForOpenCode(t)
 	writeOpenCodeContentFile(t, contentDir, "HarnessInjections.md", openCodeSharedInjections)
@@ -176,7 +181,7 @@ func TestOpenCode_MissingSharedFile_ConstructionFails(t *testing.T) {
 	// Only write orchestrator file; shared file is missing.
 	writeOpenCodeContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md", openCodeOrchestratorInjections)
 
-	_, err := opencode.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := opencode.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Error("expected non-nil error when HarnessInjections.md is missing, got nil")
 	}
@@ -188,7 +193,7 @@ func TestOpenCode_MissingSharedFile_ErrorNamesFile(t *testing.T) {
 	root, contentDir := makeTempRootForOpenCode(t)
 	writeOpenCodeContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md", openCodeOrchestratorInjections)
 
-	_, err := opencode.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := opencode.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Fatal("expected non-nil error when HarnessInjections.md is missing")
 	}
@@ -204,7 +209,7 @@ func TestOpenCode_MissingOrchestratorFile_ConstructionFails(t *testing.T) {
 	writeOpenCodeContentFile(t, contentDir, "HarnessInjections.md", openCodeSharedInjections)
 	// Orchestrator file is missing.
 
-	_, err := opencode.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := opencode.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Error("expected non-nil error when HarnessInjectionsOrchestrator.md is missing, got nil")
 	}
@@ -216,7 +221,7 @@ func TestOpenCode_MissingOrchestratorFile_ErrorNamesFile(t *testing.T) {
 	root, contentDir := makeTempRootForOpenCode(t)
 	writeOpenCodeContentFile(t, contentDir, "HarnessInjections.md", openCodeSharedInjections)
 
-	_, err := opencode.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := opencode.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Fatal("expected non-nil error when HarnessInjectionsOrchestrator.md is missing")
 	}
@@ -232,7 +237,7 @@ func TestOpenCode_UnparseableSharedFile_ConstructionFails(t *testing.T) {
 	writeOpenCodeContentFile(t, contentDir, "HarnessInjections.md", "---\nversion: \"1.0\"\nunclosed-frontmatter\n")
 	writeOpenCodeContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md", openCodeOrchestratorInjections)
 
-	_, err := opencode.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := opencode.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Error("expected non-nil error for unparseable HarnessInjections.md, got nil")
 	}
@@ -245,7 +250,7 @@ func TestOpenCode_UnparseableOrchestratorFile_ConstructionFails(t *testing.T) {
 	writeOpenCodeContentFile(t, contentDir, "HarnessInjections.md", openCodeSharedInjections)
 	writeOpenCodeContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md", "---\nversion: \"1.0\"\nunclosed-frontmatter\n")
 
-	_, err := opencode.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := opencode.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Error("expected non-nil error for unparseable HarnessInjectionsOrchestrator.md, got nil")
 	}
@@ -336,27 +341,27 @@ func TestOpenCode_Merging_OrchestratorOnly_SubagentReceivesNothing(t *testing.T)
 	}
 }
 
-// TestOpenCode_Merging_BothNonEmpty_OrchestratorReceivesMergedWithSeparator verifies that
-// when both shared and orchestrator-only content are non-empty, the orchestrator receives
-// sharedContent + "\n\n" + orchContent.
-func TestOpenCode_Merging_BothNonEmpty_OrchestratorReceivesMergedWithSeparator(t *testing.T) {
+// TestOpenCode_Merging_BothNonEmpty_OrchestratorRegionsStaySeparate verifies that
+// when both shared and orchestrator-only content are non-empty, each region name returns
+// exactly its own file's content and nothing is merged.
+func TestOpenCode_Merging_BothNonEmpty_OrchestratorRegionsStaySeparate(t *testing.T) {
 	root, contentDir := makeTempRootForOpenCode(t)
 	const sharedPart = "Shared constraint line."
 	const orchPart = "Orchestrator-only constraint line."
 	writeOpenCodeContentFile(t, contentDir, "HarnessInjections.md",
 		"<HarnessConstraints type=\"managed\">\n"+sharedPart+"\n</HarnessConstraints>\n")
 	writeOpenCodeContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md",
-		"---\nversion: \"1.0.0\"\n---\n<HarnessConstraints type=\"managed\">\n"+orchPart+"\n</HarnessConstraints>\n")
+		"---\nversion: \"1.0.0\"\n---\n<OrchestratorHarnessConstraints type=\"managed\">\n"+orchPart+"\n</OrchestratorHarnessConstraints>\n")
 
 	mod := newOpenCodeModuleFromOpts(t, root)
 
-	c, ok := mod.Injection(domain.InjectionRequest{Name: "HarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
-	if !ok {
-		t.Fatal("orchestrator: Injection(HarnessConstraints) returned ok=false")
+	shared, sharedOK := mod.Injection(domain.InjectionRequest{Name: "HarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
+	orch, orchOK := mod.Injection(domain.InjectionRequest{Name: "OrchestratorHarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
+	if !sharedOK || shared != sharedPart {
+		t.Errorf("orchestrator HarnessConstraints = %q (ok=%v), want exactly %q", shared, sharedOK, sharedPart)
 	}
-	want := sharedPart + "\n\n" + orchPart
-	if c != want {
-		t.Errorf("orchestrator HarnessConstraints merge format incorrect\ngot:  %q\nwant: %q", c, want)
+	if !orchOK || orch != orchPart {
+		t.Errorf("orchestrator OrchestratorHarnessConstraints = %q (ok=%v), want exactly %q", orch, orchOK, orchPart)
 	}
 }
 

@@ -21,11 +21,12 @@ package harness_test
 //   - Partial Allowlist mode: --yolo absent; --allow-tool entries present
 //   - Partial Allowlist mode: --no-ask-user always present
 //   - Partial Allowlist mode: one --allow-tool entry per DerivedTools element
-//   - Partial Allowlist mode: -p PROMPT remains the final two arguments
+//   - Partial Allowlist mode: ExtraArgs remain last (no -p; prompt travels on stdin)
 //   - Unresolved mode (zero value): returns ErrGHCPCLIModeUnresolved before any args are built
 //   - Unresolved mode: returns nil slice on error
-//   - Partial Allowlist mode with nil DerivedTools: returns ErrGHCPCLIAllowlistEmpty
-//   - Partial Allowlist mode with empty DerivedTools slice: returns ErrGHCPCLIAllowlistEmpty
+//   - Partial Allowlist mode with nil DerivedTools and ToolsDerived=false (default): returns ErrGHCPCLIAllowlistEmpty
+//   - Partial Allowlist mode with empty DerivedTools slice and ToolsDerived=false (default): returns ErrGHCPCLIAllowlistEmpty
+//   - Partial Allowlist mode with ToolsDerived=true and empty DerivedTools: succeeds, emits --no-ask-user, zero --allow-tool entries
 //   - New sentinels are errors.Is-distinguishable from each other and from existing sentinels
 
 import (
@@ -48,7 +49,7 @@ func TestBuildGHCPCLIArgs_BlanketMode_EmitsYolo(t *testing.T) {
 		Prompt:      "hello",
 		GHCPCLIMode: harness.GHCPCLIModeBlanket,
 	}
-	args, err := harness.BuildGHCPCLIArgs(req)
+	args, _, err := harness.BuildGHCPCLIArgs(req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -65,7 +66,7 @@ func TestBuildGHCPCLIArgs_BlanketMode_EmitsNoAskUser(t *testing.T) {
 		Prompt:      "hello",
 		GHCPCLIMode: harness.GHCPCLIModeBlanket,
 	}
-	args, err := harness.BuildGHCPCLIArgs(req)
+	args, _, err := harness.BuildGHCPCLIArgs(req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -82,7 +83,7 @@ func TestBuildGHCPCLIArgs_BlanketMode_DoesNotEmitAllowTool(t *testing.T) {
 		Prompt:      "hello",
 		GHCPCLIMode: harness.GHCPCLIModeBlanket,
 	}
-	args, err := harness.BuildGHCPCLIArgs(req)
+	args, _, err := harness.BuildGHCPCLIArgs(req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -101,7 +102,7 @@ func TestBuildGHCPCLIArgs_BlanketMode_IgnoresDerivedTools(t *testing.T) {
 		GHCPCLIMode:  harness.GHCPCLIModeBlanket,
 		DerivedTools: []string{"write", "shell", "agent"},
 	}
-	args, err := harness.BuildGHCPCLIArgs(req)
+	args, _, err := harness.BuildGHCPCLIArgs(req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -117,7 +118,7 @@ func TestBuildGHCPCLIArgs_BlanketMode_IgnoresDerivedTools(t *testing.T) {
 // argument order for Blanket mode, which must be identical to the current
 // --yolo behavior:
 //
-//	--output-format json --yolo --no-ask-user --agent NAME --model M [ExtraArgs...] -p PROMPT
+//	--output-format json --yolo --no-ask-user --agent NAME --model M [ExtraArgs...]
 func TestBuildGHCPCLIArgs_BlanketMode_FullArgumentOrder(t *testing.T) {
 	agent := ordinaryAgent()
 	req := harness.SpawnRequest{
@@ -127,7 +128,7 @@ func TestBuildGHCPCLIArgs_BlanketMode_FullArgumentOrder(t *testing.T) {
 		ExtraArgs:   []string{"--custom-flag", "custom-value"},
 		GHCPCLIMode: harness.GHCPCLIModeBlanket,
 	}
-	args, err := harness.BuildGHCPCLIArgs(req)
+	args, _, err := harness.BuildGHCPCLIArgs(req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -138,7 +139,6 @@ func TestBuildGHCPCLIArgs_BlanketMode_FullArgumentOrder(t *testing.T) {
 		"--agent", agent.Identifier,
 		"--model", "some-model",
 		"--custom-flag", "custom-value",
-		"-p", "the-prompt",
 	}
 	if !reflect.DeepEqual(args, want) {
 		t.Errorf("want exact argument order\n  want: %v\n  got:  %v", want, args)
@@ -158,7 +158,7 @@ func TestBuildGHCPCLIArgs_PartialAllowlist_NoYolo(t *testing.T) {
 		GHCPCLIMode:  harness.GHCPCLIModePartialAllowlist,
 		DerivedTools: []string{"write", "shell"},
 	}
-	args, err := harness.BuildGHCPCLIArgs(req)
+	args, _, err := harness.BuildGHCPCLIArgs(req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestBuildGHCPCLIArgs_PartialAllowlist_EmitsNoAskUser(t *testing.T) {
 		GHCPCLIMode:  harness.GHCPCLIModePartialAllowlist,
 		DerivedTools: []string{"write"},
 	}
-	args, err := harness.BuildGHCPCLIArgs(req)
+	args, _, err := harness.BuildGHCPCLIArgs(req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -195,7 +195,7 @@ func TestBuildGHCPCLIArgs_PartialAllowlist_EmitsAllowToolForEachDerivedTool(t *t
 		GHCPCLIMode:  harness.GHCPCLIModePartialAllowlist,
 		DerivedTools: []string{"shell", "write", "agent", "skill"},
 	}
-	args, err := harness.BuildGHCPCLIArgs(req)
+	args, _, err := harness.BuildGHCPCLIArgs(req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -217,7 +217,7 @@ func TestBuildGHCPCLIArgs_PartialAllowlist_AllowToolCountMatchesDerivedTools(t *
 		GHCPCLIMode:  harness.GHCPCLIModePartialAllowlist,
 		DerivedTools: tools,
 	}
-	args, err := harness.BuildGHCPCLIArgs(req)
+	args, _, err := harness.BuildGHCPCLIArgs(req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -233,51 +233,28 @@ func TestBuildGHCPCLIArgs_PartialAllowlist_AllowToolCountMatchesDerivedTools(t *
 	}
 }
 
-// TestBuildGHCPCLIArgs_PartialAllowlist_PromptRemainsLast verifies that -p
-// and the prompt value remain the final two arguments in Partial Allowlist mode.
-func TestBuildGHCPCLIArgs_PartialAllowlist_PromptRemainsLast(t *testing.T) {
-	req := harness.SpawnRequest{
-		Agent:        ordinaryAgent(),
-		Prompt:       "partial-allowlist-prompt",
-		GHCPCLIMode:  harness.GHCPCLIModePartialAllowlist,
-		DerivedTools: []string{"write"},
-	}
-	args, err := harness.BuildGHCPCLIArgs(req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(args) < 2 {
-		t.Fatalf("want at least 2 args, got %v", args)
-	}
-	if args[len(args)-2] != "-p" {
-		t.Errorf("want -p as second-to-last arg, got %v", args)
-	}
-	if args[len(args)-1] != "partial-allowlist-prompt" {
-		t.Errorf("want prompt as final arg, got %v", args)
-	}
-}
-
-// TestBuildGHCPCLIArgs_PartialAllowlist_AllowToolPrecedesPrompt verifies that
-// --allow-tool entries appear before -p PROMPT.
-func TestBuildGHCPCLIArgs_PartialAllowlist_AllowToolPrecedesPrompt(t *testing.T) {
+// TestBuildGHCPCLIArgs_PartialAllowlist_AllowToolPrecedesAgentAndExtraArgs
+// verifies --allow-tool entries come before --agent and ExtraArgs.
+func TestBuildGHCPCLIArgs_PartialAllowlist_AllowToolPrecedesAgentAndExtraArgs(t *testing.T) {
 	req := harness.SpawnRequest{
 		Agent:        ordinaryAgent(),
 		Prompt:       "the-prompt",
 		GHCPCLIMode:  harness.GHCPCLIModePartialAllowlist,
 		DerivedTools: []string{"write"},
+		ExtraArgs:    []string{"--custom-flag"},
 	}
-	args, err := harness.BuildGHCPCLIArgs(req)
+	args, _, err := harness.BuildGHCPCLIArgs(req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	allowToolIdx := indexOfArg(args, "--allow-tool")
-	pIdx := indexOfArg(args, "-p")
-	if allowToolIdx < 0 || pIdx < 0 {
-		t.Fatalf("want --allow-tool and -p in args, got %v", args)
+	agentIdx := indexOfArg(args, "--agent")
+	extraIdx := indexOfArg(args, "--custom-flag")
+	if allowToolIdx < 0 || agentIdx < 0 || extraIdx < 0 {
+		t.Fatalf("want --allow-tool, --agent and --custom-flag in args, got %v", args)
 	}
-	if allowToolIdx >= pIdx {
-		t.Errorf("want --allow-tool to precede -p, got allowToolIdx=%d pIdx=%d in %v",
-			allowToolIdx, pIdx, args)
+	if allowToolIdx >= agentIdx || agentIdx >= extraIdx {
+		t.Errorf("want order --allow-tool, --agent, ExtraArgs; got %v", args)
 	}
 }
 
@@ -290,7 +267,7 @@ func TestBuildGHCPCLIArgs_PartialAllowlist_OutputFormatPresent(t *testing.T) {
 		GHCPCLIMode:  harness.GHCPCLIModePartialAllowlist,
 		DerivedTools: []string{"write"},
 	}
-	args, err := harness.BuildGHCPCLIArgs(req)
+	args, _, err := harness.BuildGHCPCLIArgs(req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -312,7 +289,7 @@ func TestBuildGHCPCLIArgs_UnresolvedMode_ReturnsErrGHCPCLIModeUnresolved(t *test
 		Prompt: "hello",
 		// GHCPCLIMode is deliberately left as zero value (GHCPCLIModeUnresolved)
 	}
-	_, err := harness.BuildGHCPCLIArgs(req)
+	_, _, err := harness.BuildGHCPCLIArgs(req)
 	if !errors.Is(err, harness.ErrGHCPCLIModeUnresolved) {
 		t.Fatalf("want ErrGHCPCLIModeUnresolved when GHCPCLIMode is zero, got %v", err)
 	}
@@ -325,7 +302,7 @@ func TestBuildGHCPCLIArgs_UnresolvedMode_ReturnsNilSlice(t *testing.T) {
 		Agent:  ordinaryAgent(),
 		Prompt: "hello",
 	}
-	args, err := harness.BuildGHCPCLIArgs(req)
+	args, _, err := harness.BuildGHCPCLIArgs(req)
 	if err == nil {
 		t.Fatal("want error for unresolved mode, got nil")
 	}
@@ -343,7 +320,7 @@ func TestBuildGHCPCLIArgs_UnresolvedMode_CheckPrecedesEmptyPromptCheck(t *testin
 		Prompt: "",
 		// GHCPCLIMode is zero: both conditions hold; mode check must win.
 	}
-	_, err := harness.BuildGHCPCLIArgs(req)
+	_, _, err := harness.BuildGHCPCLIArgs(req)
 	if !errors.Is(err, harness.ErrGHCPCLIModeUnresolved) {
 		t.Fatalf("want ErrGHCPCLIModeUnresolved when both mode and prompt are unset, got %v", err)
 	}
@@ -364,7 +341,7 @@ func TestBuildGHCPCLIArgs_PartialAllowlist_NilDerivedTools_ReturnsErrGHCPCLIAllo
 		GHCPCLIMode:  harness.GHCPCLIModePartialAllowlist,
 		DerivedTools: nil,
 	}
-	_, err := harness.BuildGHCPCLIArgs(req)
+	_, _, err := harness.BuildGHCPCLIArgs(req)
 	if !errors.Is(err, harness.ErrGHCPCLIAllowlistEmpty) {
 		t.Fatalf("want ErrGHCPCLIAllowlistEmpty for nil DerivedTools in Partial Allowlist mode, got %v", err)
 	}
@@ -380,9 +357,92 @@ func TestBuildGHCPCLIArgs_PartialAllowlist_EmptyDerivedTools_ReturnsErrGHCPCLIAl
 		GHCPCLIMode:  harness.GHCPCLIModePartialAllowlist,
 		DerivedTools: []string{},
 	}
-	_, err := harness.BuildGHCPCLIArgs(req)
+	_, _, err := harness.BuildGHCPCLIArgs(req)
 	if !errors.Is(err, harness.ErrGHCPCLIAllowlistEmpty) {
 		t.Fatalf("want ErrGHCPCLIAllowlistEmpty for empty DerivedTools slice in Partial Allowlist mode, got %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Partial Allowlist mode with ToolsDerived=true and empty DerivedTools
+// ---------------------------------------------------------------------------
+
+// TestBuildGHCPCLIArgs_PartialAllowlist_ToolsDerivedTrue_EmptyDerivedTools_Succeeds
+// verifies that when ToolsDerived is true and DerivedTools is empty, Partial
+// Allowlist mode succeeds. This is the "all ungated tools" case: derivation ran
+// and produced an empty list (valid), so no --allow-tool entries are emitted.
+// --no-ask-user must still be present to prevent prompting.
+func TestBuildGHCPCLIArgs_PartialAllowlist_ToolsDerivedTrue_EmptyDerivedTools_Succeeds(t *testing.T) {
+	req := harness.SpawnRequest{
+		Agent:        ordinaryAgent(),
+		Prompt:       "hello",
+		GHCPCLIMode:  harness.GHCPCLIModePartialAllowlist,
+		DerivedTools: []string{},
+		ToolsDerived: true,
+	}
+	args, _, err := harness.BuildGHCPCLIArgs(req)
+	if err != nil {
+		t.Fatalf("want no error when ToolsDerived=true and DerivedTools is empty, got %v", err)
+	}
+	// --no-ask-user must be present (prevents unexpected prompts).
+	if !containsArg(args, "--no-ask-user") {
+		t.Errorf("want --no-ask-user when ToolsDerived=true with empty DerivedTools, got %v", args)
+	}
+	// No --allow-tool entries must be emitted (empty derived list = no gated tools).
+	if containsArg(args, "--allow-tool") {
+		t.Errorf("want zero --allow-tool entries when ToolsDerived=true with empty DerivedTools, got %v", args)
+	}
+	// --yolo must not appear (this is partial allowlist, not blanket mode).
+	if containsArg(args, "--yolo") {
+		t.Errorf("want --yolo absent in Partial Allowlist mode, got %v", args)
+	}
+}
+
+// TestBuildGHCPCLIArgs_PartialAllowlist_ToolsDerivedTrue_NilDerivedTools_Succeeds
+// verifies that ToolsDerived=true with a nil DerivedTools slice also succeeds.
+// Both nil and empty slice are valid "no gated tools" representations when
+// ToolsDerived is true.
+func TestBuildGHCPCLIArgs_PartialAllowlist_ToolsDerivedTrue_NilDerivedTools_Succeeds(t *testing.T) {
+	req := harness.SpawnRequest{
+		Agent:        ordinaryAgent(),
+		Prompt:       "hello",
+		GHCPCLIMode:  harness.GHCPCLIModePartialAllowlist,
+		DerivedTools: nil,
+		ToolsDerived: true,
+	}
+	args, _, err := harness.BuildGHCPCLIArgs(req)
+	if err != nil {
+		t.Fatalf("want no error when ToolsDerived=true and DerivedTools is nil, got %v", err)
+	}
+	if !containsArg(args, "--no-ask-user") {
+		t.Errorf("want --no-ask-user when ToolsDerived=true with nil DerivedTools, got %v", args)
+	}
+	if containsArg(args, "--allow-tool") {
+		t.Errorf("want zero --allow-tool entries when ToolsDerived=true with nil DerivedTools, got %v", args)
+	}
+}
+
+// TestBuildGHCPCLIArgs_PartialAllowlist_ToolsDerivedTrue_NonEmptyDerivedTools_EmitsAllowTool
+// verifies that ToolsDerived=true with a non-empty DerivedTools slice still
+// emits --allow-tool entries. The ToolsDerived flag does not suppress emission
+// when there are actual gated tools to emit.
+func TestBuildGHCPCLIArgs_PartialAllowlist_ToolsDerivedTrue_NonEmptyDerivedTools_EmitsAllowTool(t *testing.T) {
+	req := harness.SpawnRequest{
+		Agent:        ordinaryAgent(),
+		Prompt:       "hello",
+		GHCPCLIMode:  harness.GHCPCLIModePartialAllowlist,
+		DerivedTools: []string{"write", "shell"},
+		ToolsDerived: true,
+	}
+	args, _, err := harness.BuildGHCPCLIArgs(req)
+	if err != nil {
+		t.Fatalf("want no error when ToolsDerived=true and DerivedTools is non-empty, got %v", err)
+	}
+	if !containsSequence(args, "--allow-tool", "write") {
+		t.Errorf("want --allow-tool write when ToolsDerived=true with non-empty DerivedTools, got %v", args)
+	}
+	if !containsSequence(args, "--allow-tool", "shell") {
+		t.Errorf("want --allow-tool shell when ToolsDerived=true with non-empty DerivedTools, got %v", args)
 	}
 }
 

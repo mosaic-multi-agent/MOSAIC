@@ -190,12 +190,12 @@ func TestSkill_RecursiveWalk_TotalFileCountIncludesNestedFiles(t *testing.T) {
 // flat companion files, and some organised-by-subdirectory support files.
 func TestSkill_RecursiveWalk_MixedFlatAndNestedFiles(t *testing.T) {
 	root := makeTempMosaicRoot(t)
-	writeSkillFolder(t, root, "sample-skill")                    // SKILL.md
-	mustWriteFile(t, root,                                        // flat companion
+	writeSkillFolder(t, root, "sample-skill") // SKILL.md
+	mustWriteFile(t, root,                    // flat companion
 		filepath.Join("Catalog", "Skills", "sample-skill", "EXAMPLES.md"),
 		[]byte("# Examples\n"))
 	mustMkdir(t, root, "Catalog", "Skills", "sample-skill", "templates")
-	mustWriteFile(t, root,                                        // nested file
+	mustWriteFile(t, root, // nested file
 		filepath.Join("Catalog", "Skills", "sample-skill", "templates", "default.md"),
 		[]byte("# Default template\n"))
 
@@ -210,9 +210,9 @@ func TestSkill_RecursiveWalk_MixedFlatAndNestedFiles(t *testing.T) {
 
 	// All three files must appear.
 	wantFiles := map[string]bool{
-		"SKILL.md":              false,
-		"EXAMPLES.md":           false,
-		"templates/default.md":  false,
+		"SKILL.md":             false,
+		"EXAMPLES.md":          false,
+		"templates/default.md": false,
 	}
 	for _, f := range s.Files {
 		wantFiles[filepath.ToSlash(f)] = true

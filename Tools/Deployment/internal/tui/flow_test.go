@@ -23,6 +23,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"mosaic-deploy/internal/app"
+	"mosaic-deploy/internal/app/stackservicetest"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -34,6 +35,7 @@ import (
 // without consulting Interaction. It lets flow tests verify keyboard navigation without
 // exercising the question overlay system, which is covered by interaction_routing_test.go.
 type stubFlowService struct {
+	stackservicetest.MockStackService
 	harnesses       []domain.HarnessRef
 	deploy          domain.RunSummary
 	update          domain.RunSummary

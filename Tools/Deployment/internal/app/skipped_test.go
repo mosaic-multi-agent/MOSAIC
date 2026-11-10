@@ -335,9 +335,9 @@ type prepopulatedTodo struct {
 	gaps  []domain.Gap
 }
 
-func (p *prepopulatedTodo) Add(item domain.TodoItem)  { p.items = append(p.items, item) }
-func (p *prepopulatedTodo) AddGap(g domain.Gap)       { p.gaps = append(p.gaps, g) }
-func (p *prepopulatedTodo) Items() []domain.TodoItem  { return p.items }
-func (p *prepopulatedTodo) Groups() []todo.Group      { return nil }
-func (p *prepopulatedTodo) Empty() bool               { return len(p.items) == 0 }
-func (p *prepopulatedTodo) Reset()                    { p.items = nil; p.gaps = nil }
+func (p *prepopulatedTodo) Add(item domain.TodoItem) { p.items = append(p.items, item) }
+func (p *prepopulatedTodo) AddGap(g domain.Gap)      { p.gaps = append(p.gaps, g) }
+func (p *prepopulatedTodo) Items() []domain.TodoItem { return p.items }
+func (p *prepopulatedTodo) Groups() []todo.Group     { return nil }
+func (p *prepopulatedTodo) Empty() bool              { return len(p.items) == 0 }
+func (p *prepopulatedTodo) Reset()                   { p.items = nil; p.gaps = nil }

@@ -2,14 +2,16 @@
 
 This directory contains utility agents for creating and maintaining the multi-agent orchestration system:
 
-| Agent | Purpose |
-|-------|---------|
-| `anthropic-agent-creator` | Creates general-purpose AI agent instructions through iterative collaboration |
-| `anthropic-subagent-creator` | Creates subagent instructions compliant with the orchestration system architecture |
-| `workflow-creator` | Creates and modifies orchestration workflow definitions |
-| `injections-helper` | Fills and adds injection regions (`type="project"`) in a deployed workspace's agent files, from project context the user supplies |
-| `harness-issue-hunter` | Discovers, validates, and maintains a knowledge base of harness issues (bugs, limitations, quirks) and workarounds |
-| `system-prompt-capturer` | Captures and maintains harness-injected system prompts, built-in tool definitions, and tool output formats |
+| Agent | Purpose | Runs in |
+|-------|---------|---------|
+| `mosaic-helper` | Answers questions about MOSAIC from its documentation and points to the right utility agent | MOSAIC root |
+| `subagent-creator` | Creates subagent instructions compliant with the orchestration system architecture | MOSAIC root |
+| `workflow-creator` | Creates and modifies orchestration workflow definitions | MOSAIC root |
+| `injections-helper` | Fills and adds injection regions (`type="project"`) in a deployed workspace's agent files, from project context the user supplies | Project workspace (deployed) |
+| `harness-issue-hunter` | Discovers, validates, and maintains a knowledge base of harness issues (bugs, limitations, quirks) and workarounds | MOSAIC root |
+| `system-prompt-capturer` | Captures and maintains harness-injected system prompts, built-in tool definitions, and tool output formats | MOSAIC root |
+
+**Why the creators run at MOSAIC root.** `subagent-creator` and `workflow-creator` produce catalog source files (`Catalog/Subagents/...`, `Catalog/Workflows/...`) and need the design documents in `Development/Designs/` and the registries in `Catalog/` to do it. Those exist only in the MOSAIC repository, and `mosaic-deploy` reads source files only from there. Run in a project workspace, a creator cannot read its references, and what it writes never gets deployed. They ship as committed agents in the MOSAIC repository and are left out of the utility agents that the Deploy workspace flow offers by default. Project-specific content belongs in the deployed agents' injection regions, which `injections-helper` fills in the workspace.
 
 ---
 

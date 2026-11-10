@@ -287,17 +287,31 @@ func parseMarkdownTableRows(data string) [][]string {
 	return rows
 }
 
-// allCatalogAgentFiles collects every agent *.md file in the catalogue tree:
-// the orchestrator file and every file under Subagents/TestStubs/. Files or
-// directories that do not exist are silently skipped — callers that need the
-// list to be non-empty should assert len > 0 themselves.
-func allCatalogAgentFiles(root string) []string {
-	var paths []string
-
-	orch := orchestratorFile(root)
-	if _, err := os.Stat(orch); err == nil {
-		paths = append(paths, orch)
+// orchestratorAgentFiles lists every *.md file directly in Orchestrator/ (the
+// orchestrator and its scripted variant), sorted by name. A missing directory
+// yields an empty list.
+func orchestratorAgentFiles(root string) []string {
+	dir := filepath.Dir(orchestratorFile(root))
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
 	}
+	var paths []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
+			paths = append(paths, filepath.Join(dir, e.Name()))
+		}
+	}
+	return paths
+}
+
+// allCatalogAgentFiles collects every agent *.md file in the catalogue tree:
+// every file directly in Orchestrator/ and every file under
+// Subagents/TestStubs/. Files or directories that do not exist are silently
+// skipped — callers that need the list to be non-empty should assert len > 0
+// themselves.
+func allCatalogAgentFiles(root string) []string {
+	paths := orchestratorAgentFiles(root)
 
 	stubsDir := subagentCategoryDir(root, testStubsCategory)
 	entries, err := os.ReadDir(stubsDir)
@@ -532,20 +546,45 @@ func TestCatalogueTree_ReferencedAgentsResolveAndWorkflowIsIndexed(t *testing.T)
 func TestCatalogueTree_TierConformance(t *testing.T) {
 	root := catalogRoot(t)
 
-	// The orchestrator file must declare the subject tier.
+	// Every file directly in Orchestrator/ (the orchestrator and its scripted
+	// variant) must declare the subject tier.
 	t.Run("orchestrator_declares_subject_tier", func(t *testing.T) {
-		path := orchestratorFile(root)
-		fm, _ := parseFrontmatter(t, path)
-		if fm == nil {
-			return
+		paths := orchestratorAgentFiles(root)
+		if len(paths) == 0 {
+			t.Fatalf("no agent files found in %s", filepath.Dir(orchestratorFile(root)))
 		}
-		tier, _ := fm["recommended_tier"].(string)
-		if tier == "" {
-			t.Errorf("orchestrator.md: frontmatter field \"recommended_tier\" is absent or empty, want %q", tierTestSubject)
-			return
+		for _, path := range paths {
+			base := filepath.Base(path)
+			fm, _ := parseFrontmatter(t, path)
+			if fm == nil {
+				continue
+			}
+			tier, _ := fm["recommended_tier"].(string)
+			if tier == "" {
+				t.Errorf("%s: frontmatter field \"recommended_tier\" is absent or empty, want %q", base, tierTestSubject)
+				continue
+			}
+			if tier != tierTestSubject {
+				t.Errorf("%s: recommended_tier = %q, want %q (domain.TierTestSubject)", base, tier, tierTestSubject)
+			}
 		}
-		if tier != tierTestSubject {
-			t.Errorf("orchestrator.md: recommended_tier = %q, want %q (domain.TierTestSubject)", tier, tierTestSubject)
+	})
+
+	// The scripted orchestrator is part of the checked set, so a tier typo in
+	// it cannot go unnoticed.
+	t.Run("orchestrator_script_is_covered", func(t *testing.T) {
+		script := filepath.Join(filepath.Dir(orchestratorFile(root)), "orchestrator-script.md")
+		if _, err := os.Stat(script); err != nil {
+			t.Fatalf("orchestrator-script.md missing: %v", err)
+		}
+		found := false
+		for _, p := range allCatalogAgentFiles(root) {
+			if p == script {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("allCatalogAgentFiles does not include %s", script)
 		}
 	})
 

@@ -3,11 +3,12 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
 	tuicommon "mosaic-common/tui"
 	"mosaic-common/interaction"
+	"mosaic-common/tui/pastesafe"
+	"mosaic-common/tui/widgets"
 )
 
 // ---------------------------------------------------------------------------
@@ -23,6 +24,10 @@ type inlineSelectOne struct {
 	styles tuicommon.Theme
 	width  int
 	height int
+
+	// detailOffset is the first Detail line shown when the Detail is taller than
+	// the room the overlay has for it.
+	detailOffset int
 }
 
 func newInlineSelectOne(q interaction.ChoiceQuestion, styles tuicommon.Theme, width, height int) *inlineSelectOne {
@@ -64,6 +69,10 @@ func (s *inlineSelectOne) update(msg tea.Msg) bool {
 				s.done = true
 			}
 		}
+	case "pgup":
+		s.scrollDetail(-1)
+	case "pgdown":
+		s.scrollDetail(1)
 	case "esc":
 		s.back = true
 	}
@@ -91,11 +100,17 @@ func (s *inlineSelectOne) view() string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(s.styles.Style(tuicommon.RoleTitle).Width(s.width).Render(s.q.Title))
+	head := s.headView()
+	sb.WriteString(head)
 	sb.WriteByte('\n')
-	if s.q.Prompt != "" {
-		sb.WriteString(s.styles.Style(tuicommon.RoleBody).Width(s.width).Render(s.q.Prompt))
-		sb.WriteByte('\n')
+	help := selectHelpText
+	if s.q.Detail != "" {
+		var shown []string
+		shown, help, _ = s.detailLayout(head)
+		for _, line := range shown {
+			sb.WriteString(s.styles.Style(tuicommon.RoleMuted).Render(line))
+			sb.WriteByte('\n')
+		}
 	}
 	for i, opt := range s.q.Options {
 		prefix := "  "
@@ -121,72 +136,86 @@ func (s *inlineSelectOne) view() string {
 			sb.WriteString(prefix + s.styles.Style(tuicommon.RoleBody).Width(labelWidth).Render("None") + "\n")
 		}
 	}
-	sb.WriteString(s.styles.Style(tuicommon.RoleHelp).Width(s.width).Render("↑/k up  ↓/j down  enter select  esc cancel"))
+	sb.WriteString(s.renderHelp(help))
 	return sb.String()
+}
+
+// headView renders the title and, when set, the prompt, without a trailing line break.
+func (s *inlineSelectOne) headView() string {
+	head := s.styles.Style(tuicommon.RoleTitle).Width(s.width).Render(s.q.Title)
+	if s.q.Prompt != "" {
+		head += "\n" + s.styles.Style(tuicommon.RoleBody).Width(s.width).Render(s.q.Prompt)
+	}
+	return head
 }
 
 // ---------------------------------------------------------------------------
 // inlineText
 // ---------------------------------------------------------------------------
 
-// inlineText renders a text input overlay for AskText questions.
+// inlineText renders a text input overlay for AskText questions. Entry is
+// paste-safe: a pasted line break never submits and becomes a space.
 type inlineText struct {
 	q      interaction.TextQuestion
-	model  textinput.Model
-	done   bool
-	back   bool
-	errMsg string
+	field  *pastesafe.Field
 	styles tuicommon.Theme
 	width  int
 	height int
+
+	// area replaces field for a question that asks for multi-line entry.
+	area *widgets.TextArea
 }
 
 func newInlineText(q interaction.TextQuestion, styles tuicommon.Theme, width, height int) *inlineText {
-	m := textinput.New()
-	m.Placeholder = q.Prompt
-	if q.Default != "" {
-		m.SetValue(q.Default)
+	if q.Multiline {
+		return &inlineText{q: q, area: newMultilineArea(q, styles, width, height), styles: styles, width: width, height: height}
 	}
-	m.Focus()
-	return &inlineText{q: q, model: m, styles: styles, width: width, height: height}
+	field := pastesafe.NewField(pastesafe.WithPlaceholder(q.Prompt), pastesafe.WithValidate(q.Validate), pastesafe.WithWidth(width))
+	if q.Default != "" {
+		field.SetValue(q.Default)
+	}
+	return &inlineText{q: q, field: field, styles: styles, width: width, height: height}
 }
 
 func (t *inlineText) init() tea.Cmd {
-	return textinput.Blink
+	if t.area != nil {
+		return t.area.Init()
+	}
+	return t.field.Init()
 }
 
 func (t *inlineText) update(msg tea.Msg) tea.Cmd {
-	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		switch keyMsg.Type {
-		case tea.KeyEnter:
-			val := t.model.Value()
-			if t.q.Validate != nil {
-				if err := t.q.Validate(val); err != nil {
-					t.errMsg = err.Error()
-					return nil
-				}
-			}
-			t.errMsg = ""
-			t.done = true
-			return nil
-		case tea.KeyEsc:
-			t.back = true
-			return nil
-		}
+	if t.area != nil {
+		return t.area.Update(msg)
 	}
-	var cmd tea.Cmd
-	t.model, cmd = t.model.Update(msg)
-	return cmd
+	return t.field.Update(msg)
+}
+
+// finished reports whether the user confirmed the text or cancelled with Esc.
+func (t *inlineText) finished() bool {
+	if t.area != nil {
+		return t.area.Done() || t.area.Back()
+	}
+	return t.field.Done() || t.field.Back()
 }
 
 func (t *inlineText) answer() interaction.TextAnswer {
-	if t.back {
+	if t.area != nil {
+		if t.area.Back() {
+			return interaction.TextAnswer{Status: interaction.Cancelled}
+		}
+		return interaction.TextAnswer{Status: interaction.Answered, Text: t.area.Value()}
+	}
+	if t.field.Back() {
 		return interaction.TextAnswer{Status: interaction.Cancelled}
 	}
-	return interaction.TextAnswer{Status: interaction.Answered, Text: t.model.Value()}
+	return interaction.TextAnswer{Status: interaction.Answered, Text: t.field.Value()}
 }
 
 func (t *inlineText) view() string {
+	if t.area != nil {
+		return t.multilineView()
+	}
 	var sb strings.Builder
 	sb.WriteString(t.styles.Style(tuicommon.RoleTitle).Width(t.width).Render(t.q.Title))
 	sb.WriteByte('\n')
@@ -194,10 +223,10 @@ func (t *inlineText) view() string {
 		sb.WriteString(t.styles.Style(tuicommon.RoleMuted).Width(t.width).Render(t.q.Detail))
 		sb.WriteByte('\n')
 	}
-	sb.WriteString(t.model.View())
-	if t.errMsg != "" {
+	sb.WriteString(t.field.View())
+	if t.field.ErrMsg() != "" {
 		sb.WriteByte('\n')
-		sb.WriteString(t.styles.Style(tuicommon.RoleError).Width(t.width).Render(t.errMsg))
+		sb.WriteString(t.styles.Style(tuicommon.RoleError).Width(t.width).Render(t.field.ErrMsg()))
 	}
 	sb.WriteByte('\n')
 	sb.WriteString(t.styles.Style(tuicommon.RoleHelp).Width(t.width).Render("enter confirm  esc cancel"))

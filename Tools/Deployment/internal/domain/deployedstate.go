@@ -15,12 +15,16 @@ type DeployedArtifactState struct {
 	Version                       string            // frontmatter `version` scalar, verbatim; "" when absent or unparseable
 	HarnessVersion                string            // frontmatter `mosaic_harness_version` scalar (or legacy `mosaic_transform_version` fallback), verbatim
 	InjectionsVersion             string            // injection version from InjectionHarness-class region tag attribute (or legacy frontmatter fallback)
-	OrchestratorInjectionsVersion string            // reserved; always empty after Stage 3 — role-conditional comparison is in AgentStaleness
+	OrchestratorInjectionsVersion string            // version tag of the OrchestratorHarnessConstraints region; "" when the region is absent or untagged
 	ToolMappingsVersion           string            // frontmatter `tool_mappings_version` scalar, verbatim; "" when absent
 	ModelID                       string            // frontmatter model scalar under the harness's ModelKey, verbatim; "" when absent, unparseable, or the harness emits no model
 	Workflows                     DeployedWorkflows // non-nil only when the file carries workflow section markers
 	ProtocolVersion               string            // version from the `version` attribute on the deployed <CommunicationProtocol type="managed"> region's opening tag; "" when absent, region missing, or file unparseable
 	BundleVersion                 string            // frontmatter `bundle_version` scalar, verbatim; "" when absent, unparseable, or the file received no bundle region
+
+	// InfrastructureDeclarations lists the infrastructure agent declarations found in the file;
+	// non-nil only when the file declares at least one.
+	InfrastructureDeclarations DeployedInfrastructureDeclarations
 
 	// HasInjectionRegion reports whether the deployed file's body contains at least one region
 	// whose class is mosaic.InjectionHarness. When false, AgentStaleness skips the
@@ -39,6 +43,17 @@ type DeployedArtifactState struct {
 	// unreadable files. Callers in deploy.go / update.go / workflow_update.go emit these
 	// through s.deps.Logger.Event so they reach the run log.
 	DecodeNotices []string
+
+	// HasOrchestratorInjectionRegion reports whether the deployed file's body contains an
+	// OrchestratorHarnessConstraints managed region. It gates the orchestrator injection
+	// version comparison in AgentStaleness.
+	HasOrchestratorInjectionRegion bool
+
+	// ParseProblem describes why a present file at the planned target path could not be
+	// used: the parse error text (for docformat format errors: "frontmatter: line N: ...: \"excerpt\""),
+	// "no frontmatter", or "frontmatter has no id". Non-empty only when ParseFailed is true;
+	// "" for every other state.
+	ParseProblem string
 }
 
 // HasVersionInfo reports whether the deployed file carries at least one readable version stamp.

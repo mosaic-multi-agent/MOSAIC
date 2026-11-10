@@ -25,8 +25,8 @@ package codex
 import (
 	_ "embed"
 	"fmt"
-	"path/filepath"
 
+	"mosaic-deploy/internal/catalog/catalogpaths"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
 	"mosaic-deploy/internal/harness/injectionfile"
@@ -59,11 +59,15 @@ func New(opts registry.BuiltinOptions) (domain.HarnessModule, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse embedded codex descriptor: %w", err)
 	}
-	contentDir := filepath.Join(opts.MosaicRoot, RepoContentDir)
+	contentDir, err := opts.ResolveContentDir(catalogpaths.HarnessDirNameCodex)
+	if err != nil {
+		return nil, fmt.Errorf("codex: %w", err)
+	}
 	content, err := injectionfile.LoadDir(contentDir)
 	if err != nil {
 		return nil, fmt.Errorf("codex: load harness content: %w", err)
 	}
+	desc.InjectionsVersion = content.SharedVersion
 	desc.OrchestratorInjectionsVersion = content.OrchestratorVersion
 	ref := domain.HarnessRef{
 		ID:          desc.ID,
@@ -157,30 +161,12 @@ func (m *module) TargetPath(req domain.TargetPathRequest) (string, error) {
 	return descriptor.ResolveTargetPath(m.desc, req)
 }
 
-// Injection returns the harness-level content for a canonical injection name.
-//
-// For orchestrator role requests, shared content (from HarnessInjections.md) is merged
-// with orchestrator-only content (from HarnessInjectionsOrchestrator.md). For all other
-// roles, only shared content is returned.
+// Injection returns the harness-level content for a canonical injection name. Each
+// region is served from exactly one file: shared regions from HarnessInjections.md and
+// the orchestrator region from HarnessInjectionsOrchestrator.md, the latter only for
+// the orchestrator role.
 func (m *module) Injection(req domain.InjectionRequest) (string, bool) {
-	sharedContent, sharedOk := m.injections[req.Name]
-	if req.Role != domain.RoleOrchestrator {
-		return sharedContent, sharedOk
-	}
-	orchContent, orchOk := m.orchInjections[req.Name]
-	if !sharedOk && !orchOk {
-		return "", false
-	}
-	if sharedContent != "" && orchContent != "" {
-		return sharedContent + "\n\n" + orchContent, true
-	}
-	if sharedContent != "" {
-		return sharedContent, true
-	}
-	if orchContent != "" {
-		return orchContent, true
-	}
-	return "", true
+	return injectionfile.HarnessContent{Shared: m.injections, Orchestrator: m.orchInjections}.Injection(req)
 }
 
 // HookPlan returns an unsupported result because Codex does not support hooks.

@@ -49,6 +49,18 @@ type Snapshot struct {
 
 // Store reads and writes the deployment manifest stored at
 // <workspaceRoot>/.mosaic/manifest.yaml.
+//
+// Provenance: each entry may record the catalog (id, name, version) its source came from, and
+// the manifest records the catalogs that supplied the protocol and the bundle. These fields
+// are additive within schema "1": they are optional (omitted when unknown), the loader
+// ignores nothing it needs and treats absent keys as unknown, so manifests written before
+// provenance existed load as present and older builds can still read newer manifests.
+// The top-level catalog_stack field (the persisted catalog stack) follows the same decision.
+//
+// Workflow provenance is not recorded here. The manifest has no workflow entries: workflows
+// are embedded as regions in the deployed orchestrator file, so the orchestrator entry records
+// that file's source catalog. Per-workflow provenance is a property of each resolved item in
+// the catalog stack, not of a manifest entry.
 type Store interface {
 	// Load reads the manifest for the given workspace root. It always returns a Snapshot;
 	// only unexpected I/O errors (e.g. permission denied on an existing file) result in a
@@ -79,11 +91,59 @@ const (
 // yamlManifest is the YAML-serializable form of domain.Manifest. Timestamps are
 // stored as RFC3339 strings for portability and human-readability.
 type yamlManifest struct {
-	SchemaVersion string              `yaml:"schema_version"`
-	HarnessID     string              `yaml:"harness_id"`
-	UpdatedAt     string              `yaml:"updated_at"`
-	Entries       []yamlManifestEntry `yaml:"entries"`
-	ToolVersion   string              `yaml:"tool_version,omitempty"`
+	SchemaVersion  string              `yaml:"schema_version"`
+	HarnessID      string              `yaml:"harness_id"`
+	UpdatedAt      string              `yaml:"updated_at"`
+	Entries        []yamlManifestEntry `yaml:"entries"`
+	ToolVersion    string              `yaml:"tool_version,omitempty"`
+	ProtocolSource *yamlCatalog        `yaml:"protocol_source,omitempty"`
+	BundleSource   *yamlCatalog        `yaml:"bundle_source,omitempty"`
+	CatalogStack   []yamlStackLayer    `yaml:"catalog_stack,omitempty"`
+}
+
+// yamlStackLayer is the wire form of domain.PersistedCatalogLayer.
+type yamlStackLayer struct {
+	Path      string `yaml:"path,omitempty"`
+	CatalogID string `yaml:"catalog_id,omitempty"`
+	Default   bool   `yaml:"default,omitempty"`
+}
+
+func toYAMLStack(layers []domain.PersistedCatalogLayer) []yamlStackLayer {
+	var out []yamlStackLayer
+	for _, l := range layers {
+		out = append(out, yamlStackLayer{Path: l.Path, CatalogID: l.CatalogID, Default: l.Default})
+	}
+	return out
+}
+
+func fromYAMLStack(layers []yamlStackLayer) []domain.PersistedCatalogLayer {
+	var out []domain.PersistedCatalogLayer
+	for _, l := range layers {
+		out = append(out, domain.PersistedCatalogLayer{Path: l.Path, CatalogID: l.CatalogID, Default: l.Default})
+	}
+	return out
+}
+
+// yamlCatalog is the wire form of domain.CatalogIdentity. Versions are strings so values
+// such as 1.10 are not reformatted.
+type yamlCatalog struct {
+	ID      string `yaml:"id"`
+	Name    string `yaml:"name,omitempty"`
+	Version string `yaml:"version"`
+}
+
+func toYAMLCatalog(c domain.CatalogIdentity) *yamlCatalog {
+	if c == (domain.CatalogIdentity{}) {
+		return nil
+	}
+	return &yamlCatalog{ID: c.ID, Name: c.Name, Version: c.Version}
+}
+
+func fromYAMLCatalog(c *yamlCatalog) domain.CatalogIdentity {
+	if c == nil {
+		return domain.CatalogIdentity{}
+	}
+	return domain.CatalogIdentity{ID: c.ID, Name: c.Name, Version: c.Version}
 }
 
 type yamlManifestEntry struct {
@@ -95,6 +155,7 @@ type yamlManifestEntry struct {
 	OrchestratorInjectionsVersion string          `yaml:"orchestrator_injections_version,omitempty"`
 	ContentHash                   string          `yaml:"content_hash"`
 	DeployedAt                    string          `yaml:"deployed_at"`
+	Catalog                       *yamlCatalog    `yaml:"catalog,omitempty"`
 }
 
 type yamlArtifactRef struct {
@@ -165,6 +226,10 @@ func (s *store) Load(workspaceRoot string) (Snapshot, error) {
 		HarnessID:     raw.HarnessID,
 		UpdatedAt:     updatedAt,
 		ToolVersion:   raw.ToolVersion,
+
+		ProtocolSource: fromYAMLCatalog(raw.ProtocolSource),
+		BundleSource:   fromYAMLCatalog(raw.BundleSource),
+		CatalogStack:   fromYAMLStack(raw.CatalogStack),
 	}
 
 	for _, e := range raw.Entries {
@@ -183,6 +248,7 @@ func (s *store) Load(workspaceRoot string) (Snapshot, error) {
 			OrchestratorInjectionsVersion: e.OrchestratorInjectionsVersion,
 			ContentHash:                   e.ContentHash,
 			DeployedAt:                    deployedAt,
+			Catalog:                       fromYAMLCatalog(e.Catalog),
 		})
 	}
 
@@ -210,6 +276,10 @@ func (s *store) Save(workspaceRoot string, m domain.Manifest) error {
 		HarnessID:     m.HarnessID,
 		UpdatedAt:     m.UpdatedAt.UTC().Format(time.RFC3339),
 		ToolVersion:   m.ToolVersion,
+
+		ProtocolSource: toYAMLCatalog(m.ProtocolSource),
+		BundleSource:   toYAMLCatalog(m.BundleSource),
+		CatalogStack:   toYAMLStack(m.CatalogStack),
 	}
 
 	for _, e := range m.Entries {
@@ -222,6 +292,7 @@ func (s *store) Save(workspaceRoot string, m domain.Manifest) error {
 			OrchestratorInjectionsVersion: e.OrchestratorInjectionsVersion,
 			ContentHash:                   e.ContentHash,
 			DeployedAt:                    e.DeployedAt.UTC().Format(time.RFC3339),
+			Catalog:                       toYAMLCatalog(e.Catalog),
 		})
 	}
 

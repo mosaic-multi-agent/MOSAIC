@@ -1,0 +1,5 @@
+{"type":"system","subtype":"init","session_id":"abc123"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"first turn"}]},"session_id":"abc123"}
+{"type":"result","subtype":"success","is_error":false,"result":"first turn answer","session_id":"abc123"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"second turn"}]},"session_id":"abc123"}
+{"type":"result","subtype":"success","is_error":false,"result":"{\"agent_instance_id\":\"test-agent#1\",\"status_code\":\"SUCCESS\",\"status_message\":\"last\"}","session_id":"abc123"}

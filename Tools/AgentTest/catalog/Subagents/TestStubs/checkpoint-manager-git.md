@@ -1,6 +1,6 @@
 ---
 id: 16
-version: 1.0.0
+version: 1.1.0
 name: checkpoint-manager-git
 description: Test stub standing in for the checkpoint-manager-git infrastructure agent
 role: subagent
@@ -10,7 +10,7 @@ tier_rationale: Test stub receiving cheap model via shared TEST-STUB tier mappin
 tools: []
 infrastructure: checkpoint
 triggers:
-  - trigger: STAGE_END
+  - trigger: ITERATION_END
     trigger_param: null
   - trigger: INVOCATION_INTERVAL
     trigger_param: 10

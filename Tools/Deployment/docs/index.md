@@ -11,8 +11,9 @@ then use the references below for deeper topics.
 | Document | What it covers |
 |----------|----------------|
 | [README](../README.md) | Installation, the two flows (deploy and update), config file reference, runtime layout, troubleshooting |
-| [Configuration Reference](configuration.md) | Every key in `tool-config.yaml` and `user-config.yaml`; the `tool_destinations` tool-mapping layer; precedence, validation rules, worked examples |
-| [CLI Reference](cli.md) | Every subcommand, flag, exit code, and the selections file format; machine-readable JSON output |
+| [Deployment Guide](../../../docs/DeploymentGuide.md) | Task-oriented guide for project authors, including catalog stacks: layering catalogs, precedence, the conflict report, provenance, persistence and migration from `--catalog-folder` |
+| [Configuration Reference](configuration.md) | Every key in `tool-config.yaml` and `user-config.yaml`; the `tool_destinations` tool-mapping layer; precedence, validation rules, worked examples; where the catalog stack is persisted and the catalog identity file |
+| [CLI Reference](cli.md) | Every subcommand, flag, exit code, and the selections file format; the catalog stack flags, the stack-in-effect and conflict-report output, `promote --target-catalog`, per-catalog `check-index`; machine-readable JSON output |
 
 ---
 
@@ -30,7 +31,7 @@ then use the references below for deeper topics.
 
 | Document | What it covers |
 |----------|----------------|
-| [CatalogFilesFormat.md](../../Catalog/CatalogFilesFormat.md) | Generic agent frontmatter fields, boundary tag conventions (`<Name type="core">`, `<Name type="managed">`, `<Name type="project">`), version bump rules. Read this before editing generic agent files. |
+| [CatalogFilesFormat.md](../../../Catalog/CatalogFilesFormat.md) | Generic agent frontmatter fields, boundary tag conventions (`<Name type="core">`, `<Name type="managed">`, `<Name type="project">`), version bump rules, and the catalog identity file. Read this before editing generic agent files. |
 
 ---
 
@@ -61,6 +62,11 @@ The following table shows where each major concept is documented.
 | Deploy flow | [README — Deploy](../README.md#deploy--create-a-new-workspace) |
 | Update flow and conflict resolution | [README — Update](../README.md#update--bring-a-workspace-up-to-date) |
 | Utility/infrastructure-only deploy | [README — Utility/infrastructure only](../README.md#utilityinfrastructure-only--deploy-a-subset-without-workflows) |
+| Catalog stacks (precedence, default layer, migration) | [Deployment Guide — Catalog Stacks](../../../docs/DeploymentGuide.md#catalog-stacks) |
+| Catalog stack flags and stack-in-effect output | [CLI Reference — Catalog stack flags](cli.md#catalog-stack-flags) |
+| Conflict report | [CLI Reference — Conflict report](cli.md#conflict-report) |
+| Where the stack is persisted; catalog identity file | [Configuration Reference — Catalog stack and catalog identity](configuration.md#catalog-stack-and-catalog-identity) |
+| External-harness boundary for injections | [README — Catalog stacks](../README.md#catalog-stacks) |
 | tool-config.yaml fields | [Configuration Reference — tool-config.yaml](configuration.md#tool-configyaml) |
 | user-config.yaml fields | [Configuration Reference — user-config.yaml](configuration.md#user-configyaml) |
 | Mapping a generic tool to a harness tool | [Configuration Reference — tool_destinations](configuration.md#tool_destinations) |
@@ -97,8 +103,8 @@ The following harnesses are compiled into the `mosaic-deploy` binary:
 |------------|--------------|-------|
 | `claude-code` | Claude Code | Tools emitted as a comma-separated scalar |
 | `opencode` | OpenCode | Permission-shape tool mapping; reference external module available |
-| `ghcp-cli` | GitHub Copilot CLI | List-shape tool mapping |
-| `vscode-ghcp` | VS Code GitHub Copilot | List-shape tool mapping |
+| `ghcp-cli` | GHCP CLI / VS Code GHCP Copilot | List-shape tool mapping |
+| `vscode-ghcp` | VS Code GHCP Local | List-shape tool mapping |
 | `codex` | Codex | Agent files are TOML (not Markdown); skills resolved from shared `.agents/skills` root; tool grants rendered through the harness module (sandbox_mode) rather than the shared mapper |
 
 Third-party harnesses use the descriptor-only or external module tier. See the

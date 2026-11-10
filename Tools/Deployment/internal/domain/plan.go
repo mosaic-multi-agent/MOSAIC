@@ -13,8 +13,8 @@ const (
 	// ModePromoteToGeneric generates a generic agent source file from a harness-only agent.
 	// It is never triggered by an Update run; it is always an explicit, opt-in command.
 	ModePromoteToGeneric RunMode = "promote-to-generic"
-	// ModeTransformHarness converts already-deployed agents from one harness's form to
-	// another's, preserving injection content. Never triggered by an Update run.
+	// ModeTransformHarness moves the whole deployment of a workspace root (agents, skills and
+	// hook bundles) from one harness to another. Never triggered by an Update run.
 	ModeTransformHarness RunMode = "transform-harness"
 
 	// ModeDeployAgents deploys a user-chosen mix of subagents, utility agents, and
@@ -80,6 +80,11 @@ type PlanItem struct {
 	// The executor copies this into ActionRecord.SourceVersion so the version is
 	// visible in the deploy --output json wire contract.
 	SourceVersion string
+
+	// RenamedFrom is the workspace-relative path of the manifest-recorded legacy file this
+	// item replaces (GHCP X.md -> X.agent.md) when the target path is absent and the agent's
+	// deployed state was read from that file. Empty for every other item.
+	RenamedFrom string
 }
 
 // Plan is the complete, pre-computed description of what a deployment run will do.
@@ -93,6 +98,16 @@ type Plan struct {
 	Gaps          []Gap
 	Registrations []RegistrationStep
 	Workflows     []string // selected workflow ids, in selection order
+	// ConflictReport is the catalog-stack conflict report shown on plan review. The app write
+	// paths set it, from the run's report, after the plan is built and before Review; plan
+	// building never fills it. Empty when nothing is shadowed.
+	ConflictReport ConflictReport
+	// Removals are files the run deletes, after backup. Empty in every mode except a
+	// GHCP-pair transform.
+	Removals []Removal
+	// Replacements are existing files the run backs up and overwrites. Empty in every mode
+	// except a GHCP-pair transform.
+	Replacements []Replacement
 }
 
 // Counts returns the number of items for each PlanAction.

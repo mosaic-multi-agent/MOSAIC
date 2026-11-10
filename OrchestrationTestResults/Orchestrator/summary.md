@@ -5,6 +5,8 @@
 
 | Version | Reports |
 |---------|----------|
+| 8.2.2 | 10 |
+| 7.6.0 | 23 |
 | 7.4.1 | 44 |
 
 <!-- /generated:version-overview -->
@@ -14,24 +16,29 @@
 <!-- generated:version-comparison -->
 ## Version Comparison
 
-| Model | Harness | 7.4.1 |
-|-------|--------|--------|
-| claude-fable-5 | claude-code | 39% |
-| claude-haiku-4-5 | claude-code | 52% |
-| claude-opus-4-6 | claude-code | 78% |
-| claude-opus-5 | claude-code | 96% |
-| claude-sonnet-4-6 | claude-code | 86% |
-| claude-sonnet-5 | claude-code | 83% |
-| gpt-5.6-luna | opencode | 32% |
-| gpt-5.6-sol | opencode | 89% |
-| gpt-5.6-terra | opencode | 79% |
+| Model | Harness | 8.2.2 | 7.6.0 | 7.4.1 |
+|-------|--------|--------|--------|--------|
+| claude-fable-5 | claude-code | - | - | 39% |
+| claude-haiku-4-5 | claude-code | - | 51% | 52% |
+| claude-haiku-5-5 | claude-code | 86% | - | - |
+| claude-opus-4-6 | claude-code | - | - | 78% |
+| claude-opus-5 | claude-code | - | 50% | 96% |
+| claude-opus-5-5 | claude-code | - | 92% | - |
+| claude-sonnet-4-6 | claude-code | - | - | 86% |
+| claude-sonnet-5 | claude-code | - | 90% | 83% |
+| claude-sonnet-5-5 | claude-code | 93% | 95% | - |
+| gpt-5.6-luna | opencode | - | - | 32% |
+| gpt-5.6-sol | opencode | - | - | 89% |
+| gpt-5.6-terra | opencode | - | 81% | 79% |
 
 <!-- /generated:version-comparison -->
 
 <!-- generated:regression-flags -->
 ## Regression Flags
 
-No regressions detected.
+| Model | Harness | Old Version | New Version | Old Rate | New Rate | Delta |
+|-------|---------|-------------|-------------|----------|----------|-------|
+| claude-sonnet-5-5 | claude-code | 7.6.0 | 8.2.2 | 95% | 93% | -3% |
 
 <!-- /generated:regression-flags -->
 

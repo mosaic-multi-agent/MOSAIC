@@ -27,26 +27,13 @@ package catalog_test
 //       catalogue root do not appear in the loaded catalog.
 //     - Similarly for workflows.
 //
-//   Skill merge with catalogue-root precedence:
-//     - A skill key unique to the default catalogue survives in the merged result.
-//     - A skill key unique to the catalogue root is added to the merged result.
-//     - On key collision the catalogue root's version wins; the default entry is discarded.
-//     - A key collision produces no Issue of any severity — shadowing is normal operation.
-//     - The merged skills contain no duplicate entries (same key appearing twice).
-//
-//   Hook bundle merge with catalogue-root precedence:
-//     - A bundle id unique to the default catalogue survives.
-//     - A bundle id unique to the catalogue root is added.
-//     - On id collision the catalogue root's version wins.
-//     - A collision produces no Issue.
-//     - Hook integrity checking (hook-hash-mismatch) applies to bundles sourced from the
-//       catalogue root, not just the default catalogue.
-//
 //   Default case equivalence:
 //     - Load with an empty catalogRoot (defaulting to DefaultCatalogRoot(mosaicRoot)) produces
-//       exactly the same skills and hooks as an explicit Load(mosaicRoot, DefaultCatalogRoot(mosaicRoot)).
-//     - Neither call produces duplicate skills or hooks.
-//     - The CatalogRoot() value for the default case equals DefaultCatalogRoot(mosaicRoot).
+//       the same CatalogRoot() value and skill count as an explicit
+//       Load(mosaicRoot, DefaultCatalogRoot(mosaicRoot)).
+//
+//   Skill and hook loading of a custom root (no default-catalogue content) is covered in
+//   load_single_root_test.go.
 //
 //   Sparse catalogue root:
 //     - A catalogue root with no Skills/ directory loads without error and without new Issues.
@@ -517,315 +504,6 @@ func TestLoad_DistinctCatalogRoot_DefaultCatalogWorkflowsAbsent(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Skill merge with catalogue-root precedence
-// ---------------------------------------------------------------------------
-
-// TestLoad_SkillMerge_UniqueDefaultSkillSurvives verifies that a skill key present
-// only in the default catalogue appears in Skills() after the merge. The default
-// catalogue's unique entries must not be dropped.
-func TestLoad_SkillMerge_UniqueDefaultSkillSurvives(t *testing.T) {
-	mosaicRoot := makeTempMosaicRoot(t)
-	catalogRoot := makeDistinctCatalogRoot(t)
-
-	writeSkillToDefaultCatalogue(t, mosaicRoot, "default-only-skill")
-	// No corresponding skill in catalogRoot.
-
-	cat, err := catalog.Load(mosaicRoot, catalogRoot)
-	if err != nil {
-		t.Fatalf("catalog.Load: %v", err)
-	}
-
-	_, found := cat.Skill("default-only-skill")
-	if !found {
-		t.Errorf("Skill(\"default-only-skill\") not found; a skill unique to the default catalogue " +
-			"must survive in the merged result")
-	}
-}
-
-// TestLoad_SkillMerge_UniqueCustomSkillAdded verifies that a skill key present only
-// in the custom catalogue root appears in Skills() after the merge.
-func TestLoad_SkillMerge_UniqueCustomSkillAdded(t *testing.T) {
-	mosaicRoot := makeTempMosaicRoot(t)
-	catalogRoot := makeDistinctCatalogRoot(t)
-
-	writeSkillToCustomCatalogueRoot(t, catalogRoot, "custom-only-skill")
-	// No corresponding skill in default catalogue.
-
-	cat, err := catalog.Load(mosaicRoot, catalogRoot)
-	if err != nil {
-		t.Fatalf("catalog.Load: %v", err)
-	}
-
-	_, found := cat.Skill("custom-only-skill")
-	if !found {
-		t.Errorf("Skill(\"custom-only-skill\") not found; a skill unique to the custom catalogue root " +
-			"must be added to the merged result")
-	}
-}
-
-// TestLoad_SkillMerge_CollisionCustomWins verifies that when the same skill key exists
-// in both the default catalogue and the custom catalogue root, the custom version wins.
-// The returned skill's Name is taken from the custom catalogue root.
-func TestLoad_SkillMerge_CollisionCustomWins(t *testing.T) {
-	mosaicRoot := makeTempMosaicRoot(t)
-	catalogRoot := makeDistinctCatalogRoot(t)
-
-	// Both have "shared-skill", but with different Name values in their SKILL.md.
-	// writeSkillToDefaultCatalogue writes name = "shared-skill".
-	// writeSkillToCustomCatalogueRoot writes name = "shared-skill custom".
-	writeSkillToDefaultCatalogue(t, mosaicRoot, "shared-skill")
-	writeSkillToCustomCatalogueRoot(t, catalogRoot, "shared-skill")
-
-	cat, err := catalog.Load(mosaicRoot, catalogRoot)
-	if err != nil {
-		t.Fatalf("catalog.Load: %v", err)
-	}
-
-	s, found := cat.Skill("shared-skill")
-	if !found {
-		t.Fatal("Skill(\"shared-skill\") not found; the merged skill must exist")
-	}
-	// The custom catalogue root version has Name = "shared-skill custom" (version 2.0.0).
-	if s.Name != "shared-skill custom" {
-		t.Errorf("Skill(\"shared-skill\").Name = %q, want %q (custom catalogue root must win on collision)",
-			s.Name, "shared-skill custom")
-	}
-}
-
-// TestLoad_SkillMerge_CollisionProducesNoIssue verifies that a skill key collision
-// between the default catalogue and the custom catalogue root produces no Issue of any
-// severity. Shadowing is normal, deliberate operation and must be silent.
-func TestLoad_SkillMerge_CollisionProducesNoIssue(t *testing.T) {
-	mosaicRoot := makeTempMosaicRoot(t)
-	catalogRoot := makeDistinctCatalogRoot(t)
-
-	writeSkillToDefaultCatalogue(t, mosaicRoot, "shared-skill")
-	writeSkillToCustomCatalogueRoot(t, catalogRoot, "shared-skill")
-
-	cat, err := catalog.Load(mosaicRoot, catalogRoot)
-	if err != nil {
-		t.Fatalf("catalog.Load: %v", err)
-	}
-
-	for _, iss := range cat.Issues() {
-		if iss.Subject == "shared-skill" {
-			t.Errorf("skill collision produced unexpected Issue for key \"shared-skill\": %+v; "+
-				"shadowing must be silent (no Issue)", iss)
-		}
-	}
-}
-
-// TestLoad_SkillMerge_CollisionNoDuplicateEntries verifies that a skill key collision
-// results in exactly one entry in Skills() for that key — not two. The merge must
-// discard the default entry, keeping only the custom one.
-func TestLoad_SkillMerge_CollisionNoDuplicateEntries(t *testing.T) {
-	mosaicRoot := makeTempMosaicRoot(t)
-	catalogRoot := makeDistinctCatalogRoot(t)
-
-	writeSkillToDefaultCatalogue(t, mosaicRoot, "shared-skill")
-	writeSkillToCustomCatalogueRoot(t, catalogRoot, "shared-skill")
-
-	cat, err := catalog.Load(mosaicRoot, catalogRoot)
-	if err != nil {
-		t.Fatalf("catalog.Load: %v", err)
-	}
-
-	count := 0
-	for _, s := range cat.Skills() {
-		if s.Key == "shared-skill" {
-			count++
-		}
-	}
-	if count != 1 {
-		t.Errorf("Skills() contains %d entries with key \"shared-skill\", want exactly 1; "+
-			"a collision must produce one merged entry, not a duplicate", count)
-	}
-}
-
-// TestLoad_SkillMerge_BothUnique_BothPresent verifies that when each of the default
-// catalogue and the custom catalogue root contains a unique skill, both appear in Skills().
-func TestLoad_SkillMerge_BothUnique_BothPresent(t *testing.T) {
-	mosaicRoot := makeTempMosaicRoot(t)
-	catalogRoot := makeDistinctCatalogRoot(t)
-
-	writeSkillToDefaultCatalogue(t, mosaicRoot, "default-skill")
-	writeSkillToCustomCatalogueRoot(t, catalogRoot, "custom-skill")
-
-	cat, err := catalog.Load(mosaicRoot, catalogRoot)
-	if err != nil {
-		t.Fatalf("catalog.Load: %v", err)
-	}
-
-	if _, ok := cat.Skill("default-skill"); !ok {
-		t.Error("Skill(\"default-skill\") not found; unique default-catalogue skill must survive the merge")
-	}
-	if _, ok := cat.Skill("custom-skill"); !ok {
-		t.Error("Skill(\"custom-skill\") not found; unique custom-catalogue-root skill must be added by the merge")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Hook bundle merge with catalogue-root precedence
-// ---------------------------------------------------------------------------
-
-// TestLoad_HookMerge_UniqueDefaultBundleSurvives verifies that a hook bundle id
-// present only in the default catalogue appears in Hooks() after the merge.
-func TestLoad_HookMerge_UniqueDefaultBundleSurvives(t *testing.T) {
-	mosaicRoot := makeTempMosaicRoot(t)
-	catalogRoot := makeDistinctCatalogRoot(t)
-
-	writeHookBundleToDefaultCatalogue(t, mosaicRoot, "default-only-bundle")
-
-	cat, err := catalog.Load(mosaicRoot, catalogRoot)
-	if err != nil {
-		t.Fatalf("catalog.Load: %v", err)
-	}
-
-	_, found := cat.Hook("default-only-bundle")
-	if !found {
-		t.Errorf("Hook(\"default-only-bundle\") not found; a hook bundle unique to the default catalogue " +
-			"must survive in the merged result")
-	}
-}
-
-// TestLoad_HookMerge_UniqueCustomBundleAdded verifies that a hook bundle id present
-// only in the custom catalogue root appears in Hooks() after the merge.
-func TestLoad_HookMerge_UniqueCustomBundleAdded(t *testing.T) {
-	mosaicRoot := makeTempMosaicRoot(t)
-	catalogRoot := makeDistinctCatalogRoot(t)
-
-	writeHookBundleToCustomCatalogueRoot(t, catalogRoot, "custom-only-bundle")
-
-	cat, err := catalog.Load(mosaicRoot, catalogRoot)
-	if err != nil {
-		t.Fatalf("catalog.Load: %v", err)
-	}
-
-	_, found := cat.Hook("custom-only-bundle")
-	if !found {
-		t.Errorf("Hook(\"custom-only-bundle\") not found; a hook bundle unique to the custom catalogue root " +
-			"must be added to the merged result")
-	}
-}
-
-// TestLoad_HookMerge_CollisionCustomWins verifies that when the same bundle id exists
-// in both roots, the custom catalogue root's version wins. The bundle's Version field
-// must reflect the custom root's bundle.
-func TestLoad_HookMerge_CollisionCustomWins(t *testing.T) {
-	mosaicRoot := makeTempMosaicRoot(t)
-	catalogRoot := makeDistinctCatalogRoot(t)
-
-	// Both have "shared-bundle". The writeHookBundle helpers produce version "1.0.0" in
-	// hook.yaml. We can distinguish them only by which bundle's source directory is used;
-	// the Version field would be the same. We write a custom bundle with a different
-	// hook.yaml version to make the distinction assertable.
-	writeHookBundleToDefaultCatalogue(t, mosaicRoot, "shared-bundle")
-
-	// Write a custom version with version "2.0.0".
-	bundleDir := filepath.Join(catalogRoot, "Hooks", "shared-bundle")
-	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
-		t.Fatalf("setup: MkdirAll: %v", err)
-	}
-	customHookYAML := []byte("schema_version: \"1\"\nid: shared-bundle\nversion: 2.0.0\n" +
-		"description: Custom shared bundle.\nplaceholder: false\n" +
-		"variants:\n  test-harness:\n    supported: true\n    files:\n" +
-		"      - source: test-hook.sh\n        target: test-hook.sh\n    registration: []\n")
-	mustWriteFile(t, bundleDir, "hook.yaml", customHookYAML)
-	variantDir := filepath.Join(bundleDir, "test-harness")
-	if err := os.MkdirAll(variantDir, 0o755); err != nil {
-		t.Fatalf("setup: MkdirAll variant: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(variantDir, "test-hook.sh"), []byte("#!/bin/sh\n# v2\n"), 0o644); err != nil {
-		t.Fatalf("setup: WriteFile: %v", err)
-	}
-
-	cat, err := catalog.Load(mosaicRoot, catalogRoot)
-	if err != nil {
-		t.Fatalf("catalog.Load: %v", err)
-	}
-
-	h, found := cat.Hook("shared-bundle")
-	if !found {
-		t.Fatal("Hook(\"shared-bundle\") not found; the merged bundle must exist")
-	}
-	if h.Version != "2.0.0" {
-		t.Errorf("Hook(\"shared-bundle\").Version = %q, want %q (custom catalogue root must win on collision)",
-			h.Version, "2.0.0")
-	}
-}
-
-// TestLoad_HookMerge_CollisionProducesNoIssue verifies that a hook bundle id collision
-// produces no Issue. Silent shadowing is the contract for both skills and hooks.
-func TestLoad_HookMerge_CollisionProducesNoIssue(t *testing.T) {
-	mosaicRoot := makeTempMosaicRoot(t)
-	catalogRoot := makeDistinctCatalogRoot(t)
-
-	writeHookBundleToDefaultCatalogue(t, mosaicRoot, "shared-bundle")
-	writeHookBundleToCustomCatalogueRoot(t, catalogRoot, "shared-bundle")
-
-	cat, err := catalog.Load(mosaicRoot, catalogRoot)
-	if err != nil {
-		t.Fatalf("catalog.Load: %v", err)
-	}
-
-	for _, iss := range cat.Issues() {
-		if iss.Subject == "shared-bundle" {
-			t.Errorf("hook collision produced unexpected Issue for bundle \"shared-bundle\": %+v; "+
-				"shadowing must be silent (no Issue)", iss)
-		}
-	}
-}
-
-// TestLoad_HookMerge_CollisionNoDuplicateEntries verifies that a bundle id collision
-// results in exactly one entry in Hooks() for that id.
-func TestLoad_HookMerge_CollisionNoDuplicateEntries(t *testing.T) {
-	mosaicRoot := makeTempMosaicRoot(t)
-	catalogRoot := makeDistinctCatalogRoot(t)
-
-	writeHookBundleToDefaultCatalogue(t, mosaicRoot, "shared-bundle")
-	writeHookBundleToCustomCatalogueRoot(t, catalogRoot, "shared-bundle")
-
-	cat, err := catalog.Load(mosaicRoot, catalogRoot)
-	if err != nil {
-		t.Fatalf("catalog.Load: %v", err)
-	}
-
-	count := 0
-	for _, h := range cat.Hooks() {
-		if h.Key == "shared-bundle" {
-			count++
-		}
-	}
-	if count != 1 {
-		t.Errorf("Hooks() contains %d entries with id \"shared-bundle\", want exactly 1; "+
-			"a collision must yield one merged entry, not a duplicate", count)
-	}
-}
-
-// TestLoad_HookMerge_IntegrityCheckAppliesTo_CatalogRootBundle verifies that
-// hook-hash-mismatch integrity checking applies to hook bundles sourced from the
-// custom catalogue root, not just the default catalogue. A tampered bundle in the
-// custom catalogue root must produce a hook-hash-mismatch Issue.
-func TestLoad_HookMerge_IntegrityCheckAppliesTo_CatalogRootBundle(t *testing.T) {
-	mosaicRoot := makeTempMosaicRoot(t)
-	catalogRoot := makeDistinctCatalogRoot(t)
-
-	writeTamperedHookBundleToCustomCatalogueRoot(t, catalogRoot, "tampered-custom-bundle")
-
-	cat, err := catalog.Load(mosaicRoot, catalogRoot)
-	if err != nil {
-		t.Fatalf("catalog.Load: %v", err)
-	}
-
-	_, found := findIssue(cat.Issues(), "hook-hash-mismatch")
-	if !found {
-		t.Errorf("Issues() does not contain a hook-hash-mismatch issue for the tampered " +
-			"bundle sourced from the custom catalogue root; integrity checking must apply to " +
-			"bundles from either root, not just the default catalogue")
-	}
-}
-
-// ---------------------------------------------------------------------------
 // Default case equivalence
 // ---------------------------------------------------------------------------
 
@@ -853,8 +531,8 @@ func TestLoad_DefaultCase_EmptyStringEquivalentToExplicitDefault(t *testing.T) {
 }
 
 // TestLoad_DefaultCase_SkillCountMatches verifies that loading with an empty catalogRoot
-// and with an explicit DefaultCatalogRoot produce the same number of skills. This guards
-// against the identical-roots case accidentally doubling the skill count.
+// and with an explicit DefaultCatalogRoot produce the same number of skills (regression
+// coverage: both forms resolve to the same single root).
 func TestLoad_DefaultCase_SkillCountMatches(t *testing.T) {
 	root := makeTempMosaicRoot(t)
 	writeSkillToDefaultCatalogue(t, root, "alpha-skill")
@@ -873,53 +551,6 @@ func TestLoad_DefaultCase_SkillCountMatches(t *testing.T) {
 		t.Errorf("skill count mismatch:\n  empty-string: %d\n  explicit:     %d\n"+
 			"identical-roots case must not double the skill count",
 			len(catDefault.Skills()), len(catExplicit.Skills()))
-	}
-}
-
-// TestLoad_DefaultCase_NoExtraSkillsFromMerge verifies that in the identical-roots case
-// (catalogRoot defaults to DefaultCatalogRoot(mosaicRoot)), Skills() contains no
-// duplicate key. The merge of a set with itself must produce exactly that set.
-func TestLoad_DefaultCase_NoExtraSkillsFromMerge(t *testing.T) {
-	root := makeTempMosaicRoot(t)
-	writeSkillToDefaultCatalogue(t, root, "my-skill")
-
-	cat, err := catalog.Load(root, "")
-	if err != nil {
-		t.Fatalf("catalog.Load: %v", err)
-	}
-
-	seen := make(map[string]int)
-	for _, s := range cat.Skills() {
-		seen[s.Key]++
-	}
-	for key, count := range seen {
-		if count > 1 {
-			t.Errorf("Skills() contains %d entries for key %q in the default case; "+
-				"identical-roots merge must produce exactly one entry per key", count, key)
-		}
-	}
-}
-
-// TestLoad_DefaultCase_NoExtraHooksFromMerge verifies that in the identical-roots case,
-// Hooks() contains no duplicate id.
-func TestLoad_DefaultCase_NoExtraHooksFromMerge(t *testing.T) {
-	root := makeTempMosaicRoot(t)
-	writeHookBundleToDefaultCatalogue(t, root, "my-bundle")
-
-	cat, err := catalog.Load(root, "")
-	if err != nil {
-		t.Fatalf("catalog.Load: %v", err)
-	}
-
-	seen := make(map[string]int)
-	for _, h := range cat.Hooks() {
-		seen[h.Key]++
-	}
-	for key, count := range seen {
-		if count > 1 {
-			t.Errorf("Hooks() contains %d entries for id %q in the default case; "+
-				"identical-roots merge must produce exactly one entry per id", count, key)
-		}
 	}
 }
 
@@ -1043,7 +674,7 @@ func TestLoad_SparseCatalogRoot_Completely_Empty_Graceful(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestBundle_LoadsFromMosaicRoot_NotCatalogRoot verifies that FileBundleLoader.LoadBundle
-// reads the bundle from the MOSAIC root's BundleSourceRelPath, regardless of what the
+// reads the bundle from the catalog root it is given (here the default catalog under the MOSAIC root), regardless of what the
 // custom catalogue root contains. The bundle path is always relative to the MOSAIC root.
 func TestBundle_LoadsFromMosaicRoot_NotCatalogRoot(t *testing.T) {
 	mosaicRoot := makeTempMosaicRoot(t)
@@ -1064,7 +695,7 @@ func TestBundle_LoadsFromMosaicRoot_NotCatalogRoot(t *testing.T) {
 	}
 
 	// Load the bundle via the MOSAIC root. It must not be affected by the catalogue root.
-	content, err := catalog.FileBundleLoader{}.LoadBundle(mosaicRoot)
+	content, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(mosaicRoot))
 	if err != nil {
 		t.Fatalf("FileBundleLoader.LoadBundle(%q): %v; "+
 			"the real bundle at BundleSourceRelPath must be loadable from the MOSAIC root", mosaicRoot, err)

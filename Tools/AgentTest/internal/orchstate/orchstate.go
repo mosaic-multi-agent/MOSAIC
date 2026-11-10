@@ -42,7 +42,7 @@ const executionLogSection = "ExecutionLog"
 func Parse(data []byte) (domain.OrchestrationState, error) {
 	doc, err := docformat.Parse(data)
 	if err != nil {
-		return domain.OrchestrationState{}, fmt.Errorf("%w: %v", ErrDocumentMalformed, err)
+		return domain.OrchestrationState{}, &MalformedError{Section: "document", Reason: err.Error()}
 	}
 
 	state := domain.OrchestrationState{}
@@ -53,19 +53,30 @@ func Parse(data []byte) (domain.OrchestrationState, error) {
 		state.LastErrorCode = mappingString(cs, "error_code")
 	}
 
-	node, ok := doc.Body().SectionDeep(executionLogSection)
-	if !ok {
-		return domain.OrchestrationState{}, fmt.Errorf("%w: no %s section found", ErrDocumentMalformed, executionLogSection)
+	section := scanExecutionLog(data)
+	if !section.openFound {
+		return domain.OrchestrationState{}, &MalformedError{Section: executionLogSection, Reason: "no " + executionLogSection + " section found"}
+	}
+	if !section.closed {
+		return domain.OrchestrationState{}, &MalformedError{
+			Section: executionLogSection,
+			Reason:  "missing </" + executionLogSection + "> closing tag",
+		}
 	}
 
-	table, err := mdtable.Parse(node.Content())
+	table, err := mdtable.Parse(section.content)
 	if err != nil {
-		return domain.OrchestrationState{}, fmt.Errorf("%w: %v", ErrDocumentMalformed, err)
+		return domain.OrchestrationState{}, &MalformedError{Section: "document", Reason: err.Error()}
 	}
 
 	rows, err := parseExecutionLogRows(table)
 	if err != nil {
-		return domain.OrchestrationState{}, fmt.Errorf("%w: %v", ErrDocumentMalformed, err)
+		me := &MalformedError{Section: executionLogSection, Reason: err.Error()}
+		var re *rowError
+		if errors.As(err, &re) {
+			me.Line = section.rowFileLine(re.row)
+		}
+		return domain.OrchestrationState{}, me
 	}
 
 	state.Present = true
@@ -80,7 +91,12 @@ func ParseFile(path string) (domain.OrchestrationState, error) {
 	if err != nil {
 		return domain.OrchestrationState{}, fmt.Errorf("%w: %v", ErrDocumentAbsent, err)
 	}
-	return Parse(data)
+	state, err := Parse(data)
+	var me *MalformedError
+	if errors.As(err, &me) {
+		me.Path = path
+	}
+	return state, err
 }
 
 // mappingString returns the plain scalar text of key in a KindMapping
@@ -109,7 +125,7 @@ func parseExecutionLogRows(t mdtable.Table) ([]domain.ExecutionLogRow, error) {
 	checkpointCol := t.Column("Checkpoint")
 
 	var rows []domain.ExecutionLogRow
-	for _, r := range t.Rows {
+	for rowIndex, r := range t.Rows {
 		row := domain.ExecutionLogRow{}
 
 		if seqCol >= 0 && seqCol < len(r) {
@@ -117,7 +133,7 @@ func parseExecutionLogRows(t mdtable.Table) ([]domain.ExecutionLogRow, error) {
 			if cell != "" && cell != "-" {
 				seq, err := strconv.Atoi(cell)
 				if err != nil {
-					return nil, fmt.Errorf("invalid Seq value %q: %w", cell, err)
+					return nil, &rowError{row: rowIndex, err: fmt.Errorf("invalid Seq value %q: %w", cell, err)}
 				}
 				row.Seq = seq
 			}
@@ -139,7 +155,7 @@ func parseExecutionLogRows(t mdtable.Table) ([]domain.ExecutionLogRow, error) {
 			if cell != "" && cell != "-" {
 				ts, err := time.Parse(time.RFC3339, cell)
 				if err != nil {
-					return nil, fmt.Errorf("invalid Timestamp value %q: %w", cell, err)
+					return nil, &rowError{row: rowIndex, err: fmt.Errorf("invalid Timestamp value %q: %w", cell, err)}
 				}
 				row.Timestamp = ts
 			}
@@ -158,6 +174,15 @@ func parseExecutionLogRows(t mdtable.Table) ([]domain.ExecutionLogRow, error) {
 	}
 	return rows, nil
 }
+
+// rowError ties a cell error to the data row it came from.
+type rowError struct {
+	row int
+	err error
+}
+
+func (e *rowError) Error() string { return e.err.Error() }
+func (e *rowError) Unwrap() error { return e.err }
 
 // dashToEmpty trims a cell and maps the document's "-" ("no value") marker
 // to the empty string, never carrying it through as literal content.

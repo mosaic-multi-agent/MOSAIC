@@ -19,7 +19,7 @@ package app
 //   - A single-component extension returns itself.
 //   - A two-component extension returns only the final dotted part.
 //
-// agentKeyFromFileName -- Codex and GHCP CLI key derivation:
+// agentkey.FromFileNameExt -- Codex and GHCP CLI key derivation:
 //   - A .toml file's key strips the .toml suffix.
 //   - A .agent.toml file's key strips the full .agent.toml suffix.
 //   - The same logical agent derives the same key under both .md and .toml extensions.
@@ -59,6 +59,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"mosaic-deploy/internal/agentkey"
+
 	_ "mosaic-deploy/internal/agentformat/all"
 	"mosaic-deploy/internal/domain"
 )
@@ -96,7 +98,7 @@ func ghcpCliHarnessDescriptor() *domain.HarnessDescriptor {
 // canonical bytes that pass eligibleHarnessOnly.
 //
 // The file's TOML name field is set to "harness-only-agent" as a placeholder; the agent
-// key is always derived from the file name by agentKeyFromFileName, not from the name field.
+// key is always derived from the file name by agentkey.FromFileNameExt, not from the name field.
 func minimalEligibleTomlAgentBytes() []byte {
 	return []byte(
 		"# mosaic_transform_version: 1.0.0\n" +
@@ -149,15 +151,15 @@ func TestFinalSuffix_TwoComponentExtension_ReturnsFinalPart(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// agentKeyFromFileName -- key derivation for .toml and cross-extension equality
+// agentkey.FromFileNameExt -- key derivation for .toml and cross-extension equality
 // ---------------------------------------------------------------------------
 
 // TestAgentKeyFromFileName_TomlFile_StripsTomlSuffix verifies that a plain .toml file
 // (e.g. "my-agent.toml") has its .toml suffix stripped to yield the agent key "my-agent".
 func TestAgentKeyFromFileName_TomlFile_StripsTomlSuffix(t *testing.T) {
-	got := agentKeyFromFileName("my-agent.toml", ".toml")
+	got := agentkey.FromFileNameExt("my-agent.toml", ".toml")
 	if got != "my-agent" {
-		t.Errorf("agentKeyFromFileName(%q, %q) = %q; want %q",
+		t.Errorf("agentkey.FromFileNameExt(%q, %q) = %q; want %q",
 			"my-agent.toml", ".toml", got, "my-agent")
 	}
 }
@@ -166,9 +168,9 @@ func TestAgentKeyFromFileName_TomlFile_StripsTomlSuffix(t *testing.T) {
 // double-extension form "my-agent.agent.toml" has the entire ".agent.toml" suffix stripped
 // to yield the agent key "my-agent". No suffix fragment must leak into the key.
 func TestAgentKeyFromFileName_AgentTomlFile_StripsFullSuffix(t *testing.T) {
-	got := agentKeyFromFileName("my-agent.agent.toml", ".toml")
+	got := agentkey.FromFileNameExt("my-agent.agent.toml", ".toml")
 	if got != "my-agent" {
-		t.Errorf("agentKeyFromFileName(%q, %q) = %q; want %q; "+
+		t.Errorf("agentkey.FromFileNameExt(%q, %q) = %q; want %q; "+
 			"the full .agent.toml suffix must be stripped, not just the .toml part",
 			"my-agent.agent.toml", ".toml", got, "my-agent")
 	}
@@ -180,12 +182,12 @@ func TestAgentKeyFromFileName_AgentTomlFile_StripsFullSuffix(t *testing.T) {
 // must both yield the key "my-agent". This equality is required so that a generic catalog
 // counterpart check (catalogKeys["my-agent"]) works consistently across harnesses.
 func TestAgentKeyFromFileName_SameLogicalAgent_EqualKeyAcrossMdAndToml(t *testing.T) {
-	mdKey := agentKeyFromFileName("my-agent.md", ".md")
-	tomlKey := agentKeyFromFileName("my-agent.toml", ".toml")
+	mdKey := agentkey.FromFileNameExt("my-agent.md", ".md")
+	tomlKey := agentkey.FromFileNameExt("my-agent.toml", ".toml")
 	if mdKey != tomlKey {
 		t.Errorf("same logical agent derives different keys under different extensions: "+
-			"agentKeyFromFileName(%q, %q) = %q, "+
-			"agentKeyFromFileName(%q, %q) = %q; "+
+			"agentkey.FromFileNameExt(%q, %q) = %q, "+
+			"agentkey.FromFileNameExt(%q, %q) = %q; "+
 			"both must yield the same key",
 			"my-agent.md", ".md", mdKey,
 			"my-agent.toml", ".toml", tomlKey)
@@ -198,15 +200,15 @@ func TestAgentKeyFromFileName_SameLogicalAgent_EqualKeyAcrossMdAndToml(t *testin
 // TestAgentKeyFromFileName_GhcpCli_PlainMdSameKeyAsAgentMd verifies that GHCP CLI's plain
 // "foo.md" form and its "foo.agent.md" form both derive the same agent key "foo". The
 // finalSuffix of ".agent.md" is ".md", so both files pass isAgentFile and both strip the
-// correct suffix in agentKeyFromFileName. This test locks the property that switching from
+// correct suffix in agentkey.FromFileNameExt. This test locks the property that switching from
 // one form to the other does not change the derived key.
 func TestAgentKeyFromFileName_GhcpCli_PlainMdSameKeyAsAgentMd(t *testing.T) {
-	plainKey := agentKeyFromFileName("foo.md", ".agent.md")
-	agentKey := agentKeyFromFileName("foo.agent.md", ".agent.md")
+	plainKey := agentkey.FromFileNameExt("foo.md", ".agent.md")
+	agentKey := agentkey.FromFileNameExt("foo.agent.md", ".agent.md")
 	if plainKey != agentKey {
 		t.Errorf("GHCP CLI key derivation differs between plain and double-extension forms: "+
-			"agentKeyFromFileName(%q, %q) = %q, "+
-			"agentKeyFromFileName(%q, %q) = %q; both must yield the same key",
+			"agentkey.FromFileNameExt(%q, %q) = %q, "+
+			"agentkey.FromFileNameExt(%q, %q) = %q; both must yield the same key",
 			"foo.md", ".agent.md", plainKey,
 			"foo.agent.md", ".agent.md", agentKey)
 	}

@@ -1,0 +1,15 @@
+{
+  "description": "VS Code: a gen_ai.output.messages value that cannot be read (cut-off JSON, or JSON that is not an array of messages) leaves requested_tools out of the record and never drops the usage record. The span after them is unaffected. Content marked CONTENT-SENTINEL never reaches a record.",
+  "run_id": "20261028T000000Z-0000",
+  "steps": [
+    {
+      "name": "ingest",
+      "otel": "otel/ingest.jsonl",
+      "logs": null,
+      "final": false,
+      "whole_file": false,
+      "start_offset": null,
+      "scope": []
+    }
+  ]
+}

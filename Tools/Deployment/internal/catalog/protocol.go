@@ -8,14 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"mosaic-common/docformat"
+	"mosaic-deploy/internal/catalog/catalogpaths"
 	"mosaic-deploy/internal/domain"
 )
 
-// ProtocolSourceRelPath is the protocol document's path relative to the MOSAIC root.
-const ProtocolSourceRelPath = "Development/Designs/CommunicationProtocol.md"
+// ProtocolSourceRelPath names the protocol document in loader errors. The file itself is read
+// from the catalog root the caller passes (the root of the layer the stack resolved).
+const ProtocolSourceRelPath = catalogpaths.MosaicRelProtocolFile
 
 // Boundary names of the two deployable blocks in the protocol source document.
 const (
@@ -52,7 +53,7 @@ var (
 // ProtocolLoader reads the canonical protocol source document and returns its deployable payload.
 // Implementations are expected to be stateless; the app layer calls LoadProtocol once per run.
 type ProtocolLoader interface {
-	// LoadProtocol reads <mosaicRoot>/Development/Designs/CommunicationProtocol.md, extracts
+	// LoadProtocol reads <catalogRoot>/CommunicationProtocol.md, extracts
 	// the two role blocks and the frontmatter version, and returns them as a ProtocolContent.
 	//
 	// The returned block payload is each boundary's inner content only, with the block's own
@@ -64,7 +65,7 @@ type ProtocolLoader interface {
 	//   ErrProtocolBlockMissing       — a required role block is absent
 	//   ErrProtocolBlockEmpty         — a required role block has whitespace-only content
 	//   ErrProtocolVersionMissing     — frontmatter carries no scalar `version`
-	LoadProtocol(mosaicRoot string) (domain.ProtocolContent, error)
+	LoadProtocol(catalogRoot string) (domain.ProtocolContent, error)
 }
 
 // FileProtocolLoader is the filesystem-backed implementation of ProtocolLoader.
@@ -73,9 +74,9 @@ type FileProtocolLoader struct{}
 
 // LoadProtocol reads the protocol source document and returns the two role blocks plus
 // the source version.
-func (FileProtocolLoader) LoadProtocol(mosaicRoot string) (domain.ProtocolContent, error) {
+func (FileProtocolLoader) LoadProtocol(catalogRoot string) (domain.ProtocolContent, error) {
 	relPath := ProtocolSourceRelPath
-	absPath := filepath.Join(mosaicRoot, relPath)
+	absPath := catalogpaths.ProtocolFile(catalogRoot)
 
 	data, err := os.ReadFile(absPath)
 	if err != nil {

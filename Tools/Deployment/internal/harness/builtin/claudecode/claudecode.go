@@ -30,9 +30,9 @@ import (
 	_ "embed"
 	"fmt"
 	"path"
-	"path/filepath"
 	"strings"
 
+	"mosaic-deploy/internal/catalog/catalogpaths"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
 	"mosaic-deploy/internal/harness/injectionfile"
@@ -52,8 +52,8 @@ func init() {
 type module struct {
 	ref             domain.HarnessRef
 	desc            *domain.HarnessDescriptor
-	injections      map[string]string // parsed from HarnessInjections.md at construction time
-	orchInjections  map[string]string // parsed from HarnessInjectionsOrchestrator.md at construction time
+	injections     map[string]string // parsed from HarnessInjections.md at construction time
+	orchInjections map[string]string // parsed from HarnessInjectionsOrchestrator.md at construction time
 }
 
 // New parses the embedded claude-code.yaml descriptor and reads HarnessInjections.md and
@@ -65,11 +65,15 @@ func New(opts registry.BuiltinOptions) (domain.HarnessModule, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse embedded claude-code descriptor: %w", err)
 	}
-	contentDir := filepath.Join(opts.MosaicRoot, RepoContentDir)
+	contentDir, err := opts.ResolveContentDir(catalogpaths.HarnessDirNameClaudeCode)
+	if err != nil {
+		return nil, fmt.Errorf("claudecode: %w", err)
+	}
 	content, err := injectionfile.LoadDir(contentDir)
 	if err != nil {
 		return nil, fmt.Errorf("claude-code: load harness content: %w", err)
 	}
+	desc.InjectionsVersion = content.SharedVersion
 	desc.OrchestratorInjectionsVersion = content.OrchestratorVersion
 	ref := domain.HarnessRef{
 		ID:          desc.ID,
@@ -211,37 +215,12 @@ func (m *module) skillTargetPath(req domain.TargetPathRequest) (string, error) {
 	return path.Join(sp.Project, req.Key, filename), nil
 }
 
-// Injection returns the harness-level content for a canonical injection name.
-//
-// For the "orchestrator" agent key, shared content (from HarnessInjections.md) is merged
-// with orchestrator-only content (from HarnessInjectionsOrchestrator.md):
-//   - Both non-empty: returns sharedContent + "\n\n" + orchContent, ok=true
-//   - Only shared non-empty: returns sharedContent, ok=true
-//   - Only orchestrator-only non-empty: returns orchContent, ok=true
-//   - Both declared-but-empty: returns "", ok=true
-//   - Neither declared: returns "", ok=false
-//
-// For all other agent keys, only shared content is returned (existing behavior).
+// Injection returns the content this harness serves for one region and role. Each region
+// name is served from one source file only: the orchestrator region from
+// HarnessInjectionsOrchestrator.md (orchestrator role only), every other region from
+// HarnessInjections.md.
 func (m *module) Injection(req domain.InjectionRequest) (string, bool) {
-	sharedContent, sharedOk := m.injections[req.Name]
-	if req.Role != domain.RoleOrchestrator {
-		return sharedContent, sharedOk
-	}
-	orchContent, orchOk := m.orchInjections[req.Name]
-	if !sharedOk && !orchOk {
-		return "", false
-	}
-	if sharedContent != "" && orchContent != "" {
-		return sharedContent + "\n\n" + orchContent, true
-	}
-	if sharedContent != "" {
-		return sharedContent, true
-	}
-	if orchContent != "" {
-		return orchContent, true
-	}
-	// Both declared but empty.
-	return "", true
+	return injectionfile.HarnessContent{Shared: m.injections, Orchestrator: m.orchInjections}.Injection(req)
 }
 
 // HookPlan resolves a hook bundle for Claude Code. Claude Code supports hooks; the plan

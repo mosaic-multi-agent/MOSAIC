@@ -79,6 +79,9 @@ func Apply(req Request) (Result, error) {
 		return Result{}, err
 	}
 
+	// The source BOM is a file-format detail, not content: deployed output never carries one.
+	doc.StripBOM()
+
 	// Serialise the transformed document to bytes.
 	//
 	// For agent artifacts, delegate to the translator named by the descriptor's agent
@@ -176,6 +179,7 @@ func Apply(req Request) (Result, error) {
 		Gaps:                 allGaps,
 		Workflows:            workflowIDs,
 		InfrastructureAgents: infraAgentKeys,
+		InfrastructureMerge:  infrastructureMergeReport(req, regionOutcomes),
 		OutputBytes:          len(output),
 		OwnedKeyDifferences:  ownedKeyDiffs,
 	}

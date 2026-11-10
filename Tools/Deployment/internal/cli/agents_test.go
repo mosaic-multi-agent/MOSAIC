@@ -469,7 +469,7 @@ func TestAgentsCmd_ServiceSuccess_ReturnsExitSuccess(t *testing.T) {
 func TestAgentsCmd_ServiceError_ReturnsExitFailure(t *testing.T) {
 	workspace := t.TempDir()
 	svc := &spyService{
-		deployAgentsErr: app.ErrRetargetMissingAgentKey,
+		deployAgentsErr: app.ErrTransformSameHarness,
 	}
 
 	code := cli.Run(context.Background(),

@@ -78,12 +78,15 @@ func NewHarnessScreen(harnesses []domain.HarnessRef, width, height int, styles S
 // provision tier and flagging unusable harnesses.
 func makeHarnessItems(harnesses []domain.HarnessRef, styles Styles) []widgets.ListItem {
 	items := make([]widgets.ListItem, len(harnesses))
+	labelWidth := 0
+	for _, h := range harnesses {
+		if n := lipgloss.Width(harnessLabel(h)); n > labelWidth {
+			labelWidth = n
+		}
+	}
 	for i, h := range harnesses {
 		tier := tierLabel(h.Tier)
-		label := h.DisplayName
-		if label == "" {
-			label = h.ID
-		}
+		label := harnessLabel(h)
 
 		var detail strings.Builder
 		fmt.Fprintf(&detail, "ID: %s\n", h.ID)
@@ -103,9 +106,10 @@ func makeHarnessItems(harnesses []domain.HarnessRef, styles Styles) []widgets.Li
 		// The label shown in the list includes the tier badge and an external-module indicator.
 		// The indicator is only shown when the module is opted-in and usable; an external
 		// harness that failed to load or is not opted-in is not active.
-		displayLabel := fmt.Sprintf("%-30s  %s", label, tier)
+		padded := label + strings.Repeat(" ", labelWidth-lipgloss.Width(label))
+		displayLabel := fmt.Sprintf("%s  %s", padded, tier)
 		if h.Tier == domain.TierExternal && h.Usable {
-			displayLabel = fmt.Sprintf("%-30s  %s  [active external module]", label, tier)
+			displayLabel = fmt.Sprintf("%s  %s  [active external module]", padded, tier)
 		}
 
 		items[i] = widgets.ListItem{
@@ -118,6 +122,14 @@ func makeHarnessItems(harnesses []domain.HarnessRef, styles Styles) []widgets.Li
 		}
 	}
 	return items
+}
+
+// harnessLabel is the name shown for a harness: its display name, or its ID when unnamed.
+func harnessLabel(h domain.HarnessRef) string {
+	if h.DisplayName == "" {
+		return h.ID
+	}
+	return h.DisplayName
 }
 
 // tierLabel returns a short display string for the provision tier.

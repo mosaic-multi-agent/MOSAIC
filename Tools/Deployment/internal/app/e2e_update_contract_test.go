@@ -227,7 +227,7 @@ func TestE2E_UpdateContract_UpdateMode_DeployedRegionIsRegeneratedOnUpdate(t *te
 	secondOutput := applyUpdateContract(t, deployed)
 
 	if bytes.Contains(secondOutput, []byte(tampered)) {
-		t.Errorf("update mode: tampered <HarnessConstraints type=\"managed\"> content survived update;\n"+
+		t.Errorf("update mode: tampered <HarnessConstraints type=\"managed\"> content survived update;\n" +
 			"tool-managed regions must be replaced on every deploy, not preserved from the deployed file")
 	}
 	wantContent := []byte("Harness constraint: do not make assumptions.")

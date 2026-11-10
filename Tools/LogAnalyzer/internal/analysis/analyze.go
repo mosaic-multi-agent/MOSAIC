@@ -32,17 +32,25 @@ func Aggregate(in Input) (domain.Aggregate, []domain.Finding) {
 // Price converts an aggregate into a priced report using the supplied table.
 // Separate from Aggregate so a report can be re-priced from cached totals after
 // the user supplies missing prices, without re-reading any logs.
-func Price(agg domain.Aggregate, table domain.PricingTable, src domain.Source) (domain.Report, []domain.Finding) {
+func Price(agg domain.Aggregate, table domain.PricingTable, settings domain.AnalysisSettings, src domain.Source) (domain.Report, []domain.Finding) {
 	runReports := make([]domain.RunReport, 0, len(agg.Runs))
 	allRunMoneys := make([]domain.CategoryMoney, 0, len(agg.Runs))
 	var allRunTokens domain.TokenUsage
-	allUnpricedModels := make(map[domain.ModelID]bool)
+	var allRunsAssumed int64
+	var allRunsTiers [][]domain.CacheWriteTier
+	allUnpricedModels := make(map[domain.PricingKey]bool)
+	var findings []domain.Finding
 
 	for _, run := range agg.Runs {
-		rr := priceRunAggregate(run, table)
+		rr := priceRunAggregate(run, table, settings)
+		findings = append(findings, compactionFindings(run.Run, rr.Context, run.Activity.Compactions)...)
+		// Compaction matching settles the marks in place; the actor figures read them after.
+		rr.ActorSessions = buildActorSessions(run, rr)
 		runReports = append(runReports, rr)
 		allRunMoneys = append(allRunMoneys, rr.Totals.Money)
 		allRunTokens = allRunTokens.Add(run.Totals())
+		allRunsAssumed += rr.Totals.AssumedTierCacheWrite
+		allRunsTiers = append(allRunsTiers, rr.Totals.AssumedTiers)
 		for _, m := range rr.UnpricedModels {
 			allUnpricedModels[m] = true
 		}
@@ -56,34 +64,40 @@ func Price(agg domain.Aggregate, table domain.PricingTable, src domain.Source) (
 	allRuns := domain.Totals{
 		Tokens: allRunTokens,
 		Money:  allRunsMoney,
+
+		AssumedTierCacheWrite: allRunsAssumed,
+		AssumedTiers:          domain.MergeCacheWriteTiers(allRunsTiers...),
 	}
 
 	var unattribReport *domain.RunReport
 	if agg.Unattributable != nil {
-		rr := priceRunAggregate(*agg.Unattributable, table)
+		rr := priceRunAggregate(*agg.Unattributable, table, settings)
 		unattribReport = &rr
 		for _, m := range rr.UnpricedModels {
 			allUnpricedModels[m] = true
 		}
 	}
 
+	unpriced := domain.SortedPricingKeys(allUnpricedModels)
 	return domain.Report{
-		Source:         src,
-		AllRuns:        allRuns,
-		Runs:           runReports,
-		Unattributable: unattribReport,
-		UnpricedModels: sortedModelIDSet(allUnpricedModels),
-		Quality:        domain.NewQualitySummary(nil),
-		Currency:       domain.Currency,
-	}, nil
+		Source:          src,
+		AllRuns:         allRuns,
+		Runs:            runReports,
+		Unattributable:  unattribReport,
+		UnpricedModels:  unpriced,
+		UnpricedReasons: unpricedReasons(unpriced, table),
+		AcrossRuns:      buildAcrossRuns(runReports),
+		Quality:         domain.NewQualitySummary(nil),
+		Currency:        table.Currency(),
+	}, findings
 }
 
 // Analyze is the composed entry point: Aggregate then Price, with findings from
 // both phases plus any carried-in findings merged into the report's
 // QualitySummary. Identical inputs always produce an identical report.
-func Analyze(in Input, table domain.PricingTable, src domain.Source, carried []domain.Finding) domain.Report {
+func Analyze(in Input, table domain.PricingTable, settings domain.AnalysisSettings, src domain.Source, carried []domain.Finding) domain.Report {
 	agg, aggFindings := Aggregate(in)
-	report, priceFindings := Price(agg, table, src)
+	report, priceFindings := Price(agg, table, settings, src)
 
 	allFindings := make([]domain.Finding, 0, len(carried)+len(aggFindings)+len(priceFindings))
 	allFindings = append(allFindings, carried...)
@@ -95,44 +109,66 @@ func Analyze(in Input, table domain.PricingTable, src domain.Source, carried []d
 }
 
 // priceActorAggregate converts one actor's aggregate into a priced ActorReport.
-func priceActorAggregate(actor domain.ActorAggregate, table domain.PricingTable) domain.ActorReport {
-	costs := make([]cost.InvocationCost, len(actor.Invocations))
-	for i, inv := range actor.Invocations {
-		costs[i] = cost.PriceInvocation(inv, table)
+func priceActorAggregate(actor domain.ActorAggregate, table domain.PricingTable, settings domain.AnalysisSettings) domain.ActorReport {
+	// Entries without any token count are missing-usage markers, not requests.
+	usages := withTokens(actor.Invocations)
+	costs := make([]cost.InvocationCost, len(usages))
+	for i, inv := range usages {
+		costs[i] = priceUsage(inv, table, settings)
 	}
 
 	money := cost.SumCosts(costs...)
 	tokens := actor.Totals()
 
+	var assumed int64
 	seenModels := make(map[domain.ModelID]bool)
-	seenUnpriced := make(map[domain.ModelID]bool)
+	seenKeys := make(map[domain.PricingKey]bool)
+	seenUnpriced := make(map[domain.PricingKey]bool)
+	var withoutModel int
 	for _, c := range costs {
-		if !c.Model.IsEmpty() {
+		assumed += c.AssumedTierCacheWrite
+		if c.Model.IsEmpty() {
+			withoutModel++
+		} else {
+			key := domain.PricingKey{Provider: c.Provider, Model: c.Model}
 			seenModels[c.Model] = true
+			seenKeys[key] = true
 			if !c.Priced {
-				seenUnpriced[c.Model] = true
+				seenUnpriced[key] = true
 			}
 		}
 	}
 
 	return domain.ActorReport{
-		Actor:          actor.Actor,
-		Models:         sortedModelIDSet(seenModels),
-		UnpricedModels: sortedModelIDSet(seenUnpriced),
+		Actor:                actor.Actor,
+		Models:               sortedModelIDSet(seenModels),
+		Keys:                 domain.SortedPricingKeys(seenKeys),
+		UnpricedModels:       domain.SortedPricingKeys(seenUnpriced),
+		RequestsWithoutModel: withoutModel,
 		Totals: domain.Totals{
 			Tokens: tokens,
 			Money:  money,
+
+			AssumedTierCacheWrite: assumed,
+			AssumedTiers:          assumedTiersOf(costs),
 		},
+		Effort: domain.CountEffort(usages...),
 	}
 }
 
 // priceRunAggregate converts one RunAggregate into a priced RunReport.
-func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable) domain.RunReport {
-	orchReport := priceActorAggregate(run.Orchestrator, table)
+func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable, settings domain.AnalysisSettings) domain.RunReport {
+	orchReport := priceActorAggregate(run.Orchestrator, table, settings)
 
 	agentReports := make([]domain.ActorReport, len(run.Agents))
 	for i, agent := range run.Agents {
-		agentReports[i] = priceActorAggregate(agent, table)
+		agentReports[i] = priceActorAggregate(agent, table, settings)
+	}
+
+	var unattrReport *domain.ActorReport
+	if run.Unattributed != nil {
+		r := priceActorAggregate(*run.Unattributed, table, settings)
+		unattrReport = &r
 	}
 
 	// Collect all per-actor CategoryMoneys to compute the run-level sum.
@@ -142,10 +178,21 @@ func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable) domai
 		allMoneys = append(allMoneys, ar.Totals.Money)
 	}
 
+	runAssumed := orchReport.Totals.AssumedTierCacheWrite
+	runTiers := [][]domain.CacheWriteTier{orchReport.Totals.AssumedTiers}
+	if unattrReport != nil {
+		allMoneys = append(allMoneys, unattrReport.Totals.Money)
+		runAssumed += unattrReport.Totals.AssumedTierCacheWrite
+		runTiers = append(runTiers, unattrReport.Totals.AssumedTiers)
+	}
 	runMoney := sumCategoryMoneys(allMoneys...)
+	for _, ar := range agentReports {
+		runAssumed += ar.Totals.AssumedTierCacheWrite
+		runTiers = append(runTiers, ar.Totals.AssumedTiers)
+	}
 
 	// Collect run-level unpriced models from all actors.
-	seenUnpriced := make(map[domain.ModelID]bool)
+	seenUnpriced := make(map[domain.PricingKey]bool)
 	for _, m := range orchReport.UnpricedModels {
 		seenUnpriced[m] = true
 	}
@@ -155,17 +202,48 @@ func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable) domai
 		}
 	}
 
-	return domain.RunReport{
+	if unattrReport != nil {
+		for _, m := range unattrReport.UnpricedModels {
+			seenUnpriced[m] = true
+		}
+	}
+
+	rr := domain.RunReport{
 		Run:         run.Run,
 		Provisional: run.Provisional,
 		Totals: domain.Totals{
 			Tokens: run.Totals(),
 			Money:  runMoney,
+
+			AssumedTierCacheWrite: runAssumed,
+			AssumedTiers:          domain.MergeCacheWriteTiers(runTiers...),
 		},
 		Orchestrator:   orchReport,
 		Agents:         agentReports,
-		UnpricedModels: sortedModelIDSet(seenUnpriced),
+		UnpricedModels: domain.SortedPricingKeys(seenUnpriced),
+		Unattributed:   unattrReport,
 	}
+
+	rr.Context = buildRunContext(run, table, settings)
+	dispatches := buildDispatches(run.Activity.Invocations, table, settings)
+	for i := range dispatches {
+		if ctx, ok := rr.Context.Find(dispatches[i].Invocation.Actor.Instance); ok {
+			dispatches[i].PeakContext = ctx.Peak
+		}
+	}
+	markRework(dispatches)
+	attachDispatchCache(dispatches, table, settings)
+	groups := groupByType(dispatches)
+	rr.Overview = buildOverview(run, rr, dispatches, table, settings)
+	rr.ByAgentType = buildAgentTypeGroups(groups, table, settings)
+	rr.Rework = buildReworkFigures(dispatches)
+	rr.Cache = buildRunCache(run, rr.Totals, table, settings)
+	rr.OrchestratorCache = buildOrchestratorCache(run, orchReport.Totals, table, settings)
+	rr.ByStatus = buildStatusBreakdown(dispatches, groups)
+	rr.Tools = buildToolsBreakdown(run, groups, rr.Context)
+	rr.Timeline = buildTimeline(run)
+	rr.WallTime = buildWallTime(run, settings, rr.Timeline.Axis, rr.Timeline.HasAxis)
+	return rr
 }
 
 // sumCategoryMoneys folds a slice of CategoryMoney into one, summing per-category

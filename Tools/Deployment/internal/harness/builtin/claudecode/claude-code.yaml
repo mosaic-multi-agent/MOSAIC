@@ -2,7 +2,6 @@ schema_version: "1"
 id: "claude-code"
 display_name: "Claude Code"
 transform_version: "3.0.1"
-injections_version: "1.1.0"
 
 tools:
   shape: list
@@ -127,6 +126,9 @@ frontmatter:
     - "recommended_tier"
     - "tier_rationale"
     - "required_skills"
+    - "infrastructure"
+    - "triggers"
+    - "on_failure"
   key_order:
     - "mosaic_id"
     - "version"

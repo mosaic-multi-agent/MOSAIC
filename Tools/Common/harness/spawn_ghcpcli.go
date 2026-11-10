@@ -12,6 +12,7 @@ package harness
 import (
 	"context"
 	"errors"
+	"fmt"
 )
 
 // ErrGHCPCLIUnsupportedOutputFormat reports a SpawnRequest asking for an
@@ -30,13 +31,15 @@ var ErrGHCPCLIEmptyPrompt = errors.New("harness: ghcp-cli requires a non-empty p
 var ErrGHCPCLIModeUnresolved = errors.New("harness: GHCP CLI permission mode not resolved")
 
 // ErrGHCPCLIAllowlistEmpty is returned by BuildGHCPCLIArgs when
-// GHCPCLIMode is GHCPCLIModePartialAllowlist but DerivedTools is nil or
-// empty. Partial Allowlist mode requires at least one --allow-tool entry;
-// without it, the spawned process would have no tool permissions at all.
-var ErrGHCPCLIAllowlistEmpty = errors.New("harness: GHCP CLI partial allowlist mode requires non-empty DerivedTools")
+// GHCPCLIMode is GHCPCLIModePartialAllowlist, DerivedTools is nil or
+// empty, and ToolsDerived is false. This guard protects against callers
+// that did not perform tool derivation. When ToolsDerived is true, an
+// empty DerivedTools slice is valid (all tools are ungated).
+var ErrGHCPCLIAllowlistEmpty = errors.New("harness: GHCP CLI partial allowlist mode requires non-empty DerivedTools or ToolsDerived flag")
 
-// BuildGHCPCLIArgs constructs the CLI arguments for one request against the
-// `copilot -p ... --output-format json` single-shot non-interactive contract.
+// BuildGHCPCLIArgs constructs the CLI arguments and the stdin content for one
+// request against the `copilot --output-format json` single-shot
+// non-interactive contract (prompt on stdin, no -p).
 // Pure: no file, process, clock or environment access on any path.
 //
 // Permission mode is selected via req.GHCPCLIMode, which must be set to a
@@ -45,9 +48,15 @@ var ErrGHCPCLIAllowlistEmpty = errors.New("harness: GHCP CLI partial allowlist m
 //   - GHCPCLIModeBlanket: emits --yolo and --no-ask-user, granting blanket
 //     permission (equivalent to --allow-all-tools --allow-all-paths
 //     --allow-all-urls). req.DerivedTools is ignored.
-//   - GHCPCLIModePartialAllowlist: omits --yolo; emits one --allow-tool entry
-//     per element of req.DerivedTools, then --no-ask-user. req.DerivedTools
-//     must be non-empty or ErrGHCPCLIAllowlistEmpty is returned.
+//   - GHCPCLIModePartialAllowlist:
+//     When req.ToolsDerived is true and req.DerivedTools is empty: emits
+//     --no-ask-user with zero --allow-tool entries and no --yolo. This is
+//     the valid "all ungated tools" case.
+//     When req.ToolsDerived is false and req.DerivedTools is empty: returns
+//     ErrGHCPCLIAllowlistEmpty (backward-compatible guard for callers that
+//     did not perform derivation).
+//     When req.DerivedTools is non-empty: emits --allow-tool entries as
+//     before, regardless of ToolsDerived value.
 //   - GHCPCLIModeUnresolved (zero value): returns ErrGHCPCLIModeUnresolved
 //     before any args are built.
 //
@@ -80,28 +89,39 @@ var ErrGHCPCLIAllowlistEmpty = errors.New("harness: GHCP CLI partial allowlist m
 // invocation creates a fresh session; this is a structural guarantee, not a
 // conditional one.
 //
+// Prompt delivery: the CLI documents no flag that reads the prompt from a
+// file or stdin, only -p <text>. A -p value travels in argv, and on Windows
+// the npm copilot.cmd shim forwards it through cmd.exe (%*), which mangles
+// quotes, %VAR%, ^, &, |, <, > and caps the line at 8191 characters. The
+// verified mechanism (Copilot CLI 1.0.91, direct binary and through
+// cmd /c copilot.cmd, 38 KB payload included) is to omit -p entirely and pipe
+// the prompt on stdin: the CLI then receives it byte-for-byte. The returned
+// stdin is req.Prompt and the caller must pass it as RunOptions.Stdin.
+// A -p flag must never be emitted: a non-empty value takes precedence and
+// silently drops stdin, and a bare -p is a parse error. The values of
+// --allow-tool and req.ExtraArgs still travel in argv (and through cmd.exe);
+// they are outside the prompt-content guarantee.
+//
 // Argument ordering: --output-format json, permission flags (--yolo
 // --no-ask-user for Blanket; --allow-tool entries then --no-ask-user for
 // Partial Allowlist), then --agent and --model when their values are
-// non-empty, then req.ExtraArgs in caller order, then -p PROMPT last.
-// Keeping -p and its value last ensures a caller-supplied extra argument
-// can never be swallowed as part of the prompt.
-func BuildGHCPCLIArgs(req SpawnRequest) ([]string, error) {
+// non-empty, then req.ExtraArgs in caller order.
+func BuildGHCPCLIArgs(req SpawnRequest) (args []string, stdin []byte, err error) {
 	// Validation order: output-format check first, then mode check, then
 	// empty-prompt check. When output-format is invalid, that sentinel is
 	// returned regardless of mode. When mode is unresolved and prompt is
 	// also empty, the mode sentinel is returned.
 	if req.OutputFormat != "" && req.OutputFormat != "json" {
-		return nil, ErrGHCPCLIUnsupportedOutputFormat
+		return nil, nil, ErrGHCPCLIUnsupportedOutputFormat
 	}
 	if req.GHCPCLIMode == GHCPCLIModeUnresolved {
-		return nil, ErrGHCPCLIModeUnresolved
+		return nil, nil, ErrGHCPCLIModeUnresolved
 	}
 	if req.Prompt == "" {
-		return nil, ErrGHCPCLIEmptyPrompt
+		return nil, nil, ErrGHCPCLIEmptyPrompt
 	}
 
-	args := []string{
+	args = []string{
 		"--output-format", "json",
 	}
 
@@ -112,11 +132,12 @@ func BuildGHCPCLIArgs(req SpawnRequest) ([]string, error) {
 		args = append(args, "--yolo", "--no-ask-user")
 	case GHCPCLIModePartialAllowlist:
 		// Partial Allowlist mode: emit one --allow-tool entry per
-		// DerivedTools element, then --no-ask-user. An empty DerivedTools
-		// slice would leave the spawned process with no tool permissions at
-		// all, which is a configuration error.
-		if len(req.DerivedTools) == 0 {
-			return nil, ErrGHCPCLIAllowlistEmpty
+		// DerivedTools element, then --no-ask-user. When ToolsDerived is
+		// false and DerivedTools is empty, return an error (caller did not
+		// perform derivation). When ToolsDerived is true and DerivedTools is
+		// empty, the agent has only ungated tools -- succeed with no entries.
+		if len(req.DerivedTools) == 0 && !req.ToolsDerived {
+			return nil, nil, ErrGHCPCLIAllowlistEmpty
 		}
 		for _, tool := range req.DerivedTools {
 			args = append(args, "--allow-tool", tool)
@@ -134,20 +155,17 @@ func BuildGHCPCLIArgs(req SpawnRequest) ([]string, error) {
 		args = append(args, "--model", req.Model)
 	}
 
-	// ExtraArgs are appended in caller order, after the permission flags and
-	// before -p, so a caller-supplied argument can never be swallowed into
-	// the prompt. A fresh copy is made to ensure the returned slice does not
-	// alias req.ExtraArgs.
+	// ExtraArgs are appended in caller order, last, after the permission,
+	// --agent and --model flags. A fresh copy is made to ensure the returned
+	// slice does not alias req.ExtraArgs.
 	if len(req.ExtraArgs) > 0 {
 		extra := make([]string, len(req.ExtraArgs))
 		copy(extra, req.ExtraArgs)
 		args = append(args, extra...)
 	}
 
-	// -p and the prompt value are always the final two elements.
-	args = append(args, "-p", req.Prompt)
-
-	return args, nil
+	// No -p is emitted: the prompt travels on stdin (see the doc comment).
+	return args, []byte(req.Prompt), nil
 }
 
 // NewGHCPCLI constructs a Spawner bound to the given executable path,
@@ -196,7 +214,7 @@ func (s *ghcpCLISpawner) Spawn(ctx context.Context, req SpawnRequest) (Response,
 		return Response{}, err
 	}
 
-	args, err := BuildGHCPCLIArgs(req)
+	args, stdin, err := BuildGHCPCLIArgs(req)
 	if err != nil {
 		return Response{}, err
 	}
@@ -212,8 +230,11 @@ func (s *ghcpCLISpawner) Spawn(ctx context.Context, req SpawnRequest) (Response,
 	resp, err := Run(ctx, cmd, args, RunOptions{
 		WorkingDir: req.WorkingDir,
 		Env:        req.Env,
+		Stdin:      stdin,
 		Timeout:    timeout,
 		Sink:       s.cfg.sink,
+
+		OnStdoutLine: req.OnStdoutLine,
 	})
 	if err != nil {
 		// Two-class error handling: only ErrNonZeroExit comes with a fully
@@ -230,6 +251,10 @@ func (s *ghcpCLISpawner) Spawn(ctx context.Context, req SpawnRequest) (Response,
 
 	text, parseErr := ParseGHCPCLIEnvelope(resp.Stdout, []byte(resp.Stderr), resp.ExitCode)
 	if parseErr != nil {
+		if errors.Is(parseErr, ErrGHCPCLIAgentDeselected) {
+			// The parser has no agent identifier; name the requested agent here.
+			parseErr = fmt.Errorf("%w: requested agent %q", parseErr, req.Agent.Identifier)
+		}
 		return resp, parseErr
 	}
 
@@ -242,4 +267,3 @@ func (s *ghcpCLISpawner) Spawn(ctx context.Context, req SpawnRequest) (Response,
 	resp.Protocol = protocol
 	return resp, nil
 }
-

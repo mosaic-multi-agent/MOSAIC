@@ -15,7 +15,7 @@ package ghcpcli_test
 //
 //   Run-time loading from declared directory (T6.2):
 //   - A ghcpcli module constructed against a temporary root reads HarnessInjections.md
-//     and HarnessInjectionsOrchestrator.md from <MosaicRoot>/Catalog/HarnessInjections/GHCP CLI/.
+//     and HarnessInjectionsOrchestrator.md from the directory given by opts.ContentDir.
 //   - The injected content comes from those on-disk files, not from embedded bytes.
 //
 //   Failure modes (T6.3):
@@ -31,7 +31,7 @@ package ghcpcli_test
 //   Orchestrator/subagent content merging preserved (T6.5):
 //   - Shared-only: subagent receives it.
 //   - Orchestrator-only: subagent receives nothing (ok=false).
-//   - Both non-empty: orchestrator receives sharedContent + "\n\n" + orchContent.
+//   - Both non-empty: each region name returns exactly its own file's content (no merge).
 //   - Undeclared in both: ok=false.
 //
 // RED STATE:
@@ -53,9 +53,14 @@ import (
 // Test helpers
 // ---------------------------------------------------------------------------
 
-// writeGhcpCliContentFile writes src to dir/filename, failing the test on any error.
+// writeGhcpCliContentFile writes src to dir/filename, failing the test on any error. A
+// HarnessInjections.md written without any frontmatter gets a default version, because loading
+// requires one; sources that start with frontmatter are written unchanged.
 func writeGhcpCliContentFile(t *testing.T, dir, filename, src string) {
 	t.Helper()
+	if filename == "HarnessInjections.md" && !strings.HasPrefix(src, "---") {
+		src = "---\nversion: \"1.0.0\"\n---\n" + src
+	}
 	if err := os.WriteFile(filepath.Join(dir, filename), []byte(src), 0o644); err != nil {
 		t.Fatalf("write %s: %v", filename, err)
 	}
@@ -79,7 +84,7 @@ func makeTempRootForGhcpCli(t *testing.T) (root string, contentDir string) {
 // RED: Fails via NewWithOptsForTesting returning an error until I6.4 implements New(opts).
 func newGhcpCliModuleFromOpts(t *testing.T, root string) domain.HarnessModule {
 	t.Helper()
-	mod, err := ghcpcli.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	mod, err := ghcpcli.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err != nil {
 		t.Fatalf("ghcpcli.New(opts): %v", err) // RED: fails until I6.4 implemented
 	}
@@ -127,7 +132,7 @@ func TestRepoContentDir_GhcpCli_IsCorrect(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestGhcpCli_ReadsDeclaredDirectory verifies that constructing a ghcpcli module with a
-// MosaicRoot reads content from <MosaicRoot>/<RepoContentDir>/.
+// MosaicRoot reads content from the directory returned by opts.ContentDir.
 func TestGhcpCli_ReadsDeclaredDirectory(t *testing.T) {
 	root, contentDir := makeTempRootForGhcpCli(t)
 	writeGhcpCliContentFile(t, contentDir, "HarnessInjections.md", ghcpCliSharedInjections)
@@ -177,7 +182,7 @@ func TestGhcpCli_MissingSharedFile_ConstructionFails(t *testing.T) {
 	// Only write orchestrator file; shared file is missing.
 	writeGhcpCliContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md", ghcpCliOrchestratorInjections)
 
-	_, err := ghcpcli.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := ghcpcli.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Error("expected non-nil error when HarnessInjections.md is missing, got nil")
 	}
@@ -189,7 +194,7 @@ func TestGhcpCli_MissingSharedFile_ErrorNamesFile(t *testing.T) {
 	root, contentDir := makeTempRootForGhcpCli(t)
 	writeGhcpCliContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md", ghcpCliOrchestratorInjections)
 
-	_, err := ghcpcli.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := ghcpcli.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Fatal("expected non-nil error when HarnessInjections.md is missing")
 	}
@@ -205,7 +210,7 @@ func TestGhcpCli_MissingOrchestratorFile_ConstructionFails(t *testing.T) {
 	writeGhcpCliContentFile(t, contentDir, "HarnessInjections.md", ghcpCliSharedInjections)
 	// Orchestrator file is missing.
 
-	_, err := ghcpcli.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := ghcpcli.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Error("expected non-nil error when HarnessInjectionsOrchestrator.md is missing, got nil")
 	}
@@ -217,7 +222,7 @@ func TestGhcpCli_MissingOrchestratorFile_ErrorNamesFile(t *testing.T) {
 	root, contentDir := makeTempRootForGhcpCli(t)
 	writeGhcpCliContentFile(t, contentDir, "HarnessInjections.md", ghcpCliSharedInjections)
 
-	_, err := ghcpcli.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := ghcpcli.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Fatal("expected non-nil error when HarnessInjectionsOrchestrator.md is missing")
 	}
@@ -234,7 +239,7 @@ func TestGhcpCli_UnparseableSharedFile_ConstructionFails(t *testing.T) {
 	writeGhcpCliContentFile(t, contentDir, "HarnessInjections.md", "---\nversion: \"1.0\"\nunclosed-frontmatter\n")
 	writeGhcpCliContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md", ghcpCliOrchestratorInjections)
 
-	_, err := ghcpcli.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := ghcpcli.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Error("expected non-nil error for unparseable HarnessInjections.md, got nil")
 	}
@@ -247,7 +252,7 @@ func TestGhcpCli_UnparseableOrchestratorFile_ConstructionFails(t *testing.T) {
 	writeGhcpCliContentFile(t, contentDir, "HarnessInjections.md", ghcpCliSharedInjections)
 	writeGhcpCliContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md", "---\nversion: \"1.0\"\nunclosed-frontmatter\n")
 
-	_, err := ghcpcli.NewWithOptsForTesting(t, registry.BuiltinOptions{MosaicRoot: root})
+	_, err := ghcpcli.NewWithOptsForTesting(t, registry.BuiltinOptions{ContentDir: contentDirsUnder(root)})
 	if err == nil {
 		t.Error("expected non-nil error for unparseable HarnessInjectionsOrchestrator.md, got nil")
 	}
@@ -340,27 +345,27 @@ func TestGhcpCli_Merging_OrchestratorOnly_SubagentReceivesNothing(t *testing.T) 
 	}
 }
 
-// TestGhcpCli_Merging_BothNonEmpty_OrchestratorReceivesMergedWithSeparator verifies that
-// when both shared and orchestrator-only content are non-empty, the orchestrator receives
-// sharedContent + "\n\n" + orchContent.
-func TestGhcpCli_Merging_BothNonEmpty_OrchestratorReceivesMergedWithSeparator(t *testing.T) {
+// TestGhcpCli_Merging_BothNonEmpty_OrchestratorRegionsStaySeparate verifies that
+// when both shared and orchestrator-only content are non-empty, each region name returns
+// exactly its own file's content and nothing is merged.
+func TestGhcpCli_Merging_BothNonEmpty_OrchestratorRegionsStaySeparate(t *testing.T) {
 	root, contentDir := makeTempRootForGhcpCli(t)
 	const sharedPart = "Shared constraint line."
 	const orchPart = "Orchestrator-only constraint line."
 	writeGhcpCliContentFile(t, contentDir, "HarnessInjections.md",
 		"<HarnessConstraints type=\"managed\">\n"+sharedPart+"\n</HarnessConstraints>\n")
 	writeGhcpCliContentFile(t, contentDir, "HarnessInjectionsOrchestrator.md",
-		"---\nversion: \"1.0.0\"\n---\n<HarnessConstraints type=\"managed\">\n"+orchPart+"\n</HarnessConstraints>\n")
+		"---\nversion: \"1.0.0\"\n---\n<OrchestratorHarnessConstraints type=\"managed\">\n"+orchPart+"\n</OrchestratorHarnessConstraints>\n")
 
 	mod := newGhcpCliModuleFromOpts(t, root)
 
-	c, ok := mod.Injection(domain.InjectionRequest{Name: "HarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
-	if !ok {
-		t.Fatal("orchestrator: Injection(HarnessConstraints) returned ok=false")
+	shared, sharedOK := mod.Injection(domain.InjectionRequest{Name: "HarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
+	orch, orchOK := mod.Injection(domain.InjectionRequest{Name: "OrchestratorHarnessConstraints", AgentKey: "orchestrator", Role: domain.RoleOrchestrator})
+	if !sharedOK || shared != sharedPart {
+		t.Errorf("orchestrator HarnessConstraints = %q (ok=%v), want exactly %q", shared, sharedOK, sharedPart)
 	}
-	want := sharedPart + "\n\n" + orchPart
-	if c != want {
-		t.Errorf("orchestrator HarnessConstraints merge format incorrect\ngot:  %q\nwant: %q", c, want)
+	if !orchOK || orch != orchPart {
+		t.Errorf("orchestrator OrchestratorHarnessConstraints = %q (ok=%v), want exactly %q", orch, orchOK, orchPart)
 	}
 }
 

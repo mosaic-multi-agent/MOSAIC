@@ -2,7 +2,6 @@ schema_version: "1"
 id: "opencode"
 display_name: "OpenCode"
 transform_version: "3.0.0"
-injections_version: "1.3.1"
 
 tools:
   shape: permission
@@ -131,6 +130,9 @@ frontmatter:
     - "tier_rationale"
     - "required_skills"
     - "tools"
+    - "infrastructure"
+    - "triggers"
+    - "on_failure"
   add:
     - key: "mode"
       value_by_role:

@@ -940,7 +940,7 @@ func TestUpdate_HarnessOnlyAgentInPlan_ParticipatesInAtomicReversal(t *testing.T
 	}
 	// The trigger error must be reachable through Unwrap.
 	if !errors.Is(err, triggerErr) {
-		t.Errorf("errors.Is(err, triggerErr) = false; "+
+		t.Errorf("errors.Is(err, triggerErr) = false; " +
 			"RevertedRunError must unwrap to the executor's trigger error so the cause is visible")
 	}
 	// Verify the harness-only item was present in the plan that was sent to the executor
@@ -1062,8 +1062,8 @@ func TestUpdate_DryRun_ExecRequestHasDryRunTrue(t *testing.T) {
 		t.Fatal("executor was never called; Update must reach the executor even in dry-run mode")
 	}
 	if !exec.capturedReq.DryRun {
-		t.Error("ExecRequest.DryRun is false for a dry-run Update run; "+
-			"DryRun must be forwarded to the executor so no bytes are written for harness-only "+
+		t.Error("ExecRequest.DryRun is false for a dry-run Update run; " +
+			"DryRun must be forwarded to the executor so no bytes are written for harness-only " +
 			"agents (or any other artifact)")
 	}
 }
@@ -1096,8 +1096,8 @@ func TestUpdate_DryRun_DiscoveryAndPromptingStillOccur(t *testing.T) {
 
 	// Assert — the refresh-scope prompt must have been asked even in dry-run mode.
 	if !stub.WasAsked(domain.QHarnessOnlyRefreshScope, targetPath) {
-		t.Errorf("QHarnessOnlyRefreshScope was not asked in dry-run mode; "+
-			"discovery and prompting must still occur when DryRun is true — "+
+		t.Errorf("QHarnessOnlyRefreshScope was not asked in dry-run mode; " +
+			"discovery and prompting must still occur when DryRun is true — " +
 			"only the executor writes are suppressed, not the decision-making before them")
 	}
 }
@@ -1366,8 +1366,8 @@ func TestUpdate_HarnessOnlyRefresh_EmitsEventWithHarnessOnlyField(t *testing.T) 
 	// Assert — a logging event with Fields["harness_only"] == "true" must have been emitted.
 	evt, found := logger.harnessOnlyEvent()
 	if !found {
-		t.Errorf("no logging event with Fields[\"harness_only\"] == \"true\" was emitted; "+
-			"the Update flow must emit an observability event for each harness-only refresh "+
+		t.Errorf("no logging event with Fields[\"harness_only\"] == \"true\" was emitted; " +
+			"the Update flow must emit an observability event for each harness-only refresh " +
 			"so callers can identify which agents received degraded-quality treatment")
 		return
 	}
@@ -1410,7 +1410,7 @@ func TestUpdate_HarnessOnlyRefresh_EventScopeFieldMatchesUserChoice(t *testing.T
 	// Assert — the emitted event's "scope" field must match the chosen scope.
 	evt, found := logger.harnessOnlyEvent()
 	if !found {
-		t.Errorf("no harness-only logging event emitted; "+
+		t.Errorf("no harness-only logging event emitted; " +
 			"the Update flow must emit an observability event for each harness-only refresh")
 		return
 	}

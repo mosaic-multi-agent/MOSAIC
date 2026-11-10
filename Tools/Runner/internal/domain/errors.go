@@ -52,14 +52,63 @@ type RefusalError struct {
 	Component string // which component refused (e.g. "orchfile", "compat", "artifact")
 	Resource  string // what was being examined (file path, workflow id, row index)
 	Reason    string // specific condition (e.g. "no version comment", "forward dependency")
+	Cause     error  // optional underlying cause; exposed through Unwrap
+
+	Rule  string      // WorkflowFormat sec. 10 rule ID; "" when none is defined
+	Row   WorkflowRow // 1-based routing row; NoWorkflowRow when not about a row
+	Token string      // offending token, cell or heading; "" when none
+
+	Section string // document section the refusal concerns ("frontmatter", "ExecutionLog", "Artifacts", "WorkflowNotes"); "" when none
+	Line    int    // 1-based line in the examined file; 0 when not known
+}
+
+// Unwrap returns the optional underlying cause.
+func (e *RefusalError) Unwrap() error { return e.Cause }
+
+// RunIdentityProblem names why an artifact's run identity is unusable.
+type RunIdentityProblem string
+
+const (
+	RunIdentityAbsent         RunIdentityProblem = "absent"
+	RunIdentityEmpty          RunIdentityProblem = "empty"
+	RunIdentityMalformed      RunIdentityProblem = "malformed"
+	RunIdentityFolderMismatch RunIdentityProblem = "folder-mismatch"
+)
+
+// RunIdentityError names why an artifact's run identity is unusable. It is
+// carried as the Cause of a *RefusalError.
+type RunIdentityError struct {
+	Problem RunIdentityProblem
+	RunID   string // as found ("" when absent/empty)
+	Folder  string // enclosing folder base name; set for folder-mismatch
+}
+
+func (e *RunIdentityError) Error() string {
+	return fmt.Sprintf("run identity %s: %q", e.Problem, e.RunID)
 }
 
 func (e *RefusalError) Error() string {
-	return fmt.Sprintf("%s: refused %q: %s", e.Component, e.Resource, e.Reason)
+	msg := fmt.Sprintf("%s: refused %q: %s", e.Component, e.Resource, e.Reason)
+	if e.Rule != "" {
+		msg += " [rule " + e.Rule + "]"
+	}
+	if e.Row != NoWorkflowRow {
+		msg += fmt.Sprintf(" [row %d]", e.Row)
+	}
+	if e.Token != "" {
+		msg += fmt.Sprintf(" [token %q]", e.Token)
+	}
+	if e.Section != "" {
+		msg += " [section " + e.Section + "]"
+	}
+	if e.Line != 0 {
+		msg += fmt.Sprintf(" [line %d]", e.Line)
+	}
+	return msg
 }
 
 // UnresolvableApproachError is returned at the routing decision when a stage's
-// Approach value has no matching row in the workflow's Execution Groups table.
+// Approach value has no matching row in the block's **Groups:** table.
 // It is never recovered from: there is no default approach and no fallback order.
 //
 // This error is distinct from RefusalError. RefusalError describes a pre-invocation
@@ -69,7 +118,8 @@ func (e *RefusalError) Error() string {
 // alternatives.
 type UnresolvableApproachError struct {
 	WorkflowID WorkflowID
-	Stage      StageNumber
+	Block      BlockName   // block whose schedule holds the iteration
+	Iteration  IterationID // names the iteration
 	Approach   Approach
 	Declared   []Approach // every approach the workflow's table declares, in table order
 }
@@ -80,8 +130,8 @@ func (e *UnresolvableApproachError) Error() string {
 		declared[i] = string(a)
 	}
 	return fmt.Sprintf(
-		"stage %d: Approach %q is not declared in workflow %q Execution Groups table (declared: %s)",
-		e.Stage, e.Approach, e.WorkflowID, strings.Join(declared, ", "),
+		"stage %s: Approach %q is not declared in the **Groups:** table of workflow %q (declared: %s)",
+		e.Iteration, e.Approach, e.WorkflowID, strings.Join(declared, ", "),
 	)
 }
 
@@ -101,7 +151,8 @@ func (e *UnresolvableApproachError) Error() string {
 type RowNotInGroupError struct {
 	WorkflowID WorkflowID
 	RowIndex   int
-	Stage      StageNumber
+	Block      BlockName        // block whose schedule holds the iteration
+	Iteration  IterationID      // names the iteration
 	Groups     []ExecutionGroup // the resolved groups that were searched
 }
 
@@ -115,8 +166,8 @@ func (e *RowNotInGroupError) Error() string {
 		}
 	}
 	return fmt.Sprintf(
-		"stage %d: row %d is not in any execution group of workflow %q (groups: %s)",
-		e.Stage, e.RowIndex, e.WorkflowID, strings.Join(groupDescs, ", "),
+		"stage %s: row %d is not in any execution group of workflow %q (groups: %s)",
+		e.Iteration, e.RowIndex, e.WorkflowID, strings.Join(groupDescs, ", "),
 	)
 }
 
@@ -135,6 +186,18 @@ const (
 	// CauseAmbiguousRow: several rows match and the sequence-based
 	// disambiguation could not settle between them.
 	CauseAmbiguousRow
+
+	// CauseNoRecordedRow: the agent fills several EXECUTION rows, and the
+	// Execution Log holds no entry for it, or the entry records no row.
+	CauseNoRecordedRow
+
+	// CauseRecordedRowInvalid: the recorded row is outside the table, holds a
+	// different agent, or lies in another group than the entry's stage.
+	CauseRecordedRowInvalid
+
+	// CauseStagedRowWithoutStage: the step's row is a staged (EXECUTION) row but
+	// its Execution Log entry records no stage (Stage "-").
+	CauseStagedRowWithoutStage
 )
 
 // PositionUnresolvedError is returned when the workflow position cannot be
@@ -145,6 +208,9 @@ type PositionUnresolvedError struct {
 	Phase         string // the recorded phase, as stored
 	Stage         string // the recorded stage, as stored
 	Cause         PositionUnresolvedCause
+	RecordedRow   WorkflowRow // the row number recorded in the log; NoWorkflowRow when none
+	// Group is the row's group; set only for CauseStagedRowWithoutStage.
+	Group GroupName
 }
 
 // Error states the cause, not merely the symptom. For CauseAgentNotInWorkflow
@@ -166,7 +232,30 @@ func (e *PositionUnresolvedError) Error() string {
 			"position unresolved: multiple routing rows match agent %q at phase %q, stage %q, and sequence-based disambiguation could not settle between them",
 			e.AgentInstance, e.Phase, e.Stage,
 		)
+	case CauseNoRecordedRow:
+		return fmt.Sprintf(
+			"position unresolved: agent %q fills several execution rows, but the execution log holds no recorded workflow row for it (phase %q, stage %q)",
+			e.AgentInstance, e.Phase, e.Stage,
+		)
+	case CauseRecordedRowInvalid:
+		return fmt.Sprintf(
+			"position unresolved: recorded workflow row %d for agent %q does not match the routing table (phase %q, stage %q)",
+			int(e.RecordedRow), e.AgentInstance, e.Phase, e.Stage,
+		)
+	case CauseStagedRowWithoutStage:
+		return fmt.Sprintf(
+			"position unresolved: workflow row %d (agent %q) is a staged execution row, but its execution log row records no stage; set the Stage cell of that log row to the group form, e.g. %s.N (phase %q)",
+			int(e.RecordedRow), e.AgentInstance, groupOrPlaceholder(e.Group), e.Phase,
+		)
 	default:
 		return fmt.Sprintf("position unresolved for agent %q at phase %q, stage %q", e.AgentInstance, e.Phase, e.Stage)
 	}
+}
+
+// groupOrPlaceholder names group, or a placeholder when the group is unknown.
+func groupOrPlaceholder(group GroupName) string {
+	if group == "" {
+		return "<Group>"
+	}
+	return string(group)
 }

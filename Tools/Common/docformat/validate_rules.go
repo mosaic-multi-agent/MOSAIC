@@ -33,6 +33,7 @@ func validateDocumentRules(d *Document, opts ValidateOptions) []Issue {
 	// Rules 8b and 8c: Role-specific conduct regions. Skipped when Role is not set.
 	if opts.Role != "" {
 		issues = append(issues, checkConductRegions(body, opts.Role)...)
+		issues = append(issues, checkOrchestratorHarnessRegion(body, opts.Role)...)
 	}
 
 	// Rule 12: In a source file, every managed region must be empty (or hold only
@@ -177,12 +178,11 @@ func isSemver(s string) bool {
 // Rules 8a, 8b, 8c: Communication protocol and conduct regions
 // ---------------------------------------------------------------------------
 
-// conductRegionNames lists the five bundle-sourced conduct regions that subagents
+// conductRegionNames lists the four bundle-sourced conduct regions that subagents
 // must carry. Orchestrators must not carry any of them.
 var conductRegionNames = []string{
 	"AuthorityHierarchy",
 	"ClosingProcedure",
-	"ProtocolConstraints",
 	"ErrorHandlingCommon",
 	"ExecutionPhilosophyCommon",
 }
@@ -200,7 +200,7 @@ func checkRule8a(body *Body) []Issue {
 	return nil
 }
 
-// checkConductRegions checks rule 8b (subagent must have all five conduct regions) and
+// checkConductRegions checks rule 8b (subagent must have all four conduct regions) and
 // rule 8c (orchestrator must not carry any of them).
 func checkConductRegions(body *Body, role string) []Issue {
 	var issues []Issue
@@ -537,4 +537,3 @@ func stringSet(ss []string) map[string]bool {
 	}
 	return m
 }
-

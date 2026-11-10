@@ -49,6 +49,7 @@ func TestRegression_RefSubdirectory_NoUnresolvableRefDiagnostics(t *testing.T) {
 		FixtureRoot:     "",
 		ResolverFactory: factory,
 		HarnessID:       "claude-code",
+		Overrides:       selectedModels(),
 	})
 
 	for _, d := range report.Diagnostics {

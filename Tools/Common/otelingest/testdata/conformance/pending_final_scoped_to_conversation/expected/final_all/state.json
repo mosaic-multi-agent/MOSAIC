@@ -1,0 +1,14 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 968,
+    "head_len": 968,
+    "head_sha256": "232eace51e636444eec1acc4a8d63f4aba607b00d85d231b8bc92d0117fb261d"
+  },
+  "placements": {
+    "s7": "unattributed",
+    "s6": "unattributed"
+  },
+  "pending": [],
+  "links": {}
+}

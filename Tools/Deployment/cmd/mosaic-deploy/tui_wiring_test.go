@@ -1,18 +1,18 @@
 package main
 
-// tui_wiring_test.go verifies that the composition root correctly wires the catalogue folder
-// and reload capability into tui.Options. These tests exercise buildReloadFunc directly —
-// the function that constructs the CatalogReloadFunc closure passed to the TUI.
+// tui_wiring_test.go verifies that the composition root correctly wires the stack reload
+// capability into tui.Options. These tests exercise buildReloadFunc directly — the function
+// that constructs the CatalogReloadFunc closure passed to the TUI.
 //
-// Without this wiring the catalogue folder screen is never shown (Options.CatalogFolder
-// remains at its zero value "") and confirming a different folder has no effect
-// (Options.ReloadCatalog is nil).
+// Without this wiring the stack screen is never shown (Options.ReloadCatalog is nil) and
+// confirming a stack has no effect.
 
 import (
 	"runtime"
 	"testing"
 
 	"mosaic-deploy/internal/app"
+	"mosaic-deploy/internal/app/stackconfig"
 	"mosaic-deploy/internal/catalog"
 	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/deploy"
@@ -26,6 +26,9 @@ import (
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// defaultStackDescription is the stack of the default layer alone.
+var defaultStackDescription = stackconfig.Description{IncludeDefault: true}
 
 // buildTestDeps constructs a minimal but real app.Deps against the given mosaicRoot and
 // catalogFolder. It mirrors the dep-construction sequence in main() so that buildReloadFunc
@@ -104,8 +107,7 @@ func TestBuildReloadFunc_ReturnsNonNilFunc(t *testing.T) {
 }
 
 // TestBuildReloadFunc_ValidFolder_ReturnsNonNilService verifies that the reload function
-// returned by buildReloadFunc produces a non-nil service when called with a valid catalogue
-// folder. This is the core contract: the TUI calls this function when the user confirms a
+// returned by buildReloadFunc produces a non-nil service when called with a valid stack. This is the core contract: the TUI calls this function when the user confirms a
 // different folder, and the returned service must be ready for use.
 func TestBuildReloadFunc_ValidFolder_ReturnsNonNilService(t *testing.T) {
 	mosaicRoot := makeE2EMosaicRoot(t)
@@ -117,11 +119,10 @@ func TestBuildReloadFunc_ValidFolder_ReturnsNonNilService(t *testing.T) {
 	deps := buildTestDeps(t, mosaicRoot, catalogFolder)
 	reloadFunc := buildReloadFunc(mosaicRoot, deps)
 
-	newSvc, err := reloadFunc(catalogFolder)
+	newSvc, err := reloadFunc(defaultStackDescription, stackconfig.OriginDefault)
 	if err != nil {
-		t.Fatalf("reloadFunc(%q): %v; "+
-			"calling the reload function with a valid catalogue folder must not return an error",
-			catalogFolder, err)
+		t.Fatalf("reloadFunc: %v; "+
+			"calling the reload function with a valid stack must not return an error", err)
 	}
 	if newSvc == nil {
 		t.Fatal("reloadFunc returned nil service; " +
@@ -130,7 +131,7 @@ func TestBuildReloadFunc_ValidFolder_ReturnsNonNilService(t *testing.T) {
 }
 
 // TestBuildReloadFunc_ReturnsDistinctService verifies that calling the reload function with the
-// same catalogue folder returns a distinct service instance (not the same pointer as baseDeps).
+// same stack returns a distinct service instance (not the same pointer as baseDeps).
 // The TUI adopts the returned service for the remainder of the session; the function must
 // produce a new service, not return the existing one.
 func TestBuildReloadFunc_ReturnsDistinctService(t *testing.T) {
@@ -144,9 +145,9 @@ func TestBuildReloadFunc_ReturnsDistinctService(t *testing.T) {
 	originalSvc := app.New(deps)
 	reloadFunc := buildReloadFunc(mosaicRoot, deps)
 
-	newSvc, err := reloadFunc(catalogFolder)
+	newSvc, err := reloadFunc(defaultStackDescription, stackconfig.OriginDefault)
 	if err != nil {
-		t.Fatalf("reloadFunc(%q): %v", catalogFolder, err)
+		t.Fatalf("reloadFunc: %v", err)
 	}
 
 	if newSvc == originalSvc {

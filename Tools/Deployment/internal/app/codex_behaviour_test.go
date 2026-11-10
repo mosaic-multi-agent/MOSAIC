@@ -42,6 +42,7 @@ import (
 
 	_ "mosaic-deploy/internal/agentformat/all"
 	"mosaic-deploy/internal/agentformat"
+	"mosaic-deploy/internal/catalog/catalogpaths"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/builtin/codex"
 	"mosaic-deploy/internal/harness/registry"
@@ -75,7 +76,7 @@ func codexAppFrozenCatalogRoot(t *testing.T) string {
 func codexAppModule(t *testing.T) domain.HarnessModule {
 	t.Helper()
 	frozen := codexAppFrozenCatalogRoot(t)
-	mod, err := codex.New(registry.BuiltinOptions{MosaicRoot: frozen})
+	mod, err := codex.New(registry.BuiltinOptions{ContentDir: codexAppFrozenContentDirs(frozen)})
 	if err != nil {
 		t.Fatalf("codex.New: %v", err)
 	}
@@ -414,4 +415,13 @@ func TestCodexApp_ManifestPaths_AgentAndSkillRootsAreSeparate(t *testing.T) {
 
 	t.Logf("Codex agent path: %q", agentPath)
 	t.Logf("Codex skill path: %q", skillPath)
+}
+
+// codexAppFrozenContentDirs resolves a harness's injection content directory inside the
+// frozen catalog fixture tree rooted at frozenRoot.
+func codexAppFrozenContentDirs(frozenRoot string) func(string) (string, error) {
+	catalogRoot := filepath.Join(frozenRoot, "Catalog")
+	return func(harnessDirName string) (string, error) {
+		return catalogpaths.HarnessInjectionsDir(catalogRoot, harnessDirName), nil
+	}
 }

@@ -96,6 +96,8 @@ type ExecRequest struct {
 	// The executor threads it into the manifest written by buildManifest. An empty string
 	// means "not recorded" and results in no tool_version key in the YAML.
 	ToolVersion string
+	// ManifestMeta carries the manifest-level data this run supplies; see ManifestMeta.
+	ManifestMeta ManifestMeta
 }
 
 // RevertFailure names one journal entry the reversal could not apply.
@@ -144,6 +146,10 @@ type ExecResult struct {
 	// state and the listed paths need manual recovery; the reversal always attempts every
 	// entry rather than aborting at the first error.
 	RevertFailures []RevertFailure
+	// Removals reports every Plan.Removals entry in request order.
+	Removals []domain.RemovalRecord
+	// Replacements reports every Plan.Replacements entry in request order.
+	Replacements []domain.ReplacementRecord
 }
 
 // NewExecutor constructs the production Executor.
@@ -165,6 +171,9 @@ type executor struct {
 // the workspace — the user's intended target — was not writable. No manifest entries are
 // produced for fallback writes; the manifest tracks only what reached the workspace.
 func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, error) {
+	if err := validateMoves(req.Plan); err != nil {
+		return ExecResult{}, err
+	}
 	// Validate that every ActionConflict item has a decision. A missing decision is a
 	// programming error in the caller that must be surfaced immediately.
 	for _, item := range req.Plan.Items {
@@ -204,6 +213,11 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 		journal = &writeJournal{}
 	}
 
+	// Back up files that requested replacements overwrite before anything is written; the
+	// workspace probe below may overwrite a plan item's target.
+	moves := newMoveRun(req)
+	moves.backupReplacements(req.DryRun)
+
 	// Resolve the deployment root once before any content write (CD-12, AC17.2).
 	// The journal is passed through so resolveDeploymentRoot can record the probe path
 	// before writing it, ensuring atomic reversal correctly sees the probe file as newly
@@ -211,7 +225,7 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 	// probeErr is non-nil when the workspace probe failed and a fallback was triggered;
 	// it is carried as the first partial error and the per-item Err in fallback mode.
 	// contentErrors lists items whose Content callback failed during probe iteration.
-	deployRoot, fallback, probeErr, contentErrors, _, err := resolveDeploymentRoot(req, journal)
+	deployRoot, fallback, probeErr, contentErrors, probeItem, probeFormat, err := resolveDeploymentRoot(req, journal)
 	if err != nil {
 		return ExecResult{}, err
 	}
@@ -258,6 +272,12 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 	entryMap := buildEntryMap(prior) // carries prior entries; updated for successful workspace writes
 	var partialErr error
 
+	// Remove requested files (after backup) and drop their manifest entries; a failure is
+	// the run's first error. Items whose replacement backup failed are not written.
+	moves.removeFiles(req, fallback, journal, entryMap)
+	partialErr = moves.err
+	req.Plan.Items = moves.unblockedItems(req.Plan.Items, &actions, deployRoot)
+
 	// Surface content-render failures from the probe phase as TakenFailed action records.
 	// Build a set of their TargetPaths to exclude them from the main execution loop so they
 	// are not double-processed.
@@ -278,6 +298,9 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 	}
 
 	for _, item := range req.Plan.Items {
+		if atomicMode && partialErr != nil {
+			break
+		}
 		// Skip items that already have a TakenFailed record from the probe phase; executing
 		// them again would produce a duplicate action record for the same TargetPath.
 		if contentErrorPaths[item.TargetPath] {
@@ -295,6 +318,7 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 		} else {
 			// Normal mode: write to the workspace deployment root.
 			ar, entry = e.executeItem(item, req, deployRoot, prior, journal)
+			ar.FormatChange = withProbeFormat(ar, item, probeItem, probeFormat)
 			if ar.Err != "" && partialErr == nil {
 				partialErr = fmt.Errorf("%s", ar.Err)
 			}
@@ -341,19 +365,29 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 			Partial:        partialErr,
 			Reverted:       true,
 			RevertFailures: revertFailures,
+			Removals:       moves.removals,
+			Replacements:   moves.replacements,
 		}, nil
 	}
 
 	// Deploy hook bundles and apply registration steps. The journal is passed through so that
 	// hook file writes are covered by atomic reversal: if the manifest save below then fails,
 	// the hook files written here are reversed along with the plan item files.
-	hookGaps := e.deployHooks(deployRoot, req.Plan.WorkspacePath, req.Hooks, req.DryRun, journal)
+	hookGaps, hookErr := e.deployHooks(deployRoot, req.Plan.WorkspacePath, req.Hooks, req.DryRun, journal, moves.hookOpts())
+	if hookErr != nil {
+		if partialErr == nil {
+			partialErr = hookErr
+		}
+		if atomicMode {
+			return e.revertedResult(journal, deployRoot, fallback, actions, prior, partialErr, moves), nil
+		}
+	}
 	for _, g := range hookGaps {
 		addGap(g)
 	}
 
 	// Build the manifest from what is actually on disk (entryMap reflects reality).
-	finalManifest := buildManifest(prior, entryMap, req.Plan, req.ToolVersion)
+	finalManifest := buildManifest(prior, entryMap, req.Plan, req.ToolVersion, req.ManifestMeta)
 
 	// Persist the manifest and the TODO file (skipped for DryRun).
 	todoFilePath := ""
@@ -416,6 +450,8 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 				Partial:        partialErr,
 				Reverted:       true,
 				RevertFailures: revertFailures,
+				Removals:       moves.removals,
+				Replacements:   moves.replacements,
 			}, nil
 		}
 
@@ -442,6 +478,8 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 		Manifest:       finalManifest,
 		TodoFilePath:   todoFilePath,
 		Partial:        partialErr,
+		Removals:       moves.removals,
+		Replacements:   moves.replacements,
 	}, nil
 }
 
@@ -504,11 +542,13 @@ func (e *executor) executeItem(
 				return ar, nil
 			}
 		}
+		formatChange := formatChangeOnOverwrite(destPath, content)
 		if writeErr := mkdirAndWrite(destPath, content); writeErr != nil {
 			ar.Taken = domain.TakenFailed
 			ar.Err = writeErr.Error()
 			return ar, nil
 		}
+		ar.FormatChange = formatChange
 		if item.Action == domain.ActionCreate {
 			ar.Taken = domain.TakenCreated
 		} else {
@@ -606,8 +646,9 @@ func (e *executor) executeConflict(
 	switch decision {
 	case domain.DecisionSkip:
 		ar.Taken = domain.TakenSkipped
-		// Return the prior entry unchanged so entryMap preserves it.
-		if entry, ok := prior.Lookup(item.Ref); ok {
+		// Return the prior entry recorded at this item's own target path, unchanged, so
+		// entryMap preserves it. An entry for the same ref at another path is not this file's.
+		if entry, ok := prior.LookupAt(item.Ref, item.TargetPath); ok {
 			return ar, &entry
 		}
 		return ar, nil
@@ -636,11 +677,13 @@ func (e *executor) executeConflict(
 				return ar, nil
 			}
 		}
+		formatChange := formatChangeOnOverwrite(destPath, content)
 		if writeErr := mkdirAndWrite(destPath, content); writeErr != nil {
 			ar.Taken = domain.TakenFailed
 			ar.Err = writeErr.Error()
 			return ar, nil
 		}
+		ar.FormatChange = formatChange
 		ar.Taken = domain.TakenUpdated
 		stamp := resolveVersionStamp(item, req.VersionStamps)
 		entry := newManifestEntry(item, content, stamp)
@@ -683,11 +726,13 @@ func (e *executor) executeConflict(
 			return ar, nil
 		}
 		destPath := filepath.Join(deployRoot, item.TargetPath)
+		formatChange := formatChangeOnOverwrite(destPath, content)
 		if writeErr := mkdirAndWrite(destPath, content); writeErr != nil {
 			ar.Taken = domain.TakenFailed
 			ar.Err = writeErr.Error()
 			return ar, nil
 		}
+		ar.FormatChange = formatChange
 		ar.Taken = domain.TakenBackedUp
 		stamp := resolveVersionStamp(item, req.VersionStamps)
 		entry := newManifestEntry(item, content, stamp)
@@ -749,6 +794,7 @@ func newManifestEntry(item domain.PlanItem, content []byte, stamp domain.Version
 		ToolMappingsVersion:           stamp.ToolMappingsVersion,
 		ContentHash:                   manifest.Hash(content),
 		DeployedAt:                    time.Now(),
+		Catalog:                       stamp.Catalog,
 	}
 }
 
@@ -796,7 +842,7 @@ func buildEntryMap(m domain.Manifest) map[entryKey]domain.ManifestEntry {
 }
 
 // buildManifest produces the final domain.Manifest from the entry map, sorted by TargetPath.
-func buildManifest(prior domain.Manifest, entryMap map[entryKey]domain.ManifestEntry, plan domain.Plan, toolVersion string) domain.Manifest {
+func buildManifest(prior domain.Manifest, entryMap map[entryKey]domain.ManifestEntry, plan domain.Plan, toolVersion string, meta ManifestMeta) domain.Manifest {
 	harnessID := plan.Harness.ID
 	if harnessID == "" {
 		harnessID = prior.HarnessID
@@ -807,6 +853,7 @@ func buildManifest(prior domain.Manifest, entryMap map[entryKey]domain.ManifestE
 		UpdatedAt:     time.Now(),
 		ToolVersion:   toolVersion,
 	}
+	applyManifestMeta(&m, prior, meta)
 
 	keys := make([]entryKey, 0, len(entryMap))
 	for k := range entryMap {
@@ -849,13 +896,28 @@ func computeOutcome(actions []domain.ActionRecord, partialErr error, fallback do
 func (e *executor) writeTodoFile(req ExecRequest, execGaps []domain.Gap) (string, error) {
 	collector := todo.NewCollector()
 
+	// In production the executor's own collector (e.todos) and the app layer's TodoItems
+	// provider are the same collector, so every executor gap is already in TodoItems().
+	// Adding execGaps on top would list each executor gap twice. Skip items already present.
+	seen := make(map[domain.TodoItem]bool)
+	add := func(item domain.TodoItem) {
+		if seen[item] {
+			return
+		}
+		seen[item] = true
+		collector.Add(item)
+	}
 	if req.TodoItems != nil {
 		for _, item := range req.TodoItems() {
-			collector.Add(item)
+			add(item)
 		}
 	}
+	gapCollector := todo.NewCollector()
 	for _, g := range execGaps {
-		collector.AddGap(g)
+		gapCollector.AddGap(g)
+	}
+	for _, item := range gapCollector.Items() {
+		add(item)
 	}
 
 	content := todo.RenderMarkdown(collector.Groups(), req.TodoMeta)

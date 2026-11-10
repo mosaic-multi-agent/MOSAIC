@@ -7,10 +7,16 @@ You are an orchestrator agent.
 <Workflow type="core" name="deployed-workflow" version="4.0">
 ## Deployed Workflow
 
-| Phase | Subagent | HITL | Input | Output |
-|-------|----------|:----:|-------|--------|
-| PLANNING | planner | TRUE | - | Plan.md |
-| EXECUTION.[StageNumber] | implementer | FALSE | Stage-{StageNumber}/Plan.md | Stage-{StageNumber}/PlanProgress.md |
+| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
+|-------|----------|:----:|------------|-------------|-------|--------|
+| PLANNING | planner | TRUE | [Stage] | - | - | Plan.md |
+| EXECUTION.[Stage] | implementer | FALSE | COMPLETE | - | Stage-{Stage}/Plan.md | Stage-{Stage}/PlanProgress.md |
+
+**Blocks:**
+
+| Block | Source | Section |
+|-------|--------|---------|
+| Stage | Plan.md | Stages |
 </Workflow>
 </AvailableWorkflows>
 </Identity>

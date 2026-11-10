@@ -15,7 +15,7 @@ import (
 // Populated in vocabulary.go init().
 var CanonicalOrder []string
 
-// CanonicalDeployed lists the tool-managed boundary names, a closed set of nine.
+// CanonicalDeployed lists the tool-managed boundary names, a closed set of eight.
 // A name in this list must be declared with type="managed" in any document that uses it.
 //
 // Populated in vocabulary.go init().
@@ -119,10 +119,10 @@ func classifyDeployedName(name string) (mosaic.InjectionClass, error) {
 		return mosaic.InjectionWorkflow, nil
 	case "InfrastructureAgents":
 		return mosaic.InjectionInfrastructure, nil
-	case "AuthorityHierarchy", "ClosingProcedure", "ProtocolConstraints",
+	case "AuthorityHierarchy", "ClosingProcedure",
 		"ErrorHandlingCommon", "ExecutionPhilosophyCommon":
 		return mosaic.InjectionBundle, nil
-	case "HarnessConstraints":
+	case HarnessRegionName, OrchestratorHarnessRegionName:
 		return mosaic.InjectionHarness, nil
 	default:
 		// A canonical tool-managed name with no registered generator. This must never

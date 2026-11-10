@@ -1,0 +1,45 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 540,
+    "head_len": 540,
+    "head_sha256": "d2dda017b0a0a38eca90f9572ae3e9cb1430c4cb04f5b50a5e23f2e243696859"
+  },
+  "placements": {},
+  "pending": [
+    {
+      "record": {
+        "record_id": "chat-p1",
+        "record_index": 0,
+        "model": "m-sub",
+        "provider": "github-copilot",
+        "token_usage": {
+          "input_tokens": 100,
+          "output_tokens": 10
+        },
+        "timestamp": "2026-10-28T09:00:00.000Z"
+      },
+      "parent_span_id": "inv-sub",
+      "conversation_id": "vsc-session-6",
+      "chat_session_id": "toolu_L1",
+      "parent_chat_session_id": "vsc-session-6"
+    },
+    {
+      "record": {
+        "record_id": "chat-p2",
+        "record_index": 540,
+        "model": "m-sub",
+        "provider": "github-copilot",
+        "token_usage": {
+          "input_tokens": 300,
+          "output_tokens": 30
+        },
+        "timestamp": "2026-10-28T09:00:00.000Z"
+      },
+      "parent_span_id": "inv-missing",
+      "conversation_id": "vsc-session-6",
+      "chat_session_id": "toolu_M1"
+    }
+  ],
+  "links": {}
+}

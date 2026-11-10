@@ -185,7 +185,7 @@ func TestSeamBaseline(t *testing.T) {
 	}
 
 	// Load protocol from the frozen catalog root once per run.
-	protocol, err := catalog.FileProtocolLoader{}.LoadProtocol(frozenRoot)
+	protocol, err := catalog.FileProtocolLoader{}.LoadProtocol(filepath.Join(frozenRoot, "Catalog"))
 	if err != nil {
 		t.Fatalf("load protocol from frozen catalog: %v", err)
 	}

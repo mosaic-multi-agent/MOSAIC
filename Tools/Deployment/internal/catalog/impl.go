@@ -13,14 +13,14 @@ import (
 type catalogImpl struct {
 	root         string
 	catalogRoot  string
-	workers      []domain.Agent  // sorted by Key
+	workers      []domain.Agent // sorted by Key
 	orchestr     domain.Agent
-	orchScript   domain.Agent    // script orchestrator; zero value when absent
-	orchScriptOK bool            // true when orchestrator-script.md was loaded
+	orchScript   domain.Agent // script orchestrator; zero value when absent
+	orchScriptOK bool         // true when orchestrator-script.md was loaded
 	utilities    []domain.Agent
-	standalones  []domain.Agent  // sorted by Key; populated by loadAgents standalone scan
-	agentIdx     map[string]domain.Agent  // all agents by key (workers + orchestrator + utilities + standalones)
-	numericIDIdx map[string]domain.Agent  // agents by numeric frontmatter `id`; excludes empty-id agents
+	standalones  []domain.Agent          // sorted by Key; populated by loadAgents standalone scan
+	agentIdx     map[string]domain.Agent // all agents by key (workers + orchestrator + utilities + standalones)
+	numericIDIdx map[string]domain.Agent // agents by numeric frontmatter `id`; excludes empty-id agents
 	skills       []domain.Skill
 	skillIdx     map[string]domain.Skill
 	hooks        []domain.HookBundle
@@ -31,6 +31,7 @@ type catalogImpl struct {
 	tiers        []domain.TierInfo
 	issues       []Issue
 	sourcePaths  map[string]bool // every absolute path emitted by the catalog
+	failures     sourceFailures  // source files that could not be interpreted during load
 }
 
 // Root returns the absolute MOSAIC repository root passed to Load.
@@ -48,12 +49,13 @@ func (c *catalogImpl) Agent(key string) (domain.Agent, bool) {
 	return a, ok
 }
 
-// Orchestrator returns the single orchestrator agent.
+// Orchestrator returns the native orchestrator agent, one of two orchestrator sources
+// (the other is the script orchestrator returned by OrchestratorScript).
 func (c *catalogImpl) Orchestrator() domain.Agent { return c.orchestr }
 
 // OrchestratorScript returns the script-mode orchestrator agent when present.
 // Returns (domain.Agent{}, false) when the catalog root has no orchestrator-script.md.
-// This is a stub that always returns false until I7.2 is implemented.
+// The script orchestrator is loaded at catalog load time; the bool reports whether it was found.
 func (c *catalogImpl) OrchestratorScript() (domain.Agent, bool) {
 	return c.orchScript, c.orchScriptOK
 }
@@ -153,18 +155,14 @@ func (c *catalogImpl) Issues() []Issue { return c.issues }
 
 // loadCatalog reads the full MOSAIC source tree and returns an immutable Catalog.
 // mosaicRoot is the MOSAIC repository root; catalogRoot is the (already-absolute) catalogue root.
-// Agents and workflows are loaded exclusively from catalogRoot.
-// Skills and hooks are merged from both the default catalogue root and catalogRoot,
-// with catalogRoot winning on key collision. Bundle and protocol files are always read
-// from mosaicRoot regardless of catalogRoot.
+// Agents, workflows, skills and hooks are all loaded from catalogRoot alone; nothing is merged
+// in from the default catalogue root. Bundle and protocol files are always read from mosaicRoot
+// regardless of catalogRoot.
 func loadCatalog(mosaicRoot, catalogRoot string) (Catalog, error) {
 	absRoot, err := filepath.Abs(mosaicRoot)
 	if err != nil {
 		return nil, fmt.Errorf("catalog.Load: %w", err)
 	}
-
-	// defaultCatalogRoot is the Catalog/ directory under the MOSAIC root.
-	defaultCatalogRoot := DefaultCatalogRoot(absRoot)
 
 	cat := &catalogImpl{
 		root:        absRoot,
@@ -176,15 +174,15 @@ func loadCatalog(mosaicRoot, catalogRoot string) (Catalog, error) {
 		sourcePaths: make(map[string]bool),
 	}
 
-	// Agents and workflows are loaded exclusively from the catalogue root.
 	cat.issues = append(cat.issues, cat.loadAgents(catalogRoot)...)
 	cat.issues = append(cat.issues, buildNumericIDIndex(cat)...)
 	cat.issues = append(cat.issues, cat.loadWorkflows(catalogRoot)...)
+	cat.issues = append(cat.issues, cat.loadSkills(catalogRoot)...)
+	cat.issues = append(cat.issues, cat.loadHooks(catalogRoot)...)
 
-	// Skills and hooks merge from both the default catalogue root and the catalogue root.
-	// The catalogue root wins on key collision; shadowing is silent (no Issue produced).
-	cat.issues = append(cat.issues, cat.loadSkillsMerged(defaultCatalogRoot, catalogRoot)...)
-	cat.issues = append(cat.issues, cat.loadHooksMerged(defaultCatalogRoot, catalogRoot)...)
+	if err := cat.failures.asError(); err != nil {
+		return nil, err
+	}
 
 	cat.tiers = buildTiers(cat.agentIdx)
 

@@ -112,13 +112,13 @@ func scriptContentCatalog(scriptSourcePath, mainSourcePath string) *stubCatalog 
 	return &stubCatalog{
 		root: "testroot",
 		orchestrator: domain.Agent{
-			Key:            "orchestrator",
-			Version:        "1.0",
-			Name:           "Orchestrator",
-			Role:           domain.RoleOrchestrator,
+			Key:              "orchestrator",
+			Version:          "1.0",
+			Name:             "Orchestrator",
+			Role:             domain.RoleOrchestrator,
 			ToolsPlaceholder: "{tool-permissions}",
-			RequiredSkills: []string{},
-			SourcePath:     mainSourcePath,
+			RequiredSkills:   []string{},
+			SourcePath:       mainSourcePath,
 		},
 		orchestratorScript: domain.Agent{
 			Key:            "orchestrator-script",
@@ -130,12 +130,12 @@ func scriptContentCatalog(scriptSourcePath, mainSourcePath string) *stubCatalog 
 			SourcePath:     scriptSourcePath,
 		},
 		orchestratorScriptOK: true,
-		agents:     []domain.Agent{minimalAgent},
-		skills:     []domain.Skill{},
-		hooks:      []domain.HookBundle{},
-		workflows:  []domain.Workflow{minimalWorkflow},
-		categories: []domain.WorkflowCategory{{Name: "Build", Workflows: []domain.Workflow{minimalWorkflow}}},
-		tiers:      []domain.TierInfo{{Tier: "HIGH", Rationale: "needs capable model", AgentKeys: []string{"test-runner"}}},
+		agents:               []domain.Agent{minimalAgent},
+		skills:               []domain.Skill{},
+		hooks:                []domain.HookBundle{},
+		workflows:            []domain.Workflow{minimalWorkflow},
+		categories:           []domain.WorkflowCategory{{Name: "Build", Workflows: []domain.Workflow{minimalWorkflow}}},
+		tiers:                []domain.TierInfo{{Tier: "HIGH", Rationale: "needs capable model", AgentKeys: []string{"test-runner"}}},
 		sources: map[string][]byte{
 			mainSourcePath:   []byte(orchestratorMainSourceDoc),
 			scriptSourcePath: []byte(orchestratorScriptSourceDoc),
@@ -371,11 +371,11 @@ func TestOrchestratorScript_InfraInjection_SameContentAsMainOrchestrator(t *test
 	// Act
 	svc := app.New(deps)
 	_, err := svc.DeployNew(context.Background(), app.DeployRequest{
-		HarnessID:             "stub-harness",
-		WorkspacePath:         workspace,
-		WorkflowIDs:           []string{minimalWorkflow.ID},
+		HarnessID:              "stub-harness",
+		WorkspacePath:          workspace,
+		WorkflowIDs:            []string{minimalWorkflow.ID},
 		InfrastructureAgentIDs: []string{"checkpoint-manager"},
-		AutoConfirmPlan:       true,
+		AutoConfirmPlan:        true,
 	})
 	if err != nil {
 		t.Fatalf("DeployNew: %v", err)

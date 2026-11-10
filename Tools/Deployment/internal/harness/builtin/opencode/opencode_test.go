@@ -137,10 +137,10 @@ func agentFixturesDir(t *testing.T) string {
 	return abs
 }
 
-// frozenCatalogRoot returns the absolute path to the frozen Catalog fixture tree. This tree
-// is a snapshot of the protocol source document and all HarnessInjections files at the time
-// the golden files were last regenerated. Golden-file tests must use this root instead of the
-// live repo root so they remain immune to Catalog evolution (version bumps, prose edits, etc.).
+// frozenCatalogRoot returns the absolute path to the frozen MOSAIC-root-shaped fixture tree.
+// It snapshots Catalog/CommunicationProtocol.md and Catalog/HarnessInjections/ as of the last
+// golden regeneration. Golden-file tests must use this root instead of the live repo root so
+// they remain immune to Catalog evolution (version bumps, prose edits, etc.).
 func frozenCatalogRoot(t *testing.T) string {
 	t.Helper()
 	// testdata/frozen-catalog/ is at Tools/Deployment/testdata/frozen-catalog/
@@ -156,7 +156,7 @@ func frozenCatalogRoot(t *testing.T) string {
 // test immediately if construction fails.
 func newModule(t *testing.T) domain.HarnessModule {
 	t.Helper()
-	mod, err := opencode.New(registry.BuiltinOptions{MosaicRoot: repoRoot(t)})
+	mod, err := opencode.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("opencode.New(): %v", err)
 	}
@@ -168,7 +168,7 @@ func newModule(t *testing.T) domain.HarnessModule {
 // files in Catalog/ do not affect the committed golden files.
 func newModuleFromFrozen(t *testing.T) domain.HarnessModule {
 	t.Helper()
-	mod, err := opencode.New(registry.BuiltinOptions{MosaicRoot: frozenCatalogRoot(t)})
+	mod, err := opencode.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("opencode.New() from frozen catalog: %v", err)
 	}
@@ -239,7 +239,7 @@ func truncate(b []byte, n int) []byte {
 // must be populated for every transform.Apply call that processes those source files.
 func loadProtocol(t *testing.T, root string) domain.ProtocolContent {
 	t.Helper()
-	content, err := catalog.FileProtocolLoader{}.LoadProtocol(root)
+	content, err := catalog.FileProtocolLoader{}.LoadProtocol(filepath.Join(root, "Catalog"))
 	if err != nil {
 		t.Fatalf("load protocol from %s: %v", root, err)
 	}
@@ -718,11 +718,10 @@ func TestPermission_AllToolsExplicitlyListed(t *testing.T) {
 // deployed output. OpenCode identifies agents by filename, not by a name field.
 func TestFrontmatter_NameFieldDropped(t *testing.T) {
 	mod := newModule(t)
-	root := repoRoot(t)
-	protocol := loadProtocol(t, root)
+	protocol := loadProtocol(t, frozenCatalogRoot(t))
 
 
-	srcPath := filepath.Join(root, "Catalog", "Subagents", "Execution", "test-runner.md")
+	srcPath := filepath.Join(agentFixturesDir(t), "test-runner.md")
 	src, err := os.ReadFile(srcPath)
 	if err != nil {
 		t.Skipf("generic test-runner agent not found: %v", err)
@@ -757,11 +756,10 @@ func TestFrontmatter_NameFieldDropped(t *testing.T) {
 // deployed output for a regular (non-orchestrator) agent.
 func TestFrontmatter_ModeSubagentAdded(t *testing.T) {
 	mod := newModule(t)
-	root := repoRoot(t)
-	protocol := loadProtocol(t, root)
+	protocol := loadProtocol(t, frozenCatalogRoot(t))
 
 
-	srcPath := filepath.Join(root, "Catalog", "Subagents", "Execution", "test-runner.md")
+	srcPath := filepath.Join(agentFixturesDir(t), "test-runner.md")
 	src, err := os.ReadFile(srcPath)
 	if err != nil {
 		t.Skipf("generic test-runner agent not found: %v", err)
@@ -800,11 +798,10 @@ func TestFrontmatter_ModeSubagentAdded(t *testing.T) {
 // users interact with directly; subagents are invoked by other agents via the task tool.
 func TestFrontmatter_OrchestratorGetsPrimaryMode(t *testing.T) {
 	mod := newModule(t)
-	root := repoRoot(t)
-	protocol := loadProtocol(t, root)
+	protocol := loadProtocol(t, frozenCatalogRoot(t))
 
 
-	srcPath := filepath.Join(root, "Catalog", "Orchestrator", "orchestrator.md")
+	srcPath := filepath.Join(agentFixturesDir(t), "orchestrator.md")
 	src, err := os.ReadFile(srcPath)
 	if err != nil {
 		t.Skipf("generic orchestrator not found: %v", err)
@@ -842,11 +839,10 @@ func TestFrontmatter_OrchestratorGetsPrimaryMode(t *testing.T) {
 // keys (recommended_tier, tier_rationale, required_skills) are absent from deployed output.
 func TestFrontmatter_GenericOnlyKeysDropped(t *testing.T) {
 	mod := newModule(t)
-	root := repoRoot(t)
-	protocol := loadProtocol(t, root)
+	protocol := loadProtocol(t, frozenCatalogRoot(t))
 
 
-	srcPath := filepath.Join(root, "Catalog", "Subagents", "Execution", "test-runner.md")
+	srcPath := filepath.Join(agentFixturesDir(t), "test-runner.md")
 	src, err := os.ReadFile(srcPath)
 	if err != nil {
 		t.Skipf("generic test-runner agent not found: %v", err)
@@ -872,7 +868,7 @@ func TestFrontmatter_GenericOnlyKeysDropped(t *testing.T) {
 		t.Fatalf("parse output: %v", err)
 	}
 	fm := doc.Frontmatter()
-	genericOnly := []string{"recommended_tier", "tier_rationale", "required_skills"}
+	genericOnly := []string{"recommended_tier", "tier_rationale", "required_skills", "infrastructure", "triggers", "on_failure"}
 	for _, key := range genericOnly {
 		_, ok := fm.Get(key)
 		if ok {
@@ -886,11 +882,10 @@ func TestFrontmatter_GenericOnlyKeysDropped(t *testing.T) {
 // description, mode, model, permission.
 func TestFrontmatter_KeyOrderMatchesHarnessConvention(t *testing.T) {
 	mod := newModule(t)
-	root := repoRoot(t)
-	protocol := loadProtocol(t, root)
+	protocol := loadProtocol(t, frozenCatalogRoot(t))
 
 
-	srcPath := filepath.Join(root, "Catalog", "Subagents", "Execution", "test-runner.md")
+	srcPath := filepath.Join(agentFixturesDir(t), "test-runner.md")
 	src, err := os.ReadFile(srcPath)
 	if err != nil {
 		t.Skipf("generic test-runner agent not found: %v", err)
@@ -948,11 +943,10 @@ func TestFrontmatter_KeyOrderMatchesHarnessConvention(t *testing.T) {
 // "provider/model-id" convention is written exactly as given to the "model" frontmatter key.
 func TestModelFormat_ProviderModelIDIsEmittedVerbatim(t *testing.T) {
 	mod := newModule(t)
-	root := repoRoot(t)
-	protocol := loadProtocol(t, root)
+	protocol := loadProtocol(t, frozenCatalogRoot(t))
 
 
-	srcPath := filepath.Join(root, "Catalog", "Subagents", "Execution", "test-runner.md")
+	srcPath := filepath.Join(agentFixturesDir(t), "test-runner.md")
 	src, err := os.ReadFile(srcPath)
 	if err != nil {
 		t.Skipf("generic test-runner agent not found: %v", err)
@@ -993,11 +987,10 @@ func TestModelFormat_ProviderModelIDIsEmittedVerbatim(t *testing.T) {
 // reformatting is applied to the model field value.
 func TestModelFormat_CustomIDPassthrough(t *testing.T) {
 	mod := newModule(t)
-	root := repoRoot(t)
-	protocol := loadProtocol(t, root)
+	protocol := loadProtocol(t, frozenCatalogRoot(t))
 
 
-	srcPath := filepath.Join(root, "Catalog", "Subagents", "Execution", "test-runner.md")
+	srcPath := filepath.Join(agentFixturesDir(t), "test-runner.md")
 	src, err := os.ReadFile(srcPath)
 	if err != nil {
 		t.Skipf("generic test-runner agent not found: %v", err)
@@ -1037,11 +1030,10 @@ func TestModelFormat_CustomIDPassthrough(t *testing.T) {
 // provider prefix (no "/" separator) is emitted as-is, never reformatted.
 func TestModelFormat_NonConventionalIDNeverRewritten(t *testing.T) {
 	mod := newModule(t)
-	root := repoRoot(t)
-	protocol := loadProtocol(t, root)
+	protocol := loadProtocol(t, frozenCatalogRoot(t))
 
 
-	srcPath := filepath.Join(root, "Catalog", "Subagents", "Execution", "test-runner.md")
+	srcPath := filepath.Join(agentFixturesDir(t), "test-runner.md")
 	src, err := os.ReadFile(srcPath)
 	if err != nil {
 		t.Skipf("generic test-runner agent not found: %v", err)
@@ -1251,15 +1243,16 @@ func TestInjection_OpenCode_ProjectInjectionsNotFilled(t *testing.T) {
 }
 
 // TestInjection_OpenCode_InjectionsVersion verifies that the descriptor carries
-// injections_version "1.3.1". This version stamps every deployed agent and signals
-// that agent content must be refreshed when the harness injections change.
+// the frontmatter version of the frozen catalog's HarnessInjections.md ("1.4.0"). This version
+// stamps every deployed agent and signals that agent content must be refreshed when the
+// harness injections change.
 func TestInjection_OpenCode_InjectionsVersion(t *testing.T) {
 	mod := newModule(t)
 	d := mod.Descriptor()
 	if d == nil {
 		t.Fatal("Descriptor() returned nil")
 	}
-	want := "1.3.1"
+	want := "1.4.0"
 	if d.InjectionsVersion != want {
 		t.Errorf("Descriptor().InjectionsVersion = %q, want %q", d.InjectionsVersion, want)
 	}
@@ -1442,7 +1435,7 @@ func TestContract_OpenCode(t *testing.T) {
 					Set: []domain.FrontmatterField{
 						{Key: "mode", Value: domain.ScalarValue("subagent", domain.QuotePlain)},
 					},
-					Remove:   []string{"name", "recommended_tier", "tier_rationale", "required_skills", "tools"},
+					Remove:   []string{"name", "recommended_tier", "tier_rationale", "required_skills", "tools", "infrastructure", "triggers", "on_failure"},
 					KeyOrder: []string{"mosaic_id", "version", "mosaic_transform_version", "mosaic_injections_version", "description", "mode", "model", "permission"},
 				},
 			},
@@ -1468,7 +1461,7 @@ func TestContract_OpenCode(t *testing.T) {
 					Set: []domain.FrontmatterField{
 						{Key: "mode", Value: domain.ScalarValue("primary", domain.QuotePlain)},
 					},
-					Remove:   []string{"name", "recommended_tier", "tier_rationale", "required_skills", "tools"},
+					Remove:   []string{"name", "recommended_tier", "tier_rationale", "required_skills", "tools", "infrastructure", "triggers", "on_failure"},
 					KeyOrder: []string{"mosaic_id", "version", "mosaic_transform_version", "mosaic_injections_version", "description", "mode", "model", "permission"},
 				},
 			},

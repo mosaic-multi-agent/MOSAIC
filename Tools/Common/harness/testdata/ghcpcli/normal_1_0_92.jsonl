@@ -1,0 +1,8 @@
+{"type":"session.mcp_server_status_changed","data":{"serverName":"github-mcp-server","status":"connected"},"ephemeral":true,"id":"id-01","timestamp":"2026-10-06T20:58:28.000Z","parentId":"pid-01"}
+{"type":"session.skills_loaded","data":{"skills":[{"name":"example-skill","description":"Example skill","source":"builtin","path":"C:\\Users\\someuser\\AppData\\Local\\copilot\\pkg\\win32-x64\\1.0.92\\builtin\\example-skill\\SKILL.md"}]},"ephemeral":true,"id":"id-02","timestamp":"2026-10-06T20:58:28.100Z","parentId":"pid-01"}
+{"type":"user.message","data":{"content":"Reply with the protocol response."},"id":"id-03","timestamp":"2026-10-06T20:58:28.200Z","parentId":"pid-01"}
+{"type":"assistant.turn_start","data":{"turnId":"0"},"id":"id-04","timestamp":"2026-10-06T20:58:28.300Z","parentId":"id-03"}
+{"type":"assistant.message_delta","data":{"deltaContent":"Hello "},"ephemeral":true,"id":"id-05","timestamp":"2026-10-06T20:58:28.400Z","parentId":"id-04"}
+{"type":"assistant.message","data":{"messageId":"m-01","model":"example-model","content":"Hello from the agent."},"id":"id-06","timestamp":"2026-10-06T20:58:28.500Z","parentId":"id-04"}
+{"type":"assistant.turn_end","data":{"turnId":"0"},"id":"id-07","timestamp":"2026-10-06T20:58:28.600Z","parentId":"id-04"}
+{"type":"result","timestamp":"2026-10-06T20:58:28.700Z","sessionId":"sess-01","exitCode":0,"usage":{"premiumRequests":0.33,"totalApiDurationMs":4210,"sessionDurationMs":5805}}

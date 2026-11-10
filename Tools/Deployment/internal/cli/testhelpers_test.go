@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"mosaic-deploy/internal/app"
+	"mosaic-deploy/internal/app/stackservicetest"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/todo"
 )
@@ -19,6 +20,7 @@ import (
 // ---------------------------------------------------------------------------
 
 type spyService struct {
+	stackservicetest.MockStackService
 	harnessRefs []domain.HarnessRef
 
 	deployReq  *app.DeployRequest

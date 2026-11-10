@@ -56,6 +56,23 @@ const (
 	// covers the managed-region parent case.
 	GapEnclosingSectionChanged GapKind = "enclosing-section-changed"
 
+	// GapCatalogShadowing reports an undeclared catalog override found in an auto-confirmed
+	// run: a higher catalog layer shadows an item of a lower layer without declaring it.
+	GapCatalogShadowing GapKind = "catalog-shadowing"
+
+	// GapUndeliveredOrchestratorInjection reports an orchestrator source that has no
+	// OrchestratorHarnessConstraints marker while the harness has orchestrator content.
+	// The content was not deployed; deploy continues.
+	GapUndeliveredOrchestratorInjection GapKind = "undelivered-orchestrator-injection"
+
+	// GapRoleForbiddenRegion reports a non-orchestrator agent that carries the
+	// OrchestratorHarnessConstraints region. Deploy and update continue.
+	GapRoleForbiddenRegion GapKind = "role-forbidden-region"
+
+	// GapWorkflowKept reports a workflow deployed in an orchestrator-role file that the catalog
+	// stack does not supply. The block is kept as deployed, not updated or validated. One gap
+	// is produced per kept workflow id per run.
+	GapWorkflowKept GapKind = "workflow-kept"
 )
 
 // Gap is produced by transform, plan, and deploy when a decision could not be made automatically.
@@ -94,4 +111,8 @@ type TodoItem struct {
 	Owner    string
 	Detail   string
 	Fragment string
+
+	// Kind is the gap kind the item came from (set by Collector.AddGap); empty for items added
+	// with Collector.Add. Not serialised: RunSummary JSON and the TODO file are unchanged.
+	Kind GapKind `json:"-"`
 }

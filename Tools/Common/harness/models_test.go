@@ -41,19 +41,25 @@ func TestModelCatalogs_OrderIsStableAcrossCalls(t *testing.T) {
 	}
 }
 
-// TestModelCatalogs_OrderMatchesIdentityCatalog verifies that ModelCatalogs()
-// returns entries in the same order as CLIHarnesses(). The design document
-// requires "the same stable order CLIHarnesses uses".
+// TestModelCatalogs_OrderMatchesIdentityCatalog verifies that the entries of
+// ModelCatalogs() whose HarnessID is a CLI-backed harness appear in the same
+// order as CLIHarnesses(), and that every CLIHarnesses() entry is present.
+// Non-CLI entries are allowed and are skipped.
 func TestModelCatalogs_OrderMatchesIdentityCatalog(t *testing.T) {
 	identities := harness.CLIHarnesses()
-	models := harness.ModelCatalogs()
+	var cliEntries []string
+	for _, m := range harness.ModelCatalogs() {
+		if harness.IsCLIHarness(m.HarnessID) {
+			cliEntries = append(cliEntries, m.HarnessID)
+		}
+	}
 
-	if len(models) != len(identities) {
-		t.Fatalf("ModelCatalogs() has %d entries but CLIHarnesses() has %d: every identity catalog entry must have a model catalog entry", len(models), len(identities))
+	if len(cliEntries) != len(identities) {
+		t.Fatalf("ModelCatalogs() has %d CLI-backed entries but CLIHarnesses() has %d: every CLI-backed harness must have a model catalog entry", len(cliEntries), len(identities))
 	}
 	for i := range identities {
-		if models[i].HarnessID != identities[i].ID {
-			t.Errorf("index %d: ModelCatalogs()[%d].HarnessID = %q, want %q to match CLIHarnesses()[%d].ID", i, i, models[i].HarnessID, identities[i].ID, i)
+		if cliEntries[i] != identities[i].ID {
+			t.Errorf("CLI-backed entry %d is %q, want %q to match CLIHarnesses()[%d].ID", i, cliEntries[i], identities[i].ID, i)
 		}
 	}
 }
@@ -78,7 +84,7 @@ func TestModelCatalogs_EveryEntryHasNonEmptyHarnessID(t *testing.T) {
 func TestModelCatalogs_EveryEntryHasNonEmptyIDs(t *testing.T) {
 	for _, e := range harness.ModelCatalogs() {
 		if len(e.IDs) == 0 {
-			t.Errorf("harness %q: ModelCatalog has an empty IDs list; every CLI-backed harness must declare at least one model", e.HarnessID)
+			t.Errorf("harness %q: ModelCatalog has an empty IDs list; every catalog entry must declare at least one model", e.HarnessID)
 		}
 	}
 }
@@ -89,7 +95,7 @@ func TestModelCatalogs_EveryEntryHasNonEmptyIDs(t *testing.T) {
 func TestModelCatalogs_EveryEntryHasNonEmptyFormatHint(t *testing.T) {
 	for _, e := range harness.ModelCatalogs() {
 		if e.FormatHint == "" {
-			t.Errorf("harness %q: ModelCatalog has an empty FormatHint; every CLI-backed harness must declare one", e.HarnessID)
+			t.Errorf("harness %q: ModelCatalog has an empty FormatHint; every catalog entry must declare one", e.HarnessID)
 		}
 	}
 }
@@ -558,7 +564,7 @@ func TestIsModelID_GHCPCLIModel(t *testing.T) {
 
 // TestModelCatalog_EveryIdentityCatalogEntryHasModelData verifies that every
 // harness in the identity catalog (CLIHarnesses) has a corresponding model
-// catalog entry, so adding a harness to the identity catalog without adding
+// catalog entry (non-CLI entries are allowed in addition), so adding a harness to the identity catalog without adding
 // model data fails loudly here rather than silently producing an empty model
 // list at runtime.
 func TestModelCatalog_EveryIdentityCatalogEntryHasModelData(t *testing.T) {

@@ -506,7 +506,7 @@ func TestTransformCmd_DoesNotCallRenderAgent(t *testing.T) {
 	}
 
 	cli.Run(context.Background(),
-		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--path", "/agent.md"},
+		[]string{"transform", "--harness", "src", "--target-harness", "tgt", "--workspace", "/agent.md"},
 		svc, &bytes.Buffer{}, &bytes.Buffer{})
 
 	if svc.renderAgentReq != nil {

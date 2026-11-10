@@ -52,7 +52,7 @@ func TestOrchestratorScript_Flow_DeployNewPassesInclusiveMode(t *testing.T) {
 	stub := interactiontest.NewBuilder().AnswerReview(true).Build()
 	deps, workspace := newBaseDeps(t, stub)
 	deps.Catalog = &stubCatalog{
-		root: "testroot",
+		root:         "testroot",
 		orchestrator: minimalOrchestrator,
 		orchestratorScript: domain.Agent{
 			Key:     "orchestrator-script",
@@ -62,10 +62,10 @@ func TestOrchestratorScript_Flow_DeployNewPassesInclusiveMode(t *testing.T) {
 			Tools:   []string{"file_read", "file_edit"},
 		},
 		orchestratorScriptOK: true,
-		agents:    []domain.Agent{minimalAgent},
-		skills:    []domain.Skill{},
-		hooks:     []domain.HookBundle{},
-		workflows: []domain.Workflow{minimalWorkflow},
+		agents:               []domain.Agent{minimalAgent},
+		skills:               []domain.Skill{},
+		hooks:                []domain.HookBundle{},
+		workflows:            []domain.Workflow{minimalWorkflow},
 		categories: []domain.WorkflowCategory{
 			{Name: "Build", Workflows: []domain.Workflow{minimalWorkflow}},
 		},
@@ -109,7 +109,7 @@ func TestOrchestratorScript_Flow_DeployAgentsPassesExclusiveMode(t *testing.T) {
 	stub := interactiontest.NewBuilder().AnswerReview(true).Build()
 	deps, workspace := newBaseDeps(t, stub)
 	deps.Catalog = &stubCatalog{
-		root: "testroot",
+		root:         "testroot",
 		orchestrator: minimalOrchestrator,
 		orchestratorScript: domain.Agent{
 			Key:     "orchestrator-script",
@@ -119,10 +119,10 @@ func TestOrchestratorScript_Flow_DeployAgentsPassesExclusiveMode(t *testing.T) {
 			Tools:   []string{"file_read", "file_edit"},
 		},
 		orchestratorScriptOK: true,
-		agents:    []domain.Agent{minimalAgent},
-		skills:    []domain.Skill{},
-		hooks:     []domain.HookBundle{},
-		workflows: []domain.Workflow{minimalWorkflow},
+		agents:               []domain.Agent{minimalAgent},
+		skills:               []domain.Skill{},
+		hooks:                []domain.HookBundle{},
+		workflows:            []domain.Workflow{minimalWorkflow},
 		categories: []domain.WorkflowCategory{
 			{Name: "Build", Workflows: []domain.Workflow{minimalWorkflow}},
 		},
@@ -137,11 +137,11 @@ func TestOrchestratorScript_Flow_DeployAgentsPassesExclusiveMode(t *testing.T) {
 	// Act
 	svc := app.New(deps)
 	_, _ = svc.DeployAgents(context.Background(), app.DeployAgentsRequest{
-		HarnessID:     "stub-harness",
-		WorkspacePath: workspace,
-		SubagentIDs:   []string{"test-runner"},
+		HarnessID:              "stub-harness",
+		WorkspacePath:          workspace,
+		SubagentIDs:            []string{"test-runner"},
 		InfrastructureAgentIDs: []string{},
-		AutoConfirmPlan: true,
+		AutoConfirmPlan:        true,
 	})
 
 	// Assert — the planner must receive ModeDeployAgents (exclusive mode for the script).
@@ -161,7 +161,7 @@ func TestOrchestratorScript_Flow_DeployHooksPassesExclusiveMode(t *testing.T) {
 	stub := interactiontest.NewBuilder().AnswerReview(true).Build()
 	deps, workspace := newBaseDeps(t, stub)
 	deps.Catalog = &stubCatalog{
-		root: "testroot",
+		root:         "testroot",
 		orchestrator: minimalOrchestrator,
 		orchestratorScript: domain.Agent{
 			Key:     "orchestrator-script",
@@ -171,10 +171,10 @@ func TestOrchestratorScript_Flow_DeployHooksPassesExclusiveMode(t *testing.T) {
 			Tools:   []string{"file_read", "file_edit"},
 		},
 		orchestratorScriptOK: true,
-		agents:    []domain.Agent{minimalAgent},
-		skills:    []domain.Skill{},
-		hooks:     []domain.HookBundle{},
-		workflows: []domain.Workflow{minimalWorkflow},
+		agents:               []domain.Agent{minimalAgent},
+		skills:               []domain.Skill{},
+		hooks:                []domain.HookBundle{},
+		workflows:            []domain.Workflow{minimalWorkflow},
 		categories: []domain.WorkflowCategory{
 			{Name: "Build", Workflows: []domain.Workflow{minimalWorkflow}},
 		},
@@ -220,7 +220,7 @@ func TestOrchestratorScript_Flow_CatalogWithScriptPassedToPlanner(t *testing.T) 
 	stub := interactiontest.NewBuilder().AnswerReview(true).Build()
 	deps, workspace := newBaseDeps(t, stub)
 	cat := &stubCatalog{
-		root: "testroot",
+		root:         "testroot",
 		orchestrator: minimalOrchestrator,
 		orchestratorScript: domain.Agent{
 			Key:     "orchestrator-script",
@@ -230,10 +230,10 @@ func TestOrchestratorScript_Flow_CatalogWithScriptPassedToPlanner(t *testing.T) 
 			Tools:   []string{"file_read", "file_edit"},
 		},
 		orchestratorScriptOK: true,
-		agents:    []domain.Agent{minimalAgent},
-		skills:    []domain.Skill{},
-		hooks:     []domain.HookBundle{},
-		workflows: []domain.Workflow{minimalWorkflow},
+		agents:               []domain.Agent{minimalAgent},
+		skills:               []domain.Skill{},
+		hooks:                []domain.HookBundle{},
+		workflows:            []domain.Workflow{minimalWorkflow},
 		categories: []domain.WorkflowCategory{
 			{Name: "Build", Workflows: []domain.Workflow{minimalWorkflow}},
 		},
@@ -300,7 +300,7 @@ func TestOrchestratorScript_ModelResolution_ScriptGetsIndependentQuestion(t *tes
 		Build()
 	deps, workspace := newBaseDeps(t, stub)
 	deps.Catalog = &stubCatalog{
-		root: "testroot",
+		root:         "testroot",
 		orchestrator: minimalOrchestrator,
 		orchestratorScript: domain.Agent{
 			Key:     "orchestrator-script",
@@ -310,10 +310,10 @@ func TestOrchestratorScript_ModelResolution_ScriptGetsIndependentQuestion(t *tes
 			Tools:   []string{"file_read", "file_edit"},
 		},
 		orchestratorScriptOK: true,
-		agents:    []domain.Agent{minimalAgent},
-		skills:    []domain.Skill{},
-		hooks:     []domain.HookBundle{},
-		workflows: []domain.Workflow{minimalWorkflow},
+		agents:               []domain.Agent{minimalAgent},
+		skills:               []domain.Skill{},
+		hooks:                []domain.HookBundle{},
+		workflows:            []domain.Workflow{minimalWorkflow},
 		categories: []domain.WorkflowCategory{
 			{Name: "Build", Workflows: []domain.Workflow{minimalWorkflow}},
 		},
@@ -354,7 +354,7 @@ func TestOrchestratorScript_Flow_UpdatePassesInclusiveMode(t *testing.T) {
 	stub := interactiontest.NewBuilder().AnswerReview(true).Build()
 	deps, workspace := newBaseDeps(t, stub)
 	deps.Catalog = &stubCatalog{
-		root: "testroot",
+		root:         "testroot",
 		orchestrator: minimalOrchestrator,
 		orchestratorScript: domain.Agent{
 			Key:     "orchestrator-script",
@@ -364,10 +364,10 @@ func TestOrchestratorScript_Flow_UpdatePassesInclusiveMode(t *testing.T) {
 			Tools:   []string{"file_read", "file_edit"},
 		},
 		orchestratorScriptOK: true,
-		agents:    []domain.Agent{minimalAgent},
-		skills:    []domain.Skill{},
-		hooks:     []domain.HookBundle{},
-		workflows: []domain.Workflow{minimalWorkflow},
+		agents:               []domain.Agent{minimalAgent},
+		skills:               []domain.Skill{},
+		hooks:                []domain.HookBundle{},
+		workflows:            []domain.Workflow{minimalWorkflow},
 		categories: []domain.WorkflowCategory{
 			{Name: "Build", Workflows: []domain.Workflow{minimalWorkflow}},
 		},
@@ -416,7 +416,7 @@ func TestOrchestratorScript_Flow_UpdateWorkflowsPassesInclusiveMode(t *testing.T
 	stub := interactiontest.NewBuilder().AnswerReview(true).Build()
 	deps, workspace := newBaseDeps(t, stub)
 	deps.Catalog = &stubCatalog{
-		root: "testroot",
+		root:         "testroot",
 		orchestrator: minimalOrchestrator,
 		orchestratorScript: domain.Agent{
 			Key:     "orchestrator-script",
@@ -426,10 +426,10 @@ func TestOrchestratorScript_Flow_UpdateWorkflowsPassesInclusiveMode(t *testing.T
 			Tools:   []string{"file_read", "file_edit"},
 		},
 		orchestratorScriptOK: true,
-		agents:    []domain.Agent{minimalAgent},
-		skills:    []domain.Skill{},
-		hooks:     []domain.HookBundle{},
-		workflows: []domain.Workflow{minimalWorkflow},
+		agents:               []domain.Agent{minimalAgent},
+		skills:               []domain.Skill{},
+		hooks:                []domain.HookBundle{},
+		workflows:            []domain.Workflow{minimalWorkflow},
 		categories: []domain.WorkflowCategory{
 			{Name: "Build", Workflows: []domain.Workflow{minimalWorkflow}},
 		},
@@ -481,7 +481,7 @@ func TestOrchestratorScript_ModelResolution_MainOrchestratorUnaffected(t *testin
 		Build()
 	deps, workspace := newBaseDeps(t, stub)
 	deps.Catalog = &stubCatalog{
-		root: "testroot",
+		root:         "testroot",
 		orchestrator: minimalOrchestrator,
 		orchestratorScript: domain.Agent{
 			Key:     "orchestrator-script",
@@ -491,10 +491,10 @@ func TestOrchestratorScript_ModelResolution_MainOrchestratorUnaffected(t *testin
 			Tools:   []string{"file_read", "file_edit"},
 		},
 		orchestratorScriptOK: true,
-		agents:    []domain.Agent{minimalAgent},
-		skills:    []domain.Skill{},
-		hooks:     []domain.HookBundle{},
-		workflows: []domain.Workflow{minimalWorkflow},
+		agents:               []domain.Agent{minimalAgent},
+		skills:               []domain.Skill{},
+		hooks:                []domain.HookBundle{},
+		workflows:            []domain.Workflow{minimalWorkflow},
 		categories: []domain.WorkflowCategory{
 			{Name: "Build", Workflows: []domain.Workflow{minimalWorkflow}},
 		},
@@ -552,10 +552,10 @@ func TestOrchestratorScript_ModelResolution_TierMappingSkipsScriptQuestion(t *te
 			RecommendedTier: "HIGH",
 		},
 		orchestratorScriptOK: true,
-		agents:    []domain.Agent{minimalAgent},
-		skills:    []domain.Skill{},
-		hooks:     []domain.HookBundle{},
-		workflows: []domain.Workflow{minimalWorkflow},
+		agents:               []domain.Agent{minimalAgent},
+		skills:               []domain.Skill{},
+		hooks:                []domain.HookBundle{},
+		workflows:            []domain.Workflow{minimalWorkflow},
 		categories: []domain.WorkflowCategory{
 			{Name: "Build", Workflows: []domain.Workflow{minimalWorkflow}},
 		},

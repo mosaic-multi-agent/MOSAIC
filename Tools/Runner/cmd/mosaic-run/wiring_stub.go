@@ -1,25 +1,54 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"mosaic-run/internal/artifact"
+	"mosaic-run/internal/debuglog"
 	"mosaic-run/internal/deviation"
 	"mosaic-run/internal/domain"
+	"mosaic-run/internal/guidance"
 	"mosaic-run/internal/harness"
 	"mosaic-run/internal/session"
+	"mosaic-run/internal/testcatalog"
+	"mosaic-run/internal/testcheck"
+	"mosaic-run/internal/testdeploy"
+	"mosaic-run/internal/testrun"
+	"mosaic-run/internal/testrun/invoker"
+	"mosaic-run/internal/testrun/resolve"
 	"mosaic-run/internal/tui"
-	"mosaic-run/internal/tui/screens"
+	"mosaic-run/internal/tui/screens/runconfig"
 )
+
+// resolveAndAnnounceFn is the package-level seam for harness binary resolution in
+// the TUI factory. Tests override this variable to inject failures without
+// executing real resolution.
+var resolveAndAnnounceFn = resolve.ResolveAndAnnounce
+
+// orchRunFn is the package-level seam for Orchestrator.Run in the TUI factory.
+// Tests override this variable to inject orchestration results (normal-path or
+// error-path) without constructing a real deployer, subprocess invoker, or
+// orchestrator. The default delegates to the concrete Run method unchanged.
+var orchRunFn = func(orch *testrun.Orchestrator, ctx context.Context, cfg testrun.TestConfig) (*testrun.TestSummary, error) {
+	return orch.Run(ctx, cfg)
+}
+
+// buildAdapterFn is the package-level seam for adapter construction in the
+// interactive wiring. Tests override this variable to observe the arguments,
+// notably the activity observer, the wiring hands over. The default is the
+// production constructor.
+var buildAdapterFn = buildAdapter
 
 // interactiveWiringInput carries the process-scoped values runTUIMode hoists
 // and hands to the seam. Everything here is constructed once per process.
 type interactiveWiringInput struct {
-	// ClaudePath is the pre-scanned --claude-path value.
-	ClaudePath string
+	// ExecutablePath is the pre-scanned --executable-path value.
+	ExecutablePath string
 
 	// ProgramRef is the Interaction port, shared by the TUI and the session.
 	ProgramRef *tui.ProgramRef
@@ -36,6 +65,25 @@ type interactiveWiringInput struct {
 	// passing nil is a programming error, not a normalised default. A default
 	// here would recreate the orphan-signal defect the seam exists to fix.
 	StopSignal *session.StopSignal
+
+	// ForceStop is the shared force-stop request, constructed exactly once in
+	// runTUIMode next to StopSignal. The TUI raises it; every session built
+	// here watches it.
+	ForceStop *session.ForceStopSignal
+
+	// Requests is the shared in-run request object, constructed exactly once in
+	// runTUIMode next to StopSignal. Nil is a programming error, not a default.
+	Requests *session.InRunRequests
+
+	// GuardWaiver is the shared anti-loop guard waiver, constructed exactly once
+	// in runTUIMode. The TUI writes it; every session built here reads it. Nil
+	// is a programming error, not a default.
+	GuardWaiver *session.GuardWaiver
+
+	// Guidance is the live standing-guidance holder, constructed exactly once in
+	// runTUIMode. Every session built here publishes its guidance through it. Nil
+	// is a programming error, not a default.
+	Guidance *session.StandingGuidance
 
 	// Debug is the process debug logger, reaching both the session and (from
 	// the stop-observability work) the TUI, so one ordered log holds both
@@ -60,6 +108,10 @@ type interactiveWiringInput struct {
 	// Nil is permitted (the field is nil-safe in the TUI), so a test may leave
 	// it unset; production must not.
 	OnRunIDResolved func(runID string)
+
+	// DevMode enables the test-mode flow in the TUI. Passed through verbatim to
+	// tui.Options.DevMode. When true, the TUI exposes a "Run Tests" option.
+	DevMode bool
 }
 
 // interactiveWiring is the assembled interactive composition. Both fields are
@@ -76,7 +128,7 @@ type interactiveWiring struct {
 	// must observe the Deps value before session.New consumes it:
 	// sessionImpl.deps is unexported, so a constructed session cannot be
 	// interrogated.
-	NewDeps func(runFolder string, isNewRun bool, orchFile string, cfg screens.ConfigSelection) session.Deps
+	NewDeps func(runFolder string, isNewRun bool, orchFile string, cfg runconfig.ConfigSelection) session.Deps
 }
 
 // buildInteractiveWiring assembles the interactive frontend's composition seam.
@@ -92,16 +144,15 @@ func buildInteractiveWiring(in interactiveWiringInput) interactiveWiring {
 	// notably the stop signal and the two loggers -- and derives everything
 	// else from its per-invocation arguments, so a session rebuilt after a
 	// configuration change or a retry keeps observing the same shared state.
-	newDeps := func(runFolder string, isNewRun bool, orchFile string, cfg screens.ConfigSelection) session.Deps {
+	newDeps := func(runFolder string, isNewRun bool, orchFile string, cfg runconfig.ConfigSelection) session.Deps {
 		// cfg.ExecutablePath is set when the user confirms an override on the
 		// exec-override screen. It wins over the pre-scanned path so that
 		// retrying with a different executable actually takes effect.
 		execPath := cfg.ExecutablePath
 		if execPath == "" {
-			execPath = in.ClaudePath
+			execPath = in.ExecutablePath
 		}
-		h := buildAdapter(cfg.Harness, execPath, cfg.GHCPCLIMode, cfg.Timeout, in.Debug)
-
+		effectiveRunFolder := runFolder
 		artifactPath, err := resolveTUIArtifactPath(runFolder)
 		if errors.Is(err, errUnresolvedRunFolder) {
 			// Defensive branch: an unresolved run folder is a contract violation
@@ -112,7 +163,9 @@ func buildInteractiveWiring(in interactiveWiringInput) interactiveWiring {
 				domain.F("path", mintedFolder))
 			fmt.Fprintf(os.Stderr, "notice: run folder unresolved; minting new run at %s\n", mintedFolder)
 			artifactPath = filepath.Join(mintedFolder, "Orchestration.md")
+			effectiveRunFolder = mintedFolder
 		}
+		h := buildAdapterFn(effectiveRunFolder, cfg.Harness, execPath, cfg.GHCPCLIMode, domain.InvocationTimeouts{NonHITL: cfg.Timeout, HITL: cfg.HITLTimeout}, activityObserverOf(in.ProgramRef), in.Debug)
 		store := newLoggedArtifactStore(artifactPath, in.Debug)
 
 		// Extract the raw-JSON transport if the selected harness adapter
@@ -124,23 +177,44 @@ func buildInteractiveWiring(in interactiveWiringInput) interactiveWiring {
 		}
 
 		// The same builder the non-interactive path uses, so both frontends
-		// share one place where consultant selection is expressed. It returns
+		// share one place where consultant wiring is expressed. Availability
+		// depends on the transports only, never on cfg.Settings: a resumed run's
+		// effective settings come from its artifact. It returns
 		// the routing fields only; the stop dependency belongs to this seam
 		// alone, because the non-interactive frontend has no stop affordance.
-		routingDeps := buildDeps(cfg.Settings, rawInvoker, in.ProgramRef, artifact.NewApprovalReader(), in.DispatchLog)
+		routingDeps := buildDeps(rawInvoker, in.ProgramRef, artifact.NewApprovalReader(), in.DispatchLog)
+
+		// A nil *ForceStopSignal must not become a non-nil interface value.
+		var forceStop domain.ForceStopWatcher
+		if in.ForceStop != nil {
+			forceStop = in.ForceStop
+		}
 
 		return session.Deps{
-			Harness:       h,
-			Store:         store,
-			Clock:         in.Clock,
-			Interact:      in.ProgramRef,
-			Debug:         in.Debug,
-			DispatchLog:   in.DispatchLog,
-			Routing:       routingDeps.Routing,
-			Manual:        routingDeps.Manual,
-			PreConsult:    routingDeps.PreConsult,
-			Approvals:     routingDeps.Approvals,
-			StopRequested: in.StopSignal.Requested,
+			Harness:        h,
+			Store:          store,
+			Clock:          in.Clock,
+			Interact:       in.ProgramRef,
+			StepRecords:    in.ProgramRef,
+			Consultations:  in.ProgramRef,
+			Debug:          in.Debug,
+			DispatchLog:    in.DispatchLog,
+			Routing:        routingDeps.Routing,
+			Manual:         routingDeps.Manual,
+			PreConsult:     routingDeps.PreConsult,
+			GuidanceStore:  routingDeps.GuidanceStore,
+			Guidance:       in.Guidance,
+			Approvals:      routingDeps.Approvals,
+			Outputs:        artifact.NewOutputWriteDetector(),
+			StopRequested:  in.StopSignal.Requested,
+			ForceStop:      forceStop,
+			AntiLoopWaived: in.GuardWaiver.Waived,
+			TakeManualDispatchRequest: func() bool {
+				return in.Requests.Take(domain.InRunRequestManualDispatch)
+			},
+			TakeHITLRequest: func() bool {
+				return in.Requests.Take(domain.InRunRequestHITLNext)
+			},
 		}
 	}
 
@@ -153,47 +227,135 @@ func buildInteractiveWiring(in interactiveWiringInput) interactiveWiring {
 			IsNewRun:           in.Identity.IsNewRun,
 			RecordedWorkflowID: domain.WorkflowID(in.Identity.Workflow),
 			InitialRunFolder:   in.Identity.RunFolder,
-			SessionFactory: func(runFolder string, isNewRun bool, orchFile string, cfg screens.ConfigSelection) session.Session {
-				return session.New(newDeps(runFolder, isNewRun, orchFile, cfg))
+			DevMode:            in.DevMode,
+			SessionFactory: func(runFolder string, isNewRun bool, orchFile string, cfg runconfig.ConfigSelection) session.Session {
+				sessionRunFolder := resolveSessionRunFolder(runFolder, in)
+				deps := newDeps(sessionRunFolder, isNewRun, orchFile, cfg)
+				sess := withGHCPTrustPreflight(session.New(deps),
+					sessionRunFolder, cfg.Harness, in.ProgramRef, true, in.Debug)
+				return newRunLifecycleSession(sess,
+					newRunLogConfig(sessionRunFolder, cfg.Harness, in.Debug, in.Clock))
 			},
 			MintRunIdentity:        in.Minter,
 			OrchestratorDiscoverer: harness.DiscoverOrchestrator,
 			ArtifactStoreFactory: func(runFolder string) domain.ArtifactStore {
 				return newLoggedArtifactStore(filepath.Join(runFolder, "Orchestration.md"), in.Debug)
 			},
-			Clock:           in.Clock,
-			OnRunIDResolved: in.OnRunIDResolved,
-			StopSignal:      in.StopSignal,
-			Debug:           in.Debug,
-			ToolVersion:     ToolVersion,
+			Clock:             in.Clock,
+			OnRunIDResolved:   in.OnRunIDResolved,
+			StopSignal:        in.StopSignal,
+			ForceStop:         in.ForceStop,
+			InRunRequests:     in.Requests,
+			GuardWaiver:       in.GuardWaiver,
+			Debug:             in.Debug,
+			ToolVersion:       ToolVersion,
+			TestCatalogLoader: buildTestCatalogLoader(),
+			TestRunnerFactory: buildTestRunnerFactory(),
 		},
 		NewDeps: newDeps,
 	}
 }
 
+// buildTestCatalogLoader returns the production catalog loader function: it
+// loads a *testcatalog.Catalog from the given catalog root directory and
+// returns it as a testrun.CatalogPort.
+func buildTestCatalogLoader() func(catalogRoot string) (testrun.CatalogPort, error) {
+	return func(catalogRoot string) (testrun.CatalogPort, error) {
+		return testcatalog.Load(catalogRoot)
+	}
+}
+
+// buildTestRunnerFactory returns the production test runner factory function.
+// It constructs the Orchestrator and all its dependencies (Deployer,
+// SubprocessRunInvoker, checker adapter, debug logger) and runs the test flow.
+func buildTestRunnerFactory() func(ctx context.Context, cfg testrun.TestConfig, reporter testrun.ProgressReporter) (*testrun.TestSummary, error) {
+	return func(ctx context.Context, cfg testrun.TestConfig, reporter testrun.ProgressReporter) (*testrun.TestSummary, error) {
+		catRoot := filepath.Join(cfg.MosaicRoot, "Tools", "Runner", "TestCatalog")
+		cat, err := testcatalog.Load(catRoot)
+		if err != nil {
+			return nil, fmt.Errorf("loading test catalog: %w", err)
+		}
+
+		deployer := testdeploy.New(testdeploy.Options{})
+		logger := debuglog.New(cfg.Workspace)
+
+		// Resolve harness binaries before constructing the orchestrator. On failure,
+		// return (nil, error) so app.go maps it to TestSummary{DeployError: err}.
+		resolvedPaths, resolveErr := resolveAndAnnounceFn(cfg.Harnesses, exec.LookPath, nil, logger)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		cfg.ResolvedPaths = resolvedPaths
+
+		// Notify the TUI of resolved paths via the optional ResolvedPathsReporter
+		// interface. This type assertion is safe: reporters that do not implement
+		// the interface simply skip the notification.
+		if rpr, ok := reporter.(testrun.ResolvedPathsReporter); ok {
+			rpr.OnResolvedPaths(resolvedPaths, resolve.HarnessDisplayOrder(cfg.Harnesses))
+		}
+
+		runInvoker := invoker.NewSubprocessRunInvoker(invoker.RunInvokerOptions{
+			WorkingDir:  cfg.Workspace,
+			DebugLogger: logger,
+		})
+
+		orch := testrun.NewOrchestrator(testrun.OrchestratorDeps{
+			Catalog:    cat,
+			Deployer:   deployer,
+			RunInvoker: runInvoker,
+			Checker:    &testCheckerAdapter{},
+			Reporter:   reporter,
+		})
+
+		summary, runErr := orchRunFn(orch, ctx, cfg)
+		// Propagate ResolvedPaths and LogPath onto the summary so the TUI results
+		// screen can display them regardless of how the run ended.
+		if summary != nil {
+			summary.LogPath = logger.Path()
+			summary.ResolvedPaths = cfg.ResolvedPaths
+		} else if runErr != nil {
+			// Factory builds its own fallback when orch.Run returns (nil, error)
+			// after resolution succeeded. This ensures ResolvedPaths survives
+			// on the fallback summary (AC4.11).
+			summary = &testrun.TestSummary{
+				DeployError:   runErr,
+				ResolvedPaths: cfg.ResolvedPaths,
+				LogPath:       logger.Path(),
+			}
+		}
+		return summary, runErr
+	}
+}
+
+// testCheckerAdapter adapts the testcheck package-level functions to the
+// testrun.CheckerPort interface expected by the Orchestrator.
+type testCheckerAdapter struct{}
+
+func (a *testCheckerAdapter) Check(actual testcheck.CheckInput, expected *testcheck.ExpectedOutcome) testcheck.CheckResult {
+	return testcheck.Check(actual, expected)
+}
+
+func (a *testCheckerAdapter) LoadExpected(path string) (*testcheck.ExpectedOutcome, error) {
+	return testcheck.LoadExpected(path)
+}
+
 // buildDeps constructs the session's routing consultant, manual resolver,
-// pre-consultation capability and approval reader from the run's settings.
-// It is the single dependency builder for both frontends: the non-interactive
-// path calls it with settings derived from the pre-scanned CLI flags, the
-// interactive path with the settings carried by the completed configuration
-// selection. Neither frontend constructs a consultant of its own.
+// pre-consultation capability and approval reader. It is the single dependency
+// builder for both frontends. No input to it is a run setting: the ports it
+// returns are fixed by which transports exist, and the session's effective
+// settings (after resume reconciliation or adoption) decide which are used.
 //
 // The orchestrator reference and the routing table are deliberately absent:
 // neither is known at this point on either frontend. Both reach the
 // consultants later, through domain.RunContextBinder, on the session's
 // run-start path.
 //
-//   - settings.Mode selects which consultant is wired as Deps.Routing.
-//   - settings.ManualResolution controls whether a ManualResolver is wired
-//     as Deps.Manual.
-//   - settings.PreConsultation controls whether the OrchestratorConsultant is
-//     also wired as Deps.PreConsult (it implements both ports).
-//   - invoker is the consultation transport used by OrchestratorConsultant.
-//   - interact is the Interaction port used by ManualResolver.
+//   - Deps.Routing is always the OrchestratorConsultant.
+//   - Deps.PreConsult is that same consultant if and only if invoker is non-nil.
+//   - Deps.Manual is a ManualResolver if and only if interact is non-nil.
 //   - approvals is the HITL approval reader. Both frontends pass the real
 //     reader; a nil value is normalised by session.New as it is today.
 func buildDeps(
-	settings domain.RunSettings,
 	invoker domain.RawInvoker,
 	interact domain.Interaction,
 	approvals domain.ApprovalReader,
@@ -205,19 +367,29 @@ func buildDeps(
 	}
 
 	deps := session.Deps{
-		Routing:   consultant,
-		Approvals: approvals,
+		Routing:       consultant,
+		Approvals:     approvals,
+		GuidanceStore: guidance.NewFileStore(),
 	}
 
-	if settings.ManualResolution {
+	if interact != nil {
 		deps.Manual = &deviation.ManualResolver{
 			Interact: interact,
 		}
 	}
 
-	if settings.PreConsultation {
+	if invoker != nil {
 		deps.PreConsult = consultant
 	}
 
 	return deps
+}
+
+// activityObserverOf returns ref as the activity observer, or nil (no observer)
+// when ref is nil, so a nil pointer never becomes a non-nil interface.
+func activityObserverOf(ref *tui.ProgramRef) domain.ActivityObserver {
+	if ref == nil {
+		return nil
+	}
+	return ref
 }

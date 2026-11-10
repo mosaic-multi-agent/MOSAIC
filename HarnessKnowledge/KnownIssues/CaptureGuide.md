@@ -40,6 +40,7 @@ If it's genuinely the same behavior, don't create a second KB entry — cross-re
 ```
 HarnessKnowledge/KnownIssues/
 ├── CaptureGuide.md              # This file — format specs (source of truth)
+├── ToInvestigate.md             # Watch list of unreproduced/unfiled observations (not KB entries)
 ├── ClaudeCode/
 │   ├── index.md
 │   ├── active-issues.md
@@ -48,7 +49,7 @@ HarnessKnowledge/KnownIssues/
 │   ├── index.md
 │   ├── active-issues.md
 │   └── resolved-issues.md
-├── OpenCode/
+├── OpenCodeV1/                  # OpenCode 1.x ONLY (OC- IDs). OpenCode 2.x is a separate harness, not tracked here
 │   ├── index.md
 │   ├── active-issues.md
 │   └── resolved-issues.md

@@ -1,129 +1,157 @@
 package domain_test
 
-// Tests for pricing-entry validation semantics (T2.3).
+// Tests for pricing-entry validation semantics.
 //
 // Design invariants under test:
-//   - An entry with HasThreshold=false has no long-context tier.
-//   - An entry with HasThreshold=true exposes a long-context tier.
+//   - An entry without a long-context block has no long-context tier.
+//   - An entry with a long-context block exposes a long-context tier.
+//   - Standard rates are all required (> 0); a long-context block additionally
+//     needs a positive threshold and its own five positive rates.
+//   - Validation errors name the model and the offending wire field.
 //   - Lookup on a model absent from the table returns found=false (the explicit
 //     not-configured outcome), never a zero-valued entry.
 //   - PricingTable.With returns a copy; the original is not mutated.
 
 import (
+	"strings"
 	"testing"
 
 	"mosaic-log-analyzer/internal/domain"
 )
 
-// ---------------------------------------------------------------------------
-// Helpers — build valid entries to keep test cases focused
-// ---------------------------------------------------------------------------
-
-// validEntry returns an entry with all required rates set and no long-context tier.
-func validEntry(model domain.ModelID) domain.ModelPricing {
-	return domain.ModelPricing{
-		Model:                model,
-		Input:                domain.Rate(3_000_000_000),    // $3.00/1M in nanodollars
-		CachedInput:          domain.Rate(300_000_000),      // $0.30/1M
-		CacheWrite:           domain.Rate(3_750_000_000),    // $3.75/1M
-		OutputUnderThreshold: domain.Rate(15_000_000_000),   // $15.00/1M
-		HasThreshold:         false,
+// validRates returns a full rate set at the given multiple of the base rates.
+func validRates(mult int64) domain.RateSet {
+	return domain.RateSet{
+		Input:        domain.Rate(3_000_000_000 * mult),
+		CacheRead:    domain.Rate(300_000_000 * mult),
+		CacheWrite5m: domain.Rate(3_750_000_000 * mult),
+		CacheWrite1h: domain.Rate(6_000_000_000 * mult),
+		Output:       domain.Rate(15_000_000_000 * mult),
 	}
+}
+
+// validEntry returns an entry with all five standard rates and no long-context tier.
+func validEntry(model domain.ModelID) domain.ModelPricing {
+	return domain.ModelPricing{Model: model, Standard: validRates(1)}
 }
 
 // validEntryWithThreshold returns a valid entry with a long-context tier.
 func validEntryWithThreshold(model domain.ModelID) domain.ModelPricing {
 	e := validEntry(model)
-	e.HasThreshold = true
-	e.OutputAtThreshold = domain.Rate(22_500_000_000) // $22.50/1M
-	e.ContextLengthThreshold = 200_000
+	e.HasLongContext = true
+	e.LongContext = domain.LongContextPricing{Threshold: 200_000, Rates: validRates(2)}
 	return e
 }
 
-// ---------------------------------------------------------------------------
-// T2.3 — HasLongContextTier
-// ---------------------------------------------------------------------------
-
-func TestModelPricing_HasLongContextTier_False_WhenNoThreshold(t *testing.T) {
-	p := validEntry("model-a")
-	if p.HasLongContextTier() {
-		t.Error("HasLongContextTier must be false when HasThreshold=false")
+func TestModelPricing_HasLongContextTier_False_WhenNoLongContext(t *testing.T) {
+	if validEntry("model-a").HasLongContextTier() {
+		t.Error("HasLongContextTier must be false when HasLongContext=false")
 	}
 }
 
-func TestModelPricing_HasLongContextTier_True_WhenThresholdPresent(t *testing.T) {
-	p := validEntryWithThreshold("model-a")
-	if !p.HasLongContextTier() {
-		t.Error("HasLongContextTier must be true when HasThreshold=true")
+func TestModelPricing_HasLongContextTier_True_WhenLongContextPresent(t *testing.T) {
+	if !validEntryWithThreshold("model-a").HasLongContextTier() {
+		t.Error("HasLongContextTier must be true when HasLongContext=true")
 	}
 }
 
-// ---------------------------------------------------------------------------
-// T2.3 — Validate
-// ---------------------------------------------------------------------------
-
-func TestModelPricing_Validate_ValidWithoutThreshold(t *testing.T) {
-	p := validEntry("model-a")
-	if err := p.Validate(); err != nil {
-		t.Errorf("valid entry without threshold must pass Validate: %v", err)
+func TestModelPricing_Validate_ValidWithoutLongContext(t *testing.T) {
+	if err := validEntry("model-a").Validate(); err != nil {
+		t.Errorf("valid entry without long context must pass Validate: %v", err)
 	}
 }
 
-func TestModelPricing_Validate_ValidWithThreshold(t *testing.T) {
-	p := validEntryWithThreshold("model-a")
-	if err := p.Validate(); err != nil {
-		t.Errorf("valid entry with threshold must pass Validate: %v", err)
+func TestModelPricing_Validate_ValidWithLongContext(t *testing.T) {
+	if err := validEntryWithThreshold("model-a").Validate(); err != nil {
+		t.Errorf("valid entry with long context must pass Validate: %v", err)
 	}
 }
 
 func TestModelPricing_Validate_EmptyModelID_IsInvalid(t *testing.T) {
-	p := validEntry("")
-	if err := p.Validate(); err == nil {
+	if err := validEntry("").Validate(); err == nil {
 		t.Error("entry with empty ModelID must fail Validate")
 	}
 }
 
-func TestModelPricing_Validate_WithThreshold_OutputAtThresholdRequired(t *testing.T) {
-	// When HasThreshold=true the OutputAtThreshold rate is required.
-	p := validEntry("model-a")
-	p.HasThreshold = true
-	p.ContextLengthThreshold = 200_000
-	p.OutputAtThreshold = 0 // zero rate — treated as missing when threshold present
-	// The design requires OutputAtThreshold is "required only when HasThreshold is true".
-	// An entry with a zero rate when a threshold is claimed is invalid.
-	if err := p.Validate(); err == nil {
-		t.Error("entry with HasThreshold=true and zero OutputAtThreshold must fail Validate")
-	}
-}
-
-func TestModelPricing_Validate_EachRequiredRate_MissingIsInvalid(t *testing.T) {
-	// Each of the four always-required rates must be non-zero; a zero rate signals
-	// a missing entry. The design states "an entry missing any of the four
-	// always-required rates is not [valid]". This table pins each branch
-	// independently so a partial implementation (e.g. only checking Input) is
-	// caught before other rates are added.
+func TestModelPricing_Validate_EachStandardRate_MissingIsInvalid(t *testing.T) {
 	cases := []struct {
-		name   string
+		field  string
 		adjust func(*domain.ModelPricing)
 	}{
-		{"Input=0", func(p *domain.ModelPricing) { p.Input = 0 }},
-		{"CachedInput=0", func(p *domain.ModelPricing) { p.CachedInput = 0 }},
-		{"CacheWrite=0", func(p *domain.ModelPricing) { p.CacheWrite = 0 }},
-		{"OutputUnderThreshold=0", func(p *domain.ModelPricing) { p.OutputUnderThreshold = 0 }},
+		{"input", func(p *domain.ModelPricing) { p.Standard.Input = 0 }},
+		{"cache_read", func(p *domain.ModelPricing) { p.Standard.CacheRead = 0 }},
+		{"cache_write_5m", func(p *domain.ModelPricing) { p.Standard.CacheWrite5m = 0 }},
+		{"cache_write_1h", func(p *domain.ModelPricing) { p.Standard.CacheWrite1h = 0 }},
+		{"output", func(p *domain.ModelPricing) { p.Standard.Output = 0 }},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(tc.field, func(t *testing.T) {
 			p := validEntry("model-a")
 			tc.adjust(&p)
-			if err := p.Validate(); err == nil {
-				t.Errorf("entry with %s must fail Validate (zero rate signals missing)", tc.name)
+			err := p.Validate()
+			if err == nil {
+				t.Fatalf("entry with zero %s must fail Validate", tc.field)
+			}
+			if !strings.Contains(err.Error(), tc.field) {
+				t.Errorf("error %q must name the field %q", err, tc.field)
+			}
+			if !strings.Contains(err.Error(), "model-a") {
+				t.Errorf("error %q must name the model", err)
 			}
 		})
 	}
 }
 
+func TestModelPricing_Validate_LongContext_EachRateMissingIsInvalid(t *testing.T) {
+	cases := []struct {
+		field  string
+		adjust func(*domain.ModelPricing)
+	}{
+		{"long_context.input", func(p *domain.ModelPricing) { p.LongContext.Rates.Input = 0 }},
+		{"long_context.cache_read", func(p *domain.ModelPricing) { p.LongContext.Rates.CacheRead = 0 }},
+		{"long_context.cache_write_5m", func(p *domain.ModelPricing) { p.LongContext.Rates.CacheWrite5m = 0 }},
+		{"long_context.cache_write_1h", func(p *domain.ModelPricing) { p.LongContext.Rates.CacheWrite1h = 0 }},
+		{"long_context.output", func(p *domain.ModelPricing) { p.LongContext.Rates.Output = 0 }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.field, func(t *testing.T) {
+			p := validEntryWithThreshold("model-a")
+			tc.adjust(&p)
+			err := p.Validate()
+			if err == nil {
+				t.Fatalf("entry with zero %s must fail Validate", tc.field)
+			}
+			if !strings.Contains(err.Error(), tc.field) {
+				t.Errorf("error %q must name the field %q", err, tc.field)
+			}
+		})
+	}
+}
+
+func TestModelPricing_Validate_LongContext_NonPositiveThresholdIsInvalid(t *testing.T) {
+	for _, threshold := range []int64{0, -1} {
+		p := validEntryWithThreshold("model-a")
+		p.LongContext.Threshold = threshold
+		err := p.Validate()
+		if err == nil {
+			t.Fatalf("threshold %d must fail Validate", threshold)
+		}
+		if !strings.Contains(err.Error(), "long_context.threshold") {
+			t.Errorf("error %q must name long_context.threshold", err)
+		}
+	}
+}
+
+func TestModelPricing_Validate_IgnoresLongContextRates_WhenFlagFalse(t *testing.T) {
+	p := validEntry("model-a") // HasLongContext false, long-context data zero
+	p.LongContext = domain.LongContextPricing{}
+	if err := p.Validate(); err != nil {
+		t.Errorf("an unused long-context block must not affect validation: %v", err)
+	}
+}
+
 // ---------------------------------------------------------------------------
-// T2.3 — PricingTable — Lookup not-configured outcome
+// PricingTable — Lookup not-configured outcome
 // ---------------------------------------------------------------------------
 
 func TestPricingTable_Lookup_Empty_IsNotConfigured(t *testing.T) {
@@ -164,24 +192,24 @@ func TestPricingTable_Lookup_ReturnsCorrectEntry(t *testing.T) {
 	if !foundA {
 		t.Fatal("Lookup(model-a) not found")
 	}
-	if gotA.HasThreshold {
-		t.Error("model-a must not have a threshold")
+	if gotA.HasLongContext {
+		t.Error("model-a must not have a long-context tier")
 	}
 
 	gotB, foundB := table.Lookup("model-b")
 	if !foundB {
 		t.Fatal("Lookup(model-b) not found")
 	}
-	if !gotB.HasThreshold {
-		t.Error("model-b must have a threshold")
+	if !gotB.HasLongContext {
+		t.Error("model-b must have a long-context tier")
 	}
-	if gotB.ContextLengthThreshold != 200_000 {
-		t.Errorf("model-b ContextLengthThreshold = %d, want 200000", gotB.ContextLengthThreshold)
+	if gotB.LongContext.Threshold != 200_000 {
+		t.Errorf("model-b long-context threshold = %d, want 200000", gotB.LongContext.Threshold)
 	}
 }
 
 // ---------------------------------------------------------------------------
-// T2.3 — PricingTable — structural properties
+// PricingTable — structural properties
 // ---------------------------------------------------------------------------
 
 func TestPricingTable_Len_Empty(t *testing.T) {
@@ -223,7 +251,7 @@ func TestPricingTable_Models_Empty(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// T2.3 — PricingTable.With — immutability contract
+// PricingTable.With — immutability contract
 // ---------------------------------------------------------------------------
 
 func TestPricingTable_With_AddsEntry(t *testing.T) {
@@ -256,8 +284,8 @@ func TestPricingTable_With_ReplacesExistingEntry(t *testing.T) {
 	if !found {
 		t.Fatal("model-a must still be findable after replacement")
 	}
-	if !got.HasThreshold {
-		t.Error("With() must replace the entry; updated entry must have HasThreshold=true")
+	if !got.HasLongContext {
+		t.Error("With() must replace the entry; updated entry must have HasLongContext=true")
 	}
 	if table.Len() != 1 {
 		t.Errorf("Len() after replacement = %d, want 1 (no duplicate)", table.Len())

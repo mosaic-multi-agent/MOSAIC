@@ -14,11 +14,25 @@ import re
 import sys
 import tempfile
 
+try:
+    import mosaic_logger_locked_append
+except ImportError:  # run from the source tree, where the module sits in the shared folder
+    sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent / "copilot-shared"))
+    import mosaic_logger_locked_append
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.0.0"
+BASE_SCHEMA_VERSION = "1.0.0"
+# Events that carry fields added after 1.0.0 are stamped with the version that added them.
+# The version depends on the event type only, never on which optional fields are present.
+EVENT_SCHEMA_VERSIONS = {
+    "invocation_start": "1.4.0",   # spawn_call_id
+    "usage_record": "1.7.0",        # requested_tools; GHCP CLI usage from the session transcript
+    "compaction": "1.5.0",         # single-hook harness: no phase
+    "tool_call_end": "1.6.0",      # tool_name
+}
 HARNESS = "ghcp-cli"
 LOGS_DIRNAME = "OrchestrationLogs"
 AGENT_MAP_DIRNAME = ".agent-map"
@@ -72,6 +86,8 @@ class HookContext:
         self.paths: "LogPaths" = paths
         self.run_id: "str | None" = None
         self.timestamp: str = timestamp
+        # Runner mode selection (None in native mode); set by the dispatcher.
+        self.runner_mode = None
 
     @staticmethod
     def _normalize(value):
@@ -113,6 +129,11 @@ def _prune(value):
     return value, True
 
 
+def schema_version_for(event: str) -> str:
+    """Return the highest schema_version whose fields this adapter implements for ``event``."""
+    return EVENT_SCHEMA_VERSIONS.get(event, BASE_SCHEMA_VERSION)
+
+
 def build_event(event: str, ctx: "HookContext", **fields) -> dict:
     """Build a complete event object: common envelope plus caller-supplied fields.
 
@@ -123,7 +144,7 @@ def build_event(event: str, ctx: "HookContext", **fields) -> dict:
     is DROPPED. False and 0 are genuine values and are KEPT.
     """
     result: dict = {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": schema_version_for(event),
         "event": event,
         "timestamp": ctx.timestamp,
         "harness": HARNESS,
@@ -158,14 +179,23 @@ def effective_run_id(ctx: "HookContext") -> str:
 
 def append_event(path: pathlib.Path, event: dict) -> None:
     """Append one JSON object as one line to a JSONL file, creating parent dirs.
-    Swallows errors."""
+    Appends under the file's exclusive lock; swallows errors, and drops the event with a
+    debug message when the lock is not obtained in time."""
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(event, ensure_ascii=False) + "\n"
-        with open(path, "a", encoding="utf-8") as fh:
-            fh.write(line)
+        line = (json.dumps(event, ensure_ascii=False) + "\n").encode("utf-8")
+        mosaic_logger_locked_append.locked_append(path, line, _append_report(path))
     except Exception as exc:
         debug_log(f"append_event failed for {path}", exc)
+
+
+def _append_report(path: pathlib.Path):
+    """Debug callback for locked_append: names append_event and the file in the message."""
+    def report(message: str, exc: "BaseException | None") -> None:
+        if exc is None:
+            debug_log(f"append_event dropped (lock wait limit) for {path}")
+        else:
+            debug_log(f"append_event failed for {path}", exc)
+    return report
 
 
 def atomic_replace(path: pathlib.Path, data: bytes) -> bool:
@@ -200,22 +230,29 @@ def atomic_replace_text(path: pathlib.Path, text: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def resolve_workspace_root(payload: dict) -> pathlib.Path:
-    """Resolve workspace root: payload cwd > process cwd().
+    """Resolve the workspace root: payload cwd first, then process cwd.
 
-    GHCP CLI provides cwd on every payload as a first-class field.
-    No harness-specific environment variable is used as primary signal.
+    The hook registration runs the script from ``<workspace>/.github/hooks``, so a
+    candidate whose last two components are ``.github`` and ``hooks`` (case-insensitive)
+    is mapped to its grandparent, the workspace. Any other candidate is used as is.
+    No environment variable is read.
     """
     cwd = payload.get("cwd") or ""
-    if cwd:
-        return pathlib.Path(cwd)
-    return pathlib.Path.cwd()
+    candidate = pathlib.Path(cwd) if cwd else pathlib.Path.cwd()
+    parts = candidate.parts
+    if len(parts) >= 3 and parts[-1].lower() == "hooks" and parts[-2].lower() == ".github":
+        return candidate.parent.parent
+    return candidate
 
 
 class LogPaths:
     """The complete on-disk layout expressed as one object."""
 
-    def __init__(self, workspace_root: pathlib.Path):
+    def __init__(self, workspace_root: pathlib.Path,
+                 scope_orchestrator_transcript: bool = False):
         self.root: pathlib.Path = workspace_root / LOGS_DIRNAME
+        # Runner mode: every orchestrator session keeps its own transcript.
+        self.scope_orchestrator_transcript = scope_orchestrator_transcript
 
     def run_root(self, run_id: str) -> pathlib.Path:
         return self.root / run_id
@@ -230,7 +267,8 @@ class LogPaths:
         return self.run_root(run_id) / "00_orchestrator_events.jsonl"
 
     def orchestrator_raw(self, run_id: str, session_id: "str | None" = None) -> pathlib.Path:
-        if run_id == "unknown-run" and session_id:
+        if session_id and (self.scope_orchestrator_transcript
+                           or run_id == "unknown-run"):
             scope = transcript_scope_segment(HARNESS, session_id)
             return self.run_root(run_id) / f"00_orchestrator_session__{scope}.raw"
         return self.run_root(run_id) / "00_orchestrator_session.raw"
@@ -269,9 +307,10 @@ class LogPaths:
         return self.agent_run_dir() / f"{sanitize_component(agent_id)}.json"
 
 
-def build_paths(workspace_root: pathlib.Path) -> LogPaths:
+def build_paths(workspace_root: pathlib.Path,
+                scope_orchestrator_transcript: bool = False) -> LogPaths:
     """Construct the LogPaths tree. Creates no directories."""
-    return LogPaths(workspace_root)
+    return LogPaths(workspace_root, scope_orchestrator_transcript)
 
 
 # ---------------------------------------------------------------------------
@@ -322,45 +361,6 @@ def event_sink_for(ctx: "HookContext", agent_instance_id: "str | None") -> pathl
     if agent_instance_id is None:
         return ctx.paths.orchestrator_events(run_id)
     return ctx.paths.invocation_events(run_id, agent_instance_id)
-
-
-# ---------------------------------------------------------------------------
-# Adapter version
-# ---------------------------------------------------------------------------
-
-_VERSION_RE = re.compile(r"^version:\s*(.+?)\s*$")
-
-
-def read_adapter_version(hook_yaml_path: pathlib.Path) -> "str | None":
-    """Extract the top-level version value from hook.yaml without a YAML parser.
-    Matches only zero-indented lines. Returns None on any ambiguity. Never raises."""
-    try:
-        matches = []
-        with open(hook_yaml_path, "r", encoding="utf-8", errors="replace") as fh:
-            for line in fh:
-                if not line or line[0] in ("#", " ", "\t"):
-                    continue
-                m = _VERSION_RE.match(line.rstrip("\r\n"))
-                if m:
-                    value = m.group(1)
-                    if len(value) >= 2 and (
-                        (value[0] == '"' and value[-1] == '"') or
-                        (value[0] == "'" and value[-1] == "'")
-                    ):
-                        value = value[1:-1]
-                    if value:
-                        matches.append(value)
-        if len(matches) == 1:
-            return matches[0]
-        return None
-    except Exception:
-        return None
-
-
-def adapter_version(ctx: "HookContext") -> "str | None":
-    """Read version from the hook.yaml deployed alongside the adapter scripts."""
-    hook_yaml = pathlib.Path(__file__).parent / "hook.yaml"
-    return read_adapter_version(hook_yaml)
 
 
 # ---------------------------------------------------------------------------

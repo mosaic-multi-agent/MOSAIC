@@ -41,7 +41,7 @@ type HarnessOnlyRefreshRequest struct {
 	// Codex TOML) DeployedRaw holds the raw on-disk encoding. Nil on create.
 	DeployedRaw []byte
 	// AgentKey is the agent key derived from the deployed file's stem (via
-	// agentKeyFromFileName). It is supplied by the caller from the refresh plan so the
+	// agentkey.FromFileNameExt). It is supplied by the caller from the refresh plan so the
 	// routine does not recompute it. Required for the encode step: the Codex translator
 	// needs AgentKey to emit the name field.
 	AgentKey string

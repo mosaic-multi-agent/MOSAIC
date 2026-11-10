@@ -114,6 +114,7 @@ func TestValidate_LayerSuppressedAssertion_ReportsWarning(t *testing.T) {
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	var found bool
@@ -153,6 +154,7 @@ func TestValidate_LayerSuppressedAssertion_IsWarningNotError(t *testing.T) {
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	if report.HasErrors() {
@@ -186,6 +188,7 @@ func TestValidate_UnsuppressedAssertion_ValidatesCleanly(t *testing.T) {
 				SuitePath:   filepath.Join(root, "s.suite.yaml"),
 				FixtureRoot: filepath.Join(root, "fixtures"),
 				HarnessID:   "claude-code",
+				Overrides:   selectedModels(),
 			})
 
 			for _, d := range report.Diagnostics {
@@ -214,6 +217,7 @@ func TestValidate_HappyPath_NoSuppressedAssertionDiagnostic(t *testing.T) {
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	for _, d := range report.Diagnostics {

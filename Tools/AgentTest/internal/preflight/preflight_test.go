@@ -96,6 +96,7 @@ func TestValidate_HappyPath_NoErrors(t *testing.T) {
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	if report.HasErrors() {
@@ -127,6 +128,7 @@ func TestValidate_ReferenceExamples_PassCleanly(t *testing.T) {
 		SuitePath:   filepath.Join(root, "happy-path.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	if report.HasErrors() {
@@ -161,6 +163,7 @@ tests:
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	if !hasDiagnosticCode(report, "missing-test-definition") {
@@ -196,6 +199,7 @@ stub_registry: does-not-exist.stubs.json
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	if !hasDiagnosticCode(report, "missing-stub-registry") {
@@ -236,6 +240,7 @@ assertions:
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	if !hasDiagnosticCode(report, "unknown-collaborator") {
@@ -275,6 +280,7 @@ seed_files:
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	if !hasDiagnosticCode(report, "unresolvable-ref") {
@@ -321,6 +327,7 @@ assertions:
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	if !hasDiagnosticCode(report, "unknown-parallel-group-member") {
@@ -354,6 +361,7 @@ func TestValidate_RegistryTestIDMismatchesDefinitionID_ReportsError(t *testing.T
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	if !hasDiagnosticCode(report, "test-id-mismatch") {
@@ -466,6 +474,7 @@ turn_limit: -1
 				SuitePath:   filepath.Join(root, "s.suite.yaml"),
 				FixtureRoot: filepath.Join(root, "fixtures"),
 				HarnessID:   "claude-code",
+				Overrides:   selectedModels(),
 			})
 
 			if !hasDiagnosticCode(report, "setting-out-of-range") {
@@ -529,6 +538,7 @@ assertions:
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	// Four independent problems were seeded above: a missing test
@@ -560,6 +570,7 @@ tests:
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	}
 
 	_, first := preflight.Validate(in)
@@ -632,6 +643,7 @@ seed_files:
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	}
 
 	_, report := preflight.Validate(in)
@@ -686,6 +698,7 @@ func TestValidate_PerformsNoProcessSpawningOrWorkspaceCreation(t *testing.T) {
 		SuitePath:   filepath.Join(root, "s.suite.yaml"),
 		FixtureRoot: filepath.Join(root, "fixtures"),
 		HarnessID:   "claude-code",
+		Overrides:   selectedModels(),
 	})
 
 	if report.HasErrors() {

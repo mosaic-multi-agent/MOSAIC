@@ -25,8 +25,12 @@ const (
 	// is saved and the run can be resumed with --existing-artifact=resume.
 	ExitDeviationUnresolved = 5
 
-	// ExitStoppedByConsultant indicates the routing consultant issued a stop
-	// instruction, or an orchestrator failure ended the run. The artifact is left
+	// ExitStoppedByConsultant indicates the orchestrator issued a stop
+	// instruction at routing or at pre-consultation, or an orchestrator failure ended the run. The artifact is left
 	// resumable; the caller may retry with --run <run_id>.
 	ExitStoppedByConsultant = 6
+
+	// ExitStartFailed indicates commit setup or pre-consultation failed after
+	// the artifact was created. The artifact is kept; resuming retries the step.
+	ExitStartFailed = 7
 )

@@ -95,6 +95,8 @@ type fakePricingStore struct {
 	table    domain.PricingTable
 	filePath string
 	loadErr  error
+	// puts counts calls to Put: any call is a write of a pricing file.
+	puts int
 }
 
 func newFakePricingStore() *fakePricingStore {
@@ -106,13 +108,18 @@ func newFakePricingStore() *fakePricingStore {
 
 func (s *fakePricingStore) Path() string { return s.filePath }
 
+func (s *fakePricingStore) Paths() domain.ConfigPaths {
+	return domain.ConfigPaths{Project: domain.ConfigFile{Level: domain.LevelProject, Path: s.filePath}}
+}
+
 func (s *fakePricingStore) Load(_ context.Context) (domain.PricingTable, []domain.Finding, error) {
 	return s.table, nil, s.loadErr
 }
 
-func (s *fakePricingStore) Put(_ context.Context, entry domain.ModelPricing) error {
+func (s *fakePricingStore) Put(_ context.Context, level domain.ConfigLevel, entry domain.ModelPricing) (domain.ConfigFile, error) {
+	s.puts++
 	s.table = s.table.With(entry)
-	return nil
+	return domain.ConfigFile{Level: level, Path: s.filePath, Exists: true}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +158,7 @@ func (i *alwaysSkippingInteraction) Confirm(_ context.Context, _ interaction.Que
 	return interaction.ConfirmAnswer{Status: interaction.SkippedOne}, nil
 }
 
-func (i *alwaysSkippingInteraction) Notify(_ context.Context, _ interaction.Notice)         {}
+func (i *alwaysSkippingInteraction) Notify(_ context.Context, _ interaction.Notice)          {}
 func (i *alwaysSkippingInteraction) Progress(_ context.Context, _ interaction.ProgressEvent) {}
 
 // ---------------------------------------------------------------------------
@@ -198,11 +205,13 @@ func mustParseRate(s string) domain.Rate {
 // flatPricing returns a ModelPricing with no long-context tier.
 func flatPricing(model domain.ModelID) domain.ModelPricing {
 	return domain.ModelPricing{
-		Model:                model,
-		Input:                mustParseRate("3.00"),
-		CachedInput:          mustParseRate("0.30"),
-		CacheWrite:           mustParseRate("3.75"),
-		OutputUnderThreshold: mustParseRate("15.00"),
-		HasThreshold:         false,
+		Model: model,
+		Standard: domain.RateSet{
+			Input:        mustParseRate("3.00"),
+			CacheRead:    mustParseRate("0.30"),
+			CacheWrite5m: mustParseRate("3.75"),
+			CacheWrite1h: mustParseRate("6.00"),
+			Output:       mustParseRate("15.00"),
+		},
 	}
 }

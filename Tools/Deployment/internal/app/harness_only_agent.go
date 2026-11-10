@@ -16,7 +16,7 @@ type HarnessOnlyAgent struct {
 	// FileName is the base file name including its extension.
 	FileName string
 	// Key is the agent key derived from FileName by stripping the harness's declared
-	// agent extension and its ".agent.<ext>" variant (via agentKeyFromFileName). Used
+	// agent extension and its ".agent.<ext>" variant (via agentkey.FromFileNameExt). Used
 	// only for catalog-counterpart exclusion and for log subjects; it is never
 	// registered in the catalog.
 	Key string
@@ -25,7 +25,7 @@ type HarnessOnlyAgent struct {
 	// Version is the frontmatter `version` scalar, or "" when absent. Harness-only
 	// agents commonly have none; see the staleness contract in the Update flow design.
 	Version string
-	// TransformVersion is the frontmatter `transform_version` scalar. Never empty for
+	// TransformVersion is the MOSAIC version stamp value (harness_version preferred, else transform_version), as read by agentfields.ReadVersionStamp. Never empty for
 	// an eligible agent — its presence is signal one of the eligibility rule.
 	TransformVersion string
 	// Role is the frontmatter `role` scalar parsed through domain.ParseAgentRole.

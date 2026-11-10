@@ -109,7 +109,7 @@ func writeTestContentFiles(t *testing.T, root, harnessConstraintsContent string)
 		t.Fatalf("create harness content dir: %v", err)
 	}
 
-	sharedMd := "<HarnessConstraints type=\"managed\">\n" + harnessConstraintsContent + "\n</HarnessConstraints>\n"
+	sharedMd := "---\nversion: \"1.0.0\"\n---\n<HarnessConstraints type=\"managed\">\n" + harnessConstraintsContent + "\n</HarnessConstraints>\n"
 	if err := os.WriteFile(filepath.Join(dir, "HarnessInjections.md"), []byte(sharedMd), 0o644); err != nil {
 		t.Fatalf("write HarnessInjections.md: %v", err)
 	}

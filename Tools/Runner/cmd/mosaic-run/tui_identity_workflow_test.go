@@ -34,6 +34,7 @@ func writeRunArtifactRecordingWorkflow(t *testing.T, workDir, runID, workflow st
 	}
 	content := fmt.Sprintf(`---
 type: orchestration-artifact
+run_id: %s
 workflow: %s
 workflow_version: "1.0"
 task: "test task"
@@ -43,14 +44,14 @@ global_sequence: 1
 checkpoints: disabled
 current_state:
   phase: EXECUTION
-  stage: "1"
+  iteration: "1"
   last_status: SUCCESS
   last_agent: "agent#1"
   error_code: null
 ---
 
 <ExecutionLog type="core">
-| Seq | Agent   | Phase     | Stage | Status  | Timestamp            | Summary | Checkpoint |
+| Seq | Agent   | Phase     | Iteration | Status  | Timestamp            | Summary | Checkpoint |
 | --- | ------- | --------- | ----- | ------- | -------------------- | ------- | ---------- |
 | 1   | agent#1 | EXECUTION | 1     | SUCCESS | 2026-01-01T00:00:00Z | done    | -          |
 </ExecutionLog>
@@ -59,7 +60,7 @@ current_state:
 | Artifact | Created In | Created By |
 | -------- | ---------- | ---------- |
 </Artifacts>
-`, workflow)
+`, runID, workflow)
 	if err := os.WriteFile(filepath.Join(folder, "Orchestration.md"), []byte(content), 0o600); err != nil {
 		t.Fatalf("write run artifact: %v", err)
 	}

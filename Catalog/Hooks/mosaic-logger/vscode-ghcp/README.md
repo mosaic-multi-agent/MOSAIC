@@ -17,12 +17,14 @@ The adapter is a flat set of 9 Python modules, all deployed to `.github/hooks/`:
 | `mosaic_logger_transcript.py` | Best-effort model/token extraction from the session transcript |
 | `mosaic_logger_export.py` | Byte-for-byte transcript copy and sidecar metadata |
 | `mosaic_logger_artifacts.py` | `01_input.md` / `02_output.md` rendering and writing |
+| `mosaic_logger_diagnostics.py` | Default-visible diagnostics file (`OrchestrationLogs/mosaic-logger-diagnostics.jsonl`) |
+| `mosaic_logger_subagent_state.py` | Subagent spawn index, stopped markers and completion claims |
 | `mosaic_logger_handlers_session.py` | `SessionStart`, `UserPromptSubmit`, `PreCompact`, `Stop` |
 | `mosaic_logger_handlers_invocation.py` | `SubagentStart`, `SubagentStop` |
 | `mosaic_logger_handlers_tools.py` | `PreToolUse`, `PostToolUse` |
 
-A copy of `hook.yaml` (the bundle manifest) is also deployed alongside the modules so
-the adapter can stamp `adapter_version` on `run_start` events at runtime.
+The adapter stamps `adapter_version` on `run_start` events from the workspace manifest
+(`.mosaic/manifest.yaml`).
 
 ## Deployment target
 
@@ -47,7 +49,41 @@ The adapter registers exactly 8 events:
 
 Events that are unconfirmed for the VS Code harness (`SessionEnd`, `Notification`,
 `PostToolUseFailure`, `PostCompact`) are not registered; the adapter silently ignores
-any unrecognised event it receives.
+any unrecognised event it receives. Compactions are recognised from the OTel
+compaction calls, not from a hook, and failed tool calls (no `PostToolUseFailure`
+hook) are completed from OTel when the export is enabled; see "Copilot token usage"
+in the parent `README.md`.
+
+## Run binding and transcript export
+
+A session is bound to a run only by a MOSAIC dispatch: the `PreToolUse` prompt of the
+subagent-launch tool when it carries an agent instance id (`Name#N`) as well as a run id.
+The dispatch writes the session -> run cache before the dispatching `tool_call_start` is
+routed, and moves the session's earlier `unknown-run/` lines into that run. A dispatch for
+another run switches the binding. User prompts (`UserPromptSubmit`) and assistant replies
+(`Stop` `last_assistant_message`) never bind, whether they quote a run id bare or as
+`run_id: <id>`; until the first dispatch an orchestrator session's events stay in
+`unknown-run/`.
+
+`00_orchestrator_session.raw` is shared by the sessions of a run. Its sidecar
+(`00_orchestrator_session.meta.json`) records the exporting `session_id`. A different
+session never replaces a target owned by another session; the owning session's re-export
+replaces it, and a target with no sidecar or no recorded session is replaced.
+
+The `MOSAIC_RUN_ID` environment fallback does not exist in this adapter (not affected).
+
+## Compaction events
+
+`PreCompact` is the only registered compaction hook, so it writes one self-contained
+`compaction` event (log format 1.5.0) without `phase`. `tokens_before` is written only
+when the payload carries an integer value; `custom_instructions` is never written. The
+event goes to a subagent's stream when the payload's `agent_id` is in the spawn index,
+or when the payload's `session_id` is mapped to a subagent by the spawn index and is
+not an orchestrator session; otherwise to the orchestrator stream.
+
+Unverified pending a live run: whether VS Code fires `PreCompact` for a subagent's own
+compaction and what identifies the subagent in that payload, and whether `PostCompact`
+exists (it is not registered).
 
 ## Enablement
 

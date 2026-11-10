@@ -27,7 +27,7 @@
  *   - token_usage present on the emitted usage_record when tokens are resolvable
  *   - token_usage absent from the emitted usage_record when nothing is resolvable
  *   - model present when info.modelID is resolvable, absent when not
- *   - service_tier present when info.mode is resolvable, absent when not
+ *   - (service_tier, provider and reasoning rules: see handlers_messages_usage_fields.test.ts)
  *
  * buildTokenUsage — token sub-field presence rules:
  *   - Each sub-field (input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens)
@@ -133,7 +133,7 @@ function makeDeps(
     sdkClient,
     adapterVersion: "0.1.0",
     buildEvent: (event, envelope, fields) => ({
-      schema_version: "1.0.0",
+      schema_version: "1.3.0",
       event,
       timestamp: envelope.timestamp,
       harness: "opencode",
@@ -993,7 +993,7 @@ describe("handleMessageEvent — token_usage wiring into emitted usage_record", 
 });
 
 // ---------------------------------------------------------------------------
-// model and service_tier — optional field presence on usage_record
+// model — optional field presence on usage_record
 // ---------------------------------------------------------------------------
 
 describe("handleMessageEvent — model optional field on usage_record", () => {
@@ -1039,52 +1039,6 @@ describe("handleMessageEvent — model optional field on usage_record", () => {
     const usageRecord = collected.find((e) => e.event.event === "usage_record");
     expect(usageRecord).toBeDefined();
     expect(usageRecord!.event).not.toHaveProperty("model");
-  });
-});
-
-describe("handleMessageEvent — service_tier optional field on usage_record", () => {
-  it("includes service_tier on the usage_record when info.mode is resolvable", async () => {
-    const store = makeStore();
-    const paths = makePaths();
-    const { sdk } = makeSdkWithTracking();
-    const collected: CollectedEvent[] = [];
-    const { handleMessageEvent } = createMessageHandlers(
-      makeDeps(store, paths, sdk, collected),
-    );
-
-    store.register(ORCH_SESSION, { runId: RUN_ID });
-    const msg = assistantMessageEntry("Answer.", {
-      id: "msg-svc-1",
-      sessionID: ORCH_SESSION,
-      mode: "auto",
-    });
-    await handleMessageEvent(messageUpdatedEvent(msg));
-
-    const usageRecord = collected.find((e) => e.event.event === "usage_record");
-    expect(usageRecord).toBeDefined();
-    expect(usageRecord!.event.service_tier).toBeDefined();
-  });
-
-  it("omits service_tier from the usage_record when info.mode is absent", async () => {
-    const store = makeStore();
-    const paths = makePaths();
-    const { sdk } = makeSdkWithTracking();
-    const collected: CollectedEvent[] = [];
-    const { handleMessageEvent } = createMessageHandlers(
-      makeDeps(store, paths, sdk, collected),
-    );
-
-    store.register(ORCH_SESSION, { runId: RUN_ID });
-    // No mode provided — service_tier should be absent from the emitted event
-    const msg = assistantMessageEntry("Answer.", {
-      id: "msg-svc-2",
-      sessionID: ORCH_SESSION,
-    });
-    await handleMessageEvent(messageUpdatedEvent(msg));
-
-    const usageRecord = collected.find((e) => e.event.event === "usage_record");
-    expect(usageRecord).toBeDefined();
-    expect(usageRecord!.event).not.toHaveProperty("service_tier");
   });
 });
 

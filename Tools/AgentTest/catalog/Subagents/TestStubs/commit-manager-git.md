@@ -1,6 +1,6 @@
 ---
 id: 17
-version: 1.0.0
+version: 1.1.0
 name: commit-manager-git
 description: Test stub standing in for the commit-manager-git infrastructure agent
 role: subagent
@@ -10,7 +10,7 @@ tier_rationale: Test stub receiving cheap model via shared TEST-STUB tier mappin
 tools: []
 infrastructure: commit
 triggers:
-  - trigger: STAGE_END
+  - trigger: ITERATION_END
     trigger_param: null
 on_failure: continue
 ---

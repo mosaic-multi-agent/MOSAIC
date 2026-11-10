@@ -11,6 +11,8 @@ package app
 import (
 	"context"
 	"errors"
+
+	"mosaic-deploy/internal/domain"
 )
 
 // RenderAgentRequest drives the single-agent render mode. Unlike every other request type in
@@ -110,6 +112,11 @@ type RenderAgentResult struct {
 
 	// DryRun reports that nothing was written.
 	DryRun bool `json:"dryRun"`
+
+	// ConflictReport is nil when nothing is shadowed. It is intentionally a pointer, unlike the
+	// value field domain.RunSummary.ConflictReport: this struct omits optional additions when
+	// absent and encoding/json never omits a struct value. Do not unify the two.
+	ConflictReport *domain.ConflictReport `json:"conflictReport,omitempty"`
 }
 
 // ---------------------------------------------------------------------------

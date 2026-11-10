@@ -4,7 +4,7 @@
 #   - Adds:  mode: subagent
 #   - Sets model via model_key
 #   - Sets tools via tools_key (list shape)
-#   - Stamps transform_version
+#   - Stamps transform_version (the injections version is set by the test module, not here)
 #   - Applies a key_order that includes the stamped fields
 #
 # injections_version is intentionally absent. Tests that need a specific injection version
