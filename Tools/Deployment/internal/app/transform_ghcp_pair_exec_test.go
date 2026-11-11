@@ -101,10 +101,11 @@ func TestTransformGhcpPair_RealRunLeavesTheManifestNamingTheTarget(t *testing.T)
 	trPairEach(t, func(t *testing.T, r *trRun, c trPairExecCase) {
 		r.mustRun(r.request())
 
-		m := trLoadManifest(t, r.ws)
-		if m.HarnessID != r.tgt {
-			t.Errorf("harness_id = %q, want the target %q", m.HarnessID, r.tgt)
+		full := trLoadManifest(t, r.ws)
+		if _, ok := full.Section(r.tgt); !ok {
+			t.Errorf("manifest has no section for the target %q", r.tgt)
 		}
+		m := full.ForHarness(r.tgt)
 		agents := trEntryByRef(m, domain.ArtifactAgent, "worker")
 		if len(agents) != 1 || agents[0].TargetPath != trPairInPlaceAgent {
 			t.Fatalf("agent entries = %+v, want exactly one at %s", agents, trPairInPlaceAgent)
@@ -118,7 +119,7 @@ func TestTransformGhcpPair_RealRunLeavesTheManifestNamingTheTarget(t *testing.T)
 		if len(trEntryByRef(m, domain.ArtifactHook, trPairHookKey)) != 1 {
 			t.Errorf("manifest hook entries = %+v, want one for %s", trEntryByRef(m, domain.ArtifactHook, trPairHookKey), trPairHookKey)
 		}
-		got, ok := trEntryAt(m, trPairUnrelatedPath)
+		got, ok := trEntryAt(full, trPairUnrelatedPath)
 		want := trPairUnrelatedEntry()
 		if !ok || got.Ref != want.Ref || got.Version != want.Version || got.ContentHash != want.ContentHash {
 			t.Errorf("unrelated entry = %+v (found %v), want it kept as %+v", got, ok, want)

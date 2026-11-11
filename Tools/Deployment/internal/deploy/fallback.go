@@ -71,6 +71,11 @@ func resolveDeploymentRoot(req ExecRequest, journal *writeJournal) (root string,
 	// Tier 1: workspace. Journal the probe path before writing so atomic reversal can
 	// correctly identify the file as newly created (existed=false) and delete it on rollback.
 	workspaceDest := filepath.Join(req.Plan.WorkspacePath, usedItem.TargetPath)
+	if !backupBeforeProbe(req, usedItem) {
+		// The backup failed; writing the probe would destroy the file. The item's own
+		// execution reports the failure, so no probe is made and the workspace stays the root.
+		return req.Plan.WorkspacePath, domain.FallbackNone, nil, contentErrors, domain.PlanItem{}, nil, nil
+	}
 	if journal != nil {
 		_ = journal.record(workspaceDest)
 	}

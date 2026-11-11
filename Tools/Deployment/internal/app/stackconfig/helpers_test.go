@@ -44,9 +44,9 @@ func saveStack(t *testing.T, layers ...domain.PersistedCatalogLayer) string {
 	ws := t.TempDir()
 	m := domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "claude-code",
-		UpdatedAt:     time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-		CatalogStack:  layers,
+		Harnesses:     []domain.HarnessSection{{HarnessID: "claude-code", UpdatedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}},
+
+		CatalogStack: layers,
 	}
 	if err := manifest.NewStore().Save(ws, m); err != nil {
 		t.Fatalf("Save: %v", err)

@@ -64,14 +64,32 @@ const (
 	Deny  Disposition = "deny"
 )
 
+// ToolGrant is one name in a tools field with its disposition (list shape: always Allow).
+type ToolGrant struct {
+	Name        string
+	Disposition Disposition
+}
+
+// MCPNameForms declares how a harness writes MCP tool names. Placeholders: {server}, {tool}.
+type MCPNameForms struct {
+	ServerForm string // whole-server form, e.g. "mcp__{server}__*"
+	ToolForm   string // single-tool form, e.g. "mcp__{server}__{tool}"
+	// ExtraServerReadForms are further whole-server forms accepted when reading, never written.
+	ExtraServerReadForms []string
+	// NormalizeServerName: server-name characters outside A-Za-z0-9_- become "_" when writing.
+	NormalizeServerName bool
+}
+
 // ToolSpec is the complete tool configuration for a harness, declared in its descriptor.
 type ToolSpec struct {
 	Shape    ToolShape
 	Universe []HarnessTool // full harness tool set; declared order is the only ordering authority
 	Mappings []ToolMapping
-	// CustomToolTemplate is the minimal form a user-supplied MCP server name takes in this
-	// harness's output. "%s" is replaced by the supplied name. Empty = the name is used as-is.
-	CustomToolTemplate string
+	// MCP declares how this harness writes and reads MCP tool names.
+	MCP MCPNameForms
+	// ReportUnknownNames: the harness silently ignores tool names it does not know, so Deploy
+	// reports such names as gaps.
+	ReportUnknownNames bool
 	// CustomToolDestinations is the harness-level default set of output targets for custom
 	// (MCP-style) tools — the destinations a ToolCustom resolution produces when the harness
 	// declares no mapping entry for that generic tool. Each destination's Names is empty as

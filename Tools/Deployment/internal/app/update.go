@@ -136,7 +136,8 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	harnessOnlyAgents := scan.HarnessOnly
 	scannedAgentKeys := scan.MatchedKeys()
 
-	snap, _ := s.deps.Manifest.Load(workspace)
+	reconciled := loadReconciledManifest(s.deps.Manifest, workspace)
+	snap := reconciled.forHarness(module.Ref().ID) // the run sees only its own harness's entries
 
 	// Probe the deployed orchestrator early to discover which workflow IDs are already
 	// embedded in it. This replaces the prior approach of reading the orchestrator file
@@ -250,7 +251,6 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 		return domain.RunSummary{}, err
 	}
 
-	applyHookPresence(workspace, deployedState, hookPlansByTargetPath(module, set.Hooks, plannedPaths, scope))
 	legacyAgentPaths := applyRecordedLegacyAgents(workspace, module, snap, plannedPaths, deployedState)
 
 	modelSelections := deployedModelSelections(set.Agents, plannedPaths, deployedState)
@@ -334,6 +334,7 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 		return domain.RunSummary{}, err
 	}
 	migrateLegacyGhcpAgents(&p, snap)
+	reconciled.attachTo(&p)
 
 	conflicts := map[string]domain.ConflictDecision{}
 	var latchedDecision domain.ConflictDecision
@@ -369,6 +370,7 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 
 	// Only hooks the update writes keep their registration gaps and steps; the executor is
 	// handed the same set, so unchanged and skipped hooks are neither rewritten nor re-registered.
+	holdBackSkippedHookBundles(&p, conflicts)
 	writtenHooks := writtenHookBundles(set.Hooks, p.Items, conflicts)
 	dropUnwrittenHookRegistrations(&p, module, set.Hooks, writtenHooks, scope)
 	for _, g := range p.Gaps {
@@ -381,6 +383,7 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	// Review is always shown; AutoConfirmPlan only controls whether a decline/cancel answer
 	// aborts the run (see deploy.go for the same rationale).
 	p.ConflictReport = report
+	s.annotateToolsChanges(&p, module, req.CustomTools, nil, scope, newDeployedBytes(workspace, nil).withMigratedAgents(p).reader(), set.Agents)
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {
 		return domain.RunSummary{}, rerr

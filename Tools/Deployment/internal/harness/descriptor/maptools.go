@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"mosaic-deploy/internal/domain"
+	"mosaic-deploy/internal/harness/mcpname"
 )
 
 // MapTools is the shared, descriptor-driven tool mapping algorithm (CD-2). It maps every
@@ -67,8 +68,8 @@ func MapTools(d *domain.HarnessDescriptor, req domain.ToolRequest) (domain.ToolR
 		case req.CustomNames != nil && req.CustomNames[genericTool] != "":
 			// User supplied a custom MCP server name for an otherwise unmapped tool.
 			name := req.CustomNames[genericTool]
-			if d.Tools.CustomToolTemplate != "" {
-				name = fmt.Sprintf(d.Tools.CustomToolTemplate, name)
+			if written, ok := mcpname.Format(d.Tools.MCP, mcpname.Name{Server: name}); ok {
+				name = written
 			}
 			res.Outcome = domain.ToolCustom
 			res.HarnessTools = []string{name}

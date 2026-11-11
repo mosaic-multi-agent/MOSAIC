@@ -65,10 +65,10 @@ func TestUpdate_RefreshedHookWithMissingRegistrationTarget_TargetCreatedWithFrag
 }
 
 func TestUpdate_UpToDateHookWithExistingRegistrationTarget_NoRegistrationTodoOrPlanEntry(t *testing.T) {
-	files := uhEditedFiles(uhFlat)
+	files := uhFixtureFiles(t, uhFlat)
 	files[uhRegTarget] = uhExistingSettings
 
-	run := runUpdateHooks(t, uhConfig{recorded: uhCatalogVersion, files: files})
+	run := runUpdateHooks(t, uhConfig{entries: uhFileEntries(t, uhFlat, uhCatalogVersion), files: files})
 
 	requireUpdateHooksOK(t, run)
 	if a, ok := run.hookAction(); !ok || a.Taken != domain.TakenUnchanged {
@@ -92,7 +92,7 @@ func TestUpdate_UpToDateHookWithExistingRegistrationTarget_NoRegistrationTodoOrP
 }
 
 func TestUpdate_UpToDateHookWithMissingRegistrationTarget_TargetNotCreated(t *testing.T) {
-	run := runUpdateHooks(t, uhConfig{recorded: uhCatalogVersion, files: uhEditedFiles(uhFlat)})
+	run := runUpdateHooks(t, uhConfig{entries: uhFileEntries(t, uhFlat, uhCatalogVersion), files: uhFixtureFiles(t, uhFlat)})
 
 	requireUpdateHooksOK(t, run)
 	if a, ok := run.hookAction(); !ok || a.Taken != domain.TakenUnchanged {

@@ -42,7 +42,7 @@ func TestRebuild_KeptCustomAndUnmappedToolsReachTargetFile(t *testing.T) {
 	res, out := rbRebuild(t, rbInput(t, p, false, addTools))
 
 	names := rbToolNames(t, out, "permission")
-	for _, want := range []string{"patch", "srv"} {
+	for _, want := range []string{"patch", "srv_*"} {
 		if countName(names, want) != 1 {
 			t.Errorf("%q must be allowed exactly once under permission, got %v", want, names)
 		}
@@ -60,7 +60,7 @@ func TestRebuild_KeptCustomAndUnmappedToolsReachTargetFile(t *testing.T) {
 
 func TestRebuild_KeptToolFollowsMappedToolsAndCustomServerUsesTargetForm(t *testing.T) {
 	p := rbPairs[0] // OpenCode to Claude Code
-	addTools := withSourceEdit(replaceText("  bash: allow\n", "  bash: allow\n  lsp: allow\n  srv: allow\n  WebSearch: allow\n"))
+	addTools := withSourceEdit(replaceText("  bash: allow\n", "  bash: allow\n  lsp: allow\n  srv_*: allow\n  WebSearch: allow\n"))
 
 	res, out := rbRebuild(t, rbInput(t, p, false, addTools))
 

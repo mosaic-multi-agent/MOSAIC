@@ -172,6 +172,10 @@ func tierPlanFor(t *testing.T, fx tierFixture) domain.Plan {
 	}
 	in := buildInfraInput(plan.InfrastructureDeclarationIntent{}, states)
 	in.Module = tierModule{mod}
+	// The fixture entries belong to the harness of the run's module.
+	for i := range in.Manifest.Manifest.Entries {
+		in.Manifest.Manifest.Entries[i].Harness = mod.Descriptor().ID
+	}
 	return buildInfraPlan(t, in)
 }
 

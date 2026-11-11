@@ -728,9 +728,9 @@ func (m *rootModel) handleQuestionMsg(qMsg questionMsg) (tea.Model, tea.Cmd) {
 
 	case questionSelectOne:
 		m.activeQuestion = &qMsg
-		// Route model-selection questions to the dedicated overlay.
+		// Route model-selection questions, and the MCP name split with the same skip shape, to the dedicated overlay.
 		switch qMsg.choiceQ.ID {
-		case domain.QTierModel, domain.QAgentModel, domain.QTransformTargetModel:
+		case domain.QTierModel, domain.QAgentModel, domain.QTransformTargetModel, domain.QMCPNameSplit:
 			m.modelOverlay = screens.NewModelSelectScreen(qMsg.choiceQ, m.width, m.height, style)
 		case domain.QLocalModification:
 			m.conflictOverlay = screens.NewConflictScreen(qMsg.choiceQ, m.width, m.height, style)

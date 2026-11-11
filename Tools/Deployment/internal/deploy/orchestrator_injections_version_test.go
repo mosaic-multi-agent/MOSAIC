@@ -21,6 +21,7 @@ import (
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 )
 
 // ---------------------------------------------------------------------------
@@ -345,19 +346,17 @@ func TestManifest_UnchangedOrchestrator_PriorOrchestratorInjectionsVersionPreser
 	store := manifest.NewStore()
 	prior := domain.Manifest{
 		SchemaVersion: "1",
-		HarnessID:     "test-harness",
-		Entries: []domain.ManifestEntry{
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness"}},
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{
 			{
 				Ref:                           domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "orchestrator"},
 				TargetPath:                    "agents/orchestrator.md",
 				ContentHash:                   priorHash,
 				OrchestratorInjectionsVersion: priorOrchVersion,
 			},
-		},
+		}),
 	}
-	if err := store.Save(workspace, prior); err != nil {
-		t.Fatalf("seed manifest: %v", err)
-	}
+	saveManifestWithFiles(t, store, workspace, prior)
 
 	item := newAgentItem("orchestrator", "agents/orchestrator.md", domain.ActionUnchanged)
 	req := deploy.ExecRequest{

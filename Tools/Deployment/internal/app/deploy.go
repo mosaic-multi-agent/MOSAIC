@@ -161,7 +161,8 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 
 	// Probe the deployed state before any model question: an agent deployed from a recorded
 	// legacy file is asked for no model, and a tier only such agents use is not asked.
-	snap, _ := s.deps.Manifest.Load(workspace)
+	reconciled := loadReconciledManifest(s.deps.Manifest, workspace)
+	snap := reconciled.forHarness(module.Ref().ID) // the run sees only its own harness's entries
 
 	// Build the deployed-agent id index once for this run. The index is non-nil only when
 	// the harness declares a supported agents directory; otherwise id-based resolution is
@@ -189,7 +190,6 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
-	applyHookPresence(workspace, deployedState, hookPlansByTargetPath(module, probeSet.Hooks, plannedPaths, scope))
 	legacyAgentPaths := applyRecordedLegacyAgents(workspace, module, snap, plannedPaths, deployedState)
 	askAgents, migratingAgents := splitMigratingAgents(nonInfraProbeAgents, plannedPaths, legacyAgentPaths)
 	askInfraAgents, migratingInfra := splitMigratingAgents(infraAgents, plannedPaths, legacyAgentPaths)
@@ -275,6 +275,7 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 		}
 	}
 	migrateLegacyGhcpAgents(&p, snap)
+	reconciled.attachTo(&p)
 	for _, g := range p.Gaps {
 		s.deps.Todo.AddGap(g)
 	}
@@ -313,6 +314,7 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 	// only controls whether a decline/cancel answer aborts the run, so headless callers that
 	// pre-confirm still see it recorded as the last interaction before execution.
 	p.ConflictReport = report
+	s.annotateToolsChanges(&p, module, customTools, skippedTools, scope, newDeployedBytes(workspace, nil).withMigratedAgents(p).reader(), probeSet.Agents, infraAgents)
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {
 		return domain.RunSummary{}, rerr

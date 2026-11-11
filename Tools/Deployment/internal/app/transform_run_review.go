@@ -31,7 +31,7 @@ func (r *transformRun) agentWriteItems() []domain.PlanItem {
 		}
 		items = append(items, domain.PlanItem{
 			Ref:        domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: st.result.RefKey},
-			SourcePath: pa.SourcePath, TargetPath: pa.DestinationPath, Action: action, Reason: reason,
+			SourcePath: pa.SourcePath, TargetPath: pa.DestinationPath, Action: action, Reasons: []string{reason},
 			Model:         r.modelSelection(pa.SourceModel),
 			SourceVersion: st.result.Stamps.Version,
 		})
@@ -45,8 +45,10 @@ func (r *transformRun) reviewPlan() domain.Plan {
 	p := domain.Plan{
 		Mode: domain.ModeTransformHarness, Harness: r.tgt.Ref(),
 		WorkspacePath: r.workspace, Scope: domain.ScopeProject,
-		Items:    r.writeItems(),
-		Removals: r.plan.Removals, Replacements: r.plan.Replacements,
+		Items:          r.writeItems(),
+		Removals:       append(append([]domain.Removal(nil), r.plan.Removals...), r.targetLegacyRemovals()...),
+		Replacements:   r.plan.Replacements,
+		DroppedEntries: r.droppedEntries(),
 	}
 	for _, pa := range r.plan.Agents {
 		if pa.Action != PlanSkip {
@@ -57,7 +59,7 @@ func (r *transformRun) reviewPlan() domain.Plan {
 			p.Items = append(p.Items, domain.PlanItem{
 				Ref:        domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: pa.Key},
 				SourcePath: pa.SourcePath, TargetPath: pa.DestinationPath,
-				Action: domain.ActionUnchanged, Reason: pa.Reason,
+				Action: domain.ActionUnchanged, Reasons: []string{pa.Reason},
 			})
 		default:
 			p.Gaps = append(p.Gaps, domain.Gap{Kind: domain.GapSkippedFile, Subject: pa.FileName, Detail: pa.Reason})

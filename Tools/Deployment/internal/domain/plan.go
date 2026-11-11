@@ -73,7 +73,14 @@ type PlanItem struct {
 	Stale      []VersionDelta     // non-empty only for ActionUpdate; names every field that drove it
 	Model      ModelSelection     // agents only
 	Conflict   *LocalModification // non-nil only for ActionConflict
-	Reason     string             // one-line human-readable explanation, rendered by both frontends
+	// Reasons are the causes of this item's action, in the order they were added. Nothing
+	// replaces an earlier reason.
+	Reasons []string
+	// Warnings are advisory notes that do not change the action.
+	Warnings []string
+	// BackupBeforeWrite: the executor backs up the existing file to .mosaic/backups before
+	// overwriting it. Set for updates caused by an edit of Deploy-owned content.
+	BackupBeforeWrite bool
 
 	// SourceVersion is the source agent's declared version (frontmatter `version`).
 	// Non-empty only for agent artifacts whose source file declares a version.
@@ -85,6 +92,37 @@ type PlanItem struct {
 	// item replaces (GHCP X.md -> X.agent.md) when the target path is absent and the agent's
 	// deployed state was read from that file. Empty for every other item.
 	RenamedFrom string
+}
+
+// BackupThenReplaceText states, in plan and preview texts, that the current file is backed up
+// and then overwritten.
+const BackupThenReplaceText = "backs up the current file to .mosaic/backups, then replaces it"
+
+// BackupThenRemoveText states, in plan and preview texts, that the current file is backed up
+// and then deleted.
+const BackupThenRemoveText = "backs up the current file to .mosaic/backups, then removes it"
+
+// AddReason appends text to Reasons when it is non-empty and not already present.
+func (it *PlanItem) AddReason(text string) {
+	it.Reasons = appendDistinct(it.Reasons, text)
+}
+
+// AddWarning appends text to Warnings when it is non-empty and not already present.
+func (it *PlanItem) AddWarning(text string) {
+	it.Warnings = appendDistinct(it.Warnings, text)
+}
+
+// appendDistinct appends text to list unless it is empty or already in list.
+func appendDistinct(list []string, text string) []string {
+	if text == "" {
+		return list
+	}
+	for _, existing := range list {
+		if existing == text {
+			return list
+		}
+	}
+	return append(list, text)
 }
 
 // Plan is the complete, pre-computed description of what a deployment run will do.
@@ -102,12 +140,15 @@ type Plan struct {
 	// paths set it, from the run's report, after the plan is built and before Review; plan
 	// building never fills it. Empty when nothing is shadowed.
 	ConflictReport ConflictReport
-	// Removals are files the run deletes, after backup. Empty in every mode except a
-	// GHCP-pair transform.
+	// Removals are files the run deletes, after backup. Used by the GHCP agent-name migration
+	// (deploy flows, transform to a GHCP target) and the GHCP-pair transform.
 	Removals []Removal
-	// Replacements are existing files the run backs up and overwrites. Empty in every mode
-	// except a GHCP-pair transform.
+	// Replacements are existing files the run backs up and overwrites. Used by the GHCP
+	// agent-name migration and the GHCP-pair transform.
 	Replacements []Replacement
+	// DroppedEntries are manifest entries removed before planning, shown on review and in the
+	// preview. Nil when none.
+	DroppedEntries []DroppedEntry
 }
 
 // Counts returns the number of items for each PlanAction.

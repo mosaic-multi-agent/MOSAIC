@@ -26,24 +26,29 @@ package deploy_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 )
 
 // ---------------------------------------------------------------------------
 // Local builders
 // ---------------------------------------------------------------------------
 
-// newHookItem builds a PlanItem for a hook bundle, with SourcePath set to a bundle directory
-// (the path that classifyHookItem supplies and that the catalog never registers as a file).
+// newHookItem builds a PlanItem for one hook file. Its SourcePath is a file inside bundleDir
+// that this helper creates; the catalog never registers hook files, so the executor must read
+// the source itself and never route a hook item through the content callback.
 func newHookItem(key, bundleDir, targetPath string, action domain.PlanAction) domain.PlanItem {
+	src := filepath.Join(bundleDir, "hook.sh")
+	_ = os.WriteFile(src, []byte("#!/bin/sh\necho "+key+"\n"), 0o644)
 	return domain.PlanItem{
 		Ref:        domain.ArtifactRef{Kind: domain.ArtifactHook, Key: key},
-		SourcePath: bundleDir, // directory; deliberately not a registered catalog file path
+		SourcePath: src,
 		TargetPath: targetPath,
 		Action:     action,
 	}
@@ -65,7 +70,7 @@ func newSkillItem(key, targetPath string, action domain.PlanAction) domain.PlanI
 // This reproduces the exact failure mode: the catalog rejects unregistered directory paths.
 func catalogErrorContent(bundleDir string) func(domain.PlanItem) ([]byte, error) {
 	return func(item domain.PlanItem) ([]byte, error) {
-		if item.SourcePath == bundleDir {
+		if item.Ref.Kind == domain.ArtifactHook || item.SourcePath == bundleDir {
 			return nil, fmt.Errorf("catalog: path %q was not emitted by this catalog", bundleDir)
 		}
 		return []byte("# content"), nil
@@ -163,11 +168,9 @@ func TestHookItem_Update_DoesNotFailWhenSourcePathIsDirectory(t *testing.T) {
 	t.Errorf("no action record found for hook item %q", hookItem.Ref)
 }
 
-// TestHookItem_Create_NoSpuriousSingleFileWrittenAtTargetPath verifies that the fix does not
-// accidentally write a single file at the hook item's TargetPath inside the workspace. Hook
-// bundle files are managed by deployHooks (writing per-file entries under TargetDir); the
-// per-item path must remain absent so no bogus single-file artifact is created there.
-func TestHookItem_Create_NoSpuriousSingleFileWrittenAtTargetPath(t *testing.T) {
+// TestHookItem_Create_WritesSourceFileAtTargetPath verifies that a hook item writes the bytes
+// of its own source file at its TargetPath: one hook item is one deployed hook file.
+func TestHookItem_Create_WritesSourceFileAtTargetPath(t *testing.T) {
 	workspace := t.TempDir()
 	mosaicRoot := t.TempDir()
 	bundleDir := t.TempDir()
@@ -186,10 +189,7 @@ func TestHookItem_Create_NoSpuriousSingleFileWrittenAtTargetPath(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	spuriousPath := filepath.Join(workspace, targetPath)
-	if fileExistsAt(t, spuriousPath) {
-		t.Errorf("spurious single file found at %q; hook items must not produce a single-file write at their TargetPath", spuriousPath)
-	}
+	assertFileHolds(t, workspace, targetPath, string(readFile(t, hookItem.SourcePath)))
 }
 
 // TestHookItem_DryRun_ReportsCreatedWithoutError verifies that dry-run simulation for hook
@@ -412,10 +412,10 @@ func TestHookItem_Update_PriorManifestEntryReplaced(t *testing.T) {
 	store := manifest.NewStore()
 	prior := domain.Manifest{
 		SchemaVersion: "1",
-		HarnessID:     "test-harness",
-		Entries: []domain.ManifestEntry{
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness"}},
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{
 			{Ref: hookRef, TargetPath: targetPath, Version: "1.0.0"},
-		},
+		}),
 	}
 	if err := store.Save(workspace, prior); err != nil {
 		t.Fatalf("seed manifest: %v", err)

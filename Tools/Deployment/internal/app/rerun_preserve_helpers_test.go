@@ -224,34 +224,37 @@ func rpCustomSentinel(key string) string  { return "CUSTOM-SENTINEL-" + key }
 // rpToolsLine matches the frontmatter tools line of the harnesses that keep tools on one line.
 var rpToolsLine = regexp.MustCompile(`(?m)^tools: .*$`)
 
-// rpHandSetTools returns doc with the harness's tool choice changed by hand.
+// rpHandSetTools returns doc with a custom tool added by hand. The tool is not in any
+// harness's built-in tool universe, so an update keeps it while built-in tools follow the
+// catalog.
 func rpHandSetTools(t *testing.T, harness, doc string) string {
 	t.Helper()
 	switch harness {
 	case hClaude:
-		return rpToolsLine.ReplaceAllString(doc, "tools: Read, Grep")
+		return rpToolsLine.ReplaceAllString(doc, "tools: hand-set-tool")
 	case hCLI, hVSCode:
-		return rpToolsLine.ReplaceAllString(doc, "tools: ['read', 'hand-set-tool']")
+		return rpToolsLine.ReplaceAllString(doc, "tools: ['hand-set-tool']")
 	case hOpen:
 		if !strings.Contains(doc, "  webfetch: deny") {
-			t.Fatalf("opencode file has no webfetch permission to change by hand")
+			t.Fatalf("opencode file has no permission block to add a custom tool to")
 		}
-		return strings.Replace(doc, "  webfetch: deny", "  webfetch: allow", 1)
+		return strings.Replace(doc, "  webfetch: deny", "  webfetch: deny\n  hand-set-tool: allow", 1)
 	}
 	t.Fatalf("unknown harness %q", harness)
 	return doc
 }
 
-// rpHandSetToolsMarker matches the tool choice rpHandSetTools writes.
+// rpHandSetToolsMarker matches the custom tool rpHandSetTools adds, wherever the tool sits
+// among the built-in tools the catalog produces.
 func rpHandSetToolsMarker(t *testing.T, harness string) *regexp.Regexp {
 	t.Helper()
 	switch harness {
 	case hClaude:
-		return regexp.MustCompile(`(?m)^tools: Read, Grep\r?$`)
+		return regexp.MustCompile(`(?m)^tools: .*\bhand-set-tool\b.*$`)
 	case hCLI, hVSCode:
-		return regexp.MustCompile(`(?m)^tools: \['read', 'hand-set-tool'\]\r?$`)
+		return regexp.MustCompile(`(?m)^tools: \[.*'hand-set-tool'.*\]\r?$`)
 	case hOpen:
-		return regexp.MustCompile(`(?m)^  webfetch: allow\r?$`)
+		return regexp.MustCompile(`(?m)^  hand-set-tool: allow\r?$`)
 	}
 	t.Fatalf("unknown harness %q", harness)
 	return nil

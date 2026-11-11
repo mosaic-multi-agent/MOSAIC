@@ -17,6 +17,7 @@ import (
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 	"mosaic-deploy/internal/transform"
 )
@@ -97,7 +98,7 @@ func runUpdateRefresh(t *testing.T, cfg updateRefreshConfig) *injectionRun {
 		})
 	}
 	deps.Manifest = &stubManifestStore{snap: manifest.Snapshot{State: manifest.StatePresent, Manifest: domain.Manifest{
-		SchemaVersion: manifest.SchemaVersion, HarnessID: "stub-harness", Entries: entries,
+		SchemaVersion: manifest.SchemaVersion, Harnesses: []domain.HarnessSection{{HarnessID: "stub-harness"}}, Entries: manifesttest.WithHarness("stub-harness", entries),
 	}}}
 	rec := &injectionRecorder{inner: deploy.NewExecutor(deps.Manifest, deps.Logger, deps.Todo)}
 	deps.Executor = rec

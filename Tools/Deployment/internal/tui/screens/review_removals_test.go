@@ -86,8 +86,8 @@ func TestReviewScreen_RemovalsAndReplacements_CountsHeaderIncludesThem(t *testin
 	if !strings.Contains(view, "2 to remove") {
 		t.Errorf("counts header lacks %q:\n%s", "2 to remove", view)
 	}
-	if !strings.Contains(view, "1 to replace (backed up)") {
-		t.Errorf("counts header lacks %q:\n%s", "1 to replace (backed up)", view)
+	if !strings.Contains(view, "1 to replace (current file backed up first)") {
+		t.Errorf("counts header lacks %q:\n%s", "1 to replace (current file backed up first)", view)
 	}
 }
 

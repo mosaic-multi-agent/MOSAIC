@@ -44,11 +44,7 @@ func classifyAgentItemLegacyAware(
 	item.Action = domain.ActionUpdate
 	item.Conflict = nil
 	item.RenamedFrom = legacyPath
-	reason := "renamed from " + legacyPath
-	if item.Reason != "" {
-		reason += "; " + item.Reason
-	}
-	item.Reason = reason
+	item.AddReason("renamed from " + legacyPath)
 	return item
 }
 

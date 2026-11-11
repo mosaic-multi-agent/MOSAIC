@@ -1,0 +1,32 @@
+schema_version: "1"
+harness_id: opencode
+updated_at: "2026-11-03T08:00:00Z"
+tool_version: 1.6.0
+entries:
+  - ref:
+      kind: agent
+      key: codebase-research
+    target_path: .opencode/agents/codebase-research.md
+    version: "1.0.0"
+    harness_version: "2.0.0"
+    injections_version: "3.0.0"
+    content_hash: sha256:6666666666666666666666666666666666666666666666666666666666666666
+    deployed_at: "2026-11-03T07:00:00Z"
+  - ref:
+      kind: agent
+      key: reviewer
+    target_path: .github/agents/reviewer.agent.md
+    version: "2.1.0"
+    harness_version: "2.0.0"
+    injections_version: "3.0.0"
+    content_hash: sha256:7777777777777777777777777777777777777777777777777777777777777777
+    deployed_at: "2026-11-03T07:00:00Z"
+  - ref:
+      kind: skill
+      key: lean-tdd
+    target_path: .claude/skills/lean-tdd/SKILL.md
+    version: "1.2.0"
+    harness_version: ""
+    injections_version: ""
+    content_hash: sha256:8888888888888888888888888888888888888888888888888888888888888888
+    deployed_at: "2026-11-03T07:00:00Z"

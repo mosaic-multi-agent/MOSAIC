@@ -28,11 +28,11 @@ This guide is for **project authors** who want to get MOSAIC running in their AI
 - **VS Code GHCP Local** (`vscode-ghcp`): use it only for VS Code's Local harness. Local is being retired; no date has been announced.
 - To tell which harness a VS Code chat uses, look below the prompt input in the chat window: the `Set session target` control on the left switches between Local and Copilot, next to the agent mode and permissions controls.
 - Subagents on the GHCP CLI / VS Code GHCP Copilot target have no built-in ask tool, as with Claude Code background subagents. Human-in-the-loop for subagents there therefore needs an MCP ask tool that you supply. This setup is untested.
-- A workspace holds one GHCP target at a time, decided by the manifest `harness_id`. Deploy and the other deploy flows refuse the other target and point to Transform; a workspace that holds both must be cleaned up by hand.
+- A workspace holds one GHCP target at a time, decided by the harness recorded on the manifest entries (file names never decide it). Deploy and the other deploy flows refuse the other target and point to Transform; a workspace that holds both must be cleaned up by hand.
 
 ### GHCP agent file names
 
-Both GHCP targets write agents as `.github/agents/X.agent.md`, with content specific to each target. A workspace deployed earlier with `X.md` agents is migrated by the next full deploy, deploy agents, Update or workflow update for its target, for the agents that run writes: each old file is backed up under `.mosaic/backups/` and replaced by `X.agent.md`, and an existing `X.agent.md` for the same agent is backed up and replaced too. A migrated agent keeps its project and custom regions, model, tool choices and declarations. A run that writes only some agents leaves the rest as `X.md`, and the next Update migrates them. Only agents recorded as `X.md` in the manifest are migrated.
+Both GHCP targets write agents as `.github/agents/X.agent.md`, with content specific to each target. A workspace deployed earlier with `X.md` agents is migrated by the next full deploy, deploy agents, Update or workflow update for its target, for the agents that run writes: each old file is backed up under `.mosaic/backups/` and replaced by `X.agent.md`, and an existing `X.agent.md` for the same agent is backed up and replaced too. A migrated agent keeps its project and custom regions, model, tool choices and declarations. A run that writes only some agents leaves the rest as `X.md`, and the next Update migrates them. Only agents recorded as `X.md` in the manifest are migrated. The rename never forces a write by itself, a file in conflict is kept as it is, and a transform to a GHCP target leaves no `X.md` entry in the manifest.
 
 **Catalog stacks:** every subcommand and the TUI can deploy from several catalogs layered on top of each other (`--catalog-folder`, `--include-default-catalog`). See [Catalog Stacks](#catalog-stacks).
 
@@ -108,7 +108,17 @@ When the tool cannot confirm a file as its own, because it cannot be parsed or h
 | `overwrite` | Replaced with latest |
 | `backup` | Copied to `.mosaic/backups/<path>.<timestamp>.bak`, then overwritten |
 
-**What an update keeps.** Only project and custom regions, models and tool choices survive an update. Edits elsewhere in an agent or skill file are replaced the next time the file is rewritten, and `--conflict` does not protect them. Keep your own content in project and custom regions.
+**What an update keeps.** Project and custom regions, the frontmatter, models and tool choices belong to you and survive an update. In the tools field, built-in tools follow the catalog (the plan lists those an update adds or removes), tools you added are kept, and custom tools the run produces are added.
+
+**Edits to Deploy-owned content.** The agent body outside the project and custom regions, and whole skill and hook files, are Deploy-owned. When one differs from what Deploy recorded at its last write, the plan shows an update with the reason "Deploy-owned content was edited locally" and the current file is backed up under `.mosaic/backups/` before it is replaced. Files written by an earlier Deploy version carry no such record and get no edit check until their next write. The plan lists every reason for an item, not only the first.
+
+### The manifest
+
+`.mosaic/manifest.yaml` (schema version 2) holds several harnesses side by side. Every entry names its harness; each harness has a section with `protocol_source`, `bundle_source` and `updated_at`; `tool_version` is recorded once at the top level; there is no top-level `harness_id`. A hook bundle is recorded file by file, one entry per deployed hook file. Older Deploy builds refuse a schema-2 manifest.
+
+Before every action the manifest is reconciled with the disk: an entry whose file is gone is dropped, and a hook bundle with some files missing is completed by the next update. The plan review and the dry run list the dropped entries.
+
+A manifest from an earlier Deploy version is converted on its first read. Entries under `.claude/` and `.opencode/` are attributed to Claude Code and OpenCode by their path; other entries (including `.github/`) take the old `harness_id` when that harness deploys to the path; entries that cannot be attributed are dropped and reported, and their files count as unrecorded, so the first run may ask the conflict question once for them.
 
 ---
 
@@ -425,7 +435,7 @@ If no layer supplies the orchestrator pair, the run fails when the plan is built
 
 The tool records which catalog supplied what:
 
-- **Manifest** (`.mosaic/manifest.yaml`): every entry (agents including both orchestrator files, skills, hooks) carries a `catalog` field with the supplying catalog's id, name and version. The top level records `protocol_source` and `bundle_source` (written by deploy and update, kept by the partial runs) and the persisted `catalog_stack`.
+- **Manifest** (`.mosaic/manifest.yaml`): every entry (agents including both orchestrator files, skills, hooks) carries a `catalog` field with the supplying catalog's id, name and version. Each harness section records `protocol_source` and `bundle_source` (written by deploy and update, kept by the partial runs), and the top level records the persisted `catalog_stack`.
 - **Workflows have no manifest entries.** They are embedded in the deployed orchestrator file, which has its own entry naming the orchestrator pair's source catalog. Workflow provenance is therefore per resolved item in the stack, not per manifest entry.
 - **TUI**: the workflow, agent, utility, standalone, infrastructure and hook selection screens label each option with the id of the catalog it comes from (`unknown` when it cannot be told).
 

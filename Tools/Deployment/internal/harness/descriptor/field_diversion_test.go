@@ -7,7 +7,7 @@ package descriptor_test
 // value. MapTools must produce a FrontmatterField for each DestField destination key it
 // encounters, and must NOT include the diverted harness tool names in the main tools list.
 //
-// Custom tool template: when ToolSpec.CustomToolTemplate is non-empty, a
+// Custom tool template: when ToolSpec.MCP declares a server form, a
 // user-supplied MCP server name is formatted through the template before being stored
 // in HarnessTools. The formatted name must appear in the Fields output for list-shape
 // harnesses; the raw unformatted name must not.
@@ -66,7 +66,7 @@ func loadFieldDiversionDescriptor(t *testing.T) *domain.HarnessDescriptor {
 	return d
 }
 
-// customTemplateDescriptorYAML declares a harness whose custom_tool_template wraps any
+// customTemplateDescriptorYAML declares a harness whose tools.mcp server form wraps any
 // user-supplied MCP server name with the prefix "mcp:". A custom name "my-server" must
 // therefore produce "mcp:my-server" in the harness tool output.
 // Uses the multi-destination destinations: schema.
@@ -85,7 +85,9 @@ tools:
         - to: main
           names:
             - "read-file"
-  custom_tool_template: "mcp:%s"
+  mcp:
+    server_form: "mcp:{server}"
+    tool_form: "mcp:{server}:{tool}"
 frontmatter:
   tools_key: "tools"
 `
@@ -260,10 +262,10 @@ func TestMapTools_FieldDiversion_ResolutionDestinationMatchesMappingDeclaration(
 	}
 }
 
-// --- Custom tool template: ToolSpec.CustomToolTemplate formats user-supplied names ---
+// --- Custom tool template: ToolSpec.MCP server form formats user-supplied names ---
 
 // TestMapTools_CustomTemplate_NameIsFormattedThroughTemplate asserts that when
-// CustomToolTemplate is non-empty, a user-supplied MCP server name is substituted into
+// the MCP server form is declared, a user-supplied MCP server name is substituted into
 // the template before being stored in HarnessTools. The raw user-supplied name must NOT
 // appear verbatim; only the formatted form may appear.
 func TestMapTools_CustomTemplate_NameIsFormattedThroughTemplate(t *testing.T) {
@@ -295,7 +297,7 @@ func TestMapTools_CustomTemplate_NameIsFormattedThroughTemplate(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Errorf("formatted tool name %q not found in HarnessTools; custom_tool_template must be applied; got: %v", want, res.HarnessTools)
+		t.Errorf("formatted tool name %q not found in HarnessTools; the tools.mcp server form must be applied; got: %v", want, res.HarnessTools)
 	}
 }
 
@@ -321,8 +323,8 @@ func TestMapTools_CustomTemplate_RawNameAbsentWhenTemplateApplied(t *testing.T) 
 	}
 	for _, ht := range result.Resolutions[0].HarnessTools {
 		if ht == "my-server" {
-			t.Errorf("raw user-supplied name %q found in HarnessTools when custom_tool_template %q is set; only the formatted form %q must appear",
-				"my-server", "mcp:%s", "mcp:my-server")
+			t.Errorf("raw user-supplied name %q found in HarnessTools when the tools.mcp server form %q is set; only the formatted form %q must appear",
+				"my-server", "mcp:{server}", "mcp:my-server")
 		}
 	}
 }
@@ -385,7 +387,7 @@ func TestMapTools_CustomTool_AppearsInToolsField(t *testing.T) {
 // Custom tool template × CustomToolDestinations interaction
 //
 // Coverage:
-//   - When both custom_tool_template and custom_tool_destination are declared, each
+//   - When both tools.mcp forms and custom_tool_destination are declared, each
 //     destination carries the FORMATTED name (template applied) and never the raw
 //     user-supplied name.
 //   - The template and the destination are independent: the template controls what the
@@ -396,7 +398,7 @@ func TestMapTools_CustomTool_AppearsInToolsField(t *testing.T) {
 //     user-supplied name in the destinations.
 // =============================================================================
 
-// customTemplateAndDestDescriptorYAML declares a harness with both custom_tool_template
+// customTemplateAndDestDescriptorYAML declares a harness with both tools.mcp forms
 // and custom_tool_destination. The template wraps custom names with the "mcp:" prefix;
 // the destination routes the result to a separate "mcpServers" field.
 const customTemplateAndDestDescriptorYAML = `schema_version: "1"
@@ -414,7 +416,9 @@ tools:
         - to: main
           names:
             - "read-file"
-  custom_tool_template: "mcp:%s"
+  mcp:
+    server_form: "mcp:{server}"
+    tool_form: "mcp:{server}:{tool}"
   custom_tool_destination:
     - to: field
       field: mcpServers
@@ -436,7 +440,7 @@ func loadCustomTemplateAndDestDescriptor(t *testing.T) *domain.HarnessDescriptor
 }
 
 // customDestNoTemplateDescriptorYAML declares a harness with custom_tool_destination but
-// no custom_tool_template. Custom names are used as-is (no formatting applied).
+// no tools.mcp forms. Custom names are used as-is (no formatting applied).
 const customDestNoTemplateDescriptorYAML = `schema_version: "1"
 id: "dest-no-template-harness"
 display_name: "Dest No Template Harness"
@@ -464,7 +468,7 @@ func loadCustomDestNoTemplateDescriptor(t *testing.T) *domain.HarnessDescriptor 
 }
 
 // TestMapTools_CustomTemplateAndDest_DestinationsCarryFormattedName asserts that when
-// both custom_tool_template and custom_tool_destination are declared, the name injected
+// both tools.mcp forms and custom_tool_destination are declared, the name injected
 // into each destination is the FORMATTED name (template applied), not the raw user
 // input. The template and the destination settings are independent and both take effect.
 // This test is RED until MapTools reads CustomToolDestinations.
@@ -619,7 +623,7 @@ func TestMapTools_TemplateWithoutCustomDest_FallsThroughToDestMainWithFormattedN
 }
 
 // TestMapTools_CustomDestWithoutTemplate_DestinationsCarryRawName asserts that when
-// custom_tool_destination is set but custom_tool_template is empty, the destination
+// custom_tool_destination is set but no tools.mcp forms are declared, the destination
 // carries the raw user-supplied name unchanged.
 // This test is RED until MapTools reads CustomToolDestinations.
 func TestMapTools_CustomDestWithoutTemplate_DestinationsCarryRawName(t *testing.T) {

@@ -24,6 +24,12 @@ import (
 // a state whose Present is false (unreadable/absent) or whose scalar fields are empty (present
 // but unparseable). Directories at the target path also yield Present: false.
 func probeDeployedArtifact(workspace, targetPath, modelKey string) domain.DeployedArtifactState {
+	return probeDeployedArtifactOf(workspace, targetPath, modelKey, "")
+}
+
+// probeDeployedArtifactOf is probeDeployedArtifact for an artifact of the given kind: for an
+// agent or skill it also fills the Deploy-owned content record from the file on disk.
+func probeDeployedArtifactOf(workspace, targetPath, modelKey string, kind domain.ArtifactKind) domain.DeployedArtifactState {
 	fullPath := filepath.Join(workspace, targetPath)
 
 	data, err := os.ReadFile(fullPath)
@@ -83,6 +89,9 @@ func probeDeployedArtifact(workspace, targetPath, modelKey string) domain.Deploy
 	// Returns "" when the region is absent or carries no version attribute; both are treated as
 	// stale by the planner. This call never fails the scan.
 	state.ProtocolVersion = extractDeployedProtocolVersion(data)
+
+	// Record the Deploy-owned content recomputed from these bytes (agents and skills).
+	attachOwnedContent(&state, kind, data)
 
 	return state
 }
@@ -196,7 +205,7 @@ func probeDeployedState(
 			result[pp.TargetPath] = seeded
 			continue
 		}
-		result[pp.TargetPath] = probeDeployedArtifact(workspace, pp.TargetPath, modelKey)
+		result[pp.TargetPath] = probeDeployedArtifactOf(workspace, pp.TargetPath, modelKey, pp.Ref.Kind)
 	}
 
 	return result
@@ -251,11 +260,9 @@ func probeDeployedStateWithIndex(
 			continue
 		}
 
-		// Hook bundles deploy as files directly in the hooks directory, not at the planned
-		// <hooks dir>/<key> path, so a read at that path cannot observe them. Record absent here;
-		// callers that plan hooks apply the layout-aware presence post-pass (applyHookPresence).
+		// A hook file is probed on its own: presence, real content hash and Deploy-owned record.
 		if pp.Ref.Kind == domain.ArtifactHook {
-			result[pp.TargetPath] = domain.DeployedArtifactState{}
+			result[pp.TargetPath] = probeHookFile(workspace, pp.TargetPath)
 			continue
 		}
 
@@ -278,14 +285,14 @@ func probeDeployedStateWithIndex(
 					result[pp.TargetPath] = probePlannedPathForAgent(workspace, pp.TargetPath, modelKey, parseFailedPaths[pp.TargetPath])
 				} else {
 					// Probe at the id-resolved path (may differ from planned path if renamed).
-					result[pp.TargetPath] = probeDeployedArtifact(workspace, resolved, modelKey)
+					result[pp.TargetPath] = probeDeployedArtifactOf(workspace, resolved, modelKey, pp.Ref.Kind)
 				}
 				continue
 			}
 		}
 
 		// Non-agent artifacts, id-less agents, and the no-index case: probe at planned path.
-		result[pp.TargetPath] = probeDeployedArtifact(workspace, pp.TargetPath, modelKey)
+		result[pp.TargetPath] = probeDeployedArtifactOf(workspace, pp.TargetPath, modelKey, pp.Ref.Kind)
 	}
 
 	return result, nil

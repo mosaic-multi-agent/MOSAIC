@@ -97,7 +97,7 @@ Replaces the workflow set embedded in the deployed orchestrator files (`workflow
 | **Deployment Pipeline — transform** | `transform.Apply`, invoked from `buildContent`, to render one agent file per plan item. |
 | **Deployment Pipeline — deploy** | `deploy.Executor.Execute` to perform the actual write/backup/manifest/hook-registration pass. |
 | **Support Infrastructure — config** | `ToolConfigStore` (utility-agent allow-list) and `UserConfigStore` (persisted tier→model mappings, read at the start of `resolveModels` and written by `persistTierModels`). |
-| **Support Infrastructure — manifest** | `Manifest.Load` to obtain the snapshot passed into `plan.Input` for staleness comparison. |
+| **Support Infrastructure — manifest** | `Manifest.Load` (through the app layer's reconciling read) to obtain the snapshot, narrowed to the run's harness, passed into `plan.Input` for staleness comparison. The dropped manifest entries travel on `Plan.DroppedEntries`: the TUI review screen (`screens/review_dropped.go`) and the CLI dry-run and transform output (`cli/dropped_entries_output.go`) list them, and the plan review and dry-run show every reason of an item and the backup-before-replace line. |
 | **Support Infrastructure — todo/logging** | Every gap (`GapNoModel`, `GapUnmappedTool`, `GapSkippedFile`) is recorded through `deps.Todo`; log file paths and any degraded-logging errors are folded into `RunSummary`. |
 
 ## Key Concepts
@@ -137,4 +137,4 @@ Replaces the workflow set embedded in the deployed orchestrator files (`workflow
 ## Usage errors and help text
 
 - `cli.Run` prints every cobra parse or usage error (unknown flag, bad value, unknown subcommand, root with no subcommand) to stderr as `error: <message>` and returns exit 3; the root message lists all subcommands. Subcommand handlers keep their own error output and exit codes.
-- The `--conflict` help on `deploy`, `update`, `workflows`, `agents` and `hooks` (and the `agents` long help) states that it applies to files the tool cannot confirm as its own (unparsable, no manifest, or no manifest entry), not to hand-edited files.
+- The `--conflict` help on `deploy`, `update`, `workflows`, `agents` and `hooks` (and the `agents` long help) states that it applies to files the tool cannot confirm as its own (unparsable, no manifest, or no manifest entry). Edits of Deploy-owned content are not conflicts: they show in the plan as an update with a backup.

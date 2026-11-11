@@ -53,6 +53,10 @@ const (
 	QAgentModel            QuestionID = "agent-model"
 	QCustomModel           QuestionID = "custom-model"
 	QCustomTool            QuestionID = "custom-tool"
+	// QMCPNameSplit asks how an ambiguous MCP tool name splits into server and tool. SelectOne.
+	// Subject: the source tool name. Options: one per split, ID = the server part, Label
+	// "<server> / <tool>", shortest server first. Skippable and skip-all-able.
+	QMCPNameSplit QuestionID = "mcp-name-split"
 	QLocalModification     QuestionID = "local-modification"
 	QPlanConfirm           QuestionID = "plan-confirm"
 	QExternalOptIn         QuestionID = "external-opt-in"

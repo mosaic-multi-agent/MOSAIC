@@ -121,7 +121,7 @@ func TestBuild_CatalogChanged_OrchestratorWithInfrastructureDrift_CatalogDeltaAn
 
 	item := ccItemAt(t, p, ccOrchTarget)
 	if item.Action != domain.ActionUpdate {
-		t.Fatalf("Action = %q (reason %q), want %q", item.Action, item.Reason, domain.ActionUpdate)
+		t.Fatalf("Action = %q (reason %q), want %q", item.Action, reasonText(item), domain.ActionUpdate)
 	}
 	if !hasInfraDelta(item, "code-review") {
 		t.Fatalf("Stale = %+v, want an infrastructure delta for code-review", item.Stale)
@@ -129,12 +129,11 @@ func TestBuild_CatalogChanged_OrchestratorWithInfrastructureDrift_CatalogDeltaAn
 	if last := item.Stale[len(item.Stale)-1]; last.Field != ccCatalogDeltaField {
 		t.Errorf("last delta = %+v, want the catalog delta after the infrastructure delta", last)
 	}
-	parts := strings.Split(strings.TrimPrefix(item.Reason, "stale: "), "; ")
-	last := parts[len(parts)-1]
+	last := item.Reasons[len(item.Reasons)-1]
 	if !strings.Contains(last, ccOldCatalogID) || !strings.Contains(last, ccNewCatalogID) {
-		t.Errorf("Reason = %q, want the catalog reason as its last part", item.Reason)
+		t.Errorf("Reasons = %q, want the catalog reason as the last reason", item.Reasons)
 	}
-	if !strings.Contains(item.Reason, "code-review") {
-		t.Errorf("Reason = %q, want the infrastructure reason kept", item.Reason)
+	if !strings.Contains(reasonText(item), "code-review") {
+		t.Errorf("Reason = %q, want the infrastructure reason kept", reasonText(item))
 	}
 }

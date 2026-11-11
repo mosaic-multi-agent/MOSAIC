@@ -165,6 +165,9 @@ type uhConfig struct {
 	catalogVersion string
 	// recorded is the manifest-recorded hook version; empty records no hook entry.
 	recorded string
+	// entries are the per-file manifest hook entries recorded before the run; they take the
+	// place of the pre-change bundle-level entry that recorded produces.
+	entries []domain.ManifestEntry
 	// files maps workspace-relative path to the bytes present before the run.
 	files map[string]string
 	// conflict pre-answers conflicts; empty leaves the question unanswered.
@@ -209,12 +212,16 @@ func runUpdateHooks(t *testing.T, cfg uhConfig) *uhRun {
 	}
 	uhSeedFiles(t, workspace, cfg.files)
 
-	m := domain.Manifest{SchemaVersion: manifest.SchemaVersion, HarnessID: harnessID}
+	m := domain.Manifest{SchemaVersion: manifest.SchemaVersion, Harnesses: []domain.HarnessSection{{HarnessID: harnessID}}}
 	if cfg.recorded != "" {
 		m.Entries = []domain.ManifestEntry{{
+			Harness:    harnessID,
 			Ref:        domain.ArtifactRef{Kind: domain.ArtifactHook, Key: uhHookKey},
 			TargetPath: uhHookTarget, Version: cfg.recorded, ContentHash: manifest.Hash(nil),
 		}}
+	}
+	if cfg.entries != nil {
+		m.Entries = cfg.entries
 	}
 	deps.Manifest = &stubManifestStore{snap: manifest.Snapshot{State: manifest.StatePresent, Manifest: m}}
 	spyExec := &uhExecSpy{inner: deploy.NewExecutor(deps.Manifest, deps.Logger, deps.Todo)}

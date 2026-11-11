@@ -39,10 +39,7 @@ func RebuildDeployedAgent(in RebuildInput) (RebuildResult, error) {
 		placeholder = entry.ToolsPlaceholder
 	}
 
-	conv := ConvertDeployedTools(DeployedToolsInput{
-		Source: srcDesc, Target: tgtDesc, Tools: facts.Tools, Role: role,
-		PlaceholderAgent: placeholder != "", CatalogTools: catalogTools,
-	})
+	conv := ConvertDeployedTools(deployedToolsInput(in, facts, role, placeholder != "", catalogTools))
 	customTools := mergeCustomTools(conv.CustomTools, in.CustomTools)
 	appendTools := append([]string(nil), conv.TargetTools...)
 	if conv.UsePlaceholder {
@@ -54,7 +51,7 @@ func RebuildDeployedAgent(in RebuildInput) (RebuildResult, error) {
 		return RebuildResult{}, err
 	}
 	toolsValue, _ := genericToolsValue(conv, placeholder)
-	hadTools := len(facts.Tools) > 0 || len(conv.Generic) > 0 || conv.UsePlaceholder
+	hadTools := len(facts.Grants) > 0 || len(facts.Tools) > 0 || len(conv.Generic) > 0 || conv.UsePlaceholder
 	generic, err := buildRebuildGenericSource(in.Source, facts, dropKeys, toolsValue, hadTools, catalogName)
 	if err != nil {
 		return RebuildResult{}, err
@@ -62,7 +59,7 @@ func RebuildDeployedAgent(in RebuildInput) (RebuildResult, error) {
 
 	res, err := transform.Apply(transform.Request{
 		Source: generic, Deployed: in.Source, Kind: domain.ArtifactAgent, Key: refKey,
-		Module: in.TargetModule, Model: in.Model, CustomTools: customTools, SkippedTools: in.SkippedTools,
+		Module: in.TargetModule, Model: in.Model, CustomTools: customTools, SkippedTools: in.SkippedTools, DenyTools: conv.TargetDenied,
 		Scope: domain.ScopeProject, PreserveDeployedWorkflows: true,
 		ToolMappingsVersion: in.ToolMappingsVersion, Role: role, Timestamp: in.Timestamp,
 		InjectionsVersion:             tgtDesc.InjectionsVersion,
@@ -158,11 +155,19 @@ func assembleRebuildResult(in RebuildInput, tgtDesc *domain.HarnessDescriptor, f
 			dropped = append(dropped, key)
 		}
 	}
+	gaps := append([]domain.Gap(nil), res.Report.Gaps...)
 	var unmapped []string
 	for _, g := range conv.Unmapped {
 		if _, answered := in.CustomTools[g]; !answered {
 			unmapped = append(unmapped, g)
 		}
+	}
+	for _, amb := range conv.Ambiguous {
+		unmapped = append(unmapped, amb.Source)
+		gaps = append(gaps, domain.Gap{
+			Kind: domain.GapUnmappedTool, Subject: amb.Source, Owner: refKey,
+			Detail: "unmapped tool: " + amb.Source + " for agent " + refKey,
+		})
 	}
 	stamps := domain.VersionStamp{
 		Version: facts.Version, HarnessVersion: tgtDesc.TransformVersion,
@@ -175,7 +180,7 @@ func assembleRebuildResult(in RebuildInput, tgtDesc *domain.HarnessDescriptor, f
 		Output: res.Output, Role: role, RefKey: refKey,
 		Stamps: stamps,
 		Tools:  tools, Conversions: conv.Conversions, Dropped: conv.Dropped,
-		UnmappedTools: unmapped, DroppedFields: dropped, Gaps: uniqueGaps(res.Report.Gaps),
+		UnmappedTools: unmapped, DroppedFields: dropped, Gaps: uniqueGaps(gaps),
 	}, nil
 }
 

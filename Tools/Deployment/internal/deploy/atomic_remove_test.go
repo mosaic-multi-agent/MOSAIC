@@ -37,7 +37,7 @@ func failingSaveStore() manifest.Store {
 func execAtomicWith(t *testing.T, store manifest.Store, plan domain.Plan, hooks []domain.HookPlan) deploy.ExecResult {
 	t.Helper()
 	req := deploy.ExecRequest{
-		Plan:       plan,
+		Plan:       withHookItems(plan, hooks),
 		MosaicRoot: t.TempDir(),
 		Content:    fixedContent([]byte("# new")),
 		Hooks:      hooks,

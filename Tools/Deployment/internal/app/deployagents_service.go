@@ -209,7 +209,8 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 
 	// Probe the deployed state before any model question: an agent deployed from a recorded
 	// legacy file is asked for no model, and a tier only such agents use is not asked.
-	snap, _ := s.deps.Manifest.Load(workspace)
+	reconciled := loadReconciledManifest(s.deps.Manifest, workspace)
+	snap := reconciled.forHarness(module.Ref().ID) // the run sees only its own harness's entries
 
 	agentsDir := module.Descriptor().Paths.Agents.Project
 	var deployedAgentIndex DeployedAgentIndex
@@ -333,6 +334,7 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 	}
 	orch.annotate(p.Items)
 	migrateLegacyGhcpAgents(&p, snap)
+	reconciled.attachTo(&p)
 
 	conflicts := map[string]domain.ConflictDecision{}
 	var latchedDecision domain.ConflictDecision
@@ -368,6 +370,7 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 
 	report := s.conflictReportFor(module.Ref().ID, nil, s.deployedWorkflowIDs(module, workspace, scope, true), req.AutoConfirmPlan)
 	p.ConflictReport = report
+	s.annotateToolsChanges(&p, module, customTools, skippedTools, scope, newDeployedBytes(workspace, orch.readPaths()).withMigratedAgents(p).reader(), probeSet.Agents, infraAgents)
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {
 		return domain.RunSummary{}, rerr

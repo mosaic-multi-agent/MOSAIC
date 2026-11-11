@@ -1,0 +1,75 @@
+schema_version: "1"
+harness_id: ghcp-cli
+updated_at: "2026-11-02T09:15:00Z"
+tool_version: 1.6.0
+protocol_source:
+  id: mosaic-default
+  name: MOSAIC Default Catalog
+  version: "0.7.0"
+bundle_source:
+  id: user-cat
+  name: User Catalog
+  version: "1.10"
+catalog_stack:
+  - path: /abs/user-cat
+    catalog_id: user-cat
+  - default: true
+entries:
+  - ref:
+      kind: agent
+      key: codebase-research
+    target_path: .opencode/agents/codebase-research.md
+    version: "1.0.0"
+    harness_version: "2.0.0"
+    injections_version: "3.0.0"
+    content_hash: sha256:1111111111111111111111111111111111111111111111111111111111111111
+    deployed_at: "2026-11-01T10:00:00Z"
+    catalog:
+      id: user-cat
+      name: User Catalog
+      version: "1.10"
+  - ref:
+      kind: skill
+      key: lean-tdd
+    target_path: .opencode/skills/lean-tdd/SKILL.md
+    version: "1.2.0"
+    harness_version: ""
+    injections_version: ""
+    content_hash: sha256:2222222222222222222222222222222222222222222222222222222222222222
+    deployed_at: "2026-11-01T10:00:00Z"
+  - ref:
+      kind: agent
+      key: codebase-research
+    target_path: .github/agents/codebase-research.agent.md
+    version: "1.0.0"
+    harness_version: "2.0.0"
+    injections_version: "3.0.0"
+    content_hash: sha256:3333333333333333333333333333333333333333333333333333333333333333
+    deployed_at: "2026-11-02T09:00:00Z"
+  - ref:
+      kind: agent
+      key: reviewer
+    target_path: .github/agents/reviewer.agent.md
+    version: "2.1.0"
+    harness_version: "2.0.0"
+    injections_version: "3.0.0"
+    content_hash: sha256:4444444444444444444444444444444444444444444444444444444444444444
+    deployed_at: "2026-11-02T09:00:00Z"
+  - ref:
+      kind: hook
+      key: mosaic-logger
+    target_path: .github/hooks
+    version: "0.4.0"
+    harness_version: ""
+    injections_version: ""
+    content_hash: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    deployed_at: "2026-11-02T09:00:00Z"
+  - ref:
+      kind: skill
+      key: stray
+    target_path: docs/stray/SKILL.md
+    version: "1.0.0"
+    harness_version: ""
+    injections_version: ""
+    content_hash: sha256:5555555555555555555555555555555555555555555555555555555555555555
+    deployed_at: "2026-11-02T09:00:00Z"

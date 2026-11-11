@@ -35,6 +35,7 @@ import (
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 )
 
 // ---------------------------------------------------------------------------
@@ -69,10 +70,10 @@ func TestUpdate_VersionFieldStale_PlanItemIsActionUpdate(t *testing.T) {
 		snap: manifest.Snapshot{
 			State: manifest.StatePresent,
 			Manifest: domain.Manifest{
-				HarnessID: "stub-harness",
-				Entries: []domain.ManifestEntry{
+				Harnesses: []domain.HarnessSection{{HarnessID: "stub-harness"}},
+				Entries: manifesttest.WithHarness("stub-harness", []domain.ManifestEntry{
 					{Ref: domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "test-runner"}, Version: "1.0"},
-				},
+				}),
 			},
 		},
 	}

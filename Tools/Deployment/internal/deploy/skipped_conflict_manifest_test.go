@@ -16,6 +16,7 @@ import (
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 )
 
 const (
@@ -32,10 +33,8 @@ func seedSkipWorkspace(t *testing.T, entries ...domain.ManifestEntry) (string, m
 	workspace := t.TempDir()
 	writeExisting(t, workspace, skipPathB, []byte("locally written content"))
 	store := manifest.NewStore()
-	prior := domain.Manifest{SchemaVersion: "1", HarnessID: "test-harness", Entries: entries}
-	if err := store.Save(workspace, prior); err != nil {
-		t.Fatalf("seed manifest: %v", err)
-	}
+	prior := domain.Manifest{SchemaVersion: "1", Harnesses: []domain.HarnessSection{{HarnessID: "test-harness"}}, Entries: manifesttest.WithHarness("test-harness", entries)}
+	saveManifestWithFiles(t, store, workspace, prior)
 	return workspace, store
 }
 

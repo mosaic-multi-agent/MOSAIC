@@ -45,6 +45,7 @@ func (r *transformRun) prepareAgents() {
 	r.agents = make([]agentState, len(r.plan.Agents))
 	r.inspections = make([]DeployedAgentInspection, len(r.plan.Agents))
 	timestamp := r.s.now().UTC().Format(time.RFC3339)
+	r.declaredServers = r.openCodeDeclaredServers()
 	for i, pa := range r.plan.Agents {
 		if !isWrite(pa) {
 			continue
@@ -60,6 +61,7 @@ func (r *transformRun) prepareAgents() {
 			SourceModule: r.src, TargetModule: r.tgt, Catalog: r.catalogLookup(),
 			Model:               r.modelSelection(pa.SourceModel),
 			ToolMappingsVersion: r.toolMappingsVersion, Timestamp: timestamp,
+			DeclaredServers: r.declaredServers, MCPSplits: r.req.MCPSplits,
 		}
 		insp, err := InspectDeployedAgent(st.input)
 		if err != nil {
@@ -130,6 +132,7 @@ func (r *transformRun) buildAgents() {
 			continue
 		}
 		st.input.CustomTools = r.customTools
+		st.input.MCPSplits = r.mcpSplits
 		if len(r.skippedTools) > 0 {
 			st.input.SkippedTools = r.skippedTools
 		}

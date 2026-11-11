@@ -295,8 +295,8 @@ func TestDeployAgents_InfraSelected_PlanNamesInfraKeysAndExcludesWorkflowAgents(
 	if !ok {
 		t.Fatal("orchestrator.md is not in the plan")
 	}
-	if item.Action == domain.ActionCreate || !strings.Contains(item.Reason, injSecurityKey) {
-		t.Errorf("orchestrator item action=%s reason=%q, want an update whose reason names %s", item.Action, item.Reason, injSecurityKey)
+	if item.Action == domain.ActionCreate || !strings.Contains(reasonText(item), injSecurityKey) {
+		t.Errorf("orchestrator item action=%s reason=%q, want an update whose reason names %s", item.Action, reasonText(item), injSecurityKey)
 	}
 	keys := strings.Join(run.agentKeysInPlan(), ",")
 	if strings.Contains(keys, "test-runner") {

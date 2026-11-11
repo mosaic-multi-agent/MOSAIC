@@ -238,17 +238,14 @@ func TestFrontmatterPreservation_ArbitraryDeployedField_RetainedAfterUpdate(t *t
 }
 
 // ---------------------------------------------------------------------------
-// AC1.3: ToolsKey verbatim preservation regression guard
+// ToolsKey custom-tool survival regression guard
 // ---------------------------------------------------------------------------
 
 // TestFrontmatterPreservation_ToolsKey_PreservedVerbatimAfterUpdate is a regression guard
-// asserting that the ToolsKey field continues to be preserved verbatim from the deployed
-// file on Update after the Stage 1 fix. A user-added harness tool (user-extra) absent from
-// the source must survive in the output tools field.
-//
-// This test exercises existing behavior (toolsPreservedVerbatim) and is expected to be
-// GREEN immediately. It guards against the Stage 1 fix accidentally breaking ToolsKey
-// preservation when restructuring the toolsPreservedVerbatim path.
+// asserting that a custom tool in the deployed ToolsKey field survives an Update. A
+// user-added harness tool (user-extra) absent from the source must stay in the output tools
+// field. Built-in tools follow the catalog on update, so this test covers only the survival of
+// custom tools, not verbatim preservation of the whole field.
 func TestFrontmatterPreservation_ToolsKey_PreservedVerbatimAfterUpdate(t *testing.T) {
 	mod := newDescriptorModule(t, fieldPreservationDescriptorYAML, "inline:field-preservation")
 	req := transform.Request{

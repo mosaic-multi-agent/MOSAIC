@@ -736,7 +736,7 @@ func TestAtomicReversal_HookFilesReversedOnManifestSaveFailure(t *testing.T) {
 	}
 
 	req := deploy.ExecRequest{
-		Plan:       newPlan(workspace, itemA),
+		Plan:       newPlan(workspace, append([]domain.PlanItem{itemA}, hookItemsFor(workspace, hookPlan)...)...),
 		MosaicRoot: mosaicRoot,
 		Content:    fixedContent([]byte("# content")),
 		Hooks:      []domain.HookPlan{hookPlan},

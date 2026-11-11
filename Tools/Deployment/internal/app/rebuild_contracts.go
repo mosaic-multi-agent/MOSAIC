@@ -25,6 +25,9 @@ type RebuildInput struct {
 	SkippedTools        map[string]bool   // generics the user chose to skip
 	ToolMappingsVersion string
 	Timestamp           string // RFC3339 UTC, passed to transform.Request
+	// DeclaredServers are server names from the source harness's MCP configuration.
+	DeclaredServers []string
+	MCPSplits       map[string]string // source name -> chosen server
 }
 
 // RebuildResult is the output of RebuildDeployedAgent.

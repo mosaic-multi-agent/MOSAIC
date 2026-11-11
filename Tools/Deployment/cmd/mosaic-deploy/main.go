@@ -29,7 +29,6 @@ import (
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/registry"
 	"mosaic-deploy/internal/logging"
-	"mosaic-deploy/internal/manifest"
 	"mosaic-deploy/internal/pathinput"
 	"mosaic-deploy/internal/plan"
 	"mosaic-deploy/internal/todo"
@@ -45,7 +44,7 @@ import (
 	_ "mosaic-deploy/internal/harness/builtin/vscodeghcp"
 )
 
-const ToolVersion = "1.6.1"
+const ToolVersion = "1.7.0"
 
 // wantsTUI reports whether mosaic-deploy should launch the interactive TUI: no subcommand
 // was given, and both stdin and stdout are attached to a real terminal (not a pipe/redirect).
@@ -186,7 +185,7 @@ func main() {
 	// collector is shared between the Interaction port and the executor so
 	// both sinks write to the same checklist.
 	todoCollector := todo.NewCollector()
-	manifestStore := manifest.NewStore()
+	manifestStore := newManifestStore(reg)
 
 	// The Interaction port differs by frontend: the TUI needs a ProgramRef so the
 	// service's blocking calls can round-trip through the Bubble Tea program; the

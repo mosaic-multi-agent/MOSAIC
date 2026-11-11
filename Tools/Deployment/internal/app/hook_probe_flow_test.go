@@ -1,9 +1,9 @@
 package app_test
 
 // hook_probe_flow_test.go verifies, through the DeployHooks service, that the deployed-hook
-// state reaching the planner reflects the files the deploy actually writes (flat in the hooks
-// directory), and that the real planner then evaluates the manifest-recorded version instead of
-// reporting an already-deployed bundle as new.
+// state reaching the planner reports each hook file the deploy writes (flat or nested in the
+// hooks directory) with its own path and the hash and Deploy-owned record of its real bytes, and
+// that the real planner then plans one item per file from the per-file manifest entries.
 //
 // Fixtures are temp-dir workspaces and stub harness modules; nothing reads Catalog/.
 
@@ -18,12 +18,18 @@ import (
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
 	"mosaic-deploy/internal/plan"
+	"mosaic-deploy/internal/transform"
 )
 
 const (
 	flowHooksDir   = ".claude/hooks"
 	flowHookKey    = "git-hooks"
 	flowHookTarget = flowHooksDir + "/" + flowHookKey
+
+	flowHookFlatPath   = flowHooksDir + "/logger.sh"
+	flowHookNestedPath = flowHooksDir + "/lib/util.sh"
+	flowHookFlatText   = "#!/bin/sh\necho logger\n"
+	flowHookNestedText = "#!/bin/sh\necho util\n"
 )
 
 // flatHookModule is a harness module whose hook bundles deploy flat into flowHooksDir
@@ -50,8 +56,20 @@ func (m flatHookModule) HookPlan(_ domain.HookPlanRequest) (domain.HookPlan, err
 	}, nil
 }
 
+// writeFlowHookFile writes one hook file of the workspace.
+func writeFlowHookFile(t *testing.T, workspace, rel, text string) {
+	t.Helper()
+	full := filepath.Join(workspace, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(full, []byte(text), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+}
+
 // newFlatHookDeps returns deps whose catalog holds one hook bundle at catalogVersion, whose
-// harness deploys it flat, and whose workspace already contains the deployed files when
+// harness deploys it flat, and whose workspace already contains both deployed files when
 // deployed is true.
 func newFlatHookDeps(t *testing.T, catalogVersion string, deployed bool) (app.Deps, string) {
 	t.Helper()
@@ -69,28 +87,52 @@ func newFlatHookDeps(t *testing.T, catalogVersion string, deployed bool) (app.De
 	}
 
 	if deployed {
-		full := filepath.Join(workspace, ".claude", "hooks", "lib", "util.sh")
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatalf("MkdirAll: %v", err)
-		}
-		if err := os.WriteFile(full, []byte("#!/bin/sh\n"), 0o755); err != nil {
-			t.Fatalf("WriteFile: %v", err)
-		}
+		// Only the nested file: the bundle is partly deployed (damaged).
+		writeFlowHookFile(t, workspace, flowHookNestedPath, flowHookNestedText)
 	}
 	return deps, workspace
 }
 
-// manifestWithHook returns a usable manifest snapshot recording the hook at recordedVersion
-// with the nil-content hash the executor stores for hook bundles.
-func manifestWithHook(recordedVersion string) *stubManifestStore {
+// newDeployedHookDeps is newFlatHookDeps with both files of the bundle on disk.
+func newDeployedHookDeps(t *testing.T, catalogVersion string) (app.Deps, string) {
+	t.Helper()
+	deps, workspace := newFlatHookDeps(t, catalogVersion, true)
+	writeFlowHookFile(t, workspace, flowHookFlatPath, flowHookFlatText)
+	return deps, workspace
+}
+
+// flowHookEntry is the per-file entry of a hook file deployed with text at recordedVersion.
+func flowHookEntry(t *testing.T, path, text, recordedVersion string) domain.ManifestEntry {
+	t.Helper()
+	owned, err := transform.OwnedContentOf(domain.ArtifactHook, []byte(text))
+	if err != nil {
+		t.Fatalf("OwnedContentOf: %v", err)
+	}
+	return domain.ManifestEntry{
+		Harness:     "stub-harness",
+		Ref:         domain.ArtifactRef{Kind: domain.ArtifactHook, Key: flowHookKey},
+		TargetPath:  path,
+		Version:     recordedVersion,
+		ContentHash: manifest.Hash([]byte(text)),
+		Owned:       &owned,
+	}
+}
+
+// manifestWithHook returns a usable manifest snapshot recording both hook files at
+// recordedVersion, as the executor records them after a deploy.
+func manifestWithHook(t *testing.T, recordedVersion string) *stubManifestStore {
+	t.Helper()
+	return manifestWithEntries(
+		flowHookEntry(t, flowHookFlatPath, flowHookFlatText, recordedVersion),
+		flowHookEntry(t, flowHookNestedPath, flowHookNestedText, recordedVersion),
+	)
+}
+
+// manifestWithEntries returns a usable manifest snapshot holding the entries.
+func manifestWithEntries(entries ...domain.ManifestEntry) *stubManifestStore {
 	return &stubManifestStore{snap: manifest.Snapshot{
-		State: manifest.StatePresent,
-		Manifest: domain.Manifest{Entries: []domain.ManifestEntry{{
-			Ref:         domain.ArtifactRef{Kind: domain.ArtifactHook, Key: flowHookKey},
-			TargetPath:  flowHookTarget,
-			Version:     recordedVersion,
-			ContentHash: manifest.Hash(nil),
-		}}},
+		State:    manifest.StatePresent,
+		Manifest: domain.Manifest{Entries: entries},
 	}}
 }
 
@@ -108,10 +150,11 @@ func runFlatDeployHooks(t *testing.T, deps app.Deps, workspace string) {
 	}
 }
 
-// TestDeployHooks_FlatDeployedBundle_PlannerSeesHookPresent verifies that a bundle deployed
-// flat in the workspace reaches the planner as present under the planned hook target path.
-func TestDeployHooks_FlatDeployedBundle_PlannerSeesHookPresent(t *testing.T) {
-	deps, workspace := newFlatHookDeps(t, "1.0", true)
+// TestDeployHooks_DeployedFiles_PlannerSeesEachFileWithItsRealContent verifies that every hook
+// file on disk reaches the planner as present under its own path, carrying the hash and the
+// Deploy-owned record of the bytes on disk.
+func TestDeployHooks_DeployedFiles_PlannerSeesEachFileWithItsRealContent(t *testing.T) {
+	deps, workspace := newDeployedHookDeps(t, "1.0")
 	capPlan := &capturingPlanner{result: hooksPlan(workspace)}
 	deps.Planner = capPlan
 
@@ -120,21 +163,46 @@ func TestDeployHooks_FlatDeployedBundle_PlannerSeesHookPresent(t *testing.T) {
 	if capPlan.capturedInput == nil {
 		t.Fatal("planner was not called")
 	}
-	state, ok := capPlan.capturedInput.DeployedState[flowHookTarget]
-	if !ok {
-		t.Fatalf("DeployedState has no entry for %q: %+v", flowHookTarget, capPlan.capturedInput.DeployedState)
-	}
-	if !state.Present {
-		t.Errorf("DeployedState[%q].Present = false for a bundle deployed flat, want true", flowHookTarget)
-	}
-	if state.ContentHash != manifest.Hash(nil) {
-		t.Errorf("DeployedState[%q].ContentHash = %q, want manifest.Hash(nil)", flowHookTarget, state.ContentHash)
+	for path, text := range map[string]string{flowHookFlatPath: flowHookFlatText, flowHookNestedPath: flowHookNestedText} {
+		state, ok := capPlan.capturedInput.DeployedState[path]
+		if !ok || !state.Present {
+			t.Fatalf("DeployedState[%q] = %+v, present %v; want a present file", path, state, ok)
+		}
+		if want := manifest.Hash([]byte(text)); state.ContentHash != want {
+			t.Errorf("DeployedState[%q].ContentHash = %q; want the hash of the real bytes %q", path, state.ContentHash, want)
+		}
+		owned, err := transform.OwnedContentOf(domain.ArtifactHook, []byte(text))
+		if err != nil {
+			t.Fatalf("OwnedContentOf: %v", err)
+		}
+		if state.Owned == nil || state.Owned.Hash != owned.Hash {
+			t.Errorf("DeployedState[%q].Owned = %+v; want the whole-file record %q", path, state.Owned, owned.Hash)
+		}
 	}
 }
 
-// TestDeployHooks_NoFilesOnDisk_PlannerSeesHookAbsent verifies a bundle with no deployed
-// files reaches the planner as absent.
-func TestDeployHooks_NoFilesOnDisk_PlannerSeesHookAbsent(t *testing.T) {
+// TestDeployHooks_OnlyOneFileOnDisk_OtherFileReportedAbsent verifies that presence is decided
+// per file: a bundle with one file missing reports that file absent and the other present.
+func TestDeployHooks_OnlyOneFileOnDisk_OtherFileReportedAbsent(t *testing.T) {
+	deps, workspace := newFlatHookDeps(t, "1.0", false)
+	writeFlowHookFile(t, workspace, flowHookNestedPath, flowHookNestedText)
+	capPlan := &capturingPlanner{result: hooksPlan(workspace)}
+	deps.Planner = capPlan
+
+	runFlatDeployHooks(t, deps, workspace)
+
+	got := capPlan.capturedInput.DeployedState
+	if !got[flowHookNestedPath].Present {
+		t.Errorf("DeployedState[%q].Present = false for a file on disk", flowHookNestedPath)
+	}
+	if got[flowHookFlatPath].Present {
+		t.Errorf("DeployedState[%q].Present = true for a file that is not on disk", flowHookFlatPath)
+	}
+}
+
+// TestDeployHooks_NoFilesOnDisk_PlannerSeesEveryFileAbsent verifies a bundle with no deployed
+// files reaches the planner as absent, file by file.
+func TestDeployHooks_NoFilesOnDisk_PlannerSeesEveryFileAbsent(t *testing.T) {
 	deps, workspace := newFlatHookDeps(t, "1.0", false)
 	capPlan := &capturingPlanner{result: hooksPlan(workspace)}
 	deps.Planner = capPlan
@@ -144,13 +212,20 @@ func TestDeployHooks_NoFilesOnDisk_PlannerSeesHookAbsent(t *testing.T) {
 	if capPlan.capturedInput == nil {
 		t.Fatal("planner was not called")
 	}
-	if capPlan.capturedInput.DeployedState[flowHookTarget].Present {
-		t.Errorf("DeployedState[%q].Present = true with no files on disk, want false", flowHookTarget)
+	for _, path := range []string{flowHookFlatPath, flowHookNestedPath} {
+		state, ok := capPlan.capturedInput.DeployedState[path]
+		if !ok {
+			t.Errorf("DeployedState has no key for %q; each hook file must be reported", path)
+		}
+		if state.Present {
+			t.Errorf("DeployedState[%q].Present = true with no files on disk", path)
+		}
 	}
 }
 
-// capturePlannedHookItem runs DeployHooks with the real planner and returns the hook plan item.
-func capturePlannedHookItem(t *testing.T, deps app.Deps, workspace string) domain.PlanItem {
+// capturePlannedHookItems runs DeployHooks with the real planner and returns the hook plan items
+// by target path.
+func capturePlannedHookItems(t *testing.T, deps app.Deps, workspace string) map[string]domain.PlanItem {
 	t.Helper()
 	capExec := &planCapturingExecutor{result: newMinimalExecResult(workspace)}
 	deps.Planner = plan.New()
@@ -161,52 +236,131 @@ func capturePlannedHookItem(t *testing.T, deps app.Deps, workspace string) domai
 	if capExec.capturedPlan == nil {
 		t.Fatal("executor was not called; no plan captured")
 	}
-	item, ok := findPlanItem(capExec.capturedPlan.Items, flowHookKey)
-	if !ok {
-		t.Fatalf("plan has no hook item for %q: %+v", flowHookKey, capExec.capturedPlan.Items)
+	items := map[string]domain.PlanItem{}
+	for _, it := range capExec.capturedPlan.Items {
+		if it.Ref.Kind == domain.ArtifactHook && it.Ref.Key == flowHookKey {
+			items[it.TargetPath] = it
+		}
 	}
-	return item
+	if len(items) != 2 {
+		t.Fatalf("hook items = %v; want one per hook file", items)
+	}
+	return items
 }
 
-// TestDeployHooks_DeployedBundleOlderRecordedVersion_ClassifiedUpdate verifies that with the
+// TestDeployHooks_DeployedBundleOlderRecordedVersion_EveryFileUpdated verifies that with the
 // bundle's files on disk and an older manifest-recorded version, the real planner reports an
-// update with a version delta, not a new hook bundle.
-func TestDeployHooks_DeployedBundleOlderRecordedVersion_ClassifiedUpdate(t *testing.T) {
-	deps, workspace := newFlatHookDeps(t, "2.0", true)
-	deps.Manifest = manifestWithHook("1.0")
+// update with a version delta for each file, not a new hook bundle.
+func TestDeployHooks_DeployedBundleOlderRecordedVersion_EveryFileUpdated(t *testing.T) {
+	deps, workspace := newDeployedHookDeps(t, "2.0")
+	deps.Manifest = manifestWithHook(t, "1.0")
 
-	item := capturePlannedHookItem(t, deps, workspace)
-
-	if item.Action != domain.ActionUpdate {
-		t.Fatalf("hook action = %v (reason %q), want ActionUpdate", item.Action, item.Reason)
-	}
-	if len(item.Stale) == 0 {
-		t.Error("hook item has no version delta, want at least one")
+	for path, item := range capturePlannedHookItems(t, deps, workspace) {
+		if item.Action != domain.ActionUpdate || len(item.Stale) == 0 {
+			t.Errorf("%s: action = %v (reason %q), stale = %v; want ActionUpdate with a version delta", path, item.Action, reasonText(item), item.Stale)
+		}
 	}
 }
 
-// TestDeployHooks_DeployedBundleSameRecordedVersion_ClassifiedUnchanged verifies that with the
-// bundle's files on disk and an equal manifest-recorded version, the hook is unchanged.
-func TestDeployHooks_DeployedBundleSameRecordedVersion_ClassifiedUnchanged(t *testing.T) {
-	deps, workspace := newFlatHookDeps(t, "1.0", true)
-	deps.Manifest = manifestWithHook("1.0")
+// TestDeployHooks_DeployedBundleSameRecordedVersion_EveryFileUnchanged verifies that with the
+// bundle's files on disk and an equal manifest-recorded version, every file is unchanged.
+func TestDeployHooks_DeployedBundleSameRecordedVersion_EveryFileUnchanged(t *testing.T) {
+	deps, workspace := newDeployedHookDeps(t, "1.0")
+	deps.Manifest = manifestWithHook(t, "1.0")
 
-	item := capturePlannedHookItem(t, deps, workspace)
-
-	if item.Action != domain.ActionUnchanged {
-		t.Fatalf("hook action = %v (reason %q), want ActionUnchanged", item.Action, item.Reason)
+	for path, item := range capturePlannedHookItems(t, deps, workspace) {
+		if item.Action != domain.ActionUnchanged {
+			t.Errorf("%s: action = %v (reason %q), want ActionUnchanged", path, item.Action, reasonText(item))
+		}
 	}
 }
 
-// TestDeployHooks_NoFilesOnDiskWithManifestEntry_ClassifiedCreate verifies that a manifest
-// entry alone does not make a bundle deployed: with no files on disk the hook is created.
-func TestDeployHooks_NoFilesOnDiskWithManifestEntry_ClassifiedCreate(t *testing.T) {
+// TestDeployHooks_EditedHookFile_UpdateWithBackupMarker verifies the edit rule end to end
+// through the probe: a file whose bytes no longer reproduce its record is an update that backs
+// the file up first.
+func TestDeployHooks_EditedHookFile_UpdateWithBackupMarker(t *testing.T) {
+	deps, workspace := newDeployedHookDeps(t, "1.0")
+	deps.Manifest = manifestWithHook(t, "1.0")
+	writeFlowHookFile(t, workspace, flowHookFlatPath, "#!/bin/sh\necho edited\n")
+
+	items := capturePlannedHookItems(t, deps, workspace)
+
+	edited := items[flowHookFlatPath]
+	if edited.Action != domain.ActionUpdate || !edited.BackupBeforeWrite {
+		t.Errorf("edited file: action = %v, backup = %v; want update with backup", edited.Action, edited.BackupBeforeWrite)
+	}
+	if other := items[flowHookNestedPath]; other.Action != domain.ActionUnchanged {
+		t.Errorf("untouched file: action = %v; want unchanged", other.Action)
+	}
+}
+
+// TestDeployHooks_PartlyMissingBundle_MissingFileCreatedPresentFileUnchanged verifies a damaged
+// bundle: both files are recorded, one is gone from disk. The missing file is created and the
+// present, unedited file is left unchanged.
+func TestDeployHooks_PartlyMissingBundle_MissingFileCreatedPresentFileUnchanged(t *testing.T) {
+	deps, workspace := newFlatHookDeps(t, "1.0", true) // only the nested file is on disk
+	deps.Manifest = manifestWithHook(t, "1.0")
+
+	items := capturePlannedHookItems(t, deps, workspace)
+
+	if got := items[flowHookFlatPath]; got.Action != domain.ActionCreate {
+		t.Errorf("missing file: action = %v (reason %q), want ActionCreate", got.Action, reasonText(got))
+	}
+	if got := items[flowHookNestedPath]; got.Action != domain.ActionUnchanged {
+		t.Errorf("present file: action = %v (reason %q), want ActionUnchanged", got.Action, reasonText(got))
+	}
+}
+
+// TestDeployHooks_PreChangeBundleEntryWithAbsentFile_FileCreatedWithoutConflict verifies that a
+// bundle-level record from before per-file records does not stop an absent file being created.
+func TestDeployHooks_PreChangeBundleEntryWithAbsentFile_FileCreatedWithoutConflict(t *testing.T) {
+	deps, workspace := newFlatHookDeps(t, "1.0", true) // only the nested file is on disk
+	deps.Manifest = manifestWithEntries(domain.ManifestEntry{
+		Harness:     "stub-harness",
+		Ref:         domain.ArtifactRef{Kind: domain.ArtifactHook, Key: flowHookKey},
+		TargetPath:  flowHookTarget,
+		Version:     "1.0",
+		ContentHash: manifest.Hash(nil),
+	})
+
+	items := capturePlannedHookItems(t, deps, workspace)
+
+	got := items[flowHookFlatPath]
+	if got.Action != domain.ActionCreate || got.Conflict != nil {
+		t.Errorf("absent file: action = %v, conflict = %+v; want a plain create", got.Action, got.Conflict)
+	}
+}
+
+// TestDeployHooks_AbsentBundleWithStaleManifestEntries_EveryFileCreated verifies that manifest
+// entries alone do not make a bundle deployed: with no files on disk every file is created.
+func TestDeployHooks_AbsentBundleWithStaleManifestEntries_EveryFileCreated(t *testing.T) {
 	deps, workspace := newFlatHookDeps(t, "2.0", false)
-	deps.Manifest = manifestWithHook("1.0")
+	deps.Manifest = manifestWithHook(t, "1.0")
 
-	item := capturePlannedHookItem(t, deps, workspace)
+	for path, item := range capturePlannedHookItems(t, deps, workspace) {
+		if item.Action != domain.ActionCreate {
+			t.Errorf("%s: action = %v (reason %q), want ActionCreate", path, item.Action, reasonText(item))
+		}
+	}
+}
 
-	if item.Action != domain.ActionCreate {
-		t.Fatalf("hook action = %v (reason %q), want ActionCreate", item.Action, item.Reason)
+// TestDeployHooks_PreChangeBundleEntry_FilesOverwrittenWithoutConflict verifies that a manifest
+// holding only the bundle-level record from before per-file records plans the files on disk as
+// updates, not as conflicts, and without a backup.
+func TestDeployHooks_PreChangeBundleEntry_FilesOverwrittenWithoutConflict(t *testing.T) {
+	deps, workspace := newDeployedHookDeps(t, "1.0")
+	bundle := domain.ManifestEntry{
+		Harness:     "stub-harness",
+		Ref:         domain.ArtifactRef{Kind: domain.ArtifactHook, Key: flowHookKey},
+		TargetPath:  flowHookTarget,
+		Version:     "1.0",
+		ContentHash: manifest.Hash(nil),
+	}
+	deps.Manifest = manifestWithEntries(bundle)
+
+	for path, item := range capturePlannedHookItems(t, deps, workspace) {
+		if item.Action != domain.ActionUpdate || item.Conflict != nil || item.BackupBeforeWrite {
+			t.Errorf("%s: action = %v, conflict = %+v, backup = %v; want a plain update", path, item.Action, item.Conflict, item.BackupBeforeWrite)
+		}
 	}
 }

@@ -1,110 +1,88 @@
 package app_test
 
-// deployed_tools_custom_test.go verifies the custom tool template reverse and the forward
-// and backward round trip between Claude Code (template mcp__%s__*) and harnesses with no
-// template.
+// deployed_tools_custom_test.go verifies how MCP names found in a deployed source agent are
+// converted: parsed with the source harness's forms and written with the target harness's
+// forms (never carried as plain text), names already in the Claude Code form kept verbatim,
+// and the round trip between Claude Code and OpenCode.
 
 import (
-	"sort"
-	"strings"
+	"reflect"
 	"testing"
 
 	"mosaic-deploy/internal/app"
 	"mosaic-deploy/internal/domain"
-	"mosaic-deploy/internal/harness/descriptor"
 )
 
-func TestConvertDeployedTools_ClaudeTemplateToolBecomesServerOnNoTemplateTargets(t *testing.T) {
-	for _, target := range []string{harnessOpen, harnessCLI, harnessVSCode} {
-		got := convertTools(t, harnessClaude, target, []string{"mcp__server__*"})
+func TestConvertDeployedTools_ClaudeWholeServerNameIsWrittenInTargetForm(t *testing.T) {
+	cases := []struct {
+		target string
+		want   string
+	}{
+		{harnessOpen, "server_*"},
+		{harnessCLI, "server/*"},
+		{harnessVSCode, "server/*"},
+	}
+	for _, tc := range cases {
+		got := convertTools(t, harnessClaude, tc.target, []string{"mcp__server__*"})
 
-		wantGeneric := withSkill("server")
-		if target == harnessVSCode {
-			wantGeneric = []string{"server"} // the VS Code target writes no skill name
+		assertStrings(t, "TargetTools for "+tc.target, []string{tc.want}, got.TargetTools)
+		assertStrings(t, "Dropped for "+tc.target, nil, droppedNames(got))
+		assertCustomTools(t, nil, got.CustomTools)
+		for _, g := range got.Generic {
+			if g == "server" {
+				t.Errorf("target %s: the server must not be a generic tool, got Generic %v", tc.target, got.Generic)
+			}
 		}
-		assertStrings(t, "Generic for "+target, wantGeneric, got.Generic)
-		assertCustomTools(t, map[string]string{"server": "server"}, got.CustomTools)
-		assertStrings(t, "TargetTools for "+target, nil, got.TargetTools)
-		assertStrings(t, "Dropped for "+target, nil, droppedNames(got))
 		cv := findConversion(t, got, "mcp__server__*")
-		if cv.Rule != app.ToolRuleCustomTemplate || cv.Server != "server" {
-			t.Errorf("target %s conversion: want custom-template with server, got %+v", target, cv)
+		if cv.Rule != app.ToolRuleMCP || cv.Server != "server" || cv.Tool != "" {
+			t.Errorf("target %s conversion: want mcp rule for the whole server, got %+v", tc.target, cv)
 		}
 	}
 }
 
-func TestConvertDeployedTools_PlainServerOnNoTemplateSourceIsKeyedForClaudeCodeTemplate(t *testing.T) {
-	// The forward mapping writes mcp__server__* for this key; the conversion keys it as a server.
+func TestConvertDeployedTools_PlainNameOnNoFormSourceIsUnknownNotCarried(t *testing.T) {
+	// A bare name is no MCP name in any harness's forms: it is dropped, never written as text.
 	got := convertTools(t, harnessOpen, harnessClaude, []string{"server"})
 
-	assertStrings(t, "Generic", []string{"server"}, got.Generic)
-	assertCustomTools(t, map[string]string{"server": "server"}, got.CustomTools)
+	assertStrings(t, "Dropped", []string{"server"}, droppedNames(got))
 	assertStrings(t, "TargetTools", nil, got.TargetTools)
+	assertStrings(t, "Generic", nil, got.Generic)
+	assertCustomTools(t, nil, got.CustomTools)
+	assertRule(t, got, "server", app.ToolRuleUnknown)
+	want := []app.DroppedTool{{Name: "server", Reason: "not a known opencode tool or MCP name"}}
+	if !reflect.DeepEqual(got.Dropped, want) {
+		t.Errorf("Dropped: want %+v, got %+v", want, got.Dropped)
+	}
 }
 
-func TestConvertDeployedTools_RoundTripKeepsEveryCustomServer(t *testing.T) {
+func TestConvertDeployedTools_RoundTripKeepsEveryServerBetweenClaudeAndOpenCode(t *testing.T) {
 	original := []string{"Read", "mcp__alpha__*", "mcp__beta__*", "mcp__a__b__*"}
 
-	forward := convertTools(t, harnessClaude, harnessOpen, original, withRole(domain.RoleOrchestrator))
-	wantServers := map[string]string{"alpha": "alpha", "beta": "beta", "a__b": "a__b"}
-	assertCustomTools(t, wantServers, forward.CustomTools)
+	forward := convertTools(t, harnessClaude, harnessOpen, original)
+	assertStrings(t, "forward TargetTools", []string{"alpha_*", "beta_*", "a__b_*"}, forward.TargetTools)
+	assertStrings(t, "forward Dropped", nil, droppedNames(forward))
 
-	written := writtenToolNames(t, harnessOpen, forward.Generic, forward.CustomTools)
-	back := convertTools(t, harnessOpen, harnessClaude, written, withRole(domain.RoleOrchestrator))
+	back := convertTools(t, harnessOpen, harnessClaude, forward.TargetTools)
 
-	assertCustomTools(t, wantServers, back.CustomTools)
-	gotGeneric := append([]string(nil), back.Generic...)
-	sort.Strings(gotGeneric)
-	assertStrings(t, "Generic back (sorted)", []string{"a__b", "alpha", "beta", "file_read"}, gotGeneric)
-	assertStrings(t, "Unmapped back", nil, back.Unmapped)
-	assertStrings(t, "Dropped back", nil, droppedNames(back))
-
-	// The Claude Code forward mapping must write the original custom names again.
-	finalNames := writtenToolNames(t, harnessClaude, back.Generic, back.CustomTools)
-	var customFinal []string
-	for _, n := range finalNames {
-		if strings.HasPrefix(n, "mcp__") {
-			customFinal = append(customFinal, n)
-		}
-	}
-	sort.Strings(customFinal)
-	assertStrings(t, "Claude Code custom names written", []string{"mcp__a__b__*", "mcp__alpha__*", "mcp__beta__*"}, customFinal)
+	assertStrings(t, "back TargetTools", []string{"mcp__alpha__*", "mcp__beta__*", "mcp__a__b__*"}, back.TargetTools)
+	assertStrings(t, "back Dropped", nil, droppedNames(back))
+	assertStrings(t, "back Unmapped", nil, back.Unmapped)
 }
 
-// writtenToolNames runs the forward tool mapping for a harness and extracts the tool names it
-// would write into the agent file, as the reverse side reads them back.
-func writtenToolNames(t *testing.T, rel string, generic []string, custom map[string]string) []string {
-	t.Helper()
-	d := loadToolHarness(t, rel)
-	res, err := descriptor.MapTools(d, domain.ToolRequest{Generic: generic, CustomNames: custom})
-	if err != nil {
-		t.Fatalf("MapTools: %v", err)
-	}
-	var names []string
-	for _, f := range res.Fields {
-		if f.Key == d.Frontmatter.ToolsKey {
-			names = descriptor.ExtractToolEntries(d, f.Value)
-		}
-	}
-	if len(names) == 0 {
-		t.Fatalf("forward mapping wrote no tool names for %v", generic)
-	}
-	return names
-}
-
-func TestConvertDeployedTools_NarrowerClaudeEntryDoesNotFitTheWildcardTemplate(t *testing.T) {
+func TestConvertDeployedTools_NarrowerClaudeEntryBecomesSingleToolForm(t *testing.T) {
 	got := convertTools(t, harnessClaude, harnessOpen, []string{"mcp__server__tool"})
 
-	// It falls through to the later rules and, being no known tool, is kept as a custom tool.
-	assertRule(t, got, "mcp__server__tool", app.ToolRuleCustom)
-	assertStrings(t, "Generic", withSkill("mcp__server__tool"), got.Generic)
-	assertCustomTools(t, map[string]string{"mcp__server__tool": "mcp__server__tool"}, got.CustomTools)
+	assertStrings(t, "TargetTools", []string{"server_tool"}, got.TargetTools)
 	assertStrings(t, "Dropped", nil, droppedNames(got))
+	cv := findConversion(t, got, "mcp__server__tool")
+	if cv.Rule != app.ToolRuleMCP || cv.Server != "server" || cv.Tool != "tool" {
+		t.Errorf("conversion: want mcp rule with server and tool, got %+v", cv)
+	}
 }
 
 func TestConvertDeployedTools_NameAlreadyInTargetTemplateFormIsKeptNotRewrapped(t *testing.T) {
-	// A name already written in the Claude Code custom form (found in another harness's
-	// file) is in the target's own custom format and goes through unchanged.
+	// A name already written in the Claude Code form (found in another harness's file) is in
+	// the target's own MCP syntax and goes through unchanged.
 	got := convertTools(t, harnessOpen, harnessClaude, []string{"mcp__srv__*"})
 
 	assertStrings(t, "TargetTools", []string{"mcp__srv__*"}, got.TargetTools)
@@ -113,8 +91,8 @@ func TestConvertDeployedTools_NameAlreadyInTargetTemplateFormIsKeptNotRewrapped(
 }
 
 func TestConvertDeployedTools_NarrowerTargetFormNameIsKeptForNonClaudeSources(t *testing.T) {
-	// mcp__server__tool starts with the Claude Code template prefix, so it is already in the
-	// target's custom form and must not be wrapped into mcp__mcp__server__tool__*.
+	// mcp__server__tool starts with the Claude Code form prefix, so it is already in the
+	// target's MCP syntax and must not be wrapped into mcp__mcp__server__tool__*.
 	for _, src := range []string{harnessCLI, harnessOpen} {
 		got := convertTools(t, src, harnessClaude, []string{"mcp__server__tool"})
 
@@ -124,51 +102,47 @@ func TestConvertDeployedTools_NarrowerTargetFormNameIsKeptForNonClaudeSources(t 
 	}
 }
 
-func TestConvertDeployedTools_TemplateNameAndMappedToolConvertSideBySide(t *testing.T) {
-	// Mixed list: the template name becomes a server while the mapped tool follows its mapping.
+func TestConvertDeployedTools_ServerNameAndMappedToolConvertSideBySide(t *testing.T) {
 	got := convertTools(t, harnessClaude, harnessCLI, []string{"WebFetch", "mcp__srv__*"})
 
-	assertRule(t, got, "mcp__srv__*", app.ToolRuleCustomTemplate)
+	assertRule(t, got, "mcp__srv__*", app.ToolRuleMCP)
 	assertRule(t, got, "WebFetch", app.ToolRuleMapped)
-	assertStrings(t, "Generic", withSkill("web_fetch", "srv"), got.Generic)
-	// Custom server keys are never listed as unmapped generics; web_fetch has no ghcp-cli mapping.
+	assertStrings(t, "Generic", withSkill("web_fetch"), got.Generic)
+	assertStrings(t, "TargetTools", []string{"srv/*"}, got.TargetTools)
+	// web_fetch has no ghcp-cli mapping; the server is never listed as unmapped.
 	assertStrings(t, "Unmapped", []string{"web_fetch"}, got.Unmapped)
 }
 
-// templateOrderSource returns a source whose universe holds a name fitting its custom tool
-// template, with no mappings, so only rules 2 to 4 can claim the name.
-func templateOrderSource() *domain.HarnessDescriptor {
+// mcpFormUniverseSource returns a source whose universe holds a name that also fits its MCP
+// server form, with no mappings.
+func mcpFormUniverseSource() *domain.HarnessDescriptor {
 	src := syntheticHarness("src-h", []string{"mcp__x__*"}, nil, nil)
-	src.Tools.CustomToolTemplate = "mcp__%s__*"
+	src.Tools.MCP = domain.MCPNameForms{ServerForm: "mcp__{server}__*", ToolForm: "mcp__{server}__{tool}", NormalizeServerName: true}
 	return src
 }
 
-func TestConvertDeployedTools_TemplateRuleBeatsDroppedRuleForTemplateFittingUniverseName(t *testing.T) {
-	// The name is in the source universe and absent from the target: rule 3 would drop it.
+func TestConvertDeployedTools_SourceUniverseRuleBeatsMCPRuleForFormFittingUniverseName(t *testing.T) {
+	// The name is in the source universe and absent from the target: it is dropped, not read as MCP.
 	tgt := syntheticHarness("tgt-h", []string{"other"}, nil, nil)
 	in := newToolInput(t, harnessClaude, harnessOpen, []string{"mcp__x__*"})
-	in.Source, in.Target = templateOrderSource(), tgt
+	in.Source, in.Target = mcpFormUniverseSource(), tgt
 
 	got := app.ConvertDeployedTools(in)
 
-	assertRule(t, got, "mcp__x__*", app.ToolRuleCustomTemplate)
-	assertStrings(t, "Generic", []string{"x"}, got.Generic)
-	assertCustomTools(t, map[string]string{"x": "x"}, got.CustomTools)
-	assertStrings(t, "Dropped", nil, droppedNames(got))
+	assertRule(t, got, "mcp__x__*", app.ToolRuleDropped)
+	assertStrings(t, "Dropped", []string{"mcp__x__*"}, droppedNames(got))
 	assertStrings(t, "TargetTools", nil, got.TargetTools)
 }
 
-func TestConvertDeployedTools_TemplateRuleBeatsKeptRuleForTemplateFittingUniverseName(t *testing.T) {
-	// The name is also valid in the target: rule 4 would keep it as a target tool.
+func TestConvertDeployedTools_TargetVerbatimRuleBeatsMCPRuleForFormFittingUniverseName(t *testing.T) {
+	// The name is also valid in the target verbatim: it is kept as a target tool.
 	tgt := syntheticHarness("tgt-h", []string{"mcp__x__*"}, nil, nil)
 	in := newToolInput(t, harnessClaude, harnessOpen, []string{"mcp__x__*"})
-	in.Source, in.Target = templateOrderSource(), tgt
+	in.Source, in.Target = mcpFormUniverseSource(), tgt
 
 	got := app.ConvertDeployedTools(in)
 
-	assertRule(t, got, "mcp__x__*", app.ToolRuleCustomTemplate)
-	assertStrings(t, "Generic", []string{"x"}, got.Generic)
-	assertCustomTools(t, map[string]string{"x": "x"}, got.CustomTools)
-	assertStrings(t, "TargetTools", nil, got.TargetTools)
+	assertRule(t, got, "mcp__x__*", app.ToolRuleKept)
+	assertStrings(t, "TargetTools", []string{"mcp__x__*"}, got.TargetTools)
 	assertStrings(t, "Dropped", nil, droppedNames(got))
 }

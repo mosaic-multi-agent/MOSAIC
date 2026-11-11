@@ -1,13 +1,14 @@
 package app_test
 
 // deployed_tools_rules_test.go verifies the ordered rules of ConvertDeployedTools for each
-// built-in source harness: mapped, custom by template, dropped, kept and custom.
+// built-in source harness: mapped, kept, dropped, MCP and unknown.
 
 import (
 	"reflect"
 	"testing"
 
 	"mosaic-deploy/internal/app"
+	"mosaic-deploy/internal/domain"
 )
 
 func TestConvertDeployedTools_ClaudeCodeSourceMappedToGenerics(t *testing.T) {
@@ -105,8 +106,10 @@ func TestConvertDeployedTools_NameValidOnlyAsTargetMappingDestinationIsKept(t *t
 	assertStrings(t, "TargetTools", []string{"universe-only", "dest-only"}, got.TargetTools)
 	assertRule(t, got, "dest-only", app.ToolRuleKept)
 	assertRule(t, got, "universe-only", app.ToolRuleKept)
-	// "patch" is neither in the synthetic target nor in ghcp-cli's universe: a custom tool.
-	assertRule(t, got, "patch", app.ToolRuleCustom)
+	// "patch" is neither in the synthetic target nor in ghcp-cli's universe, and no MCP name
+	// in ghcp-cli's forms: it is dropped as unknown, never carried as text.
+	assertRule(t, got, "patch", app.ToolRuleUnknown)
+	assertStrings(t, "Dropped", []string{"patch"}, droppedNames(got))
 }
 
 func TestConvertDeployedTools_SourceUniverseNameValidInTargetIsKeptNotDropped(t *testing.T) {
@@ -154,7 +157,7 @@ func TestConvertDeployedTools_SourceUniverseNameInNeitherTargetListIsDropped(t *
 func TestConvertDeployedTools_MappingRuleBeatsTemplateRuleWhenNameIsBoth(t *testing.T) {
 	// "mcp__x__*" is a source mapping name and also fits the source's custom template.
 	src := syntheticHarness("src-h", []string{"mcp__x__*"}, map[string][]string{"file_read": {"mcp__x__*"}}, []string{"file_read"})
-	src.Tools.CustomToolTemplate = "mcp__%s__*"
+	src.Tools.MCP = domain.MCPNameForms{ServerForm: "mcp__{server}__*", ToolForm: "mcp__{server}__{tool}", NormalizeServerName: true}
 	in := newToolInput(t, harnessClaude, harnessOpen, []string{"mcp__x__*"})
 	in.Source = src
 
@@ -165,38 +168,41 @@ func TestConvertDeployedTools_MappingRuleBeatsTemplateRuleWhenNameIsBoth(t *test
 	assertCustomTools(t, nil, got.CustomTools)
 }
 
-func TestConvertDeployedTools_SameServerReachedTwoWaysIsListedOnce(t *testing.T) {
-	// Source Claude Code: "mcp__a__*" via the template, "a" via the custom rule.
-	got := convertTools(t, harnessClaude, harnessOpen, []string{"mcp__a__*", "a"})
+func TestConvertDeployedTools_SameServerReachedTwoWaysIsWrittenOnce(t *testing.T) {
+	// Source OpenCode: "alpha_*" and the loose "alpha*" both name the whole server alpha.
+	got := convertTools(t, harnessOpen, harnessCLI, []string{"alpha_*", "alpha*"})
 
-	assertStrings(t, "Generic", withSkill("a"), got.Generic)
-	assertCustomTools(t, map[string]string{"a": "a"}, got.CustomTools)
+	assertStrings(t, "TargetTools", []string{"alpha/*"}, got.TargetTools)
+	assertConversionSources(t, got, []string{"alpha_*", "alpha*"})
 }
 
-func TestConvertDeployedTools_UnknownNameIsACustomToolKeyedForForwardMapping(t *testing.T) {
+func TestConvertDeployedTools_UnknownNameIsDroppedWithReasonNotCarried(t *testing.T) {
 	got := convertTools(t, harnessOpen, harnessClaude, []string{"my-server"})
 
-	assertStrings(t, "Generic", []string{"my-server"}, got.Generic)
-	assertCustomTools(t, map[string]string{"my-server": "my-server"}, got.CustomTools)
+	assertStrings(t, "Generic", nil, got.Generic)
+	assertCustomTools(t, nil, got.CustomTools)
 	assertStrings(t, "TargetTools", nil, got.TargetTools)
 	assertStrings(t, "Unmapped", nil, got.Unmapped)
-	cv := findConversion(t, got, "my-server")
-	if cv.Rule != app.ToolRuleCustom || cv.Server != "my-server" {
-		t.Errorf("conversion: want custom rule with server my-server, got %+v", cv)
+	assertRule(t, got, "my-server", app.ToolRuleUnknown)
+	want := []app.DroppedTool{{Name: "my-server", Reason: "not a known opencode tool or MCP name"}}
+	if !reflect.DeepEqual(got.Dropped, want) {
+		t.Errorf("Dropped: want %+v, got %+v", want, got.Dropped)
 	}
 }
 
-func TestConvertDeployedTools_PlainServerNamesStayCustomOnNoTemplateSourcesAndTargets(t *testing.T) {
-	// A plain name on a no-template source is indistinguishable from an unknown name.
+func TestConvertDeployedTools_PlainNamesOnEverySourceAreDroppedNeverCarried(t *testing.T) {
+	// A plain name is no MCP name in any harness's forms.
 	for _, src := range []string{harnessOpen, harnessVSCode} {
 		got := convertTools(t, src, harnessCLI, []string{"context7"})
-		assertCustomTools(t, map[string]string{"context7": "context7"}, got.CustomTools)
-		wantGeneric := []string{"context7"}
-		if src == harnessVSCode {
-			wantGeneric = withSkill("context7") // implicit-skill source to an explicit-skill target
-		}
-		assertStrings(t, "Generic for "+src, wantGeneric, got.Generic)
+
+		assertStrings(t, "Dropped for "+src, []string{"context7"}, droppedNames(got))
+		assertCustomTools(t, nil, got.CustomTools)
 		assertStrings(t, "TargetTools for "+src, nil, got.TargetTools)
+		for _, g := range got.Generic {
+			if g == "context7" {
+				t.Errorf("source %s: context7 must not become a generic tool, got %v", src, got.Generic)
+			}
+		}
 	}
 }
 
@@ -208,17 +214,17 @@ func TestConvertDeployedTools_RulesApplyInDocumentOrderAcrossMixedList(t *testin
 	assertConversionSources(t, got, []string{"edit/createDirectory", "read/readFile", "context7", "agent"})
 	assertRule(t, got, "edit/createDirectory", app.ToolRuleDropped)
 	assertRule(t, got, "read/readFile", app.ToolRuleMapped)
-	assertRule(t, got, "context7", app.ToolRuleCustom)
+	assertRule(t, got, "context7", app.ToolRuleUnknown)
 	assertRule(t, got, "agent", app.ToolRuleMapped)
-	assertStrings(t, "Generic", withSkill("file_read", "context7", "subagent"), got.Generic)
+	assertStrings(t, "Generic", withSkill("file_read", "subagent"), got.Generic)
 }
 
 func TestConvertDeployedTools_IsDeterministic(t *testing.T) {
 	in := newToolInput(t, harnessVSCode, harnessCLI,
-		[]string{"edit/createDirectory", "read/readFile", "context7", "edit/editFiles"})
+		[]string{"edit/createDirectory", "read/readFile", "srv/*", "edit/editFiles"})
 
 	first := app.ConvertDeployedTools(in)
-	if len(first.Generic) == 0 || len(first.CustomTools) == 0 || len(first.Conversions) == 0 {
+	if len(first.Generic) == 0 || len(first.TargetTools) == 0 || len(first.Conversions) == 0 {
 		t.Fatal("conversion produced no result; determinism check is vacuous")
 	}
 	for i := 0; i < 20; i++ {

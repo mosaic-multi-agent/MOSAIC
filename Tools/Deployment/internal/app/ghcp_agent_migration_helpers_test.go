@@ -238,8 +238,13 @@ func gamLegacyWorkspace(t *testing.T, harness string) (string, map[string][]byte
 func gamRecordAgentAt(t *testing.T, ws, key, rel, content string) {
 	t.Helper()
 	m := gamManifest(t, ws)
+	harness := ""
+	if len(m.Harnesses) > 0 {
+		harness = m.Harnesses[0].HarnessID
+	}
 	m.Entries = append(m.Entries, domain.ManifestEntry{
-		Ref:         domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: key},
+		Harness:     harness,
+		Ref:        domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: key},
 		TargetPath:  rel,
 		ContentHash: manifest.Hash([]byte(content)),
 	})

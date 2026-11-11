@@ -44,6 +44,7 @@ import (
 
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 )
 
@@ -67,15 +68,15 @@ func TestAgentStaleness_ToolMappingsVersionMismatch_ReturnsDelta(t *testing.T) {
 		Present:             true,
 		ContentHash:         "sha256:abc",
 		Version:             "1.0",
-		HarnessVersion:    "1.0",
+		HarnessVersion:      "1.0",
 		InjectionsVersion:   "1.0",
 		ToolMappingsVersion: "config-hash-v1", // stamp in the deployed file from the previous deploy
 	}
 	agent := makeAgent("dest-test-agent", "1.0")
 	stamps := domain.VersionStamps{
-		Version:             "1.0",  // unchanged — no agent or descriptor edit
-		HarnessVersion:    "1.0",  // unchanged
-		InjectionsVersion:   "1.0",  // unchanged
+		Version:             "1.0",            // unchanged — no agent or descriptor edit
+		HarnessVersion:      "1.0",            // unchanged
+		InjectionsVersion:   "1.0",            // unchanged
 		ToolMappingsVersion: "config-hash-v2", // current effective mapping hash after config change
 	}
 
@@ -106,14 +107,14 @@ func TestAgentStaleness_ToolMappingsVersionMismatch_DeltaFieldIsToolMappingsVers
 		Present:             true,
 		ContentHash:         "sha256:abc",
 		Version:             "1.0",
-		HarnessVersion:    "1.0",
+		HarnessVersion:      "1.0",
 		InjectionsVersion:   "1.0",
 		ToolMappingsVersion: "config-hash-v1",
 	}
 	agent := makeAgent("dest-test-agent", "1.0")
 	stamps := domain.VersionStamps{
 		Version:             "1.0",
-		HarnessVersion:    "1.0",
+		HarnessVersion:      "1.0",
 		InjectionsVersion:   "1.0",
 		ToolMappingsVersion: "config-hash-v2",
 	}
@@ -161,14 +162,14 @@ func TestAgentStaleness_ToolMappingsVersionMatch_ReturnsNoExtraDelta(t *testing.
 		Present:             true,
 		ContentHash:         "sha256:abc",
 		Version:             "1.0",
-		HarnessVersion:    "1.0",
+		HarnessVersion:      "1.0",
 		InjectionsVersion:   "1.0",
 		ToolMappingsVersion: mappingHash,
 	}
 	agent := makeAgent("dest-test-agent", "1.0")
 	stamps := domain.VersionStamps{
 		Version:             "1.0",
-		HarnessVersion:    "1.0",
+		HarnessVersion:      "1.0",
 		InjectionsVersion:   "1.0",
 		ToolMappingsVersion: mappingHash, // same hash — no config change
 	}
@@ -222,9 +223,9 @@ func TestBuild_ToolMappingsVersionMismatch_ClassifiesAsActionUpdate(t *testing.T
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{manifestEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{manifestEntry}),
 	})
 
 	// Deployed file: present, hash matches (not locally modified), all static version stamps
@@ -235,7 +236,7 @@ func TestBuild_ToolMappingsVersionMismatch_ClassifiesAsActionUpdate(t *testing.T
 			Present:             true,
 			ContentHash:         contentHash,
 			Version:             "1.0",
-			HarnessVersion:    "1.0",
+			HarnessVersion:      "1.0",
 			InjectionsVersion:   "1.0",
 			ToolMappingsVersion: oldMappingHash, // stamp from the previous deploy
 		},

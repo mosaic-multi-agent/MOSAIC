@@ -23,6 +23,7 @@ import (
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 )
 
 // ---------------------------------------------------------------------------
@@ -134,14 +135,14 @@ func TestManifest_UpdatedItem_HasUpdatedEntry(t *testing.T) {
 	store := manifest.NewStore()
 	prior := domain.Manifest{
 		SchemaVersion: "1",
-		HarnessID:     "test-harness",
-		Entries: []domain.ManifestEntry{
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness"}},
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{
 			{
 				Ref:         domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "runner"},
 				TargetPath:  "agents/runner.md",
 				ContentHash: "sha256:" + strings.Repeat("0", 64),
 			},
-		},
+		}),
 	}
 	if err := store.Save(workspace, prior); err != nil {
 		t.Fatalf("seed manifest: %v", err)
@@ -188,14 +189,14 @@ func TestManifest_SkippedItem_ExistingEntryUnchanged(t *testing.T) {
 	store := manifest.NewStore()
 	prior := domain.Manifest{
 		SchemaVersion: "1",
-		HarnessID:     "test-harness",
-		Entries: []domain.ManifestEntry{
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness"}},
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{
 			{
 				Ref:         domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "runner"},
 				TargetPath:  targetPath,
 				ContentHash: priorHash,
 			},
-		},
+		}),
 	}
 	if err := store.Save(workspace, prior); err != nil {
 		t.Fatalf("seed manifest: %v", err)
@@ -423,18 +424,16 @@ func TestManifest_UnchangedItem_PriorEntryPreserved(t *testing.T) {
 	store := manifest.NewStore()
 	prior := domain.Manifest{
 		SchemaVersion: "1",
-		HarnessID:     "test-harness",
-		Entries: []domain.ManifestEntry{
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness"}},
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{
 			{
 				Ref:         domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "runner"},
 				TargetPath:  "agents/runner.md",
 				ContentHash: priorHash,
 			},
-		},
+		}),
 	}
-	if err := store.Save(workspace, prior); err != nil {
-		t.Fatalf("seed manifest: %v", err)
-	}
+	saveManifestWithFiles(t, store, workspace, prior)
 
 	item := newAgentItem("runner", "agents/runner.md", domain.ActionUnchanged)
 	req := deploy.ExecRequest{

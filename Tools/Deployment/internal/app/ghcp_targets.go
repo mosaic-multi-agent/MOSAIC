@@ -76,11 +76,13 @@ func detectGhcpTargets(snap manifest.Snapshot) ghcpTargets {
 	if snap.State != manifest.StatePresent {
 		return found
 	}
-	switch snap.Manifest.HarnessID {
-	case ghcpCLIHarnessID:
-		found.CLI = true
-	case ghcpVSCodeHarnessID:
-		found.VSCode = true
+	for _, e := range snap.Manifest.Entries {
+		switch e.Harness {
+		case ghcpCLIHarnessID:
+			found.CLI = true
+		case ghcpVSCodeHarnessID:
+			found.VSCode = true
+		}
 	}
 	return found
 }
@@ -91,7 +93,7 @@ func (s *service) ghcpTargetsOf(workspace string) ghcpTargets {
 	if s.ghcpHeld != nil {
 		return *s.ghcpHeld
 	}
-	snap, _ := s.deps.Manifest.Load(workspace)
+	snap := loadReconciledManifest(s.deps.Manifest, workspace).Snapshot
 	return detectGhcpTargets(snap)
 }
 

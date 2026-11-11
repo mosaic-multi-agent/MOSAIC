@@ -91,7 +91,7 @@ func TestDeployAgents_OrchestratorWithDeclarationDriftAndCatalogChange_ItemNames
 		t.Fatalf("the executor plan has no item for %s", injOrchestratorPath)
 	}
 	if item.Action != domain.ActionUpdate {
-		t.Fatalf("Action = %q (reason %q), want %q", item.Action, item.Reason, domain.ActionUpdate)
+		t.Fatalf("Action = %q (reason %q), want %q", item.Action, reasonText(item), domain.ActionUpdate)
 	}
 	d, has := dacCatalogDelta(item)
 	if !has || d.Deployed != dacOldCatalogID || d.Source != dacNewCatalogID {
@@ -104,12 +104,12 @@ func TestDeployAgents_OrchestratorWithDeclarationDriftAndCatalogChange_ItemNames
 		t.Errorf("Stale = %+v, want the declaration drift deltas kept before the catalog delta", item.Stale)
 	}
 	for _, want := range []string{injSecurityKey, dacOldCatalogID, dacNewCatalogID} {
-		if !strings.Contains(item.Reason, want) {
-			t.Errorf("Reason = %q, want it to name %q", item.Reason, want)
+		if !strings.Contains(reasonText(item), want) {
+			t.Errorf("Reason = %q, want it to name %q", reasonText(item), want)
 		}
 	}
-	if !strings.HasPrefix(item.Reason, "stale: ") {
-		t.Errorf("Reason = %q, want it to start with \"stale: \"", item.Reason)
+	if strings.HasPrefix(reasonText(item), "stale: ") {
+		t.Errorf("Reasons = %q, want no \"stale: \" prefix: each cause is its own reason", item.Reasons)
 	}
 }
 
@@ -124,8 +124,8 @@ func TestDeployAgents_OrchestratorWithDeclarationDriftAndSameCatalog_ItemHasNoCa
 	if _, has := dacCatalogDelta(item); has {
 		t.Errorf("Stale = %+v, want no catalog delta when the recorded catalog supplies the file", item.Stale)
 	}
-	if !strings.Contains(item.Reason, injSecurityKey) {
-		t.Errorf("Reason = %q, want the declaration drift", item.Reason)
+	if !strings.Contains(reasonText(item), injSecurityKey) {
+		t.Errorf("Reason = %q, want the declaration drift", reasonText(item))
 	}
 }
 
@@ -159,8 +159,8 @@ func TestDeployAgents_OrchestratorConflict_ReasonStillCarriesDeclarationDrift(t 
 	if item.Action != domain.ActionConflict {
 		t.Fatalf("Action = %q, want %q for a file with no manifest record", item.Action, domain.ActionConflict)
 	}
-	if !strings.Contains(item.Reason, injSecurityKey) {
-		t.Errorf("Reason = %q, want the declaration drift appended", item.Reason)
+	if !strings.Contains(reasonText(item), injSecurityKey) {
+		t.Errorf("Reason = %q, want the declaration drift appended", reasonText(item))
 	}
 }
 

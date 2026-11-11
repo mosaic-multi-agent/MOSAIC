@@ -64,8 +64,8 @@ func TestVersionFlag_WorksInsideAMosaicRootToo(t *testing.T) {
 
 // One-off release guard: update the literal at each future version bump.
 func TestToolVersion_IsBumped(t *testing.T) {
-	if ToolVersion != "1.6.1" {
-		t.Errorf("ToolVersion = %q, want 1.6.1", ToolVersion)
+	if ToolVersion != "1.7.0" {
+		t.Errorf("ToolVersion = %q, want 1.7.0", ToolVersion)
 	}
 }
 

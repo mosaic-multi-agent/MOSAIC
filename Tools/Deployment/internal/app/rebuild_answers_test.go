@@ -27,7 +27,7 @@ func TestRebuild_AnsweredUnmappedTool_BecomesCustomServerAndReportsNoGap(t *test
 
 	res, out := rbRebuild(t, rbInput(t, claudeToOpencode, true, withWebSearch, answer))
 
-	if names := rbToolNames(t, out, "permission"); countName(names, "srv") != 1 {
+	if names := rbToolNames(t, out, "permission"); countName(names, "srv_*") != 1 {
 		t.Errorf("the answered server must be allowed once in the target's custom form, got %v", names)
 	}
 	if len(res.UnmappedTools) != 0 {
@@ -104,10 +104,10 @@ func TestRebuild_MainOrchestratorPlaceholder_UnmappedExtraNeedsAnswerOrGetsGap(t
 			t.Errorf("%s: exactly one unmapped-tool gap expected, got %d in %+v", name, n, res.Gaps)
 		}
 	}
-	if containsString(rbToolNames(t, outOpen, "permission"), "srv") {
+	if containsString(rbToolNames(t, outOpen, "permission"), "srv_*") {
 		t.Errorf("an unanswered extra must write nothing:\n%s", outOpen)
 	}
-	if countName(rbToolNames(t, outAnswered, "permission"), "srv") != 1 {
+	if countName(rbToolNames(t, outAnswered, "permission"), "srv_*") != 1 {
 		t.Errorf("the answered extra must be allowed once in the custom form:\n%s", outAnswered)
 	}
 	if len(resAnswered.UnmappedTools) != 0 || countGaps(resAnswered.Gaps, domain.GapUnmappedTool) != 0 {

@@ -70,8 +70,8 @@ func TestConvertDeployedTools_RepeatedSourceNamesAreReportedOnce(t *testing.T) {
 		"edit/createDirectory", "read/readFile", "edit/createDirectory", "read/readFile", "context7", "context7",
 	})
 
-	assertStrings(t, "Dropped", []string{"edit/createDirectory"}, droppedNames(got))
-	assertStrings(t, "Generic", withSkill("file_read", "context7"), got.Generic)
+	assertStrings(t, "Dropped", []string{"edit/createDirectory", "context7"}, droppedNames(got))
+	assertStrings(t, "Generic", withSkill("file_read"), got.Generic)
 	assertConversionSources(t, got, []string{"edit/createDirectory", "read/readFile", "context7"})
 }
 

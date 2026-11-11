@@ -1,8 +1,30 @@
 # Unreleased
 
 > **To upgrade:** Runner v1.12.0 is released together with the matching `orchestrator-script` update, which the repair of a damaged run needs. Run `Update workspace` once it is available.
+>
+> Deploy v1.7.0 writes a new manifest schema (`.mosaic/manifest.yaml`, schema version 2) that older Deploy builds refuse to read; use v1.7.0 or newer on every machine that touches a workspace once it has run. An existing manifest is converted on its first run. After that first run you may see one-time conflict prompts (a file Deploy can no longer confirm as its own) or a dropped-entry report (entries that could not be attributed to a harness, or whose files are gone). Files that the old manifest recorded before edit detection existed get no edit check until their next write.
 
 ## Tools
+
+### Deploy v1.7.0
+#### Changes
+- The manifest holds several harnesses at once. Every entry names its harness, each harness has its own section (`protocol_source`, `bundle_source`, `updated_at`), `tool_version` is recorded once at the top level, and the top-level `harness_id` is gone. The schema version is raised to 2; older Deploy builds refuse the new manifest
+- An old manifest is converted in memory and written in the new form on the next write. Entries under `.claude/` and `.opencode/` take their harness from the path; other entries take the old `harness_id` when that harness deploys to the path; the rest are dropped from the manifest and reported (the files stay untouched and count as unrecorded)
+- Every action reconciles the manifest with the disk first: an entry whose file is gone is dropped, and the dropped entries are listed in the plan review, the dry-run output and the transform output (`droppedEntries` in the transform JSON document)
+- Hook bundles are recorded file by file. A hook file you edited is reported as an update and backed up under `.mosaic/backups/` before it is overwritten
+- Edits to Deploy-owned content become a visible update with a backup: the agent body outside the project and custom regions, and whole skill and hook files. Project and custom regions and the frontmatter belong to you and are never reported as edits. Entries written before this release carry no record and get no edit check until their next write
+- A plan item lists every reason for its action, not only the first, and the plan and preview say when the current file is backed up before it is replaced
+- GHCP agent files: agents recorded as `X.md` move to `X.agent.md` for both GHCP targets, with backups, as part of the normal deploy and update flows. Nothing is written only to force the rename, conflicts are kept, and a transform to a GHCP target leaves no `X.md` entry behind
+- The GHCP target a workspace holds is read from the manifest entries instead of the old `harness_id`
+- `transform` keeps the source deployment (the GHCP pair excepted), and the transformed entries carry the identity of the catalog they came from. A catalog whose id was recorded for a differently named catalog produces a name-collision warning
+- MCP tool names are written per harness in two forms, whole server and single tool, declared in the descriptor under `tools.mcp` (`server_form`, `tool_form`, `extra_server_read_forms`, `normalize_server_name`). They replace `custom_tool_template`, which a descriptor can no longer use. The server name you enter for a custom tool is written in the target harness's syntax
+- `transform` converts MCP names between harnesses with the source and target forms, keeps denies (written as a deny where the target has deny, otherwise reported as dropped), and resolves an ambiguous OpenCode single-tool name from the tool mappings, then the servers declared in `opencode.json`/`opencode.jsonc`, then a question that `--mcp-split <name=server>` answers. Unknown GHCP tool names are reported as gaps
+- On update, built-in tools in the tools field follow the catalog, tools you added are kept, and custom tools the run produces are added. The plan shows the built-in tools an update adds or removes
+
+#### Bugfixes
+- A run sees only the manifest entries of its own harness, so a deployment of one harness no longer disturbs the entries of another harness in the same workspace
+- An entry whose file was deleted by hand no longer stays in the manifest; a hook bundle with some files missing is completed by the next update or hook deploy
+- A local edit of a hook file or of Deploy-owned agent content is no longer overwritten without a backup
 
 ### Runner v1.12.0
 #### Changes

@@ -37,6 +37,7 @@ import (
 
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 )
 
@@ -69,9 +70,9 @@ func parseFailedDeployedState(contentHash string) domain.DeployedArtifactState {
 func makeManifestWithEntry(entry domain.ManifestEntry) manifest.Snapshot {
 	m := domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	}
 	return presentSnapshot(m)
 }
@@ -195,19 +196,19 @@ func TestClassifyAgentItem_ParseFailed_ReasonIsDistinctFromLocallyModified(t *te
 	const wantReasonSubstr = "could not be read/parsed"
 	const locallyModifiedReason = "locally modified since last deployment"
 
-	if strings.Contains(item.Reason, locallyModifiedReason) {
-		t.Errorf("item.Reason = %q contains %q; "+
+	if strings.Contains(reasonText(item), locallyModifiedReason) {
+		t.Errorf("reasonText(item) = %q contains %q; "+
 			"a parse-failed file must NOT produce the 'locally modified' reason. "+
 			"The ParseFailed check must precede Step 4 (hash-mismatch check) in classifyAgentItem. "+
 			"I2.5 must insert the check between Step 1 and Step 2 so it fires before Step 4.",
-			item.Reason, locallyModifiedReason)
+			reasonText(item), locallyModifiedReason)
 	}
 
-	if !strings.Contains(item.Reason, wantReasonSubstr) {
-		t.Errorf("item.Reason = %q, want reason containing %q; "+
+	if !strings.Contains(reasonText(item), wantReasonSubstr) {
+		t.Errorf("reasonText(item) = %q, want reason containing %q; "+
 			"the conflict reason for a parse-failed file must describe the parse failure, "+
 			"not any other cause (manifest missing, hash mismatch, etc.)",
-			item.Reason, wantReasonSubstr)
+			reasonText(item), wantReasonSubstr)
 	}
 }
 
@@ -246,9 +247,9 @@ func TestClassifyAgentItem_ParseFailed_LocalModificationManifestMissingTrue(t *t
 	}
 
 	if !item.Conflict.ManifestMissing {
-		t.Errorf("item.Conflict.ManifestMissing = false, want true; "+
-			"a parse-failed conflict uses ManifestMissing: true to indicate that the file's origin "+
-			"could not be confirmed against the manifest. "+
+		t.Errorf("item.Conflict.ManifestMissing = false, want true; " +
+			"a parse-failed conflict uses ManifestMissing: true to indicate that the file's origin " +
+			"could not be confirmed against the manifest. " +
 			"This distinguishes it from the Step 4 hash-mismatch pattern (ManifestMissing: false, RecordedHash set).")
 	}
 }
@@ -288,8 +289,8 @@ func TestClassifyAgentItem_ParseFailed_CurrentHashNonEmpty(t *testing.T) {
 	}
 
 	if item.Conflict.CurrentHash == "" {
-		t.Errorf("item.Conflict.CurrentHash is empty; "+
-			"probeDeployedArtifact sets ContentHash from raw bytes even for unparseable files, "+
+		t.Errorf("item.Conflict.CurrentHash is empty; " +
+			"probeDeployedArtifact sets ContentHash from raw bytes even for unparseable files, " +
 			"so CurrentHash must always be non-empty for a parse-failed conflict")
 	}
 	if item.Conflict.CurrentHash != wantHash {
@@ -336,17 +337,17 @@ func TestClassifyAgentItem_ParseFailed_NoManifest_StillConflictWithParseFailedRe
 	const wantReasonSubstr = "could not be read/parsed"
 	const step2ReasonSubstr = "no manifest is available"
 
-	if strings.Contains(item.Reason, step2ReasonSubstr) {
-		t.Errorf("item.Reason = %q contains the Step 2 reason %q; "+
+	if strings.Contains(reasonText(item), step2ReasonSubstr) {
+		t.Errorf("reasonText(item) = %q contains the Step 2 reason %q; "+
 			"the ParseFailed check (Step 1b) must fire before Step 2 (manifest usability check). "+
 			"A parse-failed file must produce the parse-failure reason even when the manifest is absent.",
-			item.Reason, step2ReasonSubstr)
+			reasonText(item), step2ReasonSubstr)
 	}
 
-	if !strings.Contains(item.Reason, wantReasonSubstr) {
-		t.Errorf("item.Reason = %q, want reason containing %q; "+
+	if !strings.Contains(reasonText(item), wantReasonSubstr) {
+		t.Errorf("reasonText(item) = %q, want reason containing %q; "+
 			"the parse-failure reason must appear regardless of manifest state",
-			item.Reason, wantReasonSubstr)
+			reasonText(item), wantReasonSubstr)
 	}
 }
 
@@ -413,7 +414,7 @@ func TestClassifyAgentItem_NormalPresentFile_ParseFailedDoesNotAffectClassificat
 		t.Errorf("item.Action = ActionConflict for a normally-present file with ParseFailed: false; "+
 			"the ParseFailed check (Step 1b) must only fire when ParseFailed: true. "+
 			"A file with ParseFailed: false must continue through the existing classification steps. "+
-			"item.Reason = %q", item.Reason)
+			"Reasons = %q", item.Reasons)
 	}
 }
 

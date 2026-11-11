@@ -49,10 +49,10 @@ func TestConvertDeployedTools_MainOrchestratorExtrasAreConvertedByRule(t *testin
 	if !got.UsePlaceholder {
 		t.Fatal("UsePlaceholder: want true when the expansion is complete and extras follow")
 	}
-	assertStrings(t, "Generic holds only the extras", []string{"srv", "web_fetch"}, got.Generic)
-	assertCustomTools(t, map[string]string{"srv": "srv"}, got.CustomTools)
+	assertStrings(t, "Generic holds only the extras", []string{"web_fetch"}, got.Generic)
+	assertStrings(t, "TargetTools holds the server in the target's form", []string{"srv/*"}, got.TargetTools)
 	assertStrings(t, "Unmapped extras", []string{"web_fetch"}, got.Unmapped)
-	assertRule(t, got, "mcp__srv__*", app.ToolRuleCustomTemplate)
+	assertRule(t, got, "mcp__srv__*", app.ToolRuleMCP)
 	assertRule(t, got, "WebFetch", app.ToolRuleMapped)
 	assertRule(t, got, "Read", app.ToolRulePlaceholder)
 	assertConversionSources(t, got, tools)
@@ -70,9 +70,9 @@ func TestConvertDeployedTools_MainOrchestratorExtraOutsideTargetIsDroppedAndKept
 	if !got.UsePlaceholder {
 		t.Fatal("UsePlaceholder: want true for a complete OpenCode expansion")
 	}
-	assertStrings(t, "Dropped extras", []string{"patch"}, droppedNames(got))
-	assertStrings(t, "Generic extras", []string{"my-server"}, got.Generic)
-	assertCustomTools(t, map[string]string{"my-server": "my-server"}, got.CustomTools)
+	assertStrings(t, "Dropped extras", []string{"patch", "my-server"}, droppedNames(got))
+	assertStrings(t, "Generic extras", nil, got.Generic)
+	assertCustomTools(t, nil, got.CustomTools)
 }
 
 func TestConvertDeployedTools_MainOrchestratorVSCodeExpansionNamesWithoutMappingAreNotDropped(t *testing.T) {

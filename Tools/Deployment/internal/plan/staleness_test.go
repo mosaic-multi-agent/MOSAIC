@@ -35,6 +35,7 @@ import (
 
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 )
 
@@ -229,8 +230,8 @@ func TestAgentStaleness_PartialMismatch_VersionAndHarness_TwoDeltas(t *testing.T
 	deployed := sampleDeployedState()
 	agent := makeAgent("test-agent", "1.1")
 	stamps := domain.VersionStamps{
-		Version:           "1.1", // differs
-		HarnessVersion:    "2.1", // differs
+		Version:           "1.1",                      // differs
+		HarnessVersion:    "2.1",                      // differs
 		InjectionsVersion: deployed.InjectionsVersion, // matches
 	}
 
@@ -247,12 +248,12 @@ func TestAgentStaleness_PartialMismatch_VersionAndHarness_TwoDeltas(t *testing.T
 // cannot be proven current; the comparison produces deltas so the classifier detects stale.
 func TestAgentStaleness_NoVersionInfo_SourceHasValues_ProducesThreeDeltas(t *testing.T) {
 	deployed := domain.DeployedArtifactState{
-		Present:             true,
-		ContentHash:         "sha256:abc",
-		Version:             "",  // no version stamp in the deployed file
-		HarnessVersion:      "",
-		InjectionsVersion:   "",
-		HasInjectionRegion:  true, // injection region is present but carries no version attribute
+		Present:            true,
+		ContentHash:        "sha256:abc",
+		Version:            "", // no version stamp in the deployed file
+		HarnessVersion:     "",
+		InjectionsVersion:  "",
+		HasInjectionRegion: true, // injection region is present but carries no version attribute
 	}
 	agent := makeAgent("test-agent", "2.0")
 	stamps := domain.VersionStamps{
@@ -460,14 +461,14 @@ func buildInputWithSingleAgent(
 	}
 	module := newFakeModule()
 	return plan.Input{
-		Catalog:       cat,
-		Module:        module,
-		Mode:          domain.ModeUpdateWorkspace,
-		WorkspacePath: "/fake/workspace",
-		Scope:         domain.ScopeProject,
-		GOOS:          "linux",
-		Manifest:      snap,
-		WorkflowIDs:   []string{wfID},
+		Catalog:         cat,
+		Module:          module,
+		Mode:            domain.ModeUpdateWorkspace,
+		WorkspacePath:   "/fake/workspace",
+		Scope:           domain.ScopeProject,
+		GOOS:            "linux",
+		Manifest:        snap,
+		WorkflowIDs:     []string{wfID},
 		UtilityAgentIDs: nil,
 		Models: map[string]domain.ModelSelection{
 			agent.Key: {
@@ -498,9 +499,9 @@ func TestBuild_LocalModification_HashMatch_ClassifiesAsUnchanged(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{manifestEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{manifestEntry}),
 	})
 
 	// Deployed file is present, hash matches, all version stamps match source.
@@ -541,9 +542,9 @@ func TestBuild_LocalModification_AgentHashMismatch_FallsThroughToStaleness_Class
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{manifestEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{manifestEntry}),
 	})
 
 	// Deployed hash differs from manifest, but all version stamps match source.
@@ -596,9 +597,9 @@ func TestBuild_LocalModification_AgentWhitespaceChange_FallsThroughToStaleness_C
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{manifestEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{manifestEntry}),
 	})
 
 	// Whitespace-only change causes a hash difference, but version stamps all match source.
@@ -638,9 +639,9 @@ func TestBuild_LocalModification_FileWithNoManifestRecord_ClassifiesAsConflict(t
 	// Manifest is present but has NO entry for test-agent.
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       nil, // no entries
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", nil), // no entries
 	})
 
 	// File exists on disk (Present: true) but has no manifest record.
@@ -675,9 +676,9 @@ func TestBuild_LocalModification_ManifestMissingFlag_SetWhenFileHasNoRecord(t *t
 	agent := makeAgent("test-agent", "1.0")
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       nil,
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", nil),
 	})
 	ds := map[string]domain.DeployedArtifactState{
 		targetPath: deployedState("sha256:abc123", "1.0", "1.0", "1.0"),
@@ -875,9 +876,9 @@ func TestBuild_PresentManifest_FileNotInManifest_NotInDeployedState_ClassifiesAs
 	// Manifest is present but has no entry for test-agent; file is also not on disk.
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       nil,
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", nil),
 	})
 
 	input := buildInputWithSingleAgent(agent, snap, nil)

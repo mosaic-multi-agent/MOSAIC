@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "azure-devops": {
+      "type": "remote",
+      "url": "https://example.invalid/azure-devops"
+    },
+    "unrelated": {
+      "type": "local",
+      "command": ["unrelated-server"]
+    }
+  }
+}

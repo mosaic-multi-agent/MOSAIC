@@ -11,6 +11,7 @@ import (
 
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 )
 
@@ -27,9 +28,9 @@ func keptBuildInput(deployed domain.DeployedWorkflows, workflowIDs, keptIDs []st
 	entry.InjectionsVersion = "1.0"
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 	return plan.Input{
 		Catalog: &fakeCatalog{
@@ -160,8 +161,8 @@ func TestBuild_KeptIdBesideCatalogDrift_ReportsOnlyCatalogDrift(t *testing.T) {
 	if hasWorkflowDelta(item, "my-custom") {
 		t.Errorf("Stale = %v; a kept id must produce no workflow delta", item.Stale)
 	}
-	if strings.Contains(item.Reason, "my-custom") {
-		t.Errorf("Reason %q names the kept id; kept ids are not drift", item.Reason)
+	if strings.Contains(reasonText(item), "my-custom") {
+		t.Errorf("Reason %q names the kept id; kept ids are not drift", reasonText(item))
 	}
 }
 

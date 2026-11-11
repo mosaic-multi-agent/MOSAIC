@@ -21,6 +21,7 @@ import (
 
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 )
 
@@ -68,9 +69,9 @@ func buildInfraInput(
 	}
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       entries,
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", entries),
 	})
 	models := map[string]domain.ModelSelection{}
 	for _, key := range []string{"orchestrator", "orchestrator-script", "test-worker"} {
@@ -128,8 +129,8 @@ func TestBuild_OrchestratorMissingEnsuredDeclaration_BecomesUpdate(t *testing.T)
 	if !hasInfraDelta(item, "code-review") {
 		t.Errorf("Stale = %+v, want an infrastructure delta for code-review", item.Stale)
 	}
-	if !strings.Contains(item.Reason, "code-review") {
-		t.Errorf("Reason = %q, want it to name code-review", item.Reason)
+	if !strings.Contains(reasonText(item), "code-review") {
+		t.Errorf("Reason = %q, want it to name code-review", reasonText(item))
 	}
 }
 
@@ -146,8 +147,8 @@ func TestBuild_OrchestratorStaleDeclaration_BecomesUpdate(t *testing.T) {
 	if !hasInfraDelta(item, "code-review") {
 		t.Errorf("Stale = %+v, want an infrastructure delta for code-review", item.Stale)
 	}
-	if !strings.Contains(item.Reason, "code-review") {
-		t.Errorf("Reason = %q, want it to name code-review", item.Reason)
+	if !strings.Contains(reasonText(item), "code-review") {
+		t.Errorf("Reason = %q, want it to name code-review", reasonText(item))
 	}
 }
 
@@ -160,7 +161,7 @@ func TestBuild_OrchestratorCurrentDeclarations_StaysUnchanged(t *testing.T) {
 	item := mustFindItem(t, buildInfraPlan(t, in), "orchestrator")
 
 	if item.Action != domain.ActionUnchanged {
-		t.Errorf("Action = %q, want %q; Stale = %+v, Reason = %q", item.Action, domain.ActionUnchanged, item.Stale, item.Reason)
+		t.Errorf("Action = %q, want %q; Stale = %+v, Reason = %q", item.Action, domain.ActionUnchanged, item.Stale, reasonText(item))
 	}
 }
 
@@ -281,11 +282,11 @@ func TestBuild_OrchestratorVersionStaleAndInfraDrift_SingleItemWithBothReasons(t
 	if !versionDelta || !hasInfraDelta(item, "code-review") {
 		t.Errorf("Stale = %+v, want both the version delta and the infrastructure delta", item.Stale)
 	}
-	if !strings.Contains(item.Reason, "code-review") {
-		t.Errorf("Reason = %q, want it to name code-review", item.Reason)
+	if !strings.Contains(reasonText(item), "code-review") {
+		t.Errorf("Reason = %q, want it to name code-review", reasonText(item))
 	}
-	if strings.Contains(item.Reason, plan.InfrastructureDeltaFieldPrefix) {
-		t.Errorf("Reason = %q must not render infrastructure deltas through the generic version-delta text", item.Reason)
+	if strings.Contains(reasonText(item), plan.InfrastructureDeltaFieldPrefix) {
+		t.Errorf("Reason = %q must not render infrastructure deltas through the generic version-delta text", reasonText(item))
 	}
 }
 
@@ -300,7 +301,7 @@ func TestBuild_OrchestratorVersionStaleOnly_ReasonUnchangedByInfrastructureSuppo
 	if item.Action != domain.ActionUpdate {
 		t.Fatalf("Action = %q, want %q", item.Action, domain.ActionUpdate)
 	}
-	if strings.Contains(item.Reason, "infrastructure") || hasInfraDelta(item, "code-review") {
-		t.Errorf("Reason = %q, Stale = %+v; no infrastructure drift exists so none may be reported", item.Reason, item.Stale)
+	if strings.Contains(reasonText(item), "infrastructure") || hasInfraDelta(item, "code-review") {
+		t.Errorf("Reason = %q, Stale = %+v; no infrastructure drift exists so none may be reported", reasonText(item), item.Stale)
 	}
 }

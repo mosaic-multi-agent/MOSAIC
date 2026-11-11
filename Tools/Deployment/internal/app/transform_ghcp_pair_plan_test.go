@@ -13,6 +13,7 @@ import (
 
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 )
 
 // tpAgentsDir is the agents folder both GHCP targets share.
@@ -31,7 +32,7 @@ var tpPairCases = []tpPairCase{
 // tpRecord saves a manifest holding the given entries for the workspace.
 func tpRecord(t *testing.T, ws, harnessID string, entries ...domain.ManifestEntry) {
 	t.Helper()
-	m := domain.Manifest{SchemaVersion: manifest.SchemaVersion, HarnessID: harnessID, Entries: entries}
+	m := domain.Manifest{SchemaVersion: manifest.SchemaVersion, Harnesses: []domain.HarnessSection{{HarnessID: harnessID}}, Entries: manifesttest.WithHarness(harnessID, entries)}
 	if err := manifest.NewStore().Save(ws, m); err != nil {
 		t.Fatalf("save manifest: %v", err)
 	}
