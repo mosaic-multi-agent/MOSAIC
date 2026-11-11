@@ -5,6 +5,10 @@ transform_version: "3.0.1"
 
 tools:
   shape: list
+  mcp:
+    server_form: "mcp__{server}__*"
+    tool_form: "mcp__{server}__{tool}"
+    normalize_server_name: true
   universe:
     - name: "Read"
       unused: deny
@@ -93,7 +97,6 @@ tools:
             - "WebFetch"
     - generic: "skill"
       destinations: []
-  custom_tool_template: "mcp__%s__*"
   placeholder_expansion:
     - "Read"
     - "Write"

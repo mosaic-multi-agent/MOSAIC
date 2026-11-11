@@ -29,6 +29,7 @@ import (
 
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 )
 
 // ---------------------------------------------------------------------------
@@ -76,9 +77,9 @@ func sampleEntry(targetPath string, ref domain.ArtifactRef) domain.ManifestEntry
 func sampleManifest() domain.Manifest {
 	return domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "claude-code",
-		UpdatedAt:     time.Date(2024, 6, 15, 12, 30, 0, 0, time.UTC),
-		Entries: []domain.ManifestEntry{
+		Harnesses:     []domain.HarnessSection{{HarnessID: "claude-code", UpdatedAt: time.Date(2024, 6, 15, 12, 30, 0, 0, time.UTC)}},
+
+		Entries: manifesttest.WithHarness("claude-code", []domain.ManifestEntry{
 			sampleEntry(
 				"Catalog/Subagents/Creation/test-writer.md",
 				domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "test-writer"},
@@ -87,7 +88,7 @@ func sampleManifest() domain.Manifest {
 				"skills/lean-tdd/SKILL.md",
 				domain.ArtifactRef{Kind: domain.ArtifactSkill, Key: "lean-tdd"},
 			),
-		},
+		}),
 	}
 }
 
@@ -155,9 +156,9 @@ func TestStore_WriteRead_SchemaVersionPreserved(t *testing.T) {
 	}
 }
 
-// TestStore_WriteRead_HarnessIDPreserved verifies that the HarnessID field survives
+// TestStore_WriteRead_HarnessSectionPreserved verifies that the harness section survives
 // a write-then-read cycle unchanged.
-func TestStore_WriteRead_HarnessIDPreserved(t *testing.T) {
+func TestStore_WriteRead_HarnessSectionPreserved(t *testing.T) {
 	store := manifest.NewStore()
 	ws := makeWorkspace(t)
 	m := sampleManifest()
@@ -166,8 +167,9 @@ func TestStore_WriteRead_HarnessIDPreserved(t *testing.T) {
 	snap, err := store.Load(ws)
 	must(t, err)
 
-	if snap.Manifest.HarnessID != m.HarnessID {
-		t.Errorf("HarnessID: got %q, want %q", snap.Manifest.HarnessID, m.HarnessID)
+	got, ok := snap.Manifest.Section("claude-code")
+	if !ok || got.HarnessID != "claude-code" {
+		t.Errorf("Section(claude-code): got %+v (found %v), want the section of claude-code", got, ok)
 	}
 }
 
@@ -182,8 +184,10 @@ func TestStore_WriteRead_UpdatedAtPreserved(t *testing.T) {
 	snap, err := store.Load(ws)
 	must(t, err)
 
-	got := snap.Manifest.UpdatedAt.UTC().Truncate(time.Second)
-	want := m.UpdatedAt.UTC().Truncate(time.Second)
+	gotSec, _ := snap.Manifest.Section("claude-code")
+	wantSec, _ := m.Section("claude-code")
+	got := gotSec.UpdatedAt.UTC().Truncate(time.Second)
+	want := wantSec.UpdatedAt.UTC().Truncate(time.Second)
 	if !got.Equal(want) {
 		t.Errorf("UpdatedAt: got %v, want %v", got, want)
 	}
@@ -303,14 +307,14 @@ func TestStore_WriteRead_HookKindPreserved(t *testing.T) {
 	ws := makeWorkspace(t)
 	m := domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "claude-code",
-		UpdatedAt:     time.Date(2024, 6, 15, 12, 30, 0, 0, time.UTC),
-		Entries: []domain.ManifestEntry{
+		Harnesses:     []domain.HarnessSection{{HarnessID: "claude-code", UpdatedAt: time.Date(2024, 6, 15, 12, 30, 0, 0, time.UTC)}},
+
+		Entries: manifesttest.WithHarness("claude-code", []domain.ManifestEntry{
 			sampleEntry(
 				"hooks/pre-deploy.sh",
 				domain.ArtifactRef{Kind: domain.ArtifactHook, Key: "pre-deploy"},
 			),
-		},
+		}),
 	}
 
 	must(t, store.Save(ws, m))
@@ -344,9 +348,9 @@ func TestStore_WriteRead_EntriesSortedByTargetPath(t *testing.T) {
 	// "skills/..." sorts after "Agents/..." in lexicographic order ('A' < 's').
 	m := domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "claude-code",
-		UpdatedAt:     time.Date(2024, 6, 15, 12, 30, 0, 0, time.UTC),
-		Entries: []domain.ManifestEntry{
+		Harnesses:     []domain.HarnessSection{{HarnessID: "claude-code", UpdatedAt: time.Date(2024, 6, 15, 12, 30, 0, 0, time.UTC)}},
+
+		Entries: manifesttest.WithHarness("claude-code", []domain.ManifestEntry{
 			sampleEntry(
 				"skills/lean-tdd/SKILL.md", // lexicographically later — saved first
 				domain.ArtifactRef{Kind: domain.ArtifactSkill, Key: "lean-tdd"},
@@ -355,7 +359,7 @@ func TestStore_WriteRead_EntriesSortedByTargetPath(t *testing.T) {
 				"Catalog/Subagents/Creation/test-writer.md", // lexicographically earlier — saved second
 				domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "test-writer"},
 			),
-		},
+		}),
 	}
 
 	must(t, store.Save(ws, m))
@@ -388,9 +392,9 @@ func TestStore_WriteRead_EmptyEntries(t *testing.T) {
 	ws := makeWorkspace(t)
 	m := domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "claude-code",
-		UpdatedAt:     time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-		Entries:       nil,
+		Harnesses:     []domain.HarnessSection{{HarnessID: "claude-code", UpdatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)}},
+
+		Entries: manifesttest.WithHarness("claude-code", nil),
 	}
 
 	must(t, store.Save(ws, m))
@@ -461,19 +465,19 @@ func TestStore_WriteRead_SecondSaveOverwritesFirst(t *testing.T) {
 
 	first := domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "claude-code",
-		UpdatedAt:     time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-		Entries: []domain.ManifestEntry{
+		Harnesses:     []domain.HarnessSection{{HarnessID: "claude-code", UpdatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)}},
+
+		Entries: manifesttest.WithHarness("claude-code", []domain.ManifestEntry{
 			sampleEntry("first/path.md", domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "first-agent"}),
-		},
+		}),
 	}
 	second := domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "claude-code",
-		UpdatedAt:     time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC),
-		Entries: []domain.ManifestEntry{
+		Harnesses:     []domain.HarnessSection{{HarnessID: "claude-code", UpdatedAt: time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC)}},
+
+		Entries: manifesttest.WithHarness("claude-code", []domain.ManifestEntry{
 			sampleEntry("second/path.md", domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "second-agent"}),
-		},
+		}),
 	}
 
 	must(t, store.Save(ws, first))
@@ -555,7 +559,7 @@ func TestStore_FutureSchema_ManifestIsZeroValue(t *testing.T) {
 	must(t, err)
 
 	if snap.State == manifest.StateFuture {
-		if snap.Manifest.SchemaVersion != "" || snap.Manifest.HarnessID != "" || len(snap.Manifest.Entries) != 0 {
+		if snap.Manifest.SchemaVersion != "" || len(snap.Manifest.Harnesses) != 0 || len(snap.Manifest.Entries) != 0 {
 			t.Error("StateFuture snapshot has non-zero Manifest; expected zero-value domain.Manifest " +
 				"because the schema cannot be interpreted")
 		}
@@ -617,7 +621,7 @@ func TestStore_AbsentManifest_ManifestIsZeroValue(t *testing.T) {
 	must(t, err)
 
 	if snap.State == manifest.StateAbsent {
-		if snap.Manifest.SchemaVersion != "" || snap.Manifest.HarnessID != "" || len(snap.Manifest.Entries) != 0 {
+		if snap.Manifest.SchemaVersion != "" || len(snap.Manifest.Harnesses) != 0 || len(snap.Manifest.Entries) != 0 {
 			t.Error("StateAbsent snapshot has non-zero Manifest; expected zero-value domain.Manifest")
 		}
 	}
@@ -773,7 +777,7 @@ func TestStore_CorruptManifest_ManifestIsZeroValue(t *testing.T) {
 	must(t, err)
 
 	if snap.State == manifest.StateCorrupt {
-		if snap.Manifest.SchemaVersion != "" || snap.Manifest.HarnessID != "" || len(snap.Manifest.Entries) != 0 {
+		if snap.Manifest.SchemaVersion != "" || len(snap.Manifest.Harnesses) != 0 || len(snap.Manifest.Entries) != 0 {
 			t.Error("StateCorrupt snapshot has non-zero Manifest; expected zero-value domain.Manifest " +
 				"because the YAML cannot be parsed")
 		}

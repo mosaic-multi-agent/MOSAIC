@@ -41,6 +41,7 @@ import (
 
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 )
 
@@ -77,7 +78,7 @@ func deployedStateNoVersionMarkers(contentHash string) domain.DeployedArtifactSt
 		Present:           true,
 		ContentHash:       contentHash,
 		Version:           "1.0", // matches agent.Version set by make*Agent helpers
-		HarnessVersion:  "1.0", // matches newFakeModule().desc.TransformVersion
+		HarnessVersion:    "1.0", // matches newFakeModule().desc.TransformVersion
 		InjectionsVersion: "1.0", // matches newFakeModule().desc.InjectionsVersion
 		// ProtocolVersion: ""  — absent by design for utility and standalone agents
 		// BundleVersion:   ""  — absent by design for utility and standalone agents
@@ -104,9 +105,9 @@ func buildRoleGateInput(agent domain.Agent) plan.Input {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	ds := map[string]domain.DeployedArtifactState{
@@ -130,7 +131,7 @@ func buildRoleGateInput(agent domain.Agent) plan.Input {
 		ProtocolVersion: "1.9",
 		BundleVersion:   "2.0",
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		DeployedState: ds,
@@ -165,9 +166,9 @@ func buildOrchestratorRoleGateInput() plan.Input {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	ds := map[string]domain.DeployedArtifactState{
@@ -221,7 +222,7 @@ func TestClassifyAgentItem_UtilityAgent_NoProtocolOrBundleMarkers_ClassifiesAsUn
 	}
 	if item.Action != domain.ActionUnchanged {
 		t.Errorf("utility agent with no protocol or bundle markers: action = %v, want ActionUnchanged; "+
-			"reason = %q", item.Action, item.Reason)
+			"reason = %q", item.Action, reasonText(item))
 	}
 }
 
@@ -265,9 +266,9 @@ func TestClassifyAgentItem_UtilityAgent_NoProtocolOrBundleMarkers_ReasonIsEmpty(
 	if !found {
 		t.Fatalf("plan item for %q not found", agent.Key)
 	}
-	if item.Reason != "" {
+	if reasonText(item) != "" {
 		t.Errorf("utility agent with no protocol or bundle markers: Reason = %q, want empty; "+
-			"ActionUnchanged items must have an empty Reason", item.Reason)
+			"ActionUnchanged items must have an empty Reason", reasonText(item))
 	}
 }
 
@@ -295,7 +296,7 @@ func TestClassifyAgentItem_StandaloneAgent_NoProtocolOrBundleMarkers_ClassifiesA
 	}
 	if item.Action != domain.ActionUnchanged {
 		t.Errorf("standalone agent with no protocol or bundle markers: action = %v, want ActionUnchanged; "+
-			"reason = %q", item.Action, item.Reason)
+			"reason = %q", item.Action, reasonText(item))
 	}
 }
 
@@ -337,9 +338,9 @@ func TestClassifyAgentItem_StandaloneAgent_NoProtocolOrBundleMarkers_ReasonIsEmp
 	if !found {
 		t.Fatalf("plan item for %q not found", agent.Key)
 	}
-	if item.Reason != "" {
+	if reasonText(item) != "" {
 		t.Errorf("standalone agent with no protocol or bundle markers: Reason = %q, want empty; "+
-			"ActionUnchanged items must have an empty Reason", item.Reason)
+			"ActionUnchanged items must have an empty Reason", reasonText(item))
 	}
 }
 
@@ -374,7 +375,7 @@ func TestClassifyAgentItem_ExcludedRoles_NoMarkers_ClassifiesAsUnchanged(t *test
 			}
 			if item.Action != domain.ActionUnchanged {
 				t.Errorf("%s agent: action = %v, want ActionUnchanged; reason = %q",
-					tc.name, item.Action, item.Reason)
+					tc.name, item.Action, reasonText(item))
 			}
 			if len(item.Stale) != 0 {
 				t.Errorf("%s agent: Stale = %v, want empty", tc.name, item.Stale)
@@ -462,10 +463,10 @@ func TestClassifyAgentItem_Subagent_NoProtocolMarker_ReasonMentionsProtocol(t *t
 	if !found {
 		t.Fatalf("plan item for %q not found", agent.Key)
 	}
-	if !strings.Contains(item.Reason, "protocol") {
+	if !strings.Contains(reasonText(item), "protocol") {
 		t.Errorf("subagent with no protocol marker: Reason = %q; expected it to mention \"protocol\"; "+
 			"the protocol staleness reason must appear for managed agents",
-			item.Reason)
+			reasonText(item))
 	}
 }
 
@@ -579,8 +580,8 @@ func TestClassifyAgentItem_ManagedRoles_NoProtocolMarker_ClassifiesAsActionUpdat
 	orchestratorIn := buildOrchestratorRoleGateInput()
 
 	cases := []struct {
-		name    string
-		in      plan.Input
+		name     string
+		in       plan.Input
 		agentKey string
 	}{
 		{"subagent", subagentIn, subagent.Key},

@@ -1,6 +1,6 @@
 package claudecode_test
 
-// Tests for ClaudeCodeAdapter CLI argument construction (ordinary and orchestrator invocations).
+// Tests for ClaudeCodeAdapter CLI argument construction.
 // Uses the fake-CLI helper process defined in helperprocess_test.go.
 
 import (
@@ -9,17 +9,18 @@ import (
 	"testing"
 	"time"
 
+	"mosaic-run/internal/domain"
 	"mosaic-run/internal/harness/claudecode"
 )
 
 // ---------------------------------------------------------------------------
-// CLI argument construction — ordinary invocations
+// CLI argument construction
 // ---------------------------------------------------------------------------
 
-// TestClaudeCodeAdapter_OrdinaryInvocation_IncludesAppendSystemPromptFile
-// verifies that ordinary invocations include --append-system-prompt-file with
-// the agent's DefinitionPath.
-func TestClaudeCodeAdapter_OrdinaryInvocation_IncludesAppendSystemPromptFile(t *testing.T) {
+// TestClaudeCodeAdapter_OrdinaryInvocation_LaunchesWithAgentFlag verifies that
+// the adapter launches with --agent <Identifier> and never passes the
+// definition path or --append-system-prompt-file.
+func TestClaudeCodeAdapter_OrdinaryInvocation_LaunchesWithAgentFlag(t *testing.T) {
 	argsFile := setHelperEnv(t, "success")
 	agent := ordinaryAgentRefCC(t)
 
@@ -30,13 +31,16 @@ func TestClaudeCodeAdapter_OrdinaryInvocation_IncludesAppendSystemPromptFile(t *
 	}
 
 	args := readArgs(t, argsFile)
-	if !containsSequence(args, "--append-system-prompt-file", agent.DefinitionPath) {
-		t.Errorf("want --append-system-prompt-file %q in args, got %v", agent.DefinitionPath, args)
+	if !containsSequence(args, "--agent", agent.Identifier) {
+		t.Errorf("want --agent %q in args, got %v", agent.Identifier, args)
+	}
+	if containsArg(args, "--append-system-prompt-file") || containsArg(args, agent.DefinitionPath) {
+		t.Errorf("want no --append-system-prompt-file and no definition path in args, got %v", args)
 	}
 }
 
 // TestClaudeCodeAdapter_OrdinaryInvocation_IncludesPromptFlag verifies that
-// ordinary invocations include -p as a bare flag and deliver the marshalled
+// the adapter passes -p as a bare flag and delivers the marshalled
 // request JSON on stdin. The prompt travels on stdin rather than as the value
 // following -p, so that multi-line prompts are not truncated by cmd.exe on Windows.
 func TestClaudeCodeAdapter_OrdinaryInvocation_IncludesPromptFlag(t *testing.T) {
@@ -63,7 +67,7 @@ func TestClaudeCodeAdapter_OrdinaryInvocation_IncludesPromptFlag(t *testing.T) {
 }
 
 // TestClaudeCodeAdapter_OrdinaryInvocation_IncludesOutputFormatStreamJSON verifies
-// that ordinary invocations include --output-format stream-json --verbose.
+// that the adapter passes --output-format stream-json --verbose.
 func TestClaudeCodeAdapter_OrdinaryInvocation_IncludesOutputFormatStreamJSON(t *testing.T) {
 	argsFile := setHelperEnv(t, "success")
 
@@ -80,7 +84,7 @@ func TestClaudeCodeAdapter_OrdinaryInvocation_IncludesOutputFormatStreamJSON(t *
 }
 
 // TestClaudeCodeAdapter_OrdinaryInvocation_IncludesPermissionModeDontAsk verifies
-// that ordinary invocations use --permission-mode dontAsk when the agent's
+// that the adapter uses --permission-mode dontAsk when the agent's
 // definition file provides a valid tools frontmatter field.
 func TestClaudeCodeAdapter_OrdinaryInvocation_IncludesPermissionModeDontAsk(t *testing.T) {
 	argsFile := setHelperEnv(t, "success")
@@ -98,8 +102,8 @@ func TestClaudeCodeAdapter_OrdinaryInvocation_IncludesPermissionModeDontAsk(t *t
 }
 
 // TestClaudeCodeAdapter_OrdinaryInvocation_NeverDangerouslySkipPermissions
-// verifies that --dangerously-skip-permissions is never present in ordinary
-// invocation arguments.
+// verifies that --dangerously-skip-permissions is never present in the
+// adapter arguments.
 func TestClaudeCodeAdapter_OrdinaryInvocation_NeverDangerouslySkipPermissions(t *testing.T) {
 	argsFile := setHelperEnv(t, "success")
 
@@ -111,38 +115,46 @@ func TestClaudeCodeAdapter_OrdinaryInvocation_NeverDangerouslySkipPermissions(t 
 
 	args := readArgs(t, argsFile)
 	if containsArg(args, "--dangerously-skip-permissions") {
-		t.Errorf("--dangerously-skip-permissions must never appear in ordinary invocation args, got %v", args)
+		t.Errorf("--dangerously-skip-permissions must never appear in args, got %v", args)
 	}
 }
 
-// TestClaudeCodeAdapter_OrdinaryInvocation_NoEnvBlock verifies that ordinary
-// invocations do NOT include a synthesized <env> block in the -p prompt content
-// (the CLI's own <env> block is preserved via --append-system-prompt-file).
-func TestClaudeCodeAdapter_OrdinaryInvocation_NoEnvBlock(t *testing.T) {
-	argsFile := setHelperEnv(t, "success")
-
-	adapter := claudecode.NewClaudeCodeAdapter(helperExe(t), 5*time.Second)
-	_, err := adapter.Invoke(context.Background(), ordinaryAgentRefCC(t), minimalClaudeRequest("test-agent#1"))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+// TestClaudeCodeAdapter_Invocation_NoEnvBlockInPrompt verifies that no
+// agent gets a synthesized <env> block in the stdin prompt: the
+// prompt is exactly the marshalled request.
+func TestClaudeCodeAdapter_Invocation_NoEnvBlockInPrompt(t *testing.T) {
+	kinds := map[string]func(*testing.T) domain.AgentReference{
+		"ordinary":     ordinaryAgentRefCC,
+		"orchestrator": orchestratorAgentRefCC,
 	}
+	for name, mk := range kinds {
+		t.Run(name, func(t *testing.T) {
+			setHelperEnv(t, "success")
+			stdinFile := newTestStdinCapture(t)
 
-	args := readArgs(t, argsFile)
-	pIdx := indexOfArg(args, "-p")
-	if pIdx < 0 || pIdx+1 >= len(args) {
-		t.Fatalf("want -p <prompt> in args, got %v", args)
-	}
-	if strings.Contains(args[pIdx+1], "<env>") {
-		t.Errorf("want NO <env> block in ordinary -p prompt, got %q", args[pIdx+1])
+			adapter := claudecode.NewClaudeCodeAdapter(helperExe(t), 5*time.Second)
+			_, err := adapter.Invoke(context.Background(), mk(t), minimalClaudeRequest("some-agent#1"))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			stdin := string(readHelperStdin(t, stdinFile))
+			if strings.Contains(stdin, "<env>") || strings.Contains(stdin, "Working directory:") {
+				t.Errorf("want no <env> block in stdin prompt, got %q", stdin)
+			}
+			if !strings.HasPrefix(strings.TrimSpace(stdin), "{") {
+				t.Errorf("want stdin to start with the marshalled request JSON, got %q", stdin)
+			}
+		})
 	}
 }
 
 // ---------------------------------------------------------------------------
-// CLI argument construction — orchestrator invocations
+// CLI argument construction — orchestrator agents
 // ---------------------------------------------------------------------------
 
 // TestClaudeCodeAdapter_OrchestratorInvocation_IncludesAgentFlag verifies that
-// orchestrator invocations include --agent <Identifier>.
+// orchestrator agents include --agent <Identifier>.
 func TestClaudeCodeAdapter_OrchestratorInvocation_IncludesAgentFlag(t *testing.T) {
 	argsFile := setHelperEnv(t, "success")
 	agent := orchestratorAgentRefCC(t)
@@ -160,7 +172,7 @@ func TestClaudeCodeAdapter_OrchestratorInvocation_IncludesAgentFlag(t *testing.T
 }
 
 // TestClaudeCodeAdapter_OrchestratorInvocation_NoAppendSystemPromptFile
-// verifies that orchestrator invocations do NOT include
+// verifies that orchestrator agents do NOT include
 // --append-system-prompt-file.
 func TestClaudeCodeAdapter_OrchestratorInvocation_NoAppendSystemPromptFile(t *testing.T) {
 	argsFile := setHelperEnv(t, "success")
@@ -178,7 +190,7 @@ func TestClaudeCodeAdapter_OrchestratorInvocation_NoAppendSystemPromptFile(t *te
 }
 
 // TestClaudeCodeAdapter_OrchestratorInvocation_IncludesOutputFormatStreamJSON
-// verifies that orchestrator invocations include --output-format stream-json --verbose.
+// verifies that orchestrator agents include --output-format stream-json --verbose.
 func TestClaudeCodeAdapter_OrchestratorInvocation_IncludesOutputFormatStreamJSON(t *testing.T) {
 	argsFile := setHelperEnv(t, "success")
 
@@ -195,7 +207,7 @@ func TestClaudeCodeAdapter_OrchestratorInvocation_IncludesOutputFormatStreamJSON
 }
 
 // TestClaudeCodeAdapter_OrchestratorInvocation_IncludesPermissionModeDontAsk
-// verifies that orchestrator invocations use --permission-mode dontAsk when
+// verifies that orchestrator agents use --permission-mode dontAsk when
 // the agent's definition file provides a valid tools frontmatter field.
 func TestClaudeCodeAdapter_OrchestratorInvocation_IncludesPermissionModeDontAsk(t *testing.T) {
 	argsFile := setHelperEnv(t, "success")
@@ -226,101 +238,12 @@ func TestClaudeCodeAdapter_OrchestratorInvocation_NeverDangerouslySkipPermission
 
 	args := readArgs(t, argsFile)
 	if containsArg(args, "--dangerously-skip-permissions") {
-		t.Errorf("--dangerously-skip-permissions must never appear in orchestrator invocation args, got %v", args)
-	}
-}
-
-// TestClaudeCodeAdapter_OrchestratorInvocation_IncludesEnvBlock verifies that
-// orchestrator invocations include a synthesized <env>...</env> block in the
-// stdin payload. The env block and prompt content travel on stdin rather than
-// as the value following -p, so that multi-line content is not truncated by
-// cmd.exe on Windows.
-func TestClaudeCodeAdapter_OrchestratorInvocation_IncludesEnvBlock(t *testing.T) {
-	argsFile := setHelperEnv(t, "success")
-	stdinFile := newTestStdinCapture(t)
-
-	adapter := claudecode.NewClaudeCodeAdapter(helperExe(t), 5*time.Second)
-	_, err := adapter.Invoke(context.Background(), orchestratorAgentRefCC(t), minimalClaudeRequest("orchestrator-agent#1"))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	args := readArgs(t, argsFile)
-	// -p must be present as a bare flag.
-	if !containsArg(args, "-p") {
-		t.Fatalf("want bare -p flag in orchestrator args, got %v", args)
-	}
-	// The synthesized <env> block must be present in the stdin payload.
-	stdin := string(readHelperStdin(t, stdinFile))
-	if !strings.Contains(stdin, "<env>") {
-		t.Errorf("want <env> opening tag in orchestrator stdin payload, got %q", stdin)
-	}
-	if !strings.Contains(stdin, "</env>") {
-		t.Errorf("want </env> closing tag in orchestrator stdin payload, got %q", stdin)
-	}
-}
-
-// TestClaudeCodeAdapter_OrchestratorInvocation_EnvBlockContainsWorkingDir
-// verifies that the synthesized <env> block in the stdin payload includes the
-// working directory.
-func TestClaudeCodeAdapter_OrchestratorInvocation_EnvBlockContainsWorkingDir(t *testing.T) {
-	setHelperEnv(t, "success")
-	stdinFile := newTestStdinCapture(t)
-
-	adapter := claudecode.NewClaudeCodeAdapter(helperExe(t), 5*time.Second)
-	_, err := adapter.Invoke(context.Background(), orchestratorAgentRefCC(t), minimalClaudeRequest("orchestrator-agent#1"))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	stdin := string(readHelperStdin(t, stdinFile))
-	if !strings.Contains(stdin, "Working directory:") {
-		t.Errorf("want 'Working directory:' in orchestrator stdin payload (env block), got %q", stdin)
-	}
-}
-
-// TestClaudeCodeAdapter_OrchestratorInvocation_EnvBlockContainsPlatform
-// verifies that the synthesized <env> block in the stdin payload includes the
-// platform (runtime.GOOS).
-func TestClaudeCodeAdapter_OrchestratorInvocation_EnvBlockContainsPlatform(t *testing.T) {
-	setHelperEnv(t, "success")
-	stdinFile := newTestStdinCapture(t)
-
-	adapter := claudecode.NewClaudeCodeAdapter(helperExe(t), 5*time.Second)
-	_, err := adapter.Invoke(context.Background(), orchestratorAgentRefCC(t), minimalClaudeRequest("orchestrator-agent#1"))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	stdin := string(readHelperStdin(t, stdinFile))
-	if !strings.Contains(stdin, "Platform:") {
-		t.Errorf("want 'Platform:' in orchestrator stdin payload (env block), got %q", stdin)
-	}
-}
-
-// TestClaudeCodeAdapter_OrchestratorInvocation_EnvBlockContainsDate verifies
-// that the synthesized <env> block in the stdin payload includes the current
-// date in the format required by the design spec ("Current date: YYYY-MM-DD").
-func TestClaudeCodeAdapter_OrchestratorInvocation_EnvBlockContainsDate(t *testing.T) {
-	setHelperEnv(t, "success")
-	stdinFile := newTestStdinCapture(t)
-
-	adapter := claudecode.NewClaudeCodeAdapter(helperExe(t), 5*time.Second)
-	_, err := adapter.Invoke(context.Background(), orchestratorAgentRefCC(t), minimalClaudeRequest("orchestrator-agent#1"))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	stdin := string(readHelperStdin(t, stdinFile))
-	if !strings.Contains(stdin, "Current date:") {
-		t.Errorf("want 'Current date:' in orchestrator stdin payload (env block), got %q", stdin)
+		t.Errorf("--dangerously-skip-permissions must never appear in orchestrator agent args, got %v", args)
 	}
 }
 
 // TestClaudeCodeAdapter_OrchestratorInvocation_IncludesRequestInPrompt verifies
 // that the marshalled request JSON is present in the orchestrator stdin payload.
-// An implementation that emits only the <env> block and omits the request would
-// fail this test.
 func TestClaudeCodeAdapter_OrchestratorInvocation_IncludesRequestInPrompt(t *testing.T) {
 	setHelperEnv(t, "success")
 	stdinFile := newTestStdinCapture(t)

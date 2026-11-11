@@ -83,20 +83,15 @@ func EnumerateTargetPaths(
 	}
 
 	for _, hook := range set.Hooks {
-		targetPath, err := module.TargetPath(domain.TargetPathRequest{
-			Kind:  domain.ArtifactHook,
-			Key:   hook.Key,
-			Scope: scope,
-			GOOS:  goos,
-		})
-		if err != nil {
+		hookPlan, err := module.HookPlan(domain.HookPlanRequest{Bundle: hook, Scope: scope})
+		if err != nil || !hookPlan.Supported {
 			// Hook not supported by this harness — skip silently, matching Build's behaviour.
 			continue
 		}
-		result = append(result, PlannedPath{
-			Ref:        domain.ArtifactRef{Kind: domain.ArtifactHook, Key: hook.Key},
-			TargetPath: targetPath,
-		})
+		ref := domain.ArtifactRef{Kind: domain.ArtifactHook, Key: hook.Key}
+		for _, p := range hookFilePaths(hookPlan) {
+			result = append(result, PlannedPath{Ref: ref, TargetPath: p})
+		}
 	}
 
 	return result, nil

@@ -3,17 +3,14 @@ package deploy
 import (
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
-	"strings"
-	"time"
 
 	"mosaic-deploy/internal/domain"
-	"mosaic-deploy/internal/logging"
 )
 
-// deployHooks writes hook bundle files and applies registration steps.
-// Hook files are copied to <deployRoot>/<HookPlan.TargetDir>/<HookFile.TargetName>.
+// deployHooks applies the registration steps of the hook bundles that had a file written.
+// Hook files themselves are written from plan items (one per file); the hook plans supply only
+// their registration steps.
 // Registration steps follow the write-if-absent / TODO-if-present policy (AC17.5):
 //   - !Performable: always emit GapManualStep; never write anything.
 //   - Performable, target absent: write the fragment; emit no gap.
@@ -22,96 +19,32 @@ import (
 // Registration targets are relative to the workspace, not the deployment root,
 // because they are user-owned config files (e.g. .claude/settings.json).
 //
-// journal is non-nil in atomic mode. When non-nil, each hook file write is recorded in the
-// journal immediately before the write so the executor can reverse hook files if the run
-// later fails (e.g. a manifest save failure). If the journal record itself fails (e.g. an
-// existing hook file at the destination is unreadable), the write is skipped and a gap is
-// emitted — hook problems are gaps, not reversal triggers.
+// written holds the hook file paths the run wrote; a bundle none of whose files was written
+// gets no registration. journal is non-nil in atomic mode and covers registration writes.
 //
-// opts carries the opt-in behaviour of a request with removals or replacements: strict makes
-// an unreadable source, a failed journal record or a failed write an error instead of a gap;
-// replace lists registration targets (workspace-relative) that are overwritten even when they
-// exist; blocked lists paths whose backup failed and which must not be written. With the zero
-// opts the behaviour is the policy described above.
-func (e *executor) deployHooks(deployRoot, workspace string, hooks []domain.HookPlan, dryRun bool, journal *writeJournal, opts hookOpts) ([]domain.Gap, error) {
+// opts carries the opt-in behaviour of a request with removals or replacements: strict makes a
+// failed journal record or a failed write an error instead of a gap; replace lists registration
+// targets (workspace-relative) that are overwritten even when they exist; blocked lists paths
+// whose backup failed and which must not be written.
+func (e *executor) deployHooks(workspace string, hooks []domain.HookPlan, written map[string]bool, dryRun bool, journal *writeJournal, opts hookOpts) ([]domain.Gap, error) {
 	var gaps []domain.Gap
-
+	if dryRun {
+		return gaps, nil
+	}
 	for _, hp := range hooks {
-		if !hp.Supported {
+		if !hp.Supported || !bundleWritten(hp, written) {
 			continue
 		}
-
-		if !dryRun {
-			// Copy hook files to the target directory under the deployment root.
-			targetDir := filepath.Join(deployRoot, hp.TargetDir)
-			for _, hf := range hp.Files {
-				if opts.blocked[normRel(path.Join(strings.ReplaceAll(hp.TargetDir, "\\", "/"), hf.TargetName))] {
-					continue
-				}
-				content, err := os.ReadFile(hf.SourcePath)
-				if err != nil {
-					if opts.strict {
-						return gaps, fmt.Errorf("hook source file %q could not be read: %w", hf.SourcePath, err)
-					}
-					// Source file unreadable: this indicates a catalog integrity problem.
-					// Log the error and emit a manual-step gap so the user is informed and
-					// the hook file does not silently disappear from the deployment (AC17.6).
-					e.log.Event(logging.Event{
-						Time:    time.Now(),
-						Level:   logging.LevelError,
-						Kind:    "hook",
-						Subject: hf.SourcePath,
-						Message: fmt.Sprintf("hook source file unreadable, skipping: %s", err),
-					})
-					gaps = append(gaps, domain.Gap{
-						Kind:    domain.GapManualStep,
-						Subject: hf.TargetName,
-						Detail:  fmt.Sprintf("hook source file %q could not be read and was not deployed: %s", hf.SourcePath, err),
-					})
-					continue
-				}
-				dest := filepath.Join(targetDir, hf.TargetName)
-				// Journal the destination before writing so an atomic reversal can undo this write.
-				// If the journal record fails (e.g. an existing hook file at dest is unreadable),
-				// skip the write and emit a gap rather than proceeding with an un-journaled write.
-				if journal != nil {
-					if recErr := journal.record(dest); recErr != nil {
-						if opts.strict {
-							return gaps, fmt.Errorf("hook file %q could not be journaled for atomic reversal: %w", dest, recErr)
-						}
-						e.log.Event(logging.Event{
-							Time:    time.Now(),
-							Level:   logging.LevelError,
-							Kind:    "hook",
-							Subject: dest,
-							Message: fmt.Sprintf("atomic journal record failed for hook file, skipping write: %s", recErr),
-						})
-						gaps = append(gaps, domain.Gap{
-							Kind:    domain.GapManualStep,
-							Subject: hf.TargetName,
-							Detail:  fmt.Sprintf("hook file %q could not be journaled for atomic reversal and was not deployed: %s", dest, recErr),
-						})
-						continue
-					}
-				}
-				if werr := mkdirAndWrite(dest, content); werr != nil && opts.strict {
-					return gaps, fmt.Errorf("hook file %q could not be written: %w", dest, werr)
-				}
+		for _, step := range hp.Registration {
+			g, err := applyRegistrationStep(step, workspace, journal, opts)
+			if err != nil {
+				return gaps, err
 			}
-
-			// Apply registration steps.
-			for _, step := range hp.Registration {
-				g, err := applyRegistrationStep(step, workspace, journal, opts)
-				if err != nil {
-					return gaps, err
-				}
-				if g != nil {
-					gaps = append(gaps, *g)
-				}
+			if g != nil {
+				gaps = append(gaps, *g)
 			}
 		}
 	}
-
 	return gaps, nil
 }
 

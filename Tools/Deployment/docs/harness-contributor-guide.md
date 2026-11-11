@@ -244,6 +244,40 @@ The `resolutions` array must always have one entry per entry in `request.generic
 
 ---
 
+## MCP Name Forms
+
+A descriptor declares how its harness writes MCP tool names under `tools.mcp`, in two forms:
+`server_form` for a whole server (OpenCode `{server}_*`, GHCP `{server}/*`, Claude Code
+`mcp__{server}__*`) and `tool_form` for a single tool (`{server}_{tool}`, `{server}/{tool}`,
+`mcp__{server}__{tool}`). Optional `extra_server_read_forms` are further whole-server forms
+that are read but never written, and `normalize_server_name` rewrites characters outside
+`A-Za-z0-9_-` in the server name as `_`.
+
+```yaml
+tools:
+  mcp:
+    server_form: "{server}/*"
+    tool_form: "{server}/{tool}"
+```
+
+The forms serve two things. The server name a user enters for a custom tool is written in the
+`server_form` of the target harness. And `transform` reads each MCP name of the source harness
+with the source forms and writes it with the target forms, so a server keeps its meaning across
+harnesses. `custom_tool_template` is retired; a descriptor that still uses it is rejected with a
+message naming the replacement keys. Set `report_unknown_tool_names: true` for a harness that
+silently ignores tool names it does not know, so Deploy reports them as gaps. External modules
+do the formatting themselves: the forms are not part of the external wire protocol.
+
+## Tool Mappings and Existing Agents
+
+Mappings turn the catalog's generic tools into harness tool names. When an update rewrites a
+deployed agent, the built-in tools in its tools field follow the catalog (tools the catalog added
+are added, tools it removed are removed), custom tools the user or an earlier run put there are
+kept, and custom tools the run produces are added. The plan lists the built-in tools an update
+adds or removes.
+
+---
+
 ## Harness-Level Custom Tool Destination
 
 Harness descriptors may declare a `custom_tool_destination` field under `tools:` to specify
@@ -268,8 +302,8 @@ Key rules for harness authors:
 - **`names:` is not permitted** in any entry and is rejected at parse time. The custom tool
   name is injected automatically by the resolution algorithm.
 - An **empty list** (`custom_tool_destination: []`) is identical to omitting the field.
-- **Independent of `custom_tool_template`.** Both may be set. `custom_tool_template` formats
-  the resolved name; `custom_tool_destination` controls where that name is written.
+- **Independent of `tools.mcp`.** Both may be set. `tools.mcp` formats the resolved name;
+  `custom_tool_destination` controls where that name is written.
 - A **`tool_destinations` entry** in any config file for a specific generic tool always takes
   precedence over this harness-level default for that tool. The full precedence chain is:
   `user-config > tool-config > descriptor mappings > descriptor custom_tool_destination`.
@@ -278,8 +312,8 @@ Key rules for harness authors:
   descriptor-only, external) without any harness-specific branching.
 
 No current built-in harness declares this field. Claude Code, which previously declared it
-to route custom tools to `mcpServers`, now uses `custom_tool_template: "mcp__%s__*"` instead
-to format custom tools as wildcards routed to the main tools field. New descriptor-only and
+to route custom tools to `mcpServers`, now writes custom tools with its `tools.mcp` server
+form (`mcp__{server}__*`) to the main tools field. New descriptor-only and
 external harnesses may declare `custom_tool_destination` freely if routing custom tools to a
 separate frontmatter key is appropriate for their platform.
 

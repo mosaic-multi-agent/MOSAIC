@@ -39,7 +39,6 @@ subject:
   infrastructure_agents: []
   opening_message: |
     Build the thing described in Requirements.md.
-  invocation_kind: orchestrator
   allowed_tools: [Task, Read, Write, Edit]
 
 stub_registry: stubs/happy-path.stubs.json

@@ -20,6 +20,7 @@ type deployedAgentFacts struct {
 	Version string
 	Role    string
 	Tools   []string
+	Grants  []domain.ToolGrant // the tools field with allow and deny dispositions
 	Keys    []string // every frontmatter key of the source, in file order
 }
 
@@ -32,6 +33,7 @@ func readDeployedAgentFacts(fm *docformat.Frontmatter, srcDesc *domain.HarnessDe
 	if toolsKey := srcDesc.Frontmatter.ToolsKey; toolsKey != "" {
 		if v, ok := fm.Get(toolsKey); ok {
 			facts.Tools = descriptor.ExtractToolEntries(srcDesc, v)
+			facts.Grants = descriptor.ExtractToolGrants(srcDesc, v)
 		}
 	}
 	return facts

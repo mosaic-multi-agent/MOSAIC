@@ -2,7 +2,7 @@
 
 > **Status:** Draft for review
 > **Created:** 2026-08-01
-> **Last Updated:** 2026-10-26
+> **Last Updated:** 2026-11-10
 > **Scope:** Design for the agent that commits completed iteration work into the user's own branch. Covers why this is a distinct class rather than a checkpoint variant, what it commits and where, how its commit message is derived without reading orchestration state, the preconditions that make writing to someone's history safe, what a rollback of committed work costs, and how a MOSAIC-owned branch is integrated afterwards.
 
 ---
@@ -142,13 +142,14 @@ An alternative was considered and rejected: leaving the user on their own branch
 
 | Part | Paths | Source |
 |---|---|---|
-| Created during runs, and deploy's own state | `Orchestration-*/`, `OrchestrationLogs/`, `RunnerLogs/`, `.mosaic/`, `**/.agents-backup/`, `**/agents-runner-*/` | Fixed here |
+| Created during runs, and deploy's own state | `Orchestration-*/`, `OrchestrationLogs/`, `RunnerLogs/`, `.mosaic/`, `**/.agents-backup/`, `**/agents-runner-*/`, `MOSAIC-DEPLOYMENT-TODO-*.md` | Fixed here |
 | Deployed | Every `target_path` in `.mosaic/manifest.yaml` | Read at each commit |
 
 ```
 git add -A -- .
 git reset -q -- ':(glob)Orchestration-*/**' ':(glob)OrchestrationLogs/**' ':(glob)RunnerLogs/**' \
                 ':(glob).mosaic/**' ':(glob)**/.agents-backup/**' ':(glob)**/agents-runner-*/**' \
+                ':(glob)MOSAIC-DEPLOYMENT-TODO-*.md' \
                 ':(literal){target_path}' ...
 ```
 
@@ -157,7 +158,8 @@ The fixed part is MOSAIC's own state:
 - the session log tree `OrchestrationLogs/` (`MosaicLogFormat.md` §4.3);
 - the script runner's debug and dispatch logs `RunnerLogs/`;
 - deploy's manifest and backups `.mosaic/`;
-- the working copies of an agents folder that an executor keeps while a run is in progress, `.agents-backup/` next to the agents folder and `agents-runner-{run_id}/` (`Tools/Runner/docs/Design.md` §6).
+- the working copies of an agents folder that an executor keeps while a run is in progress, `.agents-backup/` next to the agents folder (`Tools/Runner/docs/Design.md` §6), and `agents-runner-{run_id}/`, which older Runner versions created and may still be lying around;
+- the checklist deploy writes at the workspace root after a run, `MOSAIC-DEPLOYMENT-TODO-{timestamp}.md`. It is a reminder the user may keep indefinitely, not a deployed file, so it has no manifest entry. The glob is anchored at the root and matches only deploy's own checklists.
 
 The fixed part is a closed list. A new folder MOSAIC creates in the workspace is added to it in the same change that introduces the folder.
 
@@ -482,6 +484,8 @@ Applies to the MOSAIC-owned variant only. In the user's-own variant the work is 
 **Resolved:** whether deployed files and executor working copies are excluded. They are. The rule is "everything MOSAIC deploys or creates during runs" (§4.4): deployed paths are read from `.mosaic/manifest.yaml`, and `.mosaic/` and the agents-folder working copies were added to the fixed list. Committing only the paths an iteration changed was considered and rejected. It needs a working-tree snapshot carried from commit to commit, it still sweeps in the user's edits made during the window, and its commits match no tree that ever existed. That is a large, fragile mechanism for a problem the exclusion set already solves.
 
 **Resolved:** which folders a commit excludes. Every folder MOSAIC writes into the workspace — run folders and both log trees — staged out with add-then-reset (§4.4). Found from a run whose commit agent listed `RunnerLogs/` among the paths it would have committed.
+
+**Resolved:** whether deploy's TODO checklist is excluded. It is, through the fixed part (§4.4). It sits at the workspace root, has no manifest entry because it is a reminder the user keeps rather than a deployed file, and was otherwise committed by the first run commit after a deploy.
 
 **Resolved:** how commits coexist with parallel dispatch. They do not: `commits: enabled` fixes `dispatch: sequential` (§6).
 

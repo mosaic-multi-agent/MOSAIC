@@ -23,13 +23,11 @@ import (
 //
 //   Happy path - single .md file:
 //   - Exactly one matching .md file returns the AgentReference with the correct
-//     Identifier, a DefinitionPath ending with the .md filename, and
-//     InvocationKind set to "" (empty string).
+//     Identifier and a DefinitionPath ending with the .md filename.
 //
 //   Happy path - single .agent.md file:
 //   - Exactly one matching .agent.md file returns the AgentReference with the
-//     correct Identifier, a DefinitionPath ending with the .agent.md filename,
-//     and InvocationKind set to "" (empty string).
+//     correct Identifier and a DefinitionPath ending with the .agent.md filename.
 //
 //   Refusal - ambiguous (both .md and .agent.md present):
 //   - A directory containing both foo.md and foo.agent.md returns
@@ -136,25 +134,6 @@ func TestResolveOne_SingleMdFile_DefinitionPathEndsWithFilename(t *testing.T) {
 	}
 }
 
-// TestResolveOne_SingleMdFile_InvocationKindIsEmpty verifies that the
-// InvocationKind field in the returned reference is "" (empty string), as
-// specified in the ResolveOne contract.
-func TestResolveOne_SingleMdFile_InvocationKindIsEmpty(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "my-agent.md"), []byte("# My Agent\n"), 0600); err != nil {
-		t.Fatalf("write my-agent.md: %v", err)
-	}
-
-	ref, err := agentresolve.ResolveOne(dir, "my-agent")
-
-	if err != nil {
-		t.Fatalf("ResolveOne: %v", err)
-	}
-	if ref.InvocationKind != "" {
-		t.Errorf("InvocationKind: want %q (empty), got %q", "", ref.InvocationKind)
-	}
-}
-
 // --- ResolveOne: exactly one .agent.md file ---
 
 // TestResolveOne_SingleAgentMdFile_ReturnsReference verifies that exactly one
@@ -192,24 +171,6 @@ func TestResolveOne_SingleAgentMdFile_DefinitionPathEndsWithAgentMd(t *testing.T
 	}
 	if !strings.HasSuffix(ref.DefinitionPath, "my-agent.agent.md") {
 		t.Errorf("DefinitionPath must end with %q; got %q", "my-agent.agent.md", ref.DefinitionPath)
-	}
-}
-
-// TestResolveOne_SingleAgentMdFile_InvocationKindIsEmpty verifies that the
-// InvocationKind field is "" when a .agent.md file is matched.
-func TestResolveOne_SingleAgentMdFile_InvocationKindIsEmpty(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "my-agent.agent.md"), []byte("# My Agent\n"), 0600); err != nil {
-		t.Fatalf("write my-agent.agent.md: %v", err)
-	}
-
-	ref, err := agentresolve.ResolveOne(dir, "my-agent")
-
-	if err != nil {
-		t.Fatalf("ResolveOne: %v", err)
-	}
-	if ref.InvocationKind != "" {
-		t.Errorf("InvocationKind: want %q (empty), got %q", "", ref.InvocationKind)
 	}
 }
 

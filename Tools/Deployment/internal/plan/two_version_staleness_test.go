@@ -79,7 +79,7 @@ func tvAssertUnchanged(t *testing.T, p domain.Plan, keys ...string) {
 	for _, key := range keys {
 		item := mustFindItem(t, p, key)
 		if item.Action != domain.ActionUnchanged {
-			t.Errorf("%s: Action = %q (reason %q), want %q", key, item.Action, item.Reason, domain.ActionUnchanged)
+			t.Errorf("%s: Action = %q (reason %q), want %q", key, item.Action, reasonText(item), domain.ActionUnchanged)
 		}
 	}
 }
@@ -231,7 +231,7 @@ func TestBuild_LegacyMergedOrchestrator_AllVersionsEqual_StaleOnce_ThenClean(t *
 	first := tvPlan(t, "1.0.0", "1.0.0", legacy)
 
 	if item := mustFindItem(t, first, "orchestrator"); item.Action != domain.ActionUpdate {
-		t.Errorf("legacy orchestrator: Action = %q (reason %q), want %q", item.Action, item.Reason, domain.ActionUpdate)
+		t.Errorf("legacy orchestrator: Action = %q (reason %q), want %q", item.Action, reasonText(item), domain.ActionUpdate)
 	}
 	tvAssertUnchanged(t, first, "orchestrator-script", "test-worker")
 	tvAssertUnchanged(t, tvPlan(t, "1.0.0", "1.0.0", tvStates("1.0.0", "1.0.0")), "orchestrator")

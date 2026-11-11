@@ -18,7 +18,6 @@ import (
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/harness/registry"
 	"mosaic-deploy/internal/logging"
-	"mosaic-deploy/internal/manifest"
 	"mosaic-deploy/internal/plan"
 	"mosaic-deploy/internal/todo"
 )
@@ -63,7 +62,7 @@ func buildTestDeps(t *testing.T, mosaicRoot, catalogFolder string) app.Deps {
 	}
 
 	todoCollector := todo.NewCollector()
-	manifestStore := manifest.NewStore()
+	manifestStore := newManifestStore(reg)
 
 	return app.Deps{
 		Catalog:        cat,

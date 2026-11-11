@@ -30,6 +30,7 @@ import (
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 )
 
 // ---------------------------------------------------------------------------
@@ -153,8 +154,8 @@ func TestExecute_MultiFileSkill_UpdateOneFileDoesNotDropOther(t *testing.T) {
 	store := manifest.NewStore()
 	prior := domain.Manifest{
 		SchemaVersion: "1",
-		HarnessID:     "test-harness",
-		Entries: []domain.ManifestEntry{
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness"}},
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{
 			{
 				Ref:         ref,
 				TargetPath:  "skills/lean-tdd/SKILL.md",
@@ -166,11 +167,9 @@ func TestExecute_MultiFileSkill_UpdateOneFileDoesNotDropOther(t *testing.T) {
 				TargetPath:  "skills/lean-tdd/companion.md",
 				ContentHash: "sha256:" + strings.Repeat("b", 64),
 			},
-		},
+		}),
 	}
-	if err := store.Save(workspace, prior); err != nil {
-		t.Fatalf("seed manifest: %v", err)
-	}
+	saveManifestWithFiles(t, store, workspace, prior)
 
 	// Update the entry file; companion.md is unchanged (no write needed).
 	entryFileUpdate := newSkillItem("lean-tdd", "skills/lean-tdd/SKILL.md", domain.ActionUpdate)
@@ -276,15 +275,13 @@ func TestExecute_MultiFileSkill_UnchangedRoundTrip_AllEntriesPreserved(t *testin
 	priorHash2 := "sha256:" + strings.Repeat("b", 64)
 	prior := domain.Manifest{
 		SchemaVersion: "1",
-		HarnessID:     "test-harness",
-		Entries: []domain.ManifestEntry{
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness"}},
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{
 			{Ref: ref, TargetPath: "skills/lean-tdd/SKILL.md", ContentHash: priorHash1},
 			{Ref: ref, TargetPath: "skills/lean-tdd/companion.md", ContentHash: priorHash2},
-		},
+		}),
 	}
-	if err := store.Save(workspace, prior); err != nil {
-		t.Fatalf("seed manifest: %v", err)
-	}
+	saveManifestWithFiles(t, store, workspace, prior)
 
 	// Both files are unchanged on this run; no writes occur.
 	items := []domain.PlanItem{

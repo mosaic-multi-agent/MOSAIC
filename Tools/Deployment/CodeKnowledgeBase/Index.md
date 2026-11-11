@@ -11,7 +11,7 @@ top-level operations exposed identically through both frontends:
   workspace path, workflows, utility agents, and tier-to-model mappings, then
   write every resolved file in one pass after a plan-review step.
 - **Update** — bring an existing (manifest-tracked) workspace up to date with
-  the latest generic sources, detecting local modifications and applying a
+  the latest generic sources, detecting edits of Deploy-owned content and applying a
   chosen conflict-resolution strategy (`skip` / `overwrite` / `backup`).
 
 Both flows are pure data pipelines up until the final write step: read source
@@ -50,6 +50,10 @@ a TODO checklist for anything that needed a human decision.
 - External harness modules require explicit opt-in (`allow_external_modules: true` or `--allow-external`) and are gated at resolution time, not at listing time.
 - The deployment executor resolves the deployment root location exactly once, before any content write.
 - Manifest content hashes use the canonical `sha256:<lowercase-hex>` form with no byte normalisation — a line-ending-only change is a detectable modification.
+- The manifest (schema 2) holds several harnesses: every entry names its harness, each harness has its own section, and there is no top-level `harness_id`. It is reconciled with the disk before every action, and the entries dropped on the way are reported in the plan and the preview. A schema-1 manifest is upgraded in memory on load; older builds refuse schema 2.
+- Hook bundles are recorded file by file. Edits of Deploy-owned content (agent body outside project and custom regions, whole skill and hook files) are detected by comparing owned-content records and become an update with a backup; entries written before the records existed get no check until their next write.
+- A workspace holds one GHCP target at a time, decided from the harness of its manifest entries, never from file names or a top-level harness id.
+- MCP tool names are read and written through the whole-server and single-tool forms a descriptor declares under `tools.mcp` (`harness/mcpname`); there is no custom tool template.
 
 ## Known Complexity
 

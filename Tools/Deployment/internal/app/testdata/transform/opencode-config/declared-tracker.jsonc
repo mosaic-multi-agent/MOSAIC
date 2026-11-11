@@ -1,0 +1,10 @@
+{
+  // JSONC: comments and trailing commas are tolerated.
+  "mcp": {
+    /* the issue tracker */
+    "tracker": {
+      "type": "remote",
+      "url": "https://example.invalid/tracker",
+    },
+  },
+}

@@ -12,6 +12,7 @@ import (
 	"mosaic-deploy/internal/catalog"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 )
 
@@ -75,9 +76,9 @@ func ccSupplier(id string) map[domain.CatalogItem]domain.CatalogLayer {
 type ccCatalogOptions struct {
 	// recorded is the catalog stored in every manifest entry.
 	recorded domain.CatalogIdentity
-	// hookDeployedHash overrides the deployed hook content hash; "" keeps it equal to the
-	// recorded hash (an unmodified hook).
-	hookDeployedHash string
+	// hookEdited makes the deployed hook file differ from its recorded Deploy-owned content;
+	// false keeps it equal to the record (an unmodified hook).
+	hookEdited bool
 	// workerSourceVersion overrides the worker's catalog version; "" keeps it equal to the
 	// recorded version.
 	workerSourceVersion string
@@ -147,6 +148,7 @@ func ccManifestEntries(recorded domain.CatalogIdentity) []domain.ManifestEntry {
 	}
 	hookEntry := hookManifestEntry(makeHookBundle("pre-commit", "1.0"), ccHookTarget)
 	hookEntry.Catalog = recorded
+	hookEntry.Owned = ownedRecord("sha256:hook-written")
 	return []domain.ManifestEntry{
 		agentEntry("worker", ccWorkerTarget),
 		agentEntry("orchestrator", ccOrchTarget),
@@ -163,8 +165,9 @@ func ccDeployedStates(o ccCatalogOptions) map[string]domain.DeployedArtifactStat
 	orch := deployedState(ccDeployedHash, "1.0", "1.0", "1.0")
 	orch.Workflows = makeDeployedWorkflows("test-wf", "1.0")
 	hook := hookProbeState()
-	if o.hookDeployedHash != "" {
-		hook.ContentHash = o.hookDeployedHash
+	hook.Owned = ownedRecord("sha256:hook-written")
+	if o.hookEdited {
+		hook.Owned = ownedRecord("sha256:hook-edited")
 	}
 	return map[string]domain.DeployedArtifactState{
 		ccWorkerTarget:       deployedState(ccDeployedHash, "1.0", "1.0", "1.0"),
@@ -189,8 +192,8 @@ func ccBuildWith(t *testing.T, cat catalog.Catalog, states map[string]domain.Dep
 	t.Helper()
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		Entries:       entries,
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness"}},
+		Entries:       manifesttest.WithHarness("test-harness", entries),
 	})
 	in := plan.Input{
 		Catalog:       cat,

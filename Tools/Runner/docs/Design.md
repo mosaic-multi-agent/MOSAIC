@@ -2,7 +2,7 @@
 
 > **Status:** Draft
 > **Created:** 2026-08-15
-> **Last Updated:** 2026-11-08
+> **Last Updated:** 2026-11-11
 > **Scope:** The design of `mosaic-run`, the CLI tool that executes orchestration workflows without a human orchestrator in the loop. Covers execution modes (how much routing intelligence the Runner handles autonomously versus delegating to a script-mode orchestrator agent), the architectural layers that implement those modes, the dispatch loop lifecycle, and the contract boundaries between the Runner and the systems it drives (harness adapters, orchestrator agents, the orchestration artifact).
 
 ---
@@ -616,8 +616,8 @@ The run-start sequence validates configuration and compatibility preconditions b
 | 3 | Read existing artifact (if resuming) or verify none exists (if new) | Refusal |
 | 4 | Admit workflow for the selected mode (compat checks, block and group resolution; engine-routing shape checks in Modes 2/3 only — §1.3) | Refusal |
 | **4b** | **Recovery check: scan for orphaned `.agents-backup/` directory next to the agents directory; restore originals if found and no active runs are detected** | **Refusal if restore fails** |
-| 5 | Resolve every agent identifier to a definition file | Refusal |
-| **5b** | **Create snapshot (copy-and-invoke) or backup and transform originals (backup-and-transform), per harness strategy** | **Refusal** |
+| 5 | Resolve every agent identifier to a definition file; every resolved agent must declare a non-empty `model:` (no fallback to the harness default); on Claude Code its `name:` must equal the identifier, since `--agent` resolves by `name:` | Refusal |
+| **5b** | **Backup and transform originals on backup-and-transform harnesses; nothing on Claude Code** | **Refusal** |
 | 6 | Read each block's schedule from its declared `Source` and `Section` (seeds applied first on a new run) | Refusal when a seeded block's schedule is missing or defective; a produced block whose `Source` does not exist yet is normal |
 | 6b | Enumerate declared infrastructure agents | Refusal |
 | 6c | Validate per-class agent selections (gated classes: one active per class) | Refusal |
@@ -682,6 +682,8 @@ On resume, the session first requires a valid artifact `run_id` matching the enc
 
 **Row and iteration on resume:** The row and iteration of the last workflow step are derived by the same routine that live routing uses (§2.4), from the `WorkflowRow` and `Iteration` the log recorded for that step. Resume therefore cannot place the run differently from the live loop did. A recorded row that no longer exists in the table, holds another agent, or records an `Iteration` the row does not accept stops the resume with a message naming the row, and so does a block row whose log entry records no iteration; the Runner never guesses a row. An entry that records no row (infrastructure and ad-hoc steps) is resolved by agent and phase only where that is unambiguous. The position after a completed row is the one the table's declared routing gives (`On Success` with its scopes, block entry and exit, iteration order from the block schedule and the log), computed by the same routing as live dispatch. A run artifact in the pre-3.0 layout (an Execution Log `Stage` column, a `current_state.stage` key, or a grouped value in the `{Group}.{ID}` form) is refused before any dispatch.
 
+**Damaged artifact on resume:** A resume or Retry whose read finds the artifact damaged (§4.4) computes no `ResumePoint`. It makes a repair consultation instead, which replaces resume-position resolution and precedes pre-consultation; once the repair is accepted, the reply's `dispatch` says where the run continues (`ScriptOrchestratorContract.md` §2.5). A damaged run stays listed on the pre-run screens and resumable, marked damaged. The exception is a run whose frontmatter is itself damaged and that has no usable last-good copy: it records no workflow, so there is no routing table to consult against. It is listed as unresumable (marked damaged, with its own reason), refused by the resume preflight and by explicit run selection, and the session refuses it without a repair consultation. With a usable last-good copy its recorded values (workflow and the rest) are taken from that copy, and it is repaired at start like any other damaged run.
+
 **Counters on resume:** The PARTIALLY_DONE bound, the E501 budget, the HARNESS_ERROR budget and the review loop count are all read from the Execution Log, so they carry across a resume. A `HARNESS_ERROR` row is an unaccepted attempt: it never moved `current_state`, so the resume re-dispatches the same assignment, and its rows keep counting against the HARNESS_ERROR budget. Rows that an earlier Runner recorded for a harness error as `BLOCKED` with `E501` still resume as before and keep counting against the E501 budget. The anti-loop guard is in memory and starts again from zero, and it is on unless the user chose to resume from a guard stop with the guard off (§3.4). Standing guidance is read from `RunnerGuidance.txt` when it exists (§2.8); the resume neither asks nor runs pre-consultation for it unless the user chooses Regenerate.
 
 **Restart from the TUI:** The TUI's continue, retry and manual-dispatch paths resume the existing run in the same process by the mechanism described in §3.4; the progress screen is seeded with the run history from the Execution Log.
@@ -695,6 +697,11 @@ The Runner renders `Orchestration.md` itself, so its tables follow one layout:
 - **Compact tables.** Tables are written without column padding, so line length follows row content.
 - **Sanitising.** Every cell is made safe before it is written: each line break becomes a space, surrounding whitespace is trimmed and each `|` is escaped as `\|`; reading a cell restores the pipe. A cell can therefore never break its table. A status message goes through its own step before that: line breaks and `|` are removed, and a message longer than 150 characters is shortened to its first 50 and last 100 characters, joined by ` ... ` (OrchestrationArtifactFormat 3.1). The limits count characters, not bytes, so a cut never splits a multi-byte character. A BLOCKED row's Summary then ends with the error marker of §2.4.
 - **Path form.** Artifact paths in the `Inputs` column and the Artifacts registry are recorded run-relative with forward slashes, without the `Orchestration-{run_id}/` prefix (for example `Stage-2/Plan.md`); `run_id` is stated once, in the folder name. A project file outside the run folder is recorded unchanged. The prefixed form exists only in the protocol request, where the subagent needs a fully-qualified path; the Runner adds the prefix when it builds the request, and prefixed and unprefixed forms of one path denote the same artifact (a duplicate input is dropped, a registry entry is replaced in place).
+- **Strict reading.** The orchestrator edits the artifact to write Workflow Notes, and an edit can damage a table it does not own. Every read therefore reports damage instead of parsing around it: a table that ends before its region's close tag (any other non-blank line before the tag, including one that does not start with `|`), a row with fewer cells than the header (more cells is refused already), Execution Log `Seq` values that are not integers, or not strictly increasing, an `Agent` cell that is not `{AgentName}#{Seq}` with the row's own `Seq`, and a `current_state.last_agent` with no log row (an empty `last_agent`, which the artifact records before any invocation was accepted, is tolerated). Structural refusals the reader always made (pre-3.0 layout, run identity) keep their own handling and take precedence over damage. **Tolerated, not damage:** a closing tag after content on the same line, CRLF line endings, a `global_sequence` lagging behind the highest logged `Seq` (corrected upward on read), a `global_sequence` above the last `Seq`, and gaps in the `Seq` values (sequences consumed but never logged). Tolerance loses nothing. Damage is its own error kind, naming section, line and problem; it is never reported as an unresolved position.
+- **No write after a damaged read.** Every write re-renders the whole artifact from what was read, so a write after a lossy read deletes rows for good. The store refuses it.
+- **Last-good copy.** After every successful write the Runner keeps a copy of the written bytes outside the run folder, so it survives a restart: `{parent of the run folder}/RunnerLogs/{run_id}/Orchestration.last-good.md`, one file per run, replaced atomically on each write (no history is kept; a failed copy write leaves the previous copy intact and does not fail the artifact write). An artifact that is not at a run-scoped path (`Orchestration-{run_id}/Orchestration.md`) has no evidence location and no copy. The copy is never restored automatically: it is evidence for the orchestrator's repair. It is usable for a run when it exists, reads (strictly, or as damage that still recorded its frontmatter) and records the run's own `run_id`.
+- **Damaged artifact.** The Runner reads the artifact after every routing consultation, including one that failed or timed out. Wherever a read finds damage — run start, resume, Retry, mid-run — it saves the damaged file beside the last-good copy (`Orchestration.damaged-{UTC timestamp}.md`, a numeric suffix on a name clash; saved once, before the first repair consultation of the occurrence, and never pruned) and makes a routing consultation with `artifact_damage` set; the orchestrator repairs, then routes, and the Runner verifies the repair before acting on the reply (`ScriptOrchestratorContract.md` §2.5, §7.6). Verification accepts only a strict read with no damage, every last-good Execution Log row unchanged, and the last `Seq`, `last_agent`, `last_status` and `error_code` consistent with the dispatch log (counting only responses that advanced the run); the log check is skipped when there is no usable log. At most 2 repair consultations are made per occurrence. A repair consultation that fails or is stopped ends the run at once, without retry or manual fallback. This holds in every mode, Mode 2/3 included: no table routing runs on a damaged artifact. The progress screen and the debug log show the damage and whether the repair was accepted.
+- **Damaged frontmatter.** A run whose frontmatter is itself damaged takes its recorded values (workflow and the rest) from the last-good copy when a usable one exists; it stays listed and resumable and is repaired at start like any other damaged run. Without a usable copy no workflow is recorded, so it is listed as unresumable, refused by the resume preflight and by explicit run selection, and the session refuses it without a repair consultation (§4.3).
 
 ### 4.5 Text Entry in the TUI
 
@@ -740,7 +747,7 @@ Infrastructure agents are declared outside workflow tables and reached either by
 
 ## 6. Runner Agent Snapshot
 
-Regular orchestration and Runner execution have different deployment requirements. In regular orchestration, the orchestrator agent (`mode: primary`) spawns subagents via the harness's task/subagent tool, and the subagent's `mode: subagent` frontmatter enforces isolation. The Runner invokes every agent via the harness CLI (`opencode run --agent <id>`, `claude --agent <path>`, etc.), and some harnesses block CLI invocation of agents marked `mode: subagent`. OpenCode is the first harness with this constraint, but others may follow.
+Regular orchestration and Runner execution have different deployment requirements. In regular orchestration, the orchestrator agent (`mode: primary`) spawns subagents via the harness's task/subagent tool, and the subagent's `mode: subagent` frontmatter enforces isolation. The Runner invokes every agent by name via the harness CLI (`opencode run --agent <id>`, `claude -p --agent <id>`, `copilot -p --agent <id>`), and some harnesses block CLI invocation of agents marked `mode: subagent`. OpenCode is the first harness with this constraint, but others may follow.
 
 ### 6.1 The Problem
 
@@ -750,44 +757,34 @@ Harnesses differ fundamentally in how they load agent definitions:
 
 | Harness | Agent loading | Mechanism |
 |---------|-------------|-----------|
-| Claude Code | **Path-based** | `--append-system-prompt-file <path>` — loads the file at the given path directly |
+| Claude Code | **Name-based** | `-p --agent <name>` — resolves the name from `.claude/agents/` and applies the frontmatter (`model:`, `tools:`) |
 | OpenCode | **Name-based** | `--agent <name>` — resolves the name from its canonical agents directory |
 | GitHub Copilot CLI | **Name-based** | `--agent <name>` — resolves the name from its scoped agent directories |
 
-Path-based harnesses can be pointed at an arbitrary file — a snapshot copy works naturally. Name-based harnesses always read from their canonical directory regardless of what path the Runner has resolved internally. A snapshot sitting in a sibling directory is invisible to them.
+All supported harnesses load agents by name. Name-based harnesses always read from their canonical directory regardless of what path the Runner has resolved internally. A snapshot sitting in a sibling directory is invisible to them.
 
-### 6.2 Dual-Strategy Snapshot
+### 6.2 Snapshot Strategy per Harness
 
-The Runner selects a snapshot strategy per harness based on its agent loading mechanism:
+The Runner selects a snapshot strategy per harness:
 
 | Strategy | How it works | Used by |
 |----------|-------------|---------|
-| **Copy-and-invoke** | Copy agents to a run-scoped snapshot dir, apply transforms, invoke from snapshot path. Originals untouched. | Path-based harnesses (Claude Code) |
-| **Backup-and-transform** | Copy originals to a shared backup dir, transform originals in-place, restore from backup on completion. | Name-based harnesses (OpenCode, GHCP CLI) |
+| **None** | The Runner invokes the deployed agents by name. No copy, no transform. | Harnesses with no transformations (Claude Code) |
+| **Backup-and-transform** | Copy originals to a shared backup dir, transform originals in-place, restore from backup on completion. | Harnesses with transformations (OpenCode, GHCP CLI) |
 
-Both strategies create sibling directories next to the regular agents directory:
+| Harness | Regular directory | Sibling directory | Role |
+|---------|------------------|-------------------|------|
+| Claude Code | `.claude/agents/` | none | — |
+| OpenCode | `.opencode/agents/` | `.opencode/.agents-backup/` | Shared safety backup (restore source); one per workspace |
+| GHCP CLI | `.github/agents/` | `.github/.agents-backup/` | Shared safety backup (restore source); one per workspace |
 
-| Strategy | Harness | Regular directory | Sibling directory | Role |
-|----------|---------|------------------|-------------------|------|
-| Copy-and-invoke | Claude Code | `.claude/agents/` | `.claude/agents-runner-{run_id}/` | Working snapshot (invoked from here); one per run |
-| Backup-and-transform | OpenCode | `.opencode/agents/` | `.opencode/.agents-backup/` | Shared safety backup (restore source); one per workspace |
-| Backup-and-transform | GHCP CLI | `.github/agents/` | `.github/.agents-backup/` | Shared safety backup (restore source); one per workspace |
+Backup-and-transform creates a **shared** backup directory because all concurrent runs share the same transformed originals and need the same original-state backup to restore from.
 
-Copy-and-invoke creates a **per-run** directory (scoped by run ID) because each run needs its own independent copy. Backup-and-transform creates a **shared** backup directory because all concurrent runs share the same transformed originals and need the same original-state backup to restore from.
+**Agent files are not frozen for a run.** On every harness, an agent file changed during a run (manual edit, `Update workspace`) takes effect at that agent's next invocation, as in native orchestration. The Runner neither detects nor warns about such changes.
 
-#### 6.2.1 Copy-and-Invoke (Path-Based Harnesses)
+#### 6.2.1 Claude Code: No Snapshot
 
-This is the current mechanism, unchanged:
-
-1. Copy agents directory to `agents-runner-{run_id}/`
-2. Apply harness-specific transformations to the copies
-3. Re-resolve all agent paths to point into the snapshot
-4. Invoke agents using the snapshot paths
-5. On completion: delete snapshot directory
-
-**Crash safety:** Inherent. Originals are never modified. An orphaned snapshot directory is harmless.
-
-**Concurrency:** Naturally concurrent — each run has its own snapshot directory. No coordination needed.
+Claude Code needs no transformation, so the Runner invokes `.claude/agents/` directly with `claude -p --agent <name>`. Under `--agent`, Claude Code applies the agent's `model:` and `tools:` and builds the same prompt as for a native subagent: its tool definitions, the Claude Agent SDK identity line, then the agent body, without Claude Code's general working instructions. The environment (working directory, platform, shell, OS, date, model) arrives in the first user turn, so the Runner adds no environment block of its own. Verified on Claude Code 2.1.322 (`HarnessKnowledge/SystemPromptCapture/ClaudeCode/v2.1.322/HeadlessAgent/`). See §7.6 for the path loading this replaces.
 
 #### 6.2.2 Backup-and-Transform (Name-Based Harnesses)
 
@@ -887,7 +884,7 @@ This is a fortunate property of the current transformation set, not a design gua
 
 ### 6.4 Snapshot Transformations
 
-Both strategies apply the same harness-specific transformation rules to make agent files compatible with CLI invocation:
+Backup-and-transform applies these harness-specific transformation rules to make agent files compatible with CLI invocation:
 
 | Harness | Field | Regular value | Runner value | Reason |
 |---------|-------|---------------|--------------|--------|
@@ -908,14 +905,13 @@ The snapshot step is inserted into the Run-Start Sequence (§4). Recovery runs b
 | Step | What | Failure |
 |------|------|---------|
 | **4b** | **Recovery check: scan for the `.agents-backup/` directory next to the current harness's agents directory, restore if found** | **Refusal if restore fails** |
-| 5 | Resolve every agent identifier to a definition file | Refusal |
-| **5b** | **Create snapshot (copy-and-invoke) or backup + transform (backup-and-transform), per harness strategy** | **Refusal** |
+| 5 | Resolve every agent identifier to a definition file; every resolved agent must declare a non-empty `model:` (no fallback to the harness default); on Claude Code its `name:` must equal the identifier, since `--agent` resolves by `name:` | Refusal |
+| **5b** | **Backup + transform (backup-and-transform harnesses); nothing on Claude Code** | **Refusal** |
 | 6 | Read each block's schedule from its declared `Source` and `Section` | Refusal when a seeded block's schedule is missing or defective |
 
-Step 4b runs unconditionally for CLI harnesses — it is a no-op when no recovery is needed (and correctly detects active concurrent runs via lock files, skipping recovery in that case). Step 5b creates the snapshot or backup depending on the harness's agent loading mechanism. For copy-and-invoke, resolved paths are rewritten to point into the snapshot. For backup-and-transform, resolved paths remain unchanged (originals are now transformed).
+Step 4b runs unconditionally for CLI harnesses — it is a no-op when no recovery is needed (and correctly detects active concurrent runs via lock files, skipping recovery in that case). Step 5b creates the backup and transforms the originals on backup-and-transform harnesses and does nothing on Claude Code. Resolved paths remain unchanged.
 
 **Cleanup:** On run completion (any terminal outcome):
-- **Copy-and-invoke:** Delete the snapshot directory. Cleanup failure is non-fatal.
 - **Backup-and-transform:** Release lock, delete own lock file, perform last-out check (§6.2.2). If last out: restore originals, remove marker, delete backup directory. If not last out: leave everything for the remaining active runs. Restore failure is logged as an error but does not change the run's exit code — the run itself succeeded, and the next Runner start will retry recovery automatically.
 
 ---
@@ -979,6 +975,10 @@ These alternatives were considered on 2026-10-12/13, before the finished-work ru
 
 ---
 
+### 7.6 Path Loading on Claude Code (§6.2.1)
+
+Until 0.16 the Runner loaded Claude Code agents with `-p --append-system-prompt-file <path>` from a per-run copy in `.claude/agents-runner-{run_id}/` (copy-and-invoke), and synthesized an environment block for the orchestrator, which already used `--agent`. Path loading was chosen when `claude --agent` was reported to ignore `tools:` (CC-079). It appends the file as text: the frontmatter is ignored, so agents ran on the user's default Claude Code model and were offered every built-in tool, and the body sat on top of Claude Code's full default prompt. Replaced by `--agent` once `model:` and `tools:` were verified under the Runner's headless arguments.
+
 ## 8. Open Items
 
 No open design items remain. All items from the initial draft have been resolved — see below.
@@ -1013,6 +1013,8 @@ No open design items remain. All items from the initial draft have been resolved
 
 | Version | Date | Summary |
 |---------|------|---------|
+| 0.16 | 2026-11-11 | **Claude Code agents loaded by name (§6, §7.6).** Every Claude Code invocation uses `claude -p --agent <name>`; `--append-system-prompt-file`, the per-run copy `.claude/agents-runner-{run_id}/` (copy-and-invoke) and the synthesized environment block are removed. Path loading ignored the frontmatter, so agents ran on the user's default model with all built-in tools. Agent files are not frozen during a run on any harness. Run-start step 5 refuses an agent without a non-empty `model:` on every harness, and on Claude Code an agent whose `name:` differs from its identifier. |
+| 0.15 | 2026-11-09 | **Damaged artifact (implemented, Runner v1.12.0).** §4.4: strict reading reports damage instead of parsing around it, the store never writes after a damaged read, the Runner keeps a last-good copy as evidence outside the run folder, a run with damaged frontmatter recovers its recorded values from that copy (unresumable without one), and damage found anywhere leads to a routing consultation with `artifact_damage` in which the orchestrator repairs and then routes (`ScriptOrchestratorContract.md` §2.5, §7.6). §4.3: a damaged artifact on resume or Retry is repaired by that consultation instead of a computed resume point. |
 | 0.14 | 2026-11-08 | **Harness errors, activity header and user message documented as implemented.** §2.4, §3.3, §4.3, §5: an invocation that ends without a usable subagent response is recorded as `HARNESS_ERROR` (Runner-recorded only, not a Communication Protocol status) instead of a synthetic `BLOCKED`/`E501`; failure kinds and Summary wording, no `[error:CODE]` marker, never accepted (no `current_state` update, no HITL discharge), raw-text bypass then mechanical re-dispatch within its own budget of 3 per row and iteration (separate from the E501 budget, both read from the Execution Log), then a deviation (at once in Mode 1); old synthetic `BLOCKED`/`E501` rows still resume and count against the E501 budget; HITL repair, infrastructure and commit setup failures are recorded as `HARNESS_ERROR` (`CONFIG_ERROR` for an unresolved agent definition); the status is shown distinctly on every Runner surface. §2.9, §3.4: after `Ask the orchestrator to decide` an optional multi-line message step; the text travels verbatim as `user_message` on that one routing consultation and is not stored; shown on the consultation row and in the debug log. §3.4: the activity header shows model, `ctx <size>`, `running <tool>`/`quiet` indicator (highlighted from 5 minutes) and on end the elapsed time, `ended`, context size and cost; no token in/out. Contract 0.9. |
 | 0.13 | 2026-10-22 | **Commit-class activation and destination (§5).** Commit-class agents are gated by `commits` exactly as checkpoint-class agents are by `checkpoints`; with `commits: disabled` they never fire (implementation follow-up: the trigger pass gated only checkpoint-class, so a disabled run still dispatched the commit agent at every iteration end). A commit-class `ITERATION_END` dispatch names the recorded `commit_branch` in its task description, per `CommitAgent.md` §4.5 and `InfrastructureAgentConcept.md` §8 (implementation follow-up). |
 | 0.12 | 2026-10-20 | **Progress-screen controls and consultation rows documented as implemented.** §3.4: the progress screen's keys (`s`, `m`, `h`, `a`/`i`, `ctrl+c`, as its help bar shows them); the in-run manual dispatch request (one-shot, cancellable, used at the next routing decision) and the in-run HITL request (one-shot, cancellable, applied to the next new workflow step, raise-only); their lifetime (discarded on every session end and restart), concurrency safety and debug-log events; live/rebuilt row parity. §2.9: the manual routing dialogue's third use and where it enters in each mode; consultation rows (transient, labelled with the deviation kind, none for manual decisions). §2.8: pre-consultation row. §3.5: the in-run HITL request is verified by the gate. No wire, artifact or MOSAIC log change. |

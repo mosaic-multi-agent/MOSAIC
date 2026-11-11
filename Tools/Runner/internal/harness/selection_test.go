@@ -132,6 +132,61 @@ func TestAccepts_TrueForGHCPCLI(t *testing.T) {
 	}
 }
 
+// TestAccepts_TrueForClaudeCode verifies that "claude-code" is an accepted
+// --harness value.
+func TestAccepts_TrueForClaudeCode(t *testing.T) {
+	if !harness.Accepts(commonharness.HarnessIDClaudeCode) {
+		t.Errorf("want Accepts(%q) == true", commonharness.HarnessIDClaudeCode)
+	}
+}
+
+// TestSelections_IncludesClaudeCodeAsCLIBacked verifies that Claude Code is
+// offered by both selection lists.
+func TestSelections_IncludesClaudeCodeAsCLIBacked(t *testing.T) {
+	for name, sels := range map[string][]harness.Selection{
+		"Selections":    harness.Selections(),
+		"CLISelections": harness.CLISelections(),
+	} {
+		found := false
+		for _, s := range sels {
+			if s.ID == commonharness.HarnessIDClaudeCode {
+				found = true
+				if !s.CLIBacked {
+					t.Errorf("%s: claude-code must be CLIBacked", name)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("%s: want claude-code to be offered", name)
+		}
+	}
+}
+
+// TestDisabledReason_NoHarnessIsDisabled verifies that no harness is
+// reported as disabled.
+func TestDisabledReason_NoHarnessIsDisabled(t *testing.T) {
+	ids := []string{harness.FakeHarnessID, "unknown", ""}
+	for _, e := range commonharness.CLIHarnesses() {
+		ids = append(ids, e.ID)
+	}
+	for _, id := range ids {
+		if reason, disabled := harness.DisabledReason(id); disabled || reason != "" {
+			t.Errorf("DisabledReason(%q) = (%q, %v): want (\"\", false)", id, reason, disabled)
+		}
+	}
+}
+
+// TestFlagValues_IncludeClaudeCode verifies that the flag value strings name
+// claude-code.
+func TestFlagValues_IncludeClaudeCode(t *testing.T) {
+	if got := harness.FlagValues(); !strings.Contains(got, commonharness.HarnessIDClaudeCode) {
+		t.Errorf("FlagValues() = %q: want it to contain claude-code", got)
+	}
+	if got := harness.FlagValueList(); !strings.Contains(got, commonharness.HarnessIDClaudeCode) {
+		t.Errorf("FlagValueList() = %q: want it to contain claude-code", got)
+	}
+}
+
 // TestAccepts_FalseForUnknownValue verifies that an unrecognised value is
 // rejected.
 func TestAccepts_FalseForUnknownValue(t *testing.T) {

@@ -31,7 +31,7 @@ func execReplacing(t *testing.T, plan domain.Plan, hooks []domain.HookPlan, atom
 	t.Helper()
 	spy := newSpyCollector()
 	req := deploy.ExecRequest{
-		Plan:       plan,
+		Plan:       withHookItems(plan, hooks),
 		MosaicRoot: t.TempDir(),
 		Content:    fixedContent([]byte("# new")),
 		Hooks:      hooks,

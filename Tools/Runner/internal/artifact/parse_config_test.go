@@ -124,7 +124,7 @@ func TestParse_UnknownRunnerModeValue_RefusesNamingValue(t *testing.T) {
 	if err == nil {
 		t.Fatal("Parse with unknown runner_mode value: want error, got nil")
 	}
-	asRefusalError(t, err)
+	requireFrontmatterDamage(t, err)
 	if !strings.Contains(err.Error(), "quick") {
 		t.Errorf("error must name the offending value %q, got: %q", "quick", err.Error())
 	}
@@ -204,7 +204,7 @@ func TestParse_UnknownLegacyModeValue_RefusesNamingValue(t *testing.T) {
 	if err == nil {
 		t.Fatal("Parse with unknown legacy mode value: want error, got nil")
 	}
-	asRefusalError(t, err)
+	requireFrontmatterDamage(t, err)
 	if !strings.Contains(err.Error(), "quick") {
 		t.Errorf("error must name the offending value %q, got: %q", "quick", err.Error())
 	}
@@ -303,7 +303,7 @@ func TestParse_ReviewLoopLimit_InvalidValue_Refused(t *testing.T) {
 			if err == nil {
 				t.Fatalf("Parse with review_loop_limit %s: want refusal, got nil", bad)
 			}
-			asRefusalError(t, err)
+			requireFrontmatterDamage(t, err)
 		})
 	}
 }
@@ -339,7 +339,7 @@ func TestParse_InfrastructureSelections_NotAGatedClass_Refused(t *testing.T) {
 	if err == nil {
 		t.Fatal("Parse with non-gated class key: want refusal, got nil")
 	}
-	asRefusalError(t, err)
+	requireFrontmatterDamage(t, err)
 	if !strings.Contains(err.Error(), "review") {
 		t.Errorf("error must name the offending class %q, got: %q", "review", err.Error())
 	}
@@ -352,7 +352,7 @@ func TestParse_InfrastructureSelections_EmptyValue_Refused(t *testing.T) {
 	if err == nil {
 		t.Fatal("Parse with empty selection value: want refusal, got nil")
 	}
-	asRefusalError(t, err)
+	requireFrontmatterDamage(t, err)
 }
 
 func TestParse_InfrastructureSelections_NotPreservedAsUnknownKey(t *testing.T) {
@@ -397,7 +397,7 @@ func TestParse_NoUnknownKeys_UnknownFrontmatterEmpty(t *testing.T) {
 
 // ---- Parse: refusals on bad configuration values ----
 
-func TestParse_MalformedCheckpointsValue_ReturnsRefusalError(t *testing.T) {
+func TestParse_MalformedCheckpointsValue_ReturnsDamageError(t *testing.T) {
 	// A checkpoints value that is neither "enabled" nor "disabled" is refused;
 	// typos like "enbaled" must not silently disable checkpoints.
 	data, err := os.ReadFile(fixturePath("malformed-checkpoints.md"))
@@ -410,7 +410,7 @@ func TestParse_MalformedCheckpointsValue_ReturnsRefusalError(t *testing.T) {
 	if err == nil {
 		t.Fatal("Parse with malformed checkpoints value: want error, got nil")
 	}
-	asRefusalError(t, err)
+	requireFrontmatterDamage(t, err)
 }
 
 // ---- Parse: runner settings are all present or all absent ----
@@ -432,7 +432,7 @@ func TestParse_PartialRunnerSettings_Refused(t *testing.T) {
 			if err == nil {
 				t.Fatalf("Parse with partial runner settings %q: want refusal, got nil", runnerLines)
 			}
-			asRefusalError(t, err)
+			requireFrontmatterDamage(t, err)
 		})
 	}
 }

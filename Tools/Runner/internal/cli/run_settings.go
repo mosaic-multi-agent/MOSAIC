@@ -88,7 +88,11 @@ func needsRunnerAdoption(runFolder string, isNewRun bool) bool {
 	if err != nil {
 		return false
 	}
-	state, err := artifact.ParseAt(filepath.Join(runFolder, "Orchestration.md"), data)
+	artifactPath := filepath.Join(runFolder, "Orchestration.md")
+	state, err := artifact.ParseAt(artifactPath, data)
+	if recorded, damaged := artifact.DamagedRunFrontmatter(artifactPath, err); damaged {
+		state, err = recorded, nil
+	}
 	if err != nil {
 		return false
 	}
@@ -106,7 +110,11 @@ func commitSetupPending(runFolder string, isNewRun bool) bool {
 	if err != nil {
 		return false
 	}
-	state, err := artifact.ParseAt(filepath.Join(runFolder, "Orchestration.md"), data)
+	artifactPath := filepath.Join(runFolder, "Orchestration.md")
+	state, err := artifact.ParseAt(artifactPath, data)
+	if recorded, damaged := artifact.DamagedRunFrontmatter(artifactPath, err); damaged {
+		state, err = recorded, nil
+	}
 	if err != nil {
 		return false
 	}

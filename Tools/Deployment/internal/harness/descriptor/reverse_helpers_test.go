@@ -1,7 +1,7 @@
 package descriptor_test
 
-// reverse_helpers_test.go verifies the reverse lookups used to turn deployed harness tool
-// names back into generic tools and custom tool servers.
+// reverse_helpers_test.go verifies the reverse lookup used to turn deployed harness tool
+// names back into generic tools. MCP names are read by the mcpname package.
 
 import (
 	"reflect"
@@ -19,14 +19,6 @@ func loadBuiltinYAML(t *testing.T, relPath string) *domain.HarnessDescriptor {
 		t.Fatalf("load %s: %v", relPath, err)
 	}
 	return d
-}
-
-// templateDescriptor returns a minimal descriptor declaring the given custom tool template.
-func templateDescriptor(template string) *domain.HarnessDescriptor {
-	return &domain.HarnessDescriptor{
-		ID:    "tmpl-harness",
-		Tools: domain.ToolSpec{Shape: domain.ShapeList, CustomToolTemplate: template},
-	}
 }
 
 func TestReverseMapToolCandidates_AmbiguousNameListsAllGenericsInDeclarationOrder(t *testing.T) {
@@ -118,80 +110,5 @@ func TestReverseMapToolCandidates_FirstElementEqualsReverseMapTool(t *testing.T)
 		if len(got) == 0 || got[0] != first {
 			t.Errorf("first candidate for %q: want %q, got %v", name, first, got)
 		}
-	}
-}
-
-func TestReverseCustomTool_ClaudeTemplateYieldsServer(t *testing.T) {
-	cc := loadBuiltinYAML(t, "claudecode/claude-code.yaml")
-	cases := []struct {
-		in         string
-		wantServer string
-		wantOK     bool
-	}{
-		{"mcp__srv__*", "srv", true},
-		{"mcp__a__b__*", "a__b", true},
-		{"mcp__my-server__*", "my-server", true},
-		{"mcp__srv__tool", "", false}, // narrower entry does not fit the wildcard template
-		{"mcp____*", "", false},       // empty server
-		{"mcp__srv__", "", false},     // missing suffix
-		{"mcp__*", "", false},         // prefix and suffix overlap, no room for a server
-		{"mcp__", "", false},          // prefix only
-		{"__*", "", false},            // suffix only
-		{"srv__*", "", false},         // missing prefix
-		{"Read", "", false},
-		{"", "", false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.in, func(t *testing.T) {
-			server, ok := descriptor.ReverseCustomTool(cc, tc.in)
-			if server != tc.wantServer || ok != tc.wantOK {
-				t.Errorf("ReverseCustomTool(%q): want (%q, %v), got (%q, %v)",
-					tc.in, tc.wantServer, tc.wantOK, server, ok)
-			}
-		})
-	}
-}
-
-func TestReverseCustomTool_DescriptorWithoutTemplateNeverMatches(t *testing.T) {
-	oc := loadBuiltinYAML(t, "opencode/opencode.yaml")
-	if server, ok := descriptor.ReverseCustomTool(oc, "mcp__srv__*"); ok || server != "" {
-		t.Errorf("opencode declares no template; want (\"\", false), got (%q, %v)", server, ok)
-	}
-}
-
-func TestReverseCustomTool_TemplateNeedsExactlyOnePlaceholder(t *testing.T) {
-	// Each name would be accepted by an implementation that cuts at the first "%s" and
-	// treats the remainder literally or ignores the missing placeholder.
-	cases := []struct{ name, tmpl, in string }{
-		{"no placeholder", "mcp__", "mcp__x"},
-		{"two placeholders", "%s__%s", "a__b"},
-		{"two placeholders with longer middle", "%s__%s", "a____b"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			server, ok := descriptor.ReverseCustomTool(templateDescriptor(tc.tmpl), tc.in)
-			if ok || server != "" {
-				t.Errorf("template %q, name %q: want (\"\", false), got (%q, %v)", tc.tmpl, tc.in, server, ok)
-			}
-		})
-	}
-}
-
-func TestReverseCustomTool_SinglePlaceholderTemplateStillMatchesBesideTwoPlaceholderRejection(t *testing.T) {
-	// Positive control for the rejection rows above: one "%s" with the same literal text works.
-	server, ok := descriptor.ReverseCustomTool(templateDescriptor("%s__x"), "a__b__x")
-	if !ok || server != "a__b" {
-		t.Errorf("want (a__b, true), got (%q, %v)", server, ok)
-	}
-}
-
-func TestReverseCustomTool_PlaceholderAtEdgesOfTemplate(t *testing.T) {
-	server, ok := descriptor.ReverseCustomTool(templateDescriptor("%s-mcp"), "abc-mcp")
-	if !ok || server != "abc" {
-		t.Errorf("suffix-only template: want (abc, true), got (%q, %v)", server, ok)
-	}
-	server, ok = descriptor.ReverseCustomTool(templateDescriptor("mcp:%s"), "mcp:abc")
-	if !ok || server != "abc" {
-		t.Errorf("prefix-only template: want (abc, true), got (%q, %v)", server, ok)
 	}
 }

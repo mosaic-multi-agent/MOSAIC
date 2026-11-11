@@ -16,7 +16,9 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -254,7 +256,20 @@ func (m *fakeModule) HookPlan(req domain.HookPlanRequest) (domain.HookPlan, erro
 	if m.HookPlanFn != nil {
 		return m.HookPlanFn(req)
 	}
-	return domain.HookPlan{Supported: false, Reason: "not supported by stub"}, nil
+	// Default: one hook file at the path TargetPath resolves for the bundle; a bundle whose
+	// path cannot be resolved is unsupported.
+	p, err := m.TargetPath(domain.TargetPathRequest{Kind: domain.ArtifactHook, Key: req.Bundle.Key, Scope: req.Scope})
+	if err != nil || p == "" {
+		return domain.HookPlan{Supported: false, Reason: "not supported by stub"}, nil
+	}
+	return domain.HookPlan{
+		Supported: true,
+		TargetDir: path.Dir(p),
+		Files: []domain.HookFile{{
+			SourcePath: "/fake/hooks/" + req.Bundle.Key + "/" + path.Base(p),
+			TargetName: path.Base(p),
+		}},
+	}, nil
 }
 
 // newFakeModule returns a fakeModule with a valid ref and descriptor.
@@ -379,6 +394,7 @@ func makeWorkflow(id string, agentKeys ...string) domain.Workflow {
 // All version fields are set to the given version, and ContentHash is set to the given hash.
 func makeManifestEntry(ref domain.ArtifactRef, targetPath, version, contentHash string) domain.ManifestEntry {
 	return domain.ManifestEntry{
+		Harness:           "test-harness",
 		Ref:               ref,
 		TargetPath:        targetPath,
 		Version:           version,
@@ -607,4 +623,10 @@ func deployedStateWithModel(contentHash, version, harnessVersion, injectionsVers
 	s := deployedState(contentHash, version, harnessVersion, injectionsVersion)
 	s.ModelID = modelID
 	return s
+}
+
+// reasonText joins every reason of an item into one searchable text. Tests that only care that
+// a cause is mentioned search it; tests about the reason structure read item.Reasons.
+func reasonText(item domain.PlanItem) string {
+	return strings.Join(item.Reasons, "; ")
 }

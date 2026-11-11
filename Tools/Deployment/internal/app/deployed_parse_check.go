@@ -15,7 +15,7 @@ import (
 // planning a create that would overwrite it. A cleanly parsed file (with a different id) or an
 // absent file yields Present: false.
 func probePlannedPathForAgent(workspace, targetPath, modelKey string, scanFlagged bool) domain.DeployedArtifactState {
-	state := probeDeployedArtifact(workspace, targetPath, modelKey)
+	state := probeDeployedArtifactOf(workspace, targetPath, modelKey, domain.ArtifactAgent)
 	if !state.Present {
 		return domain.DeployedArtifactState{Present: false}
 	}

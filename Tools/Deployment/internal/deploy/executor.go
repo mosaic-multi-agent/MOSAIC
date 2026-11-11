@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 	"time"
 
 	"mosaic-deploy/internal/domain"
@@ -15,14 +13,6 @@ import (
 	"mosaic-deploy/internal/manifest"
 	"mosaic-deploy/internal/todo"
 )
-
-// entryKey is the composite key used by buildEntryMap and buildManifest.
-// Keying by (Ref, Target) instead of Ref alone ensures each file in a
-// multi-file skill retains its own manifest entry without silent overwrite.
-type entryKey struct {
-	Ref    domain.ArtifactRef
-	Target string // normalised target path (forward slashes)
-}
 
 // ErrUndecidedConflict is returned when a plan item classified as ActionConflict has no
 // corresponding entry in ExecRequest.Conflicts. This is a programming error in the caller:
@@ -96,8 +86,15 @@ type ExecRequest struct {
 	// The executor threads it into the manifest written by buildManifest. An empty string
 	// means "not recorded" and results in no tool_version key in the YAML.
 	ToolVersion string
+	// RetireHarness names a harness whose entries and section the run drops from the manifest it
+	// writes; empty keeps every harness. Files are not touched, only the records.
+	RetireHarness string
 	// ManifestMeta carries the manifest-level data this run supplies; see ManifestMeta.
 	ManifestMeta ManifestMeta
+
+	// probeBackups maps a target path to the backup already taken of it before the workspace
+	// probe overwrote it; set by Execute. See backupBeforeProbe.
+	probeBackups map[string]string
 }
 
 // RevertFailure names one journal entry the reversal could not apply.
@@ -198,7 +195,13 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 			Message: fmt.Sprintf("could not load manifest (treating workspace as new): %s", loadErr),
 		})
 	}
-	prior := snap.Manifest
+	// The prior state is reconciled with the disk so entries of files that are gone are never
+	// written back. The reconciliation is in memory; a dry run leaves the manifest file alone.
+	prior := manifest.Reconcile(snap.Manifest, manifest.FileExists(req.Plan.WorkspacePath)).Manifest
+	runHarness := runHarnessID(req.Plan, prior)
+	// A run sees only the entries of its own harness; other harnesses' entries are carried
+	// unchanged through the entry map.
+	scoped := prior.ForHarness(runHarness)
 
 	// Initialise the write journal for atomic mode. The probe item's path is pre-recorded
 	// after resolveDeploymentRoot returns (using the item that was actually written), because
@@ -225,6 +228,7 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 	// probeErr is non-nil when the workspace probe failed and a fallback was triggered;
 	// it is carried as the first partial error and the per-item Err in fallback mode.
 	// contentErrors lists items whose Content callback failed during probe iteration.
+	req.probeBackups = map[string]string{}
 	deployRoot, fallback, probeErr, contentErrors, probeItem, probeFormat, err := resolveDeploymentRoot(req, journal)
 	if err != nil {
 		return ExecResult{}, err
@@ -269,12 +273,13 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 	// The probe error is tracked separately in probeErr and does not set Partial — a complete
 	// fallback deployment is not a mid-plan stop.
 	var actions []domain.ActionRecord
-	entryMap := buildEntryMap(prior) // carries prior entries; updated for successful workspace writes
+	base := withoutHarness(prior, req.RetireHarness)
+	entryMap := buildEntryMap(base) // carries prior entries; updated for successful workspace writes
 	var partialErr error
 
 	// Remove requested files (after backup) and drop their manifest entries; a failure is
 	// the run's first error. Items whose replacement backup failed are not written.
-	moves.removeFiles(req, fallback, journal, entryMap)
+	moves.removeFiles(req, fallback, journal, entryMap, runHarness)
 	partialErr = moves.err
 	req.Plan.Items = moves.unblockedItems(req.Plan.Items, &actions, deployRoot)
 
@@ -311,16 +316,23 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 
 		if req.DryRun {
 			ar = simulateAction(item, req)
+			entry = simulatedEntry(item, req)
 		} else if fallback != domain.FallbackNone {
 			// Fallback mode: write to the fallback tier for physical completeness, but
 			// record TakenFailed because the workspace (intended target) was unwritable.
 			ar, entry = e.executeFallbackItem(item, req, deployRoot, probeErr)
 		} else {
 			// Normal mode: write to the workspace deployment root.
-			ar, entry = e.executeItem(item, req, deployRoot, prior, journal)
-			ar.FormatChange = withProbeFormat(ar, item, probeItem, probeFormat)
-			if ar.Err != "" && partialErr == nil {
-				partialErr = fmt.Errorf("%s", ar.Err)
+			if skipped, gap, ok := e.skipUnreadableHookSource(item, req, deployRoot, moves.active()); ok {
+				// An unreadable hook source is a gap, not a failure of the run.
+				ar = skipped
+				addGap(gap)
+			} else {
+				ar, entry = e.executeItem(item, req, deployRoot, scoped, journal)
+				ar.FormatChange = withProbeFormat(ar, item, probeItem, probeFormat)
+				if ar.Err != "" && partialErr == nil {
+					partialErr = fmt.Errorf("%s", ar.Err)
+				}
 			}
 		}
 
@@ -337,8 +349,13 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 		actions = append(actions, ar)
 
 		if entry != nil {
-			normTarget := strings.ReplaceAll(item.TargetPath, "\\", "/")
-			entryMap[entryKey{Ref: item.Ref, Target: normTarget}] = *entry
+			if entry.Harness == "" {
+				entry.Harness = runHarness
+			}
+			entryMap[keyOf(entry.Harness, item.Ref, item.TargetPath)] = *entry
+			if item.Ref.Kind == domain.ArtifactHook && !entry.IsBundleLevelHook() {
+				dropBundleLevelEntries(entryMap, entry.Harness, item.Ref)
+			}
 		}
 
 		// In atomic mode, stop at the first failure. Continuing to write more items only
@@ -370,10 +387,10 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 		}, nil
 	}
 
-	// Deploy hook bundles and apply registration steps. The journal is passed through so that
-	// hook file writes are covered by atomic reversal: if the manifest save below then fails,
-	// the hook files written here are reversed along with the plan item files.
-	hookGaps, hookErr := e.deployHooks(deployRoot, req.Plan.WorkspacePath, req.Hooks, req.DryRun, journal, moves.hookOpts())
+	// Apply the registration steps of the hook bundles that had a file written. The journal is
+	// passed through so that registration writes are covered by atomic reversal: if the manifest
+	// save below then fails, they are reversed along with the plan item files.
+	hookGaps, hookErr := e.deployHooks(req.Plan.WorkspacePath, req.Hooks, writtenHookFiles(actions, deployRoot), req.DryRun, journal, moves.hookOpts())
 	if hookErr != nil {
 		if partialErr == nil {
 			partialErr = hookErr
@@ -387,7 +404,7 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 	}
 
 	// Build the manifest from what is actually on disk (entryMap reflects reality).
-	finalManifest := buildManifest(prior, entryMap, req.Plan, req.ToolVersion, req.ManifestMeta)
+	finalManifest := buildManifest(base, entryMap, req.Plan, req.ToolVersion, req.ManifestMeta)
 
 	// Persist the manifest and the TODO file (skipped for DryRun).
 	todoFilePath := ""
@@ -512,23 +529,7 @@ func (e *executor) executeItem(
 		return ar, nil
 
 	case domain.ActionCreate, domain.ActionUpdate:
-		// Hook items are multi-file bundles: their SourcePath is the bundle directory, not a
-		// single file registered in the catalog. Calling req.Content on a hook item always
-		// returns a catalog error. Hook bundle files are written by deployHooks (which runs
-		// after this loop); hook plan items exist only for action recording and manifest
-		// tracking. Skip the content/write path entirely for hook items.
-		if item.Ref.Kind == domain.ArtifactHook {
-			if item.Action == domain.ActionCreate {
-				ar.Taken = domain.TakenCreated
-			} else {
-				ar.Taken = domain.TakenUpdated
-			}
-			stamp := resolveVersionStamp(item, req.VersionStamps)
-			entry := newManifestEntry(item, nil, stamp)
-			return ar, &entry
-		}
-
-		content, err := req.Content(item)
+		content, err := itemContent(item, req)
 		if err != nil {
 			ar.Taken = domain.TakenFailed
 			ar.Err = err.Error()
@@ -542,6 +543,11 @@ func (e *executor) executeItem(
 				return ar, nil
 			}
 		}
+		backedUp, backupFailed := backupBeforeUpdate(item, &ar, req, deployRoot)
+		if backupFailed {
+			return ar, nil
+		}
+		journalHookBackup(item, ar, journal)
 		formatChange := formatChangeOnOverwrite(destPath, content)
 		if writeErr := mkdirAndWrite(destPath, content); writeErr != nil {
 			ar.Taken = domain.TakenFailed
@@ -549,9 +555,12 @@ func (e *executor) executeItem(
 			return ar, nil
 		}
 		ar.FormatChange = formatChange
-		if item.Action == domain.ActionCreate {
+		switch {
+		case backedUp:
+			ar.Taken = domain.TakenBackedUp
+		case item.Action == domain.ActionCreate:
 			ar.Taken = domain.TakenCreated
-		} else {
+		default:
 			ar.Taken = domain.TakenUpdated
 		}
 		stamp := resolveVersionStamp(item, req.VersionStamps)
@@ -593,16 +602,9 @@ func (e *executor) executeFallbackItem(
 		return ar, nil
 
 	case domain.ActionCreate, domain.ActionUpdate:
-		// Hook items must not go through the content path: their SourcePath is a bundle
-		// directory that the catalog never registers, so req.Content would return an error.
-		// In fallback mode all items are TakenFailed anyway (the workspace was unwritable),
-		// so skip the content call entirely for hook items.
-		if item.Ref.Kind != domain.ArtifactHook {
-			content, err := req.Content(item)
-			if err == nil {
-				// Write to the fallback tier so the plan is physically complete there.
-				_ = mkdirAndWrite(filepath.Join(deployRoot, item.TargetPath), content)
-			}
+		if content, err := itemContent(item, req); err == nil {
+			// Write to the fallback tier so the plan is physically complete there.
+			_ = mkdirAndWrite(filepath.Join(deployRoot, item.TargetPath), content)
 		}
 		ar.Taken = domain.TakenFailed
 		if probeErr != nil {
@@ -654,16 +656,7 @@ func (e *executor) executeConflict(
 		return ar, nil
 
 	case domain.DecisionOverwrite:
-		// Hook items are multi-file bundles: their SourcePath is the bundle directory, not a
-		// single catalog-registered file. Skip the content/write path entirely; bundle files
-		// are managed by deployHooks. Produce the action record and manifest entry directly.
-		if item.Ref.Kind == domain.ArtifactHook {
-			ar.Taken = domain.TakenUpdated
-			stamp := resolveVersionStamp(item, req.VersionStamps)
-			entry := newManifestEntry(item, nil, stamp)
-			return ar, &entry
-		}
-		content, err := req.Content(item)
+		content, err := itemContent(item, req)
 		if err != nil {
 			ar.Taken = domain.TakenFailed
 			ar.Err = err.Error()
@@ -690,16 +683,6 @@ func (e *executor) executeConflict(
 		return ar, &entry
 
 	case domain.DecisionBackupThenOverwrite:
-		// Hook items are multi-file bundles whose TargetPath is a directory, not a single
-		// file. Backing up or overwriting a directory via the single-file path is not
-		// meaningful here; deployHooks manages the actual bundle files. Skip the backup,
-		// content fetch and file write; produce the action record and manifest entry directly.
-		if item.Ref.Kind == domain.ArtifactHook {
-			ar.Taken = domain.TakenBackedUp
-			stamp := resolveVersionStamp(item, req.VersionStamps)
-			entry := newManifestEntry(item, nil, stamp)
-			return ar, &entry
-		}
 		// Journal the target path before backup and overwrite. The backup file written to
 		// .mosaic/backups/ is deliberately not journaled: backup copies survive reversal by
 		// design (deleting a user's own backup is the more dangerous choice).
@@ -711,7 +694,7 @@ func (e *executor) executeConflict(
 				return ar, nil
 			}
 		}
-		backupPath, err := createBackup(req.Plan.WorkspacePath, item.TargetPath, srcPath)
+		backupPath, err := backupConflictFile(item, req.Plan.WorkspacePath, srcPath)
 		if err != nil {
 			ar.Taken = domain.TakenFailed
 			ar.Err = fmt.Sprintf("backup failed: %s", err)
@@ -719,7 +702,7 @@ func (e *executor) executeConflict(
 		}
 		ar.BackupPath = backupPath
 
-		content, err := req.Content(item)
+		content, err := itemContent(item, req)
 		if err != nil {
 			ar.Taken = domain.TakenFailed
 			ar.Err = err.Error()
@@ -760,6 +743,9 @@ func simulateAction(item domain.PlanItem, req ExecRequest) domain.ActionRecord {
 		ar.Taken = domain.TakenCreated
 	case domain.ActionUpdate:
 		ar.Taken = domain.TakenUpdated
+		if item.BackupBeforeWrite {
+			ar.Taken = domain.TakenBackedUp
+		}
 	case domain.ActionUnchanged:
 		ar.Taken = domain.TakenUnchanged
 	case domain.ActionConflict:
@@ -778,94 +764,6 @@ func simulateAction(item domain.PlanItem, req ExecRequest) domain.ActionRecord {
 		ar.Taken = domain.TakenSkipped
 	}
 	return ar
-}
-
-// newManifestEntry builds a ManifestEntry for a successfully deployed item.
-// stamp carries the source version fields for this deployment so the planner can detect
-// staleness on subsequent runs.
-func newManifestEntry(item domain.PlanItem, content []byte, stamp domain.VersionStamp) domain.ManifestEntry {
-	return domain.ManifestEntry{
-		Ref:                           item.Ref,
-		TargetPath:                    item.TargetPath,
-		Version:                       stamp.Version,
-		HarnessVersion:                stamp.HarnessVersion,
-		InjectionsVersion:             stamp.InjectionsVersion,
-		OrchestratorInjectionsVersion: stamp.OrchestratorInjectionsVersion,
-		ToolMappingsVersion:           stamp.ToolMappingsVersion,
-		ContentHash:                   manifest.Hash(content),
-		DeployedAt:                    time.Now(),
-		Catalog:                       stamp.Catalog,
-	}
-}
-
-// resolveVersionStamp derives the version stamp for one plan item.
-// For ActionUpdate items, stale field deltas supply authoritative source values — they override
-// the corresponding VersionStamps map entries. For all other actions, stamps come entirely from
-// the VersionStamps map (a nil map or absent key yields zero-value stamps).
-func resolveVersionStamp(item domain.PlanItem, stamps map[string]domain.VersionStamp) domain.VersionStamp {
-	stamp := stamps[item.TargetPath] // zero value when stamps is nil or key absent
-	// ActionUpdate: item.Stale lists every changed field with its new source value. These are
-	// authoritative for the stale fields; non-stale fields retain their value from the map.
-	if item.Action == domain.ActionUpdate {
-		for _, delta := range item.Stale {
-			switch delta.Field {
-			case "version":
-				stamp.Version = delta.Source
-			case "harness_version":
-				stamp.HarnessVersion = delta.Source
-			case "injections_version":
-				stamp.InjectionsVersion = delta.Source
-			case "orchestrator_injections_version":
-				stamp.OrchestratorInjectionsVersion = delta.Source
-			case "tool_mappings_version":
-				stamp.ToolMappingsVersion = delta.Source
-			}
-		}
-	}
-	return stamp
-}
-
-// buildEntryMap constructs a mutable map of manifest entries keyed by the composite
-// (ArtifactRef, normalised TargetPath). The executor modifies this map during execution
-// and converts it back to a Manifest via buildManifest.
-//
-// Target paths are normalised (backslashes to forward slashes) to match LookupAt semantics.
-// Using a composite key ensures each file in a multi-file skill retains its own manifest
-// entry and is not silently overwritten by a later file with the same ArtifactRef.
-func buildEntryMap(m domain.Manifest) map[entryKey]domain.ManifestEntry {
-	out := make(map[entryKey]domain.ManifestEntry, len(m.Entries))
-	for _, e := range m.Entries {
-		normTarget := strings.ReplaceAll(e.TargetPath, "\\", "/")
-		out[entryKey{Ref: e.Ref, Target: normTarget}] = e
-	}
-	return out
-}
-
-// buildManifest produces the final domain.Manifest from the entry map, sorted by TargetPath.
-func buildManifest(prior domain.Manifest, entryMap map[entryKey]domain.ManifestEntry, plan domain.Plan, toolVersion string, meta ManifestMeta) domain.Manifest {
-	harnessID := plan.Harness.ID
-	if harnessID == "" {
-		harnessID = prior.HarnessID
-	}
-	m := domain.Manifest{
-		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     harnessID,
-		UpdatedAt:     time.Now(),
-		ToolVersion:   toolVersion,
-	}
-	applyManifestMeta(&m, prior, meta)
-
-	keys := make([]entryKey, 0, len(entryMap))
-	for k := range entryMap {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		return entryMap[keys[i]].TargetPath < entryMap[keys[j]].TargetPath
-	})
-	for _, k := range keys {
-		m.Entries = append(m.Entries, entryMap[k])
-	}
-	return m
 }
 
 // computeOutcome derives the run outcome from the action records, any partial content-write

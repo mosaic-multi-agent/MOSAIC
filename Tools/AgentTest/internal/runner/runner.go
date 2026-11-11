@@ -388,6 +388,10 @@ func setup(ctx context.Context, d Deps, req Request) (domain.Sandbox, SetupLedge
 		}
 	}
 
+	if err := checkSubjectPlacement(d.Adapter, sb.SubjectDir, req.Test.Definition.Subject); err != nil {
+		return sb, ledger, err
+	}
+
 	// Pre-spawn check: what was deployed must carry the selected models,
 	// whatever the deployment tool reported.
 	if err := checkDefinitionModels(d.Adapter, targets); err != nil {

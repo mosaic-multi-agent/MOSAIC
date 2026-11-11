@@ -8,6 +8,7 @@ package app
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 
 	"mosaic-deploy/internal/domain"
@@ -15,16 +16,11 @@ import (
 
 // hookState is the working state of one planned hook bundle during a run.
 type hookState struct {
-	// targetPath and version are the manifest path and catalog version of the bundle.
-	targetPath, version string
-	// failReason is set when the manifest path of the bundle cannot be resolved.
-	failReason string
+	// version is the catalog version of the bundle, recorded with each of its files.
+	version string
 }
 
-// active reports whether the bundle is still part of the write set.
-func (h *hookState) active() bool { return h.failReason == "" }
-
-// prepareHooks resolves the manifest path and catalog version of every bundle the plan writes.
+// prepareHooks resolves the catalog version of every bundle the plan writes.
 func (r *transformRun) prepareHooks() {
 	r.hooks = make([]hookState, len(r.plan.Hooks))
 	versions := map[string]string{}
@@ -32,61 +28,63 @@ func (r *transformRun) prepareHooks() {
 		versions[b.Key] = b.Version
 	}
 	for i, hb := range r.plan.Hooks {
-		if !writes(hb.Action) {
-			continue
+		if writes(hb.Action) {
+			r.hooks[i].version = versions[hb.Key]
 		}
-		path, err := r.tgt.TargetPath(domain.TargetPathRequest{
-			Kind: domain.ArtifactHook, Key: hb.Key, Scope: domain.ScopeProject, GOOS: r.s.deps.GOOS,
-		})
-		if err != nil {
-			r.hooks[i].failReason = fmt.Sprintf("cannot resolve the hook location: %v", err)
-			continue
-		}
-		r.hooks[i].targetPath, r.hooks[i].version = path, versions[hb.Key]
 	}
 }
 
 // hookWrites is the number of hook bundles that will be written.
 func (r *transformRun) hookWrites() int {
 	n := 0
-	for i, hb := range r.plan.Hooks {
-		if writes(hb.Action) && r.hooks[i].active() {
+	for _, hb := range r.plan.Hooks {
+		if writes(hb.Action) {
 			n++
 		}
 	}
 	return n
 }
 
-// hookItems returns one plan item per hook bundle that will be written. The executor writes the
-// bundle files from hookPlans; the item records the bundle in the manifest.
+// hookTargetPath is the workspace-relative slash path a hook file is written to.
+func hookTargetPath(hp domain.HookPlan, f domain.HookFile) string {
+	return path.Join(filepath.ToSlash(hp.TargetDir), filepath.ToSlash(f.TargetName))
+}
+
+// hookItems returns one plan item per file of every hook bundle that will be written. The
+// executor writes each file from its own source and records it in the manifest.
 func (r *transformRun) hookItems() []domain.PlanItem {
 	var items []domain.PlanItem
-	for i, hb := range r.plan.Hooks {
-		if !writes(hb.Action) || !r.hooks[i].active() {
+	for _, hb := range r.plan.Hooks {
+		if !writes(hb.Action) {
 			continue
 		}
 		action, reason := domain.ActionCreate, "transform from "+r.srcID
 		if hb.Action == PlanWriteOverwrite {
 			action, reason = domain.ActionUpdate, "transform from "+r.srcID+" (overwrites the existing files)"
 		}
-		items = append(items, domain.PlanItem{
-			Ref:        domain.ArtifactRef{Kind: domain.ArtifactHook, Key: hb.Key},
-			TargetPath: r.hooks[i].targetPath, Action: action, Reason: reason,
-		})
+		for _, f := range hb.Plan.Files {
+			items = append(items, domain.PlanItem{
+				Ref:        domain.ArtifactRef{Kind: domain.ArtifactHook, Key: hb.Key},
+				SourcePath: f.SourcePath, TargetPath: hookTargetPath(hb.Plan, f),
+				Action: action, Reasons: []string{reason},
+			})
+		}
 	}
 	return items
 }
 
-// hookPlans returns the target hook plans of the bundles that will be written, with the version
-// stamps of their manifest entries added to stamps.
+// hookPlans returns the target hook plans of the bundles that will be written, which supply the
+// registration steps, with the version stamp of every hook file added to stamps.
 func (r *transformRun) hookPlans(stamps map[string]domain.VersionStamp) []domain.HookPlan {
 	var plans []domain.HookPlan
 	for i, hb := range r.plan.Hooks {
-		if !writes(hb.Action) || !r.hooks[i].active() {
+		if !writes(hb.Action) {
 			continue
 		}
 		plans = append(plans, hb.Plan)
-		stamps[r.hooks[i].targetPath] = domain.VersionStamp{Version: r.hooks[i].version}
+		for _, f := range hb.Plan.Files {
+			stamps[hookTargetPath(hb.Plan, f)] = domain.VersionStamp{Version: r.hooks[i].version, Catalog: r.sourceBundleCatalog(hb.Key)}
+		}
 	}
 	return plans
 }
@@ -95,8 +93,8 @@ func (r *transformRun) hookPlans(stamps map[string]domain.VersionStamp) []domain
 // because its destination is not a regular file. The executor reports such a hook file as a gap
 // and keeps going; a transform run is all-or-nothing and must stop instead.
 func (r *transformRun) checkHookDestinations() error {
-	for i, hb := range r.plan.Hooks {
-		if !writes(hb.Action) || !r.hooks[i].active() {
+	for _, hb := range r.plan.Hooks {
+		if !writes(hb.Action) {
 			continue
 		}
 		for _, f := range hb.Plan.Files {
@@ -126,15 +124,13 @@ func (r *transformRun) hookGaps() []domain.Gap {
 
 // hookOutcome is the outcome of one planned hook bundle.
 func (r *transformRun) hookOutcome(i int) TransformFileOutcome {
-	hb, st := r.plan.Hooks[i], r.hooks[i]
+	hb := r.plan.Hooks[i]
 	out := TransformFileOutcome{
 		Kind: domain.ArtifactHook, Key: hb.Key, DestinationPath: hb.Plan.TargetDir, Action: hb.Action,
 	}
 	switch {
 	case hb.Action == PlanSkip:
 		out.Status, out.Skip, out.Reason = StatusSkipped, hb.Skip, hb.Reason
-	case !st.active():
-		out.Status, out.Reason = StatusFailed, st.failReason
 	default:
 		out.Status = StatusTransformed
 	}

@@ -1,8 +1,6 @@
 package artifact
 
 import (
-	"bytes"
-	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -11,21 +9,11 @@ import (
 	"mosaic-run/internal/domain"
 )
 
-// parseExecutionLog parses the execution log table from section content.
-func parseExecutionLog(content []byte) ([]domain.ExecutionLogEntry, error) {
-	if len(bytes.TrimSpace(content)) == 0 {
-		return nil, nil
-	}
-	t, err := mdtable.ParseStrict(content)
-	if err != nil {
-		return nil, err
-	}
-	// The pre-3.0 column "Stage" marks the pre-3.0 layout and is not read.
-	if t.Column("Stage") >= 0 {
-		return nil, ErrPre30Layout
-	}
+// parseExecutionLog reads the rows of an Execution Log table that passed the
+// structural checks.
+func parseExecutionLog(t mdtable.Table) []domain.ExecutionLogEntry {
 	if len(t.Rows) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	seqCol := t.Column("Seq")
@@ -97,20 +85,14 @@ func parseExecutionLog(content []byte) ([]domain.ExecutionLogEntry, error) {
 
 		entries = append(entries, entry)
 	}
-	return entries, nil
+	return entries
 }
 
-// parseArtifactRegistry parses the artifact registry table from section content.
-func parseArtifactRegistry(content []byte) ([]domain.ArtifactRegistryEntry, error) {
-	if len(bytes.TrimSpace(content)) == 0 {
-		return nil, nil
-	}
-	t, err := mdtable.ParseStrict(content)
-	if err != nil {
-		return nil, err
-	}
+// parseArtifactRegistry reads the rows of an Artifacts table that passed the
+// structural checks.
+func parseArtifactRegistry(t mdtable.Table) []domain.ArtifactRegistryEntry {
 	if len(t.Rows) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	artCol := t.Column("Artifact")
@@ -131,23 +113,14 @@ func parseArtifactRegistry(content []byte) ([]domain.ArtifactRegistryEntry, erro
 		}
 		entries = append(entries, entry)
 	}
-	return entries, nil
+	return entries
 }
 
-// parseWorkflowNotes parses the workflow notes table from section content.
-func parseWorkflowNotes(content []byte) ([]domain.WorkflowNote, error) {
-	if len(bytes.TrimSpace(content)) == 0 {
-		return nil, nil
-	}
-	t, err := mdtable.ParseStrict(content)
-	if err != nil {
-		return nil, err
-	}
-	if t.Column("Seq") < 0 || t.Column("Note") < 0 {
-		return nil, errors.New("workflow notes table must have the columns Seq and Note")
-	}
+// parseWorkflowNotes reads the rows of a WorkflowNotes table that passed the
+// structural checks.
+func parseWorkflowNotes(t mdtable.Table) []domain.WorkflowNote {
 	if len(t.Rows) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	seqCol := t.Column("Seq")
@@ -167,7 +140,7 @@ func parseWorkflowNotes(content []byte) ([]domain.WorkflowNote, error) {
 		}
 		notes = append(notes, note)
 	}
-	return notes, nil
+	return notes
 }
 
 // parseWorkflowRowCell reads a WorkflowRow cell. Only a canonical positive

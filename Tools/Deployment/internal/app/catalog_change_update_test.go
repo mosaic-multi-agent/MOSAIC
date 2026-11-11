@@ -18,6 +18,7 @@ import (
 	"mosaic-deploy/internal/app/interactiontest"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 )
 
@@ -26,8 +27,9 @@ const (
 	ccuOrchTarget      = "agents/orchestrator.md"
 	ccuSkillEntry      = "skills/stub-skill/SKILL.md"
 	ccuSkillCompanion  = "skills/stub-skill/notes.md"
-	ccuHookTarget      = uhHookTarget
-	ccuCatalogDelta    = "source_catalog"
+	ccuHookTarget      = uhHooksDir + "/logger.sh"
+	ccuHookTarget2     = uhHooksDir + "/util.sh"
+	ccuCatalogDelta   = "source_catalog"
 	ccuUnmodifiedAgent = "---\nmosaic_id: \"1\"\nversion: \"1.0\"\n---\nBody.\n"
 )
 
@@ -60,7 +62,7 @@ func (m ccuModule) TargetPath(req domain.TargetPathRequest) (string, error) {
 	case domain.ArtifactSkill:
 		return "skills/" + req.Key + "/" + req.FileName, nil
 	case domain.ArtifactHook:
-		return ccuHookTarget, nil
+		return uhHooksDir + "/" + req.FileName, nil
 	}
 	return m.stubHarnessModule.TargetPath(req)
 }
@@ -73,6 +75,7 @@ func ccuTargets() map[string]domain.ArtifactRef {
 		ccuSkillEntry:     provSkillRef,
 		ccuSkillCompanion: provSkillRef,
 		ccuHookTarget:     ccuHookRef,
+		ccuHookTarget2:    ccuHookRef,
 	}
 }
 
@@ -123,7 +126,7 @@ func ccuDeps(t *testing.T, rec domain.CatalogIdentity) (app.Deps, string, *recor
 	deps.Planner = plan.New()
 	deps.Manifest = &stubManifestStore{snap: manifest.Snapshot{
 		State:    manifest.StatePresent,
-		Manifest: domain.Manifest{SchemaVersion: manifest.SchemaVersion, HarnessID: "stub-harness", Entries: ccuEntries(rec)},
+		Manifest: domain.Manifest{SchemaVersion: manifest.SchemaVersion, Harnesses: []domain.HarnessSection{{HarnessID: "stub-harness"}}, Entries: manifesttest.WithHarness("stub-harness", ccuEntries(rec))},
 	}}
 	ccuWrite(t, ws, ccuAgentTarget, ccuUnmodifiedAgent)
 	orch := strings.Replace(string(crDeployedOrchestrator("quick-fix")), "---\n", "---\nmosaic_id: \"0\"\n", 1)
@@ -185,11 +188,11 @@ func TestWritePaths_RecordedCatalogOutsideStack_PlanItemsAsCatalogUpdates(t *tes
 				item := ccuItemAt(t, items, target)
 				want := ccuSupplierOf(ref)
 				if item.Action != domain.ActionUpdate {
-					t.Errorf("%s: Action = %q (reason %q), want %q", target, item.Action, item.Reason, domain.ActionUpdate)
+					t.Errorf("%s: Action = %q (reason %q), want %q", target, item.Action, reasonText(item), domain.ActionUpdate)
 				}
 				for _, id := range []string{ccuRecorded.ID, want.ID} {
-					if !strings.Contains(item.Reason, id) {
-						t.Errorf("%s: Reason = %q, want it to name catalog %q", target, item.Reason, id)
+					if !strings.Contains(reasonText(item), id) {
+						t.Errorf("%s: Reason = %q, want it to name catalog %q", target, reasonText(item), id)
 					}
 				}
 			}
@@ -231,7 +234,7 @@ func TestWritePaths_RecordedCatalogInStack_PlansNoCatalogUpdate(t *testing.T) {
 			deps, ws, exec := ccuDeps(t, ccuRecorded)
 			deps.Manifest = &stubManifestStore{snap: manifest.Snapshot{
 				State:    manifest.StatePresent,
-				Manifest: domain.Manifest{SchemaVersion: manifest.SchemaVersion, HarnessID: "stub-harness", Entries: ccuEntriesBySupplier()},
+				Manifest: domain.Manifest{SchemaVersion: manifest.SchemaVersion, Harnesses: []domain.HarnessSection{{HarnessID: "stub-harness"}}, Entries: manifesttest.WithHarness("stub-harness", ccuEntriesBySupplier())},
 			}}
 
 			if err := op.run(context.Background(), app.New(deps), ws); err != nil {

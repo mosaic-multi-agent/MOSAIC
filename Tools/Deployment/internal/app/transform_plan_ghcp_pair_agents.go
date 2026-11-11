@@ -40,11 +40,12 @@ func isAgentExtName(name string) bool {
 }
 
 // recordedAgentPaths returns the manifest-recorded agent files by lower-cased slash path. An
-// unreadable or unusable manifest records nothing.
-func (s *service) recordedAgentPaths(workspace string) map[string]domain.ArtifactRef {
+// unreadable or unusable manifest records nothing; only the entries of harnessID count.
+func (s *service) recordedAgentPaths(workspace, harnessID string) map[string]domain.ArtifactRef {
 	recorded := map[string]domain.ArtifactRef{}
-	snap, err := s.deps.Manifest.Load(workspace)
-	if err != nil || snap.State != manifest.StatePresent {
+	snap := loadReconciledManifest(s.deps.Manifest, workspace).Snapshot
+	snap = snap.ForHarness(harnessID)
+	if snap.State != manifest.StatePresent {
 		return recorded
 	}
 	for _, e := range snap.Manifest.Entries {
@@ -62,7 +63,7 @@ func (s *service) recordedAgentPaths(workspace string) map[string]domain.Artifac
 // planPairAgents fills plan.Agents, plan.Removals, plan.Replacements and the agent notes for a
 // GHCP pair transform.
 func (s *service) planPairAgents(in transformPlanInput, relDir string, files []sourceAgentFile, plan *TransformPlan) error {
-	recorded := s.recordedAgentPaths(in.Workspace)
+	recorded := s.recordedAgentPaths(in.Workspace, in.Source.Ref().ID)
 	isRecorded := func(f sourceAgentFile) bool {
 		_, ok := recorded[strings.ToLower(slashJoin(relDir, f.name))]
 		return ok

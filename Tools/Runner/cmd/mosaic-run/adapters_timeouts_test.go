@@ -52,14 +52,14 @@ func hangingAdapter(t *testing.T, harnessID string, timeouts domain.InvocationTi
 	return buildAdapter("", harnessID, os.Args[0], "blanket", timeouts, nil)
 }
 
-func timeoutAgentRef(t *testing.T, kind domain.InvocationKind) domain.AgentReference {
+func timeoutAgentRef(t *testing.T) domain.AgentReference {
 	t.Helper()
 	def := filepath.Join(t.TempDir(), "agent.md")
 	content := "---\nname: test-agent\nmodel: m\ntools: Read\n---\n\nBody.\n"
 	if err := os.WriteFile(def, []byte(content), 0o644); err != nil {
 		t.Fatalf("write agent definition: %v", err)
 	}
-	return domain.AgentReference{Identifier: "test-agent", DefinitionPath: def, InvocationKind: kind}
+	return domain.AgentReference{Identifier: "test-agent", DefinitionPath: def}
 }
 
 func invokeHanging(t *testing.T, h domain.HarnessAdapter, hitl bool, guard time.Duration) (err, ctxErr error) {
@@ -67,7 +67,7 @@ func invokeHanging(t *testing.T, h domain.HarnessAdapter, hitl bool, guard time.
 	ctx, cancel := context.WithTimeout(context.Background(), guard)
 	defer cancel()
 	req := domain.ProtocolRequest{AgentInstanceID: "test-agent#1", TaskDescription: "x", HumanInTheLoop: hitl}
-	_, err = h.Invoke(ctx, timeoutAgentRef(t, domain.InvocationOrdinary), req)
+	_, err = h.Invoke(ctx, timeoutAgentRef(t), req)
 	return err, ctx.Err()
 }
 
@@ -116,7 +116,7 @@ func TestBuildAdapter_RawInvocation_UsesNonHITLTimeout(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), guardTimeout)
 			defer cancel()
 
-			_, err := raw.InvokeRaw(ctx, timeoutAgentRef(t, domain.InvocationOrchestrator), []byte(`{}`))
+			_, err := raw.InvokeRaw(ctx, timeoutAgentRef(t), []byte(`{}`))
 
 			if ctx.Err() != nil {
 				t.Fatalf("raw invocation was not bounded by the non-HITL timeout; err=%v", err)

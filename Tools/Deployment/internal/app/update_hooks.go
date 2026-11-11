@@ -27,6 +27,29 @@ func (s *service) deployedHookIDs(module domain.HarnessModule, workspace string,
 	return ids
 }
 
+// holdBackSkippedHookBundles removes, from the plan, the files of every hook bundle that has a
+// conflicting file the user chose to skip, except that conflicting file itself: a bundle with a
+// declined file is left as the user has it, not completed around it.
+func holdBackSkippedHookBundles(p *domain.Plan, conflicts map[string]domain.ConflictDecision) {
+	skipped := map[string]bool{}
+	for _, item := range p.Items {
+		if item.Ref.Kind == domain.ArtifactHook && item.Action == domain.ActionConflict && conflicts[item.TargetPath] == domain.DecisionSkip {
+			skipped[item.Ref.Key] = true
+		}
+	}
+	if len(skipped) == 0 {
+		return
+	}
+	kept := make([]domain.PlanItem, 0, len(p.Items))
+	for _, item := range p.Items {
+		if item.Ref.Kind == domain.ArtifactHook && skipped[item.Ref.Key] && item.Action != domain.ActionConflict {
+			continue
+		}
+		kept = append(kept, item)
+	}
+	p.Items = kept
+}
+
 // writtenHookBundles returns the hooks the update will write: hook items planned as an
 // update, or as a conflict whose decision is overwrite or backup. Unchanged hooks and hooks
 // whose conflict was skipped are excluded.

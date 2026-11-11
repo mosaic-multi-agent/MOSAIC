@@ -66,22 +66,36 @@ to make anything happen on disk.
 3. For each artifact, `Build` asks the harness module (via `domain.HarnessModule.TargetPath`)
    where it would land in the target workspace, then classifies the item into one of four
    actions using `DeployedState` as the sole source of truth for version comparison and
-   presence. The manifest contributes only recorded content hashes (for local-modification
-   detection) and state signals (absent/corrupt):
+   presence. The manifest contributes the recorded entry (and its Deploy-owned content record,
+   for edit detection) and state signals (absent/corrupt). The snapshot a run plans against is
+   the reconciled manifest narrowed to the run's own harness (see Manifest Lifecycle):
    - **Create** — no file at the current target path (`DeployedState[path].Present == false`),
      evaluated before consulting the manifest so an entry recorded by a different harness does
      not produce a spurious update.
-   - **Conflict** — a file exists on disk whose content hash disagrees with the manifest's
-     recorded hash (or a file exists with no manifest record for this target path, or the
-     manifest itself is unusable). This is a conservative bias: "found on disk but can't
-     confirm we wrote it" is always treated as a conflict, never silently overwritten.
-   - **Update** — hash matches the manifest record, but one or more version fields (`version`,
-     `mosaic_transform_version`, `mosaic_injections_version`, compared independently) differ
-     between the deployed file and the current source/harness values, or the deployed file
-     carries no readable version stamps at all. Legacy unprefixed names are accepted as
+   - **Conflict** — a file exists on disk that cannot be confirmed as tool-written: its
+     frontmatter cannot be parsed, it has no manifest record for this target path, or the
+     manifest itself is unusable. This is a conservative bias: "found on disk but can't
+     confirm we wrote it" is always treated as a conflict, never silently overwritten. A
+     content hash that differs from the record is no longer a conflict.
+   - **Update** — one or more version fields (`version`, `mosaic_transform_version`,
+     `mosaic_injections_version`, compared independently) differ between the deployed file and
+     the current source/harness values, the deployed file carries no readable version stamps at
+     all, or Deploy-owned content was edited locally. Legacy unprefixed names are accepted as
      fallback at every read site; a file carrying only legacy names is not spuriously stale and
      is migrated to the prefixed form on the next update. See Staleness Model below.
-   - **Unchanged** — hash matches and all version fields agree with source.
+   - **Unchanged** — no edit found and all version fields agree with source.
+
+   **Edit detection (`plan/build_edit.go`).** Each manifest entry written by this release
+   carries an owned-content record (`domain.OwnedContent`: a hash, plus per-region hashes for
+   agents). For an agent the owned content is the body outside the project and custom regions;
+   for a skill file or hook file it is the whole file. The frontmatter and the project and
+   custom regions belong to the user and are not part of the record. `markOwnedContentEdit`
+   compares the recorded record with the one recomputed from the disk (`deployed.Owned`); a
+   difference adds the reason "Deploy-owned content was edited locally" (naming the differing
+   regions where known), sets `PlanItem.BackupBeforeWrite` and makes the item an update. The
+   executor backs the file up under `.mosaic/backups/` before overwriting. An entry with no
+   record (written before this release) or a disk record that cannot be computed gets no check
+   until its next write.
 4. Gaps are also surfaced during planning, before any transform runs: an agent with no
    resolved model produces `GapNoModel`; a generic tool the harness cannot map produces
    `GapUnmappedTool`; a hook registration step whose target file already exists in the
@@ -124,11 +138,18 @@ Staleness is evaluated per-field, never as a single "is this stale" boolean:
   stale when the catalog id recorded in its entry and the id of the catalog that supplies it
   now are both known and differ (`plan.CatalogStaleness`, delta field `source_catalog`). The
   reason names both ids and comes last. An unknown side (pre-stack manifest, non-stack
-  catalog) contributes nothing.
+  catalog) contributes nothing. When both ids are equal but the recorded and current catalog
+  names are both known and differ, the id may be shared by two catalogs and the item gets a
+  name-collision warning (`CatalogDrift.Warning`), not a reason.
 
-Each mismatching field produces a `VersionDelta` (field name, deployed value, source value);
-the plan item's `Reason` is a human-readable join of all deltas. This granularity lets the
+Each mismatching field produces a `VersionDelta` (field name, deployed value, source value)
+and its own entry in `PlanItem.Reasons` (a list; `AddReason` skips an exact duplicate and
+nothing replaces an earlier reason). Agent reasons are added in the order: edit, version
+fields, no-version-info note, workflow, protocol, bundle, catalog. This granularity lets the
 TODO/summary views and the log explain *why* something is stale, not just *that* it is.
+Agent updates also carry the built-in tools the update adds to or removes from the tools field
+as reasons (`app/update_tools_reasons.go`, computed by `transform.ToolsChange`, the same
+function that decides the written tools field).
 
 ### Transformation (transform, applied per plan item during execution)
 
@@ -141,7 +162,10 @@ a pure function: source bytes + harness module + request context in, output byte
 rule, `deployedBytes`; `readPathFor` is the single place that decides which file an item is read
 from (its target path, or a flow-supplied override such as a recorded legacy file). With
 deployed bytes, project regions, custom regions and tool choices are kept; without them an item
-is rendered as a create. `deploy` and `agents` also keep a rewritten agent's deployed model
+is rendered as a create. The tools field of a rewritten agent is merged with the deployed one
+(`transform/tools_step.go`, `MergeToolsField`): built-in tools follow the catalog, custom tools
+found in the deployed field are kept, and run-produced custom tools are added; the frontmatter
+is otherwise the user's. `deploy` and `agents` also keep a rewritten agent's deployed model
 unless the run resolved one for it (`keepDeployedModels`, `rerun_models.go`; `deploy` counts persisted tier mappings as run-supplied, `agents` does not). `deploy` keeps the
 deployed `InfrastructureAgents` declarations only when the request made no infrastructure
 selection; any selection, including an empty one, replaces them (`Request.ClearInfrastructureAgents`).
@@ -227,11 +251,18 @@ verbatim (`keepingUnchangedMigrations`).
 3. **Hook deployment and registration** — hook bundle files are copied to the harness's
    declared target directory; claude-code uses `.claude/hooks/`, while ghcp-cli and
    vscode-ghcp both use `.github/hooks/` (a workspace holds only one of the two GHCP
-   targets, decided by the manifest `harness_id`). In Update,
+   targets, decided by the harness of the manifest entries: `detectGhcpTargets` in
+   `app/ghcp_targets.go`). In Update,
    hook membership is not a selection: a Catalog hook is included when at least one file of
    the harness's hook variant is on disk (`deployedHookIDs` in update_hooks.go, using the
    layout-aware `probeHookPlanPresence`), and its deployed version comes from the manifest.
-   A deployed hook with no manifest record is a conflict. Hooks never deployed are never
+   Each hook file has its own manifest entry (kind hook, the bundle as key, the file's own
+   target path and content hash, an owned-content record of the whole file); registration
+   files the user owns get no entry. A hook file with no manifest record is a conflict. A
+   bundle-level entry recorded before per-file entries (empty-content hash) is overwritten
+   without a conflict prompt and replaced by per-file entries; a bundle with some files
+   missing is "damaged" (`Reconciliation.Damaged`) and completed by the next update. An edited
+   hook file is an update with `BackupBeforeWrite`. Hooks never deployed are never
    added; refreshed files are overwritten and files the new version dropped stay.
    Registration steps (edits to files the tool doesn't own, e.g.
    `.claude/settings.json`) follow a fixed policy: not performable → always a manual-step
@@ -255,7 +286,28 @@ future-schema manifests are each a distinct `State`, and `plan.Build` treats eve
 non-present state identically (conservative: on-disk files are treated as possible
 conflicts) rather than guessing. Content hashes use `sha256:<lowercase-hex>` with **no
 normalisation** — a line-ending-only change between what's on disk and what the manifest
-recorded is a real, detectable local modification, not noise to be smoothed over.
+recorded is a real difference, not noise to be smoothed over. Edit detection compares the
+owned-content records, not the whole-file hash (see Edit detection above).
+
+**Schema 2.** One manifest holds several harnesses: every entry has a `harness`, a section per
+harness records `protocol_source`, `bundle_source` and `updated_at`, `tool_version` and
+`catalog_stack` sit at the top level, and there is no top-level `harness_id`. `SchemaVersion`
+is `"2"`; `Load` still reads schema `"1"` and upgrades it in memory (`manifest/migrate.go`):
+entries under `.claude/` and `.opencode/` take their harness from the path, other entries
+take the old `harness_id` when that harness's descriptor paths cover the entry (this
+attributes `.github/` entries), and unattributable entries go to `Snapshot.MigrationDropped`
+with `DropReasonUnattributed` — their files stay and count as unrecorded. Nothing is written
+by `Load`; `Save` always writes schema 2, so older builds, which report the manifest as
+future-schema, refuse it.
+
+**Reconciliation.** Every flow reads the manifest through `loadReconciledManifest`
+(`app/manifest_reconcile.go`): load, apply the migration result, then `manifest.Reconcile`
+the whole manifest with the disk (presence only, in memory). An entry whose file is missing is
+dropped (`DropReasonMissing`); a hook bundle with some files missing is kept and reported as
+damaged, all missing is dropped; a harness section left without entries goes too. Migration
+and reconciliation drops are carried to `Plan.DroppedEntries`, shown in plan review and the
+dry-run report, and in the transform result (`droppedEntries`). The flow then narrows the
+snapshot to its own harness (`forHarness`), so a run sees and rewrites only its own entries.
 
 ## Relationships
 
@@ -295,8 +347,14 @@ recorded is a real, detectable local modification, not noise to be smoothed over
   guard (`tools/importcheck`), not just convention.
 - The deployment root is resolved exactly once per run, before any content write; it is never
   re-probed mid-run even if a later write to that root would fail.
-- A file found on disk that cannot be confirmed as tool-written (no manifest, or manifest
-  unusable) is always classified as a conflict, never auto-created or auto-overwritten.
+- A file found on disk that cannot be confirmed as tool-written (no manifest, manifest
+  unusable, no record for its target path, or unparseable) is always classified as a conflict,
+  never auto-created or auto-overwritten.
+- A local edit of Deploy-owned content (agent body outside project and custom regions; whole
+  skill and hook files) is never lost silently: it becomes an update with a backup. Project and
+  custom regions and the frontmatter are the user's and never count as edits.
+- The manifest is reconciled with the disk before every action, and the entries dropped by
+  reconciliation or by the schema-1 migration reach the plan and the preview.
 - Content hashes are never normalised — byte-for-byte comparison only.
 - Harness-class injection content is always regenerated from the module; project-class
   content is only ever lifted from what was actually deployed before, never invented.

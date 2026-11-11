@@ -110,10 +110,11 @@ func TestDryRun_GhcpLegacyWorkspace_ListsRemovalsAndRenames(t *testing.T) {
 	}
 }
 
-// TestDryRun_GhcpLegacyWorkspace_ListsReplacementOfExistingAgentFile verifies an X.agent.md that
-// already exists beside the recorded X.md is listed as a replacement, next to the removal of
-// the X.md, and stays untouched.
-func TestDryRun_GhcpLegacyWorkspace_ListsReplacementOfExistingAgentFile(t *testing.T) {
+// TestDryRun_GhcpLegacyWorkspace_ExistingUnrecordedAgentFile_StaysAConflictWithoutReplacement
+// verifies an X.agent.md the manifest does not record, existing beside the recorded X.md, keeps
+// its conflict (it is not listed as a replacement) next to the removal of the X.md, and stays
+// untouched.
+func TestDryRun_GhcpLegacyWorkspace_ExistingUnrecordedAgentFile_StaysAConflictWithoutReplacement(t *testing.T) {
 	for _, h := range gamTargets {
 		for _, flow := range drgFlows() {
 			t.Run(h+"/"+flow.name, func(t *testing.T) {
@@ -135,16 +136,14 @@ func TestDryRun_GhcpLegacyWorkspace_ListsReplacementOfExistingAgentFile(t *testi
 					t.Fatalf("%s for %s: summary carries no dry-run plan", flow.name, h)
 				}
 				p := *summary.DryRunPlan
-				if !drgReplacesPath(p, newRel) {
-					t.Errorf("%s for %s: replacements %+v do not list the existing %s", flow.name, h, p.Replacements, newRel)
+				if drgReplacesPath(p, newRel) {
+					t.Errorf("%s for %s: replacements %+v list the unrecorded %s, which is a conflict", flow.name, h, p.Replacements, newRel)
+				}
+				if it, ok := gplAgentItem(p, flow.subject); !ok || it.Action != domain.ActionConflict {
+					t.Errorf("%s for %s: item for %s = %+v (found %t), want a conflict", flow.name, h, newRel, it, ok)
 				}
 				if !gplRemovesPath(p, oldRel) {
 					t.Errorf("%s for %s: removals %+v do not list %s", flow.name, h, p.Removals, oldRel)
-				}
-				for _, r := range p.Replacements {
-					if r.Reason == "" {
-						t.Errorf("replacement of %s has no reason", r.Path)
-					}
 				}
 				if !reflect.DeepEqual(crSnapshotDir(t, ws), before) {
 					t.Errorf("%s for %s: a dry run changed the workspace", flow.name, h)

@@ -78,6 +78,7 @@ func newMigWorkspace(t *testing.T) migWorkspace {
 		migWriteDeployed(t, ws, key, text)
 		m.before[key] = text
 	}
+	migClearOwnedContentRecords(t, ws)
 	migWriteCatalog(t, mosaicRoot, true)
 	return m
 }

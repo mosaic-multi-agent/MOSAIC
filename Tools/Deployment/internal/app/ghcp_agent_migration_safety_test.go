@@ -80,7 +80,8 @@ func TestGhcpDeployFlows_FailureDuringMigration_NeverLosesAnAgent(t *testing.T) 
 }
 
 // TestGhcpDeployFlows_ReviewPlan_CarriesTheMigration verifies the plan shown for review lists
-// the removal of every migrated X.md and the replacement of an existing X.agent.md.
+// the removal of every migrated X.md and, for an X.agent.md the manifest does not record (a
+// conflict that keeps its own state), no replacement.
 func TestGhcpDeployFlows_ReviewPlan_CarriesTheMigration(t *testing.T) {
 	for _, h := range gamTargets {
 		for _, flow := range gamFlows() {
@@ -107,8 +108,8 @@ func TestGhcpDeployFlows_ReviewPlan_CarriesTheMigration(t *testing.T) {
 				if got := trPlanPaths(p.Removals); !trSamePaths(got, wantRemovals) {
 					t.Errorf("review plan removals = %v, want %v", got, wantRemovals)
 				}
-				if got := trPlanPaths(p.Replacements); !trSamePaths(got, []string{existing}) {
-					t.Errorf("review plan replacements = %v, want [%s]", got, existing)
+				if got := trPlanPaths(p.Replacements); len(got) != 0 {
+					t.Errorf("review plan replacements = %v, want none: the unrecorded %s stays a conflict", got, existing)
 				}
 			})
 		}

@@ -46,6 +46,7 @@ import (
 	"mosaic-deploy/internal/app/interactiontest"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 )
 
@@ -136,10 +137,10 @@ func newUpdateDepsWithScanMembership(t *testing.T, stub *interactiontest.Stub) (
 		snap: manifest.Snapshot{
 			State: manifest.StatePresent,
 			Manifest: domain.Manifest{
-				HarnessID: "stub-harness",
-				Entries:   []domain.ManifestEntry{
+				Harnesses: []domain.HarnessSection{{HarnessID: "stub-harness"}},
+				Entries:   manifesttest.WithHarness("stub-harness", []domain.ManifestEntry{
 					// Deliberately no entry for extra-agent or test-runner.
-				},
+				}),
 			},
 		},
 	}

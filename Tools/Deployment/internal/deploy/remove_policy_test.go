@@ -69,8 +69,9 @@ func TestRemoval_NonAtomicFailure_IsRecordedAndOtherRemovalsContinue(t *testing.
 	}
 	assertFileHolds(t, ws, "agents/dir/inner.md", "INNER")
 	paths := manifestTargetPaths(t, ws)
-	if !hasPath(paths, "agents/dir") || hasPath(paths, "agents/old.md") {
-		t.Errorf("manifest paths = %v; want the failed entry kept and the removed one dropped", paths)
+	// agents/dir is no longer a regular file, so reconciliation dropped its entry before the run.
+	if hasPath(paths, "agents/old.md") {
+		t.Errorf("manifest paths = %v; want the removed entry dropped", paths)
 	}
 }
 

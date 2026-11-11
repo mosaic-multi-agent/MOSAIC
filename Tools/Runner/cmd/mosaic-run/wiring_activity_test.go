@@ -92,7 +92,7 @@ func TestInteractiveWiring_ActivityObserver_InvocationsFinishWhileTheProgramIsNo
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
 
-			_, err := deps.Harness.Invoke(ctx, timeoutAgentRef(t, domain.InvocationOrdinary),
+			_, err := deps.Harness.Invoke(ctx, timeoutAgentRef(t),
 				domain.ProtocolRequest{AgentInstanceID: "test-agent#1", TaskDescription: "x"})
 
 			if ctx.Err() != nil {
@@ -117,7 +117,7 @@ func TestInteractiveWiring_Consultation_DoesNotBreakWithTheTUIObserver(t *testin
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	_, err := raw.InvokeRaw(ctx, timeoutAgentRef(t, domain.InvocationOrchestrator), []byte(`{}`))
+	_, err := raw.InvokeRaw(ctx, timeoutAgentRef(t), []byte(`{}`))
 
 	if ctx.Err() != nil {
 		t.Fatalf("consultation did not finish through the TUI wiring: %v", err)

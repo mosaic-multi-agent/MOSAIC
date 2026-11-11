@@ -50,6 +50,9 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if cMsg, ok := msg.(consultStartedMsg); ok {
 		return m.handleConsultStarted(cMsg)
 	}
+	if rMsg, ok := msg.(repairJudgedMsg); ok {
+		return m.handleRepairJudged(rMsg)
+	}
 	if _, ok := msg.(consultEndedMsg); ok {
 		return m.handleConsultEnded()
 	}

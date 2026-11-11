@@ -14,7 +14,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Required flags, both invocation kinds
+// Required flags
 // ---------------------------------------------------------------------------
 
 func TestBuildOpenCodeArgs_Ordinary_StartsWithRunSubcommand(t *testing.T) {

@@ -14,19 +14,12 @@ import (
 	"time"
 )
 
-// InvocationKind selects the CLI invocation strategy.
-type InvocationKind string
-
-const (
-	InvocationOrdinary     InvocationKind = "ordinary"
-	InvocationOrchestrator InvocationKind = "orchestrator"
-)
-
-// AgentRef is a resolved agent: an identifier plus the definition file path.
+// AgentRef is a resolved agent: an identifier (the --agent value for Claude
+// Code) plus the deployed definition file path, which no argument builder
+// for Claude Code reads.
 type AgentRef struct {
 	Identifier     string
 	DefinitionPath string
-	Kind           InvocationKind
 }
 
 // SpawnRequest is everything needed to run one agent turn through a CLI.
@@ -49,14 +42,14 @@ type SpawnRequest struct {
 	// builders in this package are pure. Resolving it — reading a file,
 	// synthesizing an <env> block — belongs to the caller.
 	//
-	// The Claude Code builder ignores this field: it has
-	// --append-system-prompt-file and needs no substitute.
+	// The Claude Code builder ignores this field: --agent loads the agent's
+	// own definition as the system prompt.
 	SystemPrompt string
 
 	// SessionPersistence, when true, omits --no-session-persistence from
 	// the constructed argument list, allowing the Claude Code CLI to write
 	// its transcript file. The default (false) preserves today's behaviour
-	// exactly: --no-session-persistence is emitted for both invocation kinds.
+	// exactly: --no-session-persistence is emitted.
 	SessionPersistence bool
 
 	// DerivedTools is the tool allowlist derived from the invoked agent's

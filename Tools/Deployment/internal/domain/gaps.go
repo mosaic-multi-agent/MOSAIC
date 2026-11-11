@@ -73,6 +73,10 @@ const (
 	// stack does not supply. The block is kept as deployed, not updated or validated. One gap
 	// is produced per kept workflow id per run.
 	GapWorkflowKept GapKind = "workflow-kept"
+
+	// GapUnknownHarnessTool reports a tool name written into an agent for a harness that ignores
+	// unknown names. Subject: the tool name. Owner: the agent key. Todo category: TodoToolMappings.
+	GapUnknownHarnessTool GapKind = "unknown-harness-tool"
 )
 
 // Gap is produced by transform, plan, and deploy when a decision could not be made automatically.

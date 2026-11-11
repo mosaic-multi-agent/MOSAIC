@@ -5,6 +5,10 @@ transform_version: "3.0.0"
 
 tools:
   shape: list
+  mcp:
+    server_form: "{server}/*"
+    tool_form: "{server}/{tool}"
+  report_unknown_tool_names: true
   universe:
     - name: "read/readFile"
       unused: deny

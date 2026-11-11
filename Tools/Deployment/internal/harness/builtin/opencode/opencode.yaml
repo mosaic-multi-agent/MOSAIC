@@ -5,6 +5,12 @@ transform_version: "3.0.0"
 
 tools:
   shape: permission
+  mcp:
+    server_form: "{server}_*"
+    tool_form: "{server}_{tool}"
+    extra_server_read_forms:
+      - "{server}*"
+    normalize_server_name: true
   universe:
     - name: "read"
       unused: deny

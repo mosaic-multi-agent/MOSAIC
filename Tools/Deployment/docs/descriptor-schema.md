@@ -83,8 +83,16 @@ models:
 #   - field:         (advanced) if non-empty, the tool value is written to this
 #                    frontmatter key instead of the main tools field.
 #
-# custom_tool_template: format string for user-supplied MCP server names.
-#   "%s" is replaced with the user's server name. Empty = name used as-is.
+# mcp: how this harness writes MCP tool names, in two forms.
+#   server_form: the whole-server form; "{server}" appears exactly once.
+#   tool_form:   the single-tool form; "{server}" then "{tool}", each once, with
+#                literal text between them.
+#   extra_server_read_forms: further whole-server forms that are only read.
+#   normalize_server_name: when true, characters outside A-Za-z0-9_- in the
+#                server name become "_" when written.
+#   When mcp is declared, server_form and tool_form are both required. Omitting
+#   mcp is valid: a custom server name is then used as-is. The retired
+#   custom_tool_template key is rejected with a message naming these keys.
 #
 # custom_tool_destination: optional harness-level default output targets for
 #   custom (MCP-style) tools. When a user supplies a name for an unmapped
@@ -96,8 +104,8 @@ models:
 #   tool_destinations entry's destinations list, except that "names:" is NOT
 #   permitted — it will be rejected at parse time. An empty list ([]) means
 #   the same as omitting the field entirely: the custom tool goes to the main
-#   tools field. This field is independent of custom_tool_template; both may
-#   be set on the same descriptor.
+#   tools field. This field is independent of mcp; both may be set on the same
+#   descriptor.
 #
 #   Only Claude Code's descriptor currently declares this field. All other
 #   built-in descriptors omit it.
@@ -139,7 +147,9 @@ tools:
         - "search/textSearch"
     - generic: "user_interaction"   # explicitly unsupported: present in mapping but empty
       harness_tools: []
-  custom_tool_template: "mcp/%s"
+  mcp:
+    server_form: "mcp/{server}/*"
+    tool_form: "mcp/{server}/{tool}"
   placeholder_expansion:
     - "read/readFile"
     - "write/createFile"
@@ -310,14 +320,40 @@ Maps generic tool names (from the MOSAIC generic vocabulary) to harness tool nam
 **Supported generic tool names:** `file_read`, `file_write`, `file_edit`, `file_search`,
 `content_search`, `terminal`, `user_interaction`, `skill`, `subagent`.
 
-#### `tools.custom_tool_template`
+#### `tools.mcp`
 
-Optional format string for user-supplied MCP server names. `%s` is replaced with
-the user's server name at resolution time. When empty, the name is used as-is.
+Optional block declaring how the harness writes MCP tool names. It serves two
+purposes: the server name a user enters for a custom tool is written in the
+harness's whole-server form, and `transform` reads and writes MCP names of this
+harness with the same forms.
 
-This field is independent of `custom_tool_destination`. Both may be set on the same
-descriptor. When both are set, `custom_tool_template` formats the name and
-`custom_tool_destination` controls where that formatted name is written.
+| Field | Type | Description |
+|-------|------|-------------|
+| `server_form` | string | Whole-server form, e.g. `mcp__{server}__*` or `{server}/*`. `{server}` appears exactly once and `{tool}` not at all. |
+| `tool_form` | string | Single-tool form, e.g. `mcp__{server}__{tool}` or `{server}/{tool}`. `{server}` and `{tool}` appear once each, `{server}` first, with literal text between them. |
+| `extra_server_read_forms` | list of strings | Optional. Further whole-server forms accepted when reading a name (never written). Same rules as `server_form`. |
+| `normalize_server_name` | bool | Optional. When true, every character outside `A-Za-z0-9_-` in the server name is written as `_`. |
+
+When any of `server_form`, `tool_form` or `extra_server_read_forms` is declared,
+both `server_form` and `tool_form` are required. A descriptor without `mcp`
+writes a custom server name as entered. The former `custom_tool_template` key is
+rejected at load time with a message naming `tools.mcp.server_form` and
+`tools.mcp.tool_form`.
+
+A tool name that splits at more than one separator (for example an OpenCode
+`a_b_c`) is ambiguous; `transform` resolves it as described in the
+[CLI reference](cli.md#mcp-tool-names).
+
+This block is independent of `custom_tool_destination`. When both are set, `mcp`
+formats the name and `custom_tool_destination` controls where that formatted name
+is written.
+
+#### `tools.report_unknown_tool_names`
+
+Optional boolean. Set it for a harness that silently ignores tool names it does
+not know. When true, a tool name in a deployed or transformed agent that is
+neither in the universe, nor named by a mapping, nor an MCP name in the `mcp`
+forms is reported as a gap.
 
 #### `tools.custom_tool_destination`
 
@@ -346,16 +382,16 @@ Rules and constraints:
 
 - **Optional.** Omitting the field and declaring it as `[]` are equivalent: the
   custom tool goes to the harness's main tools field, the historical behaviour.
-- **Independent of `custom_tool_template`.** Both may be set; `custom_tool_template`
-  formats the name, `custom_tool_destination` controls where it is written.
+- **Independent of `mcp`.** Both may be set; `mcp` formats the name,
+  `custom_tool_destination` controls where it is written.
 - **No `names:` key.** Presence of `names:` (including `names: []`) in any entry
   is a parse-time error.
 - **Validation rules** mirror those for `tool_destinations` destinations (rules 3–9
   from the configuration reference), except that rule 10 (non-empty names) does not
   apply — names are always empty as declared and are filled in at resolution time.
 - No current built-in harness declares this field. Claude Code, the harness that
-  previously declared it, now uses `custom_tool_template: "mcp__%s__*"` to format
-  custom tools as wildcards routed to the main tools field instead.
+  previously declared it, now writes custom tools with its `mcp` server form
+  (`mcp__{server}__*`) to the main tools field instead.
 
 #### Tool mapping outcomes
 

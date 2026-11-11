@@ -14,11 +14,25 @@ import (
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 )
 
+// uhPerFileEntries records every file of files as a hook file at the catalog version.
+func uhPerFileEntries(files map[string]string) []domain.ManifestEntry {
+	var entries []domain.ManifestEntry
+	for target, content := range files {
+		entries = append(entries, domain.ManifestEntry{
+			Ref:        domain.ArtifactRef{Kind: domain.ArtifactHook, Key: uhHookKey},
+			TargetPath: target, Version: uhCatalogVersion, ContentHash: manifest.Hash([]byte(content)),
+		})
+	}
+	return entries
+}
+
 func TestDeployHooks_UnchangedDeployedHookWithExistingTarget_RegistrationGapStillReported(t *testing.T) {
 	module := newTestHookModule(uhHarnessID, newTestHookPlan(t, uhFlat))
+	deployed := uhFixtureFiles(t, uhFlat)
 	review := &uhReviewSpy{Stub: interactiontest.NewBuilder().AnswerReview(true).Build()}
 	deps, workspace := newBaseDeps(t, review.Stub)
 	deps.Interaction = review
@@ -31,17 +45,12 @@ func TestDeployHooks_UnchangedDeployedHookWithExistingTarget_RegistrationGapStil
 		modules: map[string]domain.HarnessModule{uhHarnessID: module},
 	}
 	deps.Manifest = &stubManifestStore{snap: manifest.Snapshot{State: manifest.StatePresent, Manifest: domain.Manifest{
-		SchemaVersion: manifest.SchemaVersion, HarnessID: uhHarnessID,
-		Entries: []domain.ManifestEntry{{
-			Ref:        domain.ArtifactRef{Kind: domain.ArtifactHook, Key: uhHookKey},
-			TargetPath: uhHookTarget, Version: uhCatalogVersion, ContentHash: manifest.Hash(nil),
-		}},
+		SchemaVersion: manifest.SchemaVersion, Harnesses: []domain.HarnessSection{{HarnessID: uhHarnessID}},
+		Entries: manifesttest.WithHarness(uhHarnessID, uhPerFileEntries(deployed)),
 	}}}
 	deps.Executor = deploy.NewExecutor(deps.Manifest, deps.Logger, deps.Todo)
-	uhSeedFiles(t, workspace, map[string]string{
-		uhHooksDir + "/logger.sh": "deployed earlier\n",
-		uhRegTarget:               uhExistingSettings,
-	})
+	deployed[uhRegTarget] = uhExistingSettings
+	uhSeedFiles(t, workspace, deployed)
 
 	_, err := app.New(deps).DeployHooks(context.Background(), app.DeployHooksRequest{
 		HarnessID:       uhHarnessID,
@@ -57,9 +66,18 @@ func TestDeployHooks_UnchangedDeployedHookWithExistingTarget_RegistrationGapStil
 	if review.reviewed == nil {
 		t.Fatal("no plan was reviewed")
 	}
-	item, ok := findPlanItem(review.reviewed.Items, uhHookKey)
-	if !ok || item.Action != domain.ActionUnchanged {
-		t.Fatalf("hook plan item = %+v (found %v), want ActionUnchanged", item, ok)
+	hookItems := 0
+	for _, item := range review.reviewed.Items {
+		if item.Ref.Key != uhHookKey {
+			continue
+		}
+		hookItems++
+		if item.Action != domain.ActionUnchanged {
+			t.Errorf("hook file item %s = %q, want ActionUnchanged", item.TargetPath, item.Action)
+		}
+	}
+	if hookItems == 0 {
+		t.Fatal("no hook file plan items were reviewed")
 	}
 	if !uhHasRegistrationGap(review.reviewed.Gaps) {
 		t.Errorf("deploy-hooks plan lacks the registration gap of an unchanged hook: %+v", review.reviewed.Gaps)

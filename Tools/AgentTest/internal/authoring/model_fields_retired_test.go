@@ -241,7 +241,6 @@ subject:
   agent: orchestrator
   infrastructure_agents: []
   opening_message: "Build the thing."
-  invocation_kind: orchestrator
   allowed_tools: [Task, Read, Write, Edit]
 stub_registry: stubs/d.stubs.json
 `),

@@ -36,7 +36,7 @@ const DefaultSpawnTimeout = 30 * time.Minute
 // supplied explicitly, and it must describe the sandbox the subject actually
 // runs in rather than this tool's own process working directory. This is the
 // one place OpenCode's SpawnPlan diverges from Runner's OpenCodeAdapter,
-// which passes EnvBlock("") for both invocation kinds.
+// which passes EnvBlock("").
 //
 // The plan carries neither a test-declared timeout nor a turn limit: no
 // argument this method receives could supply either (domain.SubjectUnderTest
@@ -69,7 +69,6 @@ func (a *Adapter) SpawnPlan(ctx context.Context, subject domain.SubjectUnderTest
 			// agent by name loads the definition MOSAIC already deploys to
 			// .opencode/agents/<identifier>.md.
 			DefinitionPath: filepath.Join(p.Sandbox.SubjectDir, filepath.FromSlash(subject.DefinitionPath)),
-			Kind:           commonharness.InvocationKind(subject.InvocationKind),
 		},
 		Prompt:       subject.OpeningMessage,
 		SystemPrompt: commonharness.EnvBlock(p.Sandbox.SubjectDir),

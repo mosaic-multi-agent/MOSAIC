@@ -73,6 +73,7 @@ func trPairExecRun(t *testing.T, src, tgt string, c trPairExecCase, opts ...func
 // trPairUnrelatedEntry is a manifest entry that belongs to neither deployment of the pair.
 func trPairUnrelatedEntry() domain.ManifestEntry {
 	return domain.ManifestEntry{
+		Harness:    hOpen,
 		Ref:        domain.ArtifactRef{Kind: domain.ArtifactSkill, Key: "other-skill"},
 		TargetPath: trPairUnrelatedPath, Version: "9.9.9", ContentHash: manifest.Hash([]byte("unrelated skill\n")),
 		DeployedAt: time.Date(2024, 5, 6, 7, 8, 9, 0, time.UTC),
@@ -83,6 +84,12 @@ func trPairUnrelatedEntry() domain.ManifestEntry {
 func trAppendEntry(t *testing.T, ws string, e domain.ManifestEntry) {
 	t.Helper()
 	m := trLoadManifest(t, ws)
+	if e.Harness == "" && len(m.Harnesses) > 0 {
+		e.Harness = m.Harnesses[0].HarnessID
+	}
+	if _, ok := m.Section(e.Harness); !ok {
+		m.Harnesses = append(m.Harnesses, domain.HarnessSection{HarnessID: e.Harness})
+	}
 	m.Entries = append(m.Entries, e)
 	if err := manifest.NewStore().Save(ws, m); err != nil {
 		t.Fatalf("save manifest: %v", err)

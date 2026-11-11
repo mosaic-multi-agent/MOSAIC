@@ -5,14 +5,16 @@ import (
 
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
+	"mosaic-deploy/internal/harness/mcpname"
 )
 
 // ConvertDeployedTools converts the tool names of one deployed source-harness agent into
 // the inputs deploy's forward mapping needs for the target harness.
 //
 // Each distinct source name is converted by the first rule that claims it: mapped through
-// its generic tool, custom tool by the source's template, kept when valid in the target,
-// dropped when built into the source with no target equivalent, otherwise a custom tool.
+// its generic tool, kept when valid in the target, dropped when built into the source with no
+// target equivalent, MCP name read with the source's forms and written with the target's, and
+// otherwise unknown and dropped. A name denied in the source is never granted in the target.
 func ConvertDeployedTools(in DeployedToolsInput) ConvertedTools {
 	conv := &toolConverter{
 		in:        in,
@@ -22,29 +24,31 @@ func ConvertDeployedTools(in DeployedToolsInput) ConvertedTools {
 		seen:      map[string]bool{},
 		inGeneric: map[string]bool{},
 		inTarget:  map[string]bool{},
+		inDenied:  map[string]bool{},
 		inUnmap:   map[string]bool{},
 	}
 
 	covered := map[string]bool{}
 	if in.PlaceholderAgent && in.Role == domain.RoleOrchestrator {
-		if names, ok := completeExpansion(in.Source, in.Tools); ok {
+		if names, ok := completeExpansion(in.Source, allowedNames(in.Tools)); ok {
 			conv.out.UsePlaceholder = true
 			covered = toolNameSet(names)
 		}
 	}
 
-	for _, name := range in.Tools {
-		if conv.seen[name] {
+	for _, grant := range in.Tools {
+		if conv.seen[grant.Name] {
 			continue
 		}
-		conv.seen[name] = true
-		if covered[name] {
-			conv.out.Conversions = append(conv.out.Conversions, ToolConversion{Source: name, Rule: ToolRulePlaceholder})
+		conv.seen[grant.Name] = true
+		if grant.Disposition == domain.Allow && covered[grant.Name] {
+			conv.out.Conversions = append(conv.out.Conversions, ToolConversion{Source: grant.Name, Rule: ToolRulePlaceholder})
 			continue
 		}
-		conv.convert(name)
+		conv.convert(grant)
 	}
 
+	conv.withholdDeniedGrants()
 	conv.addSkillAccess()
 	return conv.out
 }
@@ -58,45 +62,59 @@ type toolConverter struct {
 	seen      map[string]bool
 	inGeneric map[string]bool
 	inTarget  map[string]bool
+	inDenied  map[string]bool // target names denied in the source, whether or not the target writes the deny
 	inUnmap   map[string]bool
 }
 
-// convert applies the ordered rules to one source tool name.
-func (c *toolConverter) convert(name string) {
+// convert applies the ordered rules to one source tool grant.
+func (c *toolConverter) convert(grant domain.ToolGrant) {
+	name := grant.Name
+	deny := grant.Disposition == domain.Deny
 	if generics := c.resolveGenerics(name); len(generics) > 0 {
-		for _, g := range generics {
-			c.addGeneric(g)
-			if !hasMappingEntry(c.in.Target, g) && !c.inUnmap[g] {
-				c.inUnmap[g] = true
-				c.out.Unmapped = append(c.out.Unmapped, g)
-			}
+		if !deny {
+			c.mapGenerics(generics)
 		}
 		c.record(ToolConversion{Source: name, Rule: ToolRuleMapped, Generic: generics})
 		return
 	}
-	if server, ok := descriptor.ReverseCustomTool(c.in.Source, name); ok {
-		c.addCustom(server)
-		c.record(ToolConversion{Source: name, Rule: ToolRuleCustomTemplate, Server: server})
-		return
-	}
 	if c.validInTarget(name) {
-		if !c.inTarget[name] {
-			c.inTarget[name] = true
-			c.out.TargetTools = append(c.out.TargetTools, name)
-		}
+		c.emitTarget(name, name, deny)
 		c.record(ToolConversion{Source: name, Rule: ToolRuleKept})
 		return
 	}
 	if c.universe[name] {
-		c.out.Dropped = append(c.out.Dropped, DroppedTool{
-			Name:   name,
-			Reason: "built into " + c.in.Source.ID + " with no " + c.in.Target.ID + " equivalent",
-		})
+		// A denied built-in tool is listing, not intent: nothing is reported for it.
+		if !deny {
+			c.out.Dropped = append(c.out.Dropped, DroppedTool{
+				Name:   name,
+				Reason: "built into " + c.in.Source.ID + " with no " + c.in.Target.ID + " equivalent",
+			})
+		}
 		c.record(ToolConversion{Source: name, Rule: ToolRuleDropped})
 		return
 	}
-	c.addCustom(name)
-	c.record(ToolConversion{Source: name, Rule: ToolRuleCustom, Server: name})
+	if c.convertMCP(grant) {
+		return
+	}
+	if !deny {
+		c.out.Dropped = append(c.out.Dropped, DroppedTool{
+			Name:   name,
+			Reason: "not a known " + c.in.Source.ID + " tool or MCP name",
+		})
+	}
+	c.record(ToolConversion{Source: name, Rule: ToolRuleUnknown})
+}
+
+// mapGenerics adds the generic tools of an allowed mapped name and lists those the target has
+// no mapping for.
+func (c *toolConverter) mapGenerics(generics []string) {
+	for _, g := range generics {
+		c.addGeneric(g)
+		if !hasMappingEntry(c.in.Target, g) && !c.inUnmap[g] {
+			c.inUnmap[g] = true
+			c.out.Unmapped = append(c.out.Unmapped, g)
+		}
+	}
 }
 
 // resolveGenerics returns the generic tools of a source name: every candidate the catalog
@@ -130,15 +148,13 @@ func (c *toolConverter) validInTarget(name string) bool {
 	return startsWithCustomPrefix(c.in.Target, name)
 }
 
-// startsWithCustomPrefix reports whether the name already begins with the text of the
-// harness's custom tool template before its single %s, i.e. it is in the harness's own custom form.
+// startsWithCustomPrefix reports whether the name already is an MCP name in the harness's own
+// syntax. Only harnesses whose MCP names carry a distinguishing literal prefix (Claude Code's
+// "mcp__") are recognised this way: a bare "<server>_<tool>" or "<server>/<tool>" shape also
+// fits ordinary names, so for those the name is not taken as already in the target's form.
 func startsWithCustomPrefix(d *domain.HarnessDescriptor, name string) bool {
-	tmpl := d.Tools.CustomToolTemplate
-	if strings.Count(tmpl, "%s") != 1 {
-		return false
-	}
-	prefix, _, _ := strings.Cut(tmpl, "%s")
-	return prefix != "" && strings.HasPrefix(name, prefix)
+	prefix, _, _ := strings.Cut(d.Tools.MCP.ToolForm, "{server}")
+	return prefix != "" && len(mcpname.Parse(d.Tools.MCP, name)) > 0
 }
 
 func (c *toolConverter) record(cv ToolConversion) {
@@ -150,12 +166,4 @@ func (c *toolConverter) addGeneric(g string) {
 		c.inGeneric[g] = true
 		c.out.Generic = append(c.out.Generic, g)
 	}
-}
-
-func (c *toolConverter) addCustom(server string) {
-	if c.out.CustomTools == nil {
-		c.out.CustomTools = map[string]string{}
-	}
-	c.out.CustomTools[server] = server
-	c.addGeneric(server)
 }

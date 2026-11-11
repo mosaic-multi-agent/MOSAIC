@@ -24,6 +24,7 @@ import (
 
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 )
 
@@ -53,9 +54,9 @@ func TestBuild_ActionUnchanged_NoModel_NoGapNoModel(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	input := plan.Input{
@@ -77,7 +78,7 @@ func TestBuild_ActionUnchanged_NoModel_NoGapNoModel(t *testing.T) {
 				Present:           true,
 				ContentHash:       hash,
 				Version:           "1.0",
-				HarnessVersion:  "1.0",
+				HarnessVersion:    "1.0",
 				InjectionsVersion: "1.0",
 			},
 		},
@@ -216,9 +217,9 @@ func TestBuild_ActionUpdate_NoModel_NoDeployedModel_EmitsGapNoModel(t *testing.T
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	input := plan.Input{
@@ -277,9 +278,9 @@ func TestBuild_ActionUpdate_NoModel_WithDeployedModel_SuppressesGapNoModel(t *te
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	input := plan.Input{
@@ -337,9 +338,9 @@ func TestBuild_ActionUpdate_ResolvedModel_NoGapNoModel(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	input := plan.Input{
@@ -404,9 +405,9 @@ func TestBuild_ActionConflict_NoModel_NoDeployedModel_EmitsGapNoModel(t *testing
 	// record → ActionConflict with ManifestMissing: true (FR-4 edge case).
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       nil, // no entry for test-agent
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", nil), // no entry for test-agent
 	})
 
 	input := plan.Input{
@@ -473,9 +474,9 @@ func TestBuild_ActionConflict_NoModel_WithDeployedModel_SuppressesGapNoModel(t *
 	// conflict is resolved with a rewrite.
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       nil, // no entry for test-agent
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", nil), // no entry for test-agent
 	})
 
 	input := plan.Input{
@@ -542,9 +543,9 @@ func TestBuild_ActionUnchanged_UnmappedTool_NoGap(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	module := newFakeModule()
@@ -578,7 +579,7 @@ func TestBuild_ActionUnchanged_UnmappedTool_NoGap(t *testing.T) {
 				Present:           true,
 				ContentHash:       hash,
 				Version:           "1.0",
-				HarnessVersion:  "1.0",
+				HarnessVersion:    "1.0",
 				InjectionsVersion: "1.0",
 			},
 		},
@@ -627,9 +628,9 @@ func TestBuild_ActionAwareGap_ItemClassificationUnaffected(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	input := plan.Input{
@@ -650,7 +651,7 @@ func TestBuild_ActionAwareGap_ItemClassificationUnaffected(t *testing.T) {
 				Present:           true,
 				ContentHash:       unchangedHash,
 				Version:           "1.0",
-				HarnessVersion:  "1.0",
+				HarnessVersion:    "1.0",
 				InjectionsVersion: "1.0",
 			},
 		},
@@ -702,7 +703,7 @@ func TestBuild_ActionAwareGap_ItemOrderingUnaffected(t *testing.T) {
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
 			// alpha-agent has no model; zeta-agent and orchestrator have one.
-			zetaAgent.Key: {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			zetaAgent.Key:  {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 	}
@@ -828,9 +829,9 @@ func TestBuild_ActionUpdate_UnmappedTool_EmitsGap(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	input := plan.Input{

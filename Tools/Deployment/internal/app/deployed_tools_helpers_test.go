@@ -51,13 +51,52 @@ func newToolInput(t *testing.T, srcRel, tgtRel string, tools []string, opts ...t
 	in := app.DeployedToolsInput{
 		Source: loadToolHarness(t, srcRel),
 		Target: loadToolHarness(t, tgtRel),
-		Tools:  tools,
+		Tools:  allowToolGrants(tools),
 		Role:   domain.RoleSubagent,
 	}
 	for _, o := range opts {
 		o(&in)
 	}
 	return in
+}
+
+// allowToolGrants wraps names as allow grants.
+func allowToolGrants(names []string) []domain.ToolGrant {
+	grants := make([]domain.ToolGrant, len(names))
+	for i, n := range names {
+		grants[i] = domain.ToolGrant{Name: n, Disposition: domain.Allow}
+	}
+	return grants
+}
+
+// allowGrant and denyGrant build one grant.
+func allowGrant(name string) domain.ToolGrant {
+	return domain.ToolGrant{Name: name, Disposition: domain.Allow}
+}
+
+func denyGrant(name string) domain.ToolGrant {
+	return domain.ToolGrant{Name: name, Disposition: domain.Deny}
+}
+
+// withDeclaredServers sets the declared servers of the source MCP configuration.
+func withDeclaredServers(servers ...string) toolInputOpt {
+	return func(in *app.DeployedToolsInput) { in.DeclaredServers = servers }
+}
+
+// withSplitAnswers sets the answered splits (source name -> server).
+func withSplitAnswers(answers map[string]string) toolInputOpt {
+	return func(in *app.DeployedToolsInput) { in.SplitAnswers = answers }
+}
+
+// convertGrants runs ConvertDeployedTools on grants (allow and deny) of the source harness.
+func convertGrants(t *testing.T, srcRel, tgtRel string, grants []domain.ToolGrant, opts ...toolInputOpt) app.ConvertedTools {
+	t.Helper()
+	in := newToolInput(t, srcRel, tgtRel, nil, opts...)
+	in.Tools = grants
+	for _, o := range opts {
+		o(&in)
+	}
+	return app.ConvertDeployedTools(in)
 }
 
 // convertTools runs ConvertDeployedTools on a freshly built input.

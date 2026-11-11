@@ -21,10 +21,9 @@ const FakeHarnessID = "fake"
 
 // disabledHarnesses lists catalog harnesses Runner temporarily refuses, with
 // the reason shown to the user. A disabled harness is neither offered in any
-// selection UI nor accepted by the --harness flag.
-var disabledHarnesses = map[string]string{
-	commonharness.HarnessIDClaudeCode: "Claude Code is temporarily disabled in Runner: agents ignore the model and tools in their definition file. Use opencode or ghcp-cli, or run Claude Code natively",
-}
+// selection UI nor accepted by the --harness flag. It is empty while every
+// catalog harness is enabled.
+var disabledHarnesses = map[string]string{}
 
 // DisabledReason reports whether id is a catalog harness Runner temporarily
 // refuses, and why.
@@ -92,7 +91,7 @@ func CLISelections() []Selection {
 }
 
 // FlagValues renders the accepted identities for the flag's usage string,
-// pipe-separated in accepted order: "fake|claude-code|opencode".
+// pipe-separated in accepted order: "fake|claude-code|opencode|ghcp-cli".
 func FlagValues() string {
 	ids := make([]string, 0, len(Selections()))
 	for _, s := range Selections() {
@@ -102,7 +101,7 @@ func FlagValues() string {
 }
 
 // FlagValueList renders the accepted identities for the usage-error message,
-// comma-separated in accepted order: "fake, claude-code, opencode".
+// comma-separated in accepted order: "fake, claude-code, opencode, ghcp-cli".
 func FlagValueList() string {
 	ids := make([]string, 0, len(Selections()))
 	for _, s := range Selections() {

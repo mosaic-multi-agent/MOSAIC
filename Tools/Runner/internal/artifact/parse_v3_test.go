@@ -83,7 +83,7 @@ func TestParse_IterationColumnAndKey_ReadAsTheRecordedValue(t *testing.T) {
 func TestParse_IterationDashCell_ReadAsOutsideEveryBlockBesideAValuedRow(t *testing.T) {
 	doc := string(v3Document("Iteration", "-", "iteration", `"1.Test"`))
 	dashRow := "| 1 | writer#1 | EXECUTION | - | 3 | SUCCESS | 2026-01-01T01:00:00Z | done | - | - |\n"
-	valuedRow := "| 2 | writer#1 | EXECUTION | 1.Test | 3 | SUCCESS | 2026-01-01T01:00:00Z | done | - | - |\n"
+	valuedRow := "| 2 | writer#2 | EXECUTION | 1.Test | 3 | SUCCESS | 2026-01-01T01:00:00Z | done | - | - |\n"
 	if !strings.Contains(doc, dashRow) {
 		t.Fatalf("fixture row not found in:\n%s", doc)
 	}

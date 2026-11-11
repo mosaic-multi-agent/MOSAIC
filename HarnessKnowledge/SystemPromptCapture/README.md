@@ -21,15 +21,19 @@ HarnessKnowledge/SystemPromptCapture/
 │   └── varied-content-test.txt            # Tests read, edit, grep (special chars, indentation, unicode)
 ├── Analysis/                              # Cross-harness comparison (produced by architects)
 └── {Harness}/
-    ├── Subagent/                          # 5 files (see CaptureGuide.md for specs)
-    └── PrimaryAgent/                      # Same 5 files, captured from primary agent session
+    └── {HarnessVersion}/                  # Harness version with v prefix, e.g. v2.1.322; one folder per captured version
+        ├── AnalysisReport.md              # Analysis of this version's tiers (optional)
+        ├── Subagent/                      # 5 files (see CaptureGuide.md for specs)
+        └── PrimaryAgent/                  # Same 5 files, captured from primary agent session
 ```
+
+Captures are kept per harness version so that a capture can always be tied to the harness that produced it, and so that versions can be diffed. A new capture never overwrites an older version's folder.
 
 Each harness is captured at two tiers — **Subagent** and **PrimaryAgent** — because they can differ. Subagents may have fewer built-in tools (permission restrictions), different reasoning effort settings, or different behavioral instructions. Both must be captured to understand the full picture.
 
 ## How to Run a Capture
 
-1. Fill in `{Harness}`, `{Tier}`, and `{context}` in the prompts from `CaptureGuide.md`.
+1. Fill in `{Harness}`, `{HarnessVersion}`, `{Tier}`, and `{context}` in the prompts from `CaptureGuide.md`. Take the version from the installed harness (e.g. `claude --version`) right before capturing.
 2. For the **Subagent** tier: spawn a subagent with each prompt.
 3. For the **PrimaryAgent** tier: run each prompt directly in the primary agent session.
 4. Run Steps 1-3 (system prompt capture) first, then Tool Output capture separately.
@@ -58,6 +62,9 @@ The core tools table and harness-specific tool lists are in `CaptureGuide.md` (t
 1. **Agent self-reflection is imperfect.** The model reproduces what it "sees" in context, but may miss content it has internalized without being able to quote verbatim. Hook-based capture (e.g., `experimental.chat.system.transform` in OpenCode) would be more precise.
 2. **XML escaping.** The system prompt uses XML-like tags that conflict with the model's output format. Bracket notation is a pragmatic workaround but adds indirection.
 3. **Truncation.** Very long tool descriptions (e.g., task tool with many agents listed) may be truncated by the Read tool's line limit. The raw capture may be incomplete for these.
+4. **Model safeguards (observed 2026-11-11).** Opus 5.5 refuses to reproduce its own system prompt (the response is stopped by a safety classifier, also on retry). Sonnet 5.5 produced the system prompt, but refused verbatim reproduction of harness context in the first user turn (`reasoning_extraction`). Run captures on a model that permits it and set that model in the capturer's `model:` (under `--agent`, `model:` decides the model). Content that cannot be reproduced can still be established by yes/no questions, recorded as such.
+5. **Tool-calling preamble is not harness content.** The lines before the tool list ("In this environment you have access to a set of tools…", the function-call example, "Here are the functions available in JSONSchema format:") are not in the Claude Code client; the API adds them when it renders the tools, and they may differ by model. Do not treat their presence or absence as a harness difference.
+6. **Trust the capture, not the agent's later self-correction.** In `v2.1.322/HeadlessAgent` the agent wrote the preamble, then claimed in its final report it had invented it; follow-up sessions answered inconsistently, while the Opus 5.5 PrimaryAgent/Subagent captures of the same version contain the same lines. The raw file is kept exactly as written. Never edit a raw capture because of the agent's own afterthoughts.
 
 ## Capture Status
 

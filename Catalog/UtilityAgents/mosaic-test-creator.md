@@ -1,5 +1,5 @@
 ---
-version: 1.1.0
+version: 1.1.1
 name: mosaic-test-creator
 description: Creates and maintains AgentTest test suites, test definitions, stub registries, seed fixtures, and test catalogue entries for orchestrator routing tests
 role: utility
@@ -272,7 +272,6 @@ subject:
 
     Constraints: none. Do not ask me any further questions - proceed with the
     workflow immediately and autonomously using the information above.
-  invocation_kind: orchestrator
   allowed_tools: [Read, Write, Edit, Bash, Glob, Grep, Task]
 
 stub_registry: {test-id}.stubs.json

@@ -29,6 +29,9 @@ var (
 	catOther   = domain.CatalogIdentity{ID: "other-cat", Name: "Other", Version: "3.0"}
 )
 
+// metaHarnessID is the harness of the plans these tests run.
+const metaHarnessID = "test-harness"
+
 func idPtr(id domain.CatalogIdentity) *domain.CatalogIdentity { return &id }
 
 // runAgents executes a non-atomic run that creates the given agents, with the given stamps and
@@ -63,11 +66,12 @@ func loadManifest(t *testing.T, workspace string) domain.Manifest {
 
 func requireSuppliers(t *testing.T, m domain.Manifest, protocol, bundle domain.CatalogIdentity) {
 	t.Helper()
-	if m.ProtocolSource != protocol {
-		t.Errorf("ProtocolSource = %+v, want %+v", m.ProtocolSource, protocol)
+	sec, _ := m.Section(metaHarnessID)
+	if sec.ProtocolSource != protocol {
+		t.Errorf("ProtocolSource = %+v, want %+v", sec.ProtocolSource, protocol)
 	}
-	if m.BundleSource != bundle {
-		t.Errorf("BundleSource = %+v, want %+v", m.BundleSource, bundle)
+	if sec.BundleSource != bundle {
+		t.Errorf("BundleSource = %+v, want %+v", sec.BundleSource, bundle)
 	}
 }
 

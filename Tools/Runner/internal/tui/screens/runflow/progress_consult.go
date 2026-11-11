@@ -27,6 +27,36 @@ func (s *ProgressScreen) Consultation() (domain.ConsultationActivity, bool) {
 	return *s.consultation, true
 }
 
+// RecordRepairOutcome keeps o for display; outcomes stay visible for the rest
+// of the run, in the order recorded, after the consultation row ends.
+func (s *ProgressScreen) RecordRepairOutcome(o domain.RepairOutcome) {
+	s.repairOutcomes = append(s.repairOutcomes, o)
+}
+
+// RepairOutcomes returns the recorded outcomes in order.
+func (s *ProgressScreen) RepairOutcomes() []domain.RepairOutcome {
+	return append([]domain.RepairOutcome(nil), s.repairOutcomes...)
+}
+
+// repairOutcomeLines renders one line per recorded repair outcome, in order,
+// or "" when none is recorded.
+func (s *ProgressScreen) repairOutcomeLines() string {
+	lines := make([]string, 0, len(s.repairOutcomes))
+	for _, o := range s.repairOutcomes {
+		prefix := fmt.Sprintf("  artifact repair, attempt %d of 2: ", o.Attempt)
+		if o.Accepted {
+			lines = append(lines, s.styles.Success.Render(prefix+"accepted"))
+			continue
+		}
+		noun := "problems"
+		if o.Problems == 1 {
+			noun = "problem"
+		}
+		lines = append(lines, s.styles.Warning.Render(fmt.Sprintf("%snot accepted (%d %s remaining)", prefix, o.Problems, noun)))
+	}
+	return strings.Join(lines, "\n")
+}
+
 // consultationLine renders the running consultation row, or "" when none is
 // shown. Its label differs from a subagent row's so the two cannot be confused.
 func (s *ProgressScreen) consultationLine() string {
@@ -47,6 +77,9 @@ func (s *ProgressScreen) consultationLine() string {
 // deviation kind and a note that the consultation carries a user message.
 func consultationDetails(c *domain.ConsultationActivity) string {
 	var parts []string
+	if c.RepairAttempt > 0 {
+		parts = append(parts, fmt.Sprintf("artifact damaged, repair %d", c.RepairAttempt))
+	}
 	if c.Kind != "" {
 		parts = append(parts, string(c.Kind))
 	}

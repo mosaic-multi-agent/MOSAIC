@@ -32,7 +32,7 @@ type runStartCtx struct {
 	orchDir  string
 	// Artifact state from the store (set at step 3 for resume, created at step 8).
 	existingState domain.ArtifactState
-	// Agent resolution results (set at step 5; updated at step 5b for path-based harnesses).
+	// Agent resolution results (set at step 5; not re-resolved at step 5b).
 	agents      map[string]domain.AgentReference
 	identifiers []string
 	// Infrastructure agents (set at step 6b; filtered at step 6b2).
@@ -61,6 +61,13 @@ type runStartCtx struct {
 	// resumeRedispatch is the re-dispatch of a trailing unaccepted attempt a
 	// resume found, for the dispatch loop to run before it asks the engine.
 	resumeRedispatch *domain.DispatchStep
+	// startDamage is the damage a resume found when it read the artifact, until
+	// the start-time repair consultation has dealt with it.
+	startDamage *domain.ArtifactDamageError
+	// startRepair is the reply of the accepted start-time repair consultation; it
+	// replaces the resume position. repairDispatch is its dispatch, until carried out.
+	startRepair    *domain.RoutingInstruction
+	repairDispatch *domain.DispatchInstruction
 }
 
 // prepareRouting handles steps 1 through 2c of the run-start sequence:
@@ -74,6 +81,9 @@ type runStartCtx struct {
 func (s *sessionImpl) prepareRouting(ctx context.Context, config domain.RunConfig) (*runStartCtx, domain.RunOutcome, bool, error) {
 	// Step 1: load orchestrator file and get the selected workflow region.
 	if !config.IsNewRun && config.WorkflowID == "" {
+		if outcome, damaged := s.damagedBeforeWorkflow(ctx); damaged {
+			return nil, outcome, true, nil
+		}
 		return nil, s.resumeRecordedNoWorkflowRefusal(config.RunID), true, nil
 	}
 	region, err := orchfile.GetWorkflow(config.OrchestratorFilePath, string(config.WorkflowID))
@@ -136,6 +146,15 @@ func (s *sessionImpl) readArtifact(ctx context.Context, rs *runStartCtx) (domain
 		if layoutErr := resumeLayoutRefusal(readErr, rs.config.RunID); layoutErr != nil && !rs.config.IsNewRun {
 			return s.refusalCaused(layoutErr.Error(), layoutErr), true, nil
 		}
+		var damageErr *domain.ArtifactDamageError
+		if errors.As(readErr, &damageErr) {
+			if rs.config.IsNewRun {
+				return s.refusalCaused(damageErr.Error(), damageErr), true, nil
+			}
+			// A resumed run's damaged artifact is repaired once the run-start
+			// sequence has the block schedules the repair reply is checked against.
+			return s.deferStartRepair(rs, damageErr)
+		}
 		var refErr *domain.RefusalError
 		if errors.As(readErr, &refErr) {
 			return s.refusal(refErr.Error()), true, nil
@@ -165,27 +184,8 @@ func (s *sessionImpl) readArtifact(ctx context.Context, rs *runStartCtx) (domain
 	// A resumed artifact must carry a valid run_id matching its run folder.
 	// It is refused before any invocation; the identity is never repaired.
 	if !rs.config.IsNewRun {
-		if idErr := checkResumeRunIdentity(existingState.RunID, rs.config); idErr != nil {
-			return s.runIdentityRefusal(idErr, rs.config), true, nil
-		}
-		if d := existingState.Dispatch; d.Present && d.Value != domain.DispatchSequential {
-			return s.refusal(fmt.Sprintf(
-				"run artifact records dispatch %q; this Runner runs sequentially and supports only \"dispatch: %s\"",
-				d.Value, domain.DispatchSequential,
-			)), true, nil
-		}
-		if valueErr := resumeValueRefusal(existingState, rs.table, rs.config.RunID); valueErr != nil {
-			return s.refusalCaused(valueErr.Error(), valueErr), true, nil
-		}
-	}
-
-	// FR-7b: version check for resume mode.
-	if !rs.config.IsNewRun && !rs.config.AllowVersionDrift {
-		if existingState.WorkflowVersion != rs.region.Info.Version {
-			return s.refusal(fmt.Sprintf(
-				"workflow version mismatch: artifact has %q, selected workflow has %q",
-				existingState.WorkflowVersion, rs.region.Info.Version,
-			)), true, nil
+		if outcome, refused := s.resumeArtifactRefusal(rs, existingState); refused {
+			return outcome, true, nil
 		}
 	}
 
@@ -220,5 +220,10 @@ func (s *sessionImpl) admitAndResolveAgents(ctx context.Context, rs *runStartCtx
 	}
 	rs.identifiers = identifiers
 	rs.agents = agents
+
+	// Step 5a: refuse misdeclared agent definitions before any write or invocation.
+	if outcome, refused := s.checkAgentDefinitions(rs); refused {
+		return outcome, true, nil
+	}
 	return domain.RunOutcome{}, false, nil
 }

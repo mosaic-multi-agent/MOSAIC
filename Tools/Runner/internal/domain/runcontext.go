@@ -4,9 +4,8 @@ package domain
 // sequence and needed by consultants constructed before it. It is immutable
 // once handed over: a consultant stores the values and never mutates them.
 type RunContext struct {
-	// Orchestrator is the resolved orchestrator agent reference. Its
-	// InvocationKind is always InvocationOrchestrator. It is the reference
-	// every consultation is issued against.
+	// Orchestrator is the resolved orchestrator agent reference. It is
+	// the reference every consultation is issued against.
 	Orchestrator AgentReference
 
 	// Table is the selected workflow's parsed routing table. It resolves a

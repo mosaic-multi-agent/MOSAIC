@@ -82,7 +82,8 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 		deployedAgentIndex = buildDeployedAgentIndex(workspace, agentsDir)
 	}
 
-	snap, _ := s.deps.Manifest.Load(workspace)
+	reconciled := loadReconciledManifest(s.deps.Manifest, workspace)
+	snap := reconciled.forHarness(module.Ref().ID) // the run sees only its own harness's entries
 
 	// Probe the deployed orchestrator to discover its embedded model and existing workflow set.
 	// The orchestrator model is taken from the deployed file.
@@ -98,6 +99,11 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	}); pathErr == nil {
 		orchTargetPath = orchPath
 		orchState = probeAgentWithRecordedLegacy(workspace, module, snap, orchestrator.Key, orchTargetPath)
+		if problem := unreadableAgentProblem(workspace, orchTargetPath, orchState); problem != "" {
+			// An orchestrator file that cannot be read as an agent stays a conflict, as for the
+			// other agents, instead of being rewritten as an ordinary update.
+			orchState.ParseFailed, orchState.ParseProblem = true, problem
+		}
 	}
 
 	// Probe the orchestrator-script early: its deployed workflows join the checklist.
@@ -294,6 +300,7 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	p.Gaps = script.dropAbsentGaps(p.Gaps)
 	p.Registrations = nil
 	migrateLegacyGhcpAgents(&p, snap)
+	reconciled.attachTo(&p)
 
 	// Forward plan gaps to the todo collector before conflict handling.
 	for _, g := range p.Gaps {
@@ -335,6 +342,7 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	report := s.conflictReportFor(module.Ref().ID, workflowIDs, unionPreserveOrder(unionPreserveOrder(orchState.Workflows.IDs(), script.state.Workflows.IDs()), s.deployedWorkflowIDs(module, workspace, scope, false)), req.AutoConfirmPlan)
 	// Review is always shown; AutoConfirmPlan only controls whether a decline/cancel aborts the run.
 	p.ConflictReport = report
+	s.annotateToolsChanges(&p, module, customTools, skippedTools, scope, newDeployedBytes(workspace, nil).withMigratedAgents(p).reader(), set.Agents)
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {
 		return domain.RunSummary{}, rerr

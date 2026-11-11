@@ -30,14 +30,14 @@ func TestBuild_CatalogChanged_EveryItemIsUpdatedNamingBothCatalogs(t *testing.T)
 			item := ccItemAt(t, p, target)
 
 			if item.Action != domain.ActionUpdate {
-				t.Fatalf("Action = %q, want %q (reason %q)", item.Action, domain.ActionUpdate, item.Reason)
+				t.Fatalf("Action = %q, want %q (reason %q)", item.Action, domain.ActionUpdate, reasonText(item))
 			}
-			if !strings.HasPrefix(item.Reason, "stale: ") {
-				t.Errorf("Reason = %q, want it to start with \"stale: \"", item.Reason)
+			if strings.HasPrefix(reasonText(item), "stale: ") {
+				t.Errorf("Reasons = %q, want no \"stale: \" prefix: each cause is its own reason", item.Reasons)
 			}
 			for _, id := range []string{ccOldCatalogID, ccNewCatalogID} {
-				if !strings.Contains(item.Reason, id) {
-					t.Errorf("Reason = %q, want it to name catalog %q", item.Reason, id)
+				if !strings.Contains(reasonText(item), id) {
+					t.Errorf("Reason = %q, want it to name catalog %q", reasonText(item), id)
 				}
 			}
 		})
@@ -121,13 +121,13 @@ func TestBuild_CatalogChanged_ComposesWithVersionDeltaIntoOneItem(t *testing.T) 
 	if last := item.Stale[len(item.Stale)-1]; last.Field != ccCatalogDeltaField {
 		t.Errorf("last delta = %+v, want the catalog delta", last)
 	}
-	if !strings.Contains(item.Reason, "2.0") {
-		t.Errorf("Reason = %q, want it to keep the version part", item.Reason)
+	if !strings.Contains(reasonText(item), "2.0") {
+		t.Errorf("Reason = %q, want it to keep the version part", reasonText(item))
 	}
 	for _, id := range []string{ccOldCatalogID, ccNewCatalogID} {
-		if n := strings.Count(item.Reason, id); n != 1 {
+		if n := strings.Count(reasonText(item), id); n != 1 {
 			t.Errorf("Reason = %q names catalog %q %d times, want once (the catalog delta is not part of the generic version part)",
-				item.Reason, id, n)
+				reasonText(item), id, n)
 		}
 	}
 }
@@ -152,8 +152,8 @@ func TestBuild_CatalogChanged_HookAndSkillEntryWithVersionBump_CatalogDeltaLast(
 				t.Errorf("Stale = %+v, want the version delta followed by the catalog delta", item.Stale)
 			}
 			for _, id := range []string{ccOldCatalogID, ccNewCatalogID} {
-				if !strings.Contains(item.Reason, id) {
-					t.Errorf("Reason = %q, want it to name catalog %q", item.Reason, id)
+				if !strings.Contains(reasonText(item), id) {
+					t.Errorf("Reason = %q, want it to name catalog %q", reasonText(item), id)
 				}
 			}
 		})
@@ -171,7 +171,7 @@ func TestBuild_SameCatalogId_StaysUnchanged(t *testing.T) {
 			item := ccItemAt(t, p, target)
 
 			if item.Action != domain.ActionUnchanged {
-				t.Errorf("Action = %q (reason %q), want %q", item.Action, item.Reason, domain.ActionUnchanged)
+				t.Errorf("Action = %q (reason %q), want %q", item.Action, reasonText(item), domain.ActionUnchanged)
 			}
 		})
 	}
@@ -215,9 +215,9 @@ func TestBuild_UnknownCatalog_LeavesVersionBasedOutcomeUnchanged(t *testing.T) {
 			for _, target := range ccPlannedTargets() {
 				item := ccItemAt(t, p, target)
 				want := ccItemAt(t, baseline, target)
-				if item.Action != want.Action || item.Reason != want.Reason || len(item.Stale) != 0 || item.Conflict != nil {
+				if item.Action != want.Action || reasonText(item) != reasonText(want) || len(item.Stale) != 0 || item.Conflict != nil {
 					t.Errorf("%s: Action %q Reason %q Stale %+v Conflict %+v, want the unchanged outcome %q",
-						target, item.Action, item.Reason, item.Stale, item.Conflict, want.Action)
+						target, item.Action, reasonText(item), item.Stale, item.Conflict, want.Action)
 				}
 			}
 			if len(p.Gaps) != len(baseline.Gaps) {
@@ -243,18 +243,26 @@ func TestBuild_UnknownCatalog_KeepsVersionStaleness(t *testing.T) {
 	}
 }
 
-// TestBuild_CatalogChanged_LocallyModifiedHook_StaysConflict verifies the content-hash check of
-// hooks still comes first: a modified hook is a conflict, not a catalog update.
-func TestBuild_CatalogChanged_LocallyModifiedHook_StaysConflict(t *testing.T) {
+// TestBuild_CatalogChanged_LocallyEditedHook_UpdatesWithEditAndCatalogReasons verifies an edited
+// recorded hook file is an update with a backup, carrying both the edit reason and the catalog
+// change reason, not a conflict.
+func TestBuild_CatalogChanged_LocallyEditedHook_UpdatesWithEditAndCatalogReasons(t *testing.T) {
 	p := ccStackBuild(t, ccNewCatalogID, ccCatalogOptions{
-		recorded:         domain.CatalogIdentity{ID: ccOldCatalogID},
-		hookDeployedHash: "sha256:locally-modified",
+		recorded:   domain.CatalogIdentity{ID: ccOldCatalogID},
+		hookEdited: true,
 	})
 
 	item := ccItemAt(t, p, ccHookTarget)
 
-	if item.Action != domain.ActionConflict || item.Conflict == nil {
-		t.Errorf("Action %q Conflict %+v, want a conflict for a locally modified hook", item.Action, item.Conflict)
+	if item.Action != domain.ActionUpdate || item.Conflict != nil || !item.BackupBeforeWrite {
+		t.Errorf("Action %q Conflict %+v backup %v, want an update with backup for an edited hook",
+			item.Action, item.Conflict, item.BackupBeforeWrite)
+	}
+	if !hasExactReason(item, editReason) {
+		t.Errorf("Reasons = %q, want the edit reason", item.Reasons)
+	}
+	if got := reasonsMentioning(item, ccOldCatalogID, ccNewCatalogID); len(got) != 1 {
+		t.Errorf("reasons naming the catalog change = %q, want exactly one of %q", got, item.Reasons)
 	}
 }
 

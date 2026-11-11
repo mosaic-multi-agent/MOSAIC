@@ -36,7 +36,9 @@ func (r *transformRun) execute(ctx context.Context) (deploy.ExecResult, error) {
 	for i, pa := range r.plan.Agents {
 		if r.agents[i].built && r.agents[i].active() {
 			content[pa.DestinationPath] = r.agents[i].result.Output
-			stamps[pa.DestinationPath] = r.agents[i].result.Stamps
+			stamp := r.agents[i].result.Stamps
+			stamp.Catalog = r.sourceFileCatalog(domain.ArtifactAgent, pa.SourcePath)
+			stamps[pa.DestinationPath] = stamp
 		}
 	}
 	plan.Items = r.writeItems()
@@ -59,8 +61,9 @@ func (r *transformRun) execute(ctx context.Context) (deploy.ExecResult, error) {
 			Harness: r.tgt.Ref().DisplayName, WorkspacePath: r.workspace, DeploymentRoot: r.workspace,
 			GeneratedAt: r.s.now(), Mode: domain.ModeTransformHarness,
 		},
-		Atomic:      true,
-		ToolVersion: r.s.deps.ToolVersion,
+		Atomic:        true,
+		RetireHarness: r.retiredHarness(),
+		ToolVersion:   r.s.deps.ToolVersion,
 	})
 	if err != nil {
 		return res, err

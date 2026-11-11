@@ -61,6 +61,7 @@ import (
 
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 )
 
@@ -100,9 +101,9 @@ func buildProtocolStalenessInput(
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{manifestEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{manifestEntry}),
 	})
 
 	ds := map[string]domain.DeployedArtifactState{
@@ -368,7 +369,7 @@ func TestProtocolDrift_Reason_VersionChanged_NamesVersions(t *testing.T) {
 
 // TestProtocolDrift_Reason_EmptyDeployedVersion_NamesNoMarker verifies that when the deployed
 // file carries no protocol version marker (deployed == ""), Reason() returns a string that
-// names the absence of the marker — not "changed from '' to '1.9'".
+// names the absence of the marker — not "changed from ” to '1.9'".
 func TestProtocolDrift_Reason_EmptyDeployedVersion_NamesNoMarker(t *testing.T) {
 	deployed := domain.DeployedArtifactState{
 		Present:         true,
@@ -460,9 +461,9 @@ func TestBuild_ProtocolStaleness_SubagentReason_NamesProtocol(t *testing.T) {
 		t.Skipf("skipping reason check: Action = %q (not ActionUpdate); the preceding test covers this",
 			item.Action)
 	}
-	if !strings.Contains(strings.ToLower(item.Reason), "protocol") {
-		t.Errorf("item.Reason = %q; want it to contain %q so the user can identify the cause of the update",
-			item.Reason, "protocol")
+	if !strings.Contains(strings.ToLower(reasonText(item)), "protocol") {
+		t.Errorf("reasonText(item) = %q; want it to contain %q so the user can identify the cause of the update",
+			reasonText(item), "protocol")
 	}
 }
 
@@ -491,9 +492,9 @@ func TestBuild_ProtocolStaleness_AppliedToSubagentNotJustOrchestrator(t *testing
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entryStale, entryCurrent},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entryStale, entryCurrent}),
 	})
 
 	// Create a two-workflow catalog so both agents appear in the plan.
@@ -508,9 +509,9 @@ func TestBuild_ProtocolStaleness_AppliedToSubagentNotJustOrchestrator(t *testing
 	module := newFakeModule()
 
 	ds := map[string]domain.DeployedArtifactState{
-		pathStale:              deployedStateWithProtocol(hashStale, "1.0", "1.0", "1.0", "1.7"),   // old protocol
-		pathCurrent:            deployedStateWithProtocol(hashCurrent, "1.0", "1.0", "1.0", "1.9"), // current protocol
-		"agents/orchestrator.md": {Present: false}, // orchestrator absent — will be ActionCreate
+		pathStale:                deployedStateWithProtocol(hashStale, "1.0", "1.0", "1.0", "1.7"),   // old protocol
+		pathCurrent:              deployedStateWithProtocol(hashCurrent, "1.0", "1.0", "1.0", "1.9"), // current protocol
+		"agents/orchestrator.md": {Present: false},                                                   // orchestrator absent — will be ActionCreate
 	}
 
 	in := plan.Input{
@@ -572,9 +573,9 @@ func TestBuild_ProtocolStaleness_ComposesWithVersionStampDeltas(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{manifestEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{manifestEntry}),
 	})
 
 	// Deployed file: hash matches, but version stamp is 1.0 (stale) AND protocol is old.
@@ -644,9 +645,9 @@ func TestBuild_ProtocolStaleness_OrchestratorComposesWithWorkflowDrift(t *testin
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entryOrch},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entryOrch}),
 	})
 
 	// Deployed orchestrator: hash matches, version stamps match, but:
@@ -654,10 +655,10 @@ func TestBuild_ProtocolStaleness_OrchestratorComposesWithWorkflowDrift(t *testin
 	//   - Has old protocol version (1.7 vs source 1.9 → protocol staleness)
 	ds := map[string]domain.DeployedArtifactState{
 		orchPath: {
-			Present:         true,
-			ContentHash:     orchHash,
-			Version:         "1.0",
-			HarnessVersion: "1.0",
+			Present:           true,
+			ContentHash:       orchHash,
+			Version:           "1.0",
+			HarnessVersion:    "1.0",
 			InjectionsVersion: "1.0",
 			Workflows: domain.DeployedWorkflows{
 				{ID: "quick-fix", Version: "1.0"},
@@ -768,10 +769,10 @@ func TestBuild_ProtocolStaleness_DeltaNotRoutedThroughVersionFieldFormatter(t *t
 
 	// The reason must NOT contain the raw field delta representation.
 	genericFormat := "protocol_version changed from"
-	if strings.Contains(item.Reason, genericFormat) {
-		t.Errorf("item.Reason = %q; must not contain %q; "+
+	if strings.Contains(reasonText(item), genericFormat) {
+		t.Errorf("reasonText(item) = %q; must not contain %q; "+
 			"the protocol delta must be formatted by ProtocolDrift.Reason(), not the generic field formatter",
-			item.Reason, genericFormat)
+			reasonText(item), genericFormat)
 	}
 }
 
@@ -799,9 +800,9 @@ func TestBuild_Agent_HashMismatch_AndProtocolStale_FallsThroughToStaleness(t *te
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{manifestEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{manifestEntry}),
 	})
 
 	// Deployed state: hash differs AND protocol is stale. For agents, only the protocol
@@ -850,9 +851,9 @@ func TestBuild_Agent_HashMismatch_AndProtocolStale_ConflictFieldIsNil(t *testing
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{manifestEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{manifestEntry}),
 	})
 
 	ds := map[string]domain.DeployedArtifactState{

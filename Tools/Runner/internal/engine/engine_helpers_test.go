@@ -127,7 +127,6 @@ func newTestAgents(ids ...string) map[string]domain.AgentReference {
 		m[id] = domain.AgentReference{
 			Identifier:     id,
 			DefinitionPath: "/agents/" + id + ".md",
-			InvocationKind: domain.InvocationOrdinary,
 		}
 	}
 	return m

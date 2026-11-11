@@ -47,8 +47,6 @@ subject:
   agent: orchestrator         # catalogue agent key — REQUIRED, replaces the old `definition` field
   workflows: [tdd-soft]       # optional; absent = unspecified, [] = explicitly none
   opening_message: "..."
-  invocation_kind: orchestrator
-  model: "..."
   allowed_tools: [...]
 ```
 

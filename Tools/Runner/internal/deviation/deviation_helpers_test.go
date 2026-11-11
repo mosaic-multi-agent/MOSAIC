@@ -114,7 +114,6 @@ func orchestratorRef() domain.AgentReference {
 	return domain.AgentReference{
 		Identifier:     "test-orchestrator",
 		DefinitionPath: "/agents/test-orchestrator.md",
-		InvocationKind: domain.InvocationOrchestrator,
 	}
 }
 

@@ -4,8 +4,6 @@ package plan
 // from the catalog supplying it now is stale.
 
 import (
-	"strings"
-
 	"mosaic-deploy/internal/catalog"
 	"mosaic-deploy/internal/domain"
 )
@@ -66,16 +64,6 @@ func entryCatalogDrift(look supplierLookup, ref domain.ArtifactRef, entry domain
 	return CatalogStaleness(entry.Catalog, current)
 }
 
-// withCatalogDrift appends the catalog delta after deltas and the catalog reason after reasons,
-// when the drift is stale.
-func withCatalogDrift(d CatalogDrift, deltas []domain.VersionDelta, reasons string) ([]domain.VersionDelta, string) {
-	delta, ok := d.Delta()
-	if !ok {
-		return deltas, reasons
-	}
-	return append(deltas, delta), strings.Join(filterEmpty(reasons, d.Reason()), "; ")
-}
-
 // CatalogStaleness compares the catalog recorded in an item's manifest entry with the catalog
 // that supplies the item now. Either argument may be the zero identity (unknown).
 func CatalogStaleness(recorded, current domain.CatalogIdentity) CatalogDrift {
@@ -102,4 +90,21 @@ func (d CatalogDrift) Reason() string {
 		return ""
 	}
 	return `source catalog changed from "` + d.Recorded.ID + `" to "` + d.Current.ID + `"`
+}
+
+// NameCollision reports true when both ids are non-empty and equal while both names are
+// non-empty and differ: the id may be shared by two different catalogs.
+func (d CatalogDrift) NameCollision() bool {
+	return d.Recorded.ID != "" && d.Recorded.ID == d.Current.ID &&
+		d.Recorded.Name != "" && d.Current.Name != "" && d.Recorded.Name != d.Current.Name
+}
+
+// Warning returns one line naming the shared id and both catalog names, or "" when there is no
+// name collision.
+func (d CatalogDrift) Warning() string {
+	if !d.NameCollision() {
+		return ""
+	}
+	return `possible catalog id collision: id "` + d.Recorded.ID + `" was recorded for catalog "` +
+		d.Recorded.Name + `" but is now supplied by catalog "` + d.Current.Name + `"`
 }

@@ -215,7 +215,7 @@ func TestOpenCodeSafetyNet_InvokeRawIsForwardedUnchangedWithoutLogging(t *testin
 	mock := &MockOpenCodeHarness{RunIDValue: mlRunID, RawReply: []byte("raw reply bytes"), RawErr: errors.New("raw failure")}
 	net, ws := mlSafetyNet(t, mock)
 	events := mlMakeInvocationDir(t, ws, mlRunID, mlAgentInstance)
-	agent := domain.AgentReference{Identifier: "Orchestrator", DefinitionPath: "x.md", InvocationKind: domain.InvocationOrchestrator}
+	agent := domain.AgentReference{Identifier: "Orchestrator", DefinitionPath: "x.md"}
 	payload := []byte(`{"consult":"payload"}`)
 
 	reply, err := net.InvokeRaw(context.Background(), agent, payload)

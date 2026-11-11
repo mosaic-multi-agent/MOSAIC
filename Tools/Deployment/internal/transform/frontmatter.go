@@ -6,7 +6,6 @@ import (
 	"mosaic-common/docformat"
 	"mosaic-deploy/internal/agentfields"
 	"mosaic-deploy/internal/domain"
-	"mosaic-deploy/internal/harness/descriptor"
 )
 
 // resolveTools determines the tool frontmatter output for the transformation. It handles
@@ -334,74 +333,9 @@ func applyFrontmatter(
 		})
 	}
 
-	// Steps 5 and 5b: Tool field handling.
-	// On Update (req.Deployed != nil) when the deployed file has the tools/permission key:
-	// preserve that field verbatim rather than re-generating it from source. This makes
-	// the tools/permission field user-owned after initial Deploy — subsequent Updates never
-	// overwrite user customizations (including per-command sub-permission flow mappings).
-	// On Create (req.Deployed == nil), or when the deployed file cannot be parsed, or when
-	// the deployed file has no tools key: fall through to the Create path (Steps 5 and 5b).
-	toolsPreservedVerbatim := false
-	if req.Deployed != nil && desc.Frontmatter.ToolsKey != "" {
-		deployedDoc, deployedParseErr := docformat.Parse(req.Deployed)
-		if deployedParseErr == nil {
-			deployedFM := deployedDoc.Frontmatter()
-			if deployedToolsValue, ok := deployedFM.Get(desc.Frontmatter.ToolsKey); ok {
-				before := ""
-				if v, ok2 := fm.Get(desc.Frontmatter.ToolsKey); ok2 {
-					before = renderValue(v)
-				}
-				fm.Set(desc.Frontmatter.ToolsKey, deployedToolsValue)
-				changes = append(changes, FieldChange{
-					Key:    desc.Frontmatter.ToolsKey,
-					Before: before,
-					After:  renderValue(deployedToolsValue),
-					Reason: "preserved from deployed file",
-				})
-				touchedKeys[desc.Frontmatter.ToolsKey] = true
-				toolsPreservedVerbatim = true
-			}
-		}
-		// When deployedParseErr != nil: fall through to the Create path below.
-		// buildDeployedRegionMap (called earlier in the pipeline) normally catches parse
-		// failures before reaching this point. If it does not, the safe fallback is to
-		// compute tools from source — identical to what a first-time Deploy would produce.
-		// When the deployed file parses but has no tools key: also fall through, so the
-		// output always has the tools/permission key set (never left absent).
-	}
-
-	// Step 5: Write tool fields from toolResult.Fields. When ToolsKey was already preserved
-	// verbatim above, skip only the ToolsKey entry itself; all other to:field destinations
-	// (such as mcpServers) are written normally regardless of toolsPreservedVerbatim.
-	for _, field := range toolResult.Fields {
-		touchedKeys[field.Key] = true
-		if toolsPreservedVerbatim && field.Key == desc.Frontmatter.ToolsKey {
-			// ToolsKey already set verbatim from the deployed file; do not overwrite.
-			continue
-		}
-		before := ""
-		if v, ok := fm.Get(field.Key); ok {
-			before = renderValue(v)
-		}
-		changes = append(changes, FieldChange{
-			Key:    field.Key,
-			Before: before,
-			After:  renderValue(field.Value),
-			Reason: "tool mapping",
-		})
-		fm.Set(field.Key, field.Value)
-	}
-
-	// Step 5b: Merge user-added tools from the deployed file. This is skipped when
-	// toolsPreservedVerbatim is true because the deployed value is already set verbatim
-	// and there is nothing to merge (mergeDeployedTools only applies to ToolsKey).
-	if !toolsPreservedVerbatim && req.Deployed != nil {
-		mergeChanges := mergeDeployedTools(fm, req.Deployed, desc)
-		changes = append(changes, mergeChanges...)
-	}
-
-	// Step 5b2: append target-native tool names requested by the caller.
-	changes = append(changes, appendRequestedTools(fm, req.AppendTools, desc)...)
+	// Steps 5 and 5b: tool fields, appended tools, and the merge with the deployed tools field.
+	toolChanges, _ := writeToolFields(req, fm, desc, toolResult, touchedKeys)
+	changes = append(changes, toolChanges...)
 
 	// Step 5c: Preserve user-owned fields from the deployed file. After all managed-field
 	// steps have run, any key in the deployed file's frontmatter that was not touched by
@@ -469,151 +403,6 @@ func applyVersionStamp(fm *docformat.Frontmatter, key, value string) *FieldChang
 		After:  value,
 		Reason: "version stamp",
 	}
-}
-
-// mergeDeployedTools augments the freshly-computed tool field(s) in fm with any
-// tools present in the deployed file but absent from the current computed output.
-// It uses descriptor.ExtractToolEntries to parse both the deployed file's tool
-// field and the current output's tool field, then appends any entries from the
-// deployed set that are missing from the output set.
-//
-// Parameters:
-//   - fm: the frontmatter being built (already has Step 5 tool fields set)
-//   - deployed: the previously-deployed file bytes (req.Deployed); nil on create
-//   - desc: the harness descriptor (provides ToolsKey, Tools.Shape, Tools.Universe)
-//
-// When deployed is nil (new deployment), this is a no-op.
-// When the deployed file has no parseable tool field, this is a no-op.
-// Tool names are compared at the harness-name level (the rendered form in the deployed file).
-// Appended tools preserve the harness-specific rendering format.
-func mergeDeployedTools(fm *docformat.Frontmatter, deployed []byte, desc *domain.HarnessDescriptor) []FieldChange {
-	if desc.Frontmatter.ToolsKey == "" {
-		return nil
-	}
-
-	// Parse the deployed file to extract its tool field value.
-	deployedDoc, err := docformat.Parse(deployed)
-	if err != nil {
-		// Graceful no-op on parse failure.
-		return nil
-	}
-
-	deployedToolsValue, ok := deployedDoc.Frontmatter().Get(desc.Frontmatter.ToolsKey)
-	if !ok {
-		// Deployed file has no tools field; nothing to merge.
-		return nil
-	}
-
-	// Get the names present in the deployed file.
-	deployedNames := descriptor.ExtractToolEntries(desc, deployedToolsValue)
-	if len(deployedNames) == 0 {
-		return nil
-	}
-
-	// Get the names already in the current output.
-	outputToolsValue, _ := fm.Get(desc.Frontmatter.ToolsKey)
-	outputNames := descriptor.ExtractToolEntries(desc, outputToolsValue)
-
-	// Build a set of names already in the output.
-	inOutput := make(map[string]bool, len(outputNames))
-	for _, name := range outputNames {
-		inOutput[name] = true
-	}
-
-	// Collect names from deployed that are absent from the output.
-	var toAppend []string
-	for _, name := range deployedNames {
-		if !inOutput[name] {
-			toAppend = append(toAppend, name)
-		}
-	}
-	if len(toAppend) == 0 {
-		return nil
-	}
-
-	// Append missing tools to the output field, preserving the harness-specific format.
-	var changes []FieldChange
-
-	if desc.Tools.Shape == domain.ShapePermission {
-		// Permission shape: KindMapping — append new pairs with allow disposition.
-		currentValue, _ := fm.Get(desc.Frontmatter.ToolsKey)
-		allowVal := domain.ScalarValue(string(domain.Allow), domain.QuotePlain)
-		var pairs []domain.FieldPair
-		if currentValue.Kind == domain.KindMapping {
-			pairs = append(pairs, currentValue.Pairs...)
-		}
-		for _, name := range toAppend {
-			pairs = append(pairs, domain.FieldPair{Key: name, Value: allowVal})
-		}
-		newValue := domain.MappingValue(pairs)
-		before := renderValue(currentValue)
-		fm.Set(desc.Frontmatter.ToolsKey, newValue)
-		changes = append(changes, FieldChange{
-			Key:    desc.Frontmatter.ToolsKey,
-			Before: before,
-			After:  renderValue(newValue),
-			Reason: "tool preservation",
-		})
-	} else {
-		// List or scalar shape.
-		currentValue, _ := fm.Get(desc.Frontmatter.ToolsKey)
-		before := renderValue(currentValue)
-
-		switch currentValue.Kind {
-		case domain.KindList:
-			// Append new scalar items to the existing list, preserving the list style.
-			items := make([]domain.FieldValue, len(currentValue.Items))
-			copy(items, currentValue.Items)
-			for _, name := range toAppend {
-				items = append(items, domain.ScalarValue(name, domain.QuotePlain))
-			}
-			newValue := domain.ListValue(items, currentValue.List)
-			fm.Set(desc.Frontmatter.ToolsKey, newValue)
-			changes = append(changes, FieldChange{
-				Key:    desc.Frontmatter.ToolsKey,
-				Before: before,
-				After:  renderValue(newValue),
-				Reason: "tool preservation",
-			})
-		case domain.KindScalar:
-			// Comma-separated scalar — append to the existing string.
-			existing := strings.TrimSpace(currentValue.Scalar)
-			added := strings.Join(toAppend, ", ")
-			var newScalar string
-			if existing == "" {
-				newScalar = added
-			} else {
-				newScalar = existing + ", " + added
-			}
-			newValue := domain.ScalarValue(newScalar, currentValue.Quote)
-			fm.Set(desc.Frontmatter.ToolsKey, newValue)
-			changes = append(changes, FieldChange{
-				Key:    desc.Frontmatter.ToolsKey,
-				Before: before,
-				After:  renderValue(newValue),
-				Reason: "tool preservation",
-			})
-		default:
-			// No parseable current value — build a new list from the deployed names.
-			// This handles the case where the output tools field was cleared or is absent.
-			// First include the computed output names, then the preserved ones.
-			allNames := append(outputNames, toAppend...)
-			items := make([]domain.FieldValue, len(allNames))
-			for i, name := range allNames {
-				items[i] = domain.ScalarValue(name, domain.QuotePlain)
-			}
-			newValue := domain.ListValue(items, domain.ListFlow)
-			fm.Set(desc.Frontmatter.ToolsKey, newValue)
-			changes = append(changes, FieldChange{
-				Key:    desc.Frontmatter.ToolsKey,
-				Before: before,
-				After:  renderValue(newValue),
-				Reason: "tool preservation",
-			})
-		}
-	}
-
-	return changes
 }
 
 // renderValue converts a domain.FieldValue to a concise string for use in FieldChange

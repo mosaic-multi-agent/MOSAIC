@@ -84,6 +84,10 @@ func NewRunSelectScreen(question runselect.Question, width, height int, styles s
 			}
 			detail += c.Run.LastUpdated.Format("2006-01-02 15:04:05 UTC")
 		}
+		if c.Run.Damaged {
+			// The list shows the label only, so the mark goes there.
+			label += " (damaged: repaired when the run starts)"
+		}
 		items = append(items, widgets.ListItem{
 			ID:     c.ID,
 			Label:  label,

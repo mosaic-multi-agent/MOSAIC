@@ -19,6 +19,7 @@ import (
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 	"mosaic-deploy/internal/transform"
 )
@@ -248,7 +249,7 @@ func runInfraInjection(t *testing.T, cfg injectionConfig) *injectionRun {
 	}
 	if cfg.manifested {
 		snap = manifest.Snapshot{State: manifest.StatePresent, Manifest: domain.Manifest{
-			SchemaVersion: "1", HarnessID: "stub-harness", Entries: entries,
+			SchemaVersion: "1", Harnesses: []domain.HarnessSection{{HarnessID: "stub-harness"}}, Entries: manifesttest.WithHarness("stub-harness", entries),
 		}}
 	}
 	deps.Manifest = &stubManifestStore{snap: snap}

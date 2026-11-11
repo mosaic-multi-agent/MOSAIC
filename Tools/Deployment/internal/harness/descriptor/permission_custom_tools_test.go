@@ -100,9 +100,9 @@ func TestPermissionCustomTools_NoCustomToolsLeavesPermissionMapUnchanged(t *test
 	wantPair(t, pairs, 1, "write", "deny")
 }
 
-func TestPermissionCustomTools_CustomToolTemplateIsAppliedToPermissionKey(t *testing.T) {
+func TestPermissionCustomTools_ServerFormIsAppliedToPermissionKey(t *testing.T) {
 	d := makePermNoCustomDestDescriptor()
-	d.Tools.CustomToolTemplate = "mcp__%s__*"
+	d.Tools.MCP = domain.MCPNameForms{ServerForm: "mcp__{server}__*", ToolForm: "mcp__{server}__{tool}"}
 
 	result, err := descriptor.MapTools(d, domain.ToolRequest{
 		AgentKey:    "test-agent",

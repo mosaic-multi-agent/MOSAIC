@@ -16,8 +16,7 @@ import (
 type OrchestratorConsultant struct {
 	// Invoker carries the raw JSON payload to the orchestrator.
 	Invoker domain.RawInvoker
-	// Orchestrator is the resolved orchestrator agent. Its InvocationKind must
-	// be domain.InvocationOrchestrator.
+	// Orchestrator is the resolved orchestrator agent.
 	Orchestrator domain.AgentReference
 	// Table validates a dispatch reply's agent, row and stage and supplies the
 	// available-agent list for the unknown-agent error.
@@ -50,13 +49,16 @@ type OrchestratorConsultant struct {
 // retried like a malformed one and, once the attempts are spent, fails with
 // ConsultFailMalformedJSON.
 func (c *OrchestratorConsultant) ConsultRouting(ctx context.Context, req domain.ConsultationRequest) (domain.RoutingInstruction, error) {
-	wr := wireRequest{
-		OrchestrationArtifact: req.OrchestrationArtifact,
-		Context:               string(req.Context),
-		LastStatus:            statusWire(req.LastStatus),
-		LastStatusMessage:     req.LastStatusMessage,
-		LastErrorReason:       req.LastErrorReason,
-		UserMessage:           req.UserMessage,
+	wr := wireRoutingRequest{
+		wireRequest: wireRequest{
+			OrchestrationArtifact: req.OrchestrationArtifact,
+			Context:               string(req.Context),
+			LastStatus:            statusWire(req.LastStatus),
+			LastStatusMessage:     req.LastStatusMessage,
+			LastErrorReason:       req.LastErrorReason,
+			UserMessage:           req.UserMessage,
+		},
+		ArtifactDamage: damageWire(req.ArtifactDamage),
 	}
 	payload, err := json.Marshal(wr)
 	if err != nil {

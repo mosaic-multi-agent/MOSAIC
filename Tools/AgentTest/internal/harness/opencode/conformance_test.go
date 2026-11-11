@@ -126,7 +126,6 @@ func newConformanceConfig() contract.Config {
 			Identity:       "orchestrator",
 			DefinitionPath: "agents/orchestrator.md",
 			OpeningMessage: "begin the run",
-			InvocationKind: "agent",
 			Model:          "test-model",
 		},
 	}

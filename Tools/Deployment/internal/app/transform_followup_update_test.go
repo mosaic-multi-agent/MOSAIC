@@ -97,7 +97,7 @@ func TestTransformThenUpdate_NothingCarriedIsReportedAsLocallyModified(t *testin
 		switch it.Ref.Kind {
 		case domain.ArtifactAgent, domain.ArtifactSkill, domain.ArtifactHook:
 			if it.Action == domain.ActionConflict {
-				t.Errorf("%s %q at %s is reported as a conflict (%s)", it.Ref.Kind, it.Ref.Key, it.TargetPath, it.Reason)
+				t.Errorf("%s %q at %s is reported as a conflict (%s)", it.Ref.Kind, it.Ref.Key, it.TargetPath, reasonText(it))
 			}
 		}
 	}
@@ -114,7 +114,7 @@ func TestTransformThenUpdate_CarriedSkillAndHookAreRecognisedAsAlreadyDeployed(t
 	}{{domain.ArtifactSkill, trSkillKey}, {domain.ArtifactHook, trHookKey}} {
 		it := trPlanItem(t, got.Plan.Items, ref.kind, ref.key)
 		if it.Action != domain.ActionUnchanged && it.Action != domain.ActionUpdate {
-			t.Errorf("%s %q: action = %q (%s), want unchanged or update of a recorded deployment", ref.kind, ref.key, it.Action, it.Reason)
+			t.Errorf("%s %q: action = %q (%s), want unchanged or update of a recorded deployment", ref.kind, ref.key, it.Action, reasonText(it))
 		}
 	}
 }
@@ -126,7 +126,7 @@ func TestTransformThenUpdate_CarriedAgentIsNotAConflict(t *testing.T) {
 
 	it := trPlanItem(t, got.Plan.Items, domain.ArtifactAgent, "subagent")
 	if it.Action == domain.ActionConflict || it.Action == domain.ActionCreate {
-		t.Errorf("agent subagent: action = %q (%s), want unchanged or update", it.Action, it.Reason)
+		t.Errorf("agent subagent: action = %q (%s), want unchanged or update", it.Action, reasonText(it))
 	}
 }
 

@@ -97,7 +97,7 @@ func TestParse_MissingTypeField_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestParse_MissingTypeField_ReturnsRefusalError(t *testing.T) {
+func TestParse_MissingTypeField_ReturnsDamageError(t *testing.T) {
 	data, err := os.ReadFile(fixturePath("no-type.md"))
 	if err != nil {
 		t.Fatalf("reading fixture: %v", err)
@@ -105,7 +105,10 @@ func TestParse_MissingTypeField_ReturnsRefusalError(t *testing.T) {
 
 	_, err = artifact.Parse(data)
 
-	asRefusalError(t, err)
+	d := asDamageError(t, err)
+	if len(problemLines(d, "frontmatter")) == 0 {
+		t.Errorf("no problem in section frontmatter: %+v", d.Problems)
+	}
 }
 
 func TestParse_OldTemplateFormat_ReturnsRefusalError(t *testing.T) {
@@ -124,7 +127,7 @@ func TestParse_OldTemplateFormat_ReturnsRefusalError(t *testing.T) {
 	asRefusalError(t, err)
 }
 
-func TestParse_MissingExecutionLogSection_ReturnsRefusalError(t *testing.T) {
+func TestParse_MissingExecutionLogSection_ReturnsDamageError(t *testing.T) {
 	data, err := os.ReadFile(fixturePath("missing-exec-log.md"))
 	if err != nil {
 		t.Fatalf("reading fixture: %v", err)
@@ -135,10 +138,13 @@ func TestParse_MissingExecutionLogSection_ReturnsRefusalError(t *testing.T) {
 	if err == nil {
 		t.Fatal("Parse must return an error when <ExecutionLog type=\"core\"> is absent")
 	}
-	asRefusalError(t, err)
+	d := asDamageError(t, err)
+	if len(problemLines(d, "ExecutionLog")) == 0 {
+		t.Errorf("no problem in section ExecutionLog: %+v", d.Problems)
+	}
 }
 
-func TestParse_MissingArtifactsSection_ReturnsRefusalError(t *testing.T) {
+func TestParse_MissingArtifactsSection_ReturnsDamageError(t *testing.T) {
 	data, err := os.ReadFile(fixturePath("missing-artifacts-section.md"))
 	if err != nil {
 		t.Fatalf("reading fixture: %v", err)
@@ -149,10 +155,13 @@ func TestParse_MissingArtifactsSection_ReturnsRefusalError(t *testing.T) {
 	if err == nil {
 		t.Fatal("Parse must return an error when <Artifacts type=\"core\"> is absent")
 	}
-	asRefusalError(t, err)
+	d := asDamageError(t, err)
+	if len(problemLines(d, "Artifacts")) == 0 {
+		t.Errorf("no problem in section Artifacts: %+v", d.Problems)
+	}
 }
 
-func TestParse_TruncatedFile_ReturnsRefusalError(t *testing.T) {
+func TestParse_TruncatedFile_ReturnsDamageError(t *testing.T) {
 	data, err := os.ReadFile(fixturePath("truncated.md"))
 	if err != nil {
 		t.Fatalf("reading fixture: %v", err)
@@ -163,21 +172,9 @@ func TestParse_TruncatedFile_ReturnsRefusalError(t *testing.T) {
 	if err == nil {
 		t.Fatal("Parse must return an error for a truncated file")
 	}
-	asRefusalError(t, err)
-}
-
-func TestParse_RefusalError_ComponentIsArtifact(t *testing.T) {
-	// Every refusal from artifact.Parse must name "artifact" as the component.
-	data, err := os.ReadFile(fixturePath("no-type.md"))
-	if err != nil {
-		t.Fatalf("reading fixture: %v", err)
-	}
-
-	_, err = artifact.Parse(data)
-
-	re := asRefusalError(t, err)
-	if re.Component != "artifact" {
-		t.Errorf("RefusalError.Component: want %q, got %q", "artifact", re.Component)
+	d := asDamageError(t, err)
+	if len(problemLines(d, "ExecutionLog")) == 0 {
+		t.Errorf("no problem in section ExecutionLog: %+v", d.Problems)
 	}
 }
 

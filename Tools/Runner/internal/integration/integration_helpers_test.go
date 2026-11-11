@@ -87,9 +87,26 @@ func copyFile(t *testing.T, dir, dstName, srcPath string) string {
 func writeAgentFile(t *testing.T, dir, agentID string) {
 	t.Helper()
 	path := filepath.Join(dir, agentID+".md")
-	if err := os.WriteFile(path, []byte("# Agent: "+agentID+"\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("---\nname: "+agentID+"\nmodel: m\n---\n# Agent: "+agentID+"\n"), 0600); err != nil {
 		t.Fatalf("writeAgentFile(%q): %v", agentID, err)
 	}
+}
+
+// writeOrchWithFrontmatter copies an orchestrator fixture into dir as
+// <id>.md, prefixed with model and matching name frontmatter so it passes the
+// run-start definition checks on CLI harnesses.
+func writeOrchWithFrontmatter(t *testing.T, dir, id, srcPath string) string {
+	t.Helper()
+	data, err := os.ReadFile(srcPath)
+	if err != nil {
+		t.Fatalf("writeOrchWithFrontmatter: read %q: %v", srcPath, err)
+	}
+	content := "---\nname: " + id + "\nmodel: m\n---\n" + string(data)
+	dst := filepath.Join(dir, id+".md")
+	if err := os.WriteFile(dst, []byte(content), 0600); err != nil {
+		t.Fatalf("writeOrchWithFrontmatter: write %q: %v", dst, err)
+	}
+	return dst
 }
 
 // writeOrchFile writes an orchestrator file with an inline workflow section.

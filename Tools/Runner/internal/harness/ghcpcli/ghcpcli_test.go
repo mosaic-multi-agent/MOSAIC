@@ -11,12 +11,11 @@ package ghcpcli_test
 // Coverage:
 //
 //   Request mapping:
-//   - The stdin prompt carries the marshalled request for both invocation kinds.
-//   - --agent <Identifier> is emitted for both invocation kinds.
+//   - The stdin prompt carries the marshalled request.
+//   - --agent <Identifier> is emitted.
 //   - SystemPrompt is left unset: no <env> block appears in the prompt
-//     for either invocation kind, unlike OpenCodeAdapter which always injects
+//     for any agent, unlike OpenCodeAdapter which always injects
 //     one because --agent replaces the default system prompt for that harness.
-//   - domain.AgentReference.InvocationKind is mapped onto commonharness.AgentRef.Kind.
 //
 //   Protocol response mapping:
 //   - A successful GHCP CLI event stream decodes into domain.ProtocolResponse.
@@ -66,8 +65,7 @@ import (
 // ---------------------------------------------------------------------------
 
 // TestGHCPCLIAdapter_OrdinaryInvocation_PromptCarriesMarshalledRequest verifies
-// that the stdin prompt contains the marshalled request JSON for ordinary
-// invocations.
+// that the stdin prompt contains the marshalled request JSON.
 func TestGHCPCLIAdapter_OrdinaryInvocation_PromptCarriesMarshalledRequest(t *testing.T) {
 	setHelperEnv(t, "ghcpcli-success")
 	stdinFile := newTestStdinCapture(t)
@@ -85,7 +83,7 @@ func TestGHCPCLIAdapter_OrdinaryInvocation_PromptCarriesMarshalledRequest(t *tes
 }
 
 // TestGHCPCLIAdapter_OrchestratorInvocation_PromptCarriesMarshalledRequest
-// verifies the same for orchestrator invocations.
+// verifies the same for orchestrator agents.
 func TestGHCPCLIAdapter_OrchestratorInvocation_PromptCarriesMarshalledRequest(t *testing.T) {
 	setHelperEnv(t, "ghcpcli-success")
 	stdinFile := newTestStdinCapture(t)
@@ -103,7 +101,7 @@ func TestGHCPCLIAdapter_OrchestratorInvocation_PromptCarriesMarshalledRequest(t 
 }
 
 // TestGHCPCLIAdapter_OrdinaryInvocation_IncludesAgentFlag verifies that
-// ordinary invocations include --agent <Identifier>.
+// the adapter includes --agent <Identifier>.
 func TestGHCPCLIAdapter_OrdinaryInvocation_IncludesAgentFlag(t *testing.T) {
 	argsFile := setHelperEnv(t, "ghcpcli-success")
 	agent := ordinaryAgentRef()
@@ -116,12 +114,12 @@ func TestGHCPCLIAdapter_OrdinaryInvocation_IncludesAgentFlag(t *testing.T) {
 
 	args := readArgs(t, argsFile)
 	if !containsSequence(args, "--agent", agent.Identifier) {
-		t.Errorf("want --agent %q in args for ordinary invocation, got %v", agent.Identifier, args)
+		t.Errorf("want --agent %q in args, got %v", agent.Identifier, args)
 	}
 }
 
 // TestGHCPCLIAdapter_OrchestratorInvocation_IncludesAgentFlag verifies that
-// orchestrator invocations include --agent <Identifier>.
+// orchestrator agents include --agent <Identifier>.
 func TestGHCPCLIAdapter_OrchestratorInvocation_IncludesAgentFlag(t *testing.T) {
 	argsFile := setHelperEnv(t, "ghcpcli-success")
 	agent := orchestratorAgentRef()
@@ -134,13 +132,13 @@ func TestGHCPCLIAdapter_OrchestratorInvocation_IncludesAgentFlag(t *testing.T) {
 
 	args := readArgs(t, argsFile)
 	if !containsSequence(args, "--agent", agent.Identifier) {
-		t.Errorf("want --agent %q in args for orchestrator invocation, got %v", agent.Identifier, args)
+		t.Errorf("want --agent %q in args for orchestrator agent, got %v", agent.Identifier, args)
 	}
 }
 
 // TestGHCPCLIAdapter_OrdinaryInvocation_NoEnvBlockInPrompt verifies that the
-// adapter does NOT inject an <env> block into the prompt for ordinary
-// invocations. Unlike OpenCodeAdapter (which always sets SystemPrompt to an
+// adapter does NOT inject an <env> block into the prompt for any agent.
+// Unlike OpenCodeAdapter (which always sets SystemPrompt to an
 // EnvBlock because --agent replaces the default system prompt for that harness),
 // GHCPCLIAdapter never sets SystemPrompt: the harness layers instructions from
 // files it discovers itself, and any orchestration context is rendered into the
@@ -157,13 +155,13 @@ func TestGHCPCLIAdapter_OrdinaryInvocation_NoEnvBlockInPrompt(t *testing.T) {
 
 	stdin := string(readHelperStdin(t, stdinFile))
 	if strings.Contains(stdin, "<env>") {
-		t.Errorf("want NO <env> block in ordinary invocation prompt (SystemPrompt must be left unset), got %q", stdin)
+		t.Errorf("want NO <env> block in prompt (SystemPrompt must be left unset), got %q", stdin)
 	}
 }
 
 // TestGHCPCLIAdapter_OrchestratorInvocation_NoEnvBlockInPrompt verifies that
-// SystemPrompt is also left unset for orchestrator invocations. Both invocation
-// kinds must leave the <env> injection absent.
+// SystemPrompt is also left unset for orchestrator agents. Both
+// agent types must leave the <env> injection absent.
 func TestGHCPCLIAdapter_OrchestratorInvocation_NoEnvBlockInPrompt(t *testing.T) {
 	setHelperEnv(t, "ghcpcli-success")
 	stdinFile := newTestStdinCapture(t)
@@ -176,7 +174,7 @@ func TestGHCPCLIAdapter_OrchestratorInvocation_NoEnvBlockInPrompt(t *testing.T) 
 
 	stdin := string(readHelperStdin(t, stdinFile))
 	if strings.Contains(stdin, "<env>") {
-		t.Errorf("want NO <env> block in orchestrator invocation prompt (SystemPrompt must be left unset), got %q", stdin)
+		t.Errorf("want NO <env> block in orchestrator agent prompt (SystemPrompt must be left unset), got %q", stdin)
 	}
 }
 

@@ -19,11 +19,12 @@ import (
 // workspace manifest.
 func trSaveManifest(t *testing.T, ws, harnessID string, agentFiles ...string) {
 	t.Helper()
-	m := domain.Manifest{SchemaVersion: manifest.SchemaVersion, HarnessID: harnessID}
+	m := domain.Manifest{SchemaVersion: manifest.SchemaVersion, Harnesses: []domain.HarnessSection{{HarnessID: harnessID}}}
 	for _, rel := range agentFiles {
 		key := rel[strings.LastIndex(rel, "/")+1:]
 		key = strings.TrimSuffix(strings.TrimSuffix(key, ".agent.md"), ".md")
 		m.Entries = append(m.Entries, domain.ManifestEntry{
+			Harness:    harnessID,
 			Ref:        domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: key},
 			TargetPath: rel,
 		})

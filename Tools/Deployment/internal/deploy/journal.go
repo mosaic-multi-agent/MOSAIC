@@ -49,6 +49,11 @@ func (j *writeJournal) record(path string) error {
 	return nil
 }
 
+// recordNew records a file the run has just created at path, so the reversal deletes it.
+func (j *writeJournal) recordNew(path string) {
+	j.entries = append(j.entries, journalEntry{path: path, existed: false})
+}
+
 // revert applies the journal in reverse order of recording, restoring the workspace to its
 // state before the run began. Every entry is attempted even when an earlier one fails;
 // all failures are collected and returned rather than aborting the reversal mid-way.
