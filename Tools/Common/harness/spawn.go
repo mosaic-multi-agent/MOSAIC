@@ -113,8 +113,8 @@ func ResolveExecutable(path string) (Command, error) {
 // delivered on the subprocess's standard input, such that no argv element
 // ever contains a newline.
 //
-// Every request launches as -p --agent <identifier>, whatever the agent's
-// invocation kind: the CLI resolves the agent by name from its deployed
+// Every request launches as -p --agent <identifier>: the CLI resolves the
+// agent by name from its deployed
 // definition and loads that definition itself. The definition path is never
 // passed, and the CLI supplies its own environment information in the first
 // user turn, so nothing is prepended to the prompt.

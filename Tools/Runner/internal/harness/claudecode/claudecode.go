@@ -26,7 +26,7 @@ import (
 // ClaudeCodeAdapter implements domain.HarnessAdapter by delegating to
 // mosaic-common/harness for every Invoke call.
 //
-// Every agent, whatever its invocation kind, is launched with
+// Every agent is launched with
 // --agent <identifier> as the CLI's primary thread; the CLI loads the
 // deployed definition by name and the prompt is passed unchanged.
 //

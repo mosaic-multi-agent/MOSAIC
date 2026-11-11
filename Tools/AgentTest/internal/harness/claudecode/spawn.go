@@ -45,7 +45,7 @@ func (a *Adapter) SpawnPlan(ctx context.Context, subject domain.SubjectUnderTest
 		OutputFormat:       "json",
 		WorkingDir:         p.Sandbox.SubjectDir,
 		SessionPersistence: true,
-		// Every subject, whatever its invocation kind, is launched with
+		// Every subject is launched with
 		// `--agent <identity>`; the harness resolves it by name among the
 		// sandbox's project-level agents. The launch-time model wins over the
 		// definition's model field, so the run never depends on the harness

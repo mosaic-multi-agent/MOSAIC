@@ -46,13 +46,12 @@ var definitionKnownFields = map[string]bool{
 // runtime-only concern; a definition declaring either will now be rejected by
 // the unknown-field check below.
 var subjectKnownFields = map[string]bool{
-	"identity":               true,
-	"agent":                  true,
-	"workflows":              true,
-	"infrastructure_agents":  true,
-	"opening_message":        true,
-	"invocation_kind":        true,
-	"allowed_tools":          true,
+	"identity":              true,
+	"agent":                 true,
+	"workflows":             true,
+	"infrastructure_agents": true,
+	"opening_message":       true,
+	"allowed_tools":         true,
 }
 
 type wireSubject struct {
@@ -61,7 +60,6 @@ type wireSubject struct {
 	Workflows            []string `yaml:"workflows"`
 	InfrastructureAgents []string `yaml:"infrastructure_agents"`
 	OpeningMessage       string   `yaml:"opening_message"`
-	InvocationKind       string   `yaml:"invocation_kind"`
 	AllowedTools         []string `yaml:"allowed_tools"`
 }
 
@@ -242,6 +240,7 @@ func ParseTestDefinition(src Source) (domain.TestDefinition, Report) {
 	checkUnknownSubjectFields(src, root, subjectKnownFields, &report)
 	reportRemovedHarnessKeyIfPresent(src, root, "harness", &report)
 	reportRemovedSubjectDefinitionKeyIfPresent(src, root, &report)
+	reportRemovedSubjectInvocationKindKeyIfPresent(src, root, &report)
 
 	var wire wireDefinition
 	if err := goyaml.Unmarshal(src.Data, &wire); err != nil {
@@ -316,7 +315,6 @@ func ParseTestDefinition(src Source) (domain.TestDefinition, Report) {
 			Workflows:              wire.Subject.Workflows,
 			InfrastructureAgentIDs: wire.Subject.InfrastructureAgents,
 			OpeningMessage:         wire.Subject.OpeningMessage,
-			InvocationKind:         wire.Subject.InvocationKind,
 			AllowedTools:           wire.Subject.AllowedTools,
 		},
 		StubRegistryPath: wire.StubRegistry,

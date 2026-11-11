@@ -64,42 +64,32 @@ func TestSpawnPlan_ModelArgumentFollowsTheSubjectModelExactly(t *testing.T) {
 	}
 }
 
-// Every kind of subject is launched by identity with exactly its own model;
-// each kind carries a different model so a model taken from anywhere but the
-// subject (another kind's, a default) is caught.
-func TestSpawnPlan_EveryKindOfSubjectLaunchesByIdentityWithItsOwnModel(t *testing.T) {
-	kinds := map[string]string{
-		"orchestrator": "model-for-orchestrator",
-		"subagent":     "model-for-subagent",
-		"agent":        "model-for-agent",
-		"custom-kind":  "model-for-custom-kind",
+// A subject is launched by identity with exactly its own model; the model is
+// distinct from any default so a model taken from anywhere but the subject is
+// caught.
+func TestSpawnPlan_SubjectLaunchesByIdentityWithItsOwnModel(t *testing.T) {
+	const model = "model-distinct-from-any-default"
+	a, _, prov := provisionedAdapter(t)
+	subject := spawnTestSubject()
+	subject.Identity = "identity-distinct-from-the-helper-default"
+	subject.Model = model
+
+	plan, err := a.SpawnPlan(testContext(), subject, prov)
+	if err != nil {
+		t.Fatalf("SpawnPlan: %v", err)
 	}
-	for kind, model := range kinds {
-		t.Run("kind="+kind, func(t *testing.T) {
-			a, _, prov := provisionedAdapter(t)
-			subject := spawnTestSubject()
-			subject.Identity = "identity-of-" + kind
-			subject.InvocationKind = kind
-			subject.Model = model
 
-			plan, err := a.SpawnPlan(testContext(), subject, prov)
-			if err != nil {
-				t.Fatalf("SpawnPlan: %v", err)
-			}
-
-			if got, ok := argValue(plan.Args, "--agent"); !ok || got != subject.Identity {
-				t.Errorf("SpawnPlan: Args = %v, want --agent %q", plan.Args, subject.Identity)
-			}
-			count := 0
-			for _, arg := range plan.Args {
-				if arg == "--model" {
-					count++
-				}
-			}
-			if got, ok := argValue(plan.Args, "--model"); !ok || got != model || count != 1 {
-				t.Errorf("SpawnPlan: Args = %v, want exactly one --model %q", plan.Args, model)
-			}
-		})
+	if got, ok := argValue(plan.Args, "--agent"); !ok || got != subject.Identity {
+		t.Errorf("SpawnPlan: Args = %v, want --agent %q", plan.Args, subject.Identity)
+	}
+	count := 0
+	for _, arg := range plan.Args {
+		if arg == "--model" {
+			count++
+		}
+	}
+	if got, ok := argValue(plan.Args, "--model"); !ok || got != model || count != 1 {
+		t.Errorf("SpawnPlan: Args = %v, want exactly one --model %q", plan.Args, model)
 	}
 }
 

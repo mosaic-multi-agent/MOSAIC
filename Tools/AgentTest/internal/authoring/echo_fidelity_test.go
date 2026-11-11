@@ -31,7 +31,6 @@ subject:
   identity: researcher
   agent: researcher
   infrastructure_agents: []
-  invocation_kind: subagent
 `),
 	}
 
@@ -66,7 +65,6 @@ subject:
   identity: researcher
   agent: researcher
   infrastructure_agents: []
-  invocation_kind: subagent
 `),
 	}
 
@@ -100,7 +98,6 @@ subject:
   identity: researcher
   agent: researcher
   infrastructure_agents: []
-  invocation_kind: subagent
 `),
 	}
 
@@ -135,7 +132,6 @@ subject:
   identity: researcher
   agent: researcher
   infrastructure_agents: []
-  invocation_kind: subagent
 `),
 	}
 
@@ -315,7 +311,6 @@ subject:
   identity: researcher
   agent: researcher
   infrastructure_agents: []
-  invocation_kind: subagent
 `),
 	}
 

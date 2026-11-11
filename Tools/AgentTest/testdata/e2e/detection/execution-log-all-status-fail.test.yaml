@@ -17,7 +17,6 @@ subject:
   infrastructure_agents: []
   opening_message: |
     Greet the collaborator, then have the helper assist without creating files.
-  invocation_kind: subagent
   allowed_tools: [Task]
 
 stub_registry: execution-log-all-status-fail.stubs.json

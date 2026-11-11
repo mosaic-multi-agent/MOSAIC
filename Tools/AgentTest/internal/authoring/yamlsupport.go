@@ -147,6 +147,35 @@ func reportRemovedSubjectDefinitionKeyIfPresent(src Source, root *ast.MappingNod
 	}
 }
 
+// reportRemovedSubjectInvocationKindKeyIfPresent reports a
+// "removed-key-subject-invocation-kind" diagnostic when the subject mapping in
+// root contains an "invocation_kind" key. Every subject is launched by agent
+// name, so the key never had an effect.
+func reportRemovedSubjectInvocationKindKeyIfPresent(src Source, root *ast.MappingNode, report *Report) {
+	subjectNode := mappingChild(root, "subject")
+	if subjectNode == nil {
+		return
+	}
+	subjectMapping, ok := subjectNode.(*ast.MappingNode)
+	if !ok {
+		return
+	}
+	for _, v := range subjectMapping.Values {
+		if v.Key.String() != "invocation_kind" {
+			continue
+		}
+		report.Add(Diagnostic{
+			Severity: SeverityError,
+			Code:     "removed-key-subject-invocation-kind",
+			Path:     src.Path,
+			Line:     v.Key.GetToken().Position.Line,
+			Pointer:  "subject.invocation_kind",
+			Message: "subject.invocation_kind is no longer used and must be removed; " +
+				"every subject is launched by agent name",
+		})
+	}
+}
+
 // checkUnknownSubjectFields reports an "unknown-field" diagnostic, with line
 // and structural pointer, for every key in the subject block not present in
 // known. subjectNode is the value of the root's "subject" key; if it is nil
@@ -166,9 +195,10 @@ func checkUnknownSubjectFields(src Source, root *ast.MappingNode, known map[stri
 		if known[key] {
 			continue
 		}
-		// "definition" is handled by reportRemovedSubjectDefinitionKeyIfPresent
-		// with a more specific diagnostic; skip it here to avoid a duplicate.
-		if key == "definition" {
+		// "definition" and "invocation_kind" are handled by dedicated
+		// removed-key reporters with more specific diagnostics; skip them here
+		// to avoid a duplicate.
+		if key == "definition" || key == "invocation_kind" {
 			continue
 		}
 		report.Add(Diagnostic{

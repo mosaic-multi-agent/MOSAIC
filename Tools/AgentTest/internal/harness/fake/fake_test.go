@@ -69,7 +69,6 @@ func fakeSubject() domain.SubjectUnderTest {
 		Identity:       "orchestrator",
 		DefinitionPath: "agents/orchestrator.md",
 		OpeningMessage: "begin the run",
-		InvocationKind: "agent",
 		Model:          "test-model",
 	}
 }

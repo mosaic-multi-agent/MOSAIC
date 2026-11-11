@@ -37,7 +37,6 @@ func spawnTestSubject() domain.SubjectUnderTest {
 		Identity:       "orchestrator",
 		DefinitionPath: "agents/orchestrator.md",
 		OpeningMessage: "begin the run",
-		InvocationKind: "orchestrator",
 		Model:          "test-model",
 	}
 }
@@ -265,40 +264,35 @@ func TestSpawnPlan_StdinCarriesOnlyOpeningMessage(t *testing.T) {
 	}
 }
 
-// TestSpawnPlan_LaunchesByAgentNameForEveryInvocationKind verifies that the
-// authored invocation kind has no effect on the launch: every value yields
-// -p --agent <identity>, exactly one --model, and no --append-system-prompt-file.
-func TestSpawnPlan_LaunchesByAgentNameForEveryInvocationKind(t *testing.T) {
-	for _, kind := range []string{"orchestrator", "subagent", "agent", "", "other"} {
-		t.Run("kind="+kind, func(t *testing.T) {
-			a, _, prov := provisionedAdapter(t)
-			subject := spawnTestSubject()
-			subject.InvocationKind = kind
+// TestSpawnPlan_LaunchesByAgentName verifies the launch shape: the plan starts
+// -p --agent <identity>, carries exactly one --model equal to the subject's
+// model, and has no --append-system-prompt-file.
+func TestSpawnPlan_LaunchesByAgentName(t *testing.T) {
+	a, _, prov := provisionedAdapter(t)
+	subject := spawnTestSubject()
 
-			plan, err := a.SpawnPlan(testContext(), subject, prov)
-			if err != nil {
-				t.Fatalf("SpawnPlan: %v", err)
-			}
+	plan, err := a.SpawnPlan(testContext(), subject, prov)
+	if err != nil {
+		t.Fatalf("SpawnPlan: %v", err)
+	}
 
-			if len(plan.Args) < 3 || plan.Args[0] != "-p" || plan.Args[1] != "--agent" || plan.Args[2] != subject.Identity {
-				t.Errorf("SpawnPlan: Args = %v, want to start with -p --agent %s", plan.Args, subject.Identity)
-			}
-			models := 0
-			for i, arg := range plan.Args {
-				if arg == "--append-system-prompt-file" {
-					t.Errorf("SpawnPlan: Args = %v, want no --append-system-prompt-file", plan.Args)
-				}
-				if arg == "--model" && i+1 < len(plan.Args) && plan.Args[i+1] == subject.Model {
-					models++
-				}
-			}
-			if models != 1 {
-				t.Errorf("SpawnPlan: Args = %v, want exactly one --model %s", plan.Args, subject.Model)
-			}
-			if string(plan.Stdin) != subject.OpeningMessage {
-				t.Errorf("SpawnPlan: Stdin = %q, want exactly %q", plan.Stdin, subject.OpeningMessage)
-			}
-		})
+	if len(plan.Args) < 3 || plan.Args[0] != "-p" || plan.Args[1] != "--agent" || plan.Args[2] != subject.Identity {
+		t.Errorf("SpawnPlan: Args = %v, want to start with -p --agent %s", plan.Args, subject.Identity)
+	}
+	models := 0
+	for i, arg := range plan.Args {
+		if arg == "--append-system-prompt-file" {
+			t.Errorf("SpawnPlan: Args = %v, want no --append-system-prompt-file", plan.Args)
+		}
+		if arg == "--model" && i+1 < len(plan.Args) && plan.Args[i+1] == subject.Model {
+			models++
+		}
+	}
+	if models != 1 {
+		t.Errorf("SpawnPlan: Args = %v, want exactly one --model %s", plan.Args, subject.Model)
+	}
+	if string(plan.Stdin) != subject.OpeningMessage {
+		t.Errorf("SpawnPlan: Stdin = %q, want exactly %q", plan.Stdin, subject.OpeningMessage)
 	}
 }
 

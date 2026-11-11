@@ -28,7 +28,6 @@ subject:
     Continue the existing workflow run. Read the Orchestration.md in the
     run-scoped folder and resume from where it left off. Do not ask me any
     further questions - proceed immediately and autonomously.
-  invocation_kind: orchestrator
   allowed_tools: [Task, Read, Write, Edit, Bash, Glob, Grep]
 
 stub_registry: commits-parallel-resume-refusal.stubs.json

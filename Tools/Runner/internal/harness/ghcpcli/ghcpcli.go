@@ -12,7 +12,7 @@
 //     layers instructions from files it discovers itself (.github/copilot-instructions.md,
 //     .agent.md profiles, etc.), and MOSAIC orchestration context is rendered into the
 //     agent's .agent.md profile at deploy time by Tools/Deployment. No runtime injection
-//     is needed or correct; the field is left unset for both invocation kinds.
+//     is needed or correct; the field is left unset.
 //
 //  2. Distinct sentinel alias names. The package already exports ErrStreamError and
 //     ErrStreamIncomplete, aliased onto OpenCode's stream sentinels in opencode.go.
@@ -134,7 +134,7 @@ func NewGHCPCLIAdapterWithMode(executablePath string, timeout time.Duration, log
 
 // Invoke implements domain.HarnessAdapter.
 //
-// SystemPrompt is deliberately left unset for both invocation kinds — unlike
+// SystemPrompt is deliberately left unset — unlike
 // OpenCodeAdapter which always injects an EnvBlock. GHCP CLI discovers context
 // from files on disk (.agent.md profiles, etc.), and MOSAIC orchestration
 // context is rendered into the agent profile at deploy time by Tools/Deployment.
@@ -165,7 +165,7 @@ func (a *GHCPCLIAdapter) invoke(ctx context.Context, agent domain.AgentReference
 		OutputFormat: "json",
 		OnStdoutLine: onLine,
 		GHCPCLIMode:  a.mode,
-		// SystemPrompt is deliberately left unset for both invocation kinds.
+		// SystemPrompt is deliberately left unset.
 		// GHCP CLI layers instructions from files it discovers itself; MOSAIC
 		// orchestration context is rendered into the agent's .agent.md profile
 		// at deploy time by Tools/Deployment. No EnvBlock injection is correct.

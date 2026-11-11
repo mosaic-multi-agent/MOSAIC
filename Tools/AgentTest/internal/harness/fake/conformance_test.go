@@ -63,7 +63,6 @@ func newConformanceConfig(caps domain.HarnessCapabilities) contract.Config {
 			Identity:       "orchestrator",
 			DefinitionPath: "agents/orchestrator.md",
 			OpeningMessage: "begin the run",
-			InvocationKind: "agent",
 			Model:          "test-model",
 		},
 	}

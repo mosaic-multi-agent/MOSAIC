@@ -9,7 +9,7 @@ import (
 )
 
 // ResolveOrchestrator resolves the orchestrator agent file the run was given
-// into an AgentReference carrying the orchestrator invocation kind.
+// into an AgentReference for the orchestrator.
 //
 // path is domain.RunConfig.OrchestratorFilePath — the same file whose
 // workflow regions orchfile enumerated. The returned reference's Identifier

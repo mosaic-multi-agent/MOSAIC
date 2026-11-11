@@ -43,7 +43,6 @@ subject:
   agent: orchestrator
   infrastructure_agents: []
   opening_message: "Build the thing."
-  invocation_kind: orchestrator
 stub_registry: stubs/d.stubs.json
 `),
 	}

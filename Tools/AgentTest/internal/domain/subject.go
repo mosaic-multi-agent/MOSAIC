@@ -51,7 +51,6 @@ type SubjectUnderTest struct {
 	DefinitionPath string
 
 	OpeningMessage string // the first message the subject receives
-	InvocationKind string // maps to mosaic-common/harness InvocationKind
 
 	// Model and StubModel were previously authored in the test-definition
 	// subject block. Model selection is now a runtime concern: frontends

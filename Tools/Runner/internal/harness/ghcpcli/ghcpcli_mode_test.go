@@ -79,7 +79,7 @@ func writeGHCPCLITestAgentFile(t *testing.T, tools []string) string {
 }
 
 // agentRefWithDefinitionPath returns a domain.AgentReference with the given
-// definition path, using ordinary invocation kind. Used for Partial Allowlist
+// definition path. Used for Partial Allowlist
 // tests that require the adapter to read the file.
 func agentRefWithDefinitionPath(path string) domain.AgentReference {
 	return domain.AgentReference{

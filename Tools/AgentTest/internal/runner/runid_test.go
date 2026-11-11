@@ -76,7 +76,6 @@ func TestRun_RunIDPreludeInjectionPreservesEverySubjectFieldExceptOpeningMessage
 		Identity:       "orchestrator",
 		DefinitionPath: "orchestrator.md",
 		OpeningMessage: "start",
-		InvocationKind: "task",
 		Model:          "opus",
 		AllowedTools:   []string{"dispatch"},
 	}
@@ -92,9 +91,6 @@ func TestRun_RunIDPreludeInjectionPreservesEverySubjectFieldExceptOpeningMessage
 	}
 	if got.DefinitionPath != want.DefinitionPath {
 		t.Errorf("subject.DefinitionPath = %q, want %q", got.DefinitionPath, want.DefinitionPath)
-	}
-	if got.InvocationKind != want.InvocationKind {
-		t.Errorf("subject.InvocationKind = %q, want %q", got.InvocationKind, want.InvocationKind)
 	}
 	// The spawned subject carries the selected subject model, not the
 	// authored legacy field; the prelude injection must not disturb it.

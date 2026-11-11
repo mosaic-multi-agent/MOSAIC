@@ -22,7 +22,6 @@ subject:
   infrastructure_agents: []
   opening_message: |
     Invoke the worker collaborator once, then finish.
-  invocation_kind: subagent
   allowed_tools: [Task]
 
 stub_registry: run-alpha.stubs.json

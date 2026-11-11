@@ -36,7 +36,7 @@ const DefaultSpawnTimeout = 30 * time.Minute
 // supplied explicitly, and it must describe the sandbox the subject actually
 // runs in rather than this tool's own process working directory. This is the
 // one place OpenCode's SpawnPlan diverges from Runner's OpenCodeAdapter,
-// which passes EnvBlock("") for both invocation kinds.
+// which passes EnvBlock("").
 //
 // The plan carries neither a test-declared timeout nor a turn limit: no
 // argument this method receives could supply either (domain.SubjectUnderTest
