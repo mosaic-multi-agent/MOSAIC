@@ -1,39 +1,40 @@
-# Unreleased
+# 0.7.5 (2026-11-11)
 
-> **To upgrade:** Runner v1.12.0 is released together with the matching `orchestrator-script` update, which the repair of a damaged run needs. Run `Update workspace` once it is available.
->
-> Deploy v1.7.0 writes a new manifest schema (`.mosaic/manifest.yaml`, schema version 2) that older Deploy builds refuse to read; use v1.7.0 or newer on every machine that touches a workspace once it has run. An existing manifest is converted on its first run. After that first run you may see one-time conflict prompts (a file Deploy can no longer confirm as its own) or a dropped-entry report (entries that could not be attributed to a harness, or whose files are gone). Files that the old manifest recorded before edit detection existed get no edit check until their next write.
+> **To upgrade:**
+> - Run `Update workspace`. Runner v1.12.0 needs the matching `orchestrator-script` to repair a damaged run.
+> - Deploy v1.7.0 writes manifest schema 2, which older Deploy builds refuse. Use v1.7.0 or newer on every machine that touches the workspace. The old manifest is converted on the first run. That first run may ask about some conflicts once, and may report manifest entries it dropped.
+> - Claude Code works in the Runner again. Every agent the Runner runs must declare a `model:`, and on Claude Code its `name:` must match the agent id. Otherwise the run is refused at start.
 
 ## Tools
 
-### Deploy v1.7.0
-#### Changes
-- The manifest holds several harnesses at once. Every entry names its harness, each harness has its own section (`protocol_source`, `bundle_source`, `updated_at`), `tool_version` is recorded once at the top level, and the top-level `harness_id` is gone. The schema version is raised to 2; older Deploy builds refuse the new manifest
-- An old manifest is converted in memory and written in the new form on the next write. Entries under `.claude/` and `.opencode/` take their harness from the path; other entries take the old `harness_id` when that harness deploys to the path; the rest are dropped from the manifest and reported (the files stay untouched and count as unrecorded)
-- Every action reconciles the manifest with the disk first: an entry whose file is gone is dropped, and the dropped entries are listed in the plan review, the dry-run output and the transform output (`droppedEntries` in the transform JSON document)
-- Hook bundles are recorded file by file. A hook file you edited is reported as an update and backed up under `.mosaic/backups/` before it is overwritten
-- Edits to Deploy-owned content become a visible update with a backup: the agent body outside the project and custom regions, and whole skill and hook files. Project and custom regions and the frontmatter belong to you and are never reported as edits. Entries written before this release carry no record and get no edit check until their next write
-- A plan item lists every reason for its action, not only the first, and the plan and preview say when the current file is backed up before it is replaced
-- GHCP agent files: agents recorded as `X.md` move to `X.agent.md` for both GHCP targets, with backups, as part of the normal deploy and update flows. Nothing is written only to force the rename, conflicts are kept, and a transform to a GHCP target leaves no `X.md` entry behind
-- The GHCP target a workspace holds is read from the manifest entries instead of the old `harness_id`
-- `transform` keeps the source deployment (the GHCP pair excepted), and the transformed entries carry the identity of the catalog they came from. A catalog whose id was recorded for a differently named catalog produces a name-collision warning
-- MCP tool names are written per harness in two forms, whole server and single tool, declared in the descriptor under `tools.mcp` (`server_form`, `tool_form`, `extra_server_read_forms`, `normalize_server_name`). They replace `custom_tool_template`, which a descriptor can no longer use. The server name you enter for a custom tool is written in the target harness's syntax
-- `transform` converts MCP names between harnesses with the source and target forms, keeps denies (written as a deny where the target has deny, otherwise reported as dropped), and resolves an ambiguous OpenCode single-tool name from the tool mappings, then the servers declared in `opencode.json`/`opencode.jsonc`, then a question that `--mcp-split <name=server>` answers. Unknown GHCP tool names are reported as gaps
-- On update, built-in tools in the tools field follow the catalog, tools you added are kept, and custom tools the run produces are added. The plan shows the built-in tools an update adds or removes
-
-#### Bugfixes
-- A run sees only the manifest entries of its own harness, so a deployment of one harness no longer disturbs the entries of another harness in the same workspace
-- An entry whose file was deleted by hand no longer stays in the manifest; a hook bundle with some files missing is completed by the next update or hook deploy
-- A local edit of a hook file or of Deploy-owned agent content is no longer overwritten without a backup
-
 ### Runner v1.12.0
 #### Changes
-- A damaged `Orchestration.md` is detected on every read: a table that ends before its closing tag, a row with too few cells, an execution log `Seq` that is not an integer or not increasing, an `Agent` cell that does not match `{AgentName}#{Seq}`, or a `last_agent` with no log row. Harmless variations (CRLF, a closing tag after content, a lagging `global_sequence`, gaps in `Seq`) are still accepted
-- The Runner never writes the artifact after a read that found damage, so a damaged table is not rewritten into permanent data loss
-- After every successful write the Runner keeps a last-good copy of the artifact outside the run folder (`RunnerLogs/{run_id}/Orchestration.last-good.md`), and saves the damaged file next to it before the first repair attempt
-- The orchestrator repairs the damage through a routing consultation, then routes. The Runner verifies the repair (strict read, last-good rows unchanged, consistent with the dispatch log) before acting on the reply, tries at most 2 times, and stops the run if the repair does not succeed or a repair consultation fails
-- The progress screen and debug log show the damage and whether the repair was accepted
-- A damaged run stays listed and resumable on the pre-run screens, marked damaged. A run whose frontmatter is damaged recovers its values from the last-good copy; without a usable copy it is listed as unresumable and refused
+- **Claude Code is enabled again.** Agents run by name (`claude -p --agent <name>`), so their own `model:` and `tools:` apply. Before, they ran on your default Claude Code model with every built-in tool. The run-scoped copy `.claude/agents-runner-{run_id}/` is gone; a leftover one is safe to delete
+- At run start, an agent without a `model:` is refused on every harness. On Claude Code, an agent whose `name:` differs from its id is also refused
+- Agent files are not frozen during a run. An edit takes effect at the agent's next invocation, as in native orchestration
+- A damaged `Orchestration.md` is detected on every read (broken tables, bad `Seq` or `Agent` cells, a `last_agent` with no log row) and is never written back. The orchestrator repairs it in a routing consultation. The Runner checks the repair, allows at most 2 attempts, and otherwise stops the run
+- A last-good copy of the artifact is kept in `RunnerLogs/{run_id}/`. A damaged run stays listed and resumable, marked damaged; damaged frontmatter is recovered from the last-good copy
+
+### Deploy v1.7.0
+#### Changes
+- One manifest holds several harnesses (schema 2): every entry names its harness, and each harness has its own section under `harnesses:`, identified by `harness_id`. The single `harness_id` at the top of the file is gone
+- Every action first removes entries whose files are gone and lists them in the plan, the dry-run output and the transform output
+- Hook files are recorded one by one. An edited hook file, or an edit outside the project and custom regions of an agent, is shown as an update and backed up before it is overwritten
+- The plan lists every reason for an action and says when a file is backed up
+- GHCP agents recorded as `X.md` move to `X.agent.md`, with backups, during normal deploys and updates
+- MCP tools are written in the target harness's own naming, including when you enter a custom tool's server name. `Transform harness` converts them to the new harness, keeps tool denies where the target supports them, and asks you which server a tool belongs to when an OpenCode name is ambiguous
+- On update, built-in tools follow the catalog and tools you added are kept
+#### Bugfixes
+- Deploying one harness no longer changes the entries of another harness in the same workspace
+- Local edits to hooks and to agent content that Deploy manages are no longer overwritten without a backup
+
+### AgentTest v1.2.2
+#### Changes
+- Every subject is launched by name. A test file with `subject.invocation_kind` is rejected
+- A subject whose definition is not in the harness's agents directory, or whose `name:` differs from its id, is reported as a setup error
+
+## Catalog
+- **mosaic-test-creator** (v1.1.1): test templates no longer write `invocation_kind`
 
 # 0.7.4 (2026-11-08)
 

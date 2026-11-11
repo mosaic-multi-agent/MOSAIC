@@ -152,7 +152,7 @@ func TestRunVersion_WriteFailure_ReturnsNonZero(t *testing.T) {
 }
 
 func TestToolVersion_IsBumped(t *testing.T) {
-	if ToolVersion != "1.2.1" {
-		t.Errorf("ToolVersion = %q, want %q", ToolVersion, "1.2.1")
+	if ToolVersion != "1.2.2" {
+		t.Errorf("ToolVersion = %q, want %q", ToolVersion, "1.2.2")
 	}
 }
