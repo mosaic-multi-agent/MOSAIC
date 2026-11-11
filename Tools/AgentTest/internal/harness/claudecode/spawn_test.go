@@ -248,22 +248,11 @@ func TestSpawnPlan_BuildingItStartsNoProcessAndTouchesNoFiles(t *testing.T) {
 	}
 }
 
-// TestSpawnPlan_StdinEnvBlockNamesSubjectDir verifies that the stdin payload
-// of the spawn plan names the sandbox subject directory in its synthesized
-// <env> block. plan.WorkingDir (the OS-level working directory for the
-// subprocess) was already set to the subject directory; this test pins the
-// complementary requirement that the text the spawned orchestrator agent is
-// told about its working directory also names the subject directory — not
-// AgentTest's own tool directory, which is what the process CWD fallback
-// would produce when no working directory is passed to the spawn request.
-//
-// Without the fix, SpawnPlan does not set WorkingDir on the commonharness
-// SpawnRequest, so BuildArgs falls through to EnvBlock(""), which reads the
-// process's own working directory. The spawned agent is therefore told the
-// wrong directory in its <env> block. This test will fail until the fix
-// populates SpawnRequest.WorkingDir from the sandbox.
-func TestSpawnPlan_StdinEnvBlockNamesSubjectDir(t *testing.T) {
-	a, sb, prov := provisionedAdapter(t)
+// TestSpawnPlan_StdinCarriesOnlyOpeningMessage verifies that the stdin payload
+// is exactly the subject's opening message: the harness supplies the
+// environment itself under --agent, so no synthesized <env> block is added.
+func TestSpawnPlan_StdinCarriesOnlyOpeningMessage(t *testing.T) {
+	a, _, prov := provisionedAdapter(t)
 	subject := spawnTestSubject()
 
 	plan, err := a.SpawnPlan(testContext(), subject, prov)
@@ -271,11 +260,45 @@ func TestSpawnPlan_StdinEnvBlockNamesSubjectDir(t *testing.T) {
 		t.Fatalf("SpawnPlan: %v", err)
 	}
 
-	if plan.Stdin == nil {
-		t.Fatalf("SpawnPlan: Stdin is nil; want a stdin payload containing the env block for orchestrator invocations")
+	if string(plan.Stdin) != subject.OpeningMessage {
+		t.Errorf("SpawnPlan: Stdin = %q, want exactly the opening message %q", plan.Stdin, subject.OpeningMessage)
 	}
-	if !strings.Contains(string(plan.Stdin), sb.SubjectDir) {
-		t.Errorf("SpawnPlan: stdin env block = %q, want the sandbox subject directory %q named in the env block so the spawned agent is told the correct working directory", plan.Stdin, sb.SubjectDir)
+}
+
+// TestSpawnPlan_LaunchesByAgentNameForEveryInvocationKind verifies that the
+// authored invocation kind has no effect on the launch: every value yields
+// -p --agent <identity>, exactly one --model, and no --append-system-prompt-file.
+func TestSpawnPlan_LaunchesByAgentNameForEveryInvocationKind(t *testing.T) {
+	for _, kind := range []string{"orchestrator", "subagent", "agent", "", "other"} {
+		t.Run("kind="+kind, func(t *testing.T) {
+			a, _, prov := provisionedAdapter(t)
+			subject := spawnTestSubject()
+			subject.InvocationKind = kind
+
+			plan, err := a.SpawnPlan(testContext(), subject, prov)
+			if err != nil {
+				t.Fatalf("SpawnPlan: %v", err)
+			}
+
+			if len(plan.Args) < 3 || plan.Args[0] != "-p" || plan.Args[1] != "--agent" || plan.Args[2] != subject.Identity {
+				t.Errorf("SpawnPlan: Args = %v, want to start with -p --agent %s", plan.Args, subject.Identity)
+			}
+			models := 0
+			for i, arg := range plan.Args {
+				if arg == "--append-system-prompt-file" {
+					t.Errorf("SpawnPlan: Args = %v, want no --append-system-prompt-file", plan.Args)
+				}
+				if arg == "--model" && i+1 < len(plan.Args) && plan.Args[i+1] == subject.Model {
+					models++
+				}
+			}
+			if models != 1 {
+				t.Errorf("SpawnPlan: Args = %v, want exactly one --model %s", plan.Args, subject.Model)
+			}
+			if string(plan.Stdin) != subject.OpeningMessage {
+				t.Errorf("SpawnPlan: Stdin = %q, want exactly %q", plan.Stdin, subject.OpeningMessage)
+			}
+		})
 	}
 }
 
@@ -380,7 +403,7 @@ func TestSpawnPlan_EnvCarriesMosaicRunID(t *testing.T) {
 // SpawnRequest must continue to emit the flag unchanged.
 func TestSpawnPlan_DefaultSpawnRequestPreservesNoSessionPersistenceFlag(t *testing.T) {
 	args, _, err := commonharness.BuildArgs(commonharness.SpawnRequest{
-		Agent:        commonharness.AgentRef{Kind: commonharness.InvocationOrdinary},
+		Agent:        commonharness.AgentRef{},
 		OutputFormat: "json",
 		// SessionPersistence deliberately omitted (zero value = false).
 	})

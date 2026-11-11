@@ -85,7 +85,6 @@ func agentRefWithDefinitionPath(path string) domain.AgentReference {
 	return domain.AgentReference{
 		Identifier:     "test-agent",
 		DefinitionPath: path,
-		InvocationKind: domain.InvocationOrdinary,
 	}
 }
 
@@ -256,7 +255,6 @@ func TestGHCPCLIAdapterWithMode_PartialAllowlist_Invoke_MissingDefinitionPath_Re
 	agentRef := domain.AgentReference{
 		Identifier:     "test-agent",
 		DefinitionPath: "/nonexistent/path/to/agent.md",
-		InvocationKind: domain.InvocationOrdinary,
 	}
 
 	adapter := ghcpcli.NewGHCPCLIAdapterWithMode(

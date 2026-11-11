@@ -4,27 +4,24 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	commonharness "mosaic-common/harness"
-	"mosaic-run/internal/agentresolve"
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/engine"
 	"mosaic-run/internal/orchfile"
 	"mosaic-run/internal/resumecheck"
 	"mosaic-run/internal/seed"
-	"mosaic-run/internal/snapshot"
 	"mosaic-run/internal/snapshot/lockprotocol"
 	"mosaic-run/internal/snapshot/transform"
 )
 
-// setupSnapshotOrBackup handles step 5b of the run-start sequence: select
-// and execute the snapshot or backup-and-transform strategy for CLI harnesses.
-// Non-CLI harnesses skip this step entirely.
+// setupSnapshotOrBackup handles step 5b of the run-start sequence: run the
+// backup-and-transform strategy for CLI harnesses. Non-CLI harnesses skip this
+// step entirely. A harness with no transformation rules (Claude Code) leaves
+// the agents directory untouched: no copy, no backup, no transform.
 //
-// On success, s.snapshotDir and/or s.backupState are set (as applicable).
-// The caller (Start) is responsible for registering the corresponding defers
-// immediately after this call returns without done=true.
+// On success, s.backupState is set when a backup was made. The caller (Start)
+// registers the corresponding cleanup defer before calling this.
 func (s *sessionImpl) setupSnapshotOrBackup(ctx context.Context, rs *runStartCtx) (domain.RunOutcome, bool, error) {
 	entry, ok := commonharness.LookupCLIHarness(rs.config.HarnessID)
 	if !ok {
@@ -32,8 +29,6 @@ func (s *sessionImpl) setupSnapshotOrBackup(ctx context.Context, rs *runStartCtx
 	}
 
 	switch entry.LoadingMechanism {
-	case commonharness.LoadingMechanismPath:
-		return s.setupPathSnapshot(ctx, rs)
 	case commonharness.LoadingMechanismName:
 		return s.setupNameBackup(ctx, rs)
 	default:
@@ -44,41 +39,8 @@ func (s *sessionImpl) setupSnapshotOrBackup(ctx context.Context, rs *runStartCtx
 	}
 }
 
-// setupPathSnapshot implements the copy-and-invoke strategy for
-// LoadingMechanismPath harnesses (e.g. claude-code).
-func (s *sessionImpl) setupPathSnapshot(ctx context.Context, rs *runStartCtx) (domain.RunOutcome, bool, error) {
-	snapshotDir := filepath.Join(filepath.Dir(rs.orchDir), filepath.Base(rs.orchDir)+"-runner-"+rs.config.RunID)
-	rules := transform.TransformationsFor(rs.config.HarnessID)
-	if err := snapshot.NewSnapshot(rs.orchDir, snapshotDir, rules); err != nil {
-		return s.refusal(err.Error()), true, nil
-	}
-	s.snapshotDir = snapshotDir
-
-	// Re-resolve all agents against the snapshot directory.
-	agents, err := agentresolve.ResolveAll(snapshotDir, rs.identifiers)
-	if err != nil {
-		return s.refusal(err.Error()), true, nil
-	}
-	rs.agents = agents
-
-	// Re-resolve the orchestrator against the snapshot directory.
-	snapshotOrchPath := filepath.Join(snapshotDir, filepath.Base(rs.config.OrchestratorFilePath))
-	orchRef, err := agentresolve.ResolveOrchestrator(snapshotOrchPath)
-	if err != nil {
-		return s.refusal(err.Error()), true, nil
-	}
-	s.orchRef = orchRef
-
-	// Re-bind consultants with the snapshot-resolved orchestrator reference.
-	rc := domain.RunContext{Orchestrator: orchRef, Table: rs.table}
-	bindRunContext(s.deps.Routing, rc)
-	bindRunContext(s.deps.Manual, rc)
-	bindRunContext(s.deps.PreConsult, rc)
-	return domain.RunOutcome{}, false, nil
-}
-
 // setupNameBackup implements the backup-and-transform strategy for
-// LoadingMechanismName harnesses (e.g. opencode, ghcp-cli).
+// LoadingMechanismName harnesses (opencode, ghcp-cli, claude-code).
 func (s *sessionImpl) setupNameBackup(ctx context.Context, rs *runStartCtx) (domain.RunOutcome, bool, error) {
 	rules := transform.TransformationsFor(rs.config.HarnessID)
 	bs, bsErr := lockprotocol.SetupBackupAndTransform(rs.orchDir, rs.config.RunID, rules, s.deps.Debug)

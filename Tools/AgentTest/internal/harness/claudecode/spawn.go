@@ -38,7 +38,6 @@ func (a *Adapter) SpawnPlan(ctx context.Context, subject domain.SubjectUnderTest
 		Agent: commonharness.AgentRef{
 			Identifier:     subject.Identity,
 			DefinitionPath: filepath.Join(p.Sandbox.SubjectDir, filepath.FromSlash(subject.DefinitionPath)),
-			Kind:           commonharness.InvocationKind(subject.InvocationKind),
 		},
 		Prompt:             subject.OpeningMessage,
 		Model:              subject.Model,
@@ -46,9 +45,11 @@ func (a *Adapter) SpawnPlan(ctx context.Context, subject domain.SubjectUnderTest
 		OutputFormat:       "json",
 		WorkingDir:         p.Sandbox.SubjectDir,
 		SessionPersistence: true,
-		// The launch-time model wins over the definition's model field, so
-		// the run never depends on the harness default. BuildArgs does not
-		// emit --model for this harness.
+		// Every subject, whatever its invocation kind, is launched with
+		// `--agent <identity>`; the harness resolves it by name among the
+		// sandbox's project-level agents. The launch-time model wins over the
+		// definition's model field, so the run never depends on the harness
+		// default. BuildArgs does not emit --model for this harness.
 		ExtraArgs: []string{"--model", subject.Model},
 	}
 

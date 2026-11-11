@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"mosaic-run/internal/agentresolve"
-	"mosaic-run/internal/domain"
 )
 
 // --- .agent.md recognition ---
@@ -50,26 +49,6 @@ func TestResolveAll_AgentMdFile_DefinitionPathEndsWithAgentMd(t *testing.T) {
 	ref := result["foo"]
 	if !strings.HasSuffix(ref.DefinitionPath, "foo.agent.md") {
 		t.Errorf("DefinitionPath must end with %q; got %q", "foo.agent.md", ref.DefinitionPath)
-	}
-}
-
-// TestResolveAll_AgentMdFile_InvocationKindIsOrdinary verifies that a
-// .agent.md file resolves to a reference carrying InvocationOrdinary, the
-// same as a .md file.
-func TestResolveAll_AgentMdFile_InvocationKindIsOrdinary(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "foo.agent.md"), []byte("# Foo\n"), 0600); err != nil {
-		t.Fatalf("write foo.agent.md: %v", err)
-	}
-
-	result, err := agentresolve.ResolveAll(dir, []string{"foo"})
-
-	if err != nil {
-		t.Fatalf("ResolveAll: %v", err)
-	}
-	ref := result["foo"]
-	if ref.InvocationKind != domain.InvocationOrdinary {
-		t.Errorf("InvocationKind: want %q, got %q", domain.InvocationOrdinary, ref.InvocationKind)
 	}
 }
 

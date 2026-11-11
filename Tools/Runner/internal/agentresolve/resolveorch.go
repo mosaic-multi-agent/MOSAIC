@@ -17,10 +17,6 @@ import (
 // identity rule ResolveAll uses for ordinary agents. DefinitionPath is the
 // absolute path to that file.
 //
-// The returned reference always carries InvocationKind ==
-// domain.InvocationOrchestrator, so the orchestrator retains native
-// subagent-spawning capability during a consultation.
-//
 // Returns *domain.RefusalError{Component: "agentresolve", Resource: path}
 // when the file does not exist, cannot be read, is a directory, or has an
 // empty filename stem.
@@ -66,6 +62,5 @@ func ResolveOrchestrator(path string) (domain.AgentReference, error) {
 	return domain.AgentReference{
 		Identifier:     stem,
 		DefinitionPath: absPath,
-		InvocationKind: domain.InvocationOrchestrator,
 	}, nil
 }

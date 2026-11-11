@@ -20,24 +20,19 @@ const (
 	// refuses the run rather than silently misbehaving.
 	LoadingMechanismUnset LoadingMechanism = 0
 
-	// LoadingMechanismPath means the harness accepts a full file path to the
-	// agent definition file. Runner uses the copy-and-invoke snapshot strategy.
-	LoadingMechanismPath LoadingMechanism = 1
-
 	// LoadingMechanismName means the harness resolves agents by name from the
-	// agents directory. Runner uses the backup-and-transform snapshot strategy.
+	// agents directory. Runner uses the backup-and-transform strategy, which
+	// does nothing for a harness with no transformation rules.
 	LoadingMechanismName LoadingMechanism = 2
 )
 
 // String returns a human-readable label for the loading mechanism.
-// Returns "unset", "path", or "name" for defined constants, or
-// "unknown(<N>)" for unrecognized values.
+// Returns "unset" or "name" for defined constants, or "unknown(<N>)" for
+// unrecognized values.
 func (m LoadingMechanism) String() string {
 	switch m {
 	case LoadingMechanismUnset:
 		return "unset"
-	case LoadingMechanismPath:
-		return "path"
 	case LoadingMechanismName:
 		return "name"
 	default:
@@ -60,13 +55,12 @@ type CLIHarness struct {
 	// AgentsDir is the harness-convention relative path (from the project
 	// root) to the directory that holds agent definition files. For example,
 	// ".claude/agents" for claude-code or ".opencode/agents" for opencode.
-	// Runner computes the run-scoped agents directory path from this value.
-	// Note: session.go computes the path inline; SnapshotDirPath is not used.
+	// Runner locates the deployed agents directory from this value.
 	AgentsDir string
 
 	// LoadingMechanism describes how this harness locates agent definition
-	// files. Path-based harnesses (claude-code) receive a full file path;
-	// name-based harnesses (opencode, ghcp-cli) resolve agents by name.
+	// files. All CLI harnesses are name-based: they resolve agents by name;
+	// the Runner passes the agent name, not a file path.
 	// This field has no counterpart in the Deployment tool's harness YAML
 	// descriptors; it is not drift-guarded.
 	LoadingMechanism LoadingMechanism
@@ -100,7 +94,7 @@ type CLIHarness struct {
 // are not drift-guarded; they reflect the harness's own agent-loading
 // convention.
 var cliHarnesses = []CLIHarness{
-	{ID: HarnessIDClaudeCode, Label: "Claude Code CLI", AgentsDir: ".claude/agents", LoadingMechanism: LoadingMechanismPath},
+	{ID: HarnessIDClaudeCode, Label: "Claude Code CLI", AgentsDir: ".claude/agents", LoadingMechanism: LoadingMechanismName},
 	{ID: HarnessIDOpenCode, Label: "OpenCode CLI", AgentsDir: ".opencode/agents", LoadingMechanism: LoadingMechanismName},
 	{ID: HarnessIDGHCPCLI, Label: "GitHub Copilot CLI", AgentsDir: ".github/agents", LoadingMechanism: LoadingMechanismName},
 }

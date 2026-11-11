@@ -113,15 +113,11 @@ func ResolveExecutable(path string) (Command, error) {
 // delivered on the subprocess's standard input, such that no argv element
 // ever contains a newline.
 //
-// For InvocationOrdinary: uses --append-system-prompt-file with the agent's
-// definition file, keeping the CLI's default system prompt (including
-// <env>).
-//
-// For InvocationOrchestrator: uses --agent <identifier> to launch the
-// orchestrator as the primary/main thread. Because --agent fully replaces
-// the default system prompt (losing the CLI's <env> block), an equivalent
-// <env> block is synthesized and prepended to the stdin payload alongside the
-// prompt content.
+// Every request launches as -p --agent <identifier>, whatever the agent's
+// invocation kind: the CLI resolves the agent by name from its deployed
+// definition and loads that definition itself. The definition path is never
+// passed, and the CLI supplies its own environment information in the first
+// user turn, so nothing is prepended to the prompt.
 //
 // Permission mode selection:
 //   - When req.DerivedTools is non-empty: --permission-mode dontAsk with
@@ -136,16 +132,13 @@ func ResolveExecutable(path string) (Command, error) {
 // --dangerously-skip-permissions is never included.
 //
 // The prompt content never appears as an argv value. -p is emitted as a bare
-// flag with no following value; the prompt content (with the <env> block
-// prepended for orchestrator invocations) is returned as stdin. stdin is nil
-// when req.Prompt is empty and no <env> block was prepended, so the caller's
-// existing if o.Stdin != nil guard behaves as it did before this change.
+// flag with no following value; the prompt content is returned as stdin,
+// exactly as given. stdin is nil when req.Prompt is empty, so the caller's
+// if o.Stdin != nil guard skips it.
 //
-// Note: this function calls EnvBlock for orchestrator invocations, which reads
-// the clock and the process working directory and is therefore not pure.
+// The result depends only on req: the function reads no clock, working
+// directory or file.
 func BuildArgs(req SpawnRequest) (args []string, stdin []byte, err error) {
-	stdinContent := req.Prompt
-
 	// Select permission mode. When DerivedTools is non-empty or ToolsDerived
 	// is true, use deterministic dontAsk mode; otherwise fall back to auto
 	// for backward compatibility (e.g., AgentTest callers).
@@ -154,22 +147,11 @@ func BuildArgs(req SpawnRequest) (args []string, stdin []byte, err error) {
 		permMode = "dontAsk"
 	}
 
-	switch req.Agent.Kind {
-	case InvocationOrchestrator:
-		stdinContent = EnvBlock(req.WorkingDir) + "\n" + stdinContent
-		args = []string{
-			"--agent", req.Agent.Identifier,
-			"-p",
-			"--output-format", req.OutputFormat,
-			"--permission-mode", permMode,
-		}
-	default: // InvocationOrdinary
-		args = []string{
-			"-p",
-			"--append-system-prompt-file", req.Agent.DefinitionPath,
-			"--output-format", req.OutputFormat,
-			"--permission-mode", permMode,
-		}
+	args = []string{
+		"-p",
+		"--agent", req.Agent.Identifier,
+		"--output-format", req.OutputFormat,
+		"--permission-mode", permMode,
 	}
 
 	// The CLI rejects stream-json in print mode without --verbose.
@@ -187,8 +169,8 @@ func BuildArgs(req SpawnRequest) (args []string, stdin []byte, err error) {
 
 	args = append(args, req.ExtraArgs...)
 
-	if stdinContent != "" {
-		stdin = []byte(stdinContent)
+	if req.Prompt != "" {
+		stdin = []byte(req.Prompt)
 	}
 	return args, stdin, nil
 }
@@ -199,13 +181,12 @@ func BuildArgs(req SpawnRequest) (args []string, stdin []byte, err error) {
 //
 // workingDir names the directory the block should report. An empty
 // workingDir resolves the current process's working directory, which is the
-// behaviour the Claude Code orchestrator path has always had; a caller that
-// knows the subject will run somewhere else (a sandbox, for instance) passes
-// that directory explicitly rather than letting the block describe the wrong
-// place.
+// behaviour of the process default; a caller that knows the subject will run
+// somewhere else (a sandbox, for instance) passes that directory explicitly
+// rather than letting the block describe the wrong place.
 //
 // This function reads the clock and may read the process working directory.
-// BuildArgs calls it for InvocationOrchestrator requests.
+// Only the OpenCode paths call it; BuildArgs does not.
 func EnvBlock(workingDir string) string {
 	dir := workingDir
 	if dir == "" {

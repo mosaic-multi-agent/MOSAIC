@@ -155,7 +155,7 @@ func TestBuildAdapter_Invoke_ReportsActivityToObserver(t *testing.T) {
 			defer cancel()
 			req := domain.ProtocolRequest{AgentInstanceID: "test-agent#1", TaskDescription: "x"}
 
-			_, _ = h.Invoke(ctx, timeoutAgentRef(t, domain.InvocationOrdinary), req)
+			_, _ = h.Invoke(ctx, timeoutAgentRef(t), req)
 
 			assertWiredActivity(t, obs, id, domain.ActivitySourceDispatch, "test-agent#1")
 		})
@@ -175,7 +175,7 @@ func TestBuildAdapter_InvokeRaw_ReportsActivityToObserver(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
 
-			_, _ = raw.InvokeRaw(ctx, timeoutAgentRef(t, domain.InvocationOrchestrator), []byte(`{}`))
+			_, _ = raw.InvokeRaw(ctx, timeoutAgentRef(t), []byte(`{}`))
 
 			assertWiredActivity(t, obs, id, domain.ActivitySourceConsultation, "test-agent")
 		})
@@ -190,7 +190,7 @@ func TestBuildAdapter_NilObserver_InvocationsStillRun(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
 
-			_, err := h.Invoke(ctx, timeoutAgentRef(t, domain.InvocationOrdinary),
+			_, err := h.Invoke(ctx, timeoutAgentRef(t),
 				domain.ProtocolRequest{AgentInstanceID: "test-agent#1", TaskDescription: "x"})
 
 			if ctx.Err() != nil {
@@ -226,7 +226,7 @@ func TestInteractiveWiring_WithoutObserver_InvocationsStillRun(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	_, err := deps.Harness.Invoke(ctx, timeoutAgentRef(t, domain.InvocationOrdinary),
+	_, err := deps.Harness.Invoke(ctx, timeoutAgentRef(t),
 		domain.ProtocolRequest{AgentInstanceID: "test-agent#1", TaskDescription: "x"})
 
 	if ctx.Err() != nil {

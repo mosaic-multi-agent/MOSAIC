@@ -321,7 +321,7 @@ assertions:
 | `workflows` | No | list of strings | Workflow IDs to inject. `null`/absent = all, `[]` = none, `["id"]` = exactly these |
 | `infrastructure_agents` | **Yes** | list of strings | Infrastructure agent IDs to deploy. `[]` = none (region stays empty), `["id"]` = exactly these. **Absent field is a parse error** — every test must declare this explicitly |
 | `opening_message` | Yes | string | The initial message the subject receives |
-| `invocation_kind` | Yes | string | `orchestrator` or `subagent` |
+| `invocation_kind` | Yes | string | `orchestrator` or `subagent`. The key is still required, but it no longer affects how the subject is launched; every subject starts by name. It is a candidate for removal in a future change. |
 | `model` | No | string | Model identifier for the subject (e.g. `sonnet`, `claude-sonnet-4-5`) |
 | `stub_model` | No | string | Model identifier for stubs deployed alongside the subject on the catalogue path. Optional: omitting it gives stubs the same model as `subject.model`. |
 | `allowed_tools` | No | list | Tools the subject may use |

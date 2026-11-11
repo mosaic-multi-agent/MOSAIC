@@ -2286,12 +2286,12 @@ Distinct from CC-054 (session-wide `EnterWorktree` latch desync once the tool IS
 | **Classification** | Bug |
 | **Source** | Direct MOSAIC reproduction on v2.1.269 (2026-09-12), narrowing and partially superseding three earlier GitHub reports: [#31287](https://github.com/anthropics/claude-code/issues/31287), [#65142](https://github.com/anthropics/claude-code/issues/65142), [#66581](https://github.com/anthropics/claude-code/issues/66581) |
 | **Reported** | Direct observation reported to this KB 2026-09-12; earliest corroborating GitHub report dated 2026-03-06 (#31287) |
-| **Last Activity** | 2026-09-12 (MOSAIC systematic reproduction — see Evidence) |
+| **Last Activity** | 2026-11-11 (MOSAIC headless re-check of `tools:` scoping on v2.1.322 — see Evidence) |
 | **Confidence** | Confirmed (reproduced at MOSAIC with a systematic 7-test matrix on v2.1.269) |
 | **Orchestration Impact** | HIGH |
 | **Reproduced at MOSAIC** | Yes |
 | **MOSAIC Response** | Unevaluated |
-| **Version(s) Affected** | Confirmed present on v2.1.269 (2026-09-12). The broader `tools:`-also-broken variant reported in #31287/#65142/#66581 (v2.1.69–v2.1.169) appears to have been fixed — `tools:` scoping for built-in tools now works correctly |
+| **Version(s) Affected** | Confirmed present on v2.1.269 (2026-09-12). The broader `tools:`-also-broken variant reported in #31287/#65142/#66581 (v2.1.69–v2.1.169) appears to have been fixed — `tools:` scoping for built-in tools now works correctly, re-confirmed on v2.1.322 under `-p` with `--permission-mode dontAsk` (2026-11-11). The `mcpServers:` + `tools:` case was not re-tested on v2.1.322 |
 | **Latest Platform Version** | v2.1.310 (2026-10-23) |
 | **Labels** | N/A for the direct reproduction; underlying GitHub issues carry `bug`, `has repro`, `area:mcp`, `area:agents`, `stale` |
 
@@ -2325,6 +2325,8 @@ MOSAIC reproduction matrix on Claude Code v2.1.269 (Windows 11, 2026-09-12), all
 T4 is the failing case — it is the **only** configuration where MCP tools are absent, and it is precisely the pattern MOSAIC agents use. T7 shows the same configuration works when MCP tools are also listed explicitly in `tools:` alongside `mcpServers:` — confirming `mcpServers:` is ignored, not that MCP is fundamentally broken.
 
 Additional note on permission layer: MCP tools that appear in the schema still require permission grants to invoke. In headless `-p` mode, use `--allowedTools "mcp__github__get_me"` or `--dangerously-skip-permissions` or add to `settings.local.json`'s `permissions.allow`. This is a separate, correct behavior — not part of the bug.
+
+**Re-check on v2.1.322 (2026-11-11, Windows 11):** `claude -p --agent codebase-research --output-format stream-json --verbose --permission-mode dontAsk --allowedTools <the agent's tools:>`, prompt on stdin, user default model `haiku` in settings. The `init` event listed exactly the built-in tools in the agent's `tools:` (`Read, Write, Edit, Glob, Grep, Bash`) and the agent's `model:` (`claude-sonnet-5-5`), not the settings default. So built-in `tools:` scoping and `model:` hold under `dontAsk`, not only under `--dangerously-skip-permissions`. MCP was not exercised (servers disabled locally). Also observed: `AskUserQuestion` is not offered under `-p` even when listed in `tools:`.
 
 **Historical context:** The three GitHub reports (#31287/#65142/#66581, v2.1.69–v2.1.169) described a **broader** failure where `tools:` scoping itself was also broken (enumerated lists fully ignored, fixed 7-tool hardcoded set). That broader bug appears to have been fixed silently between v2.1.169 and v2.1.237 (consistent with #78777 counter-evidence). What remains is the narrower `mcpServers:`-ignored-when-`tools:`-present interaction bug, which may have been present all along but was masked by the broader `tools:` failure.
 

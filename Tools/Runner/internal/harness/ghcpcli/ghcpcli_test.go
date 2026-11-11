@@ -16,7 +16,6 @@ package ghcpcli_test
 //   - SystemPrompt is left unset: no <env> block appears in the prompt
 //     for either invocation kind, unlike OpenCodeAdapter which always injects
 //     one because --agent replaces the default system prompt for that harness.
-//   - domain.AgentReference.InvocationKind is mapped onto commonharness.AgentRef.Kind.
 //
 //   Protocol response mapping:
 //   - A successful GHCP CLI event stream decodes into domain.ProtocolResponse.

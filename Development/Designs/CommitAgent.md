@@ -158,7 +158,7 @@ The fixed part is MOSAIC's own state:
 - the session log tree `OrchestrationLogs/` (`MosaicLogFormat.md` §4.3);
 - the script runner's debug and dispatch logs `RunnerLogs/`;
 - deploy's manifest and backups `.mosaic/`;
-- the working copies of an agents folder that an executor keeps while a run is in progress, `.agents-backup/` next to the agents folder and `agents-runner-{run_id}/` (`Tools/Runner/docs/Design.md` §6);
+- the working copies of an agents folder that an executor keeps while a run is in progress, `.agents-backup/` next to the agents folder (`Tools/Runner/docs/Design.md` §6), and `agents-runner-{run_id}/`, which older Runner versions created and may still be lying around;
 - the checklist deploy writes at the workspace root after a run, `MOSAIC-DEPLOYMENT-TODO-{timestamp}.md`. It is a reminder the user may keep indefinitely, not a deployed file, so it has no manifest entry. The glob is anchored at the root and matches only deploy's own checklists.
 
 The fixed part is a closed list. A new folder MOSAIC creates in the workspace is added to it in the same change that introduces the folder.

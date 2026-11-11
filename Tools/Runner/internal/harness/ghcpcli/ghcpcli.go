@@ -143,7 +143,6 @@ func NewGHCPCLIAdapterWithMode(executablePath string, timeout time.Duration, log
 func (a *GHCPCLIAdapter) invoke(ctx context.Context, agent domain.AgentReference, request domain.ProtocolRequest, onLine func([]byte)) (domain.ProtocolResponse, error) {
 	a.logger.Log(domain.EventHarnessInvokeStart, "dispatching invocation",
 		domain.F("agent", request.AgentInstanceID),
-		domain.F("kind", string(agent.InvocationKind)),
 	)
 
 	reqBytes, err := harness.MarshalRequest(request)
@@ -159,7 +158,6 @@ func (a *GHCPCLIAdapter) invoke(ctx context.Context, agent domain.AgentReference
 		Agent: commonharness.AgentRef{
 			Identifier:     agent.Identifier,
 			DefinitionPath: agent.DefinitionPath,
-			Kind:           commonharness.InvocationKind(agent.InvocationKind),
 		},
 		Prompt:       string(reqBytes),
 		Timeout:      a.invokeTimeout(request.HumanInTheLoop),
@@ -260,14 +258,12 @@ func (a *GHCPCLIAdapter) invoke(ctx context.Context, agent domain.AgentReference
 func (a *GHCPCLIAdapter) invokeRaw(ctx context.Context, agent domain.AgentReference, payload []byte, onLine func([]byte)) ([]byte, error) {
 	a.logger.Log(domain.EventHarnessInvokeStart, "dispatching raw invocation",
 		domain.F("agent", agent.Identifier),
-		domain.F("kind", string(agent.InvocationKind)),
 	)
 
 	spawnReq := commonharness.SpawnRequest{
 		Agent: commonharness.AgentRef{
 			Identifier:     agent.Identifier,
 			DefinitionPath: agent.DefinitionPath,
-			Kind:           commonharness.InvocationKind(agent.InvocationKind),
 		},
 		Prompt:       string(payload),
 		Env:          roleenv.OrchestratorEnv(a.roleEnv.RunID),

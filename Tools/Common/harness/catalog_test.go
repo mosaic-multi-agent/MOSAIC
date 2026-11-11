@@ -312,9 +312,8 @@ func TestLookupCLIHarness_GHCPCLIHasExpectedAgentsDir(t *testing.T) {
 // unknown identities.
 //
 // The LoadingMechanism field records how a harness locates agent definition
-// files. Path-based harnesses (claude-code) copy agents to a snapshot dir
-// and pass a file path. Name-based harnesses (opencode, ghcp-cli) modify
-// agents in-place and pass only the agent name.
+// files. All CLI harnesses (claude-code, opencode, ghcp-cli) are name-based:
+// they resolve agents by name from the agents directory.
 // ---------------------------------------------------------------------------
 
 // TestCLIHarnesses_EveryEntryHasValidLoadingMechanism verifies that every
@@ -329,17 +328,26 @@ func TestCLIHarnesses_EveryEntryHasValidLoadingMechanism(t *testing.T) {
 	}
 }
 
-// TestLookupCLIHarness_ClaudeCodeIsPathBased verifies that the claude-code
-// harness uses path-based agent loading. Claude Code receives a full file
-// path to the agent definition file, so it uses the copy-and-invoke snapshot
-// strategy.
-func TestLookupCLIHarness_ClaudeCodeIsPathBased(t *testing.T) {
+// TestLookupCLIHarness_ClaudeCodeIsNameBased verifies that the claude-code
+// harness uses name-based agent loading. Claude Code resolves agents by name
+// (--agent) from the agents directory, like the other CLI harnesses.
+func TestLookupCLIHarness_ClaudeCodeIsNameBased(t *testing.T) {
 	entry, ok := harness.LookupCLIHarness(harness.HarnessIDClaudeCode)
 	if !ok {
 		t.Fatalf("want %q to be found in the catalog", harness.HarnessIDClaudeCode)
 	}
-	if entry.LoadingMechanism != harness.LoadingMechanismPath {
-		t.Errorf("want LoadingMechanism == LoadingMechanismPath for %q, got %v", harness.HarnessIDClaudeCode, entry.LoadingMechanism)
+	if entry.LoadingMechanism != harness.LoadingMechanismName {
+		t.Errorf("want LoadingMechanism == LoadingMechanismName for %q, got %v", harness.HarnessIDClaudeCode, entry.LoadingMechanism)
+	}
+}
+
+// TestCLIHarnesses_AllEntriesAreNameBased verifies that every catalog entry
+// is name-based.
+func TestCLIHarnesses_AllEntriesAreNameBased(t *testing.T) {
+	for _, e := range harness.CLIHarnesses() {
+		if e.LoadingMechanism != harness.LoadingMechanismName {
+			t.Errorf("catalog entry %q: want LoadingMechanismName, got %v", e.ID, e.LoadingMechanism)
+		}
 	}
 }
 
@@ -371,12 +379,20 @@ func TestLookupCLIHarness_GHCPCLIIsNameBased(t *testing.T) {
 	}
 }
 
-// TestLoadingMechanism_PathAndNameAreDistinct verifies that
-// LoadingMechanismPath and LoadingMechanismName have distinct values. If they
-// were equal a harness assigned one would silently behave as the other.
-func TestLoadingMechanism_PathAndNameAreDistinct(t *testing.T) {
-	if harness.LoadingMechanismPath == harness.LoadingMechanismName {
-		t.Errorf("want LoadingMechanismPath != LoadingMechanismName: both have value %v", harness.LoadingMechanismPath)
+// TestLoadingMechanism_UnsetAndNameAreDistinct verifies that
+// LoadingMechanismUnset and LoadingMechanismName have distinct values.
+func TestLoadingMechanism_UnsetAndNameAreDistinct(t *testing.T) {
+	if harness.LoadingMechanismUnset == harness.LoadingMechanismName {
+		t.Errorf("want LoadingMechanismUnset != LoadingMechanismName: both have value %v", harness.LoadingMechanismUnset)
+	}
+}
+
+// TestLoadingMechanism_RemovedPathValueRendersAsUnknown verifies that the
+// value formerly used for path-based loading is no longer defined.
+func TestLoadingMechanism_RemovedPathValueRendersAsUnknown(t *testing.T) {
+	got := harness.LoadingMechanism(1).String()
+	if !containsSubstring(got, "unknown") {
+		t.Errorf("LoadingMechanism(1).String() = %q: want an unknown marker", got)
 	}
 }
 
@@ -402,7 +418,6 @@ func TestLoadingMechanism_StringRepresentations(t *testing.T) {
 		wantEmpty bool
 	}{
 		{harness.LoadingMechanismUnset, false},
-		{harness.LoadingMechanismPath, false},
 		{harness.LoadingMechanismName, false},
 		{harness.LoadingMechanism(99), false}, // unrecognized value must still produce output
 	}

@@ -33,7 +33,7 @@ func mlInvokeFailingHarness(t *testing.T, runFolder, harnessStr string) string {
 	}
 
 	_, err := h.Invoke(context.Background(),
-		domain.AgentReference{Identifier: "Research", DefinitionPath: agentFile, InvocationKind: domain.InvocationOrdinary},
+		domain.AgentReference{Identifier: "Research", DefinitionPath: agentFile},
 		domain.ProtocolRequest{AgentInstanceID: mlAgentInstance, RunID: mlRunID, TaskDescription: "t"})
 
 	if err == nil {
@@ -123,7 +123,7 @@ func TestBuildAdapter_DecoratedOpenCodeInvokeRawNeverWritesInvocationEnd(t *test
 	raw := h.(domain.RawInvoker)
 
 	_, err := raw.InvokeRaw(context.Background(),
-		domain.AgentReference{Identifier: mlAgentInstance, InvocationKind: domain.InvocationOrchestrator}, []byte("{}"))
+		domain.AgentReference{Identifier: mlAgentInstance}, []byte("{}"))
 
 	if err == nil {
 		t.Fatal("InvokeRaw succeeded, want a launch failure")

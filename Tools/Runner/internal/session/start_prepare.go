@@ -32,7 +32,7 @@ type runStartCtx struct {
 	orchDir  string
 	// Artifact state from the store (set at step 3 for resume, created at step 8).
 	existingState domain.ArtifactState
-	// Agent resolution results (set at step 5; updated at step 5b for path-based harnesses).
+	// Agent resolution results (set at step 5; not re-resolved at step 5b).
 	agents      map[string]domain.AgentReference
 	identifiers []string
 	// Infrastructure agents (set at step 6b; filtered at step 6b2).
@@ -220,5 +220,10 @@ func (s *sessionImpl) admitAndResolveAgents(ctx context.Context, rs *runStartCtx
 	}
 	rs.identifiers = identifiers
 	rs.agents = agents
+
+	// Step 5a: refuse misdeclared agent definitions before any write or invocation.
+	if outcome, refused := s.checkAgentDefinitions(rs); refused {
+		return outcome, true, nil
+	}
 	return domain.RunOutcome{}, false, nil
 }

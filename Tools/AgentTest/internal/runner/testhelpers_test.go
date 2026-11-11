@@ -108,6 +108,10 @@ type stubAdapter struct {
 	// simulate a definition that lost, emptied or changed its model line, or
 	// that cannot be read.
 	definitionOverrides map[string]definitionModelResult
+
+	// agentsDir is the project-level agents directory SubjectAgentsDir reports;
+	// empty means the harness resolves the subject some other way.
+	agentsDir string
 }
 
 // definitionModelResult is one scripted DefinitionModel answer.
@@ -388,3 +392,10 @@ func (d *stubDeployer) allDeployCalls() []domain.DeployRequest {
 	defer d.mu.Unlock()
 	return append([]domain.DeployRequest(nil), d.deployCalls...)
 }
+
+// SubjectAgentsDir implements domain.SubjectPlacementReader for a harness that
+// resolves the subject by name among its project-level agents. The directory is
+// empty (unchecked) unless a test sets agentsDir.
+func (a *stubAdapter) SubjectAgentsDir() string { return a.agentsDir }
+
+var _ domain.SubjectPlacementReader = (*stubAdapter)(nil)

@@ -69,7 +69,6 @@ func (a *Adapter) SpawnPlan(ctx context.Context, subject domain.SubjectUnderTest
 			// agent by name loads the definition MOSAIC already deploys to
 			// .opencode/agents/<identifier>.md.
 			DefinitionPath: filepath.Join(p.Sandbox.SubjectDir, filepath.FromSlash(subject.DefinitionPath)),
-			Kind:           commonharness.InvocationKind(subject.InvocationKind),
 		},
 		Prompt:       subject.OpeningMessage,
 		SystemPrompt: commonharness.EnvBlock(p.Sandbox.SubjectDir),

@@ -16,8 +16,7 @@ import (
 type OrchestratorConsultant struct {
 	// Invoker carries the raw JSON payload to the orchestrator.
 	Invoker domain.RawInvoker
-	// Orchestrator is the resolved orchestrator agent. Its InvocationKind must
-	// be domain.InvocationOrchestrator.
+	// Orchestrator is the resolved orchestrator agent.
 	Orchestrator domain.AgentReference
 	// Table validates a dispatch reply's agent, row and stage and supplies the
 	// available-agent list for the unknown-agent error.

@@ -40,7 +40,6 @@ func boundOrchestratorRef() domain.AgentReference {
 	return domain.AgentReference{
 		Identifier:     "orchestrator",
 		DefinitionPath: "/agents/orchestrator.md",
-		InvocationKind: domain.InvocationOrchestrator,
 	}
 }
 

@@ -82,7 +82,7 @@ func newDamagedResumeRun(t *testing.T) *damagedResumeRun {
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", agentsDir, err)
 	}
-	copyFile(t, agentsDir, "orchestrator-script.md", linearOrchFixture)
+	writeOrchWithFrontmatter(t, agentsDir, "orchestrator-script", linearOrchFixture)
 	writeAgentFile(t, agentsDir, "agent-a")
 	writeAgentFile(t, agentsDir, "agent-b")
 

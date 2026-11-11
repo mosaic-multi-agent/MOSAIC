@@ -2,7 +2,7 @@
 // Claude Code BuildArgs rather than being folded into it: the two CLIs'
 // contracts diverge enough (stdin prompt vs -p flag, no session-reuse
 // flags, no append-system-prompt equivalent) that a shared function would
-// need to branch on more than InvocationKind.
+// need to branch on the harness.
 package harness
 
 import (

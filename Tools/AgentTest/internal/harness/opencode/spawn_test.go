@@ -104,7 +104,6 @@ func TestSpawnPlan_ArgsMatchSharedOpenCodeArgumentBuilder(t *testing.T) {
 	want, wantStdin, err := commonharness.BuildOpenCodeArgs(commonharness.SpawnRequest{
 		Agent: commonharness.AgentRef{
 			Identifier: subject.Identity,
-			Kind:       commonharness.InvocationKind(subject.InvocationKind),
 		},
 		Prompt:       subject.OpeningMessage,
 		SystemPrompt: commonharness.EnvBlock(sb.SubjectDir),
@@ -144,7 +143,6 @@ func TestSpawnPlan_SystemPromptUsesSandboxSubjectDirNotProcessCwd(t *testing.T) 
 	_, wrongCwdStdin, err := commonharness.BuildOpenCodeArgs(commonharness.SpawnRequest{
 		Agent: commonharness.AgentRef{
 			Identifier: subject.Identity,
-			Kind:       commonharness.InvocationKind(subject.InvocationKind),
 		},
 		Prompt:       subject.OpeningMessage,
 		SystemPrompt: commonharness.EnvBlock(""),

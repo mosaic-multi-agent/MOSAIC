@@ -34,6 +34,7 @@ package claudecode_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -56,7 +57,6 @@ func ccOrchestratorRef(t *testing.T) domain.AgentReference {
 	return domain.AgentReference{
 		Identifier:     "orchestrator-agent",
 		DefinitionPath: defPath,
-		InvocationKind: domain.InvocationOrchestrator,
 	}
 }
 
@@ -92,6 +92,25 @@ func TestClaudeCodeAdapter_InvokeRaw_IssuesOrchestratorKind(t *testing.T) {
 	}
 	if containsArg(args, "--append-system-prompt-file") {
 		t.Errorf("want --append-system-prompt-file absent for orchestrator-kind InvokeRaw, got %v", args)
+	}
+}
+
+func TestClaudeCodeAdapter_InvokeRaw_StdinIsExactlyThePayload(t *testing.T) {
+	setHelperEnv(t, "success")
+	stdinFile := newTestStdinCapture(t)
+
+	adapter := claudecode.NewClaudeCodeAdapter(helperExe(t), 5*time.Second)
+	ri := any(adapter).(domain.RawInvoker)
+	if _, err := ri.InvokeRaw(context.Background(), ccOrchestratorRef(t), rawPayload); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	stdin := readHelperStdin(t, stdinFile)
+	if strings.Contains(string(stdin), "<env>") {
+		t.Errorf("want no <env> block in stdin, got %q", stdin)
+	}
+	if !strings.Contains(string(stdin), string(rawPayload)) {
+		t.Errorf("want payload %q in stdin, got %q", rawPayload, stdin)
 	}
 }
 

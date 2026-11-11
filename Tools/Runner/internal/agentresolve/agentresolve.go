@@ -111,7 +111,6 @@ func ResolveAll(dir string, identifiers []string) (map[string]domain.AgentRefere
 		result[id] = domain.AgentReference{
 			Identifier:     id,
 			DefinitionPath: path,
-			InvocationKind: domain.InvocationOrdinary,
 		}
 	}
 
@@ -131,7 +130,6 @@ func ResolveAll(dir string, identifiers []string) (map[string]domain.AgentRefere
 //   - If no file matches: returns *domain.RefusalError (no definition file).
 //   - If id is empty: returns *domain.RefusalError.
 //   - Uses case-sensitive exact match (consistent with ResolveAll).
-//   - InvocationKind is set to "" (empty string).
 //
 // Returns *domain.RefusalError if the identifier has no matching definition
 // file or is ambiguous, same error type as ResolveAll.
@@ -177,7 +175,6 @@ func ResolveOne(dir string, id string) (domain.AgentReference, error) {
 		return domain.AgentReference{
 			Identifier:     id,
 			DefinitionPath: absPath,
-			InvocationKind: "",
 		}, nil
 	default:
 		return domain.AgentReference{}, &domain.RefusalError{

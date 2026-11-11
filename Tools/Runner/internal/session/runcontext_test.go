@@ -18,7 +18,6 @@ package session_test
 //   - When the routing consultant implements domain.RunContextBinder, the session
 //     calls BindRunContext on it before the first consultation.
 //   - The bound RunContext carries a non-empty routing table.
-//   - The bound RunContext's Orchestrator carries InvocationOrchestrator kind.
 //   - The bound Orchestrator's Identifier matches the orchestrator file's stem.
 //
 //   RunContextBinder on manual resolver:
@@ -211,26 +210,6 @@ func TestSession_Start_BoundRoutingTable_IsNonEmpty(t *testing.T) {
 	}
 	if len(recorder.BoundContext.Table.Rows) == 0 {
 		t.Error("want non-empty routing table in BoundContext (workflow has rows); got empty")
-	}
-}
-
-// TestSession_Start_BoundOrchestrator_HasOrchestratorInvocationKind verifies
-// that the RunContext handed to the routing consultant carries an orchestrator
-// reference with InvocationKind == InvocationOrchestrator.
-func TestSession_Start_BoundOrchestrator_HasOrchestratorInvocationKind(t *testing.T) {
-	recorder := &bindingRecordingConsultant{}
-	ses, _, store, orchPath := newOrchestratedSession(t, recorder)
-	_ = store
-
-	ses.Start(context.Background(), baseOrchestratedConfig(orchPath)) //nolint:errcheck
-
-	if recorder.BoundContext == nil {
-		t.Fatal("want BindRunContext to be called; got no binding")
-	}
-	if recorder.BoundContext.Orchestrator.InvocationKind != domain.InvocationOrchestrator {
-		t.Errorf("want Orchestrator.InvocationKind %q, got %q",
-			domain.InvocationOrchestrator,
-			recorder.BoundContext.Orchestrator.InvocationKind)
 	}
 }
 

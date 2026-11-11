@@ -76,7 +76,6 @@ func agentWithDef(identifier, defPath string) domain.AgentReference {
 	return domain.AgentReference{
 		Identifier:     identifier,
 		DefinitionPath: defPath,
-		InvocationKind: domain.InvocationOrdinary,
 	}
 }
 
@@ -86,7 +85,6 @@ func orchestratorWithDef(identifier, defPath string) domain.AgentReference {
 	return domain.AgentReference{
 		Identifier:     identifier,
 		DefinitionPath: defPath,
-		InvocationKind: domain.InvocationOrchestrator,
 	}
 }
 

@@ -26,16 +26,11 @@ import (
 // ClaudeCodeAdapter implements domain.HarnessAdapter by delegating to
 // mosaic-common/harness for every Invoke call.
 //
-// For InvocationOrdinary: uses --append-system-prompt-file with the agent's
-// definition file, keeping the CLI's default system prompt (including <env>).
+// Every agent, whatever its invocation kind, is launched with
+// --agent <identifier> as the CLI's primary thread; the CLI loads the
+// deployed definition by name and the prompt is passed unchanged.
 //
-// For InvocationOrchestrator: uses --agent <identifier> to launch the
-// orchestrator as the primary/main thread with native subagent-spawning
-// capability. Because --agent fully replaces the default system prompt
-// (losing the CLI's <env> block), the shared package synthesizes an
-// equivalent <env> block and prepends it to the -p prompt content.
-//
-// Both invocation kinds read the agent's deployed definition file to extract
+// Every invocation reads the agent's deployed definition file to extract
 // the tools frontmatter field, then use --permission-mode dontAsk with
 // --allowedTools entries derived from that field. An agent with a missing
 // tools field is rejected before any subprocess is spawned (FR-10). An agent
@@ -108,7 +103,6 @@ func NewClaudeCodeAdapterWithLogger(executablePath string, timeout time.Duration
 func (a *ClaudeCodeAdapter) invoke(ctx context.Context, agent domain.AgentReference, request domain.ProtocolRequest, onLine func([]byte)) (domain.ProtocolResponse, error) {
 	a.logger.Log(domain.EventHarnessInvokeStart, "dispatching invocation",
 		domain.F("agent", request.AgentInstanceID),
-		domain.F("kind", string(agent.InvocationKind)),
 	)
 
 	// FR-10: extract tools from the agent's deployed definition file before
@@ -138,7 +132,6 @@ func (a *ClaudeCodeAdapter) invoke(ctx context.Context, agent domain.AgentRefere
 		Agent: commonharness.AgentRef{
 			Identifier:     agent.Identifier,
 			DefinitionPath: agent.DefinitionPath,
-			Kind:           commonharness.InvocationKind(agent.InvocationKind),
 		},
 		Prompt:             string(reqBytes),
 		Timeout:            a.invokeTimeout(request.HumanInTheLoop),
@@ -240,7 +233,6 @@ func (a *ClaudeCodeAdapter) invoke(ctx context.Context, agent domain.AgentRefere
 func (a *ClaudeCodeAdapter) invokeRaw(ctx context.Context, agent domain.AgentReference, payload []byte, onLine func([]byte)) ([]byte, error) {
 	a.logger.Log(domain.EventHarnessInvokeStart, "dispatching raw invocation",
 		domain.F("agent", agent.Identifier),
-		domain.F("kind", string(agent.InvocationKind)),
 	)
 
 	// FR-10: extract tools from the agent's deployed definition file before
@@ -261,7 +253,6 @@ func (a *ClaudeCodeAdapter) invokeRaw(ctx context.Context, agent domain.AgentRef
 		Agent: commonharness.AgentRef{
 			Identifier:     agent.Identifier,
 			DefinitionPath: agent.DefinitionPath,
-			Kind:           commonharness.InvocationKind(agent.InvocationKind),
 		},
 		Prompt:             string(payload),
 		Env:                roleenv.OrchestratorEnv(a.roleEnv.RunID),

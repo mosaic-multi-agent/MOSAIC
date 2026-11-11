@@ -2,7 +2,7 @@
 
 > **Status:** Draft
 > **Created:** 2026-08-15
-> **Last Updated:** 2026-11-09
+> **Last Updated:** 2026-11-11
 > **Scope:** The design of `mosaic-run`, the CLI tool that executes orchestration workflows without a human orchestrator in the loop. Covers execution modes (how much routing intelligence the Runner handles autonomously versus delegating to a script-mode orchestrator agent), the architectural layers that implement those modes, the dispatch loop lifecycle, and the contract boundaries between the Runner and the systems it drives (harness adapters, orchestrator agents, the orchestration artifact).
 
 ---
@@ -616,8 +616,8 @@ The run-start sequence validates configuration and compatibility preconditions b
 | 3 | Read existing artifact (if resuming) or verify none exists (if new) | Refusal |
 | 4 | Admit workflow for the selected mode (compat checks, block and group resolution; engine-routing shape checks in Modes 2/3 only — §1.3) | Refusal |
 | **4b** | **Recovery check: scan for orphaned `.agents-backup/` directory next to the agents directory; restore originals if found and no active runs are detected** | **Refusal if restore fails** |
-| 5 | Resolve every agent identifier to a definition file | Refusal |
-| **5b** | **Create snapshot (copy-and-invoke) or backup and transform originals (backup-and-transform), per harness strategy** | **Refusal** |
+| 5 | Resolve every agent identifier to a definition file; every resolved agent must declare a non-empty `model:` (no fallback to the harness default); on Claude Code its `name:` must equal the identifier, since `--agent` resolves by `name:` | Refusal |
+| **5b** | **Backup and transform originals on backup-and-transform harnesses; nothing on Claude Code** | **Refusal** |
 | 6 | Read each block's schedule from its declared `Source` and `Section` (seeds applied first on a new run) | Refusal when a seeded block's schedule is missing or defective; a produced block whose `Source` does not exist yet is normal |
 | 6b | Enumerate declared infrastructure agents | Refusal |
 | 6c | Validate per-class agent selections (gated classes: one active per class) | Refusal |
@@ -747,7 +747,7 @@ Infrastructure agents are declared outside workflow tables and reached either by
 
 ## 6. Runner Agent Snapshot
 
-Regular orchestration and Runner execution have different deployment requirements. In regular orchestration, the orchestrator agent (`mode: primary`) spawns subagents via the harness's task/subagent tool, and the subagent's `mode: subagent` frontmatter enforces isolation. The Runner invokes every agent via the harness CLI (`opencode run --agent <id>`, `claude --agent <path>`, etc.), and some harnesses block CLI invocation of agents marked `mode: subagent`. OpenCode is the first harness with this constraint, but others may follow.
+Regular orchestration and Runner execution have different deployment requirements. In regular orchestration, the orchestrator agent (`mode: primary`) spawns subagents via the harness's task/subagent tool, and the subagent's `mode: subagent` frontmatter enforces isolation. The Runner invokes every agent by name via the harness CLI (`opencode run --agent <id>`, `claude -p --agent <id>`, `copilot -p --agent <id>`), and some harnesses block CLI invocation of agents marked `mode: subagent`. OpenCode is the first harness with this constraint, but others may follow.
 
 ### 6.1 The Problem
 
@@ -757,44 +757,34 @@ Harnesses differ fundamentally in how they load agent definitions:
 
 | Harness | Agent loading | Mechanism |
 |---------|-------------|-----------|
-| Claude Code | **Path-based** | `--append-system-prompt-file <path>` — loads the file at the given path directly |
+| Claude Code | **Name-based** | `-p --agent <name>` — resolves the name from `.claude/agents/` and applies the frontmatter (`model:`, `tools:`) |
 | OpenCode | **Name-based** | `--agent <name>` — resolves the name from its canonical agents directory |
 | GitHub Copilot CLI | **Name-based** | `--agent <name>` — resolves the name from its scoped agent directories |
 
-Path-based harnesses can be pointed at an arbitrary file — a snapshot copy works naturally. Name-based harnesses always read from their canonical directory regardless of what path the Runner has resolved internally. A snapshot sitting in a sibling directory is invisible to them.
+All supported harnesses load agents by name. Name-based harnesses always read from their canonical directory regardless of what path the Runner has resolved internally. A snapshot sitting in a sibling directory is invisible to them.
 
-### 6.2 Dual-Strategy Snapshot
+### 6.2 Snapshot Strategy per Harness
 
-The Runner selects a snapshot strategy per harness based on its agent loading mechanism:
+The Runner selects a snapshot strategy per harness:
 
 | Strategy | How it works | Used by |
 |----------|-------------|---------|
-| **Copy-and-invoke** | Copy agents to a run-scoped snapshot dir, apply transforms, invoke from snapshot path. Originals untouched. | Path-based harnesses (Claude Code) |
-| **Backup-and-transform** | Copy originals to a shared backup dir, transform originals in-place, restore from backup on completion. | Name-based harnesses (OpenCode, GHCP CLI) |
+| **None** | The Runner invokes the deployed agents by name. No copy, no transform. | Harnesses with no transformations (Claude Code) |
+| **Backup-and-transform** | Copy originals to a shared backup dir, transform originals in-place, restore from backup on completion. | Harnesses with transformations (OpenCode, GHCP CLI) |
 
-Both strategies create sibling directories next to the regular agents directory:
+| Harness | Regular directory | Sibling directory | Role |
+|---------|------------------|-------------------|------|
+| Claude Code | `.claude/agents/` | none | — |
+| OpenCode | `.opencode/agents/` | `.opencode/.agents-backup/` | Shared safety backup (restore source); one per workspace |
+| GHCP CLI | `.github/agents/` | `.github/.agents-backup/` | Shared safety backup (restore source); one per workspace |
 
-| Strategy | Harness | Regular directory | Sibling directory | Role |
-|----------|---------|------------------|-------------------|------|
-| Copy-and-invoke | Claude Code | `.claude/agents/` | `.claude/agents-runner-{run_id}/` | Working snapshot (invoked from here); one per run |
-| Backup-and-transform | OpenCode | `.opencode/agents/` | `.opencode/.agents-backup/` | Shared safety backup (restore source); one per workspace |
-| Backup-and-transform | GHCP CLI | `.github/agents/` | `.github/.agents-backup/` | Shared safety backup (restore source); one per workspace |
+Backup-and-transform creates a **shared** backup directory because all concurrent runs share the same transformed originals and need the same original-state backup to restore from.
 
-Copy-and-invoke creates a **per-run** directory (scoped by run ID) because each run needs its own independent copy. Backup-and-transform creates a **shared** backup directory because all concurrent runs share the same transformed originals and need the same original-state backup to restore from.
+**Agent files are not frozen for a run.** On every harness, an agent file changed during a run (manual edit, `Update workspace`) takes effect at that agent's next invocation, as in native orchestration. The Runner neither detects nor warns about such changes.
 
-#### 6.2.1 Copy-and-Invoke (Path-Based Harnesses)
+#### 6.2.1 Claude Code: No Snapshot
 
-This is the current mechanism, unchanged:
-
-1. Copy agents directory to `agents-runner-{run_id}/`
-2. Apply harness-specific transformations to the copies
-3. Re-resolve all agent paths to point into the snapshot
-4. Invoke agents using the snapshot paths
-5. On completion: delete snapshot directory
-
-**Crash safety:** Inherent. Originals are never modified. An orphaned snapshot directory is harmless.
-
-**Concurrency:** Naturally concurrent — each run has its own snapshot directory. No coordination needed.
+Claude Code needs no transformation, so the Runner invokes `.claude/agents/` directly with `claude -p --agent <name>`. Under `--agent`, Claude Code applies the agent's `model:` and `tools:` and builds the same prompt as for a native subagent: its tool definitions, the Claude Agent SDK identity line, then the agent body, without Claude Code's general working instructions. The environment (working directory, platform, shell, OS, date, model) arrives in the first user turn, so the Runner adds no environment block of its own. Verified on Claude Code 2.1.322 (`HarnessKnowledge/SystemPromptCapture/ClaudeCode/v2.1.322/HeadlessAgent/`). See §7.6 for the path loading this replaces.
 
 #### 6.2.2 Backup-and-Transform (Name-Based Harnesses)
 
@@ -894,7 +884,7 @@ This is a fortunate property of the current transformation set, not a design gua
 
 ### 6.4 Snapshot Transformations
 
-Both strategies apply the same harness-specific transformation rules to make agent files compatible with CLI invocation:
+Backup-and-transform applies these harness-specific transformation rules to make agent files compatible with CLI invocation:
 
 | Harness | Field | Regular value | Runner value | Reason |
 |---------|-------|---------------|--------------|--------|
@@ -915,14 +905,13 @@ The snapshot step is inserted into the Run-Start Sequence (§4). Recovery runs b
 | Step | What | Failure |
 |------|------|---------|
 | **4b** | **Recovery check: scan for the `.agents-backup/` directory next to the current harness's agents directory, restore if found** | **Refusal if restore fails** |
-| 5 | Resolve every agent identifier to a definition file | Refusal |
-| **5b** | **Create snapshot (copy-and-invoke) or backup + transform (backup-and-transform), per harness strategy** | **Refusal** |
+| 5 | Resolve every agent identifier to a definition file; every resolved agent must declare a non-empty `model:` (no fallback to the harness default); on Claude Code its `name:` must equal the identifier, since `--agent` resolves by `name:` | Refusal |
+| **5b** | **Backup + transform (backup-and-transform harnesses); nothing on Claude Code** | **Refusal** |
 | 6 | Read each block's schedule from its declared `Source` and `Section` | Refusal when a seeded block's schedule is missing or defective |
 
-Step 4b runs unconditionally for CLI harnesses — it is a no-op when no recovery is needed (and correctly detects active concurrent runs via lock files, skipping recovery in that case). Step 5b creates the snapshot or backup depending on the harness's agent loading mechanism. For copy-and-invoke, resolved paths are rewritten to point into the snapshot. For backup-and-transform, resolved paths remain unchanged (originals are now transformed).
+Step 4b runs unconditionally for CLI harnesses — it is a no-op when no recovery is needed (and correctly detects active concurrent runs via lock files, skipping recovery in that case). Step 5b creates the backup and transforms the originals on backup-and-transform harnesses and does nothing on Claude Code. Resolved paths remain unchanged.
 
 **Cleanup:** On run completion (any terminal outcome):
-- **Copy-and-invoke:** Delete the snapshot directory. Cleanup failure is non-fatal.
 - **Backup-and-transform:** Release lock, delete own lock file, perform last-out check (§6.2.2). If last out: restore originals, remove marker, delete backup directory. If not last out: leave everything for the remaining active runs. Restore failure is logged as an error but does not change the run's exit code — the run itself succeeded, and the next Runner start will retry recovery automatically.
 
 ---
@@ -986,6 +975,10 @@ These alternatives were considered on 2026-10-12/13, before the finished-work ru
 
 ---
 
+### 7.6 Path Loading on Claude Code (§6.2.1)
+
+Until 0.16 the Runner loaded Claude Code agents with `-p --append-system-prompt-file <path>` from a per-run copy in `.claude/agents-runner-{run_id}/` (copy-and-invoke), and synthesized an environment block for the orchestrator, which already used `--agent`. Path loading was chosen when `claude --agent` was reported to ignore `tools:` (CC-079). It appends the file as text: the frontmatter is ignored, so agents ran on the user's default Claude Code model and were offered every built-in tool, and the body sat on top of Claude Code's full default prompt. Replaced by `--agent` once `model:` and `tools:` were verified under the Runner's headless arguments.
+
 ## 8. Open Items
 
 No open design items remain. All items from the initial draft have been resolved — see below.
@@ -1020,6 +1013,7 @@ No open design items remain. All items from the initial draft have been resolved
 
 | Version | Date | Summary |
 |---------|------|---------|
+| 0.16 | 2026-11-11 | **Claude Code agents loaded by name (§6, §7.6).** Every Claude Code invocation uses `claude -p --agent <name>`; `--append-system-prompt-file`, the per-run copy `.claude/agents-runner-{run_id}/` (copy-and-invoke) and the synthesized environment block are removed. Path loading ignored the frontmatter, so agents ran on the user's default model with all built-in tools. Agent files are not frozen during a run on any harness. Run-start step 5 refuses an agent without a non-empty `model:` on every harness, and on Claude Code an agent whose `name:` differs from its identifier. |
 | 0.15 | 2026-11-09 | **Damaged artifact (implemented, Runner v1.12.0).** §4.4: strict reading reports damage instead of parsing around it, the store never writes after a damaged read, the Runner keeps a last-good copy as evidence outside the run folder, a run with damaged frontmatter recovers its recorded values from that copy (unresumable without one), and damage found anywhere leads to a routing consultation with `artifact_damage` in which the orchestrator repairs and then routes (`ScriptOrchestratorContract.md` §2.5, §7.6). §4.3: a damaged artifact on resume or Retry is repaired by that consultation instead of a computed resume point. |
 | 0.14 | 2026-11-08 | **Harness errors, activity header and user message documented as implemented.** §2.4, §3.3, §4.3, §5: an invocation that ends without a usable subagent response is recorded as `HARNESS_ERROR` (Runner-recorded only, not a Communication Protocol status) instead of a synthetic `BLOCKED`/`E501`; failure kinds and Summary wording, no `[error:CODE]` marker, never accepted (no `current_state` update, no HITL discharge), raw-text bypass then mechanical re-dispatch within its own budget of 3 per row and iteration (separate from the E501 budget, both read from the Execution Log), then a deviation (at once in Mode 1); old synthetic `BLOCKED`/`E501` rows still resume and count against the E501 budget; HITL repair, infrastructure and commit setup failures are recorded as `HARNESS_ERROR` (`CONFIG_ERROR` for an unresolved agent definition); the status is shown distinctly on every Runner surface. §2.9, §3.4: after `Ask the orchestrator to decide` an optional multi-line message step; the text travels verbatim as `user_message` on that one routing consultation and is not stored; shown on the consultation row and in the debug log. §3.4: the activity header shows model, `ctx <size>`, `running <tool>`/`quiet` indicator (highlighted from 5 minutes) and on end the elapsed time, `ended`, context size and cost; no token in/out. Contract 0.9. |
 | 0.13 | 2026-10-22 | **Commit-class activation and destination (§5).** Commit-class agents are gated by `commits` exactly as checkpoint-class agents are by `checkpoints`; with `commits: disabled` they never fire (implementation follow-up: the trigger pass gated only checkpoint-class, so a disabled run still dispatched the commit agent at every iteration end). A commit-class `ITERATION_END` dispatch names the recorded `commit_branch` in its task description, per `CommitAgent.md` §4.5 and `InfrastructureAgentConcept.md` §8 (implementation follow-up). |
