@@ -17,6 +17,13 @@
 
 ## Tools
 
+### Runner v1.12.1
+#### Bugfixes
+- A loop-back from a reviewer to a creator after a resume now includes the reviewer's report
+- A creator sent back to revise its work now receives its own earlier output
+- The live activity panel stays visible on long runs when it is shown
+- Resuming a run no longer overwrites the start of the existing Runner log
+
 ### LogAnalyzer v1.3.0
 #### Changes
 - The runs list opens with a head of three lines: the number of runs, their period, total cost and tokens, and per run the average, median and (from 10 priced runs) p90 cost, and the average and median duration. Runs still in progress and runs without a price or a timeline are left out of the statistics concerned, and a note shows how many runs they cover

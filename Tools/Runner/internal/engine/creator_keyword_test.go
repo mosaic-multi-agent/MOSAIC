@@ -44,7 +44,7 @@ func TestNext_CreatorArtifactInjection_RegistryPresent_InjectsOutputArtifact(t *
 		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("tests-review-tdd#5"),
-		LastOutputArtifacts: reviewOutputs,
+		LastOutputsOverride: overrideOf(reviewOutputs),
 		Agents:              agents,
 		Seq:                 5,
 		Now:                 fixedNow,
@@ -72,7 +72,7 @@ func TestNext_CreatorArtifactInjection_RegistryPresent_InjectsOutputArtifact(t *
 // TestNext_CreatorArtifactInjection_RegistryAbsent_NoInjection verifies that
 // when ArtifactRegistry is nil (first invocation of the creator agent), no
 // creator-artifact injection occurs -- the dispatched step's InputArtifacts
-// contain only the table row entries and the review agent's LastOutputArtifacts.
+// contain only the table row entries and the review agent's previous-step outputs.
 func TestNext_CreatorArtifactInjection_RegistryAbsent_NoInjection(t *testing.T) {
 	aw := mustParseAndAdmitV216(t, creatorInjectionV216Content, "creator-injection", "1.0")
 	schedules := singleSchedules("TDD")
@@ -85,7 +85,7 @@ func TestNext_CreatorArtifactInjection_RegistryAbsent_NoInjection(t *testing.T) 
 		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("tests-review-tdd#5"),
-		LastOutputArtifacts: reviewOutputs,
+		LastOutputsOverride: overrideOf(reviewOutputs),
 		Agents:              agents,
 		Seq:                 5,
 		Now:                 fixedNow,
@@ -132,7 +132,7 @@ func TestNext_CreatorArtifactInjection_TemplatedOutput_MatchesResolvedPath(t *te
 		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("tests-review-tdd#7"),
-		LastOutputArtifacts: reviewOutputs,
+		LastOutputsOverride: overrideOf(reviewOutputs),
 		Agents:              agents,
 		Seq:                 7,
 		Now:                 fixedNow,

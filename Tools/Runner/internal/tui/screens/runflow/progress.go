@@ -219,6 +219,8 @@ func (s *ProgressScreen) View() string {
 		contentH--
 	}
 	contentH -= len(s.repairOutcomes)
+	extraParts := s.optionalParts()
+	contentH = s.rowBudgetWithPanel(contentH, extraParts)
 	if contentH < 1 {
 		contentH = 1
 	}
@@ -276,6 +278,16 @@ func (s *ProgressScreen) View() string {
 	help := s.styles.Help.Width(s.width).Render(s.helpBar())
 
 	parts := []string{title, statusLine, border, rowsBuilder.String()}
+	parts = append(parts, extraParts...)
+	parts = append(parts, border, help)
+	return strings.Join(s.withActivityPanel(parts), "\n")
+}
+
+// optionalParts renders the lines shown below the step rows only in some
+// states: pending lines, the stop prompt or notice, the force-stop banner and
+// the guard indicator.
+func (s *ProgressScreen) optionalParts() []string {
+	var parts []string
 	if pending := s.pendingLines(); pending != "" {
 		parts = append(parts, pending)
 	}
@@ -291,8 +303,7 @@ func (s *ProgressScreen) View() string {
 	if line := s.guardIndicatorLine(); line != "" {
 		parts = append(parts, line)
 	}
-	parts = append(parts, border, help)
-	return strings.Join(s.withActivityPanel(parts), "\n")
+	return parts
 }
 
 // confirmBanner renders the pending stop prompt as a bordered box, so it reads

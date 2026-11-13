@@ -37,7 +37,7 @@ import (
 //	ExecutionModeAutoReview — As ExecutionModeAuto, plus: on
 //	  StatusCOMPLETED_NEEDS_ACTION where the row's typed On Findings entry
 //	  names a row, returns a DispatchDecision targeting that row,
-//	  with in.LastOutputArtifacts injected into the dispatched step's
+//	  with the previous step's outputs injected into the dispatched step's
 //	  Request.InputArtifacts (see review artifact injection below). When the
 //	  reviewer's COMPLETED_NEEDS_ACTION count at the current phase and stage
 //	  reaches state.ReviewLoopLimit (0 = no limit), the engine returns a
@@ -48,11 +48,16 @@ import (
 // iteration.
 //
 // Review artifact injection applies to the auto-review COMPLETED_NEEDS_ACTION
-// auto-route-back and to nothing else. A SUCCESS-routed dispatch never carries
-// injected artifacts. The dispatched step's InputArtifacts are the table row's
-// entries in table order, followed by the entries of in.LastOutputArtifacts
-// that are not already present, in their given order. Comparison is on the
-// exact path string as dispatched.
+// auto-route-back and to the PARTIALLY_DONE mechanical re-dispatch, and to
+// nothing else. A SUCCESS-routed dispatch never carries injected artifacts. The
+// previous step's outputs are in.LastOutputsOverride when non-nil (used
+// verbatim, a non-nil empty list injects nothing); otherwise they are the
+// Output column of the row routed from, resolved for the recorded iteration
+// (wildcard entries unchanged), whether or not the step wrote them. The
+// dispatched step's InputArtifacts are the target row's entries in table
+// order, followed by those outputs, followed (route-back only) by the
+// registry entries of the target's own resolved outputs, without duplicates
+// (run-prefixed and bare forms are equal).
 //
 // DispatchDecision.Steps continues to hold exactly one element.
 func Next(in NextInput) domain.EngineDecision {

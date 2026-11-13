@@ -49,7 +49,7 @@ type runStartCtx struct {
 	// Dispatch loop shared mutable state.
 	lastResponse        *domain.ProtocolResponse
 	prevWorkflowStep    *domain.CompletedStep
-	lastOutputArtifacts []string
+	lastOutputsOverride *[]string
 	antiLoop            antiLoopState
 	// Seed inputs applied at step 8 (new-run only).
 	seedPlan seed.Plan

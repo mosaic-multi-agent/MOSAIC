@@ -36,7 +36,7 @@ func routeBackInputs(t *testing.T, reviewOutputs []string) []string {
 		Schedules:           singleSchedules("TDD"),
 		State:               state,
 		LastResponse:        cnaResponse("build-review#9"),
-		LastOutputArtifacts: reviewOutputs,
+		LastOutputsOverride: overrideOf(reviewOutputs),
 		Agents:              agents,
 		Seq:                 9,
 		Now:                 fixedNow,
