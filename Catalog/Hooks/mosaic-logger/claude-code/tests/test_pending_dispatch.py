@@ -15,9 +15,9 @@ Covers:
     an unresolved to a resolved run_id, because the queue path never carries
     a run_id component (Design D4) -- this eliminates the Stage 1/2 hazard
     rather than merely mitigating it.
-  - handle_pre_tool_use Agent branch: pending dispatch created when
-    tool_name == "Agent", correct extraction, existing tool_call_start event
-    still emitted, non-Agent calls unaffected.
+  - capture_dispatch (the synchronous dispatch capture): pending dispatch created
+    when tool_name == "Agent", correct extraction, non-Agent calls unaffected;
+    handle_pre_tool_use still emits tool_call_start for the Agent tool.
   - handle_subagent_start consuming pending dispatch: uses dispatch's
     agent_instance_id for mapping (the start's agent type matching the
     dispatch type), consumes the entry, takes a unique fallback id (never
@@ -404,7 +404,7 @@ class TestPendingDispatchRunIdIndependentTransitionConsistency(unittest.TestCase
             self.tmp.name, run_id=None, session_id=_SESSION_ID,
             tool_name="Agent", tool_input={"prompt": _DISPATCH_PROMPT_NO_RUN_ID},
         )
-        tools.handle_pre_tool_use(pre_ctx)
+        tools.capture_dispatch(pre_ctx)
 
         # The session acquires a real run_id binding in between the two firings.
         runstate.put_session_run_binding(self.paths, _SESSION_ID, _RUN_ID, _TS)
@@ -664,11 +664,11 @@ class TestConcurrentPutPendingDispatch(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# handle_pre_tool_use Agent branch
+# Dispatch capture for the Agent tool
 # ---------------------------------------------------------------------------
 
 class TestPreToolUseAgentCapture(unittest.TestCase):
-    """handle_pre_tool_use must capture pending dispatch when tool_name is 'Agent'."""
+    """capture_dispatch must queue a pending dispatch when tool_name is 'Agent'."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -693,16 +693,16 @@ class TestPreToolUseAgentCapture(unittest.TestCase):
         return _read_jsonl(entry_path)
 
     def test_creates_pending_dispatch_for_agent_tool(self):
-        """Calling handle_pre_tool_use with tool_name='Agent' creates a queue entry."""
+        """Calling capture_dispatch with tool_name='Agent' creates a queue entry."""
         ctx = self._agent_ctx()
-        tools.handle_pre_tool_use(ctx)
+        tools.capture_dispatch(ctx)
         entries = self._read_queue()
         self.assertEqual(1, len(entries))
 
     def test_extracts_agent_instance_id_from_prompt(self):
         """The pending dispatch entry must contain the extracted agent_instance_id."""
         ctx = self._agent_ctx(prompt=_DISPATCH_PROMPT)
-        tools.handle_pre_tool_use(ctx)
+        tools.capture_dispatch(ctx)
         entries = self._read_queue()
         self.assertEqual(1, len(entries))
         self.assertEqual("planner-tdd-soft#9", entries[0]["agent_instance_id"])
@@ -710,7 +710,7 @@ class TestPreToolUseAgentCapture(unittest.TestCase):
     def test_extracts_run_id_from_prompt(self):
         """The pending dispatch entry must contain the extracted run_id."""
         ctx = self._agent_ctx(prompt=_DISPATCH_PROMPT)
-        tools.handle_pre_tool_use(ctx)
+        tools.capture_dispatch(ctx)
         entries = self._read_queue()
         self.assertEqual(1, len(entries))
         self.assertEqual("20260101T110000Z-a1b2", entries[0]["run_id"])
@@ -718,7 +718,7 @@ class TestPreToolUseAgentCapture(unittest.TestCase):
     def test_run_id_is_null_when_not_in_prompt(self):
         """When the prompt contains no run_id, the entry's run_id must be null."""
         ctx = self._agent_ctx(prompt=_DISPATCH_PROMPT_NO_RUN_ID)
-        tools.handle_pre_tool_use(ctx)
+        tools.capture_dispatch(ctx)
         entries = self._read_queue()
         self.assertEqual(1, len(entries))
         self.assertIsNone(entries[0]["run_id"])
@@ -743,7 +743,7 @@ class TestPreToolUseAgentCapture(unittest.TestCase):
             tool_name="Read",
             tool_input={"file_path": "/some/file.py"},
         )
-        tools.handle_pre_tool_use(ctx)
+        tools.capture_dispatch(ctx)
         # The .pending-dispatch directory must not be created at all.
         pending_dir = self.paths.pending_dispatch_dir()
         if pending_dir.exists():
@@ -754,7 +754,7 @@ class TestPreToolUseAgentCapture(unittest.TestCase):
     def test_no_pending_dispatch_when_prompt_has_no_extractable_id(self):
         """When no agent_instance_id can be extracted from the prompt, no entry is written."""
         ctx = self._agent_ctx(prompt=_PLAIN_PROMPT)
-        tools.handle_pre_tool_use(ctx)
+        tools.capture_dispatch(ctx)
         entries = self._read_queue()
         self.assertEqual(0, len(entries),
                          "No pending dispatch when extraction yields no agent_instance_id")
@@ -767,7 +767,7 @@ class TestPreToolUseAgentCapture(unittest.TestCase):
             tool_name="Agent",
             tool_input={"other_key": "value"},
         )
-        tools.handle_pre_tool_use(ctx)
+        tools.capture_dispatch(ctx)
         entries = self._read_queue()
         self.assertEqual(0, len(entries))
 
@@ -806,12 +806,11 @@ class TestPreToolUseAgentCapture(unittest.TestCase):
             self.fail(f"handle_pre_tool_use raised: {exc}")
 
     def test_extracted_run_id_is_adopted_into_the_session_binding(self):
-        """When handle_pre_tool_use extracts a run_id from an Agent/Task
+        """When capture_dispatch extracts a run_id from an Agent/Task
         prompt, it must call runstate.adopt_run_id so the extraction also
-        becomes the session's binding (Design A4: 'handle_pre_tool_use gains
-        one call ... before writing the pending dispatch')."""
+        becomes the session's binding."""
         ctx = self._agent_ctx(prompt=_DISPATCH_PROMPT)
-        tools.handle_pre_tool_use(ctx)
+        tools.capture_dispatch(ctx)
         bound = runstate.get_session_run_binding(
             self.paths, _SESSION_ID, at="2026-01-01T12:00:01.000Z"
         )
@@ -839,7 +838,7 @@ class TestSubagentStartConsumingPendingDispatch(unittest.TestCase):
     def _pre_populate(self, session_id=_SESSION_ID,
                       agent_instance_id=_AGENT_INSTANCE_ID,
                       extracted_run_id=None):
-        """Write a pending dispatch as if handle_pre_tool_use already ran."""
+        """Write a pending dispatch as if capture_dispatch already ran."""
         runstate.put_pending_dispatch(
             self.paths, session_id,
             agent_instance_id, extracted_run_id
@@ -1089,7 +1088,7 @@ class TestEndToEndPreToolUseToSubagentStart(unittest.TestCase):
         """
         prompt = '{"agent_instance_id": "contracts-designer#17", "run_id": "20260101T090000Z-bb33"}'
         pre_ctx = self._pre_tool_ctx(prompt)
-        tools.handle_pre_tool_use(pre_ctx)
+        tools.capture_dispatch(pre_ctx)
 
         start_ctx = self._start_ctx("harness-e2e-001", agent_type="contracts-designer")
         invocation.handle_subagent_start(start_ctx)
@@ -1109,8 +1108,8 @@ class TestEndToEndPreToolUseToSubagentStart(unittest.TestCase):
         # Fire two pre-tool-use events for the same session (parallel dispatches).
         pre_ctx_a = self._pre_tool_ctx(prompt_a)
         pre_ctx_b = self._pre_tool_ctx(prompt_b)
-        tools.handle_pre_tool_use(pre_ctx_a)
-        tools.handle_pre_tool_use(pre_ctx_b)
+        tools.capture_dispatch(pre_ctx_a)
+        tools.capture_dispatch(pre_ctx_b)
 
         # First SubagentStart pops first dispatch.
         start_ctx_a = self._start_ctx("harness-first-001", agent_type="agent-first")
@@ -1157,7 +1156,7 @@ class TestEndToEndPreToolUseToSubagentStart(unittest.TestCase):
             f'"run_id": "{_EXTRACTED_RUN_ID}"}}'
         )
         pre_ctx = self._pre_tool_ctx(prompt)
-        tools.handle_pre_tool_use(pre_ctx)
+        tools.capture_dispatch(pre_ctx)
 
         start_ctx = self._start_ctx("harness-runid-001", agent_type="planner-tdd-soft")
         invocation.handle_subagent_start(start_ctx)

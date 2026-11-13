@@ -1,6 +1,6 @@
 schema_version: "1"
 id: mosaic-logger
-version: 1.11.2
+version: 1.11.3
 # description is user-facing: the Deploy tool shows it in the hook picker.
 # Keep it short and actionable; maintainer detail belongs in the comments below.
 description: >-
@@ -104,8 +104,13 @@ variants:
     # All are well below the 1 s guideline, so no handler speed-up was needed.
     # Registration covers all 12 Claude Code hook events. SubagentStart is also
     # synchronous so the agent_id mapping is written before the subagent's first
-    # tool call. All other events are async so the adapter cannot block or deny
-    # operations.
+    # tool call. PreToolUse has a second, synchronous entry with matcher
+    # Agent|Task that runs the adapter with the capture-dispatch argument: it
+    # queues the dispatch before SubagentStart reads the queue, because Claude
+    # Code starts the subagent without waiting for async hooks. The catch-all
+    # PreToolUse entry stays async because it reads the orchestrator transcript
+    # on every tool call. All other events are async so the adapter cannot
+    # block or deny operations.
     registration:
       - id: register-mosaic-logger
         target_path: .claude/settings.json
@@ -178,6 +183,18 @@ variants:
                       "command": "python3",
                       "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/mosaic_logger.py"],
                       "async": true,
+                      "timeout": 30
+                    }
+                  ]
+                },
+                {
+                  "matcher": "Agent|Task",
+                  "hooks": [
+                    {
+                      "type": "command",
+                      "command": "python3",
+                      "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/mosaic_logger.py", "capture-dispatch"],
+                      "async": false,
                       "timeout": 30
                     }
                   ]

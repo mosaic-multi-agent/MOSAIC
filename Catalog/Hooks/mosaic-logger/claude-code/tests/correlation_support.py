@@ -125,7 +125,12 @@ class CorrelationCase(unittest.TestCase):
                 os.environ[key] = value
 
     def replay(self, *payloads):
+        """Fire each payload; a dispatch PreToolUse fires the synchronous capture
+        entry (which queues the dispatch) before the catch-all entry."""
         for payload in payloads:
+            if (payload.get("hook_event_name") == "PreToolUse"
+                    and payload.get("tool_name") in ("Agent", "Task")):
+                mosaic_logger.dispatch_capture(json.dumps(payload))
             mosaic_logger.dispatch(json.dumps(payload))
 
     def run_root(self, run_id=RUN_ID):

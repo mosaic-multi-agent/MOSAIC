@@ -2,6 +2,12 @@
 
 ## Hooks
 
+### mosaic-logger v1.11.3
+#### Bugfixes
+- In Claude Code, every dispatched agent is now logged under its own instance id, even when it starts before the dispatch hook has finished
+- Existing deployments need a redeploy to get the new hook registration
+- Logs that were already written are not repaired
+
 ### mosaic-logger v1.11.2
 #### Bugfixes
 - Claude Code, GitHub Copilot CLI and VS Code Copilot Chat now log each agent invocation under its own instance id, so parallel dispatches no longer end up in the wrong instance folder
