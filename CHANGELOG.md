@@ -1,3 +1,14 @@
+# Unreleased
+
+## Hooks
+
+### mosaic-logger v1.11.2
+#### Bugfixes
+- Claude Code, GitHub Copilot CLI and VS Code Copilot Chat now log each agent invocation under its own instance id, so parallel dispatches no longer end up in the wrong instance folder
+- Invocations that cannot be matched to a dispatch get a unique folder instead of a shared `unknown-agent` folder
+- When an agent's lifecycle fires again (for example after killing its orphaned process), the existing invocation continues and its usage is no longer logged twice
+- Logs that were already written are not repaired
+
 # 0.7.5 (2026-11-11)
 
 > **To upgrade:**

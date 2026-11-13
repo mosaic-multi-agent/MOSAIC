@@ -28,8 +28,10 @@ import mosaic_logger
 import mosaic_logger_core as core
 import mosaic_logger_runstate as runstate
 from runner_mode_support import (
-    OTHER_RUN_ID, RUN_ID, RunnerModeTestCase, event_types, read_jsonl,
+    OTHER_RUN_ID, RUN_ID, LazyModule, RunnerModeTestCase, event_types, read_jsonl,
 )
+
+pending = LazyModule("mosaic_logger_pending_dispatch")
 
 _INSTANCE = "TestWriter#7"
 _SESSION = "bind-sess"
@@ -292,9 +294,9 @@ class TestPreToolUseDispatchBinds(_BindingCase):
 
     def test_pending_dispatch_is_stored_under_the_dispatched_run(self):
         self.dispatch_via_tool(RUN_ID)
-        pending = runstate.pop_pending_dispatch(self.paths, RUN_ID, _SESSION)
-        self.assertIsNotNone(pending)
-        self.assertEqual(_INSTANCE, pending["agent_instance_id"])
+        queued = pending.take_pending_dispatch(self.paths, RUN_ID, _SESSION, "TestWriter")
+        self.assertIsNotNone(queued)
+        self.assertEqual(_INSTANCE, queued.agent_instance_id)
 
     def test_subagent_start_after_the_dispatch_routes_the_invocation(self):
         self.dispatch_via_tool(RUN_ID)

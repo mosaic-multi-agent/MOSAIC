@@ -1,6 +1,6 @@
 schema_version: "1"
 id: mosaic-logger
-version: 1.11.1
+version: 1.11.2
 # description is user-facing: the Deploy tool shows it in the hook picker.
 # Keep it short and actionable; maintainer detail belongs in the comments below.
 description: >-
@@ -64,6 +64,10 @@ variants:
         target: mosaic_logger_locked_append.py
       - source: mosaic_logger_provider.py
         target: mosaic_logger_provider.py
+      - source: mosaic_logger_pending_dispatch.py
+        target: mosaic_logger_pending_dispatch.py
+      - source: mosaic_logger_start_identity.py
+        target: mosaic_logger_start_identity.py
       - source: mosaic_logger_runstate.py
         target: mosaic_logger_runstate.py
       - source: mosaic_logger_export.py
@@ -337,6 +341,10 @@ variants:
         target: mosaic_logger_core.py
       - source: mosaic_logger_manifest_version.py
         target: mosaic_logger_manifest_version.py
+      - source: mosaic_logger_pending_dispatch.py
+        target: mosaic_logger_pending_dispatch.py
+      - source: mosaic_logger_start_identity.py
+        target: mosaic_logger_start_identity.py
       - source: mosaic_logger_runstate.py
         target: mosaic_logger_runstate.py
       - source: mosaic_logger_export.py
@@ -451,6 +459,10 @@ variants:
         target: mosaic_logger_handlers_runner.py
       - source: mosaic_logger_spawn_key.py
         target: mosaic_logger_spawn_key.py
+      - source: mosaic_logger_pending_dispatch.py
+        target: mosaic_logger_pending_dispatch.py
+      - source: mosaic_logger_start_identity.py
+        target: mosaic_logger_start_identity.py
       - source: ../copilot-shared/mosaic_logger_locked_append.py
         target: mosaic_logger_locked_append.py
     # Registration covers all 14 GHCP CLI hook events. subagentStart is

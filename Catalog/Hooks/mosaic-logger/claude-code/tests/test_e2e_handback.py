@@ -225,18 +225,20 @@ class TestHandbackSessionFlow(_WorkspaceCase):
         self.assertNotIn("model", ends[0])
         self.assertNotIn("token_usage", ends[0])
 
-    def test_resumed_cycle_after_handback_is_completed_by_its_stop(self):
+    def test_resumed_cycle_after_handback_continues_without_second_end(self):
         pre, post = _handback_payloads(self.session_path)
         resumed_start = {
             "hook_event_name": "SubagentStart", "session_id": _SESSION_ID,
             "agent_id": _AGENT_ID, "agent_type": "TestWriter"}
         self.replay(_start_payload(), pre, post, resumed_start,
                     _stop_payload(self.session_path, message="resumed reply"))
-        resumed = [e for e in self.events("unknown-agent")
-                   if e["event"] == "invocation_end"]
-        self.assertEqual(1, len(resumed))
-        self.assertEqual("resumed reply", resumed[0]["response"])
-        self.assertEqual(1, self.names().count("invocation_end"))
+        ends = [e for e in self.events() if e["event"] == "invocation_end"]
+        self.assertEqual(1, len(ends))
+        self.assertEqual(_REPLY, ends[0]["response"])
+        self.assertEqual(1, self.names().count("invocation_start"))
+        run_root = self.paths.run_root(_RUN_ID)
+        self.assertEqual([], [d.name for d in run_root.iterdir()
+                              if d.name.startswith(("unknown-agent", "TestWriter_"))])
 
 
 class TestHandbackEdgeCasesEndToEnd(_WorkspaceCase):

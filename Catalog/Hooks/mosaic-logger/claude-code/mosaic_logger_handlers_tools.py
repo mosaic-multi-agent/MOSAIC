@@ -118,8 +118,12 @@ def handle_pre_tool_use(ctx: "core.HookContext") -> None:
         try:
             tool_input = ctx.field("tool_input")
             prompt = None
+            dispatch_type = None
             if isinstance(tool_input, dict):
                 prompt = tool_input.get("prompt") or None
+                subagent_type = tool_input.get("subagent_type")
+                if isinstance(subagent_type, str) and subagent_type:
+                    dispatch_type = subagent_type
             if prompt:
                 agent_instance_id = runstate.extract_instance_id(prompt)
                 if agent_instance_id:
@@ -131,6 +135,7 @@ def handle_pre_tool_use(ctx: "core.HookContext") -> None:
                         agent_instance_id,
                         extracted_run_id,
                         prompt=prompt,
+                        agent_type=dispatch_type,
                     )
         except Exception:
             pass  # Never let dispatch capture suppress the tool_call_start event.

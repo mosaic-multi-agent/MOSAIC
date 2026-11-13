@@ -6,7 +6,7 @@ boundary turn events, artifact files, and transcript exports for each subagent.
 Key vscode-ghcp behaviour:
 - Subagent correlation is keyed on the spawning tool-call ID: SubagentStart and
   SubagentStop carry it as agent_id (the `toolu_...` value, possibly with a
-  `__vscode-<ms>` suffix, which is stripped). agent_name is a fallback key only.
+  `__vscode-<ms>` suffix, which is stripped). A start without agent_id mints a unique key.
 - SubagentStop carries no response text and no run ID. It only marks the subagent as
   stopped; the invocation_end is written once, by whichever of the orchestrator's
   PostToolUse for the spawning tool or the orchestrator's Stop sweep claims it first.
@@ -21,6 +21,7 @@ import mosaic_logger_core as core
 import mosaic_logger_diagnostics as diagnostics
 import mosaic_logger_subagent_state as subagent_state
 import mosaic_logger_runstate as runstate
+import mosaic_logger_start_identity as start_identity
 import mosaic_logger_export as export
 import mosaic_logger_transcript as transcript
 import mosaic_logger_artifacts as artifacts
@@ -78,17 +79,17 @@ def extract_status_code(message: "str | None") -> "str | None":
 
 
 def resolve_agent_key(ctx: "core.HookContext") -> "str | None":
-    """Return the correlation key for this firing.
+    """Return the correlation key for this firing: the normalised agent_id (the
+    spawning tool-call ID without any `__vscode-<ms>` suffix), or None when agent_id
+    is absent.
 
-    The normalised agent_id (the spawning tool-call ID without any `__vscode-<ms>`
-    suffix); agent_name only when agent_id is absent; None when both are absent.
-    SubagentStart and SubagentStop both route through this function so start and
-    stop cannot disagree about which key was used.
+    There is no agent_name fallback: two same-named spawns without an agent_id must
+    not share a key. A start without agent_id mints a unique key per spawn
+    (subagent_state.mint_spawn_key); a stop without agent_id finds its spawn by name
+    (subagent_state.mark_stopped_by_name). SubagentStart and SubagentStop both route
+    through this function so they cannot disagree about the agent_id key.
     """
-    from_id = subagent_state.normalize_call_id(ctx.agent_id)
-    if from_id is not None:
-        return from_id
-    return ctx.field("agent_name")
+    return subagent_state.normalize_call_id(ctx.agent_id)
 
 
 def resolve_agent_type(ctx: "core.HookContext") -> "str | None":
@@ -107,84 +108,85 @@ def resolve_agent_type(ctx: "core.HookContext") -> "str | None":
 # Handlers
 # ---------------------------------------------------------------------------
 
+def _existing_invocation(ctx: "core.HookContext", agent_key: str) -> "dict | None":
+    """The spawn index entry of an agent_key that already started, else None."""
+    entry = subagent_state.get_spawn_entry(ctx.paths, agent_key)
+    if entry is not None and entry.get("run_id"):
+        return entry
+    return None
+
+
+def _refresh_orchestrator_raw(ctx: "core.HookContext", run_id: str) -> None:
+    """Refresh 00_orchestrator_session.raw (best-effort)."""
+    export.export_transcript(
+        ctx.transcript_path,
+        ctx.paths.orchestrator_raw(run_id, ctx.session_id),
+        "transcript_path",
+        owner_session_id=ctx.session_id,
+    )
+
+
 def handle_subagent_start(ctx: "core.HookContext") -> None:
     """Handle SubagentStart: persist mapping, emit invocation_start and user turn,
     write 01_input.md, and refresh 00_orchestrator_session.raw.
 
     The correlation key is the spawning tool-call ID (agent_id); the same value,
-    suffix stripped, is written on invocation_start as spawn_call_id. The agent map
-    entry and the workspace-level spawn index entry are persisted BEFORE any event
-    write to minimize the correlation window for concurrent firings.
+    suffix stripped, is written on invocation_start as spawn_call_id. Without an
+    agent_id the start mints a unique key from the agent name. A start for a key that
+    is already indexed continues that invocation and writes nothing but the orchestrator
+    raw refresh. Otherwise the instance id comes from the type-matched pending dispatch,
+    else a unique fallback id. The agent map entry and the workspace-level spawn index
+    entry are persisted BEFORE any event write to minimize the correlation window for
+    concurrent firings.
 
     Never raises.
     """
     try:
-        # Step 1: resolve correlation key; return early only when truly uncorrelatable.
         agent_key = resolve_agent_key(ctx)
-        if agent_key is None:
-            return
-
-        # Step 2: pop pending dispatch.
-        dispatch = runstate.pop_pending_dispatch(
-            ctx.paths, core.effective_run_id(ctx), ctx.session_id
-        )
-
-        # Step 3: optionally set ctx.run_id from the dispatch when not yet set.
-        if dispatch and dispatch.get("run_id") and not ctx.run_id:
-            ctx.run_id = dispatch["run_id"]
-
-        # Step 4: compute effective run_id for all downstream routing.
-        run_id = core.effective_run_id(ctx)
-
-        # Step 5: resolve agent_prompt and agent_instance_id.
-        dispatch_prompt = dispatch.get("prompt") if dispatch else None
-        agent_prompt = dispatch_prompt
-
-        if dispatch:
-            agent_instance_id = dispatch["agent_instance_id"]
+        minted = agent_key is None
+        if minted:
+            agent_name = ctx.field("agent_name")
+            if not agent_name:
+                return
+            agent_key = subagent_state.mint_spawn_key(agent_name)
         else:
-            extracted = runstate.extract_instance_id(agent_prompt)
-            agent_instance_id = extracted if extracted else "unknown-agent"
+            existing = _existing_invocation(ctx, agent_key)
+            if existing is not None:
+                _refresh_orchestrator_raw(ctx, existing["run_id"])
+                return
 
-        # Step 6: persist the agent map entry FIRST — before any event write.
-        runstate.put_agent_mapping(
-            ctx.paths, run_id, agent_key, agent_instance_id, resolve_agent_type(ctx)
-        )
+        identity = start_identity.resolve_start_identity(ctx)
+        run_id = identity.run_id
+        agent_instance_id = identity.agent_instance_id
+        agent_prompt = identity.prompt
+        agent_type = resolve_agent_type(ctx)
+
+        runstate.put_agent_mapping(ctx.paths, run_id, agent_key, agent_instance_id, agent_type)
         subagent_state.put_spawn_entry(
-            ctx.paths, agent_key, run_id, agent_instance_id, ctx.session_id,
-            resolve_agent_type(ctx),
+            ctx.paths, agent_key, run_id, agent_instance_id, ctx.session_id, agent_type,
+            agent_name=ctx.field("agent_name"), minted_key=minted,
         )
 
         sink = ctx.paths.invocation_events(run_id, agent_instance_id)
-
-        # Step 7: emit invocation_start.
         event = core.build_event(
             "invocation_start", ctx,
             agent_instance_id=agent_instance_id,
-            agent_type=resolve_agent_type(ctx),
+            agent_type=agent_type,
             prompt=agent_prompt,
-            spawn_call_id=subagent_state.normalize_call_id(ctx.agent_id),
+            spawn_call_id=None if minted else agent_key,
         )
         core.append_event(sink, event)
 
-        # Step 8: emit initial user turn when prompt is available.
         if agent_prompt is not None:
             turn = core.build_event("turn", ctx, role="user", content=agent_prompt)
             core.append_event(sink, turn)
 
-        # Step 9: write 01_input.md.
         input_text = artifacts.render_input(ctx, agent_instance_id, agent_prompt)
         artifacts.write_artifact(
             ctx.paths.invocation_input(run_id, agent_instance_id), input_text
         )
 
-        # Step 10: refresh 00_orchestrator_session.raw (best-effort).
-        export.export_transcript(
-            ctx.transcript_path,
-            ctx.paths.orchestrator_raw(run_id, ctx.session_id),
-            "transcript_path",
-            owner_session_id=ctx.session_id,
-        )
+        _refresh_orchestrator_raw(ctx, run_id)
 
     except Exception as exc:
         core.debug_log("handle_subagent_start failed", exc)
@@ -287,7 +289,19 @@ def handle_subagent_stop(ctx: "core.HookContext") -> None:
     """
     try:
         key = resolve_agent_key(ctx)
-        if key is None or subagent_state.get_spawn_entry(ctx.paths, key) is None:
+        if key is None:
+            # No agent id: a minted-key spawn is found by agent name.
+            name = ctx.field("agent_name")
+            if name:
+                key = subagent_state.mark_stopped_by_name(ctx.paths, ctx.session_id, name)
+                if key is not None:
+                    return
+            _report_unmapped(
+                ctx, "unmapped_subagent_stop",
+                "SubagentStop did not match any started subagent", None,
+            )
+            return
+        if subagent_state.get_spawn_entry(ctx.paths, key) is None:
             _report_unmapped(
                 ctx, "unmapped_subagent_stop",
                 "SubagentStop did not match any started subagent", key,

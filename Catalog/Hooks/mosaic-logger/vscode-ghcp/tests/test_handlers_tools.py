@@ -31,10 +31,12 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import mosaic_logger_core as core
 import mosaic_logger_runstate as runstate
 import mosaic_logger_handlers_tools as tools
+from pending_dispatch_support import pending
 
 
 # ---------------------------------------------------------------------------
@@ -353,11 +355,11 @@ class TestHandlePreToolUse(unittest.TestCase):
             tool_input={"prompt": prompt_text}
         )
         tools.handle_pre_tool_use(ctx)
-        # Pop the entry to verify it was written
-        entry = runstate.pop_pending_dispatch(self.paths, _RUN_ID, _SESSION_ID)
+        # Take the entry (by its type) to verify it was written
+        entry = pending.take_pending_dispatch(self.paths, _RUN_ID, _SESSION_ID, "TestWriter")
         self.assertIsNotNone(entry,
                              "A pending dispatch entry must be written for Agent tool with extractable ID")
-        self.assertEqual("TestWriter#1", entry.get("agent_instance_id"))
+        self.assertEqual("TestWriter#1", entry.agent_instance_id)
 
     def test_non_dispatch_tool_does_not_capture_pending_dispatch(self):
         """A Bash invocation must not create a pending-dispatch entry."""
@@ -366,10 +368,9 @@ class TestHandlePreToolUse(unittest.TestCase):
             tool_input={"command": 'echo hello'}
         )
         tools.handle_pre_tool_use(ctx)
-        entry = runstate.pop_pending_dispatch(self.paths, _RUN_ID, _SESSION_ID)
-        self.assertIsNone(entry,
-                          "Non-dispatch tool (Bash) must not write a pending dispatch entry "
-                          "— filtering happens inside the handler body")
+        self.assertFalse(self.paths.pending_dispatch_entry(_RUN_ID, _SESSION_ID).exists(),
+                         "Non-dispatch tool (Bash) must not write a pending dispatch entry "
+                         "— filtering happens inside the handler body")
 
     def test_read_tool_does_not_capture_pending_dispatch(self):
         """Read is not a dispatch tool; no pending-dispatch entry must be written."""
@@ -378,8 +379,7 @@ class TestHandlePreToolUse(unittest.TestCase):
             tool_input={"file_path": "/tmp/test.py"}
         )
         tools.handle_pre_tool_use(ctx)
-        entry = runstate.pop_pending_dispatch(self.paths, _RUN_ID, _SESSION_ID)
-        self.assertIsNone(entry)
+        self.assertFalse(self.paths.pending_dispatch_entry(_RUN_ID, _SESSION_ID).exists())
 
     def test_task_tool_name_captures_pending_dispatch(self):
         """'Task' is also a dispatch tool name and must capture the dispatch."""
@@ -389,7 +389,7 @@ class TestHandlePreToolUse(unittest.TestCase):
             tool_input={"prompt": prompt_text}
         )
         tools.handle_pre_tool_use(ctx)
-        entry = runstate.pop_pending_dispatch(self.paths, _RUN_ID, _SESSION_ID)
+        entry = pending.take_pending_dispatch(self.paths, _RUN_ID, _SESSION_ID, "Researcher")
         self.assertIsNotNone(entry,
                              "'Task' tool must also capture a pending dispatch entry")
 
@@ -401,9 +401,18 @@ class TestHandlePreToolUse(unittest.TestCase):
             tool_input={"prompt": prompt_text}
         )
         tools.handle_pre_tool_use(ctx)
-        entry = runstate.pop_pending_dispatch(self.paths, _RUN_ID, _SESSION_ID)
+        entry = pending.take_pending_dispatch(self.paths, _RUN_ID, _SESSION_ID, "Planner")
         self.assertIsNotNone(entry,
                              "'runSubagent' tool must also capture a pending dispatch entry")
+
+    def test_dispatch_with_only_a_bare_mention_is_not_captured(self):
+        """Only an explicit agent_instance_id line is trusted; a bare Name#Number is not."""
+        ctx = _pre_tool_ctx(
+            self.tmp_path, tool_name="runSubagent", tool_use_id="tu-rs-002",
+            tool_input={"prompt": "Hand this to Planner#1 when ready."}
+        )
+        tools.handle_pre_tool_use(ctx)
+        self.assertFalse(self.paths.pending_dispatch_entry(_RUN_ID, _SESSION_ID).exists())
 
     def test_tool_call_start_still_emitted_even_when_capture_fails(self):
         """A failed pending-dispatch capture must not suppress the tool_call_start event."""

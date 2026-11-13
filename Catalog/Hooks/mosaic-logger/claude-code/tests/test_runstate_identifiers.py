@@ -1,7 +1,7 @@
 """Tests for identifier generation and extraction in mosaic_logger_runstate.
 
 Covers: new_run_id format, fallback_instance_id format and prefix handling,
-extract_instance_id structured-match priority over bare-match, near-miss and
+extract_instance_id explicit-key-only matching, near-miss and
 no-match cases, and never-raises contract. Also covers fallback_call_id format.
 """
 
@@ -122,9 +122,8 @@ class TestFallbackCallId(unittest.TestCase):
 
 
 class TestExtractInstanceId(unittest.TestCase):
-    """extract_instance_id matches {AgentName}#{Number} preferring structured
-    key-value occurrences; falls back to the earliest bare occurrence; returns
-    None when neither form exists."""
+    """extract_instance_id matches {AgentName}#{Number} only after an explicit
+    agent_instance_id key; a bare mention elsewhere in the text returns None."""
 
     # --- Structured (key-value) match ---
 
@@ -143,22 +142,24 @@ class TestExtractInstanceId(unittest.TestCase):
         result = runstate.extract_instance_id(prompt)
         self.assertEqual("TestAgent#10", result)
 
-    def test_structured_match_preferred_over_earlier_bare_match(self):
-        # A bare occurrence appears before the structured key/value in the text.
-        prompt = 'BareAgent#5 is mentioned first. {"agent_instance_id": "StructuredAgent#2"}'
-        result = runstate.extract_instance_id(prompt)
-        self.assertEqual("StructuredAgent#2", result)
+    def test_extracts_from_equals_form(self):
+        result = runstate.extract_instance_id("agent_instance_id=Research#3")
+        self.assertEqual("Research#3", result)
 
-    # --- Bare match (fallback when no structured occurrence) ---
+    # --- Bare mentions are never an id source ---
 
-    def test_extracts_earliest_bare_occurrence_when_no_structured_match(self):
+    def test_bare_mention_without_explicit_key_is_not_a_match(self):
         prompt = "Hello, this task is for TestAgent#3. Also see OtherAgent#7."
         result = runstate.extract_instance_id(prompt)
-        self.assertEqual("TestAgent#3", result)
+        self.assertIsNone(result)
 
-    def test_bare_match_requires_letter_start(self):
-        # Name must match [A-Za-z][A-Za-z0-9_.-]* so leading digit is not a match
-        result = runstate.extract_instance_id("2Agent#1 mentioned here")
+    def test_bare_mention_beside_an_explicit_key_does_not_win(self):
+        prompt = 'See OtherAgent#7 first. agent_instance_id: Research#3'
+        result = runstate.extract_instance_id(prompt)
+        self.assertEqual("Research#3", result)
+
+    def test_bare_mention_requires_explicit_key_even_for_name_hash_number_alone(self):
+        result = runstate.extract_instance_id("Research#3")
         self.assertIsNone(result)
 
     # --- No-match cases ---

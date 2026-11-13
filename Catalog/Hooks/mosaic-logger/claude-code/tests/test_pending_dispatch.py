@@ -7,12 +7,11 @@ Covers:
   - put_pending_dispatch: persistence, JSONL append (FIFO), parent-dir creation,
     success/failure return, never-raises contract, None run_id serialization.
     Signature no longer takes a path_run_id argument.
-  - pop_pending_dispatch: FIFO ordering, stale-entry eviction, empty-queue
-    resilience, corrupt-file resilience, absent-file resilience, concurrent
-    session isolation, max_age_seconds parameter. Signature no longer takes
-    a path_run_id argument.
+  - take_pending_dispatch round-trip of the prompt field and old-format
+    entries (queue consumption behaviour itself lives in
+    test_pending_dispatch_take*.py).
   - Concurrent write safety for put_pending_dispatch (real subprocesses).
-  - The put/pop pair is unconditionally consistent across the transition from
+  - The put/take pair is unconditionally consistent across the transition from
     an unresolved to a resolved run_id, because the queue path never carries
     a run_id component (Design D4) -- this eliminates the Stage 1/2 hazard
     rather than merely mitigating it.
@@ -20,20 +19,15 @@ Covers:
     tool_name == "Agent", correct extraction, existing tool_call_start event
     still emitted, non-Agent calls unaffected.
   - handle_subagent_start consuming pending dispatch: uses dispatch's
-    agent_instance_id for mapping, consumes the entry, falls back to
-    "unknown-agent" when no dispatch exists, adopts the dispatch's run_id via
-    adopt_run_id when ctx.run_id is not yet set, guard-then-pop ordering.
+    agent_instance_id for mapping (the start's agent type matching the
+    dispatch type), consumes the entry, takes a unique fallback id (never
+    "unknown-agent") when no dispatch exists, adopts the dispatch's run_id via
+    adopt_run_id when ctx.run_id is not yet set, guard-then-take ordering.
   - End-to-end correlation: PreToolUse Agent -> SubagentStart produces correct
     agent_instance_id in the mapping store.
   - Unmapped SubagentStop filtering: no files/events written when
     resolve_invocation_id returns "unmapped_*".
   - handle_stop guard removal: Stop with agent_id present still emits turn event.
-
-RED-phase note: put_pending_dispatch and pop_pending_dispatch still accept a
-path_run_id positional argument in the current implementation; every call in
-this file that omits it will fail (TypeError) until the relocation lands.
-LogPaths.pending_dispatch_dir/entry still require a run_id argument; every
-call in this file that omits it will fail until the relocation lands.
 """
 
 import datetime
@@ -50,6 +44,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import mosaic_logger_core as core
+import mosaic_logger_pending_dispatch as pending
 import mosaic_logger_runstate as runstate
 import mosaic_logger_handlers_tools as tools
 import mosaic_logger_handlers_invocation as invocation
@@ -343,180 +338,6 @@ class TestPutPendingDispatch(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# pop_pending_dispatch tests
-# ---------------------------------------------------------------------------
-
-class TestPopPendingDispatch(unittest.TestCase):
-    """pop_pending_dispatch: FIFO, stale eviction, resilience. Signature:
-    (paths, session_id, max_age_seconds=...) -- no path_run_id."""
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.paths = core.build_paths(pathlib.Path(self.tmp.name))
-
-    def tearDown(self):
-        self.tmp.cleanup()
-
-    def _entry_path(self, session_id=_SESSION_ID):
-        return self.paths.pending_dispatch_entry(session_id)
-
-    def _pop(self, session_id=_SESSION_ID, max_age_seconds=120):
-        return runstate.pop_pending_dispatch(
-            self.paths, session_id, max_age_seconds=max_age_seconds
-        )
-
-    def _put(self, session_id=_SESSION_ID, agent_instance_id=_AGENT_INSTANCE_ID,
-             extracted_run_id=_EXTRACTED_RUN_ID):
-        runstate.put_pending_dispatch(
-            self.paths, session_id, agent_instance_id, extracted_run_id
-        )
-
-    def test_returns_none_when_file_absent(self):
-        result = self._pop()
-        self.assertIsNone(result)
-
-    def test_returns_none_for_empty_file(self):
-        path = self._entry_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(b"")
-        result = self._pop()
-        self.assertIsNone(result)
-
-    def test_returns_dict_with_agent_instance_id(self):
-        self._put(agent_instance_id="reviewer-tdd#7")
-        result = self._pop()
-        self.assertIsNotNone(result)
-        self.assertEqual("reviewer-tdd#7", result["agent_instance_id"])
-
-    def test_returns_dict_with_run_id(self):
-        self._put(extracted_run_id="20260201T080000Z-ff99")
-        result = self._pop()
-        self.assertIsNotNone(result)
-        self.assertEqual("20260201T080000Z-ff99", result["run_id"])
-
-    def test_returns_dict_with_none_run_id_when_stored_as_null(self):
-        self._put(extracted_run_id=None)
-        result = self._pop()
-        self.assertIsNotNone(result)
-        self.assertIn("run_id", result)
-        self.assertIsNone(result["run_id"])
-
-    def test_pops_oldest_entry_first_fifo(self):
-        """The oldest (first-appended) entry must be returned first."""
-        self._put(agent_instance_id="first-agent#1")
-        self._put(agent_instance_id="second-agent#2")
-        result = self._pop()
-        self.assertIsNotNone(result)
-        self.assertEqual("first-agent#1", result["agent_instance_id"])
-
-    def test_removes_popped_entry_from_queue(self):
-        """After a pop, the consumed entry must no longer be in the queue."""
-        self._put(agent_instance_id="first-agent#1")
-        self._put(agent_instance_id="second-agent#2")
-        self._pop()
-        # A second pop must return the second entry, not the first.
-        result2 = self._pop()
-        self.assertIsNotNone(result2)
-        self.assertEqual("second-agent#2", result2["agent_instance_id"])
-
-    def test_queue_empty_after_all_entries_popped(self):
-        """After popping all entries, further pops return None."""
-        self._put(agent_instance_id="only-agent#1")
-        self._pop()
-        result = self._pop()
-        self.assertIsNone(result)
-
-    def test_preserves_remaining_entries_in_order(self):
-        """After popping the first entry, remaining entries stay in FIFO order."""
-        self._put(agent_instance_id="first#1")
-        self._put(agent_instance_id="second#2")
-        self._put(agent_instance_id="third#3")
-        self._pop()  # pops first#1
-        result2 = self._pop()
-        self.assertEqual("second#2", result2["agent_instance_id"])
-        result3 = self._pop()
-        self.assertEqual("third#3", result3["agent_instance_id"])
-
-    def test_stale_entries_are_evicted_during_pop(self):
-        """Entries older than max_age_seconds are discarded without being returned."""
-        path = self._entry_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        _write_pending_dispatch_file(path, [
-            {"agent_instance_id": "stale-agent#1", "run_id": None,
-             "created_at": _old_timestamp()},
-        ])
-        result = self._pop(max_age_seconds=120)
-        self.assertIsNone(result, "Stale entry must be evicted, not returned")
-
-    def test_fresh_entry_returned_after_stale_entries_evicted(self):
-        """After evicting stale leading entries, the first fresh entry is returned."""
-        path = self._entry_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        _write_pending_dispatch_file(path, [
-            {"agent_instance_id": "stale-agent#1", "run_id": None,
-             "created_at": _old_timestamp()},
-            {"agent_instance_id": "fresh-agent#2", "run_id": "20260101T110000Z-a1b2",
-             "created_at": _fresh_timestamp()},
-        ])
-        result = self._pop(max_age_seconds=120)
-        self.assertIsNotNone(result)
-        self.assertEqual("fresh-agent#2", result["agent_instance_id"])
-
-    def test_all_stale_entries_returns_none(self):
-        """When all entries are stale, pop returns None."""
-        path = self._entry_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        _write_pending_dispatch_file(path, [
-            {"agent_instance_id": "stale#1", "run_id": None,
-             "created_at": _old_timestamp()},
-            {"agent_instance_id": "stale#2", "run_id": None,
-             "created_at": _old_timestamp()},
-        ])
-        result = self._pop(max_age_seconds=120)
-        self.assertIsNone(result)
-
-    def test_max_age_seconds_zero_evicts_all_entries(self):
-        """max_age_seconds=0 makes all entries immediately stale."""
-        self._put(agent_instance_id="any-agent#1")
-        result = self._pop(max_age_seconds=0)
-        self.assertIsNone(result)
-
-    def test_returns_none_on_corrupt_file(self):
-        """A file with invalid JSON lines returns None without raising."""
-        path = self._entry_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("this is not json at all\n{broken\n", encoding="utf-8")
-        result = self._pop()
-        self.assertIsNone(result)
-
-    def test_never_raises_on_absent_file(self):
-        try:
-            runstate.pop_pending_dispatch(self.paths, _SESSION_ID)
-        except Exception as exc:
-            self.fail(f"pop_pending_dispatch raised on absent file: {exc}")
-
-    def test_never_raises_on_corrupt_file(self):
-        path = self._entry_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("}{totally broken{{", encoding="utf-8")
-        try:
-            runstate.pop_pending_dispatch(self.paths, _SESSION_ID)
-        except Exception as exc:
-            self.fail(f"pop_pending_dispatch raised on corrupt file: {exc}")
-
-    def test_concurrent_session_isolation(self):
-        """pop for one session_id must not affect the queue of another session_id."""
-        self._put(session_id="session-alpha", agent_instance_id="alpha-agent#1")
-        self._put(session_id="session-beta", agent_instance_id="beta-agent#2")
-        # Pop only from session-alpha
-        runstate.pop_pending_dispatch(self.paths, "session-alpha")
-        # session-beta queue must be unaffected
-        result = runstate.pop_pending_dispatch(self.paths, "session-beta")
-        self.assertIsNotNone(result)
-        self.assertEqual("beta-agent#2", result["agent_instance_id"])
-
-
-# ---------------------------------------------------------------------------
 # Run-id-independent transition consistency (Stage 2, Design D4)
 # ---------------------------------------------------------------------------
 
@@ -551,13 +372,14 @@ class TestPendingDispatchRunIdIndependentTransitionConsistency(unittest.TestCase
         runstate.put_pending_dispatch(
             self.paths, _SESSION_ID, "transition-agent#1", None
         )
-        result = runstate.pop_pending_dispatch(self.paths, _SESSION_ID)
+        result = pending.take_pending_dispatch(
+            self.paths, _SESSION_ID, "transition-agent")
         self.assertIsNotNone(
             result,
-            "Entry written while run_id was unresolved must still be poppable "
+            "Entry written while run_id was unresolved must still be takeable "
             "once the session has since acquired a real run_id",
         )
-        self.assertEqual("transition-agent#1", result["agent_instance_id"])
+        self.assertEqual("transition-agent#1", result.agent_instance_id)
 
     def test_put_while_resolved_then_pop_while_still_resolved_succeeds(self):
         """Symmetric direction: both firings already have a resolved run_id.
@@ -566,9 +388,10 @@ class TestPendingDispatchRunIdIndependentTransitionConsistency(unittest.TestCase
         runstate.put_pending_dispatch(
             self.paths, _SESSION_ID, "transition-agent#2", _EXTRACTED_RUN_ID
         )
-        result = runstate.pop_pending_dispatch(self.paths, _SESSION_ID)
+        result = pending.take_pending_dispatch(
+            self.paths, _SESSION_ID, "transition-agent")
         self.assertIsNotNone(result)
-        self.assertEqual("transition-agent#2", result["agent_instance_id"])
+        self.assertEqual("transition-agent#2", result.agent_instance_id)
 
     def test_end_to_end_writer_unresolved_reader_resolved_via_binding(self):
         """PreToolUse fires before any run_id is bound for the session
@@ -589,7 +412,7 @@ class TestPendingDispatchRunIdIndependentTransitionConsistency(unittest.TestCase
         start_ctx = _make_ctx(
             self.tmp.name, "SubagentStart",
             run_id=_RUN_ID, session_id=_SESSION_ID,
-            agent_id="harness-transition-001",
+            agent_id="harness-transition-001", agent_type="test-writer-tdd",
         )
         invocation.handle_subagent_start(start_ctx)
 
@@ -605,14 +428,13 @@ class TestPendingDispatchRunIdIndependentTransitionConsistency(unittest.TestCase
 
 
 # ---------------------------------------------------------------------------
-# Prompt field round-trip through put_pending_dispatch / pop_pending_dispatch
+# Prompt field round-trip through put_pending_dispatch / take_pending_dispatch
 # ---------------------------------------------------------------------------
 
 class TestPendingDispatchPromptField(unittest.TestCase):
     """put_pending_dispatch must accept and persist a 'prompt' keyword argument.
-    pop_pending_dispatch must return the stored prompt value (or None via
-    .get() access for backward-compatible old-format entries that lack the
-    field)."""
+    take_pending_dispatch must return the stored prompt value (or None for
+    backward-compatible old-format entries that lack the field)."""
 
     # A realistic dispatch JSON, the same text that would come from tool_input.prompt.
     _SAMPLE_PROMPT = (
@@ -629,7 +451,8 @@ class TestPendingDispatchPromptField(unittest.TestCase):
         self.tmp.cleanup()
 
     def _pop(self, session_id=_SESSION_ID):
-        return runstate.pop_pending_dispatch(self.paths, session_id)
+        return pending.take_pending_dispatch(
+            self.paths, session_id, "planner-tdd-soft")
 
     # --- put_pending_dispatch: prompt acceptance and persistence ---
 
@@ -682,11 +505,10 @@ class TestPendingDispatchPromptField(unittest.TestCase):
             "(degrade-never-fabricate)",
         )
 
-    # --- pop_pending_dispatch: prompt key in returned dict ---
+    # --- take_pending_dispatch: prompt on the returned dispatch ---
 
     def test_pop_includes_prompt_key_in_returned_dict(self):
-        """pop_pending_dispatch must always include a 'prompt' key in the
-        returned dict, even when the stored value is None."""
+        """take_pending_dispatch must expose the stored prompt on the result."""
         runstate.put_pending_dispatch(
             self.paths, _SESSION_ID,
             _AGENT_INSTANCE_ID, _EXTRACTED_RUN_ID,
@@ -694,13 +516,10 @@ class TestPendingDispatchPromptField(unittest.TestCase):
         )
         result = self._pop()
         self.assertIsNotNone(result)
-        self.assertIn(
-            "prompt", result,
-            "pop_pending_dispatch must include 'prompt' in the returned dict",
-        )
+        self.assertEqual(self._SAMPLE_PROMPT, result.prompt)
 
     def test_pop_returns_correct_prompt_value(self):
-        """The 'prompt' value in the popped dict must match the stored text."""
+        """The prompt on the taken dispatch must match the stored text."""
         runstate.put_pending_dispatch(
             self.paths, _SESSION_ID,
             _AGENT_INSTANCE_ID, _EXTRACTED_RUN_ID,
@@ -709,17 +528,13 @@ class TestPendingDispatchPromptField(unittest.TestCase):
         result = self._pop()
         self.assertIsNotNone(result)
         self.assertEqual(
-            self._SAMPLE_PROMPT, result["prompt"],
-            "Popped 'prompt' must equal the value that was stored",
+            self._SAMPLE_PROMPT, result.prompt,
+            "Taken 'prompt' must equal the value that was stored",
         )
 
     def test_pop_returns_none_for_prompt_key_when_entry_lacks_prompt_field(self):
-        """Backward compatibility: an old-format entry (no 'prompt' field) must
-        yield None for 'prompt' in the popped dict (via .get() access in pop).
-
-        The returned dict must still contain the 'prompt' key (set to None),
-        so callers can always access result.get('prompt') without a KeyError.
-        """
+        """Backward compatibility: an old-format entry (no 'prompt' field and
+        no 'agent_type') is still consumable and yields None for the prompt."""
         # Write an old-format entry directly, without a 'prompt' field.
         entry_path = self.paths.pending_dispatch_entry(_SESSION_ID)
         entry_path.parent.mkdir(parents=True, exist_ok=True)
@@ -731,34 +546,29 @@ class TestPendingDispatchPromptField(unittest.TestCase):
             }) + "\n",
             encoding="utf-8",
         )
-        result = runstate.pop_pending_dispatch(self.paths, _SESSION_ID)
+        result = self._pop()
         self.assertIsNotNone(result)
-        self.assertIn(
-            "prompt", result,
-            "pop_pending_dispatch must include 'prompt' key even for old-format entries",
-        )
         self.assertIsNone(
-            result["prompt"],
+            result.prompt,
             "Old-format entry (no 'prompt' field) must yield None for 'prompt'",
         )
 
     def test_pop_returns_none_for_prompt_when_put_called_without_prompt(self):
-        """When put is called without a prompt argument, pop must include a
-        'prompt' key set to None in the returned dict."""
+        """When put is called without a prompt argument, the taken dispatch
+        has prompt None."""
         runstate.put_pending_dispatch(
             self.paths, _SESSION_ID, _AGENT_INSTANCE_ID, _EXTRACTED_RUN_ID
         )
         result = self._pop()
         self.assertIsNotNone(result)
-        self.assertIn("prompt", result)
         self.assertIsNone(
-            result["prompt"],
-            "pop must return None for 'prompt' when put was called without one",
+            result.prompt,
+            "take must return None for 'prompt' when put was called without one",
         )
 
     def test_prompt_does_not_affect_other_fields_in_popped_dict(self):
         """Storing a prompt must not alter agent_instance_id or run_id in the
-        popped dict."""
+        taken dispatch."""
         runstate.put_pending_dispatch(
             self.paths, _SESSION_ID,
             _AGENT_INSTANCE_ID, _EXTRACTED_RUN_ID,
@@ -766,8 +576,8 @@ class TestPendingDispatchPromptField(unittest.TestCase):
         )
         result = self._pop()
         self.assertIsNotNone(result)
-        self.assertEqual(_AGENT_INSTANCE_ID, result["agent_instance_id"])
-        self.assertEqual(_EXTRACTED_RUN_ID, result["run_id"])
+        self.assertEqual(_AGENT_INSTANCE_ID, result.agent_instance_id)
+        self.assertEqual(_EXTRACTED_RUN_ID, result.run_id)
 
 
 class TestConcurrentPutPendingDispatch(unittest.TestCase):
@@ -1035,14 +845,19 @@ class TestSubagentStartConsumingPendingDispatch(unittest.TestCase):
             agent_instance_id, extracted_run_id
         )
 
-    def _start_ctx(self, agent_id="harness-001", run_id=None, **kwargs):
-        """Build a SubagentStart context with run_id=None by default (unknown-run bucket)."""
+    def _start_ctx(self, agent_id="harness-001", run_id=None,
+                   agent_type="planner-tdd-soft", **kwargs):
+        """Build a SubagentStart context with run_id=None by default (unknown-run bucket).
+
+        agent_type defaults to the type matching the default dispatch id."""
         payload = {
             "hook_event_name": "SubagentStart",
             "session_id": _SESSION_ID,
             "agent_id": agent_id,
             **kwargs,
         }
+        if agent_type is not None:
+            payload["agent_type"] = agent_type
         workspace_root = pathlib.Path(self.tmp.name)
         ctx = core.HookContext(payload, workspace_root, self.paths, _TS)
         ctx.run_id = run_id  # None -> unknown-run bucket, matching put's path
@@ -1074,7 +889,7 @@ class TestSubagentStartConsumingPendingDispatch(unittest.TestCase):
         self._pre_populate(agent_instance_id="correct-agent#1")
         # agent_prompt contains a different (wrong) agent_instance_id.
         ctx = self._start_ctx(
-            agent_id="harness-xyz",
+            agent_id="harness-xyz", agent_type="correct-agent",
             agent_prompt='{"agent_instance_id": "wrong-agent#99"}'
         )
         invocation.handle_subagent_start(ctx)
@@ -1088,18 +903,21 @@ class TestSubagentStartConsumingPendingDispatch(unittest.TestCase):
         self._pre_populate(agent_instance_id="planner-tdd-soft#9")
         ctx = self._start_ctx(agent_id="harness-aaa")
         invocation.handle_subagent_start(ctx)
-        # A second pop must return None (entry was consumed).
-        result = runstate.pop_pending_dispatch(self.paths, _SESSION_ID)
+        # A further take must return None (entry was consumed).
+        result = pending.take_pending_dispatch(
+            self.paths, _SESSION_ID, "planner-tdd-soft")
         self.assertIsNone(result,
                            "Pending dispatch must be consumed by handle_subagent_start")
 
-    def test_falls_back_to_unknown_agent_when_no_pending_dispatch(self):
-        """When no pending dispatch exists for the session, fallback is 'unknown-agent'."""
+    def test_unique_fallback_id_when_no_pending_dispatch(self):
+        """When no pending dispatch exists for the session, the id is the unique
+        fallback with the agent type as prefix, never 'unknown-agent'."""
         ctx = self._start_ctx(agent_id="harness-bbb")
         invocation.handle_subagent_start(ctx)
         mapping = runstate.get_agent_mapping(self.paths, "unknown-run", "harness-bbb")
         self.assertIsNotNone(mapping)
-        self.assertEqual("unknown-agent", mapping["agent_instance_id"])
+        self.assertRegex(mapping["agent_instance_id"],
+                         r"^planner-tdd-soft_\d{8}T\d{6}Z-[0-9a-f]{4}$")
 
     def test_fallback_does_not_raise(self):
         """Fallback when no pending dispatch exists must never raise."""
@@ -1154,7 +972,7 @@ class TestSubagentStartConsumingPendingDispatch(unittest.TestCase):
                          "ctx.run_id must not be overridden when already set")
 
     def test_events_still_emitted_when_falling_back(self):
-        """Even on fallback to 'unknown-agent', invocation_start must be emitted."""
+        """Even on the unique fallback id, invocation_start must be emitted."""
         ctx = self._start_ctx(agent_id="harness-fff")
         invocation.handle_subagent_start(ctx)
         dirs = self._invocation_dirs("unknown-run")
@@ -1171,7 +989,7 @@ class TestSubagentStartConsumingPendingDispatch(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestSubagentStartGuardThenPop(unittest.TestCase):
-    """pop_pending_dispatch must be placed AFTER the `if not ctx.agent_id` guard.
+    """Dispatch consumption must be placed AFTER the `if not ctx.agent_id` guard.
 
     A SubagentStart firing with no ctx.agent_id must not consume the pending
     dispatch. A subsequent genuine SubagentStart must still pop it correctly.
@@ -1208,6 +1026,7 @@ class TestSubagentStartGuardThenPop(unittest.TestCase):
             "hook_event_name": "SubagentStart",
             "session_id": _SESSION_ID,
             "agent_id": "harness-genuine-001",
+            "agent_type": "planner-tdd-soft",
         }
         genuine_ctx = core.HookContext(genuine_payload, workspace_root, self.paths, _TS)
         genuine_ctx.run_id = None
@@ -1248,12 +1067,14 @@ class TestEndToEndPreToolUseToSubagentStart(unittest.TestCase):
             tool_use_id="tu-e2e-001",
         )
 
-    def _start_ctx(self, agent_id, session_id=_SESSION_ID):
+    def _start_ctx(self, agent_id, session_id=_SESSION_ID, agent_type=None):
         payload = {
             "hook_event_name": "SubagentStart",
             "session_id": session_id,
             "agent_id": agent_id,
         }
+        if agent_type is not None:
+            payload["agent_type"] = agent_type
         workspace_root = pathlib.Path(self.tmp.name)
         ctx = core.HookContext(payload, workspace_root, self.paths, _TS)
         ctx.run_id = None
@@ -1270,7 +1091,7 @@ class TestEndToEndPreToolUseToSubagentStart(unittest.TestCase):
         pre_ctx = self._pre_tool_ctx(prompt)
         tools.handle_pre_tool_use(pre_ctx)
 
-        start_ctx = self._start_ctx("harness-e2e-001")
+        start_ctx = self._start_ctx("harness-e2e-001", agent_type="contracts-designer")
         invocation.handle_subagent_start(start_ctx)
 
         mapping = runstate.get_agent_mapping(
@@ -1279,10 +1100,11 @@ class TestEndToEndPreToolUseToSubagentStart(unittest.TestCase):
         self.assertIsNotNone(mapping)
         self.assertEqual("contracts-designer#17", mapping["agent_instance_id"])
 
-    def test_fifo_ordering_for_multiple_dispatches(self):
-        """Two PreToolUse firings followed by two SubagentStart firings: FIFO ordering."""
+    def test_fifo_ordering_for_multiple_dispatches_of_one_type(self):
+        """Two PreToolUse firings followed by two SubagentStart firings of the
+        same agent type: oldest-first ordering."""
         prompt_a = '{"agent_instance_id": "agent-first#1"}'
-        prompt_b = '{"agent_instance_id": "agent-second#2"}'
+        prompt_b = '{"agent_instance_id": "agent-first#2"}'
 
         # Fire two pre-tool-use events for the same session (parallel dispatches).
         pre_ctx_a = self._pre_tool_ctx(prompt_a)
@@ -1291,11 +1113,11 @@ class TestEndToEndPreToolUseToSubagentStart(unittest.TestCase):
         tools.handle_pre_tool_use(pre_ctx_b)
 
         # First SubagentStart pops first dispatch.
-        start_ctx_a = self._start_ctx("harness-first-001")
+        start_ctx_a = self._start_ctx("harness-first-001", agent_type="agent-first")
         invocation.handle_subagent_start(start_ctx_a)
 
         # Second SubagentStart pops second dispatch.
-        start_ctx_b = self._start_ctx("harness-second-002")
+        start_ctx_b = self._start_ctx("harness-second-002", agent_type="agent-first")
         invocation.handle_subagent_start(start_ctx_b)
 
         mapping_a = runstate.get_agent_mapping(
@@ -1309,19 +1131,22 @@ class TestEndToEndPreToolUseToSubagentStart(unittest.TestCase):
         self.assertEqual("agent-first#1", mapping_a["agent_instance_id"],
                          "First SubagentStart must receive first dispatch (FIFO)")
         self.assertIsNotNone(mapping_b)
-        self.assertEqual("agent-second#2", mapping_b["agent_instance_id"],
+        self.assertEqual("agent-first#2", mapping_b["agent_instance_id"],
                          "Second SubagentStart must receive second dispatch (FIFO)")
 
-    def test_subagent_start_without_prior_pre_tool_use_falls_back(self):
-        """SubagentStart with no prior PreToolUse for that session falls back to 'unknown-agent'."""
-        start_ctx = self._start_ctx("harness-nopretool-001", session_id="no-prior-session")
+    def test_subagent_start_without_prior_pre_tool_use_gets_unique_fallback(self):
+        """SubagentStart with no prior PreToolUse for that session gets a unique
+        fallback id carrying the agent type as prefix, never 'unknown-agent'."""
+        start_ctx = self._start_ctx("harness-nopretool-001", session_id="no-prior-session",
+                                    agent_type="planner-tdd-soft")
         invocation.handle_subagent_start(start_ctx)
 
         mapping = runstate.get_agent_mapping(
             self.paths, "unknown-run", "harness-nopretool-001"
         )
         self.assertIsNotNone(mapping)
-        self.assertEqual("unknown-agent", mapping["agent_instance_id"])
+        self.assertRegex(mapping["agent_instance_id"],
+                         r"^planner-tdd-soft_\d{8}T\d{6}Z-[0-9a-f]{4}$")
 
     def test_ctx_run_id_updated_from_dispatch_enabling_correct_path_routing(self):
         """When the pending dispatch carries a run_id and ctx.run_id is None,
@@ -1334,7 +1159,7 @@ class TestEndToEndPreToolUseToSubagentStart(unittest.TestCase):
         pre_ctx = self._pre_tool_ctx(prompt)
         tools.handle_pre_tool_use(pre_ctx)
 
-        start_ctx = self._start_ctx("harness-runid-001")
+        start_ctx = self._start_ctx("harness-runid-001", agent_type="planner-tdd-soft")
         invocation.handle_subagent_start(start_ctx)
 
         # After the handler runs, ctx.run_id should be set to the extracted run_id.

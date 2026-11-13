@@ -1,0 +1,13 @@
+2026-11-13T00:07:28.631Z adapter_version: manifest unreadable at C:\Users\tgurt\AppData\Local\Temp\tmp4x70gipk\.mosaic\manifest.yaml
+Traceback (most recent call last):
+  File "C:\AI\MOSAIC\MOSAIC\Catalog\Hooks\mosaic-logger\vscode-ghcp\mosaic_logger_manifest_version.py", line 88, in read_hook_version
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+         ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\tgurt\\AppData\\Local\\Temp\\tmp4x70gipk\\.mosaic\\manifest.yaml'
+2026-11-13T00:07:32.779Z adapter_version: manifest unreadable at C:\Users\tgurt\AppData\Local\Temp\tmpjzasxthh\.mosaic\manifest.yaml
+Traceback (most recent call last):
+  File "C:\AI\MOSAIC\MOSAIC\Catalog\Hooks\mosaic-logger\vscode-ghcp\mosaic_logger_manifest_version.py", line 88, in read_hook_version
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+         ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\tgurt\\AppData\\Local\\Temp\\tmpjzasxthh\\.mosaic\\manifest.yaml'
+2026-11-13T00:07:32.795Z diagnostic variable_unset: COPILOT_OTEL_FILE_EXPORTER_PATH is not set; no usage is ingested
