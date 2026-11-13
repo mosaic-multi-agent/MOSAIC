@@ -34,8 +34,9 @@ func TestRuns_AllRunsSummaryLineIsTextAboveTheRunRows(t *testing.T) {
 
 	view := runsView(report, tableW, tallH)
 
-	assertContains(t, view, "All runs", screens.FormatTotalsLine(domain.CurrencyUSD, report.AllRuns))
-	summary := lineNumber(t, view, screens.FormatTotalsLine(domain.CurrencyUSD, report.AllRuns))
+	assertContains(t, view, "All runs", "5 runs (1 in progress)", "total "+screens.FormatTotal(domain.CurrencyUSD, report.AllRuns.Money))
+	assertNotContains(t, view, screens.FormatTotalsLine(domain.CurrencyUSD, report.AllRuns))
+	summary := lineNumber(t, view, "All runs")
 	for _, id := range []string{runIDOne, runIDTwo, runIDThree, runIDFour, runIDLong} {
 		if lineNumber(t, view, id) < summary {
 			t.Errorf("the all-runs line must come before the row of %s\n%s", id, view)

@@ -22,6 +22,9 @@ type Deps struct {
 	Ingester    domain.UsageIngester    // nil = ingest-otel off
 	IngestProbe domain.IngestStateProbe // nil = pending usage is never reported
 	Alarms      domain.AlarmSource      // nil = adapter alarms are not read
+	Transcripts domain.TranscriptSource // nil = transcripts are not read (no transcript findings)
+
+	FindingsFiles domain.FindingsFileWriter // nil = ExportFindings returns an error
 }
 
 // Service is the single use-case layer both frontends drive.

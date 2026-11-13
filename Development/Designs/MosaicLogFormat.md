@@ -125,6 +125,7 @@ No `duration_ms` field — see §3.5.
 
 **Invocation identity rules** (native mode):
 - An invocation's `agent_instance_id` must belong to that invocation's own dispatch. Where the harness reports the started agent's type, an instance id is taken only from a dispatch of that type; correlation by arrival order alone is not enough when dispatches are parallel or starts arrive late.
+- A dispatch is captured before its agent starts. A harness does not wait for an async hook, so the dispatch capture runs in a synchronous hook. In Claude Code an async `PreToolUse` let `SubagentStart` reach the queue first. That start fell back to a unique id, and the late entry was then consumed by the next start of the same type. On Claude Code this means a synchronous `PreToolUse` registration limited to the dispatch tools, which does only the capture. The catch-all `PreToolUse` registration stays async, because in orchestrator scope it re-reads the transcript on every tool call.
 - One harness agent is one invocation. A start event for a harness agent the adapter has already mapped (a resume, or a harness re-firing the start of an agent that already finished) continues that invocation: same `agent_instance_id`, same folder and stream. It neither consumes a pending dispatch nor writes usage records a second time.
 - When no instance id can be resolved, the adapter uses the unique fallback described for `agent_instance_id` above. Unresolved invocations never share one folder.
 

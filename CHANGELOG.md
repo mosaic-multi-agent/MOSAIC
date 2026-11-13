@@ -9,6 +9,14 @@
 - When an agent's lifecycle fires again (for example after killing its orphaned process), the existing invocation continues and its usage is no longer logged twice
 - Logs that were already written are not repaired
 
+## Tools
+
+### LogAnalyzer v1.3.0
+#### Changes
+- The runs list opens with a head of three lines: the number of runs, their period, total cost and tokens, and per run the average, median and (from 10 priced runs) p90 cost, and the average and median duration. Runs still in progress and runs without a price or a timeline are left out of the statistics concerned, and a note shows how many runs they cover
+- New `f` overlay on the runs list and inside a run: it lists the kinds of findings with severity, count, number of runs and a plain-language explanation of what each does to the figures. `e` in the overlay exports the findings it shows to a JSON file
+- New findings report log-integrity problems: an instance with different agent types, an invocation that cannot be tied to a dispatch, overlapping invocation starts, a dispatch without invocation, a gap in a captured transcript, and an instance prompt that differs from its dispatch. They appear as additional entries in `report` output
+
 # 0.7.5 (2026-11-11)
 
 > **To upgrade:**

@@ -66,10 +66,15 @@ const (
 )
 
 // ToolCallStartFields holds the fields from a tool_call_start event. The
-// tool_input payload is deliberately not decoded.
+// tool_input payload is not decoded, except the dispatch prompt's instance id.
 type ToolCallStartFields struct {
 	CallID   string // "" when absent
 	ToolName string // "" when absent
+	// DispatchedInstance is the agent instance id named by the dispatch prompt:
+	// set only when IsSubagentLaunchTool(ToolName), tool_input is a JSON object
+	// whose "prompt" member is a string, and ExtractInstanceID finds an id in it.
+	// "" in every other case.
+	DispatchedInstance AgentInstanceID
 }
 
 // ToolCallEndFields holds the fields from a tool_call_end event. The

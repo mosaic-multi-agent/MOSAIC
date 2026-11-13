@@ -20,7 +20,7 @@ const runsTitle = "Log Analyzer — Runs"
 // runsKeys are the short help keys of the runs list.
 var runsKeys = []tuicommon.HelpEntry{
 	{Key: "↑/↓", Desc: "navigate"}, {Key: "enter", Desc: "open"}, {Key: KeySort, Desc: "sort"},
-	{Key: KeyMarkRun, Desc: "mark run"}, {Key: KeyCompare, Desc: "compare marked"},
+	{Key: KeyMarkRun, Desc: "mark run"}, {Key: KeyCompare, Desc: "compare marked"}, findingsKeyEntry,
 	{Key: KeyAcrossRuns, Desc: "across runs"}, {Key: KeyExportRun, Desc: "export run"}, {Key: KeyExportAll, Desc: "export all"},
 	{Key: "s", Desc: "source"}, {Key: "p", Desc: "pricing"}, quitKeyEntry,
 }
@@ -45,6 +45,7 @@ func runsOverlayGroups() []chrome.HelpGroup {
 			{Key: "enter", Desc: "open the selected run"},
 			{Key: "esc", Desc: "quit"},
 			{Key: "q", Desc: "same as esc"},
+			findingsHelpEntry,
 			{Key: KeyHelp, Desc: "show or hide this help"},
 			{Key: "ctrl+c", Desc: "quit"},
 		}},
@@ -97,6 +98,7 @@ type RunsScreen struct {
 	marks  runMarks
 	// version is shown in the title when non-empty.
 	version string
+	findings findingsOverlay
 	pageChrome
 }
 
@@ -145,7 +147,7 @@ func (s *RunsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s, nil
 	}
 	k := key.String()
-	if s.help.handle(k) {
+	if s.handleOverlays(k) {
 		return s, nil
 	}
 	n := len(s.report.Runs)
@@ -242,6 +244,9 @@ func (s *RunsScreen) View(width, height int) string {
 	n := len(s.report.Runs)
 
 	head := []string{st.Subtitle.Render("All runs") + st.Body.Render("  "+FormatTotalsLine(st.Currency, s.report.AllRuns))}
+	if n > 0 {
+		head = runsHeadLines(st, s.report, width)
+	}
 	tail := s.tailLines()
 
 	var body []string
@@ -266,7 +271,21 @@ func (s *RunsScreen) View(width, height int) string {
 	}
 
 	page := Page{Title: s.title(), Badges: s.badges(), Keys: runsKeys, Help: true, Hint: FormatScrollHint(w, n)}
+	if s.findings.open {
+		page.Keys, page.Hint = findingsOverlayKeys, ""
+		body = s.findings.lines(s.FindingsScope(), true, width, PageBodyHeight(height), st)
+	}
 	return s.render(page, withLegend(runsOverlayGroups(), runsLegend()...), body, width, height, st)
+}
+
+// handleOverlays gives a key to the open overlay first: the findings overlay
+// opens only while the help overlay is closed, and the help key does nothing
+// inside the findings overlay.
+func (s *RunsScreen) handleOverlays(key string) bool {
+	if !s.help.open && s.findings.handle(key) {
+		return true
+	}
+	return s.help.handle(key)
 }
 
 // badges are the page header badges: the count of named runs, the findings and

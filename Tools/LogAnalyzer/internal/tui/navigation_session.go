@@ -31,6 +31,7 @@ func (m Model) openSessionIfRequested() (Model, bool) {
 	opener := m.runView
 	session := screens.NewSessionScreen(run, actor, opener.ID(), m.width, m.height, m.screenStyles())
 	session.SetRunQuality(screens.RunQualityOf(m.report.Quality, run.Run))
+	session.SetRunFindings(screens.RunFindingsOf(m.report.Quality, run.Run))
 	m.sessionOpener = opener
 	m.runView = session
 	m.screen = screenSession

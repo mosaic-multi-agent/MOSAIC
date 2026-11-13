@@ -16,15 +16,17 @@ import (
 	"mosaic-log-analyzer/internal/app"
 	"mosaic-log-analyzer/internal/cli"
 	"mosaic-log-analyzer/internal/digest"
+	"mosaic-log-analyzer/internal/findingsfile"
 	"mosaic-log-analyzer/internal/logread"
 	"mosaic-log-analyzer/internal/logscan"
 	"mosaic-log-analyzer/internal/otelusage"
 	"mosaic-log-analyzer/internal/pricing"
 	"mosaic-log-analyzer/internal/settings"
+	"mosaic-log-analyzer/internal/transcript"
 	"mosaic-log-analyzer/internal/tui"
 )
 
-const ToolVersion = "1.2.2"
+const ToolVersion = "1.3.0"
 
 // valueFlagNames are the flags that consume a following token in space-separated
 // form (--flag value). Boolean flags like --tui are NOT in this set.
@@ -159,17 +161,19 @@ func main() {
 		tuiInteract, tuiQuestions := tui.NewInteraction()
 
 		svc := app.New(app.Deps{
-			Source:      scanner,
-			Reader:      reader,
-			Pricing:     pricingStore,
-			Settings:    settingsStore,
-			Digests:     digestStore,
-			ToolVersion: ToolVersion,
-			Clock:       clock,
-			Interaction: tuiInteract,
-			WorkDir:     workDir,
-			IngestProbe: usageIngest,
-			Alarms:      scanner,
+			Source:        scanner,
+			Reader:        reader,
+			Pricing:       pricingStore,
+			Settings:      settingsStore,
+			Digests:       digestStore,
+			ToolVersion:   ToolVersion,
+			Clock:         clock,
+			Interaction:   tuiInteract,
+			WorkDir:       workDir,
+			IngestProbe:   usageIngest,
+			Alarms:        scanner,
+			Transcripts:   transcript.NewReader(),
+			FindingsFiles: findingsfile.NewWriter(),
 		})
 
 		os.Exit(tui.Run(tui.Options{
@@ -187,18 +191,20 @@ func main() {
 	interact := cli.NewInteraction(os.Stdout, answers)
 
 	svc := app.New(app.Deps{
-		Source:      scanner,
-		Reader:      reader,
-		Pricing:     pricingStore,
-		Settings:    settingsStore,
-		Digests:     digestStore,
-		ToolVersion: ToolVersion,
-		Clock:       clock,
-		Interaction: interact,
-		WorkDir:     workDir,
-		Ingester:    usageIngest,
-		IngestProbe: usageIngest,
-		Alarms:      scanner,
+		Source:        scanner,
+		Reader:        reader,
+		Pricing:       pricingStore,
+		Settings:      settingsStore,
+		Digests:       digestStore,
+		ToolVersion:   ToolVersion,
+		Clock:         clock,
+		Interaction:   interact,
+		WorkDir:       workDir,
+		Ingester:      usageIngest,
+		IngestProbe:   usageIngest,
+		Alarms:        scanner,
+		Transcripts:   transcript.NewReader(),
+		FindingsFiles: findingsfile.NewWriter(),
 	})
 
 	os.Exit(cli.Execute(cli.Options{

@@ -44,6 +44,7 @@ func Price(agg domain.Aggregate, table domain.PricingTable, settings domain.Anal
 	for _, run := range agg.Runs {
 		rr := priceRunAggregate(run, table, settings)
 		findings = append(findings, compactionFindings(run.Run, rr.Context, run.Activity.Compactions)...)
+		findings = append(findings, RunModelIntegrityFindings(run)...)
 		// Compaction matching settles the marks in place; the actor figures read them after.
 		rr.ActorSessions = buildActorSessions(run, rr)
 		runReports = append(runReports, rr)
@@ -73,6 +74,7 @@ func Price(agg domain.Aggregate, table domain.PricingTable, settings domain.Anal
 	if agg.Unattributable != nil {
 		rr := priceRunAggregate(*agg.Unattributable, table, settings)
 		unattribReport = &rr
+		findings = append(findings, RunModelIntegrityFindings(*agg.Unattributable)...)
 		for _, m := range rr.UnpricedModels {
 			allUnpricedModels[m] = true
 		}

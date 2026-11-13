@@ -49,7 +49,7 @@ func (s *ToolsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	}
 	k := key.String()
 	s.status = ""
-	if s.help.handle(k) {
+	if s.handleOverlays(k) {
 		return s, nil
 	}
 	switch k {
@@ -112,7 +112,7 @@ func (s *ToolsScreen) body() []string {
 }
 
 // toolsKeys are the short help keys of the view.
-var toolsKeys = []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "scroll"}, {Key: KeySort, Desc: "sort"}, {Key: KeyMarkUserTool, Desc: "mark"}, exportKeyEntry, {Key: "esc", Desc: "back"}}
+var toolsKeys = []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "scroll"}, {Key: KeySort, Desc: "sort"}, {Key: KeyMarkUserTool, Desc: "mark"}, findingsKeyEntry, exportKeyEntry, {Key: "esc", Desc: "back"}}
 
 // Help implements Screen.
 func (s *ToolsScreen) Help() string {

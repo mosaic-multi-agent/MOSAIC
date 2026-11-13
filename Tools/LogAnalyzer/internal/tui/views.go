@@ -49,6 +49,9 @@ func (m Model) openRunView(runID string, id screens.ScreenID) Model {
 	if q, ok := m.runView.(interface{ SetRunQuality(screens.RunQuality) }); ok {
 		q.SetRunQuality(screens.RunQualityOf(m.report.Quality, run.Run))
 	}
+	if f, ok := m.runView.(interface{ SetRunFindings([]domain.Finding) }); ok {
+		f.SetRunFindings(screens.RunFindingsOf(m.report.Quality, run.Run))
+	}
 	if r, ok := m.runView.(interface{ SetUnpricedReasons([]domain.UnpricedReason) }); ok {
 		r.SetUnpricedReasons(m.report.UnpricedReasons)
 	}

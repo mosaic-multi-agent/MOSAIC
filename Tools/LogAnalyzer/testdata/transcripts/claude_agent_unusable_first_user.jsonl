@@ -1,0 +1,3 @@
+{"type":"user","uuid":"u-1","message":{"role":"user"}}
+{"type":"user","uuid":"u-2","message":{"role":"user","content":"a later prompt that must not be used"}}
+{"type":"assistant","uuid":"a-1","message":{"id":"msg_Y","role":"assistant","content":[]}}

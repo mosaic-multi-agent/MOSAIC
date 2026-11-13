@@ -53,7 +53,7 @@ func (s *AgentTypesScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s, nil
 	}
 	k := key.String()
-	if s.help.handle(k) {
+	if s.handleOverlays(k) {
 		return s, nil
 	}
 	switch k {
@@ -133,10 +133,10 @@ func (s *AgentTypesScreen) View(width, height int) string {
 // helpKeys are the short help keys of the list currently shown.
 func (s *AgentTypesScreen) helpKeys() []tuicommon.HelpEntry {
 	if s.drilled {
-		return []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: "enter", Desc: "session"}, {Key: KeySort, Desc: "sort"}, exportKeyEntry, {Key: "esc", Desc: "types"}}
+		return []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: "enter", Desc: "session"}, {Key: KeySort, Desc: "sort"}, findingsKeyEntry, exportKeyEntry, {Key: "esc", Desc: "types"}}
 	}
 	return []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: "enter", Desc: "dispatches"},
-		{Key: KeySort, Desc: "sort"}, exportKeyEntry, {Key: "esc", Desc: "back"}}
+		{Key: KeySort, Desc: "sort"}, findingsKeyEntry, exportKeyEntry, {Key: "esc", Desc: "back"}}
 }
 
 // screenKeys are the overlay entries of the keys this view has of its own.

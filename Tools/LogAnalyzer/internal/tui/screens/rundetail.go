@@ -11,7 +11,7 @@ import (
 )
 
 // dispatchKeys are the short help keys of the Dispatches view.
-var dispatchKeys = []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: "enter", Desc: "session"}, {Key: KeySort, Desc: "sort"}, exportKeyEntry, {Key: "esc", Desc: "back"}}
+var dispatchKeys = []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: "enter", Desc: "session"}, {Key: KeySort, Desc: "sort"}, findingsKeyEntry, exportKeyEntry, {Key: "esc", Desc: "back"}}
 
 // RunDetailScreen is the Dispatches view of one run: a table with the orchestrator
 // row first and one row per dispatch with its cost, share of the run, status,
@@ -62,7 +62,7 @@ func (s *RunDetailScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s, nil
 	}
 	k := key.String()
-	if s.help.handle(k) {
+	if s.handleOverlays(k) {
 		return s, nil
 	}
 	entries := dispatchEntries(s.run.ByAgentType)
