@@ -172,6 +172,11 @@ var rules = []rule{
 		},
 	},
 	{
+		dir:          "internal/deploy",
+		desc:         "deploy is format-blind: it must not import any agent-format package (internal/agentformat or its sub-packages, including formatid)",
+		forbidPrefix: []string{modulePrefix + "internal/agentformat"},
+	},
+	{
 		dir:  "internal/app/stackconfig",
 		desc: "the stack persistence operations are part of the use-case layer: they must not import any frontend package (tui or cli)",
 		forbidPrefix: []string{
@@ -298,6 +303,15 @@ var rules = []rule{
 		forbidExact:  translatorForbidExact,
 	},
 	{
+		dir: "internal/agentformat/testjson",
+		desc: "the translator layer (agentformat/testjson) must be a pure function: no I/O, clock, or randomness; " +
+			"and must depend only downward — it must never import harness, app, transform, cli, tui, or " +
+			"infrastructure packages. Permitted module dependencies: internal/domain, internal/agentfields, " +
+			"internal/agentformat, mosaic-common/docformat, mosaic-common/mosaic",
+		forbidPrefix: append(translatorForbidPrefix, translatorForbidModulePrefix...),
+		forbidExact:  translatorForbidExact,
+	},
+	{
 		dir:                    "internal/agentformat/formatid",
 		desc:                   "formatid is a leaf vocabulary package and must not import any package from this module",
 		forbidAllModuleImports: true,
@@ -392,6 +406,12 @@ func runChecks(moduleRoot string) (violations []string, errs []string) {
 	// Apply per-package call-boundary rules.
 	for _, r := range callBoundaryRules {
 		vs, es := checkCallBoundary(moduleRoot, r)
+		violations = append(violations, vs...)
+		errs = append(errs, es...)
+	}
+
+	for _, r := range funnelInventoryRules {
+		vs, es := checkFunnelInventory(moduleRoot, r)
 		violations = append(violations, vs...)
 		errs = append(errs, es...)
 	}

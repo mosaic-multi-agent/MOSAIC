@@ -3,6 +3,7 @@ package descriptor
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/goccy/go-yaml"
 	"mosaic-deploy/internal/agentformat/formatid"
@@ -181,6 +182,16 @@ func Parse(src []byte, origin string) (*domain.HarnessDescriptor, error) {
 	return d, nil
 }
 
+// quotedFormatIDs lists the format vocabulary as double-quoted IDs joined by ", ".
+func quotedFormatIDs() string {
+	all := formatid.All()
+	quoted := make([]string, len(all))
+	for i, id := range all {
+		quoted[i] = fmt.Sprintf("%q", string(id))
+	}
+	return strings.Join(quoted, ", ")
+}
+
 // mapWireToDomain converts the YAML wire representation to the domain type.
 // Returns mapping-phase validation errors (mutual-exclusivity violations and
 // unrecognized role keys in frontmatter add entries). These are merged with
@@ -193,7 +204,7 @@ func mapWireToDomain(w *wireDescriptor) (*domain.HarnessDescriptor, []Validation
 	if fmtErr != nil {
 		fmErrs = append(fmErrs, ValidationError{
 			Field:   "agent_format_id",
-			Message: fmt.Sprintf("unknown agent format id %q: must be one of: markdown, codex-toml", w.AgentFormatID),
+			Message: fmt.Sprintf("unknown agent format id %q: must be one of: %s", w.AgentFormatID, quotedFormatIDs()),
 		})
 		parsedFmtID = formatid.Markdown // use default to allow other validations to proceed
 	}

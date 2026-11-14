@@ -99,7 +99,7 @@ func TestUpdateWorkflows_Codex_CustomWorkflowInDeployedOrchestrator_OfferedAndKe
 	// Arrange
 	ws, harnessID := codexKeptUWDeploy(t)
 	codexKeptUWPlant(t, ws, wpsOrch, wukBlockX)
-	checklist := newWukChecklist(wpsFlowParity)
+	checklist := newWukChecklist(wpsFlowParity, wukIDX)
 	svc, _ := codexKeptUWService(t, func(d *app.Deps) { d.Interaction = checklist })
 
 	// Act

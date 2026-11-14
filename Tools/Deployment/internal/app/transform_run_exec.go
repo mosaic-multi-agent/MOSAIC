@@ -54,9 +54,10 @@ func (r *transformRun) execute(ctx context.Context) (deploy.ExecResult, error) {
 		Content: func(item domain.PlanItem) ([]byte, error) {
 			return content[item.TargetPath], nil
 		},
-		VersionStamps: stamps,
-		Hooks:         hooks,
-		TodoItems:     r.s.deps.Todo.Items,
+		VersionStamps:     stamps,
+		AgentOwnedContent: agentOwnedContentFor(r.tgt.Descriptor()),
+		Hooks:             hooks,
+		TodoItems:         r.s.deps.Todo.Items,
 		TodoMeta: todo.Meta{
 			Harness: r.tgt.Ref().DisplayName, WorkspacePath: r.workspace, DeploymentRoot: r.workspace,
 			GeneratedAt: r.s.now(), Mode: domain.ModeTransformHarness,

@@ -346,14 +346,15 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 
 	now := s.now()
 	execReq := deploy.ExecRequest{
-		Plan:          p,
-		MosaicRoot:    s.deps.MosaicRoot,
-		Content:       deployedRule.keepingUnchangedMigrations(p, contentFn),
-		Conflicts:     conflicts,
-		VersionStamps: s.withProvenance(buildVersionStamps(append(probeSet.Agents, infraAgents...), probeSet.Skills, probeSet.Hooks, p.Items, module.Descriptor(), toolMappingsVersion), p.Items),
-		ManifestMeta:  s.fullRunManifestMeta(),
-		Hooks:         buildHookPlans(module, probeSet.Hooks, scope),
-		TodoItems:     s.deps.Todo.Items,
+		Plan:              p,
+		MosaicRoot:        s.deps.MosaicRoot,
+		Content:           deployedRule.keepingUnchangedMigrations(p, contentFn),
+		AgentOwnedContent: agentOwnedContentFor(module.Descriptor()),
+		Conflicts:         conflicts,
+		VersionStamps:     s.withProvenance(buildVersionStamps(append(probeSet.Agents, infraAgents...), probeSet.Skills, probeSet.Hooks, p.Items, module.Descriptor(), toolMappingsVersion), p.Items),
+		ManifestMeta:      s.fullRunManifestMeta(),
+		Hooks:             buildHookPlans(module, probeSet.Hooks, scope),
+		TodoItems:         s.deps.Todo.Items,
 		TodoMeta: todo.Meta{
 			Harness: harnessRef.DisplayName, WorkspacePath: workspace, DeploymentRoot: workspace,
 			GeneratedAt: now, Mode: domain.ModeDeployWorkspace,

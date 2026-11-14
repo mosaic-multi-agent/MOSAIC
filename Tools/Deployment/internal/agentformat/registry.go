@@ -198,6 +198,10 @@ var ErrMalformedDeployed = errors.New("deployed file is malformed")
 var (
 	mu          sync.RWMutex
 	translators = map[formatid.ID]Translator{}
+
+	// testOnlyTranslators holds formats registered through RegisterTestOnly. It is kept
+	// apart from translators so Lookup and RegisteredIDs only ever see production formats.
+	testOnlyTranslators = map[formatid.ID]Translator{}
 )
 
 // Register makes t resolvable under id. It is called from an init() in the package
@@ -231,9 +235,38 @@ func Lookup(id formatid.ID) (Translator, error) {
 func LookupString(id string) (Translator, error) {
 	fid, err := formatid.Parse(id)
 	if err != nil {
+		mu.RLock()
+		t, ok := testOnlyTranslators[formatid.ID(id)]
+		mu.RUnlock()
+		if ok {
+			return t, nil
+		}
 		return nil, err
 	}
 	return Lookup(fid)
+}
+
+// RegisterTestOnly makes t resolvable under id for the current process through
+// LookupString, without adding id to the production registry: RegisteredIDs() and
+// formatid.All() never include it. It exists so test binaries can register a
+// test-only format; production code never calls it.
+//
+// It panics when id is a member of formatid.All() or is already registered through
+// Register. A second call with an id already registered through RegisterTestOnly is a
+// no-op (the first translator stays), so independent tests may each call it.
+func RegisterTestOnly(id formatid.ID, t Translator) {
+	mu.Lock()
+	defer mu.Unlock()
+	if formatid.IsKnown(id) {
+		panic(fmt.Sprintf("agentformat: %q is a production format id and cannot be registered test-only", id))
+	}
+	if _, exists := translators[id]; exists {
+		panic(fmt.Sprintf("agentformat: translator already registered for %q", id))
+	}
+	if _, exists := testOnlyTranslators[id]; exists {
+		return
+	}
+	testOnlyTranslators[id] = t
 }
 
 // RegisteredIDs returns every registered id, sorted. Used by the per-format

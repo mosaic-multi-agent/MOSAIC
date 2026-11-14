@@ -14,11 +14,14 @@ import (
 )
 
 // sourceStrippedFields lists the stripped fields of a decoded source frontmatter and the keys
-// to remove from the generic source because of them. It reports nothing for a Markdown
-// source, whose frontmatter travels as it is.
+// to remove from the generic source because of them. It reports nothing for a source format
+// without a closed vocabulary, whose frontmatter travels as it is.
 func sourceStrippedFields(in RebuildInput, role domain.AgentRole, fm *docformat.Frontmatter) ([]StrippedField, []string) {
 	srcDesc := in.SourceModule.Descriptor()
-	if isMarkdownAgentFormat(srcDesc) {
+	if srcDesc == nil {
+		return nil, nil
+	}
+	if traits, err := agentformat.TraitsOf(srcDesc.AgentFormatID); err != nil || !traits.ClosedVocabulary {
 		return nil, nil
 	}
 	var plan domain.FrontmatterPlan

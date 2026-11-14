@@ -37,11 +37,15 @@ package app
 //     the prior deployed bytes it needs for an update.
 //     deployedBytes.canonicalReader wraps it for read-only consumers (annotateToolsChanges);
 //     their decode reports are surfaced by the probe of the same files (logProbeDecodeNotices).
-//   - deployed_bytes_migration.go: captures the raw bytes of a recorded legacy file; the
-//     funnelReader decodes them through decodeDeployedBytes.
+//   - deploy.go: deployedBytes.canonicalReader.
+//   - deployagents_service.go: deployedBytes.canonicalReader.
+//   - update.go: deployedBytes.canonicalReader.
+//   - workflow_update.go: deployedBytes.canonicalReader.
 //   - deployedstate.go (probeDeployedArtifact): readDeployedArtifact.
 //   - deployed_agent_index.go: decodeDeployedBytes on files matching the harness-declared
 //     agent extension.
+//   - deployed_owned_written.go: decodeDeployedBytes on the bytes an agent write puts on disk, so
+//     the manifest record is computed from the same decoded form the probe sees.
 //   - deployed_decode_problem.go: readDeployedArtifact.
 //   - deployed_parse_check.go: readDeployedArtifact.
 //   - orchestrator_parse_check.go (unreadableAgentProblem): readDeployedArtifact.
@@ -53,8 +57,12 @@ package app
 //   - transform_plan_discovery.go: readDeployedArtifact.
 //   - transform_run_build.go: readDeployedArtifact on the destination, so the encoder
 //     receives the destination's prior bytes.
-//   - rebuild.go, rebuild_destination.go, rebuild_source.go: decodeDeployedBytes on the
-//     rebuild source and the destination.
+//   - rebuild.go: decodeDeployedBytes on the rebuild source and the destination.
+//   - rebuild_destination.go: decodeDeployedBytes on the rebuild destination.
+//   - rebuild_source.go: decodeDeployedBytes on the rebuild source.
+//
+// deployed_bytes_migration.go is not a funnel caller: it only captures the raw bytes of a
+// recorded legacy file, which the funnelReader decodes through decodeDeployedBytes.
 //
 // Harness-only refresh (harness_only_refresh.go) receives canonical bytes from the funnel
 // and threads DeployedRaw as the prior-bytes channel for the encode step, so user-owned
@@ -77,7 +85,10 @@ package app
 // Paths come from the descriptor: the agents and skills locations are resolved
 // independently through module.TargetPath, so no site derives one from the other.
 //
-// Both categories are enforced by the read-boundary guard rule in tools/importcheck/main.go.
+// The FUNNEL-ROUTED READS list is enforced by the funnel-inventory rule in
+// tools/importcheck/funnel_inventory.go (a non-test file referencing a funnel identifier
+// must be listed, and a listed file must reference one); raw docformat calls are enforced by
+// the read-boundary rule in tools/importcheck/main.go. Both run in go test ./....
 
 import (
 	"fmt"

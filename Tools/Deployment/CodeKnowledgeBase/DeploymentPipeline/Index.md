@@ -87,15 +87,26 @@ to make anything happen on disk.
 
    **Edit detection (`plan/build_edit.go`).** Each manifest entry written by this release
    carries an owned-content record (`domain.OwnedContent`: a hash, plus per-region hashes for
-   agents). For an agent the owned content is the body outside the project and custom regions;
+   agents). For an agent the owned content is the body outside the project and custom regions,
+   computed from the canonical (decoded) form on both the write side (`agentOwnedContentFor`)
+   and the probe side (`attachOwnedContent`), so the agent's on-disk format does not matter;
    for a skill file or hook file it is the whole file. The frontmatter and the project and
-   custom regions belong to the user and are not part of the record. `markOwnedContentEdit`
-   compares the recorded record with the one recomputed from the disk (`deployed.Owned`); a
-   difference adds the reason "Deploy-owned content was edited locally" (naming the differing
-   regions where known), sets `PlanItem.BackupBeforeWrite` and makes the item an update. The
-   executor backs the file up under `.mosaic/backups/` before overwriting. An entry with no
-   record (written before this release) or a disk record that cannot be computed gets no check
-   until its next write.
+   custom regions belong to the user, for every harness, and are not part of the record.
+   `markOwnedContentEdit` compares the recorded record with the one recomputed from the disk
+   (`deployed.Owned`); a difference adds the reason "Deploy-owned content was edited locally"
+   (naming the differing regions where known), sets `PlanItem.BackupBeforeWrite` and makes the
+   item an update. The executor backs the file up under `.mosaic/backups/` before overwriting.
+   An entry with no record (written before this release) or a disk record that cannot be
+   computed gets no check until its next write. `ContentHash` is separate and stays over the
+   exact written bytes.
+
+   The record comparison needs a record. Where none vouches for the file (no manifest, an
+   unusable manifest, no entry for the path), the file on disk is a conflict (see Conflict
+   above) and the frontmatter keys that differ from the incoming file are reported
+   in `RunSummary.OwnedKeyDifferences` as information only; a file that cannot be parsed or
+   decoded is a conflict with a parse reason. Both mechanisms exist because each covers what
+   the other cannot. The eight hand-edit scenarios and their tests are in
+   [Agent Format](../AgentFormat/Index.md), "Owned content and hand edits".
 4. Gaps are also surfaced during planning, before any transform runs: an agent with no
    resolved model produces `GapNoModel`; a generic tool the harness cannot map produces
    `GapUnmappedTool`; a hook registration step whose target file already exists in the
@@ -350,9 +361,10 @@ snapshot to its own harness (`forHarness`), so a run sees and rewrites only its 
 - A file found on disk that cannot be confirmed as tool-written (no manifest, manifest
   unusable, no record for its target path, or unparseable) is always classified as a conflict,
   never auto-created or auto-overwritten.
-- A local edit of Deploy-owned content (agent body outside project and custom regions; whole
-  skill and hook files) is never lost silently: it becomes an update with a backup. Project and
-  custom regions and the frontmatter are the user's and never count as edits.
+- A local edit of Deploy-owned content (agent body outside project and custom regions, judged
+  on the decoded form; whole skill and hook files) is never lost silently: when a record vouches
+  for the file it becomes an update with a backup, otherwise the file is a conflict. Project and
+  custom regions and the frontmatter are the user's, on every harness, and never count as edits.
 - The manifest is reconciled with the disk before every action, and the entries dropped by
   reconciliation or by the schema-1 migration reach the plan and the preview.
 - Content hashes are never normalised — byte-for-byte comparison only.

@@ -1085,6 +1085,12 @@ func (s *service) buildContent(
 				deployedCanonical = read.Canonical
 				deployedRaw = read.Raw
 			}
+			if op == agentformat.OpCreate {
+				// The plan creates the agent, yet a file of another agent already sits at its
+				// path. That file is not this agent's prior artifact, so the translator
+				// receives no raw prior bytes; the operation stays a create.
+				deployedRaw = nil
+			}
 			decodeReport = read.Report
 			// Decode notices (e.g. missing developer_instructions) will be forwarded to the
 			// todo collector after Apply returns via mergeDecodeReport below.

@@ -28,6 +28,12 @@ func init() {
 // frontmatter and a Codex-compatible TOML file.
 type codexTranslator struct{}
 
+// Traits declares that Codex stores its provenance stamps in TOML comments, outside
+// the data model, and holds a closed vocabulary of native keys.
+func (codexTranslator) Traits() agentformat.Traits {
+	return agentformat.Traits{StampsOutsideData: true, ClosedVocabulary: true}
+}
+
 // Encode converts a canonical MOSAIC Markdown document to Codex TOML bytes.
 //
 // The three-row classification rule applied to every canonical frontmatter key:

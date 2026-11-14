@@ -78,3 +78,13 @@ func ownedContentOfWritten(kind domain.ArtifactKind, content []byte) *domain.Own
 	}
 	return &owned
 }
+
+// ownedOfEntry returns the record stored in a manifest entry. Agent records come from agentOwned
+// when the run supplies it (nil result stored verbatim); every other case, including skills and
+// hooks, hashes the whole written file.
+func ownedOfEntry(item domain.PlanItem, content []byte, agentOwned func(domain.PlanItem, []byte) *domain.OwnedContent) *domain.OwnedContent {
+	if agentOwned != nil && item.Ref.Kind == domain.ArtifactAgent && len(content) > 0 {
+		return agentOwned(item, content)
+	}
+	return ownedContentOfWritten(item.Ref.Kind, content)
+}

@@ -114,7 +114,8 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	// Probe the orchestrator-script early: its deployed workflows join the checklist.
 	script := s.probeWorkflowScript(module, workspace, scope, snap)
 	deployedCustom, err := readKeptWorkflows(workspace, module.Descriptor(), s.deps.Catalog, []deployedOrchestratorFile{
-		{TargetPath: orchTargetPath, Present: orchState.Present},
+		// An unreadable orchestrator is a conflict (ParseFailed), so its workflows are not read.
+		{TargetPath: orchTargetPath, Present: orchState.Present && !orchState.ParseFailed},
 		{TargetPath: script.targetPath, Present: script.state.Present},
 	})
 	if err != nil {
@@ -376,13 +377,14 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 
 	now := s.now()
 	execReq := deploy.ExecRequest{
-		Plan:          p,
-		MosaicRoot:    s.deps.MosaicRoot,
-		Content:       deployedRule.keepingUnchangedMigrations(p, contentFn),
-		Conflicts:     conflicts,
-		VersionStamps: versionStamps,
-		Hooks:         nil, // no hook artifacts written in this mode
-		TodoItems:     s.deps.Todo.Items,
+		Plan:              p,
+		MosaicRoot:        s.deps.MosaicRoot,
+		Content:           deployedRule.keepingUnchangedMigrations(p, contentFn),
+		AgentOwnedContent: agentOwnedContentFor(module.Descriptor()),
+		Conflicts:         conflicts,
+		VersionStamps:     versionStamps,
+		Hooks:             nil, // no hook artifacts written in this mode
+		TodoItems:         s.deps.Todo.Items,
 		TodoMeta: todo.Meta{
 			Harness: harnessRef.DisplayName, WorkspacePath: workspace, DeploymentRoot: workspace,
 			GeneratedAt: now, Mode: domain.ModeUpdateWorkflows,

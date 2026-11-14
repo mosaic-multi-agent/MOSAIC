@@ -108,7 +108,7 @@ func probeDeployedArtifact(workspace, targetPath, modelKey string, kind domain.A
 	state.ProtocolVersion = extractDeployedProtocolVersion(canonical)
 
 	// Record the Deploy-owned content recomputed from these bytes (agents and skills).
-	attachOwnedContent(&state, kind, dr.Raw)
+	attachOwnedContent(&state, kind, dr.Canonical)
 
 	return state
 }

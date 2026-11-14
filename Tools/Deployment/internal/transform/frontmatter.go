@@ -390,6 +390,11 @@ func applyFrontmatter(
 				if touchedKeys[k] {
 					continue
 				}
+				// The marker container names spans that live only in the deployed raw bytes.
+				// A create has no prior raw bytes, so the container is meaningless there.
+				if req.Op == agentformat.OpCreate && k == agentformat.CarriageMarkersKey {
+					continue
+				}
 				v, _ := deployedFM.Get(k)
 				fm.Set(k, v)
 				changes = append(changes, FieldChange{

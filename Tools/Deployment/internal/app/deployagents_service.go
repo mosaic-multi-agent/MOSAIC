@@ -400,13 +400,14 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 
 	now := s.now()
 	execReq := deploy.ExecRequest{
-		Plan:          p,
-		MosaicRoot:    s.deps.MosaicRoot,
-		Content:       deployedRule.keepingUnchangedMigrations(p, contentFn),
-		Conflicts:     conflicts,
-		VersionStamps: s.withProvenance(buildVersionStamps(append(probeSet.Agents, infraAgents...), probeSet.Skills, nil, p.Items, module.Descriptor(), toolMappingsVersion), p.Items),
-		Hooks:         nil,
-		TodoItems:     s.deps.Todo.Items,
+		Plan:              p,
+		MosaicRoot:        s.deps.MosaicRoot,
+		Content:           deployedRule.keepingUnchangedMigrations(p, contentFn),
+		AgentOwnedContent: agentOwnedContentFor(module.Descriptor()),
+		Conflicts:         conflicts,
+		VersionStamps:     s.withProvenance(buildVersionStamps(append(probeSet.Agents, infraAgents...), probeSet.Skills, nil, p.Items, module.Descriptor(), toolMappingsVersion), p.Items),
+		Hooks:             nil,
+		TodoItems:         s.deps.Todo.Items,
 		TodoMeta: todo.Meta{
 			Harness: harnessRef.DisplayName, WorkspacePath: workspace, DeploymentRoot: workspace,
 			GeneratedAt: now, Mode: domain.ModeDeployAgents,

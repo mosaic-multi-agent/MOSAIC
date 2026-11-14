@@ -4,7 +4,7 @@ Pre-implementation gate for adding a new agentic harness to MOSAIC. **Complete t
 
 **Time budget:** 1-2 hours. If a capability can't be verified in that window, it's a red flag.
 
-**Origin:** This checklist exists because the Codex CLI harness was fully implemented (3 days) before discovering that its subagent dispatch mechanism couldn't reference custom agents by name -- a blocker that a 30-minute spike would have surfaced. See `MOSAIC-CODEX-FEASIBILITY-20260921.md` for the full post-mortem.
+**Origin:** This checklist exists because the Codex CLI harness was fully implemented (3 days) before discovering that its subagent dispatch mechanism couldn't reference custom agents by name -- a blocker that a 30-minute spike would have surfaced. See `MOSAIC-CODEX-FEASIBILITY.md` for the full post-mortem.
 
 ---
 

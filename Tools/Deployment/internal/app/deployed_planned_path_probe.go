@@ -4,16 +4,20 @@ package app
 // path of an id-bearing agent that no indexed file resolved to.
 
 import (
+	"mosaic-deploy/internal/agentformat"
 	"mosaic-deploy/internal/domain"
 )
 
-// markdownAgentFormatID is the descriptor value of the Markdown identity agent format.
-const markdownAgentFormatID = "markdown"
-
-// isMarkdownAgentFormat reports whether src describes a Markdown agent format: a nil
-// descriptor and an absent agent format id both mean Markdown.
-func isMarkdownAgentFormat(src *domain.HarnessDescriptor) bool {
-	return src == nil || src.AgentFormatID == "" || src.AgentFormatID == markdownAgentFormatID
+// stampsOutsideData reports whether src's agent format stores the provenance stamps outside
+// its data model. A nil descriptor means Markdown; a format that does not resolve counts as
+// having no such trait, because the decode at the same site reports the real problem.
+func stampsOutsideData(src *domain.HarnessDescriptor) bool {
+	id := ""
+	if src != nil {
+		id = src.AgentFormatID
+	}
+	traits, err := agentformat.TraitsOf(id)
+	return err == nil && traits.StampsOutsideData
 }
 
 // probeAgentAtPlannedPath probes the planned path of an id-bearing agent that has no index
@@ -31,7 +35,7 @@ func isMarkdownAgentFormat(src *domain.HarnessDescriptor) bool {
 func probeAgentAtPlannedPath(
 	workspace, targetPath, modelKey string, src *domain.HarnessDescriptor, claimed, scanFlagged bool,
 ) domain.DeployedArtifactState {
-	if isMarkdownAgentFormat(src) {
+	if !stampsOutsideData(src) {
 		return probePlannedPathForAgent(workspace, targetPath, modelKey, scanFlagged, src)
 	}
 	if claimed {

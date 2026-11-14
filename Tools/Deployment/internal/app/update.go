@@ -425,14 +425,15 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 
 	now := s.now()
 	execReq := deploy.ExecRequest{
-		Plan:          p,
-		MosaicRoot:    s.deps.MosaicRoot,
-		Content:       deployedRule.keepingUnchangedMigrations(p, contentFn),
-		Conflicts:     conflicts,
-		VersionStamps: versionStamps,
-		ManifestMeta:  s.fullRunManifestMeta(),
-		Hooks:         hookPlans,
-		TodoItems:     s.deps.Todo.Items,
+		Plan:              p,
+		MosaicRoot:        s.deps.MosaicRoot,
+		Content:           deployedRule.keepingUnchangedMigrations(p, contentFn),
+		AgentOwnedContent: agentOwnedContentFor(module.Descriptor()),
+		Conflicts:         conflicts,
+		VersionStamps:     versionStamps,
+		ManifestMeta:      s.fullRunManifestMeta(),
+		Hooks:             hookPlans,
+		TodoItems:         s.deps.Todo.Items,
 		TodoMeta: todo.Meta{
 			Harness: harnessRef.DisplayName, WorkspacePath: workspace, DeploymentRoot: workspace,
 			GeneratedAt: now, Mode: domain.ModeUpdateWorkspace,

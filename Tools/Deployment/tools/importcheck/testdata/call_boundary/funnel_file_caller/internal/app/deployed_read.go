@@ -12,6 +12,10 @@ package app
 // This fixture exists to prove the companion acceptance case: the guard does not
 // degrade into rejecting everything, only raw-bytes calls from files that are
 // neither the funnel nor the named generic-source operation.
+//
+// FUNNEL-ROUTED READS:
+//
+// (No other file calls the funnel in this fixture, so the section is empty.)
 
 import (
 	"mosaic-common/docformat"

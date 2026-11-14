@@ -37,9 +37,9 @@ func runHarnessID(plan domain.Plan, prior domain.Manifest) string {
 // newManifestEntry builds a ManifestEntry for a successfully deployed item.
 // stamp carries the source version fields for this deployment so the planner can detect
 // staleness on subsequent runs.
-func newManifestEntry(item domain.PlanItem, content []byte, stamp domain.VersionStamp) domain.ManifestEntry {
+func newManifestEntry(item domain.PlanItem, content []byte, stamp domain.VersionStamp, agentOwned func(domain.PlanItem, []byte) *domain.OwnedContent) domain.ManifestEntry {
 	return domain.ManifestEntry{
-		Owned:                         ownedContentOfWritten(item.Ref.Kind, content),
+		Owned:                         ownedOfEntry(item, content, agentOwned),
 		Ref:                           item.Ref,
 		TargetPath:                    item.TargetPath,
 		Version:                       stamp.Version,
@@ -64,7 +64,7 @@ func simulatedEntry(item domain.PlanItem, req ExecRequest) *domain.ManifestEntry
 	if err != nil {
 		return nil
 	}
-	entry := newManifestEntry(item, content, resolveVersionStamp(item, req.VersionStamps))
+	entry := newManifestEntry(item, content, resolveVersionStamp(item, req.VersionStamps), req.AgentOwnedContent)
 	return &entry
 }
 

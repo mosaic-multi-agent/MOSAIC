@@ -72,7 +72,9 @@ type Request struct {
 	DenyTools []string
 	Scope     domain.Scope
 	// Deployed is the currently-deployed file bytes in CANONICAL form (Markdown with
-	// YAML frontmatter), or nil on create. Decode happens in the application layer
+	// YAML frontmatter), or nil when no decodable file sits at the target path. Op, not
+	// Deployed, states create versus update: an OpCreate request may carry a non-nil
+	// Deployed over another agent's file. Decode happens in the application layer
 	// before Apply is called. A caller holding raw on-disk bytes that has not decoded
 	// them is violating this precondition.
 	//
