@@ -152,6 +152,7 @@ func (r *transformRun) addModelSummary(res *TransformHarnessResult) {
 func (r *transformRun) identifiers() TransformHarnessResult {
 	return TransformHarnessResult{
 		SourceHarnessID: r.srcID, TargetHarnessID: r.tgtID, Workspace: r.workspace,
-		SourceAgentsDir: r.plan.SourceAgentsDir,
+		SourceAgentsDir:       r.plan.SourceAgentsDir,
+		ExperimentalHarnesses: r.experimentalOfRun(),
 	}
 }

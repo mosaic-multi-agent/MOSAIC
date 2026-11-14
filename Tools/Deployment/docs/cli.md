@@ -450,6 +450,8 @@ result=$(mosaic-deploy deploy --harness claude-code --workspace /path --auto-con
 echo "$result" | jq '.Outcome'
 ```
 
+When an experimental harness is involved (for example Codex), the result also carries `experimentalHarnesses`: an array of `{harnessId, displayName, reason}` entries, absent otherwise. The same field is in the `transform` document, and a transform with an experimental source or target lists it. In human output the same reason is printed once as a `warning:` line.
+
 The JSON object always contains at least `Mode`, `Outcome`, and `WorkspacePath`. A JSON document is written even when `Outcome` is `"failed"`, so consumers can inspect the failure reason programmatically.
 
 Two keys are additive: `ConflictReport` (the [conflict report](#conflict-report)) and `StackInEffect` (the [stack in effect](#stack-in-effect)). Both appear inside the one document; stdout never carries anything else.

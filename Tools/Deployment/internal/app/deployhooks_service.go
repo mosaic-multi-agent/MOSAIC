@@ -181,6 +181,7 @@ func deployHooks(ctx context.Context, s *service, req DeployHooksRequest) (domai
 
 	report := s.conflictReportFor(module.Ref().ID, nil, s.deployedWorkflowIDs(module, workspace, scope, true), req.AutoConfirmPlan)
 	p.ConflictReport = report
+	p.ExperimentalHarnesses = domain.ExperimentalHarnessesOf(module.Ref())
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {
 		return domain.RunSummary{}, rerr

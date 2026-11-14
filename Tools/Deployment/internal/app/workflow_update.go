@@ -349,6 +349,7 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	report := s.conflictReportFor(module.Ref().ID, workflowIDs, unionPreserveOrder(unionPreserveOrder(orchState.Workflows.IDs(), script.state.Workflows.IDs()), s.deployedWorkflowIDs(module, workspace, scope, false)), req.AutoConfirmPlan)
 	// Review is always shown; AutoConfirmPlan only controls whether a decline/cancel aborts the run.
 	p.ConflictReport = report
+	p.ExperimentalHarnesses = domain.ExperimentalHarnessesOf(module.Ref())
 	s.annotateToolsChanges(&p, module, customTools, skippedTools, scope, newDeployedBytes(workspace, nil).withMigratedAgents(p).canonicalReader(module.Descriptor()), set.Agents)
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {

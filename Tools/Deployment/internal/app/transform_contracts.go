@@ -126,6 +126,9 @@ type TransformHarnessResult struct {
 	Replacements []TransformFileChange `json:"replacements,omitempty"`
 	// DroppedEntries lists manifest entries dropped before planning (upgrade and reconciliation).
 	DroppedEntries []TransformDroppedEntry `json:"droppedEntries,omitempty"`
+	// ExperimentalHarnesses are the experimental source and/or target harnesses of the run,
+	// source first. Absent from JSON when neither is experimental.
+	ExperimentalHarnesses []domain.ExperimentalHarness `json:"experimentalHarnesses,omitempty"`
 }
 
 // TransformDroppedEntry is one manifest entry removed before the transform was planned.

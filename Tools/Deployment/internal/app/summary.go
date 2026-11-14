@@ -46,6 +46,8 @@ func (s *service) buildSummary(mode domain.RunMode, harness domain.HarnessRef, w
 		Logs:           s.deps.Logger.Paths(),
 		LogDegraded:    degraded,
 		Outcome:        outcome,
+
+		ExperimentalHarnesses: domain.ExperimentalHarnessesOf(harness),
 	}
 }
 

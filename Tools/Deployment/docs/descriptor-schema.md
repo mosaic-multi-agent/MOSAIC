@@ -41,6 +41,15 @@ display_name: "My Harness"
 transform_version: "1.0.0"
 
 # --------------------------------------------------------------------------
+# OPTIONAL: mark the harness experimental. Leave the key out for a regular
+# harness. When declared, "reason" is required and must not be blank.
+# The harness is still offered, but marked "Experimental" in the pickers and
+# its reason is shown as a warning (see the field table below).
+# --------------------------------------------------------------------------
+# experimental:
+#   reason: "Agents deploy, but no orchestration runs on this harness yet."
+
+# --------------------------------------------------------------------------
 # Field group 2 — OPTIONAL: model catalog
 #
 # ids: the model identifiers presented to the user during model selection.
@@ -276,7 +285,26 @@ hooks:
 | `transform_version` | string | Stamped into every deployed agent's frontmatter as `transform_version`. Bump when the transform logic changes so stale agents can be detected. |
 | `injections_version` | string | Removed. A descriptor that still declares it loads, and the value is ignored. Injection versions come from the frontmatter `version` of `HarnessInjections.md` (the subagent and shared-region version) and of `HarnessInjectionsOrchestrator.md` (the orchestrator-region version). A present injection file without a `version` fails loading. |
 | `agent_format_id` | string | Identifies the file format used for deployed agent files. Empty or absent means `markdown` (the default). The only other recognised value today is `codex-toml`, which causes the deployment tool to write TOML files through the Codex translator rather than Markdown files. An unrecognised value is a fatal parse error. |
+| `experimental` | mapping | Optional. Marks the harness as experimental. Absent means not experimental. When present it must be a mapping whose only key is `reason`, a non-blank string. Rejected with a validation error: a bare or null `experimental:`, a scalar or list value, a mapping without `reason`, a non-string `reason`, a blank (empty or whitespace-only) `reason`, and any other key. See [Experimental harnesses](#experimental-harnesses). |
 | `tool_info_recoverable` | bool | When absent or `true` (the default), the tool's deployed format is considered to carry a recoverable tool list. Set to `false` to declare that it does not -- for example, Codex expresses tool grants via `sandbox_mode` rather than a `tools` field, so `promote` cannot reverse-map the grant and asks the user instead. Most harnesses omit this field (equivalent to `true`). |
+
+---
+
+### Experimental harnesses
+
+```yaml
+experimental:
+  reason: "Agents deploy, but no orchestration runs on this harness yet."
+```
+
+Declare `experimental` when a harness works only in part, or is not yet proven. The declaration applies to descriptors of every tier (built-in, descriptor-only, external module). The harness stays available; only its presentation and warnings change:
+
+- **TUI:** the harness picker and the question pickers mark it "Experimental", and the reason is shown with it. Plan review shows the reason as a warning.
+- **CLI:** every writing command (`deploy`, `update`, `workflows`, `agents`, `hooks`, `promote`, `transform`) prints the reason once as a `warning:` line. `transform` warns when either the source or the target is experimental. The reason is whitespace-normalised to a single line.
+- **JSON:** with `--output json` the result carries an `experimentalHarnesses` array (absent when no experimental harness is involved). Each entry has `harnessId`, `displayName` and `reason`.
+- **Read-only `render`** is unaffected.
+
+The `reason` is trimmed. A blank reason is rejected at load time, so an experimental harness always explains itself.
 
 ---
 
@@ -503,7 +531,7 @@ code and are documented here so a descriptor author knows when to escalate:
 
 ### Exceptions established across the five built-in harnesses
 
-All five built-in harnesses (Claude Code, Codex, GHCP CLI, OpenCode, VS Code GHCP) were
+All five built-in harnesses (Claude Code, Codex (experimental), GHCP CLI, OpenCode, VS Code GHCP) were
 implemented using a module + embedded descriptor structure. The exceptions below are documented
 so that future descriptor authors recognise when a built-in module is required.
 

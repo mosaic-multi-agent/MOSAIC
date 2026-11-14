@@ -56,7 +56,7 @@ func (r *transformRun) targetHarnessOptions() []domain.Option {
 	harnesses := r.s.deps.Registry.List()
 	opts := make([]domain.Option, 0, len(harnesses))
 	for _, h := range harnesses {
-		opt := domain.Option{ID: h.ID, Label: h.DisplayName}
+		opt := domain.HarnessOption(h)
 		if h.ID == r.req.SourceHarnessID {
 			opt.Disabled, opt.DisabledReason = true, "already the transform source"
 		} else if !h.Usable {

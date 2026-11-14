@@ -657,7 +657,7 @@ Five built-in harnesses are compiled into the binary:
 | `opencode` | OpenCode |
 | `ghcp-cli` | GHCP CLI / VS Code GHCP Copilot |
 | `vscode-ghcp` | VS Code GHCP Local |
-| `codex` | Codex | Two departures from the Markdown norm: agent files are TOML (not Markdown), and skills are resolved from a shared `.agents/skills` root rather than a harness-local skills directory. |
+| `codex` | Codex (experimental) | Experimental: no MOSAIC orchestration runs on it yet. Two departures from the Markdown norm: agent files are TOML (not Markdown), and skills are resolved from a shared `.agents/skills` root rather than a harness-local skills directory. |
 Use `ghcp-cli` for the terminal and for VS Code's default chat harness, and `vscode-ghcp` only for VS Code's Local harness. A workspace holds one GHCP target at a time. See [Choosing a GHCP target](../../docs/DeploymentGuide.md#choosing-a-ghcp-target).
 
 To add a harness without writing Go code, create a `harness.yaml` descriptor in a

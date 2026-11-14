@@ -19,7 +19,9 @@
 
 ### Deploy v1.8.0
 #### Changes
-- Codex is a supported harness. Agents are deployed as standalone TOML files under `.codex/agents/`, with skills in the shared `.agents/skills` root. Keys you add to a Codex agent file survive an update
+- Codex is an experimental harness. Agents are deployed as standalone TOML files under `.codex/agents/`, with skills in the shared `.agents/skills` root. Keys you add to a Codex agent file survive an update. Update and transform work. No MOSAIC orchestration runs on Codex yet: its native multi-agent dispatch is not usable for MOSAIC and `mosaic-run` has no Codex adapter. Minimum Codex version is 0.169.0
+- The agent-format layer (translators, edit detection, format-neutral deploy) is stable; only the Codex harness is experimental
+- A harness descriptor can declare `experimental:` with a required, non-blank `reason`. An experimental harness is still offered but is marked "Experimental" in the harness and question pickers, its reason is a warning at plan review, every writing command (deploy, update, workflows, agents, hooks, promote, transform, also with an experimental transform source) prints it once, and `--output json` results carry it as `experimentalHarnesses`. Read-only `render` is unaffected. The built-in Codex descriptor is experimental
 - Edit detection works the same for every agent file format. Deploy compares the agent body outside the project and custom regions, as decoded from the file, with what it recorded at its last write. Frontmatter and the project and custom regions are yours on every harness and are never reported as edits
 - A file Deploy cannot confirm as its own, or cannot parse, stays a conflict. When the manifest has no usable record for an edited agent, the conflict question appears and the differing frontmatter keys are reported for information
 - The import-boundary guards (read-funnel inventory, translator purity, format-blind `internal/deploy`) now run as part of `go test ./...`

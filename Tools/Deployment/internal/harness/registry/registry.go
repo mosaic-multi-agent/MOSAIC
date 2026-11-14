@@ -410,6 +410,7 @@ func Discover(opts Options) (Registry, error) {
 				RequiresOptIn:  true,
 				Usable:         usable,
 				UnusableReason: unusableReason,
+				ExperimentalReason: h.desc.ExperimentalReason,
 			}
 			var mod domain.HarnessModule
 			if usable {
@@ -456,6 +457,7 @@ func Discover(opts Options) (Registry, error) {
 				Tier:        domain.TierDescriptor,
 				SourcePath:  h.yamlPath,
 				Usable:      true,
+				ExperimentalReason: h.desc.ExperimentalReason,
 			}
 			if tierErr != nil {
 				ref.Usable = false

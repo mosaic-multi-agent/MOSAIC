@@ -813,6 +813,8 @@ func (s *service) Promote(ctx context.Context, req PromoteRequest) (PromoteResul
 			RecoveredFields: recovered.Supplied,
 			StrippedFields:  strippedFields,
 			DivertedTools:   facts.DivertedTools,
+
+			ExperimentalHarnesses: domain.ExperimentalHarnessesOf(module.Ref()),
 		}, nil
 	}
 
@@ -837,5 +839,7 @@ func (s *service) Promote(ctx context.Context, req PromoteRequest) (PromoteResul
 		RecoveredFields: recovered.Supplied,
 		StrippedFields:  strippedFields,
 		DivertedTools:   facts.DivertedTools,
+
+		ExperimentalHarnesses: domain.ExperimentalHarnessesOf(module.Ref()),
 	}, nil
 }

@@ -2,7 +2,7 @@
 
 This guide explains how to build a custom harness module for MOSAIC. A harness defines how MOSAIC transforms generic agent definitions into harness-specific deployable files. Three provision tiers exist: **built-in** (compiled into MOSAIC), **descriptor-only** (declared in a YAML file with no code), and **external** (a standalone executable).
 
-Most harnesses produce Markdown agent files, which is the default. A harness can also produce non-Markdown files by declaring a format ID in its descriptor's `agent_format_id` field. The only non-Markdown format available today is `codex-toml` (used by the Codex built-in). A non-Markdown harness must supply a translator pair registered under its format ID; see [Non-Markdown harnesses](#non-markdown-harnesses) below for the additional steps.
+Most harnesses produce Markdown agent files, which is the default. A harness can also produce non-Markdown files by declaring a format ID in its descriptor's `agent_format_id` field. The only non-Markdown format available today is `codex-toml` (used by the Codex built-in, which is experimental). A non-Markdown harness must supply a translator pair registered under its format ID; see [Non-Markdown harnesses](#non-markdown-harnesses) below for the additional steps.
 
 Read this guide to decide which tier fits your harness, then follow the step-by-step instructions for your chosen approach.
 
@@ -89,6 +89,17 @@ frontmatter:
     - model
     - tools
 ```
+
+### Mark a harness experimental (optional)
+
+A harness that is not yet fully proven can declare itself experimental:
+
+```yaml
+experimental:
+  reason: "Agents deploy, but no orchestration runs on this harness yet."
+```
+
+`reason` is required and must not be blank; a bare `experimental:`, a missing or blank reason, or any other key makes the descriptor invalid. Leaving the key out means the harness is not experimental. The declaration works the same in every tier (built-in, descriptor-only and external module). MOSAIC still offers the harness, but marks it "Experimental" in the TUI pickers, shows the reason as a warning at plan review, prints it once from every writing CLI command, and adds it to the `--output json` result as `experimentalHarnesses`. Read-only `render` is unaffected. See the [descriptor schema](descriptor-schema.md#experimental-harnesses) for details. The built-in Codex harness is declared this way.
 
 ### Register with MOSAIC
 

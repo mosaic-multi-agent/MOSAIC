@@ -100,9 +100,14 @@ type RunSummary struct {
 	// deployed bytes. Empty on every ordinary run and when all conflicts are resolved by skip.
 	OwnedKeyDifferences []OwnedKeyDifference
 	// ConflictReport is the catalog-stack conflict report of the run; empty without shadowing.
-	// It is a value field on purpose (this struct has no omitempty fields), unlike the pointer
-	// on app.RenderAgentResult. Do not unify the two.
+	// It is a value field on purpose (this struct has no omitempty fields besides
+	// ExperimentalHarnesses), unlike the pointer on app.RenderAgentResult. Do not unify the two.
 	ConflictReport ConflictReport
+
+	// ExperimentalHarnesses are the experimental harnesses this run involved, one entry per
+	// harness. The only omitempty field of this struct: absent from the JSON document of a run
+	// with no experimental harness, so that document is unchanged.
+	ExperimentalHarnesses []ExperimentalHarness `json:",omitempty"`
 
 	// DryRunPlan is the plan a dry run reviewed; nil for every run that is not a dry run.
 	// Not serialised: the JSON document keeps its shape.

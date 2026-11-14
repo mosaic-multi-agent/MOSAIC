@@ -26,6 +26,7 @@ type wireDescriptor struct {
 	Frontmatter         wireFrontmatterSpec `yaml:"frontmatter"`
 	Injections          []wireInjection     `yaml:"injections"`
 	Hooks               wireHookSupport     `yaml:"hooks"`
+	Experimental        wireExperimental    `yaml:"experimental"`
 	// DeprecatedInjectionsVersion is accepted so older descriptors keep loading; the value is
 	// ignored. The injection version comes from the frontmatter of HarnessInjections.md.
 	DeprecatedInjectionsVersion string `yaml:"injections_version"`
@@ -140,6 +141,8 @@ func Parse(src []byte, origin string) (*domain.HarnessDescriptor, error) {
 		return nil, fmt.Errorf("%s: %w", origin, err)
 	}
 
+	w.Experimental.present = w.Experimental.present || hasExperimentalKey(src)
+
 	if w.Tools.RetiredCustomToolTemplate != "" {
 		e := retiredCustomToolTemplateError()
 		e.File = origin
@@ -213,6 +216,9 @@ func mapWireToDomain(w *wireDescriptor) (*domain.HarnessDescriptor, []Validation
 	// explicit false -> ToolInfoUnrecoverable = true.
 	toolInfoUnrecoverable := w.ToolInfoRecoverable != nil && !*w.ToolInfoRecoverable
 
+	expReason, expErrs := experimentalReason(w.Experimental)
+	fmErrs = append(fmErrs, expErrs...)
+
 	return &domain.HarnessDescriptor{
 		SchemaVersion:         w.SchemaVersion,
 		ID:                    w.ID,
@@ -220,6 +226,7 @@ func mapWireToDomain(w *wireDescriptor) (*domain.HarnessDescriptor, []Validation
 		AgentFormatID:         string(parsedFmtID),
 		TransformVersion:      w.TransformVersion,
 		ToolInfoUnrecoverable: toolInfoUnrecoverable,
+		ExperimentalReason:    expReason,
 		Models:                mapWireModelCatalog(&w.Models),
 		Tools:                 mapWireToolSpec(&w.Tools),
 		Paths:                 mapWirePathSpec(&w.Paths),

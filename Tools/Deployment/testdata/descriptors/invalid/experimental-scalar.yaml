@@ -1,0 +1,5 @@
+# Invalid: experimental must be a mapping, not a scalar.
+schema_version: "1"
+id: "experimental-scalar"
+display_name: "Experimental Scalar"
+experimental: true

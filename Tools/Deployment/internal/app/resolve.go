@@ -28,9 +28,9 @@ import (
 func (s *service) askHarness(ctx context.Context) (string, error) {
 	opts := make([]domain.Option, 0)
 	for _, h := range s.deps.Registry.List() {
-		opts = append(opts, domain.Option{
-			ID: h.ID, Label: h.DisplayName, Disabled: !h.Usable, DisabledReason: h.UnusableReason,
-		})
+		opt := domain.HarnessOption(h)
+		opt.Disabled, opt.DisabledReason = !h.Usable, h.UnusableReason
+		opts = append(opts, opt)
 	}
 	q := domain.ChoiceQuestion{
 		Question: domain.Question{ID: domain.QHarness, Title: "Select a harness"},

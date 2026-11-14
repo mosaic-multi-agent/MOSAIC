@@ -317,6 +317,7 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 	// only controls whether a decline/cancel answer aborts the run, so headless callers that
 	// pre-confirm still see it recorded as the last interaction before execution.
 	p.ConflictReport = report
+	p.ExperimentalHarnesses = domain.ExperimentalHarnessesOf(module.Ref())
 	s.annotateToolsChanges(&p, module, customTools, skippedTools, scope, newDeployedBytes(workspace, nil).withMigratedAgents(p).canonicalReader(module.Descriptor()), probeSet.Agents, infraAgents)
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {

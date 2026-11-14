@@ -373,6 +373,7 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 
 	report := s.conflictReportFor(module.Ref().ID, nil, s.deployedWorkflowIDs(module, workspace, scope, true), req.AutoConfirmPlan)
 	p.ConflictReport = report
+	p.ExperimentalHarnesses = domain.ExperimentalHarnessesOf(module.Ref())
 	s.annotateToolsChanges(&p, module, customTools, skippedTools, scope, newDeployedBytes(workspace, orch.readPaths()).withMigratedAgents(p).canonicalReader(module.Descriptor()), probeSet.Agents, infraAgents)
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {

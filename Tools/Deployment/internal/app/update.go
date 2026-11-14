@@ -399,6 +399,7 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	// Review is always shown; AutoConfirmPlan only controls whether a decline/cancel answer
 	// aborts the run (see deploy.go for the same rationale).
 	p.ConflictReport = report
+	p.ExperimentalHarnesses = domain.ExperimentalHarnessesOf(module.Ref())
 	s.annotateToolsChanges(&p, module, req.CustomTools, nil, scope, newDeployedBytes(workspace, nil).withMigratedAgents(p).canonicalReader(module.Descriptor()), set.Agents)
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {

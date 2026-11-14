@@ -1,0 +1,6 @@
+# Invalid: empty reason.
+schema_version: "1"
+id: "experimental-empty-reason"
+display_name: "Experimental Empty Reason"
+experimental:
+  reason: ""

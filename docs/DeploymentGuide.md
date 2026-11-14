@@ -20,7 +20,7 @@ This guide is for **project authors** who want to get MOSAIC running in their AI
 
 **Two ways to run:** Launch without a subcommand for the interactive TUI, or pass a subcommand for scriptable CLI mode.
 
-**Built-in harnesses:** `claude-code` (Claude Code), `opencode` (OpenCode), `ghcp-cli` ("GHCP CLI / VS Code GHCP Copilot"), `vscode-ghcp` ("VS Code GHCP Local"), `codex`.
+**Built-in harnesses:** `claude-code` (Claude Code), `opencode` (OpenCode), `ghcp-cli` ("GHCP CLI / VS Code GHCP Copilot"), `vscode-ghcp` ("VS Code GHCP Local"), `codex` (experimental, see [Codex (experimental)](#codex-experimental)).
 
 ### Choosing a GHCP target
 
@@ -29,6 +29,16 @@ This guide is for **project authors** who want to get MOSAIC running in their AI
 - To tell which harness a VS Code chat uses, look below the prompt input in the chat window: the `Set session target` control on the left switches between Local and Copilot, next to the agent mode and permissions controls.
 - Subagents on the GHCP CLI / VS Code GHCP Copilot target have no built-in ask tool, as with Claude Code background subagents. Human-in-the-loop for subagents there therefore needs an MCP ask tool that you supply. This setup is untested.
 - A workspace holds one GHCP target at a time, decided by the harness recorded on the manifest entries (file names never decide it). Deploy and the other deploy flows refuse the other target and point to Transform; a workspace that holds both must be cleaned up by hand.
+
+### Codex (experimental)
+
+The `codex` harness is experimental. The picker marks it "Experimental", plan review shows a warning, and every writing command prints the same warning once.
+
+- **What works:** agents deploy as standalone TOML files in `.codex/agents/*.toml`, with skills in the shared `.agents/skills` root. Update and Transform work too.
+- **What does not run:** no MOSAIC orchestration path runs on Codex yet. Codex's native multi-agent dispatch is not usable for MOSAIC, and `mosaic-run` has no Codex adapter, so you cannot run a workflow on Codex.
+- **Minimum Codex version:** 0.169.0.
+
+Only the Codex harness is experimental. The agent-format layer behind it is stable.
 
 ### GHCP agent file names
 
@@ -602,7 +612,7 @@ Work through this checklist before using the workspace. Filling project regions 
 | Problem | Fix |
 |---------|-----|
 | "not a MOSAIC repository" | Run from inside the MOSAIC repo, or pass `--mosaic-root /path/to/MOSAIC` |
-| "harness not found" | Check the ID (`claude-code`, `opencode`, `ghcp-cli`, `vscode-ghcp`, `codex`). For custom descriptors, pass the full file path. |
+| "harness not found" | Check the ID (`claude-code`, `opencode`, `ghcp-cli`, `vscode-ghcp`, `codex` (experimental)). For custom descriptors, pass the full file path. |
 | "external harness modules require explicit opt-in" | Set `allow_external_modules: true` in `tool-config.yaml`, or pass `--allow-external` |
 | Config file not picked up | The tool looks in `MosaicDeploy/config/` under the MOSAIC root. Verify `--mosaic-root` if you moved the binary. |
 | "catalog stack has no layers" | You gave `--include-default-catalog=false` without `--catalog-folder`. Add a layer or drop the flag. |

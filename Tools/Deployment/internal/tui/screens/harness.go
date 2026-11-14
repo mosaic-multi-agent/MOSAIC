@@ -99,6 +99,9 @@ func makeHarnessItems(harnesses []domain.HarnessRef, styles Styles) []widgets.Li
 				fmt.Fprintf(&detail, "Module: %s\n", h.ExecutablePath)
 			}
 		}
+		if h.IsExperimental() {
+			fmt.Fprintf(&detail, "\n%s: %s\n", domain.ExperimentalLabel, h.ExperimentalReason)
+		}
 		if !h.Usable && h.UnusableReason != "" {
 			fmt.Fprintf(&detail, "\nUnavailable: %s\n", h.UnusableReason)
 		}
@@ -110,6 +113,9 @@ func makeHarnessItems(harnesses []domain.HarnessRef, styles Styles) []widgets.Li
 		displayLabel := fmt.Sprintf("%s  %s", padded, tier)
 		if h.Tier == domain.TierExternal && h.Usable {
 			displayLabel = fmt.Sprintf("%s  %s  [active external module]", padded, tier)
+		}
+		if h.IsExperimental() {
+			displayLabel += "  [" + domain.ExperimentalLabel + "]"
 		}
 
 		items[i] = widgets.ListItem{

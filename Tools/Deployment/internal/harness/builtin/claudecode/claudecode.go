@@ -80,6 +80,7 @@ func New(opts registry.BuiltinOptions) (domain.HarnessModule, error) {
 		DisplayName: desc.DisplayName,
 		Tier:        domain.TierBuiltin,
 		Usable:      true,
+		ExperimentalReason: desc.ExperimentalReason,
 	}
 	return &module{ref: ref, desc: desc, injections: content.Shared, orchInjections: content.Orchestrator}, nil
 }

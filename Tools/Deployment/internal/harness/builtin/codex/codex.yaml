@@ -3,6 +3,8 @@ id: "codex"
 display_name: "Codex"
 agent_format_id: "codex-toml"
 tool_info_recoverable: false
+experimental:
+  reason: "Agents deploy to .codex/agents/*.toml, and update and transform work. There is no orchestration: Codex native multi-agent dispatch is not usable for MOSAIC, and mosaic-run has no Codex adapter."
 transform_version: "1.0.0"
 injections_version: "1.0.0"
 models:

@@ -49,6 +49,8 @@ func (r *transformRun) reviewPlan() domain.Plan {
 		Removals:       append(append([]domain.Removal(nil), r.plan.Removals...), r.targetLegacyRemovals()...),
 		Replacements:   r.plan.Replacements,
 		DroppedEntries: r.droppedEntries(),
+
+		ExperimentalHarnesses: domain.ExperimentalHarnessesOf(r.src.Ref(), r.tgt.Ref()),
 	}
 	for _, pa := range r.plan.Agents {
 		if pa.Action != PlanSkip {
