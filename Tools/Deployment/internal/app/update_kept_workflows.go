@@ -6,8 +6,10 @@ package app
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"mosaic-deploy/internal/catalog"
+	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/transform"
 )
 
@@ -34,14 +36,21 @@ func (k keptWorkflows) customIDSet() map[string]bool {
 
 // readKeptWorkflows reads the workflow blocks of each present file and keeps those whose id the
 // catalog does not supply. A file whose workflows cannot be read is an error naming its path.
-func readKeptWorkflows(workspace string, cat catalog.Catalog, files []deployedOrchestratorFile) (keptWorkflows, error) {
+func readKeptWorkflows(workspace string, src *domain.HarnessDescriptor, cat catalog.Catalog, files []deployedOrchestratorFile) (keptWorkflows, error) {
 	result := keptWorkflows{byPath: map[string]DeployedPathWorkflows{}}
 	seen := map[string]bool{}
 	for _, f := range files {
 		if !f.Present || f.TargetPath == "" {
 			continue
 		}
-		blocks, err := transform.KeptWorkflowBlocks(readDeployedFile(workspace, f.TargetPath))
+		read := readDeployedArtifact(filepath.Join(workspace, f.TargetPath), domain.ArtifactAgent, src)
+		if read.ReadErr != nil {
+			return keptWorkflows{}, fmt.Errorf("%s: %w", f.TargetPath, read.ReadErr)
+		}
+		if read.DecodeErr != nil {
+			return keptWorkflows{}, fmt.Errorf("%s: %w", f.TargetPath, read.DecodeErr)
+		}
+		blocks, err := transform.KeptWorkflowBlocks(read.Canonical)
 		if err != nil {
 			return keptWorkflows{}, fmt.Errorf("%s: %w", f.TargetPath, err)
 		}

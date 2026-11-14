@@ -11,6 +11,7 @@ import (
 	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
+	"mosaic-deploy/internal/logging"
 	"mosaic-deploy/internal/plan"
 	"mosaic-deploy/internal/todo"
 )
@@ -79,7 +80,11 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	agentsDir := module.Descriptor().Paths.Agents.Project
 	var deployedAgentIndex DeployedAgentIndex
 	if module.Descriptor().Paths.Agents.Supported && agentsDir != "" {
-		deployedAgentIndex = buildDeployedAgentIndex(workspace, agentsDir)
+		var indexNotices []string
+		deployedAgentIndex, indexNotices = buildDeployedAgentIndex(workspace, agentsDir, module.Descriptor())
+		for _, notice := range indexNotices {
+			s.deps.Logger.Event(logging.Event{Level: logging.LevelWarn, Kind: "decode", Message: notice})
+		}
 	}
 
 	reconciled := loadReconciledManifest(s.deps.Manifest, workspace)
@@ -99,7 +104,7 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	}); pathErr == nil {
 		orchTargetPath = orchPath
 		orchState = probeAgentWithRecordedLegacy(workspace, module, snap, orchestrator.Key, orchTargetPath)
-		if problem := unreadableAgentProblem(workspace, orchTargetPath, orchState); problem != "" {
+		if problem := unreadableAgentProblem(workspace, orchTargetPath, orchState, module.Descriptor()); problem != "" {
 			// An orchestrator file that cannot be read as an agent stays a conflict, as for the
 			// other agents, instead of being rewritten as an ordinary update.
 			orchState.ParseFailed, orchState.ParseProblem = true, problem
@@ -108,8 +113,9 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 
 	// Probe the orchestrator-script early: its deployed workflows join the checklist.
 	script := s.probeWorkflowScript(module, workspace, scope, snap)
-	deployedCustom, err := readKeptWorkflows(workspace, s.deps.Catalog, []deployedOrchestratorFile{
-		{TargetPath: orchTargetPath, Present: orchState.Present},
+	deployedCustom, err := readKeptWorkflows(workspace, module.Descriptor(), s.deps.Catalog, []deployedOrchestratorFile{
+		// An unreadable orchestrator is a conflict (ParseFailed), so its workflows are not read.
+		{TargetPath: orchTargetPath, Present: orchState.Present && !orchState.ParseFailed},
 		{TargetPath: script.targetPath, Present: script.state.Present},
 	})
 	if err != nil {
@@ -198,10 +204,11 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 		probeAgentByKey[a.Key] = a
 	}
 
-	deployedState, err := probeDeployedStateWithIndex(workspace, plannedPaths, module.Descriptor().Frontmatter.ModelKey, seed, deployedAgentIndex, probeAgentByKey, nil)
+	deployedState, err := probeDeployedStateWithIndex(workspace, plannedPaths, module.Descriptor().Frontmatter.ModelKey, seed, deployedAgentIndex, probeAgentByKey, nil, module.Descriptor())
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
+	s.logProbeDecodeNotices(deployedState)
 	legacyAgentPaths := applyRecordedLegacyAgents(workspace, module, snap, plannedPaths, deployedState)
 
 	// Detect agents required by the selected workflows that have no file in the workspace.
@@ -342,7 +349,8 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	report := s.conflictReportFor(module.Ref().ID, workflowIDs, unionPreserveOrder(unionPreserveOrder(orchState.Workflows.IDs(), script.state.Workflows.IDs()), s.deployedWorkflowIDs(module, workspace, scope, false)), req.AutoConfirmPlan)
 	// Review is always shown; AutoConfirmPlan only controls whether a decline/cancel aborts the run.
 	p.ConflictReport = report
-	s.annotateToolsChanges(&p, module, customTools, skippedTools, scope, newDeployedBytes(workspace, nil).withMigratedAgents(p).reader(), set.Agents)
+	p.ExperimentalHarnesses = domain.ExperimentalHarnessesOf(module.Ref())
+	s.annotateToolsChanges(&p, module, customTools, skippedTools, scope, newDeployedBytes(workspace, nil).withMigratedAgents(p).canonicalReader(module.Descriptor()), set.Agents)
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {
 		return domain.RunSummary{}, rerr
@@ -357,10 +365,11 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	}
 
 	workflowBlocks := s.buildWorkflowBlocks(workflowIDs)
-	deployedReader := newDeployedBytes(workspace, nil).withMigratedAgents(p).reader()
+	deployedRule := newDeployedBytes(workspace, nil).withMigratedAgents(p)
 	// Custom tools resolved above for new agents; already-deployed agents are never in the
 	// input to resolveCustomTools so no already-deployed agent can trigger a tool question.
-	contentFn := s.buildContent(module, agentByKey, models, customTools, skippedTools, workflowBlocks, nil, scope, deployedReader, toolMappingsVersion, protocol, bundle, nil, withKeptWorkflows(kept.byPath))
+	var ownedKeyDiffs []domain.OwnedKeyDifference
+	contentFn := s.buildContent(module, agentByKey, models, customTools, skippedTools, workflowBlocks, nil, scope, deployedRule.funnelReader(module.Descriptor()), toolMappingsVersion, protocol, bundle, nil, &ownedKeyDiffs, withKeptWorkflows(kept.byPath))
 
 	// Version stamps cover the orchestrator and all admitted new-agent and new-skill items.
 	// set.Skills is passed so admitted skill items are stamped; set.Hooks is nil because hook
@@ -369,13 +378,14 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 
 	now := s.now()
 	execReq := deploy.ExecRequest{
-		Plan:          p,
-		MosaicRoot:    s.deps.MosaicRoot,
-		Content:       newDeployedBytes(workspace, nil).withMigratedAgents(p).keepingUnchangedMigrations(p, contentFn),
-		Conflicts:     conflicts,
-		VersionStamps: versionStamps,
-		Hooks:         nil, // no hook artifacts written in this mode
-		TodoItems:     s.deps.Todo.Items,
+		Plan:              p,
+		MosaicRoot:        s.deps.MosaicRoot,
+		Content:           deployedRule.keepingUnchangedMigrations(p, contentFn),
+		AgentOwnedContent: agentOwnedContentFor(module.Descriptor()),
+		Conflicts:         conflicts,
+		VersionStamps:     versionStamps,
+		Hooks:             nil, // no hook artifacts written in this mode
+		TodoItems:         s.deps.Todo.Items,
 		TodoMeta: todo.Meta{
 			Harness: harnessRef.DisplayName, WorkspacePath: workspace, DeploymentRoot: workspace,
 			GeneratedAt: now, Mode: domain.ModeUpdateWorkflows,
@@ -427,5 +437,7 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 		}
 	}
 
-	return withDryRunPlan(withConflictReport(s.buildSummary(domain.ModeUpdateWorkflows, harnessRef, workspace, result), report), req.DryRun, p), nil
+	summary := s.buildSummary(domain.ModeUpdateWorkflows, harnessRef, workspace, result)
+	summary.OwnedKeyDifferences = ownedKeyDiffs
+	return withDryRunPlan(withConflictReport(summary, report), req.DryRun, p), nil
 }

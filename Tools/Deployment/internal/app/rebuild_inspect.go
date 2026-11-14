@@ -1,7 +1,6 @@
 package app
 
 import (
-	"mosaic-common/docformat"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -34,7 +33,7 @@ func deployedToolsInput(in RebuildInput, facts deployedAgentFacts, role domain.A
 // returns its role, ref key and tool conversion without building any output. It returns the
 // same error as RebuildDeployedAgent for unparseable input or a missing frontmatter block.
 func InspectDeployedAgent(in RebuildInput) (DeployedAgentInspection, error) {
-	doc, err := docformat.Parse(in.Source)
+	_, doc, err := decodeRebuildSource(in)
 	if err != nil {
 		return DeployedAgentInspection{}, err
 	}
@@ -45,15 +44,14 @@ func InspectDeployedAgent(in RebuildInput) (DeployedAgentInspection, error) {
 	facts := readDeployedAgentFacts(doc.Frontmatter(), srcDesc)
 
 	entry := lookupCatalogEntry(in.Catalog, facts.ID, in.AgentKey)
-	role := rebuildRole(facts.Role, in.FileName, entry)
+	role := rebuildRole(facts.Role, in.FileName, srcDesc, entry)
 	refKey := in.AgentKey
-	var catalogTools []string
-	placeholder := ""
 	if entry != nil {
 		refKey = entry.Key
-		catalogTools = entry.Tools
-		placeholder = entry.ToolsPlaceholder
 	}
-	conv := ConvertDeployedTools(deployedToolsInput(in, facts, role, placeholder != "", catalogTools))
+	conv, _, err := rebuildToolsConversion(in, facts, role, entry)
+	if err != nil {
+		return DeployedAgentInspection{}, err
+	}
 	return DeployedAgentInspection{Role: role, RefKey: refKey, Converted: conv}, nil
 }

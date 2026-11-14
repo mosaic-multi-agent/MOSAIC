@@ -6,10 +6,13 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
+	"mosaic-deploy/internal/agentformat"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -63,12 +66,31 @@ func (r *transformRun) prepareAgents() {
 			ToolMappingsVersion: r.toolMappingsVersion, Timestamp: timestamp,
 			DeclaredServers: r.declaredServers, MCPSplits: r.req.MCPSplits,
 		}
+		r.setWriteOp(st, pa)
 		insp, err := InspectDeployedAgent(st.input)
 		if err != nil {
 			st.failReason = err.Error()
 			continue
 		}
 		r.inspections[i] = insp
+	}
+}
+
+// setWriteOp sets the explicit operation of the rebuild from the planned write action and, on
+// setWriteOp sets the explicit operation of the rebuild from the planned write action and, on
+// overwrite, the destination file's raw bytes. The destination is read through the decode
+// funnel with the target descriptor. A file that cannot be read or decoded is passed on
+// without a decode result: the rebuild reports an undecodable destination, and an unreadable
+// one leaves the prior bytes missing so the encoder reports it.
+func (r *transformRun) setWriteOp(st *agentState, pa PlannedAgent) {
+	if pa.Action != PlanWriteOverwrite {
+		st.input.Op = agentformat.OpCreate
+		return
+	}
+	st.input.Op = agentformat.OpUpdate
+	dest := filepath.Join(r.workspace, filepath.FromSlash(pa.DestinationPath))
+	if read := readDeployedArtifact(dest, domain.ArtifactAgent, r.tgt.Descriptor()); read.Present && read.ReadErr == nil {
+		st.input.DestinationRaw = read.Raw
 	}
 }
 
@@ -139,6 +161,9 @@ func (r *transformRun) buildAgents() {
 		res, err := RebuildDeployedAgent(st.input)
 		if err != nil {
 			st.failReason = err.Error()
+			if errors.Is(err, agentformat.ErrMalformedDeployed) {
+				st.failReason = fmt.Sprintf("existing destination %s: %v", filepath.ToSlash(r.plan.Agents[i].DestinationPath), err)
+			}
 			continue
 		}
 		st.built, st.result = true, res

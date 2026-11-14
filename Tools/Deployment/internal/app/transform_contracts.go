@@ -86,6 +86,9 @@ type TransformFileOutcome struct {
 	CustomTools   []string         `json:"customTools,omitempty"`   // servers kept as custom tools
 	UnmappedTools []string         `json:"unmappedTools,omitempty"` // generics whose custom-tool question was skipped
 	DroppedFields []string         `json:"droppedFields,omitempty"`
+	// StrippedFields reports source fields removed from the written agent: harness-specific
+	// fields of a non-Markdown source and keys held in the source carriage container.
+	StrippedFields []StrippedField `json:"strippedFields,omitempty"`
 }
 
 // TransformHarnessResult is the whole-run report, rendered by both frontends.
@@ -123,6 +126,9 @@ type TransformHarnessResult struct {
 	Replacements []TransformFileChange `json:"replacements,omitempty"`
 	// DroppedEntries lists manifest entries dropped before planning (upgrade and reconciliation).
 	DroppedEntries []TransformDroppedEntry `json:"droppedEntries,omitempty"`
+	// ExperimentalHarnesses are the experimental source and/or target harnesses of the run,
+	// source first. Absent from JSON when neither is experimental.
+	ExperimentalHarnesses []domain.ExperimentalHarness `json:"experimentalHarnesses,omitempty"`
 }
 
 // TransformDroppedEntry is one manifest entry removed before the transform was planned.

@@ -1,0 +1,7 @@
+# Invalid: unknown key inside the experimental mapping.
+schema_version: "1"
+id: "experimental-unknown-key"
+display_name: "Experimental Unknown Key"
+experimental:
+  reason: "Some reason."
+  since: "1.0"

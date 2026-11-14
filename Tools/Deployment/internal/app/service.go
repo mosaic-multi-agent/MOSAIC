@@ -313,6 +313,9 @@ type PromoteResult struct {
 	DivertedTools []string `json:"divertedTools,omitempty"`
 	// TargetCatalogID is the id of the layer that received the file; empty for a plain catalog.
 	TargetCatalogID string `json:"targetCatalogId,omitempty"`
+	// ExperimentalHarnesses holds the harness the promote was interpreted against when it is
+	// experimental. Absent from JSON otherwise.
+	ExperimentalHarnesses []domain.ExperimentalHarness `json:"experimentalHarnesses,omitempty"`
 }
 
 // New constructs a Service with the supplied dependency set.

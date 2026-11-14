@@ -51,7 +51,7 @@ func (s *service) planAgents(in transformPlanInput, plan *TransformPlan) error {
 			continue
 		}
 		recognised++
-		a.Key = agentkey.FromFileName(f.name)
+		a.Key = agentkey.FromFileNameExt(f.name, srcExt)
 		a.SourceModel = f.model
 		switch {
 		case sameFolder && tgtExt != srcExt && fileAgentExt(f.name) == tgtExt:
@@ -85,7 +85,7 @@ func duplicateKeyKeepers(files []sourceAgentFile, srcExt string) map[string]stri
 		if !f.recognised {
 			continue
 		}
-		key := agentkey.FromFileName(f.name)
+		key := agentkey.FromFileNameExt(f.name, srcExt)
 		cur, seen := keeper[key]
 		if !seen || (fileAgentExt(cur) != srcExt && fileAgentExt(f.name) == srcExt) {
 			keeper[key] = f.name

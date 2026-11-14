@@ -29,6 +29,7 @@ import (
 	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
+	"mosaic-deploy/internal/logging"
 	"mosaic-deploy/internal/plan"
 	"mosaic-deploy/internal/todo"
 )
@@ -122,7 +123,11 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	agentsDir := module.Descriptor().Paths.Agents.Project
 	var deployedAgentIndex DeployedAgentIndex
 	if module.Descriptor().Paths.Agents.Supported && agentsDir != "" {
-		deployedAgentIndex = buildDeployedAgentIndex(workspace, agentsDir)
+		var indexNotices []string
+		deployedAgentIndex, indexNotices = buildDeployedAgentIndex(workspace, agentsDir, module.Descriptor())
+		for _, notice := range indexNotices {
+			s.deps.Logger.Event(logging.Event{Level: logging.LevelWarn, Kind: "decode", Message: notice})
+		}
 	}
 
 	// Scan the deployed-agents directory in one pass to classify every file found there.
@@ -131,7 +136,11 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	// Guarded on the harness declaring a supported agents directory.
 	scan := WorkspaceAgentScan{}
 	if module.Descriptor().Paths.Agents.Supported && agentsDir != "" {
-		scan = scanWorkspaceAgents(workspace, agentsDir, s.deps.Catalog)
+		var scanNotices []string
+		scan, scanNotices = scanWorkspaceAgents(workspace, agentsDir, s.deps.Catalog, module.Descriptor())
+		for _, notice := range scanNotices {
+			s.deps.Logger.Event(logging.Event{Level: logging.LevelWarn, Kind: "decode", Message: notice})
+		}
 	}
 	harnessOnlyAgents := scan.HarnessOnly
 	scannedAgentKeys := scan.MatchedKeys()
@@ -192,7 +201,7 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	}
 
 	existing := discoverExistingWorkflows(orchState)
-	kept, err := readKeptWorkflows(workspace, s.deps.Catalog, []deployedOrchestratorFile{
+	kept, err := readKeptWorkflows(workspace, module.Descriptor(), s.deps.Catalog, []deployedOrchestratorFile{
 		{TargetPath: orchTargetPath, Present: orchState.Present},
 		{TargetPath: orchScriptTargetPath, Present: orchScriptState.Present},
 	})
@@ -246,9 +255,16 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 		probeAgentByKey[a.Key] = a
 	}
 
-	deployedState, err := probeDeployedStateWithIndex(workspace, plannedPaths, module.Descriptor().Frontmatter.ModelKey, seed, deployedAgentIndex, probeAgentByKey, buildParseFailedPaths(scan.Matched))
+	deployedState, err := probeDeployedStateWithIndex(workspace, plannedPaths, module.Descriptor().Frontmatter.ModelKey, seed, deployedAgentIndex, probeAgentByKey, buildParseFailedPaths(scan.Matched), module.Descriptor())
 	if err != nil {
 		return domain.RunSummary{}, err
+	}
+	// Emit decode notices from the probe phase (e.g. EntryMissingInstructions from body-less
+	// Codex agents) through the run log. These complement the index and scan notices above.
+	for _, state := range deployedState {
+		for _, notice := range state.DecodeNotices {
+			s.deps.Logger.Event(logging.Event{Level: logging.LevelWarn, Kind: "decode", Message: notice})
+		}
 	}
 
 	legacyAgentPaths := applyRecordedLegacyAgents(workspace, module, snap, plannedPaths, deployedState)
@@ -319,14 +335,14 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 		Manifest: snap, WorkflowIDs: workflowIDs, KeptWorkflowIDs: kept.ids, HookIDs: hookIDs,
 		// ScannedAgentKeys carries the same slice used for the app layer's ResolveArtifactsFrom
 		// call above, ensuring the probe map and the built plan resolve the identical artifact set.
-		ScannedAgentKeys:           scannedAgentKeys,
-		DeployedState:              deployedState,
-		LegacyAgentPaths:           legacyAgentPaths,
-		Models:                     allModels,
-		ToolMappingsVersion:        toolMappingsVersion,
-		ProtocolVersion:            protocol.Version,
-		BundleVersion:              bundle.Version,
-		InfrastructureDeclarations: refreshIntent(),
+		ScannedAgentKeys:                scannedAgentKeys,
+		DeployedState:                   deployedState,
+		LegacyAgentPaths:                legacyAgentPaths,
+		Models:                          allModels,
+		ToolMappingsVersion:             toolMappingsVersion,
+		ProtocolVersion:                 protocol.Version,
+		BundleVersion:                   bundle.Version,
+		InfrastructureDeclarations:      refreshIntent(),
 		OrchestratorRegionUndeliverable: orchestratorRegionUndeliverable(s.deps.Catalog, module, set.Agents),
 	}
 	p, err := s.deps.Planner.Build(ctx, planInput)
@@ -383,7 +399,8 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	// Review is always shown; AutoConfirmPlan only controls whether a decline/cancel answer
 	// aborts the run (see deploy.go for the same rationale).
 	p.ConflictReport = report
-	s.annotateToolsChanges(&p, module, req.CustomTools, nil, scope, newDeployedBytes(workspace, nil).withMigratedAgents(p).reader(), set.Agents)
+	p.ExperimentalHarnesses = domain.ExperimentalHarnessesOf(module.Ref())
+	s.annotateToolsChanges(&p, module, req.CustomTools, nil, scope, newDeployedBytes(workspace, nil).withMigratedAgents(p).canonicalReader(module.Descriptor()), set.Agents)
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {
 		return domain.RunSummary{}, rerr
@@ -399,23 +416,25 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 	hookPlans := buildHookPlans(module, writtenHooks, scope)
 
 	workflowBlocks := s.buildWorkflowBlocks(workflowIDs)
-	deployedReader := newDeployedBytes(workspace, nil).withMigratedAgents(p).reader()
+	deployedRule := newDeployedBytes(workspace, nil).withMigratedAgents(p)
+	var ownedKeyDiffs []domain.OwnedKeyDifference
 	// Update never asks about or adds infrastructure declarations; it refreshes stale
 	// catalog-backed ones in place (refresh-only merge), leaving all others byte-identical.
-	contentFn := s.buildContent(module, agentByKey, allModels, req.CustomTools, nil, workflowBlocks, nil, scope, deployedReader, toolMappingsVersion, protocol, bundle, harnessOnlyPlan, append(orchRefresh.refreshContentOptions(s), withKeptWorkflows(kept.byPath))...)
+	contentFn := s.buildContent(module, agentByKey, allModels, req.CustomTools, nil, workflowBlocks, nil, scope, deployedRule.funnelReader(module.Descriptor()), toolMappingsVersion, protocol, bundle, harnessOnlyPlan, &ownedKeyDiffs, append(orchRefresh.refreshContentOptions(s), withKeptWorkflows(kept.byPath))...)
 
 	versionStamps := s.withProvenance(buildVersionStamps(set.Agents, set.Skills, set.Hooks, p.Items, module.Descriptor(), toolMappingsVersion), p.Items)
 
 	now := s.now()
 	execReq := deploy.ExecRequest{
-		Plan:          p,
-		MosaicRoot:    s.deps.MosaicRoot,
-		Content:       newDeployedBytes(workspace, nil).withMigratedAgents(p).keepingUnchangedMigrations(p, contentFn),
-		Conflicts:     conflicts,
-		VersionStamps: versionStamps,
-		ManifestMeta:  s.fullRunManifestMeta(),
-		Hooks:         hookPlans,
-		TodoItems:     s.deps.Todo.Items,
+		Plan:              p,
+		MosaicRoot:        s.deps.MosaicRoot,
+		Content:           deployedRule.keepingUnchangedMigrations(p, contentFn),
+		AgentOwnedContent: agentOwnedContentFor(module.Descriptor()),
+		Conflicts:         conflicts,
+		VersionStamps:     versionStamps,
+		ManifestMeta:      s.fullRunManifestMeta(),
+		Hooks:             hookPlans,
+		TodoItems:         s.deps.Todo.Items,
 		TodoMeta: todo.Meta{
 			Harness: harnessRef.DisplayName, WorkspacePath: workspace, DeploymentRoot: workspace,
 			GeneratedAt: now, Mode: domain.ModeUpdateWorkspace,
@@ -461,5 +480,7 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 		s.notifyPersistFailure(ctx, err)
 	}
 
-	return withDryRunPlan(withConflictReport(s.buildSummary(domain.ModeUpdateWorkspace, harnessRef, workspace, result), report), req.DryRun, p), nil
+	summary := s.buildSummary(domain.ModeUpdateWorkspace, harnessRef, workspace, result)
+	summary.OwnedKeyDifferences = ownedKeyDiffs
+	return withDryRunPlan(withConflictReport(summary, report), req.DryRun, p), nil
 }

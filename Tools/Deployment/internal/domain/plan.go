@@ -149,6 +149,10 @@ type Plan struct {
 	// DroppedEntries are manifest entries removed before planning, shown on review and in the
 	// preview. Nil when none.
 	DroppedEntries []DroppedEntry
+	// ExperimentalHarnesses are the experimental harnesses the operation involves (target;
+	// for transform also the source, source first), shown as warnings on plan review. The
+	// app write paths set it before Review; plan building never fills it. Nil when none.
+	ExperimentalHarnesses []ExperimentalHarness
 }
 
 // Counts returns the number of items for each PlanAction.

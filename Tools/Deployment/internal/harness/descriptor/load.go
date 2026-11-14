@@ -3,28 +3,33 @@ package descriptor
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/goccy/go-yaml"
+	"mosaic-deploy/internal/agentformat/formatid"
 	"mosaic-deploy/internal/domain"
 )
 
 // wireDescriptor is the YAML wire representation of a harness descriptor.
 // It carries struct tags; domain.HarnessDescriptor does not (CD-1).
 type wireDescriptor struct {
-	SchemaVersion     string              `yaml:"schema_version"`
-	ID                string              `yaml:"id"`
-	DisplayName       string              `yaml:"display_name"`
-	TransformVersion  string              `yaml:"transform_version"`
-	Models            wireModelCatalog    `yaml:"models"`
-	Tools             wireToolSpec        `yaml:"tools"`
-	Paths             wirePathSpec        `yaml:"paths"`
-	Extensions        map[string]string   `yaml:"extensions"`
-	Frontmatter       wireFrontmatterSpec `yaml:"frontmatter"`
-	Injections        []wireInjection     `yaml:"injections"`
+	SchemaVersion       string              `yaml:"schema_version"`
+	ID                  string              `yaml:"id"`
+	DisplayName         string              `yaml:"display_name"`
+	AgentFormatID       string              `yaml:"agent_format_id"`
+	TransformVersion    string              `yaml:"transform_version"`
+	ToolInfoRecoverable *bool               `yaml:"tool_info_recoverable"`
+	Models              wireModelCatalog    `yaml:"models"`
+	Tools               wireToolSpec        `yaml:"tools"`
+	Paths               wirePathSpec        `yaml:"paths"`
+	Extensions          map[string]string   `yaml:"extensions"`
+	Frontmatter         wireFrontmatterSpec `yaml:"frontmatter"`
+	Injections          []wireInjection     `yaml:"injections"`
+	Hooks               wireHookSupport     `yaml:"hooks"`
+	Experimental        wireExperimental    `yaml:"experimental"`
 	// DeprecatedInjectionsVersion is accepted so older descriptors keep loading; the value is
 	// ignored. The injection version comes from the frontmatter of HarnessInjections.md.
 	DeprecatedInjectionsVersion string `yaml:"injections_version"`
-	Hooks             wireHookSupport     `yaml:"hooks"`
 }
 
 type wireModelCatalog struct {
@@ -136,6 +141,8 @@ func Parse(src []byte, origin string) (*domain.HarnessDescriptor, error) {
 		return nil, fmt.Errorf("%s: %w", origin, err)
 	}
 
+	w.Experimental.present = w.Experimental.present || hasExperimentalKey(src)
+
 	if w.Tools.RetiredCustomToolTemplate != "" {
 		e := retiredCustomToolTemplateError()
 		e.File = origin
@@ -178,23 +185,54 @@ func Parse(src []byte, origin string) (*domain.HarnessDescriptor, error) {
 	return d, nil
 }
 
+// quotedFormatIDs lists the format vocabulary as double-quoted IDs joined by ", ".
+func quotedFormatIDs() string {
+	all := formatid.All()
+	quoted := make([]string, len(all))
+	for i, id := range all {
+		quoted[i] = fmt.Sprintf("%q", string(id))
+	}
+	return strings.Join(quoted, ", ")
+}
+
 // mapWireToDomain converts the YAML wire representation to the domain type.
 // Returns mapping-phase validation errors (mutual-exclusivity violations and
 // unrecognized role keys in frontmatter add entries). These are merged with
 // Validate's errors in Parse.
 func mapWireToDomain(w *wireDescriptor) (*domain.HarnessDescriptor, []ValidationError) {
 	fm, fmErrs := mapWireFrontmatterSpec(&w.Frontmatter)
+
+	// Parse agent_format_id: empty string defaults to Markdown; unknown values are errors.
+	parsedFmtID, fmtErr := formatid.Parse(w.AgentFormatID)
+	if fmtErr != nil {
+		fmErrs = append(fmErrs, ValidationError{
+			Field:   "agent_format_id",
+			Message: fmt.Sprintf("unknown agent format id %q: must be one of: %s", w.AgentFormatID, quotedFormatIDs()),
+		})
+		parsedFmtID = formatid.Markdown // use default to allow other validations to proceed
+	}
+
+	// tool_info_recoverable polarity inversion: absent or true -> ToolInfoUnrecoverable = false;
+	// explicit false -> ToolInfoUnrecoverable = true.
+	toolInfoUnrecoverable := w.ToolInfoRecoverable != nil && !*w.ToolInfoRecoverable
+
+	expReason, expErrs := experimentalReason(w.Experimental)
+	fmErrs = append(fmErrs, expErrs...)
+
 	return &domain.HarnessDescriptor{
-		SchemaVersion:     w.SchemaVersion,
-		ID:                w.ID,
-		DisplayName:       w.DisplayName,
-		TransformVersion:  w.TransformVersion,
-		Models:            mapWireModelCatalog(&w.Models),
-		Tools:             mapWireToolSpec(&w.Tools),
-		Paths:             mapWirePathSpec(&w.Paths),
-		Extensions:        mapExtensions(w.Extensions),
-		Frontmatter:       fm,
-		Injections:        mapWireInjections(w.Injections),
+		SchemaVersion:         w.SchemaVersion,
+		ID:                    w.ID,
+		DisplayName:           w.DisplayName,
+		AgentFormatID:         string(parsedFmtID),
+		TransformVersion:      w.TransformVersion,
+		ToolInfoUnrecoverable: toolInfoUnrecoverable,
+		ExperimentalReason:    expReason,
+		Models:                mapWireModelCatalog(&w.Models),
+		Tools:                 mapWireToolSpec(&w.Tools),
+		Paths:                 mapWirePathSpec(&w.Paths),
+		Extensions:            mapExtensions(w.Extensions),
+		Frontmatter:           fm,
+		Injections:            mapWireInjections(w.Injections),
 		Hooks: domain.HookSupport{
 			Supported:  w.Hooks.Supported,
 			VariantKey: w.Hooks.VariantKey,

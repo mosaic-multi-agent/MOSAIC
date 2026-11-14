@@ -56,7 +56,7 @@ func probeAgentWithRecordedLegacy(
 	workspace string, module domain.HarnessModule, snap manifest.Snapshot, key, target string,
 ) domain.DeployedArtifactState {
 	modelKey := module.Descriptor().Frontmatter.ModelKey
-	state := probeDeployedArtifactOf(workspace, target, modelKey, domain.ArtifactAgent)
+	state := probeDeployedArtifact(workspace, target, modelKey, domain.ArtifactAgent, module.Descriptor())
 	if state.Present {
 		return state
 	}
@@ -64,7 +64,7 @@ func probeAgentWithRecordedLegacy(
 		return state // something is at the target path (not a readable agent file): not a rename
 	}
 	if legacy := recordedLegacyPath(module, snap, key, target); legacy != "" {
-		return probeDeployedArtifactOf(workspace, legacy, modelKey, domain.ArtifactAgent)
+		return probeDeployedArtifact(workspace, legacy, modelKey, domain.ArtifactAgent, module.Descriptor())
 	}
 	return state
 }
@@ -109,7 +109,7 @@ func applyRecordedLegacyAgents(
 		if legacy == "" || pathExists(filepath.Join(workspace, filepath.FromSlash(pp.TargetPath))) {
 			continue
 		}
-		legacyState := probeDeployedArtifactOf(workspace, legacy, modelKey, domain.ArtifactAgent)
+		legacyState := probeDeployedArtifact(workspace, legacy, modelKey, domain.ArtifactAgent, module.Descriptor())
 		if !legacyState.Present {
 			continue
 		}

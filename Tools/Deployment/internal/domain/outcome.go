@@ -66,6 +66,19 @@ type LogPaths struct {
 	History string
 }
 
+// OwnedKeyDifference names one MOSAIC-owned frontmatter key whose decoded canonical
+// value in the deployed file differs from the value being written in this run. Only
+// populated for artifacts whose origin the plan layer could not confirm. The difference
+// asserts nothing about who changed what; it reports only what was found.
+type OwnedKeyDifference struct {
+	Key             string // the frontmatter key
+	Deployed        string // prior on-disk value (decoded canonical); "" when DeployedPresent is false
+	Incoming        string // value this run writes; "" when IncomingPresent is false
+	Reason          string // human-readable explanation
+	DeployedPresent bool   // false when the key was absent from the deployed file
+	IncomingPresent bool   // false when the key is absent from the incoming form
+}
+
 // RunSummary is the single structure both frontends render and the only value the app returns.
 // It is also the JSON document emitted by cli --output json.
 type RunSummary struct {
@@ -81,10 +94,20 @@ type RunSummary struct {
 	Logs           LogPaths
 	LogDegraded    []string // non-fatal logging failures
 	Outcome        Outcome
+
+	// OwnedKeyDifferences accumulates every owned-key difference emitted during this run.
+	// Non-empty only when one or more artifacts were conflict-classified and had parseable
+	// deployed bytes. Empty on every ordinary run and when all conflicts are resolved by skip.
+	OwnedKeyDifferences []OwnedKeyDifference
 	// ConflictReport is the catalog-stack conflict report of the run; empty without shadowing.
-	// It is a value field on purpose (this struct has no omitempty fields), unlike the pointer
-	// on app.RenderAgentResult. Do not unify the two.
+	// It is a value field on purpose (this struct has no omitempty fields besides
+	// ExperimentalHarnesses), unlike the pointer on app.RenderAgentResult. Do not unify the two.
 	ConflictReport ConflictReport
+
+	// ExperimentalHarnesses are the experimental harnesses this run involved, one entry per
+	// harness. The only omitempty field of this struct: absent from the JSON document of a run
+	// with no experimental harness, so that document is unchanged.
+	ExperimentalHarnesses []ExperimentalHarness `json:",omitempty"`
 
 	// DryRunPlan is the plan a dry run reviewed; nil for every run that is not a dry run.
 	// Not serialised: the JSON document keeps its shape.

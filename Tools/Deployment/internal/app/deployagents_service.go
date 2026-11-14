@@ -215,7 +215,9 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 	agentsDir := module.Descriptor().Paths.Agents.Project
 	var deployedAgentIndex DeployedAgentIndex
 	if module.Descriptor().Paths.Agents.Supported && agentsDir != "" {
-		deployedAgentIndex = buildDeployedAgentIndex(workspace, agentsDir)
+		var indexNotices []string
+		deployedAgentIndex, indexNotices = buildDeployedAgentIndex(workspace, agentsDir, module.Descriptor())
+		s.logDecodeNotices(indexNotices)
 	}
 
 	probeAgentByKey := make(map[string]domain.Agent, len(probeSet.Agents))
@@ -227,10 +229,11 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 	if pathErr != nil {
 		return domain.RunSummary{}, pathErr
 	}
-	deployedState, err := probeDeployedStateWithIndex(workspace, plannedPaths, module.Descriptor().Frontmatter.ModelKey, orch.seedStates(), deployedAgentIndex, probeAgentByKey, nil)
+	deployedState, err := probeDeployedStateWithIndex(workspace, plannedPaths, module.Descriptor().Frontmatter.ModelKey, orch.seedStates(), deployedAgentIndex, probeAgentByKey, nil, module.Descriptor())
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
+	s.logProbeDecodeNotices(deployedState)
 	legacyAgentPaths := applyRecordedLegacyAgents(workspace, module, snap, plannedPaths, deployedState)
 	askAgents, migratingAgents := splitMigratingAgents(nonInfraProbeAgents, plannedPaths, legacyAgentPaths)
 	askInfraAgents, migratingInfra := splitMigratingAgents(infraAgents, plannedPaths, legacyAgentPaths)
@@ -370,7 +373,8 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 
 	report := s.conflictReportFor(module.Ref().ID, nil, s.deployedWorkflowIDs(module, workspace, scope, true), req.AutoConfirmPlan)
 	p.ConflictReport = report
-	s.annotateToolsChanges(&p, module, customTools, skippedTools, scope, newDeployedBytes(workspace, orch.readPaths()).withMigratedAgents(p).reader(), probeSet.Agents, infraAgents)
+	p.ExperimentalHarnesses = domain.ExperimentalHarnessesOf(module.Ref())
+	s.annotateToolsChanges(&p, module, customTools, skippedTools, scope, newDeployedBytes(workspace, orch.readPaths()).withMigratedAgents(p).canonicalReader(module.Descriptor()), probeSet.Agents, infraAgents)
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {
 		return domain.RunSummary{}, rerr
@@ -391,17 +395,20 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 	// No catalog workflow blocks: orchestrator files keep their deployed workflows, and only
 	// their infrastructure declarations are merged (see orch.contentOptions).
 	models := orch.withDeployedModels(modelRes.models)
-	contentFn := s.buildContent(module, agentByKey, models, customTools, skippedTools, nil, nil, scope, newDeployedBytes(workspace, orch.readPaths()).withMigratedAgents(p).reader(), toolMappingsVersion, protocol, bundle, nil, orch.contentOptions(s)...)
+	deployedRule := newDeployedBytes(workspace, orch.readPaths()).withMigratedAgents(p)
+	var ownedKeyDiffs []domain.OwnedKeyDifference
+	contentFn := s.buildContent(module, agentByKey, models, customTools, skippedTools, nil, nil, scope, deployedRule.funnelReader(module.Descriptor()), toolMappingsVersion, protocol, bundle, nil, &ownedKeyDiffs, orch.contentOptions(s)...)
 
 	now := s.now()
 	execReq := deploy.ExecRequest{
-		Plan:          p,
-		MosaicRoot:    s.deps.MosaicRoot,
-		Content:       newDeployedBytes(workspace, nil).withMigratedAgents(p).keepingUnchangedMigrations(p, contentFn),
-		Conflicts:     conflicts,
-		VersionStamps: s.withProvenance(buildVersionStamps(append(probeSet.Agents, infraAgents...), probeSet.Skills, nil, p.Items, module.Descriptor(), toolMappingsVersion), p.Items),
-		Hooks:         nil,
-		TodoItems:     s.deps.Todo.Items,
+		Plan:              p,
+		MosaicRoot:        s.deps.MosaicRoot,
+		Content:           deployedRule.keepingUnchangedMigrations(p, contentFn),
+		AgentOwnedContent: agentOwnedContentFor(module.Descriptor()),
+		Conflicts:         conflicts,
+		VersionStamps:     s.withProvenance(buildVersionStamps(append(probeSet.Agents, infraAgents...), probeSet.Skills, nil, p.Items, module.Descriptor(), toolMappingsVersion), p.Items),
+		Hooks:             nil,
+		TodoItems:         s.deps.Todo.Items,
 		TodoMeta: todo.Meta{
 			Harness: harnessRef.DisplayName, WorkspacePath: workspace, DeploymentRoot: workspace,
 			GeneratedAt: now, Mode: domain.ModeDeployAgents,
@@ -432,5 +439,7 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 		s.notifyPersistFailure(ctx, err)
 	}
 
-	return withDryRunPlan(withConflictReport(s.buildSummary(domain.ModeDeployAgents, harnessRef, workspace, result), report), req.DryRun, p), nil
+	summary := s.buildSummary(domain.ModeDeployAgents, harnessRef, workspace, result)
+	summary.OwnedKeyDifferences = ownedKeyDiffs
+	return withDryRunPlan(withConflictReport(summary, report), req.DryRun, p), nil
 }

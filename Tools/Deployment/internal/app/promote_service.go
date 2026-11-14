@@ -14,11 +14,12 @@ import (
 	"strconv"
 	"strings"
 
-	"mosaic-common/docformat"
-	"mosaic-deploy/internal/catalog"
+	"mosaic-deploy/internal/agentformat"
 	"mosaic-deploy/internal/agentkey"
+	"mosaic-deploy/internal/catalog"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
+	"mosaic-deploy/internal/transform"
 )
 
 // promoteHarnessDropSet is the unified result of the harness drop-key derivation and
@@ -222,6 +223,118 @@ func (s *service) resolvePromoteTools(
 	return tools, verbatim
 }
 
+// knownGenericToolVocab is the accepted vocabulary for QPromoteNonRecoverableTools.
+// It covers the minimal read-only grant and the escalating tools so that operators
+// who know their agent's tool requirements can supply them. Names outside this set
+// are filtered out rather than accepted silently, so an unfamiliar name never reaches
+// the promoted file unvetted.
+var knownGenericToolVocab = map[string]bool{
+	"file_read":      true,
+	"file_search":    true,
+	"content_search": true,
+	"file_write":     true,
+	"file_edit":      true,
+	"terminal":       true,
+	"subagent":       true,
+	"bash":           true,
+}
+
+// knownGenericToolVocabSorted returns a sorted comma-separated list of the known
+// generic tool vocabulary for display in re-ask prompts.
+func knownGenericToolVocabSorted() string {
+	names := make([]string, 0, len(knownGenericToolVocab))
+	for name := range knownGenericToolVocab {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
+}
+
+// parseGenericToolNames splits a comma-separated answer, normalises each entry
+// (trim surrounding whitespace and lower-case), filters to knownGenericToolVocab,
+// and returns the accepted deduplicated list. An empty or all-blank input returns
+// a nil slice.
+func parseGenericToolNames(text string) []string {
+	parts := strings.Split(text, ",")
+	var result []string
+	seen := make(map[string]bool)
+	for _, part := range parts {
+		name := strings.ToLower(strings.TrimSpace(part))
+		if name == "" {
+			continue
+		}
+		if knownGenericToolVocab[name] && !seen[name] {
+			seen[name] = true
+			result = append(result, name)
+		}
+	}
+	return result
+}
+
+// resolveNonRecoverablePromoteTools asks the user for a comma-separated list of
+// generic tool names when the source harness cannot recover tool information. It
+// normalises each entry (whitespace trim, lower-case) and filters against
+// knownGenericToolVocab, accepting only recognised names. When the user provides
+// a non-blank answer but every name is outside the vocabulary, the question is
+// re-asked with the vocabulary listed; this repeats up to maxNonRecoverableReasks
+// additional times before falling through to the empty-list warning path. A blank
+// answer, a non-interactive session, or an unanswered question all return an
+// explicit empty (non-nil) slice plus a NoticeWarning.
+//
+// maxNonRecoverableReasks limits re-ask iterations to keep the function
+// terminating in tests that script a permanently-bad answer.
+const maxNonRecoverableReasks = 3
+
+func (s *service) resolveNonRecoverablePromoteTools(ctx context.Context, subject string) []string {
+	title := "Source harness does not record tools. Enter comma-separated generic tool names (or leave blank for none):"
+
+	for attempt := 0; attempt <= maxNonRecoverableReasks; attempt++ {
+		q := domain.TextQuestion{
+			Question: domain.Question{
+				ID:        domain.QPromoteNonRecoverableTools,
+				Subject:   subject,
+				Title:     title,
+				AllowSkip: true,
+			},
+		}
+		ans, err := s.deps.Interaction.AskText(ctx, q)
+
+		if err != nil || ans.Status != domain.Answered {
+			// Non-interactive or unanswered: empty tools list with a warning.
+			s.deps.Interaction.Notify(ctx, domain.Notice{
+				Level:   domain.NoticeWarning,
+				Message: fmt.Sprintf("agent %q: source harness does not record tool information; tools list left empty", subject),
+			})
+			return []string{}
+		}
+
+		if strings.TrimSpace(ans.Text) == "" {
+			// Blank answer: explicit empty tools list.
+			return []string{}
+		}
+
+		// Normalise (trim + lower-case) and filter to known vocabulary.
+		result := parseGenericToolNames(ans.Text)
+		if len(result) > 0 {
+			return result
+		}
+
+		// All provided names were outside the known vocabulary. Re-ask with the
+		// vocabulary listed so the user knows which names are accepted.
+		title = fmt.Sprintf(
+			"Unknown tool name(s). Known generic tools: %s. Enter comma-separated names (or leave blank for none):",
+			knownGenericToolVocabSorted(),
+		)
+	}
+
+	// Re-ask limit reached: emit warning and return empty list.
+	s.deps.Interaction.Notify(ctx, domain.Notice{
+		Level:   domain.NoticeWarning,
+		Message: fmt.Sprintf("agent %q: no recognised tool names provided; tools list left empty", subject),
+	})
+	return []string{}
+}
+
 // resolvePromoteGenericFields asks for the generic-only frontmatter fields the harness drops
 // at deploy time and that cannot be derived from the deployed file: recommended_tier,
 // tier_rationale, and required_skills.
@@ -405,10 +518,31 @@ func (s *service) Promote(ctx context.Context, req PromoteRequest) (PromoteResul
 	}
 	defer module.Close() //nolint:errcheck // close error must not fail an otherwise complete run
 
-	// Read the source file bytes. The source is never modified or deleted by this function.
-	src, err := os.ReadFile(req.FilePath)
-	if err != nil {
-		return PromoteResult{}, fmt.Errorf("reading source file %s: %w", req.FilePath, err)
+	// Read and decode the source file through the funnel. For Markdown harnesses this is an
+	// identity decode; for Codex TOML the file is translated to canonical Markdown form.
+	dr := readDeployedArtifact(req.FilePath, domain.ArtifactAgent, module.Descriptor())
+	if dr.ReadErr != nil {
+		return PromoteResult{}, fmt.Errorf("reading source file %s: %w", req.FilePath, dr.ReadErr)
+	}
+	if dr.DecodeErr != nil {
+		return PromoteResult{}, fmt.Errorf("decoding source file %s: %w", req.FilePath, dr.DecodeErr)
+	}
+	// dr.Present is guaranteed true here: the stat check above already filtered absent files.
+
+	// All subsequent processing uses canonical bytes so that harness-specific syntax
+	// (e.g. Codex TOML stamps) is read in the uniform Markdown frontmatter form.
+	src := dr.Canonical
+
+	// Merge the decode report from the source read (AC15.11). An absent or undecodable
+	// file is already rejected above; here the report is non-empty only on a successful
+	// decode that has informational entries (e.g. EntryMissingInstructions for a
+	// body-less source).
+	{
+		var decodeRpt transform.Report
+		mergeDecodeReport(&decodeRpt, dr.Report)
+		for _, g := range decodeRpt.Gaps {
+			s.deps.Todo.AddGap(g)
+		}
 	}
 
 	// Apply the shared two-signal eligibility rule. Reject with ErrPromoteNotTransformed
@@ -418,9 +552,15 @@ func (s *service) Promote(ctx context.Context, req PromoteRequest) (PromoteResul
 		return PromoteResult{}, fmt.Errorf("%w: %s: %s", ErrPromoteNotTransformed, req.FilePath, verdict.Reason)
 	}
 
-	// Derive the agent key from the source filename — the same derivation the catalog uses
-	// so the promoted file is reachable under the key the user expects.
-	key := agentkey.FromFileName(filepath.Base(req.FilePath))
+	// Derive the agent key from the source filename with the harness's declared extension;
+	// the shared derivation strips the extension and its ".agent.<suffix>"
+	// variant. Falls back to ".md" stripping when the descriptor declares no extension.
+	name := filepath.Base(req.FilePath)
+	agentExt := module.Descriptor().Extensions[domain.ArtifactAgent]
+	if agentExt == "" {
+		agentExt = ".md"
+	}
+	key := agentkey.FromFileNameExt(name, agentExt)
 
 	// Inspect the deployed source for harness-side facts (tool entries and key presence set)
 	// before asking any questions. This is a pure parse — no I/O, no questions.
@@ -496,17 +636,36 @@ func (s *service) Promote(ctx context.Context, req PromoteRequest) (PromoteResul
 	var strippedFields []StrippedField
 	var divertedResolvedGenericNames []string // generic names recovered from diverted fields
 
-	srcDoc, srcParseErr := docformat.Parse(src)
+	srcDoc, srcParseErr := ParseGenericSource(src)
 	if srcParseErr == nil {
 		srcFm := srcDoc.Frontmatter()
 
 		// Unknown-field detection (FR-3): classify every source key; keys that are ClassUnknown
 		// are added to the drop set and reported as stripped.
+		//
+		// ClassHarness keys that are not already in the drop set are also dropped and reported.
+		// These are harness-specific keys (e.g. from KeyOrder) that the source harness recognises
+		// but that have no meaning in generic Markdown. They are not drop candidates (ModelKey,
+		// ToolsKey, and plan Set keys are already in dropKeys via buildPromoteHarnessDropSet), so
+		// they would otherwise be carried through to the generic output unchanged. Reporting them
+		// with StripReasonUnknownField informs the operator that the field did not travel the
+		// format-change boundary.
 		for _, k := range srcFm.Keys() {
-			if clf.Classify(k) == descriptor.ClassUnknown {
+			class := clf.Classify(k)
+			if class == descriptor.ClassUnknown {
 				if !promoteProtectedGenericKeys[k] {
 					dropKeys[k] = true
 				}
+				val, _ := srcFm.Get(k)
+				rendered := descriptor.RenderFieldValues(val)
+				strippedFields = append(strippedFields, StrippedField{
+					Key:    k,
+					Values: rendered,
+					Reason: StripReasonUnknownField,
+				})
+			} else if class == descriptor.ClassHarness && !dropKeys[k] && !promoteProtectedGenericKeys[k] {
+				// Harness-specific key not yet in the drop set: drop and report it.
+				dropKeys[k] = true
 				val, _ := srcFm.Get(k)
 				rendered := descriptor.RenderFieldValues(val)
 				strippedFields = append(strippedFields, StrippedField{
@@ -556,9 +715,21 @@ func (s *service) Promote(ctx context.Context, req PromoteRequest) (PromoteResul
 		}
 	}
 
-	// Reverse-map the harness tool entries to the authoritative generic tools list.
-	// resolvePromoteTools returns a non-nil slice (AD-7) so it is always authoritative.
-	resolvedTools, verbatimTools := s.resolvePromoteTools(ctx, module, facts.HarnessTools, req.FilePath)
+	// Reverse-map the harness tool entries to the authoritative generic tools list, or
+	// ask the user when the source harness cannot recover tool information.
+	//
+	// For non-recoverable sources (ToolInfoUnrecoverable=true), the reverse-mapping path
+	// is skipped entirely. Instead the user is asked for a comma-separated list of generic
+	// tool names. Names outside the known generic vocabulary are filtered out. A blank
+	// answer, a non-interactive session, or an unanswered question all yield an explicit
+	// empty tools list plus a warning notice.
+	var resolvedTools []string
+	var verbatimTools []string
+	if module.Descriptor().ToolInfoUnrecoverable {
+		resolvedTools = s.resolveNonRecoverablePromoteTools(ctx, req.FilePath)
+	} else {
+		resolvedTools, verbatimTools = s.resolvePromoteTools(ctx, module, facts.HarnessTools, req.FilePath)
+	}
 
 	// Append diverted-field recoveries to the generic tools list, deduplicating first-seen
 	// against entries already resolved from the main tools key.
@@ -580,19 +751,45 @@ func (s *service) Promote(ctx context.Context, req PromoteRequest) (PromoteResul
 	// This is deterministic for a given catalog state and the test asserts no collision.
 	numericID := nextNumericID(s.deps.Catalog)
 
+	// Strip the carriage container from the canonical source at the format-change
+	// boundary. Any key held in the container cannot travel the format change; each is
+	// reported as a StrippedField with StripReasonCarriedKey so the operator knows which
+	// user-owned keys did not carry forward.
+	//
+	// StripCarriage is pure: it does not modify src, so the source artifact on disk is
+	// not affected. The stripped canonical bytes replace src for the generation call.
+	stripResult, stripErr := agentformat.StripCarriage(src)
+	if stripErr != nil {
+		return PromoteResult{}, fmt.Errorf("stripping carriage container from source: %w", stripErr)
+	}
+	for _, k := range stripResult.CarriedKeys {
+		strippedFields = append(strippedFields, StrippedField{
+			Key:    k,
+			Reason: StripReasonCarriedKey,
+		})
+	}
+	src = stripResult.Canonical
+
+	// For the non-recoverable path an empty resolved tools list must be written as
+	// tools: [] rather than omitting the key. An absent tools key is read as "inherit all"
+	// by some consumers, which is not the intended outcome when the operator explicitly
+	// answered blank or did not interact.
+	writeEmptyToolsList := module.Descriptor().ToolInfoUnrecoverable
+
 	// Generate the generic agent bytes from the harness-only source. The generation core
 	// is pure: src is not modified and no file is written here.
 	genericBytes, err := buildGenericAgent(PromoteInput{
-		Source:          src,
-		NumericID:       numericID,
-		Key:             key,
-		Role:            verdict.Meta.Role,
-		Version:         verdict.Meta.Version,
-		DropKeys:        dropKeys,
-		Tools:           resolvedTools,
-		RecommendedTier: recovered.RecommendedTier,
-		TierRationale:   recovered.TierRationale,
-		RequiredSkills:  recovered.RequiredSkills,
+		Source:              src,
+		NumericID:           numericID,
+		Key:                 key,
+		Role:                verdict.Meta.Role,
+		Version:             verdict.Meta.Version,
+		DropKeys:            dropKeys,
+		Tools:               resolvedTools,
+		WriteEmptyToolsList: writeEmptyToolsList,
+		RecommendedTier:     recovered.RecommendedTier,
+		TierRationale:       recovered.TierRationale,
+		RequiredSkills:      recovered.RequiredSkills,
 	})
 	if err != nil {
 		return PromoteResult{}, fmt.Errorf("%s: %w", req.FilePath, err)
@@ -616,6 +813,8 @@ func (s *service) Promote(ctx context.Context, req PromoteRequest) (PromoteResul
 			RecoveredFields: recovered.Supplied,
 			StrippedFields:  strippedFields,
 			DivertedTools:   facts.DivertedTools,
+
+			ExperimentalHarnesses: domain.ExperimentalHarnessesOf(module.Ref()),
 		}, nil
 	}
 
@@ -640,5 +839,7 @@ func (s *service) Promote(ctx context.Context, req PromoteRequest) (PromoteResul
 		RecoveredFields: recovered.Supplied,
 		StrippedFields:  strippedFields,
 		DivertedTools:   facts.DivertedTools,
+
+		ExperimentalHarnesses: domain.ExperimentalHarnessesOf(module.Ref()),
 	}, nil
 }

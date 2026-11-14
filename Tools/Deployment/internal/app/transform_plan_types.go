@@ -39,6 +39,9 @@ const (
 	NoteBothForms          TransformNoteKind = "both-forms"
 	NoteNewerTargetContent TransformNoteKind = "newer-target-content"
 	NoteNoAgentsFound      TransformNoteKind = "no-agents-found"
+	// NoteMinimalToolGrant warns that the source harness records no tool information and a
+	// minimal read-only grant was applied; Paths lists the affected destination files.
+	NoteMinimalToolGrant TransformNoteKind = "minimal-tool-grant"
 )
 
 // TransformNote is one run-level note.

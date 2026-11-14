@@ -13,7 +13,7 @@ This guide is for **project authors** who want to run multi-agent workflows with
 | **What it does** | Executes a MOSAIC workflow end-to-end: reads the workflow table, dispatches subagents, writes `Orchestration.md`, handles deviations |
 | **Two ways to run** | Interactive TUI (no subcommand) or scriptable CLI (`mosaic-run run`) |
 | **Three execution modes** | **Orchestrated** (orchestrator decides everything), **Auto** (engine routes happy path), **Auto-review** (engine also routes review loops) |
-| **Supported harnesses** | `claude-code`, `opencode`, `ghcp-cli` |
+| **Supported harnesses** | `claude-code`, `opencode`, `ghcp-cli`. Codex is not supported: `mosaic-run` has no Codex adapter yet. |
 | **State file** | `Orchestration-{run_id}/Orchestration.md` — atomic writes, crash-safe, resumable |
 
 > **Known issue — GHCP CLI:** Runner runs on `ghcp-cli` are currently unreliable. With recent GHCP CLI versions (observed on 1.0.91), GHCP CLI sometimes ignores the requested `--agent` and runs its default agent instead, which shows up as protocol or parsing errors in the run. The failures are intermittent and the cause is not yet confirmed. In limited testing GHCP CLI 1.0.87 did not show the problem, so pinning it may help, but this is not verified. For reliable runs, use `claude-code` or `opencode`.
@@ -83,7 +83,7 @@ All three modes are dramatically cheaper than running the orchestrator agent man
 |------|----------|---------|-------------|
 | `--workflow` | New run | — | Workflow identifier (must exist in the orchestrator file); not needed with `--run` |
 | `--task` | New run | — | Task description for the run; not needed with `--run` |
-| `--harness` | Yes | `fake` | Harness adapter (`claude-code`, `opencode`, `ghcp-cli`) |
+| `--harness` | Yes | `fake` | Harness adapter (`claude-code`, `opencode`, `ghcp-cli`); Codex is not supported yet |
 | `--mode` | New run | — | Execution mode (`orchestrated`, `auto`, `auto-review`); on a resume only for a run that records no Runner settings |
 | `--timeout` | No | `30m` | Per-invocation timeout for dispatches without human-in-the-loop |
 | `--hitl-timeout` | No | `4h` | Per-invocation timeout for dispatches sent with `human_in_the_loop: true`, where a person may take long to answer |
@@ -107,6 +107,8 @@ There is no `--orchestrator-file` flag. The Runner derives the orchestrator path
 | `claude-code` | `.claude/agents/orchestrator-script.md` |
 | `opencode` | `.opencode/agents/orchestrator-script.md` |
 | `ghcp-cli` | `.github/agents/orchestrator-script.md` |
+
+There is no row for Codex: `mosaic-run` does not support Codex yet, even though Deploy can deploy agents to it (experimental).
 
 `orchestrator-script.agent.md` is accepted in place of `orchestrator-script.md` in each of these folders, and a folder holding both is refused. If the file does not exist, the Runner exits immediately with a message indicating the workspace is not properly deployed for the selected harness. Run the Deploy tool to populate the agents directory before using the Runner.
 

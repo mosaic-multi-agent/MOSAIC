@@ -89,7 +89,7 @@ func TestCurrentDeployOutput_IsReturnedByHarnessOnlyDiscovery(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			got := scanHarnessOnlyAgents(ws, "agents", map[string]bool{})
+			got, _ := scanHarnessOnlyAgents(ws, "agents", map[string]bool{})
 
 			if len(got) != 1 {
 				t.Fatalf("scanHarnessOnlyAgents returned %d agents, want 1", len(got))

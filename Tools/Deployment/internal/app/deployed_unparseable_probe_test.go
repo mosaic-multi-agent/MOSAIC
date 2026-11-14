@@ -87,10 +87,10 @@ func probeSingleAgent(t *testing.T, content []byte, parseFailedPaths map[string]
 	paths := plan.PlannedPaths{
 		{Ref: domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: agent.Key}, TargetPath: targetPath},
 	}
-	index := buildDeployedAgentIndex(ws, unparseableAgentsDir)
+	index, _ := buildDeployedAgentIndex(ws, unparseableAgentsDir, nil)
 
 	result, err := probeDeployedStateWithIndex(ws, paths, "", nil, index,
-		map[string]domain.Agent{agent.Key: agent}, parseFailedPaths)
+		map[string]domain.Agent{agent.Key: agent}, parseFailedPaths, nil)
 	if err != nil {
 		t.Fatalf("probeDeployedStateWithIndex: unexpected error: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestBuildDeployedAgentIndex_BOMFile_IndexedByID(t *testing.T) {
 	writeFile(t, mkdirAll(t, filepath.Join(ws, unparseableAgentsDir)), "renamed.md", content)
 
 	// Act
-	index := buildDeployedAgentIndex(ws, unparseableAgentsDir)
+	index, _ := buildDeployedAgentIndex(ws, unparseableAgentsDir, nil)
 
 	// Assert
 	entries := index.Lookup("9")
@@ -208,7 +208,7 @@ func TestScanWorkspaceAgents_NoFrontmatterFile_FilenameMatchesCatalogAgent_Parse
 	cat.byKey["known-agent"] = domain.Agent{Key: "known-agent", NumericID: "42"}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, nil)
 
 	// Assert
 	if len(scan.Matched) != 1 {

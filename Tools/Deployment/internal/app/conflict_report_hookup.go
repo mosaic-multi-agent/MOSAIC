@@ -110,7 +110,7 @@ func (s *service) orchestratorTargetPaths(module domain.HarnessModule, scope dom
 func (s *service) deployedWorkflowIDs(module domain.HarnessModule, workspace string, scope domain.Scope, includeOrchestrator bool) []string {
 	var ids []string
 	for _, p := range s.orchestratorTargetPaths(module, scope, includeOrchestrator) {
-		state := probeDeployedArtifact(workspace, p, module.Descriptor().Frontmatter.ModelKey)
+		state := probeDeployedArtifact(workspace, p, module.Descriptor().Frontmatter.ModelKey, domain.ArtifactAgent, module.Descriptor())
 		ids = unionPreserveOrder(ids, state.Workflows.IDs())
 	}
 	return ids

@@ -34,6 +34,11 @@ type HarnessRef struct {
 	RequiresOptIn  bool
 	Usable         bool   // false when gated by missing opt-in or a load error
 	UnusableReason string // human-readable; empty when Usable
+
+	// ExperimentalReason is copied from the harness descriptor; empty when the harness is not
+	// experimental or has no loaded descriptor. Excluded from JSON so RunSummary.Harness keeps
+	// its shape for every harness.
+	ExperimentalReason string `json:"-"`
 }
 
 // HarnessDescriptor is the declarative half of the harness contract. It carries no struct tags
@@ -42,9 +47,11 @@ type HarnessDescriptor struct {
 	SchemaVersion                 string
 	ID                            string
 	DisplayName                   string
+	AgentFormatID                 string // agent file format identifier; defaults to "markdown" when absent
 	TransformVersion              string // stamped into every deployed agent
 	InjectionsVersion             string // stamped into every deployed agent
 	OrchestratorInjectionsVersion string // stamped into the orchestrator's deployed file only; populated at module construction time from HarnessInjectionsOrchestrator.md frontmatter
+	ToolInfoUnrecoverable         bool   // true when wire tool_info_recoverable is explicitly false (polarity inversion)
 	Models                        ModelCatalog
 	Tools                         ToolSpec
 	Paths                         PathSpec
@@ -52,6 +59,11 @@ type HarnessDescriptor struct {
 	Frontmatter                   FrontmatterSpec
 	Injections                    []InjectionContent
 	Hooks                         HookSupport
+
+	// ExperimentalReason is the descriptor's experimental declaration: non-empty when the
+	// harness is experimental, holding the trimmed user-facing reason; empty when the
+	// descriptor declares nothing.
+	ExperimentalReason string
 }
 
 // ModelCatalog lists the models a harness exposes to the user during model selection.

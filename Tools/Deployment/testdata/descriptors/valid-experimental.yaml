@@ -1,0 +1,6 @@
+# Minimal descriptor that declares its harness experimental with a user-facing reason.
+schema_version: "1"
+id: "experimental-harness"
+display_name: "Experimental Harness"
+experimental:
+  reason: "  Agents deploy; orchestration is not supported.  "

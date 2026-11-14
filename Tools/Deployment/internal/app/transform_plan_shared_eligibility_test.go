@@ -67,7 +67,7 @@ func TestScanWorkspaceAgents_ClassificationOfTransformFixturesIsUnchanged(t *tes
 		tpPlaceAgent(t, ws, ".claude/agents", f+".md", f+".md")
 	}
 
-	scan := scanWorkspaceAgents(ws, ".claude/agents", tpScanCatalog{})
+	scan, _ := scanWorkspaceAgents(ws, ".claude/agents", tpScanCatalog{}, nil)
 
 	var matched []string
 	for _, m := range scan.Matched {
@@ -91,7 +91,7 @@ func TestScanWorkspaceAgents_IgnoresDeployedUtilityAndStandaloneAgentsStampedOnl
 	tpPlaceAgent(t, ws, ".claude/agents", "utility.md", "utility.md")
 	tpPlaceAgent(t, ws, ".claude/agents", "standalone.md", "standalone.md")
 
-	scan := scanWorkspaceAgents(ws, ".claude/agents", tpScanCatalog{})
+	scan, _ := scanWorkspaceAgents(ws, ".claude/agents", tpScanCatalog{}, nil)
 
 	if len(scan.Matched) != 0 || len(scan.HarnessOnly) != 0 {
 		t.Errorf("scan = %+v, want empty for stamped files without a canonical section", scan)

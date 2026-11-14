@@ -32,7 +32,7 @@ func fileAgentExt(name string) string {
 // recognizeTransformAgent reports whether data is a MOSAIC agent. When it is not, reason names
 // the failed condition.
 func recognizeTransformAgent(data []byte) (ok bool, reason string) {
-	doc, err := docformat.Parse(data)
+	doc, err := ParseGenericSource(data)
 	if err != nil {
 		return false, "document could not be parsed: " + err.Error()
 	}
@@ -71,6 +71,7 @@ type sourceAgentFile struct {
 // name order with their recognition result, and the lower-cased workspace-relative slash
 // paths of every regular file in the folder. A missing folder yields no files and no error.
 func listSourceAgentFiles(dir, relDir string, src domain.HarnessModule, anyCase bool) ([]sourceAgentFile, map[string]bool, error) {
+	srcDesc := src.Descriptor()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -85,28 +86,40 @@ func listSourceAgentFiles(dir, relDir string, src domain.HarnessModule, anyCase 
 			continue
 		}
 		allFiles[strings.ToLower(slashJoin(relDir, e.Name()))] = true
-		if !hasAgentSuffix(e.Name(), anyCase) {
+		if !hasAgentSuffix(e.Name(), srcDesc, anyCase) {
 			continue
 		}
 		f := sourceAgentFile{name: e.Name(), path: filepath.Join(dir, e.Name())}
-		data, rerr := os.ReadFile(f.path)
-		if rerr != nil {
-			f.reason = "file could not be read: " + rerr.Error()
-		} else if ok, why := recognizeTransformAgent(data); ok {
-			f.recognised = true
-			f.model = ReadSourceModel(data, *src.Descriptor())
-		} else {
-			f.reason = why
-		}
-		files = append(files, f)
+		files = append(files, classifySourceAgentFile(f, srcDesc))
 	}
 	return files, allFiles, nil
 }
 
-// hasAgentSuffix reports whether name ends in .md, ignoring case when anyCase is set.
-func hasAgentSuffix(name string, anyCase bool) bool {
+// classifySourceAgentFile reads a source agent file through the decode funnel with the source
+// descriptor and records whether it is a MOSAIC agent, why not, and its source model.
+func classifySourceAgentFile(f sourceAgentFile, srcDesc *domain.HarnessDescriptor) sourceAgentFile {
+	read := readDeployedArtifact(f.path, domain.ArtifactAgent, srcDesc)
+	switch {
+	case read.ReadErr != nil:
+		f.reason = "file could not be read: " + read.ReadErr.Error()
+	case read.DecodeErr != nil:
+		f.reason = "file could not be decoded: " + read.DecodeErr.Error()
+	default:
+		if ok, why := recognizeTransformAgent(read.Canonical); ok {
+			f.recognised = true
+			f.model = readCanonicalSourceModel(read.Canonical, srcDesc)
+		} else {
+			f.reason = why
+		}
+	}
+	return f
+}
+
+// hasAgentSuffix reports whether name ends in the source harness's declared agent extension
+// (its final dotted component), ignoring case when anyCase is set.
+func hasAgentSuffix(name string, srcDesc *domain.HarnessDescriptor, anyCase bool) bool {
 	if anyCase {
 		name = strings.ToLower(name)
 	}
-	return strings.HasSuffix(name, agentFileExtPlain)
+	return strings.HasSuffix(name, finalSuffix(srcDesc.Extensions[domain.ArtifactAgent]))
 }

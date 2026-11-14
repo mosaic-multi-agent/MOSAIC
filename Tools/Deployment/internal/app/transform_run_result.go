@@ -32,6 +32,7 @@ func (r *transformRun) agentOutcome(i int) TransformFileOutcome {
 		out.Tools, out.DroppedTools = res.Tools, res.Dropped
 		out.UnmappedTools, out.DroppedFields = res.UnmappedTools, res.DroppedFields
 		out.CustomTools = r.customToolServers(i)
+		out.StrippedFields = res.StrippedFields
 	}
 	return out
 }
@@ -80,6 +81,9 @@ func (r *transformRun) result(todoPath string) TransformHarnessResult {
 	}
 	res.DroppedEntries = r.droppedEntryResults()
 	res.Notes = append([]TransformNote(nil), r.plan.Notes...)
+	if note, ok := r.minimalGrantNote(); ok {
+		res.Notes = append(res.Notes, note)
+	}
 	if res.Transformed > 0 {
 		res.Notes = append(res.Notes, TransformNote{Kind: NoteNewerTargetContent, Message: newerInjectionsMessage})
 	}
@@ -148,6 +152,7 @@ func (r *transformRun) addModelSummary(res *TransformHarnessResult) {
 func (r *transformRun) identifiers() TransformHarnessResult {
 	return TransformHarnessResult{
 		SourceHarnessID: r.srcID, TargetHarnessID: r.tgtID, Workspace: r.workspace,
-		SourceAgentsDir: r.plan.SourceAgentsDir,
+		SourceAgentsDir:       r.plan.SourceAgentsDir,
+		ExperimentalHarnesses: r.experimentalOfRun(),
 	}
 }

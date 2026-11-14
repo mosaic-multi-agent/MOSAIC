@@ -170,7 +170,9 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 	agentsDir := module.Descriptor().Paths.Agents.Project
 	var deployedAgentIndex DeployedAgentIndex
 	if module.Descriptor().Paths.Agents.Supported && agentsDir != "" {
-		deployedAgentIndex = buildDeployedAgentIndex(workspace, agentsDir)
+		var indexNotices []string
+		deployedAgentIndex, indexNotices = buildDeployedAgentIndex(workspace, agentsDir, module.Descriptor())
+		s.logDecodeNotices(indexNotices)
 	}
 
 	// Build the agent-by-key map for id-based probe resolution (covers workflow + utility agents).
@@ -186,10 +188,11 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 	if pathErr != nil {
 		return domain.RunSummary{}, pathErr
 	}
-	deployedState, err := probeDeployedStateWithIndex(workspace, plannedPaths, module.Descriptor().Frontmatter.ModelKey, nil, deployedAgentIndex, probeAgentByKey, nil)
+	deployedState, err := probeDeployedStateWithIndex(workspace, plannedPaths, module.Descriptor().Frontmatter.ModelKey, nil, deployedAgentIndex, probeAgentByKey, nil, module.Descriptor())
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
+	s.logProbeDecodeNotices(deployedState)
 	legacyAgentPaths := applyRecordedLegacyAgents(workspace, module, snap, plannedPaths, deployedState)
 	askAgents, migratingAgents := splitMigratingAgents(nonInfraProbeAgents, plannedPaths, legacyAgentPaths)
 	askInfraAgents, migratingInfra := splitMigratingAgents(infraAgents, plannedPaths, legacyAgentPaths)
@@ -314,7 +317,8 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 	// only controls whether a decline/cancel answer aborts the run, so headless callers that
 	// pre-confirm still see it recorded as the last interaction before execution.
 	p.ConflictReport = report
-	s.annotateToolsChanges(&p, module, customTools, skippedTools, scope, newDeployedBytes(workspace, nil).withMigratedAgents(p).reader(), probeSet.Agents, infraAgents)
+	p.ExperimentalHarnesses = domain.ExperimentalHarnessesOf(module.Ref())
+	s.annotateToolsChanges(&p, module, customTools, skippedTools, scope, newDeployedBytes(workspace, nil).withMigratedAgents(p).canonicalReader(module.Descriptor()), probeSet.Agents, infraAgents)
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {
 		return domain.RunSummary{}, rerr
@@ -337,18 +341,21 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 		// An infrastructure selection (even an empty one) replaces the deployed declarations.
 		contentOpts = append(contentOpts, withInfrastructureReplaced())
 	}
-	contentFn := s.buildContent(module, agentByKey, modelRes.models, customTools, skippedTools, workflowBlocks, infraBlocks, scope, newDeployedBytes(workspace, nil).withMigratedAgents(p).reader(), toolMappingsVersion, protocol, bundle, nil, contentOpts...)
+	deployedRule := newDeployedBytes(workspace, nil).withMigratedAgents(p)
+	var ownedKeyDiffs []domain.OwnedKeyDifference
+	contentFn := s.buildContent(module, agentByKey, modelRes.models, customTools, skippedTools, workflowBlocks, infraBlocks, scope, deployedRule.funnelReader(module.Descriptor()), toolMappingsVersion, protocol, bundle, nil, &ownedKeyDiffs, contentOpts...)
 
 	now := s.now()
 	execReq := deploy.ExecRequest{
-		Plan:          p,
-		MosaicRoot:    s.deps.MosaicRoot,
-		Content:       newDeployedBytes(workspace, nil).withMigratedAgents(p).keepingUnchangedMigrations(p, contentFn),
-		Conflicts:     conflicts,
-		VersionStamps: s.withProvenance(buildVersionStamps(append(probeSet.Agents, infraAgents...), probeSet.Skills, probeSet.Hooks, p.Items, module.Descriptor(), toolMappingsVersion), p.Items),
-		ManifestMeta:  s.fullRunManifestMeta(),
-		Hooks:         buildHookPlans(module, probeSet.Hooks, scope),
-		TodoItems:     s.deps.Todo.Items,
+		Plan:              p,
+		MosaicRoot:        s.deps.MosaicRoot,
+		Content:           deployedRule.keepingUnchangedMigrations(p, contentFn),
+		AgentOwnedContent: agentOwnedContentFor(module.Descriptor()),
+		Conflicts:         conflicts,
+		VersionStamps:     s.withProvenance(buildVersionStamps(append(probeSet.Agents, infraAgents...), probeSet.Skills, probeSet.Hooks, p.Items, module.Descriptor(), toolMappingsVersion), p.Items),
+		ManifestMeta:      s.fullRunManifestMeta(),
+		Hooks:             buildHookPlans(module, probeSet.Hooks, scope),
+		TodoItems:         s.deps.Todo.Items,
 		TodoMeta: todo.Meta{
 			Harness: harnessRef.DisplayName, WorkspacePath: workspace, DeploymentRoot: workspace,
 			GeneratedAt: now, Mode: domain.ModeDeployWorkspace,
@@ -380,7 +387,9 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 		s.notifyPersistFailure(ctx, err)
 	}
 
-	return withDryRunPlan(withConflictReport(s.buildSummary(domain.ModeDeployWorkspace, harnessRef, workspace, result), report), req.DryRun, p), nil
+	summary := s.buildSummary(domain.ModeDeployWorkspace, harnessRef, workspace, result)
+	summary.OwnedKeyDifferences = ownedKeyDiffs
+	return withDryRunPlan(withConflictReport(summary, report), req.DryRun, p), nil
 }
 
 // orderedAgentsForModelResolution reorders agents into a processing sequence suitable for

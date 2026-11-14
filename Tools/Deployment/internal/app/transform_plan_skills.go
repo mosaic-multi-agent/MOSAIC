@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"mosaic-common/docformat"
 	"mosaic-deploy/internal/agentfields"
 	"mosaic-deploy/internal/domain"
 )
@@ -125,7 +124,7 @@ func skillVersion(skillFile string) string {
 	if err != nil {
 		return ""
 	}
-	doc, err := docformat.Parse(data)
+	doc, err := ParseGenericSource(data)
 	if err != nil {
 		return ""
 	}

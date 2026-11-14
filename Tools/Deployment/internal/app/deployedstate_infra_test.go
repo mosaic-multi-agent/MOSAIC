@@ -41,7 +41,7 @@ func probeInfra(t *testing.T, content []byte) domain.DeployedInfrastructureDecla
 	t.Helper()
 	ws := t.TempDir()
 	writeFile(t, ws, "orchestrator.md", content)
-	return probeDeployedArtifact(ws, "orchestrator.md", "").InfrastructureDeclarations
+	return probeDeployedArtifact(ws, "orchestrator.md", "", domain.ArtifactAgent, nil).InfrastructureDeclarations
 }
 
 func TestProbeDeployedArtifact_AssembledDeclarations_ListsKeysVersionsAndParsedFields(t *testing.T) {
@@ -110,7 +110,7 @@ func TestProbeDeployedArtifact_OrdinaryAgentFile_NoDeclarations(t *testing.T) {
 	ws := t.TempDir()
 	writeFile(t, ws, "worker.md", []byte("---\nversion: \"1.0\"\n---\n\nA plain worker agent.\n"))
 
-	state := probeDeployedArtifact(ws, "worker.md", "")
+	state := probeDeployedArtifact(ws, "worker.md", "", domain.ArtifactAgent, nil)
 
 	if !state.Present || state.Version != "1.0" {
 		t.Errorf("state = %+v, want present with version 1.0 (probe otherwise unchanged)", state)
@@ -121,7 +121,7 @@ func TestProbeDeployedArtifact_OrdinaryAgentFile_NoDeclarations(t *testing.T) {
 }
 
 func TestProbeDeployedArtifact_AbsentFile_NoDeclarations(t *testing.T) {
-	state := probeDeployedArtifact(t.TempDir(), "missing.md", "")
+	state := probeDeployedArtifact(t.TempDir(), "missing.md", "", domain.ArtifactAgent, nil)
 
 	if len(state.InfrastructureDeclarations) != 0 {
 		t.Errorf("InfrastructureDeclarations = %+v, want none for an absent file", state.InfrastructureDeclarations)

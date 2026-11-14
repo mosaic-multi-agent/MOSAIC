@@ -5,7 +5,6 @@ package app
 // deploy-new and update flows to populate plan.Input.DeployedState before calling Build.
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -20,33 +19,51 @@ import (
 // probeDeployedArtifact reads a single deployed artifact at <workspace>/<targetPath> and
 // reports its state. modelKey is the harness's model frontmatter key
 // (Descriptor().Frontmatter.ModelKey); an empty modelKey means the harness emits no model
-// and yields an empty ModelID. It never returns an error: any failure to read or parse yields
-// a state whose Present is false (unreadable/absent) or whose scalar fields are empty (present
-// but unparseable). Directories at the target path also yield Present: false.
-func probeDeployedArtifact(workspace, targetPath, modelKey string) domain.DeployedArtifactState {
-	return probeDeployedArtifactOf(workspace, targetPath, modelKey, "")
-}
-
-// probeDeployedArtifactOf is probeDeployedArtifact for an artifact of the given kind: for an
-// agent or skill it also fills the Deploy-owned content record from the file on disk.
-func probeDeployedArtifactOf(workspace, targetPath, modelKey string, kind domain.ArtifactKind) domain.DeployedArtifactState {
+// and yields an empty ModelID. kind is the artifact kind (ArtifactAgent, ArtifactSkill, etc.),
+// used to select the correct decoder. src is the source harness descriptor used to resolve
+// the translator; a nil src or zero-value AgentFormatID is treated as the Markdown identity
+// decoder.
+//
+// It never returns an error: any failure to read or parse yields a state whose Present is
+// false (unreadable/absent) or whose scalar fields are empty (present but unparseable or
+// undecodable). Directories at the target path also yield Present: false.
+func probeDeployedArtifact(workspace, targetPath, modelKey string, kind domain.ArtifactKind, src *domain.HarnessDescriptor) domain.DeployedArtifactState {
 	fullPath := filepath.Join(workspace, targetPath)
 
-	data, err := os.ReadFile(fullPath)
-	if err != nil {
-		// File absent, unreadable, or is a directory (ReadFile fails for directories).
+	dr := readDeployedArtifact(fullPath, kind, src)
+
+	// Absent or unreadable: report as not present.
+	if !dr.Present || dr.ReadErr != nil {
 		return domain.DeployedArtifactState{Present: false}
 	}
 
 	state := domain.DeployedArtifactState{
 		Present:     true,
-		ContentHash: manifest.Hash(data),
+		ContentHash: manifest.Hash(dr.Raw),
 	}
 
-	// Parse frontmatter for version stamps and model ID. Failure leaves scalar fields empty (graceful degradation).
-	// Each MOSAIC-only stamp is read via agentfields.ReadOrder, which tries the prefixed name first
-	// and falls back to the legacy name. This accepts both already-migrated and legacy-named files.
-	if doc, parseErr := docformat.Parse(data); parseErr == nil {
+	// Undecodable: present, hash from raw bytes, scalar fields empty.
+	if dr.DecodeErr != nil || dr.Canonical == nil {
+		return state
+	}
+
+	// Surface the decode report at the probe boundary. decodeReportNotices renders each
+	// report entry as a human-readable string keyed by targetPath. Callers collect and
+	// log these via state.DecodeNotices so EntryMissingInstructions and similar entries
+	// reach the run log rather than being silently discarded.
+	if len(dr.Report.Entries) > 0 {
+		state.DecodeNotices = decodeReportNotices(targetPath, dr.Report)
+	}
+
+	// Use canonical (decoded) bytes for all frontmatter and body parsing so that
+	// non-Markdown harnesses (e.g. Codex TOML) are read in the uniform Markdown form.
+	canonical := dr.Canonical
+
+	// Parse frontmatter for version stamps and model ID. Failure leaves scalar fields empty
+	// (graceful degradation). Each MOSAIC-only stamp is read via agentfields.ReadOrder, which
+	// tries the prefixed name first and falls back to the legacy name, accepting both
+	// already-migrated and legacy-named files.
+	if doc, parseErr := ParseGenericSource(canonical); parseErr == nil {
 		fm := doc.Frontmatter()
 		if fm.Present() {
 			state.Version = readDeployedStamp(fm, "version")
@@ -73,25 +90,25 @@ func probeDeployedArtifactOf(workspace, targetPath, modelKey string, kind domain
 	// Falls back to mosaic_injections_version frontmatter for pre-migration files.
 	// found is true when at least one InjectionHarness-class region was present in the body;
 	// this signal determines whether AgentStaleness should compare InjectionsVersion at all.
-	state.InjectionsVersion, state.HasInjectionRegion = extractDeployedInjectionVersion(data, "injections_version")
+	state.InjectionsVersion, state.HasInjectionRegion = extractDeployedInjectionVersion(canonical, "injections_version")
 
 	// Read the orchestrator injection version from the OrchestratorHarnessConstraints region tag.
 	// No frontmatter fallback: an untagged second region reads as present with an empty version.
-	state.OrchestratorInjectionsVersion, state.HasOrchestratorInjectionRegion = extractDeployedOrchestratorInjectionVersion(data)
+	state.OrchestratorInjectionsVersion, state.HasOrchestratorInjectionRegion = extractDeployedOrchestratorInjectionVersion(canonical)
 
 	// Extract workflow section markers; nil when none are present.
-	state.Workflows = extractDeployedWorkflows(data)
+	state.Workflows = extractDeployedWorkflows(canonical)
 
 	// Extract the infrastructure agent declarations; nil when the file declares none.
-	state.InfrastructureDeclarations = extractDeployedInfrastructure(data)
+	state.InfrastructureDeclarations = extractDeployedInfrastructure(canonical)
 
 	// Extract the protocol version from the deployed <CommunicationProtocol type="managed"> region.
 	// Returns "" when the region is absent or carries no version attribute; both are treated as
 	// stale by the planner. This call never fails the scan.
-	state.ProtocolVersion = extractDeployedProtocolVersion(data)
+	state.ProtocolVersion = extractDeployedProtocolVersion(canonical)
 
 	// Record the Deploy-owned content recomputed from these bytes (agents and skills).
-	attachOwnedContent(&state, kind, data)
+	attachOwnedContent(&state, kind, dr.Canonical)
 
 	return state
 }
@@ -121,7 +138,7 @@ func extractDeployedOrchestratorInjectionVersion(data []byte) (version string, f
 	if len(data) == 0 {
 		return "", false
 	}
-	doc, err := docformat.Parse(data)
+	doc, err := ParseGenericSource(data)
 	if err != nil {
 		return "", false
 	}
@@ -152,7 +169,7 @@ func extractDeployedInjectionVersion(data []byte, legacyFrontmatterKey string) (
 	if len(data) == 0 {
 		return "", false
 	}
-	doc, err := docformat.Parse(data)
+	doc, err := ParseGenericSource(data)
 	if err != nil {
 		return "", false
 	}
@@ -188,15 +205,17 @@ func extractDeployedInjectionVersion(data []byte, legacyFrontmatterKey string) (
 	return "", foundRegion
 }
 
-// probeDeployedState probes every path in paths, passing modelKey to each per-artifact probe.
-// Entries already present in seed are reused verbatim and not re-read, so a path probed
-// earlier in the flow (the orchestrator, for workflow discovery) is read exactly once per run.
-// seed may be nil. The returned map contains one entry per path in paths, including absent ones.
+// probeDeployedState probes every path in paths, passing modelKey and src to each
+// per-artifact probe. Entries already present in seed are reused verbatim and not re-read,
+// so a path probed earlier in the flow (the orchestrator, for workflow discovery) is read
+// exactly once per run. seed may be nil. The returned map contains one entry per path in
+// paths, including absent ones.
 func probeDeployedState(
 	workspace string,
 	paths plan.PlannedPaths,
 	modelKey string,
 	seed map[string]domain.DeployedArtifactState,
+	src *domain.HarnessDescriptor,
 ) map[string]domain.DeployedArtifactState {
 	result := make(map[string]domain.DeployedArtifactState, len(paths))
 
@@ -205,7 +224,7 @@ func probeDeployedState(
 			result[pp.TargetPath] = seeded
 			continue
 		}
-		result[pp.TargetPath] = probeDeployedArtifactOf(workspace, pp.TargetPath, modelKey, pp.Ref.Kind)
+		result[pp.TargetPath] = probeDeployedArtifact(workspace, pp.TargetPath, modelKey, pp.Ref.Kind, src)
 	}
 
 	return result
@@ -250,8 +269,24 @@ func probeDeployedStateWithIndex(
 	index DeployedAgentIndex,
 	agentByKey map[string]domain.Agent,
 	parseFailedPaths map[string]bool,
+	src *domain.HarnessDescriptor,
 ) (map[string]domain.DeployedArtifactState, error) {
 	result := make(map[string]domain.DeployedArtifactState, len(paths))
+
+	// Build a set of all target paths that are already claimed by some indexed file.
+	// A "claimed" path is one where a deployed file carries a mosaic_id stamp, so it
+	// belongs to a specific catalog agent by ID. When a planned path is claimed by a
+	// different agent's file, it must NOT be probed as a fallback (doing so would let
+	// a file with a wrong ID be treated as belonging to this agent).
+	// Paths are normalised with filepath.FromSlash so that forward-slash paths from
+	// path.Join (used in descriptor.ResolveTargetPath) compare correctly against
+	// backslash-separated paths from filepath.Join (used in buildDeployedAgentIndex).
+	claimedPaths := make(map[string]bool)
+	for _, entries := range index {
+		for _, e := range entries {
+			claimedPaths[filepath.FromSlash(e.TargetPath)] = true
+		}
+	}
 
 	for _, pp := range paths {
 		// Seeded entries are reused without re-reading or re-resolving.
@@ -274,25 +309,25 @@ func probeDeployedStateWithIndex(
 					return nil, err
 				}
 				if resolved == "" {
-					// Agent has a numeric id but no deployed file matches in the index.
-					// Fallback: probe the planned path. A file there that cannot be parsed
-					// cleanly (or that the scan flagged) is parse-failed; files that simply
-					// have a different id still yield Present: false.
-					result[pp.TargetPath] = probePlannedPathForAgent(workspace, pp.TargetPath, modelKey, parseFailedPaths[pp.TargetPath])
+					// Agent has a numeric id but no deployed file matches in the index:
+					// probe the planned path (see probeAgentAtPlannedPath for the rules).
+					result[pp.TargetPath] = probeAgentAtPlannedPath(workspace, pp.TargetPath, modelKey, src,
+						claimedPaths[filepath.FromSlash(pp.TargetPath)], parseFailedPaths[pp.TargetPath])
 				} else if isLegacySiblingPath(resolved, pp.TargetPath) {
 					// A legacy X.md found by id is not the X.agent.md this run writes: the
 					// planned path is probed, so the agent is deployed as X.agent.md.
-					result[pp.TargetPath] = probePlannedPathForAgent(workspace, pp.TargetPath, modelKey, parseFailedPaths[pp.TargetPath])
+					result[pp.TargetPath] = probeAgentAtPlannedPath(workspace, pp.TargetPath, modelKey, src,
+						claimedPaths[filepath.FromSlash(pp.TargetPath)], parseFailedPaths[pp.TargetPath])
 				} else {
 					// Probe at the id-resolved path (may differ from planned path if renamed).
-					result[pp.TargetPath] = probeDeployedArtifactOf(workspace, resolved, modelKey, pp.Ref.Kind)
+					result[pp.TargetPath] = probeDeployedArtifact(workspace, resolved, modelKey, pp.Ref.Kind, src)
 				}
 				continue
 			}
 		}
 
 		// Non-agent artifacts, id-less agents, and the no-index case: probe at planned path.
-		result[pp.TargetPath] = probeDeployedArtifactOf(workspace, pp.TargetPath, modelKey, pp.Ref.Kind)
+		result[pp.TargetPath] = probeDeployedArtifact(workspace, pp.TargetPath, modelKey, pp.Ref.Kind, src)
 	}
 
 	return result, nil
@@ -320,7 +355,7 @@ func extractDeployedWorkflows(data []byte) domain.DeployedWorkflows {
 	if len(data) == 0 {
 		return nil
 	}
-	doc, err := docformat.Parse(data)
+	doc, err := ParseGenericSource(data)
 	if err != nil {
 		return nil
 	}

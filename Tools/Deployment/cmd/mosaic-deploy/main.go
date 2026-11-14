@@ -39,12 +39,20 @@ import (
 	// Import built-in harnesses so their init() functions run and register
 	// themselves with the package-level registry before Discover is called.
 	_ "mosaic-deploy/internal/harness/builtin/claudecode"
+	_ "mosaic-deploy/internal/harness/builtin/codex"
 	_ "mosaic-deploy/internal/harness/builtin/ghcpcli"
 	_ "mosaic-deploy/internal/harness/builtin/opencode"
 	_ "mosaic-deploy/internal/harness/builtin/vscodeghcp"
+
+	// Import the translator wiring package so that all format translators (CodexTOML
+	// and any future ones) register themselves via their init() functions before any
+	// LookupString call at runtime. This is the non-test owner of translator registration;
+	// the T2.8a test in main_test.go guards that both this import and the Codex harness
+	// import above are present.
+	_ "mosaic-deploy/internal/agentformat/all"
 )
 
-const ToolVersion = "1.7.0"
+const ToolVersion = "1.8.0"
 
 // wantsTUI reports whether mosaic-deploy should launch the interactive TUI: no subcommand
 // was given, and both stdin and stdout are attached to a real terminal (not a pipe/redirect).
