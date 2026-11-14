@@ -43,7 +43,7 @@ func (s *StatusScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s, nil
 	}
 	k := key.String()
-	if s.help.handle(k) {
+	if s.handleOverlays(k) {
 		return s, nil
 	}
 	switch k {
@@ -88,7 +88,7 @@ func (s *StatusScreen) body() []string {
 }
 
 // statusKeys are the short help keys of the view.
-var statusKeys = []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "scroll"}, {Key: KeySort, Desc: "sort"}, exportKeyEntry, {Key: "esc", Desc: "back"}}
+var statusKeys = []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "scroll"}, {Key: KeySort, Desc: "sort"}, findingsKeyEntry, exportKeyEntry, {Key: "esc", Desc: "back"}}
 
 // Help implements Screen.
 func (s *StatusScreen) Help() string {

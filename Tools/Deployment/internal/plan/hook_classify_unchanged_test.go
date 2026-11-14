@@ -103,6 +103,7 @@ func buildInputWithHook(
 // using manifest.Hash(nil) as the content hash (the executor's convention for hook bundles).
 func hookManifestEntry(hook domain.HookBundle, targetPath string) domain.ManifestEntry {
 	return domain.ManifestEntry{
+		Harness:    "test-harness",
 		Ref:        domain.ArtifactRef{Kind: domain.ArtifactHook, Key: hook.Key},
 		TargetPath: targetPath,
 		Version:    hook.Version, // recorded version matches source → not stale
@@ -178,8 +179,8 @@ func TestBuild_PresentHookBundleWithMatchingVersion_ReasonIsEmpty(t *testing.T) 
 		t.Skipf("skipping Reason check: Action = %q (expected ActionUnchanged)", item.Action)
 	}
 
-	if item.Reason != "" {
-		t.Errorf("Reason = %q, want empty for ActionUnchanged hook", item.Reason)
+	if reasonText(item) != "" {
+		t.Errorf("Reason = %q, want empty for ActionUnchanged hook", reasonText(item))
 	}
 }
 
@@ -207,10 +208,10 @@ func TestBuild_PresentHookBundleWithMatchingVersion_ReasonDoesNotMentionVersionS
 		t.Fatal("plan has no item for hook pre-commit")
 	}
 
-	if strings.Contains(item.Reason, "no readable version stamps") {
+	if strings.Contains(reasonText(item), "no readable version stamps") {
 		t.Errorf("Reason %q must not contain 'no readable version stamps'; "+
 			"the no-version-info fallback must be bypassed on the hook path",
-			item.Reason)
+			reasonText(item))
 	}
 }
 
@@ -229,6 +230,7 @@ func TestBuild_PresentHookBundleWithAdvancedVersion_ClassifiesAsUpdate(t *testin
 	hook := makeHookBundle("pre-commit", "2.0") // source at v2.0
 	// Manifest records v1.0 — the previously deployed version.
 	entry := domain.ManifestEntry{
+		Harness:     "test-harness",
 		Ref:         domain.ArtifactRef{Kind: domain.ArtifactHook, Key: "pre-commit"},
 		TargetPath:  hookTarget,
 		Version:     "1.0", // recorded version differs from source
@@ -295,36 +297,32 @@ func TestBuild_PresentHookBundleWithAdvancedVersion_ExactlyOneVersionDelta(t *te
 }
 
 // ---------------------------------------------------------------------------
-// AC2.3 — Hook hash mismatch retains ActionConflict (Step 4 not removed for hooks)
+// Edited hook file is an update with backup, not a conflict
 // ---------------------------------------------------------------------------
 
-// TestBuild_HookHashMismatch_StillClassifiesAsConflict verifies that when a hook bundle's
-// deployed content hash differs from the hash recorded in the manifest, the plan item
-// classifies as ActionConflict. The Step 4 whole-file hash check is retained in
-// classifyHookItem -- Stage 2 removes Step 4 only from classifyAgentItem and
-// classifySkillItem. This test guards against accidental removal of the hook hash check
-// during the Stage 2 implementation and must pass both before and after I2.1.
-func TestBuild_HookHashMismatch_StillClassifiesAsConflict(t *testing.T) {
+// TestBuild_HookDeployOwnedContentEdited_UpdatesWithBackup verifies that when a hook file's
+// recomputed Deploy-owned record differs from the recorded one, the plan item is an update
+// that backs the file up first, not a conflict.
+func TestBuild_HookDeployOwnedContentEdited_UpdatesWithBackup(t *testing.T) {
 	const hookTarget = "hooks/pre-commit"
-	const recordedHash = "sha256:recorded-hook-hash"
-	const currentHash = "sha256:modified-hook-hash" // differs from recordedHash -- hash mismatch
 
 	hook := makeHookBundle("pre-commit", "1.0")
 
 	entry := domain.ManifestEntry{
+		Harness:     "test-harness",
 		Ref:         domain.ArtifactRef{Kind: domain.ArtifactHook, Key: "pre-commit"},
 		TargetPath:  hookTarget,
 		Version:     hook.Version,
-		ContentHash: recordedHash,
+		ContentHash: "sha256:recorded-hook-hash",
+		Owned:       ownedRecord("sha256:recorded-owned"),
 	}
 	snap := presentSnapshot(domain.Manifest{Entries: []domain.ManifestEntry{entry}})
 
-	// Deployed hash differs from the manifest-recorded hash.
-	// For hooks, Step 4 is retained: this must still produce ActionConflict.
 	deployed := map[string]domain.DeployedArtifactState{
 		hookTarget: {
 			Present:     true,
-			ContentHash: currentHash,
+			ContentHash: "sha256:modified-hook-hash",
+			Owned:       ownedRecord("sha256:edited-owned"),
 		},
 	}
 
@@ -339,12 +337,12 @@ func TestBuild_HookHashMismatch_StillClassifiesAsConflict(t *testing.T) {
 		t.Fatal("plan has no item for hook pre-commit")
 	}
 
-	if item.Action != domain.ActionConflict {
-		t.Errorf("hook with hash mismatch: Action = %q, want ActionConflict; "+
-			"the Step 4 hash check must be retained for hooks -- only agents and skills "+
-			"have Step 4 removed in Stage 2. A hook hash mismatch must still classify as "+
-			"ActionConflict to guard against accidental local modification of hook files.",
-			item.Action)
+	if item.Action != domain.ActionUpdate || !item.BackupBeforeWrite || !hasExactReason(item, editReason) {
+		t.Errorf("edited hook file: Action = %q, backup = %v, Reasons = %q; want update with backup and the edit reason",
+			item.Action, item.BackupBeforeWrite, item.Reasons)
+	}
+	if item.Conflict != nil {
+		t.Errorf("edited hook file carries a conflict %+v", item.Conflict)
 	}
 }
 
@@ -377,8 +375,8 @@ func TestBuild_PresentHookBundleWithAdvancedVersion_ReasonDoesNotMentionVersionS
 		t.Fatal("plan has no item for hook pre-commit")
 	}
 
-	if strings.Contains(item.Reason, "no readable version stamps") {
+	if strings.Contains(reasonText(item), "no readable version stamps") {
 		t.Errorf("Reason %q must not contain 'no readable version stamps' on the hook path; "+
-			"only the version delta reason should appear", item.Reason)
+			"only the version delta reason should appear", reasonText(item))
 	}
 }

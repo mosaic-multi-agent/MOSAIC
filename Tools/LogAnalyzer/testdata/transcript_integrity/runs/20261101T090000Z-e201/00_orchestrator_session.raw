@@ -1,0 +1,3 @@
+{"type":"user","uuid":"u-1","message":{"role":"user","content":"orchestrator task text"}}
+{"type":"assistant","uuid":"ou-1","message":{"id":"o1","role":"assistant","content":[]}}
+{"type":"assistant","uuid":"ou-2","message":{"id":"o2","role":"assistant","content":[]}}

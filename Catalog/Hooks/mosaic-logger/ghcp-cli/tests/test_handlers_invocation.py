@@ -9,7 +9,7 @@ Key differences from the claude-code variant:
 
 Covers:
   extract_status_code: closed enum extraction, last-occurrence-wins, None on ambiguity
-  handle_subagent_start: agent mapping registration, pending dispatch pop,
+  handle_subagent_start: agent mapping registration, pending dispatch take,
     invocation_start event, user turn (when prompt present), 01_input.md artifact
   handle_subagent_stop: invocation_end event, status_code extraction,
     02_output.md artifact, transcript export, unmapped guard
@@ -228,13 +228,28 @@ class TestHandleSubagentStart(unittest.TestCase):
         content = ctx.paths.invocation_input(_RUN_ID, _INSTANCE_ID).read_text("utf-8")
         self.assertIn(_INSTANCE_ID, content)
 
+    def _invocation_folders(self, ctx):
+        root = ctx.paths.run_root(_RUN_ID)
+        return [d.name for d in root.iterdir() if d.is_dir() and not d.name.startswith(".")]
+
     def test_fallback_agent_instance_id_when_no_dispatch(self):
-        """Without pending dispatch or parseable prompt, uses 'unknown-agent'."""
+        """Without pending dispatch or an explicit id line, the unique fallback id
+        {type}_{timestamp}-{4 hex} is used -- never 'unknown-agent'."""
         ctx = _make_start_ctx(self.tmp_path, agentId=_AGENT_ID, agentName="Research",
                                agentPrompt="No ID embedded here at all")
         invocation.handle_subagent_start(ctx)
-        events_file = ctx.paths.invocation_events(_RUN_ID, "unknown-agent")
-        self.assertTrue(events_file.exists())
+        folders = self._invocation_folders(ctx)
+        self.assertEqual(1, len(folders))
+        self.assertRegex(folders[0], r"^Research_\d{8}T\d{6}Z-[0-9a-f]{4}$")
+
+    def test_bare_mention_in_agent_prompt_is_not_used_as_instance_id(self):
+        ctx = _make_start_ctx(self.tmp_path, agentId=_AGENT_ID, agentName="Research",
+                               agentPrompt="Continue the work of Planner#3 now.")
+        invocation.handle_subagent_start(ctx)
+        self.assertFalse(ctx.paths.invocation_events(_RUN_ID, "Planner#3").exists())
+        folders = self._invocation_folders(ctx)
+        self.assertEqual(1, len(folders))
+        self.assertRegex(folders[0], r"^Research_\d{8}T\d{6}Z-[0-9a-f]{4}$")
 
     def test_reads_agent_instance_id_from_agent_prompt_when_no_dispatch(self):
         """Falls back to extracting from agentPrompt when dispatch queue is empty."""

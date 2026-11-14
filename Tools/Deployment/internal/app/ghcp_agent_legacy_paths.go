@@ -60,6 +60,9 @@ func probeAgentWithRecordedLegacy(
 	if state.Present {
 		return state
 	}
+	if pathExists(filepath.Join(workspace, filepath.FromSlash(target))) {
+		return state // something is at the target path (not a readable agent file): not a rename
+	}
 	if legacy := recordedLegacyPath(module, snap, key, target); legacy != "" {
 		return probeDeployedArtifact(workspace, legacy, modelKey, domain.ArtifactAgent, module.Descriptor())
 	}

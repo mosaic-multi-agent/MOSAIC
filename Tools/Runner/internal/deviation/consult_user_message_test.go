@@ -60,7 +60,7 @@ func TestOrchestratorConsultant_RoutingRequest_SendsNullUserMessageWhenNil(t *te
 	}
 }
 
-func TestOrchestratorConsultant_RoutingRequest_AllSixMembersPresentWithAMessage(t *testing.T) {
+func TestOrchestratorConsultant_RoutingRequest_AllSevenMembersPresentWithAMessage(t *testing.T) {
 	fake := &fakeRawInvoker{reply: routingStopReply("done")}
 	c := newTestOrchestratorConsultant(fake, mustParseTable(t))
 	msg := "hello"
@@ -68,13 +68,9 @@ func TestOrchestratorConsultant_RoutingRequest_AllSixMembersPresentWithAMessage(
 	c.ConsultRouting(context.Background(), routingRequestWithMessage(&msg)) //nolint:errcheck
 
 	raw := wireKeys(t, fake.sent)
-	for _, key := range []string{
-		"orchestration_artifact", "context", "last_status", "last_status_message", "last_error_reason", "user_message",
-	} {
-		if _, ok := raw[key]; !ok {
-			t.Errorf("want member %q present, got absent", key)
-		}
-	}
+	assertMemberSet(t, raw,
+		"orchestration_artifact", "context", "last_status", "last_status_message",
+		"last_error_reason", "user_message", "artifact_damage")
 	if string(raw["user_message"]) != `"hello"` {
 		t.Errorf("want user_message=\"hello\", got %s", raw["user_message"])
 	}

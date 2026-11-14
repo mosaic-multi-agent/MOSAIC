@@ -30,6 +30,7 @@ import (
 
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 )
 
@@ -66,7 +67,7 @@ func buildInputFull(
 		Manifest:      snap,
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		DeployedState: deployedState,
@@ -117,7 +118,7 @@ func TestBuild_AgentTargetPath_SetFromHarnessModule(t *testing.T) {
 		Manifest:      absentSnapshot(),
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 	}
@@ -170,7 +171,7 @@ func TestBuild_SkillTargetPath_SetFromHarnessModule(t *testing.T) {
 		Manifest:      absentSnapshot(),
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 	}
@@ -270,9 +271,9 @@ func TestBuild_Artifact_InManifest_AllVersionsMatch_HashMatches_ClassifiesAsUnch
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	// Deployed file is present; hash matches; version stamps match source (version "1.0",
@@ -312,9 +313,9 @@ func TestBuild_Artifact_InManifest_VersionMismatch_ClassifiesAsUpdate(t *testing
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	// Deployed file has version "1.0" (old); hash matches manifest (no local modification).
@@ -353,9 +354,9 @@ func TestBuild_Artifact_InManifest_VersionMismatch_StaleHasAtLeastOneDelta(t *te
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 	// Deployed file has version "1.0" while source is "1.1" → stale.
 	ds := map[string]domain.DeployedArtifactState{
@@ -393,9 +394,9 @@ func TestBuild_Artifact_InManifest_AgentHashMismatch_ClassifiesAsUnchanged(t *te
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	// Deployed hash differs from manifest, but all version stamps match source.
@@ -494,8 +495,8 @@ func TestBuild_Items_AreOrderedByKindThenKey(t *testing.T) {
 		Manifest:      absentSnapshot(),
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agentA.Key:   {ModelID: "test-model", Origin: domain.OriginHarnessList},
-			agentB.Key:   {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agentA.Key:     {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agentB.Key:     {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 	}
@@ -585,9 +586,9 @@ func TestPlan_Empty_TrueWhenAllItemsAreUnchanged(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 	// Deployed file present with matching hash and all version stamps matching source.
 	ds := map[string]domain.DeployedArtifactState{
@@ -641,8 +642,8 @@ func TestBuild_Plan_WorkflowsPreserveSelectionOrder(t *testing.T) {
 		Manifest:      absentSnapshot(),
 		WorkflowIDs:   []string{"beta-wf", "alpha-wf"}, // intentionally out of alphabetical order
 		Models: map[string]domain.ModelSelection{
-			agentA.Key:   {ModelID: "test-model", Origin: domain.OriginHarnessList},
-			agentB.Key:   {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agentA.Key:     {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agentB.Key:     {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 	}
@@ -672,9 +673,9 @@ func TestBuild_NoFileWrites_WorkspaceUnchanged(t *testing.T) {
 	// Write a real manifest so the workspace has a known state before Build.
 	m := domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-		Entries:       nil,
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)}},
+
+		Entries: manifesttest.WithHarness("test-harness", nil),
 	}
 	writeManifestFile(t, ws, m)
 
@@ -706,9 +707,9 @@ func TestBuild_NoFileWrites_ManifestFileUnmodified(t *testing.T) {
 
 	m := domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-		Entries:       nil,
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)}},
+
+		Entries: manifesttest.WithHarness("test-harness", nil),
 	}
 	writeManifestFile(t, ws, m)
 
@@ -781,9 +782,9 @@ func TestBuild_AgentAbsentFromDeployedState_ClassifiesAsCreate_DespiteManifestEn
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	// Deployed state explicitly marks the file as absent at the target path.
@@ -807,7 +808,7 @@ func TestBuild_AgentAbsentFromDeployedState_ClassifiesAsCreate_DespiteManifestEn
 		Manifest:      snap,
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		DeployedState: ds,
@@ -842,9 +843,9 @@ func TestBuild_SkillAbsentFromDeployedState_ClassifiesAsCreate_DespiteManifestEn
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{skillEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{skillEntry}),
 	})
 
 	// Skill target path absent in deployed state.
@@ -869,7 +870,7 @@ func TestBuild_SkillAbsentFromDeployedState_ClassifiesAsCreate_DespiteManifestEn
 		Manifest:      snap,
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		DeployedState: ds,
@@ -904,9 +905,9 @@ func TestBuild_AgentAbsent_DeployedState_MissingKey_TreatedAsAbsent(t *testing.T
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	// Empty DeployedState — key not present — must be equivalent to Present: false.
@@ -926,7 +927,7 @@ func TestBuild_AgentAbsent_DeployedState_MissingKey_TreatedAsAbsent(t *testing.T
 		Manifest:      snap,
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		DeployedState: map[string]domain.DeployedArtifactState{}, // empty — no entry for targetPath
@@ -973,9 +974,9 @@ func TestBuild_CrossHarness_FilesAbsentAtNewTargetPaths_AllAgentsAreCreate(t *te
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "old-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{oldEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "old-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("old-harness", []domain.ManifestEntry{oldEntry}),
 	})
 
 	// New harness module returns new-harness paths; no file exists there.
@@ -992,7 +993,7 @@ func TestBuild_CrossHarness_FilesAbsentAtNewTargetPaths_AllAgentsAreCreate(t *te
 
 	// No files at new-harness paths — all absent.
 	ds := map[string]domain.DeployedArtifactState{
-		newTargetPath:                      {Present: false},
+		newTargetPath:                        {Present: false},
 		"new-harness/agents/orchestrator.md": {Present: false},
 	}
 
@@ -1012,7 +1013,7 @@ func TestBuild_CrossHarness_FilesAbsentAtNewTargetPaths_AllAgentsAreCreate(t *te
 		Manifest:      snap,
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		DeployedState: ds,
@@ -1060,9 +1061,9 @@ func TestBuild_ManifestEntryAtDifferentTargetPath_FileExistsAtCurrentPath_Classi
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "old-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{oldEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "old-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("old-harness", []domain.ManifestEntry{oldEntry}),
 	})
 
 	// Current target path is new path; a file exists there (independently deployed).
@@ -1079,7 +1080,7 @@ func TestBuild_ManifestEntryAtDifferentTargetPath_FileExistsAtCurrentPath_Classi
 
 	// File IS present at new path; its hash doesn't match old manifest entry.
 	ds := map[string]domain.DeployedArtifactState{
-		newTargetPath: deployedState("sha256:independent", "1.0", "1.0", "1.0"),
+		newTargetPath:                        deployedState("sha256:independent", "1.0", "1.0", "1.0"),
 		"new-harness/agents/orchestrator.md": {Present: false},
 	}
 
@@ -1099,7 +1100,7 @@ func TestBuild_ManifestEntryAtDifferentTargetPath_FileExistsAtCurrentPath_Classi
 		Manifest:      snap,
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		DeployedState: ds,
@@ -1152,9 +1153,9 @@ func TestBuild_AgentHashMismatch_FallsThroughToVersionStaleness_ClassifiesAsUpda
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	// Deployed file: hash differs from manifest AND version is stale (deployed "1.0", source "2.0").
@@ -1179,7 +1180,7 @@ func TestBuild_AgentHashMismatch_FallsThroughToVersionStaleness_ClassifiesAsUpda
 		Manifest:      snap,
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		DeployedState: ds,
@@ -1217,9 +1218,9 @@ func TestBuild_HashMatch_ConflictNotFired_VersionStalenessClassifiedAsUpdate(t *
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	// Deployed file: hash matches manifest (no local mod), version is old.
@@ -1243,7 +1244,7 @@ func TestBuild_HashMatch_ConflictNotFired_VersionStalenessClassifiedAsUpdate(t *
 		Manifest:      snap,
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		DeployedState: ds,
@@ -1282,9 +1283,9 @@ func TestBuild_UnversionedDeployedFile_ClassifiesAsUpdate(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	// Deployed file is present with matching hash but NO version stamps at all.
@@ -1292,8 +1293,8 @@ func TestBuild_UnversionedDeployedFile_ClassifiesAsUpdate(t *testing.T) {
 		targetPath: {
 			Present:           true,
 			ContentHash:       hash,
-			Version:           "",  // no version info
-			HarnessVersion:  "",
+			Version:           "", // no version info
+			HarnessVersion:    "",
 			InjectionsVersion: "",
 		},
 	}
@@ -1314,7 +1315,7 @@ func TestBuild_UnversionedDeployedFile_ClassifiesAsUpdate(t *testing.T) {
 		Manifest:      snap,
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		DeployedState: ds,
@@ -1353,9 +1354,9 @@ func TestBuild_HookAbsentFromDeployedState_ClassifiesAsCreate_DespiteManifestEnt
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{hookEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{hookEntry}),
 	})
 
 	// Hook target path explicitly absent in deployed state.
@@ -1381,7 +1382,7 @@ func TestBuild_HookAbsentFromDeployedState_ClassifiesAsCreate_DespiteManifestEnt
 		WorkflowIDs:   []string{"test-wf"},
 		HookIDs:       []string{"my-hooks"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		DeployedState: ds,
@@ -1420,9 +1421,9 @@ func TestBuild_CrossHarness_FilesAbsentAtNewTargetPaths_SkillIsCreate(t *testing
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "old-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{oldSkillEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "old-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("old-harness", []domain.ManifestEntry{oldSkillEntry}),
 	})
 
 	// New harness module returns new-harness paths; no file exists there.
@@ -1441,8 +1442,8 @@ func TestBuild_CrossHarness_FilesAbsentAtNewTargetPaths_SkillIsCreate(t *testing
 
 	// No files at new-harness skill path — absent.
 	ds := map[string]domain.DeployedArtifactState{
-		newSkillPath:                        {Present: false},
-		"new-harness/agents/test-agent.md":  {Present: false},
+		newSkillPath:                         {Present: false},
+		"new-harness/agents/test-agent.md":   {Present: false},
 		"new-harness/agents/orchestrator.md": {Present: false},
 	}
 
@@ -1463,7 +1464,7 @@ func TestBuild_CrossHarness_FilesAbsentAtNewTargetPaths_SkillIsCreate(t *testing
 		Manifest:      snap,
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		DeployedState: ds,
@@ -1501,9 +1502,9 @@ func TestBuild_CrossHarness_FilesAbsentAtNewTargetPaths_HookIsCreate(t *testing.
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "old-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{oldHookEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "old-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("old-harness", []domain.ManifestEntry{oldHookEntry}),
 	})
 
 	// New harness module returns new-harness paths.
@@ -1522,8 +1523,8 @@ func TestBuild_CrossHarness_FilesAbsentAtNewTargetPaths_HookIsCreate(t *testing.
 
 	// No files at new-harness hook path.
 	ds := map[string]domain.DeployedArtifactState{
-		newHookPath:                         {Present: false},
-		"new-harness/agents/test-agent.md":  {Present: false},
+		newHookPath:                          {Present: false},
+		"new-harness/agents/test-agent.md":   {Present: false},
 		"new-harness/agents/orchestrator.md": {Present: false},
 	}
 
@@ -1545,7 +1546,7 @@ func TestBuild_CrossHarness_FilesAbsentAtNewTargetPaths_HookIsCreate(t *testing.
 		WorkflowIDs:   []string{"test-wf"},
 		HookIDs:       []string{"my-hooks"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		DeployedState: ds,
@@ -1589,9 +1590,9 @@ func TestBuild_ManifestEntryAtDifferentTargetPath_SkillFileExistsAtCurrentPath_C
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "old-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{oldSkillEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "old-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("old-harness", []domain.ManifestEntry{oldSkillEntry}),
 	})
 
 	// Current target path is new path; a file exists there with a different hash.
@@ -1609,8 +1610,8 @@ func TestBuild_ManifestEntryAtDifferentTargetPath_SkillFileExistsAtCurrentPath_C
 	}
 
 	ds := map[string]domain.DeployedArtifactState{
-		newSkillPath:                        deployedState("sha256:independent-skill", "1.5", "", ""),
-		"new-harness/agents/test-agent.md":  {Present: false},
+		newSkillPath:                         deployedState("sha256:independent-skill", "1.5", "", ""),
+		"new-harness/agents/test-agent.md":   {Present: false},
 		"new-harness/agents/orchestrator.md": {Present: false},
 	}
 
@@ -1631,7 +1632,7 @@ func TestBuild_ManifestEntryAtDifferentTargetPath_SkillFileExistsAtCurrentPath_C
 		Manifest:      snap,
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		DeployedState: ds,
@@ -1670,9 +1671,9 @@ func TestBuild_ManifestEntryAtDifferentTargetPath_HookFileExistsAtCurrentPath_Cl
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "old-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{oldHookEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "old-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("old-harness", []domain.ManifestEntry{oldHookEntry}),
 	})
 
 	// Current target path is new path; a file exists there.
@@ -1690,8 +1691,8 @@ func TestBuild_ManifestEntryAtDifferentTargetPath_HookFileExistsAtCurrentPath_Cl
 	}
 
 	ds := map[string]domain.DeployedArtifactState{
-		newHookPath:                         deployedState("sha256:independent-hook", "2.0", "", ""),
-		"new-harness/agents/test-agent.md":  {Present: false},
+		newHookPath:                          deployedState("sha256:independent-hook", "2.0", "", ""),
+		"new-harness/agents/test-agent.md":   {Present: false},
 		"new-harness/agents/orchestrator.md": {Present: false},
 	}
 
@@ -1713,7 +1714,7 @@ func TestBuild_ManifestEntryAtDifferentTargetPath_HookFileExistsAtCurrentPath_Cl
 		WorkflowIDs:   []string{"test-wf"},
 		HookIDs:       []string{"my-hooks"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		DeployedState: ds,
@@ -1759,9 +1760,9 @@ func TestBuild_VersionDowngrade_StillClassifiesAsUpdate(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	// Deployed file has version "2.0" (newer than source "1.0"); hash matches (no local mod).
@@ -1785,7 +1786,7 @@ func TestBuild_VersionDowngrade_StillClassifiesAsUpdate(t *testing.T) {
 		Manifest:      snap,
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		DeployedState: ds,

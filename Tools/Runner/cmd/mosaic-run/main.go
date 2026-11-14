@@ -27,7 +27,12 @@ import (
 	"github.com/mattn/go-isatty"
 )
 
-const ToolVersion = "1.11.0"
+const ToolVersion = "1.12.1"
+
+// stdioIsTerminal reports whether stdin and stdout are both real terminals.
+func stdioIsTerminal() bool {
+	return isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd())
+}
 
 // wantsTUI reports whether mosaic-run should launch the interactive TUI.
 // The TUI is launched when:
@@ -39,17 +44,31 @@ const ToolVersion = "1.11.0"
 // This mirrors the deployment tool's wantsTUI pattern to ensure consistent
 // behaviour across mosaic-run and mosaic-deploy.
 func wantsTUI(args []string) bool {
+	return wantsTUIWith(args, stdioIsTerminal)
+}
+
+// wantsTUIWith is wantsTUI with an injectable terminal check.
+func wantsTUIWith(args []string, isTerminal func() bool) bool {
 	if scanBoolFlag(args, "--tui") {
 		return true
 	}
 	if hasPositionalArg(args) {
 		return false
 	}
-	return isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd())
+	return isTerminal()
 }
 
 func main() {
 	args := os.Args[1:]
+
+	// --version is decided before any other routing or wiring: no TUI, logger,
+	// run identity or workspace access.
+	switch selectFrontend(args, stdioIsTerminal) {
+	case frontendVersion:
+		os.Exit(runVersion(os.Stdout))
+	case frontendVersionUsage:
+		os.Exit(runVersionUsage(os.Stderr))
+	}
 
 	// Pre-scan --dev before any other processing. The --dev flag gates the test
 	// subcommand and the TUI test flow. It is an entry-point-only flag (like

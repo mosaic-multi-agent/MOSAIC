@@ -46,6 +46,11 @@ DispatchLogs/
 # Log capture output (optional enhancement tier)
 logs/
 
+# Test fixtures that imitate the runtime artifacts above are sources, not output.
+!**/testdata/**/logs/
+!**/testdata/**/Orchestration.md
+!**/testdata/**/orchestration.md
+
 # Cost / execution analyzer output
 CostReports/
 *.cost.json

@@ -10,6 +10,7 @@ import re
 
 import mosaic_logger_core as core
 import mosaic_logger_runstate as runstate
+import mosaic_logger_start_identity as start_identity
 import mosaic_logger_export as export
 import mosaic_logger_transcript as transcript
 import mosaic_logger_artifacts as artifacts
@@ -222,92 +223,64 @@ def _complete_from_handback(ctx: "core.HookContext") -> None:
 # Handlers
 # ---------------------------------------------------------------------------
 
+def _write_invocation_start(ctx: "core.HookContext", run_id: str,
+                            agent_instance_id: str, agent_prompt: "str | None") -> None:
+    """Mapping first, then invocation_start, the input turn and 01_input.md."""
+    agent_type = start_identity.started_agent_type(ctx)
+    # A new cycle for this agent_id must be able to complete.
+    runstate.clear_completion_claim(ctx.paths, run_id, ctx.agent_id)
+    runstate.put_agent_mapping(
+        ctx.paths, run_id, ctx.agent_id, agent_instance_id, agent_type
+    )
+    sink = ctx.paths.invocation_events(run_id, agent_instance_id)
+    core.append_event(sink, core.build_event(
+        "invocation_start", ctx,
+        agent_instance_id=agent_instance_id,
+        agent_type=agent_type,
+        prompt=agent_prompt,
+    ))
+    if agent_prompt is not None:
+        core.append_event(sink, core.build_event(
+            "turn", ctx, role="user", content=agent_prompt))
+    artifacts.write_artifact(
+        ctx.paths.invocation_input(run_id, agent_instance_id),
+        artifacts.render_input(ctx, agent_instance_id, agent_prompt),
+    )
+
+
 def handle_subagent_start(ctx: "core.HookContext") -> None:
     """Handle SubagentStart: register mapping, emit invocation_start and
     input turn, write 01_input.md, and refresh 00_orchestrator_session.raw.
 
-    Agent instance ID is sourced from the pending-dispatch queue (populated
-    by handle_pre_tool_use when tool_name was 'Agent') rather than from
-    ctx.field('agent_prompt') (which is never populated in practice).
-    Falls back to 'unknown-agent' when no pending dispatch is available.
-
-    If the pending dispatch also carried a run_id and ctx.run_id is not
-    yet set, adopts it via runstate.adopt_run_id so ctx.run_id and the
-    session-run binding cannot disagree.
+    The identity comes from start_identity.resolve_start_identity: an existing
+    invocation of this agent_id (a re-fired start writes nothing into its
+    folder), else the type-matched pending dispatch, else an explicit
+    agent_instance_id line in the task message, else a unique fallback id.
 
     Never raises.
     """
     if not ctx.agent_id:
         return
 
-    # 1. Pop pending dispatch (after guard, before path resolution). The
-    #    queue path no longer carries a run_id component (Design D4), so
-    #    this always addresses the same file the writer used regardless of
-    #    what either firing resolved for run_id.
-    dispatch = runstate.pop_pending_dispatch(ctx.paths, ctx.session_id)
+    identity = start_identity.resolve_start_identity(ctx)
+    run_id = identity.run_id
+    agent_instance_id = identity.agent_instance_id
 
-    # 2. Optionally adopt ctx.run_id from the dispatch's run_id when not yet set.
-    if dispatch and dispatch.get("run_id") and not ctx.run_id:
-        runstate.adopt_run_id(ctx, dispatch.get("run_id"))
-
-    # 3. Compute effective run_id for all downstream path routing.
-    run_id = core.effective_run_id(ctx)
-
-    # 4. Resolve agent_prompt: prefer the prompt from the pending dispatch;
-    #    fall back to ctx.field("agent_prompt") for backward compatibility with
-    #    callers that supply the prompt directly in the payload without a dispatch.
-    dispatch_prompt = dispatch.get("prompt") if dispatch else None
-    agent_prompt = dispatch_prompt if dispatch_prompt is not None else ctx.field("agent_prompt")
-
-    # 5. Resolve agent_instance_id: pending dispatch takes priority; fall back
-    #    to extracting from agent_prompt (backward-compatible path for callers
-    #    that supply the prompt directly without a pending dispatch); final
-    #    fallback is 'unknown-agent'.
-    if dispatch:
-        agent_instance_id = dispatch["agent_instance_id"]
+    if identity.source == start_identity.SOURCE_EXISTING:
+        core.debug_log(
+            f"subagent-start: continued existing invocation for "
+            f"agent_id={ctx.agent_id!r} agent_instance_id={agent_instance_id!r}"
+        )
     else:
-        extracted = runstate.extract_instance_id(agent_prompt)
-        agent_instance_id = extracted if extracted else "unknown-agent"
-    agent_type = ctx.agent_type
+        _write_invocation_start(ctx, run_id, agent_instance_id, identity.prompt)
 
-    # 5b. A new cycle for this agent_id (first start or a resume) must be able
-    #     to complete: drop any completion claim left by a previous cycle.
-    runstate.clear_completion_claim(ctx.paths, run_id, ctx.agent_id)
-
-    # 6. Persist mapping FIRST — before any event write
-    runstate.put_agent_mapping(
-        ctx.paths, run_id, ctx.agent_id, agent_instance_id, agent_type
-    )
-
-    sink = ctx.paths.invocation_events(run_id, agent_instance_id)
-
-    # 7. Emit invocation_start
-    event = core.build_event(
-        "invocation_start", ctx,
-        agent_instance_id=agent_instance_id,
-        agent_type=agent_type,
-        prompt=agent_prompt,
-    )
-    core.append_event(sink, event)
-
-    # 8. Emit initial user turn (only when agent_prompt is present)
-    if agent_prompt is not None:
-        turn = core.build_event("turn", ctx, role="user", content=agent_prompt)
-        core.append_event(sink, turn)
-
-    # 9. Write 01_input.md
-    input_text = artifacts.render_input(ctx, agent_instance_id, agent_prompt)
-    artifacts.write_artifact(ctx.paths.invocation_input(run_id, agent_instance_id), input_text)
-
-    # 10. Emit raw usage_record events from the orchestrator transcript
-    #     (ctx.transcript_path, NOT the subagent's) to the orchestrator
-    #     stream. SubagentStart has orchestrator-transcript access and is
-    #     one of the every-transcript-bearing-firing capture points.
+    # Raw usage_record events from the orchestrator transcript (NOT the
+    # subagent's) to the orchestrator stream.
     usage.emit_usage_records(
         ctx, ctx.transcript_path, None, "orchestrator_transcript"
     )
 
-    # 6. Refresh 00_orchestrator_session.raw from the orchestrator transcript
+    # Refresh 00_orchestrator_session.raw from the orchestrator transcript
     export.export_transcript(
         ctx.transcript_path,
         ctx.paths.orchestrator_raw(run_id, ctx.session_id),

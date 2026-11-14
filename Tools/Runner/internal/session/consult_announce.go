@@ -20,13 +20,21 @@ func activityFor(req domain.ConsultationRequest) domain.ConsultationActivity {
 // announcing the consultation's start before the call and its end as soon as
 // the call returns, whatever the outcome.
 func (s *sessionImpl) consultOrchestratorAgent(ctx context.Context, req domain.ConsultationRequest) (domain.RoutingInstruction, error) {
+	return s.consultOrchestratorAttempt(ctx, req, 0)
+}
+
+// consultOrchestratorAttempt is consultOrchestratorAgent for the repair
+// consultation numbered repairAttempt (0 for any other routing consultation).
+func (s *sessionImpl) consultOrchestratorAttempt(ctx context.Context, req domain.ConsultationRequest, repairAttempt int) (domain.RoutingInstruction, error) {
 	if req.UserMessage != nil {
 		s.deps.Debug.Log(domain.EventSessionConsultUserMessage, "consultation carries a user message",
 			domain.F("context", string(req.Context)),
 			domain.F("message", *req.UserMessage),
 		)
 	}
-	s.deps.Consultations.ConsultationStarted(ctx, activityFor(req))
+	activity := activityFor(req)
+	activity.RepairAttempt = repairAttempt
+	s.deps.Consultations.ConsultationStarted(ctx, activity)
 	defer s.deps.Consultations.ConsultationEnded(ctx)
 	var instr domain.RoutingInstruction
 	err := s.watchConsultation(ctx, forceStopTargetConsultation, func(wctx context.Context) error {

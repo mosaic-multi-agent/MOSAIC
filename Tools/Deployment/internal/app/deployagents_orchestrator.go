@@ -49,7 +49,8 @@ func (s *service) probeOrchestratorInfra(module domain.HarnessModule, workspace 
 		candidates = append(candidates, script)
 	}
 
-	snap, _ := s.deps.Manifest.Load(workspace)
+	reconciled := loadReconciledManifest(s.deps.Manifest, workspace)
+	snap := reconciled.forHarness(module.Ref().ID) // the run sees only its own harness's entries
 	result := orchestratorInfra{keys: keys, blocks: blocks}
 	for _, agent := range candidates {
 		if agent.Key == "" {
@@ -174,19 +175,22 @@ func (o orchestratorInfra) annotate(items []domain.PlanItem) {
 		switch items[i].Action {
 		case domain.ActionUpdate:
 			stale := append([]domain.VersionDelta(nil), t.Drift.Deltas()...)
-			reason := t.Drift.Reason()
+			reasons := []string{t.Drift.Reason()}
 			for _, d := range items[i].Stale {
 				if d.Field == plan.CatalogDeltaField {
 					stale = append(stale, d)
-					reason += "; " + plan.CatalogStaleness(
-						domain.CatalogIdentity{ID: d.Deployed}, domain.CatalogIdentity{ID: d.Source}).Reason()
+					reasons = append(reasons, plan.CatalogStaleness(
+						domain.CatalogIdentity{ID: d.Deployed}, domain.CatalogIdentity{ID: d.Source}).Reason())
 					break
 				}
 			}
 			items[i].Stale = stale
-			items[i].Reason = "stale: " + reason
+			items[i].Reasons = nil
+			for _, r := range reasons {
+				items[i].AddReason(r)
+			}
 		case domain.ActionConflict:
-			items[i].Reason += "; " + t.Drift.Reason()
+			items[i].AddReason(t.Drift.Reason())
 		}
 	}
 }

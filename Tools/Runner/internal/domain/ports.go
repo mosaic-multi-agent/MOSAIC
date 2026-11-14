@@ -229,9 +229,6 @@ type RawInvoker interface {
 	// InvokeRaw sends payload verbatim as the agent's prompt and returns the
 	// agent's reply bytes verbatim, with no schema interpretation of either.
 	//
-	// agent.InvocationKind must be InvocationOrchestrator for orchestrator
-	// consultations, so the agent retains native subagent-spawning capability.
-	//
 	// Returns a non-nil error on harness-level failure (timeout, crash, empty
 	// output, non-zero exit). The returned bytes are the raw reply on success
 	// and are never nil on a nil error.

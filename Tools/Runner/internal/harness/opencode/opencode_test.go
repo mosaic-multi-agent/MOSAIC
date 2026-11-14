@@ -11,14 +11,14 @@ package opencode_test
 // Coverage:
 //
 //   Request mapping:
-//   - Includes --agent <Identifier> for both invocation kinds.
+//   - Includes --agent <Identifier>.
 //   - Includes --format json.
 //   - Includes --auto.
 //   - The marshalled request travels on stdin; no positional message is emitted.
-//   - SystemPrompt carries a synthesized <env> block for BOTH invocation
-//     kinds (unlike ClaudeCodeAdapter, which only synthesizes one for the
-//     orchestrator kind) — OpenCode's --agent replaces the default system
-//     prompt in both cases.
+//   - SystemPrompt carries a synthesized <env> block for every agent
+//     (unlike ClaudeCodeAdapter, which only synthesizes one for the
+//     orchestrator agents) — OpenCode's --agent replaces the default system
+//     prompt in every case.
 //
 //   Protocol response mapping:
 //   - A successful stream-terminated run decodes into domain.ProtocolResponse.
@@ -54,7 +54,7 @@ import (
 // ---------------------------------------------------------------------------
 
 // TestOpenCodeAdapter_OrdinaryInvocation_IncludesAgentFlag verifies that
-// ordinary invocations include --agent <Identifier>, mirroring the
+// the adapter includes --agent <Identifier>, mirroring the
 // orchestrator case: OpenCode selects any agent (subagent or primary) by
 // name through the same flag.
 func TestOpenCodeAdapter_OrdinaryInvocation_IncludesAgentFlag(t *testing.T) {
@@ -74,7 +74,7 @@ func TestOpenCodeAdapter_OrdinaryInvocation_IncludesAgentFlag(t *testing.T) {
 }
 
 // TestOpenCodeAdapter_OrchestratorInvocation_IncludesAgentFlag verifies that
-// orchestrator invocations include --agent <Identifier>.
+// orchestrator agents include --agent <Identifier>.
 func TestOpenCodeAdapter_OrchestratorInvocation_IncludesAgentFlag(t *testing.T) {
 	argsFile := setHelperEnv(t, "opencode-success")
 	agent := orchestratorAgentRef()
@@ -92,7 +92,7 @@ func TestOpenCodeAdapter_OrchestratorInvocation_IncludesAgentFlag(t *testing.T) 
 }
 
 // TestOpenCodeAdapter_IncludesFormatJSON verifies that --format json is
-// present regardless of invocation kind.
+// present.
 func TestOpenCodeAdapter_IncludesFormatJSON(t *testing.T) {
 	argsFile := setHelperEnv(t, "opencode-success")
 
@@ -148,10 +148,10 @@ func TestOpenCodeAdapter_StdinCarriesMarshalledRequest(t *testing.T) {
 }
 
 // TestOpenCodeAdapter_OrdinaryInvocation_SystemPromptCarriesEnvBlock verifies
-// that, unlike ClaudeCodeAdapter, an ORDINARY invocation also loses the
+// that, unlike ClaudeCodeAdapter, the adapter also loses the
 // default system prompt (OpenCode's --agent replaces it for every
-// invocation kind), so the adapter must supply a synthesized <env> block via
-// SystemPrompt for the ordinary case too.
+// agent), so the adapter must supply a synthesized <env> block via
+// SystemPrompt.
 func TestOpenCodeAdapter_OrdinaryInvocation_SystemPromptCarriesEnvBlock(t *testing.T) {
 	setHelperEnv(t, "opencode-success")
 	stdinFile := newTestStdinCapture(t)
@@ -164,12 +164,12 @@ func TestOpenCodeAdapter_OrdinaryInvocation_SystemPromptCarriesEnvBlock(t *testi
 
 	message := string(readHelperStdin(t, stdinFile))
 	if !strings.Contains(message, "<env>") {
-		t.Errorf("want a synthesized <env> block on stdin for the ordinary invocation, got %q", message)
+		t.Errorf("want a synthesized <env> block on stdin, got %q", message)
 	}
 }
 
 // TestOpenCodeAdapter_OrchestratorInvocation_SystemPromptCarriesEnvBlock
-// verifies the same for the orchestrator invocation kind.
+// verifies the same for an orchestrator agent.
 func TestOpenCodeAdapter_OrchestratorInvocation_SystemPromptCarriesEnvBlock(t *testing.T) {
 	setHelperEnv(t, "opencode-success")
 	stdinFile := newTestStdinCapture(t)
@@ -182,7 +182,7 @@ func TestOpenCodeAdapter_OrchestratorInvocation_SystemPromptCarriesEnvBlock(t *t
 
 	message := string(readHelperStdin(t, stdinFile))
 	if !strings.Contains(message, "<env>") {
-		t.Errorf("want a synthesized <env> block on stdin for the orchestrator invocation, got %q", message)
+		t.Errorf("want a synthesized <env> block on stdin for the orchestrator agent, got %q", message)
 	}
 }
 

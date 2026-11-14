@@ -28,6 +28,7 @@ package plan_test
 // match the Codex harness's actual output layout.
 
 import (
+	"slices"
 	"context"
 	"testing"
 
@@ -142,8 +143,9 @@ func TestCodexClassify_ManifestBacked_NothingStale_ReturnsUnchanged(t *testing.T
 	ds := deployedState("sha256:hand-edited-doesnt-matter", agent.Version, "1.0", "1.0")
 
 	entry := makeManifestEntry(agentRef(agent.Key), targetPath, agent.Version, "sha256:hand-edited-doesnt-matter")
+	entry.Harness = "codex"
 	snap := presentSnapshot(domain.Manifest{
-		HarnessID: "codex",
+		Harnesses: []domain.HarnessSection{{HarnessID: "codex"}},
 		Entries:   []domain.ManifestEntry{entry},
 	})
 
@@ -203,8 +205,9 @@ func TestCodexClassify_SourceVersionBumped_ReturnsUpdate(t *testing.T) {
 	ds := deployedState("sha256:stale", "1.0", "1.0", "1.0")
 
 	entry := makeManifestEntry(agentRef(agent.Key), targetPath, "1.0", "sha256:stale")
+	entry.Harness = "codex"
 	snap := presentSnapshot(domain.Manifest{
-		HarnessID: "codex",
+		Harnesses: []domain.HarnessSection{{HarnessID: "codex"}},
 		Entries:   []domain.ManifestEntry{entry},
 	})
 
@@ -269,7 +272,7 @@ func TestCodexClassify_ManifestRecordMissing_ReturnsConflict(t *testing.T) {
 
 	// Manifest present but empty (no entries).
 	snap := presentSnapshot(domain.Manifest{
-		HarnessID: "codex",
+		Harnesses: []domain.HarnessSection{{HarnessID: "codex"}},
 		Entries:   []domain.ManifestEntry{}, // no entry for this target path
 	})
 
@@ -340,8 +343,9 @@ func TestCodexClassify_ParseFailed_ReturnsConflict(t *testing.T) {
 	}
 
 	entry := makeManifestEntry(agentRef(agent.Key), targetPath, "1.0", "sha256:corrupted")
+	entry.Harness = "codex"
 	snap := presentSnapshot(domain.Manifest{
-		HarnessID: "codex",
+		Harnesses: []domain.HarnessSection{{HarnessID: "codex"}},
 		Entries:   []domain.ManifestEntry{entry},
 	})
 
@@ -381,9 +385,9 @@ func TestCodexClassify_ParseFailed_ReturnsConflict(t *testing.T) {
 	}
 
 	// The conflict reason must not be the hash-mismatch "locally modified" reason.
-	if item.Reason == "deployed file has been locally modified since last deployment" {
-		t.Errorf("item.Reason = %q; this is the Step-4 hash-mismatch reason; "+
-			"the ParseFailed check must fire before Step 4 so the reason is distinct", item.Reason)
+	if slices.Contains(item.Reasons, "deployed file has been locally modified since last deployment") {
+		t.Errorf("item.Reasons = %q; this is the Step-4 hash-mismatch reason; "+
+			"the ParseFailed check must fire before Step 4 so the reason is distinct", item.Reasons)
 	}
 }
 
@@ -420,8 +424,9 @@ func TestCodexClassify_StampsRoundTrip_ReturnsUnchanged(t *testing.T) {
 	ds := deployedState("sha256:nodrift", agent.Version, "1.0", "1.0")
 
 	entry := makeManifestEntry(agentRef(agent.Key), targetPath, agent.Version, "sha256:nodrift")
+	entry.Harness = "codex"
 	snap := presentSnapshot(domain.Manifest{
-		HarnessID: "codex",
+		Harnesses: []domain.HarnessSection{{HarnessID: "codex"}},
 		Entries:   []domain.ManifestEntry{entry},
 	})
 

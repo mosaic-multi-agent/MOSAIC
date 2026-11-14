@@ -66,7 +66,11 @@ type Request struct {
 	Model        domain.ModelSelection
 	CustomTools  map[string]string   // generic tool name → user-supplied MCP server name
 	SkippedTools map[string]bool
-	Scope        domain.Scope
+	// DenyTools are target-harness names written as "<name>: deny" in a permission-shaped tools
+	// field after AppendTools; a deny always wins over an allow of the same name. Ignored for list
+	// shape. Nil adds nothing.
+	DenyTools []string
+	Scope     domain.Scope
 	// Deployed is the currently-deployed file bytes in CANONICAL form (Markdown with
 	// YAML frontmatter), or nil on create. Decode happens in the application layer
 	// before Apply is called. A caller holding raw on-disk bytes that has not decoded

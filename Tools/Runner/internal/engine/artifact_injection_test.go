@@ -7,9 +7,9 @@ import (
 	"mosaic-run/internal/engine"
 )
 
-func TestNext_ArtifactInjection_AutoReview_CNA_InjectsLastOutputArtifacts(t *testing.T) {
+func TestNext_ArtifactInjection_AutoReview_CNA_InjectsLastOutputsOverride(t *testing.T) {
 	// brownfield-tdd-build-verified row 8: build-review, OnFindings="test-writer-tdd".
-	// build-review's own output artifact (LastOutputArtifacts) must be appended
+	// build-review's own output artifact (LastOutputsOverride) must be appended
 	// to the dispatched test-writer-tdd step's InputArtifacts.
 	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	schedules := singleSchedules("TDD")
@@ -28,7 +28,7 @@ func TestNext_ArtifactInjection_AutoReview_CNA_InjectsLastOutputArtifacts(t *tes
 		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("build-review#9"),
-		LastOutputArtifacts: reviewOutputs,
+		LastOutputsOverride: overrideOf(reviewOutputs),
 		Agents:              agents,
 		Seq:                 9,
 		Now:                 fixedNow,
@@ -52,7 +52,7 @@ func TestNext_ArtifactInjection_AutoReview_CNA_InjectsLastOutputArtifacts(t *tes
 }
 
 // TestNext_ArtifactInjection_AutoReview_CNA_NoDeduplication_WhenUnique verifies
-// that when LastOutputArtifacts contains paths not already in the table row's
+// that when LastOutputsOverride contains paths not already in the table row's
 // InputArtifacts, all of them are appended.
 func TestNext_ArtifactInjection_AutoReview_CNA_NoDeduplication_WhenUnique(t *testing.T) {
 	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
@@ -72,7 +72,7 @@ func TestNext_ArtifactInjection_AutoReview_CNA_NoDeduplication_WhenUnique(t *tes
 		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("build-review#9"),
-		LastOutputArtifacts: reviewOutputs,
+		LastOutputsOverride: overrideOf(reviewOutputs),
 		Agents:              agents,
 		Seq:                 9,
 		Now:                 fixedNow,
@@ -94,13 +94,13 @@ func TestNext_ArtifactInjection_AutoReview_CNA_NoDeduplication_WhenUnique(t *tes
 
 // TestNext_ArtifactInjection_AutoReview_CNA_DeduplicatesExisting verifies that
 // paths already present in the table row's InputArtifacts are not duplicated
-// when LastOutputArtifacts contains them too, and that a new unique path from
-// LastOutputArtifacts IS injected (proving injection occurred at all).
+// when LastOutputsOverride contains them too, and that a new unique path from
+// LastOutputsOverride IS injected (proving injection occurred at all).
 func TestNext_ArtifactInjection_AutoReview_CNA_DeduplicatesExisting(t *testing.T) {
 	// We use the build-review row (row 8) dispatching back to test-writer-tdd.
 	// test-writer-tdd's table InputArtifacts are:
 	//   Stage-1/Plan.md, ContractsDesign.md, Stage-1/PlanProgress.md
-	// LastOutputArtifacts contains two entries:
+	// LastOutputsOverride contains two entries:
 	//   - "Stage-1/Plan.md": already in the table row — must NOT appear twice.
 	//   - "Stage-1/build-review-findings.md": NOT in the table row — must appear
 	//     exactly once, proving injection actually ran.
@@ -125,7 +125,7 @@ func TestNext_ArtifactInjection_AutoReview_CNA_DeduplicatesExisting(t *testing.T
 		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("build-review#9"),
-		LastOutputArtifacts: reviewOutputs,
+		LastOutputsOverride: overrideOf(reviewOutputs),
 		Agents:              agents,
 		Seq:                 9,
 		Now:                 fixedNow,
@@ -163,11 +163,11 @@ func TestNext_ArtifactInjection_AutoReview_CNA_DeduplicatesExisting(t *testing.T
 
 // TestNext_ArtifactInjection_AutoReview_Success_NoInjection verifies that a
 // SUCCESS-routed dispatch never carries injected artifacts, even when
-// LastOutputArtifacts is non-empty.
+// LastOutputsOverride is non-empty.
 func TestNext_ArtifactInjection_AutoReview_Success_NoInjection(t *testing.T) {
 	// planner-tdd-soft returns SUCCESS; routes to plan-review.
 	// plan-review's table InputArtifacts do not include any "review-output.md".
-	// Even with LastOutputArtifacts = ["review-output.md"], it must not appear.
+	// Even with LastOutputsOverride = ["review-output.md"], it must not appear.
 	aw := mustParseAndAdmitV216(t, quickFixV216Content, "quick-fix", "3.0")
 	schedules := singleSchedules("Implementation-Only")
 	agents := newTestAgents("planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner")
@@ -178,7 +178,7 @@ func TestNext_ArtifactInjection_AutoReview_Success_NoInjection(t *testing.T) {
 		Schedules:           schedules,
 		State:               state,
 		LastResponse:        successResponse("planner-tdd-soft#1"),
-		LastOutputArtifacts: []string{"review-output.md"},
+		LastOutputsOverride: overrideOf([]string{"review-output.md"}),
 		Agents:              agents,
 		Seq:                 1,
 		Now:                 fixedNow,
@@ -215,7 +215,7 @@ func TestNext_ArtifactInjection_Auto_CNA_NoInjection(t *testing.T) {
 		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("build-review#9"),
-		LastOutputArtifacts: []string{"Stage-1/build-review-tests.md"},
+		LastOutputsOverride: overrideOf([]string{"Stage-1/build-review-tests.md"}),
 		Agents:              agents,
 		Seq:                 9,
 		Now:                 fixedNow,
@@ -247,7 +247,7 @@ func TestNext_ArtifactInjection_AutoReview_CNA_InjectsAfterTableEntries(t *testi
 		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("build-review#9"),
-		LastOutputArtifacts: reviewOutputs,
+		LastOutputsOverride: overrideOf(reviewOutputs),
 		Agents:              agents,
 		Seq:                 9,
 		Now:                 fixedNow,
@@ -297,12 +297,14 @@ func TestNext_ArtifactInjection_AutoReview_CNA_InjectsAfterTableEntries(t *testi
 	}
 }
 
-// ===== Nil / empty LastOutputArtifacts on auto-review CNA path (Stage 2) =====
+// ===== Nil / empty LastOutputsOverride on auto-review CNA path (Stage 2) =====
 
-// TestNext_ArtifactInjection_AutoReview_CNA_NilLastOutputArtifacts verifies that
-// when LastOutputArtifacts is nil the dispatched step's InputArtifacts match the
-// table row exactly — no injection, no panic.
-func TestNext_ArtifactInjection_AutoReview_CNA_NilLastOutputArtifacts(t *testing.T) {
+// TestNext_ArtifactInjection_AutoReview_CNA_NilLastOutputsOverride verifies that
+// when LastOutputsOverride is nil the dispatched step's InputArtifacts match the
+// table row followed by the output of the row the route-back comes from
+// (build-review(tests) declares Stage-{Stage}/build-review-tests.md), derived
+// for the recorded iteration whether or not the step wrote it.
+func TestNext_ArtifactInjection_AutoReview_CNA_NilLastOutputsOverride_DerivesRowOutput(t *testing.T) {
 	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	schedules := singleSchedules("TDD")
 	agents := newTestAgents(
@@ -318,7 +320,7 @@ func TestNext_ArtifactInjection_AutoReview_CNA_NilLastOutputArtifacts(t *testing
 		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("build-review#9"),
-		LastOutputArtifacts: nil,
+		LastOutputsOverride: nil,
 		Agents:              agents,
 		Seq:                 9,
 		Now:                 fixedNow,
@@ -326,36 +328,22 @@ func TestNext_ArtifactInjection_AutoReview_CNA_NilLastOutputArtifacts(t *testing
 	})
 
 	step := requireDispatch(t, dec)
-	// With nil LastOutputArtifacts the table row's InputArtifacts must appear
-	// and no extra entries should be present beyond what the table supplies.
-	tableEntries := []string{"Stage-1/Plan.md", "ContractsDesign.md", "Stage-1/PlanProgress.md"}
-	inputSet := make(map[string]bool)
-	for _, a := range step.Request.InputArtifacts {
-		inputSet[a] = true
+	// With a nil override the target row's own inputs appear, followed by the
+	// output of the build-review(tests) row, and nothing else.
+	want := []string{
+		"Stage-1/Plan.md", "ContractsDesign.md", "Stage-1/PlanProgress.md",
+		"Stage-1/build-review-tests.md",
 	}
-	for _, expected := range tableEntries {
-		if !inputSet[expected] {
-			t.Errorf("nil LastOutputArtifacts: table entry %q missing from InputArtifacts %v",
-				expected, step.Request.InputArtifacts)
-		}
-	}
-	// No artifact beyond the table entries should be present.
-	tableSet := make(map[string]bool)
-	for _, e := range tableEntries {
-		tableSet[e] = true
-	}
-	for _, a := range step.Request.InputArtifacts {
-		if !tableSet[a] {
-			t.Errorf("nil LastOutputArtifacts: unexpected extra artifact %q in InputArtifacts %v (should match table row only)",
-				a, step.Request.InputArtifacts)
-		}
+	if !stringSlicesEqual(step.Request.InputArtifacts, want) {
+		t.Errorf("nil LastOutputsOverride: want table inputs then the derived row output %v, got %v",
+			want, step.Request.InputArtifacts)
 	}
 }
 
-// TestNext_ArtifactInjection_AutoReview_CNA_EmptyLastOutputArtifacts verifies that
-// when LastOutputArtifacts is an empty slice the dispatched step's InputArtifacts
+// TestNext_ArtifactInjection_AutoReview_CNA_EmptyLastOutputsOverride verifies that
+// when LastOutputsOverride is an empty slice the dispatched step's InputArtifacts
 // match the table row exactly — same expectation as nil.
-func TestNext_ArtifactInjection_AutoReview_CNA_EmptyLastOutputArtifacts(t *testing.T) {
+func TestNext_ArtifactInjection_AutoReview_CNA_EmptyLastOutputsOverride(t *testing.T) {
 	aw := mustParseAndAdmitV216(t, brownfieldBuildVerifiedV216Content, "brownfield-tdd-build-verified", "2.0")
 	schedules := singleSchedules("TDD")
 	agents := newTestAgents(
@@ -371,7 +359,7 @@ func TestNext_ArtifactInjection_AutoReview_CNA_EmptyLastOutputArtifacts(t *testi
 		Schedules:           schedules,
 		State:               state,
 		LastResponse:        cnaResponse("build-review#9"),
-		LastOutputArtifacts: []string{},
+		LastOutputsOverride: overrideOf([]string{}),
 		Agents:              agents,
 		Seq:                 9,
 		Now:                 fixedNow,
@@ -386,7 +374,7 @@ func TestNext_ArtifactInjection_AutoReview_CNA_EmptyLastOutputArtifacts(t *testi
 	}
 	for _, expected := range tableEntries {
 		if !inputSet[expected] {
-			t.Errorf("empty LastOutputArtifacts: table entry %q missing from InputArtifacts %v",
+			t.Errorf("empty LastOutputsOverride: table entry %q missing from InputArtifacts %v",
 				expected, step.Request.InputArtifacts)
 		}
 	}
@@ -396,7 +384,7 @@ func TestNext_ArtifactInjection_AutoReview_CNA_EmptyLastOutputArtifacts(t *testi
 	}
 	for _, a := range step.Request.InputArtifacts {
 		if !tableSet[a] {
-			t.Errorf("empty LastOutputArtifacts: unexpected extra artifact %q in InputArtifacts %v (should match table row only)",
+			t.Errorf("empty LastOutputsOverride: unexpected extra artifact %q in InputArtifacts %v (should match table row only)",
 				a, step.Request.InputArtifacts)
 		}
 	}

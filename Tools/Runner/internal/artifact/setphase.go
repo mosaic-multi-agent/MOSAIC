@@ -29,7 +29,7 @@ func (f *fileStore) SetPhase(_ context.Context, _ domain.ArtifactState, phase st
 		return domain.ArtifactState{}, fmt.Errorf("SetPhase: read: %w", err)
 	}
 
-	current, err := Parse(data)
+	current, err := f.readForWrite(data)
 	if err != nil {
 		return domain.ArtifactState{}, fmt.Errorf("SetPhase: parse: %w", err)
 	}
@@ -43,7 +43,7 @@ func (f *fileStore) SetPhase(_ context.Context, _ domain.ArtifactState, phase st
 	if err != nil {
 		return domain.ArtifactState{}, fmt.Errorf("SetPhase: render: %w", err)
 	}
-	if err := atomicWrite(f.path, rendered); err != nil {
+	if err := f.writeArtifact(rendered); err != nil {
 		return domain.ArtifactState{}, fmt.Errorf("SetPhase: write: %w", err)
 	}
 

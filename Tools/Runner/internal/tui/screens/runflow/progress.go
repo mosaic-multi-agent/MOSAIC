@@ -55,6 +55,7 @@ type ProgressScreen struct {
 	rows              []ProgressRow
 	runningIdx        int // index of currently running row, or -1
 	consultation      *domain.ConsultationActivity
+	repairOutcomes    []domain.RepairOutcome
 	startTime         time.Time
 	stopRequest       bool
 	confirmPending    bool
@@ -217,6 +218,12 @@ func (s *ProgressScreen) View() string {
 	if s.consultation != nil && contentH > 1 {
 		contentH--
 	}
+	contentH -= len(s.repairOutcomes)
+	extraParts := s.optionalParts()
+	contentH = s.rowBudgetWithPanel(contentH, extraParts)
+	if contentH < 1 {
+		contentH = 1
+	}
 	start := 0
 	if len(s.rows) > contentH {
 		start = len(s.rows) - contentH
@@ -255,6 +262,12 @@ func (s *ProgressScreen) View() string {
 		}
 		rowsBuilder.WriteString(line)
 	}
+	if lines := s.repairOutcomeLines(); lines != "" {
+		if rowsBuilder.Len() > 0 {
+			rowsBuilder.WriteString("\n")
+		}
+		rowsBuilder.WriteString(lines)
+	}
 	if line := s.consultationLine(); line != "" {
 		if rowsBuilder.Len() > 0 {
 			rowsBuilder.WriteString("\n")
@@ -265,6 +278,16 @@ func (s *ProgressScreen) View() string {
 	help := s.styles.Help.Width(s.width).Render(s.helpBar())
 
 	parts := []string{title, statusLine, border, rowsBuilder.String()}
+	parts = append(parts, extraParts...)
+	parts = append(parts, border, help)
+	return strings.Join(s.withActivityPanel(parts), "\n")
+}
+
+// optionalParts renders the lines shown below the step rows only in some
+// states: pending lines, the stop prompt or notice, the force-stop banner and
+// the guard indicator.
+func (s *ProgressScreen) optionalParts() []string {
+	var parts []string
 	if pending := s.pendingLines(); pending != "" {
 		parts = append(parts, pending)
 	}
@@ -280,8 +303,7 @@ func (s *ProgressScreen) View() string {
 	if line := s.guardIndicatorLine(); line != "" {
 		parts = append(parts, line)
 	}
-	parts = append(parts, border, help)
-	return strings.Join(s.withActivityPanel(parts), "\n")
+	return parts
 }
 
 // confirmBanner renders the pending stop prompt as a bordered box, so it reads

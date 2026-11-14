@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
@@ -41,6 +40,8 @@ func (p *planner) Build(ctx context.Context, in Input) (domain.Plan, error) {
 
 	desc := in.Module.Descriptor()
 	manifestUsable := in.Manifest.State == manifest.StatePresent
+	// Classification sees only the entries of the harness the run is for.
+	runManifest := in.Manifest.Manifest.ForHarness(in.Module.Ref().ID)
 
 	var items []domain.PlanItem
 	var gaps []domain.Gap
@@ -62,7 +63,7 @@ func (p *planner) Build(ctx context.Context, in Input) (domain.Plan, error) {
 		deployed.Workflows = deployedWithoutKept(deployed.Workflows, in.KeptWorkflowIDs)
 
 		// Classify before evaluating gaps: the GapNoModel emission rule depends on the action.
-		item := classifyAgentItemLegacyAware(in.LegacyAgentPaths[targetPath], agent, targetPath, model, manifestUsable, in.Manifest.Manifest, deployed, descriptorForAgent(desc, agent, in.OrchestratorRegionUndeliverable), selectedWorkflows, in.ToolMappingsVersion, in.ProtocolVersion, in.BundleVersion, infrastructureInput{Catalog: in.Catalog, Intent: in.InfrastructureDeclarations}, supplierOf(in.Catalog))
+		item := classifyAgentItemLegacyAware(in.LegacyAgentPaths[targetPath], agent, targetPath, model, manifestUsable, runManifest, deployed, descriptorForAgent(desc, agent, in.OrchestratorRegionUndeliverable), selectedWorkflows, in.ToolMappingsVersion, in.ProtocolVersion, in.BundleVersion, infrastructureInput{Catalog: in.Catalog, Intent: in.InfrastructureDeclarations}, supplierOf(in.Catalog))
 		items = append(items, item)
 
 		// Surface a GapNoModel gap only when the file write that would occur requires a model
@@ -114,6 +115,7 @@ func (p *planner) Build(ctx context.Context, in Input) (domain.Plan, error) {
 						})
 					}
 				}
+				gaps = append(gaps, unknownHarnessToolGaps(desc, agent.Key, toolResult)...)
 			}
 		}
 	}
@@ -136,7 +138,7 @@ func (p *planner) Build(ctx context.Context, in Input) (domain.Plan, error) {
 			sourcePath := filepath.Join(skill.SourceDir, file)
 			isEntryFile := file == skill.EntryFile
 			deployed := in.DeployedState[targetPath]
-			item := classifySkillItem(skill, sourcePath, targetPath, isEntryFile, manifestUsable, in.Manifest.Manifest, deployed, supplierOf(in.Catalog))
+			item := classifySkillItem(skill, sourcePath, targetPath, isEntryFile, manifestUsable, runManifest, deployed, supplierOf(in.Catalog))
 			items = append(items, item)
 		}
 	}
@@ -144,35 +146,38 @@ func (p *planner) Build(ctx context.Context, in Input) (domain.Plan, error) {
 	// Build plan items for each hook bundle.
 	for _, hook := range set.Hooks {
 		ref := domain.ArtifactRef{Kind: domain.ArtifactHook, Key: hook.Key}
-		targetPath, ok := paths.Path(ref)
-		if !ok {
-			// Hook not supported by this harness — skip plan item.
-			continue
-		}
-
-		// Check registration steps for conflicts with existing workspace files.
+		targetPaths := paths.PathsFor(ref) // one entry per hook file, in HookPlan file order
 		hookPlan, hookErr := in.Module.HookPlan(domain.HookPlanRequest{
 			Bundle: hook,
 			Scope:  in.Scope,
 		})
-		if hookErr == nil && hookPlan.Supported {
-			for _, step := range hookPlan.Registration {
-				registrations = append(registrations, step)
-				if step.TargetPath != "" && registrationTargetExists(in, step.TargetPath) {
-					// Registration target already exists in the workspace.
-					gaps = append(gaps, domain.Gap{
-						Kind:     domain.GapHookRegistration,
-						Subject:  step.ID,
-						Detail:   fmt.Sprintf("registration target %q already exists in workspace", step.TargetPath),
-						Fragment: step.Fragment,
-					})
-				}
+		if hookErr != nil || !hookPlan.Supported {
+			// Hook not supported by this harness — skip plan items.
+			continue
+		}
+
+		// Check registration steps for conflicts with existing workspace files.
+		for _, step := range hookPlan.Registration {
+			registrations = append(registrations, step)
+			if step.TargetPath != "" && registrationTargetExists(in, step.TargetPath) {
+				// Registration target already exists in the workspace.
+				gaps = append(gaps, domain.Gap{
+					Kind:     domain.GapHookRegistration,
+					Subject:  step.ID,
+					Detail:   fmt.Sprintf("registration target %q already exists in workspace", step.TargetPath),
+					Fragment: step.Fragment,
+				})
 			}
 		}
 
-		deployed := in.DeployedState[targetPath]
-		item := classifyHookItem(hook, targetPath, manifestUsable, in.Manifest.Manifest, deployed, supplierOf(in.Catalog))
-		items = append(items, item)
+		for i, file := range hookPlan.Files {
+			if i >= len(targetPaths) {
+				break
+			}
+			targetPath := targetPaths[i]
+			deployed := in.DeployedState[targetPath]
+			items = append(items, classifyHookItem(hook, file.SourcePath, targetPath, manifestUsable, runManifest, deployed, supplierOf(in.Catalog)))
+		}
 	}
 
 	// Sort items deterministically: agents first, then skills, then hooks; within each kind by key.
@@ -221,401 +226,4 @@ func artifactKindOrder(k domain.ArtifactKind) int {
 	default:
 		return 99
 	}
-}
-
-// classifyAgentItem classifies one agent into a PlanItem with the appropriate action.
-// The classification contract (see ContractsDesign.md Classification Contract):
-//  1. No deployed file → ActionCreate
-//  2. No usable manifest → ActionConflict (ManifestMissing: true)
-//  3. No manifest entry at current target path → ActionConflict (ManifestMissing: true)
-//  4. Version staleness check against deployed-file versions
-//  5a. For orchestrator-role agents: workflow staleness check; merged into deltas
-//  5b. For agents whose role carries version markers: protocol staleness check; merged into deltas.
-//      Excluded for RoleUtility and RoleStandalone: those roles receive no protocol marker by design.
-//  5c. For agents whose role carries version markers and is not orchestrator: bundle staleness check;
-//      merged into deltas. Excluded for RoleUtility and RoleStandalone alongside RoleOrchestrator.
-//  6. Stale or no version info → ActionUpdate
-//  7. → ActionUnchanged
-//
-// selectedWorkflows is the full list of workflows resolved from plan.Input.WorkflowIDs for
-// this run. It is only consulted for agents with Role == domain.RoleOrchestrator; it may
-// be nil or empty for other agents with no effect.
-//
-// toolMappingsVersion is the current effective mapping hash from plan.Input.ToolMappingsVersion.
-// When it differs from deployed.ToolMappingsVersion, a "tool_mappings_version" staleness
-// delta is produced so the destination field is regenerated on the next update.
-//
-// protocolVersion is the current protocol source version from plan.Input.ProtocolVersion.
-// Protocol staleness applies to agents whose role carries version markers (RoleSubagent and
-// RoleOrchestrator). It is suppressed for RoleUtility and RoleStandalone, which receive harness
-// transformation only — the absence of a protocol marker in those files is by design.
-//
-// bundleVersion is the current bundle source version from plan.Input.BundleVersion.
-// Bundle staleness applies to subagent-role agents whose role carries version markers;
-// the orchestrator and marker-free roles (utility, standalone) are excluded.
-func classifyAgentItem(
-	agent domain.Agent,
-	targetPath string,
-	model domain.ModelSelection,
-	manifestUsable bool,
-	m domain.Manifest,
-	deployed domain.DeployedArtifactState,
-	desc *domain.HarnessDescriptor,
-	selectedWorkflows []domain.Workflow,
-	toolMappingsVersion string,
-	protocolVersion string,
-	bundleVersion string,
-	infra infrastructureInput,
-	supplier supplierLookup,
-) domain.PlanItem {
-	ref := domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: agent.Key}
-	item := domain.PlanItem{
-		Ref:           ref,
-		SourcePath:    agent.SourcePath,
-		TargetPath:    targetPath,
-		Model:         model,
-		SourceVersion: agent.Version,
-	}
-
-	// Step 1: No deployed file — short-circuit to create before consulting the manifest.
-	if !deployed.Present {
-		item.Action = domain.ActionCreate
-		item.Reason = "new artifact; no file at target path"
-		return item
-	}
-
-	// Step 1b: File exists but frontmatter could not be parsed. Classify as CONFLICT with a
-	// distinct reason before reaching the manifest-availability or hash-mismatch checks.
-	// Without this early exit, the file would fall through to the manifest-availability check
-	// and version-staleness steps with incomplete state.
-	if deployed.ParseFailed {
-		item.Action = domain.ActionConflict
-		item.Conflict = &domain.LocalModification{
-			CurrentHash:     deployed.ContentHash,
-			ManifestMissing: true,
-		}
-		item.Reason = "deployed file could not be read/parsed"
-		if deployed.ParseProblem != "" {
-			item.Reason += ": " + deployed.ParseProblem
-		}
-		return item
-	}
-
-	// Step 2: No usable manifest — any file on disk could have been placed there manually.
-	if !manifestUsable {
-		item.Action = domain.ActionConflict
-		item.Conflict = &domain.LocalModification{
-			CurrentHash:     deployed.ContentHash,
-			ManifestMissing: true,
-		}
-		item.Reason = "deployed file found but no manifest is available; cannot confirm it was written by this tool"
-		return item
-	}
-
-	// Step 3: Target-path-aware manifest lookup. An entry for the same Kind+Key at a
-	// different target path (e.g. a different harness) does not apply to this run.
-	entry, inManifest := m.LookupAt(ref, targetPath)
-	if !inManifest {
-		item.Action = domain.ActionConflict
-		item.Conflict = &domain.LocalModification{
-			CurrentHash:     deployed.ContentHash,
-			ManifestMissing: true,
-		}
-		item.Reason = "file exists on disk but has no manifest record for this target path; cannot confirm origin"
-		return item
-	}
-
-	// Step 4: Compare version fields against the deployed-file versions.
-	stamps := agentVersionStamps(agent, desc, toolMappingsVersion)
-	deltas := AgentStaleness(deployed, agent, stamps)
-
-	// Step 5a: For orchestrator-role agents, also compare the deployed workflow set
-	// against the newly selected workflows. Workflow drift composes with version-field
-	// deltas into a single update item; never produces a separate plan item.
-	var drift WorkflowDrift
-	if agent.Role == domain.RoleOrchestrator {
-		drift = WorkflowStaleness(deployed.Workflows, selectedWorkflows)
-		deltas = append(deltas, drift.Deltas()...)
-	}
-
-	// Step 5a (continued): infrastructure declaration drift, orchestrator-role agents only,
-	// evaluated against this item's own deployed declarations.
-	infraDrift := orchestratorInfrastructureDrift(agent, deployed, infra)
-	deltas = append(deltas, infraDrift.Deltas()...)
-
-	// Steps 5b/5c precondition: evaluate once for all role-gated staleness checks.
-	// Utility and standalone agents receive harness transformation only; neither a protocol
-	// marker nor a bundle stamp is written to their deployed files by design. Reporting either
-	// as staleness would cause a perpetual-update loop.
-	markersApply := domain.RoleCarriesVersionMarkers(agent.Role)
-
-	// Step 5b: For agents whose role carries version markers, compare the deployed protocol
-	// version against the source version. Suppressed for RoleUtility and RoleStandalone.
-	var protocolDrift ProtocolDrift
-	if markersApply {
-		protocolDrift = ProtocolStaleness(deployed, protocolVersion)
-		if delta, ok := protocolDrift.Delta(); ok {
-			deltas = append(deltas, delta)
-		}
-	}
-
-	// Step 5c: For agents whose role carries version markers and is not the orchestrator,
-	// compare the deployed bundle version against the source version. Bundle blocks apply to
-	// subagent-role agents; the orchestrator and marker-free roles are excluded.
-	bundleApplies := markersApply && agent.Role != domain.RoleOrchestrator
-	bundleDrift := BundleStaleness(deployed, bundleVersion, bundleApplies)
-	if delta, ok := bundleDrift.Delta(); ok {
-		deltas = append(deltas, delta)
-	}
-
-	// Step 6: Stale or no version info → update.
-	catDrift := entryCatalogDrift(supplier, ref, entry)
-	if len(deltas) > 0 || !deployed.HasVersionInfo() || catDrift.Stale() {
-		item.Action = domain.ActionUpdate
-		reasons := buildAgentUpdateReasons(deltas, !deployed.HasVersionInfo(), drift, protocolDrift, bundleDrift)
-		if infraDrift.IsStale() {
-			reasons = strings.Join(filterEmpty(reasons, infraDrift.Reason()), "; ")
-		}
-		item.Stale, reasons = withCatalogDrift(catDrift, deltas, reasons)
-		item.Reason = "stale: " + reasons
-		return item
-	}
-
-	// Step 7: All checks passed — unchanged.
-	item.Action = domain.ActionUnchanged
-	return item
-}
-
-// classifySkillItem classifies one file within a skill into a PlanItem with the appropriate
-// action. isEntryFile controls whether version-based staleness is evaluated (entry files only).
-func classifySkillItem(
-	skill domain.Skill,
-	sourcePath string,
-	targetPath string,
-	isEntryFile bool,
-	manifestUsable bool,
-	m domain.Manifest,
-	deployed domain.DeployedArtifactState,
-	supplier supplierLookup,
-) domain.PlanItem {
-	ref := domain.ArtifactRef{Kind: domain.ArtifactSkill, Key: skill.Key}
-	item := domain.PlanItem{
-		Ref:        ref,
-		SourcePath: sourcePath,
-		TargetPath: targetPath,
-	}
-
-	// Step 1: No deployed file.
-	if !deployed.Present {
-		item.Action = domain.ActionCreate
-		item.Reason = "new skill; no file at target path"
-		return item
-	}
-
-	// Step 2: No usable manifest.
-	if !manifestUsable {
-		item.Action = domain.ActionConflict
-		item.Conflict = &domain.LocalModification{
-			CurrentHash:     deployed.ContentHash,
-			ManifestMissing: true,
-		}
-		item.Reason = "deployed skill file found but no manifest is available; cannot confirm origin"
-		return item
-	}
-
-	// Step 3: Target-path-aware manifest lookup.
-	entry, inManifest := m.LookupAt(ref, targetPath)
-	if !inManifest {
-		item.Action = domain.ActionConflict
-		item.Conflict = &domain.LocalModification{
-			CurrentHash:     deployed.ContentHash,
-			ManifestMissing: true,
-		}
-		item.Reason = "skill file exists on disk but has no manifest record for this target path; cannot confirm origin"
-		return item
-	}
-
-	// Step 5: Staleness check — entry files only. Non-entry files have no version frontmatter
-	// so SkillStaleness would always produce a spurious delta (deployed.Version == "").
-	var deltas []domain.VersionDelta
-	versionStale := false
-	if isEntryFile {
-		deltas = SkillStaleness(deployed, skill)
-		versionStale = len(deltas) > 0 || !deployed.HasVersionInfo()
-	}
-	// Step 7: version staleness (entry files) or a changed supplying catalog (every file).
-	catDrift := entryCatalogDrift(supplier, ref, entry)
-	if versionStale || catDrift.Stale() {
-		item.Action = domain.ActionUpdate
-		reasons := ""
-		if versionStale {
-			reasons = buildUpdateReasons(deltas, !deployed.HasVersionInfo())
-		}
-		item.Stale, reasons = withCatalogDrift(catDrift, deltas, reasons)
-		item.Reason = "stale: " + reasons
-		return item
-	}
-
-	// Step 8.
-	item.Action = domain.ActionUnchanged
-	return item
-}
-
-// classifyHookItem classifies one hook bundle into a PlanItem with the appropriate action.
-func classifyHookItem(
-	hook domain.HookBundle,
-	targetPath string,
-	manifestUsable bool,
-	m domain.Manifest,
-	deployed domain.DeployedArtifactState,
-	supplier supplierLookup,
-) domain.PlanItem {
-	ref := domain.ArtifactRef{Kind: domain.ArtifactHook, Key: hook.Key}
-	item := domain.PlanItem{
-		Ref:        ref,
-		SourcePath: hook.SourceDir,
-		TargetPath: targetPath,
-	}
-
-	// Step 1: No deployed file.
-	if !deployed.Present {
-		item.Action = domain.ActionCreate
-		item.Reason = "new hook bundle; no file at target path"
-		return item
-	}
-
-	// Step 2: No usable manifest.
-	if !manifestUsable {
-		item.Action = domain.ActionConflict
-		item.Conflict = &domain.LocalModification{
-			CurrentHash:     deployed.ContentHash,
-			ManifestMissing: true,
-		}
-		item.Reason = "deployed hook found but no manifest is available; cannot confirm origin"
-		return item
-	}
-
-	// Step 3: Target-path-aware manifest lookup.
-	entry, inManifest := m.LookupAt(ref, targetPath)
-	if !inManifest {
-		item.Action = domain.ActionConflict
-		item.Conflict = &domain.LocalModification{
-			CurrentHash:     deployed.ContentHash,
-			ManifestMissing: true,
-		}
-		item.Reason = "hook file exists on disk but has no manifest record for this target path; cannot confirm origin"
-		return item
-	}
-
-	// Step 4: Check for local modification.
-	if deployed.ContentHash != entry.ContentHash {
-		item.Action = domain.ActionConflict
-		item.Conflict = &domain.LocalModification{
-			RecordedHash: entry.ContentHash,
-			CurrentHash:  deployed.ContentHash,
-		}
-		item.Reason = "deployed hook file has been locally modified since last deployment"
-		return item
-	}
-
-	// Step 5: Staleness check using the manifest-recorded version as the deployed version
-	// signal. Hook bundles are deployed as plain files (flat or nested in the hooks directory) with no
-	// in-file version marker, so deployed.Version is always empty; the manifest entry's recorded Version is the only
-	// truthful "deployed version" for a hook bundle.
-	deltas := HookStalenessFromRecorded(entry.Version, hook.Version)
-
-	// Step 7: The manifest-version comparison above is the sole update trigger on the hook
-	// path. The !deployed.HasVersionInfo() fallback that the pre-fix code ORed in is
-	// deliberately excluded here: the hook presence probe always leaves all four version
-	// fields empty (a hook bundle carries no in-file marker), making HasVersionInfo()
-	// unconditionally false for every present hook bundle. Leaving that fallback in place
-	// would force every present hook to ActionUpdate regardless of step 5's result.
-	catDrift := entryCatalogDrift(supplier, ref, entry)
-	if len(deltas) > 0 || catDrift.Stale() {
-		item.Action = domain.ActionUpdate
-		reasons := ""
-		if len(deltas) > 0 {
-			reasons = buildUpdateReasons(deltas, false)
-		}
-		item.Stale, reasons = withCatalogDrift(catDrift, deltas, reasons)
-		item.Reason = "stale: " + reasons
-		return item
-	}
-
-	// Step 8.
-	item.Action = domain.ActionUnchanged
-	return item
-}
-
-// buildUpdateReasons composes the Reason string for an ActionUpdate item. It combines
-// version-field delta text and the no-version-info sentinel, each in a separate formatter
-// so they remain distinguishable downstream.
-func buildUpdateReasons(deltas []domain.VersionDelta, noVersionInfo bool) string {
-	var parts []string
-	if len(deltas) > 0 {
-		parts = append(parts, formatVersionDeltas(deltas))
-	}
-	if noVersionInfo {
-		parts = append(parts, "deployed file carries no readable version stamps")
-	}
-	return strings.Join(parts, "; ")
-}
-
-// buildAgentUpdateReasons composes the Reason string for an agent ActionUpdate item. It
-// extends buildUpdateReasons by also appending the workflow drift, protocol drift, and bundle
-// drift reasons when present. Each is formatted separately rather than through formatVersionDeltas,
-// which would produce unhelpful generic text.
-//
-// Reason part order: version-field deltas; no-version-info note; workflow drift; protocol drift; bundle drift.
-func buildAgentUpdateReasons(deltas []domain.VersionDelta, noVersionInfo bool, drift WorkflowDrift, protocolDrift ProtocolDrift, bundleDrift BundleDrift) string {
-	var parts []string
-
-	// Version-field deltas only — exclude workflow-prefixed, protocol, and bundle deltas from
-	// the generic field formatter; each has a dedicated human-readable reason method.
-	var versionDeltas []domain.VersionDelta
-	for _, d := range deltas {
-		if strings.HasPrefix(d.Field, WorkflowDeltaFieldPrefix) || strings.HasPrefix(d.Field, InfrastructureDeltaFieldPrefix) {
-			continue
-		}
-		if d.Field == ProtocolDeltaField {
-			continue
-		}
-		if d.Field == BundleDeltaField {
-			continue
-		}
-		versionDeltas = append(versionDeltas, d)
-	}
-	if len(versionDeltas) > 0 {
-		parts = append(parts, formatVersionDeltas(versionDeltas))
-	}
-
-	if noVersionInfo {
-		parts = append(parts, "deployed file carries no readable version stamps")
-	}
-
-	// Workflow drift reason is formatted separately so it names workflow IDs.
-	if drift.Stale() {
-		parts = append(parts, drift.Reason())
-	}
-
-	// Protocol drift reason is formatted separately so it names the protocol.
-	if protocolDrift.Stale() {
-		parts = append(parts, protocolDrift.Reason())
-	}
-
-	// Bundle drift reason is formatted separately so it names the bundle.
-	if bundleDrift.Stale() {
-		parts = append(parts, bundleDrift.Reason())
-	}
-
-	return strings.Join(parts, "; ")
-}
-
-// formatVersionDeltas returns a human-readable summary of version deltas for use in Reason fields.
-func formatVersionDeltas(deltas []domain.VersionDelta) string {
-	parts := make([]string, 0, len(deltas))
-	for _, d := range deltas {
-		parts = append(parts, fmt.Sprintf("%s changed from %q to %q", d.Field, d.Deployed, d.Source))
-	}
-	return strings.Join(parts, "; ")
 }

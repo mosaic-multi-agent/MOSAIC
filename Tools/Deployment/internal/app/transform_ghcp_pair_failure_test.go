@@ -38,8 +38,9 @@ func trAssertSourceUsable(t *testing.T, r *trRun, before map[string]string, res 
 	if diff := trSameTree(trWithoutBackups(before), trWithoutBackups(r.snapshot())); diff != "" {
 		t.Errorf("the reverted run left a trace: %s", diff)
 	}
-	if m := trLoadManifest(t, r.ws); m.HarnessID != r.src {
-		t.Errorf("manifest harness_id = %q after the revert, want the source %q", m.HarnessID, r.src)
+	m := trLoadManifest(t, r.ws)
+	if _, ok := m.Section(r.src); !ok {
+		t.Errorf("manifest has no section for the source %q after the revert", r.src)
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 )
 
 func provenanceManifest() domain.Manifest {
@@ -30,12 +31,10 @@ func provenanceManifest() domain.Manifest {
 	hook := sampleEntry(".claude/hooks/h", domain.ArtifactRef{Kind: domain.ArtifactHook, Key: "h"})
 	hook.Catalog = domain.CatalogIdentity{ID: "user-cat", Name: "User Catalog", Version: "1.10"}
 	return domain.Manifest{
-		SchemaVersion:  manifest.SchemaVersion,
-		HarnessID:      "claude-code",
-		UpdatedAt:      time.Date(2024, 6, 15, 12, 30, 0, 0, time.UTC),
-		Entries:        []domain.ManifestEntry{agent, skill, hook},
-		ProtocolSource: domain.CatalogIdentity{ID: "mosaic-default", Name: "MOSAIC Default Catalog", Version: "0.7.0"},
-		BundleSource:   domain.CatalogIdentity{ID: "user-cat", Name: "User Catalog", Version: "1.10"},
+		SchemaVersion: manifest.SchemaVersion,
+		Harnesses:     []domain.HarnessSection{{HarnessID: "claude-code", UpdatedAt: time.Date(2024, 6, 15, 12, 30, 0, 0, time.UTC), ProtocolSource: domain.CatalogIdentity{ID: "mosaic-default", Name: "MOSAIC Default Catalog", Version: "0.7.0"}, BundleSource: domain.CatalogIdentity{ID: "user-cat", Name: "User Catalog", Version: "1.10"}}},
+
+		Entries: manifesttest.WithHarness("claude-code", []domain.ManifestEntry{agent, skill, hook}),
 	}
 }
 
@@ -80,16 +79,18 @@ func TestProvenance_SuppliersRoundTrip(t *testing.T) {
 
 	snap, _ := saveAndLoad(t, want)
 
-	if snap.Manifest.ProtocolSource != want.ProtocolSource {
-		t.Errorf("ProtocolSource = %+v, want %+v", snap.Manifest.ProtocolSource, want.ProtocolSource)
+	gotSec, _ := snap.Manifest.Section("claude-code")
+	wantSec, _ := want.Section("claude-code")
+	if gotSec.ProtocolSource != wantSec.ProtocolSource {
+		t.Errorf("ProtocolSource = %+v, want %+v", gotSec.ProtocolSource, wantSec.ProtocolSource)
 	}
-	if snap.Manifest.BundleSource != want.BundleSource {
-		t.Errorf("BundleSource = %+v, want %+v", snap.Manifest.BundleSource, want.BundleSource)
+	if gotSec.BundleSource != wantSec.BundleSource {
+		t.Errorf("BundleSource = %+v, want %+v", gotSec.BundleSource, wantSec.BundleSource)
 	}
 }
 
 // TestProvenance_ZeroIdentityWritesNoCatalogKeys verifies unknown provenance leaves the file free
-// of catalog keys, and the manifest stays on schema "1".
+// of catalog keys, and the manifest is written in schema "2".
 func TestProvenance_ZeroIdentityWritesNoCatalogKeys(t *testing.T) {
 	m := sampleManifest()
 	// Provenance recorded for one entry, so a store that writes nothing at all cannot pass the
@@ -115,8 +116,8 @@ func TestProvenance_ZeroIdentityWritesNoCatalogKeys(t *testing.T) {
 			t.Errorf("manifest contains %q although no supplier is recorded:\n%s", key, text)
 		}
 	}
-	if !strings.Contains(text, `schema_version: "1"`) {
-		t.Errorf("provenance must stay within schema \"1\":\n%s", text)
+	if !strings.Contains(text, `schema_version: "2"`) {
+		t.Errorf("manifest must be written in schema 2:\n%s", text)
 	}
 }
 
@@ -146,8 +147,9 @@ func TestProvenance_PreFeatureManifestLoadsWithUnknownProvenance(t *testing.T) {
 			t.Errorf("entry %v Catalog = %+v, want zero (unknown)", e.Ref, e.Catalog)
 		}
 	}
-	if snap.Manifest.ProtocolSource != (domain.CatalogIdentity{}) || snap.Manifest.BundleSource != (domain.CatalogIdentity{}) {
-		t.Errorf("suppliers = %+v / %+v, want zero (unknown)", snap.Manifest.ProtocolSource, snap.Manifest.BundleSource)
+	sec, _ := snap.Manifest.Section("claude-code")
+	if sec.ProtocolSource != (domain.CatalogIdentity{}) || sec.BundleSource != (domain.CatalogIdentity{}) {
+		t.Errorf("suppliers = %+v / %+v, want zero (unknown)", sec.ProtocolSource, sec.BundleSource)
 	}
 	cr, ok := snap.Manifest.Lookup(domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "code-reviewer"})
 	if !ok || cr.Version != "1.2.3" || cr.InjectionsVersion != "3.1.0" {
@@ -171,7 +173,7 @@ func TestProvenance_PreFeatureManifestGainsProvenanceOnResave(t *testing.T) {
 	}
 	m := snap.Manifest
 	m.Entries[0].Catalog = domain.CatalogIdentity{ID: "user-cat", Version: "2.0"}
-	m.ProtocolSource = domain.CatalogIdentity{ID: "mosaic-default", Version: "0.7.0"}
+	m.Harnesses[0].ProtocolSource = domain.CatalogIdentity{ID: "mosaic-default", Version: "0.7.0"}
 
 	if err := store.Save(ws, m); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -184,10 +186,11 @@ func TestProvenance_PreFeatureManifestGainsProvenanceOnResave(t *testing.T) {
 	if again.Manifest.Entries[0].Catalog.ID != "user-cat" {
 		t.Errorf("entry Catalog = %+v after redeploy, want id user-cat", again.Manifest.Entries[0].Catalog)
 	}
-	if again.Manifest.ProtocolSource.ID != "mosaic-default" {
-		t.Errorf("ProtocolSource = %+v after redeploy, want id mosaic-default", again.Manifest.ProtocolSource)
+	againSec, _ := again.Manifest.Section("claude-code")
+	if againSec.ProtocolSource.ID != "mosaic-default" {
+		t.Errorf("ProtocolSource = %+v after redeploy, want id mosaic-default", againSec.ProtocolSource)
 	}
-	if again.Manifest.BundleSource != (domain.CatalogIdentity{}) {
-		t.Errorf("BundleSource = %+v, want it still unknown", again.Manifest.BundleSource)
+	if againSec.BundleSource != (domain.CatalogIdentity{}) {
+		t.Errorf("BundleSource = %+v, want it still unknown", againSec.BundleSource)
 	}
 }

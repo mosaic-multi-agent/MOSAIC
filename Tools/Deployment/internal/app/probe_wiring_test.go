@@ -350,6 +350,7 @@ func TestDeployNew_AgentHashMismatch_VersionMatch_ClassifiedAsUnchanged(t *testi
 	// Under the current classification logic, matching versions mean ActionUnchanged regardless
 	// of the hash.
 	manifestEntry := domain.ManifestEntry{
+		Harness:     "stub-harness",
 		Ref:         domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "test-runner"},
 		TargetPath:  "test-runner.md",
 		Version:     "1.0",

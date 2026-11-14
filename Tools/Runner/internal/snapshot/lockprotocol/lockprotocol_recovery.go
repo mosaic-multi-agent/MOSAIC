@@ -110,7 +110,7 @@ func recoveryRestoreAndCleanup(agentsDir, backupDir string, restoringHandle *fil
 // and restores if still safe.
 //
 // Idempotent: no-op when nothing needs recovery.
-// No-op for path-based harnesses (no backup directory exists).
+// No-op for harnesses with no transformation rules (no backup directory exists).
 // Returns *domain.RefusalError for a corrupt manifest (backup left for manual
 // inspection).
 func RecoveryCheck(agentsDir string, logger domain.DebugLogger, opts ...Option) error {

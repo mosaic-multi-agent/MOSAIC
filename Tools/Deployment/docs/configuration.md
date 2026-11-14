@@ -273,9 +273,9 @@ for which the user supplies a name but the harness has no built-in mapping — t
 specific frontmatter field rather than the main tools value. A `tool_destinations`
 entry in either config file for a specific generic tool always wins over this default.
 
-**Claude Code's default:** The Claude Code harness uses
-`custom_tool_template: "mcp__%s__*"` to format custom tool names as wildcards and
-routes them to the main `tools` field. This is why a custom MCP server now appears
+**Claude Code's default:** The Claude Code harness declares the
+whole-server form `mcp__{server}__*` under `tools.mcp`, so a custom tool name is written
+as a wildcard and routed to the main `tools` field. This is why a custom MCP server now appears
 in the `tools` value as `mcp__<name>__*` with no `tool_destinations` entry required:
 
 ```yaml
@@ -468,7 +468,7 @@ Neither `tool-config.yaml` nor `user-config.yaml` holds the catalog stack (the o
 
 ### Where the stack is persisted
 
-The stack is stored **per workspace**, in the deployment manifest `<workspace>/.mosaic/manifest.yaml`, under the additive key `catalog_stack` (manifest schema stays `"1"`):
+The stack is stored **per workspace**, in the deployment manifest `<workspace>/.mosaic/manifest.yaml`, under the top-level key `catalog_stack` (manifest schema version `"2"`):
 
 ```yaml
 catalog_stack:              # highest layer first
@@ -480,7 +480,7 @@ catalog_stack:              # highest layer first
 - A run that writes (`deploy`, `update`, `workflows`, `agents`, `hooks`) stores the stack only when it was given stack input (`--catalog-folder` / `--include-default-catalog` flags, or a stack changed on the TUI stack screen). It replaces the stored list whole. Runs without stack input leave it as it is, and reuse it.
 - `promote`, `transform`, `render` and `check-index` never write it.
 - The stored stack is per machine. A layer whose folder moved or whose catalog id changed fails with an error naming the stored path; a list that breaks the structure above (for example the default entry not last) is rejected, never repaired. Passing new stack flags replaces it.
-- The same manifest records `protocol_source` and `bundle_source` (the catalogs that supplied the protocol and bundle in the last full `deploy` or `update`) and a `catalog` identity on every entry. They are provenance only; they are not read back as configuration. A manifest without these keys is valid.
+- The same manifest records, in the section of each harness, `protocol_source` and `bundle_source` (the catalogs that supplied the protocol and bundle in the last full `deploy` or `update` for that harness), and a `catalog` identity on every entry. They are provenance only; they are not read back as configuration. A manifest without these keys is valid. The manifest holds several harnesses, every entry names its harness, and `tool_version` is recorded once at the top level.
 
 ### The catalog identity file
 

@@ -23,6 +23,7 @@ import (
 
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 )
 
@@ -47,9 +48,9 @@ func TestProvenanceRetirement_CurrentAgent_NoProvenanceReasonInPlanItem(t *testi
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	// Deployed state: all stamps match, hash matches. No provenance field (retired).
@@ -71,8 +72,8 @@ func TestProvenanceRetirement_CurrentAgent_NoProvenanceReasonInPlanItem(t *testi
 			"no staleness of any kind must be reported for a fully current agent",
 			item.Action, domain.ActionUnchanged)
 	}
-	if strings.Contains(strings.ToLower(item.Reason), "provenance") {
-		t.Errorf("item.Reason = %q; must not contain 'provenance' after the provenance system is retired", item.Reason)
+	if strings.Contains(strings.ToLower(reasonText(item)), "provenance") {
+		t.Errorf("reasonText(item) = %q; must not contain 'provenance' after the provenance system is retired", reasonText(item))
 	}
 }
 
@@ -96,9 +97,9 @@ func TestProvenanceRetirement_NoProvenanceStalenessDrivesPlanUpdate(t *testing.T
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	ds := map[string]domain.DeployedArtifactState{
@@ -119,10 +120,10 @@ func TestProvenanceRetirement_NoProvenanceStalenessDrivesPlanUpdate(t *testing.T
 	// as ActionUpdate (because no provenance stamp exists on the deployed file). The correct
 	// post-retirement outcome is ActionUnchanged — provenance has no bearing on the plan.
 	if item.Action == domain.ActionUpdate {
-		if strings.Contains(strings.ToLower(item.Reason), "provenance") {
+		if strings.Contains(strings.ToLower(reasonText(item)), "provenance") {
 			t.Errorf("agent classified as ActionUpdate with reason %q; "+
 				"provenance staleness must not exist as a classification signal after retirement",
-				item.Reason)
+				reasonText(item))
 		}
 	}
 }
@@ -145,9 +146,9 @@ func TestProvenanceRetirement_PlanItemStaleSlice_ContainsNoProvenanceDelta(t *te
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	// Deployed state: version stamps differ from the manifest stamps → stale on version.

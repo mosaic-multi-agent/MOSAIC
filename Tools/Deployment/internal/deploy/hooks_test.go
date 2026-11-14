@@ -50,7 +50,7 @@ func TestHooks_FilesDeployedToTargetDir(t *testing.T) {
 	}
 
 	req := deploy.ExecRequest{
-		Plan:       newPlan(workspace),
+		Plan:       newPlan(workspace, hookItemsFor(workspace, hookPlan)...),
 		MosaicRoot: mosaicRoot,
 		Content:    fixedContent(nil),
 		Hooks:      []domain.HookPlan{hookPlan},
@@ -83,7 +83,7 @@ func TestHooks_FileContentMatchesSource(t *testing.T) {
 	}
 
 	req := deploy.ExecRequest{
-		Plan:       newPlan(workspace),
+		Plan:       newPlan(workspace, hookItemsFor(workspace, hookPlan)...),
 		MosaicRoot: mosaicRoot,
 		Content:    fixedContent(nil),
 		Hooks:      []domain.HookPlan{hookPlan},
@@ -119,7 +119,7 @@ func TestHooks_MultipleFilesDeployed(t *testing.T) {
 	}
 
 	req := deploy.ExecRequest{
-		Plan:       newPlan(workspace),
+		Plan:       newPlan(workspace, hookItemsFor(workspace, hookPlan)...),
 		MosaicRoot: mosaicRoot,
 		Content:    fixedContent(nil),
 		Hooks:      []domain.HookPlan{hookPlan},
@@ -154,7 +154,7 @@ func TestHooks_UnsupportedHookPlan_NoFilesWritten(t *testing.T) {
 	}
 
 	req := deploy.ExecRequest{
-		Plan:       newPlan(workspace),
+		Plan:       newPlan(workspace, hookItemsFor(workspace, hookPlan)...),
 		MosaicRoot: mosaicRoot,
 		Content:    fixedContent(nil),
 		Hooks:      []domain.HookPlan{hookPlan},
@@ -201,7 +201,7 @@ func TestHooks_Registration_AbsentTarget_FragmentIsWritten(t *testing.T) {
 	}
 
 	req := deploy.ExecRequest{
-		Plan:       newPlan(workspace),
+		Plan:       newPlan(workspace, hookItemsFor(workspace, hookPlan)...),
 		MosaicRoot: mosaicRoot,
 		Content:    fixedContent(nil),
 		Hooks:      []domain.HookPlan{hookPlan},
@@ -244,7 +244,7 @@ func TestHooks_Registration_AbsentTarget_NoGapEmitted(t *testing.T) {
 	}
 
 	req := deploy.ExecRequest{
-		Plan:       newPlan(workspace),
+		Plan:       newPlan(workspace, hookItemsFor(workspace, hookPlan)...),
 		MosaicRoot: mosaicRoot,
 		Content:    fixedContent(nil),
 		Hooks:      []domain.HookPlan{hookPlan},
@@ -299,7 +299,7 @@ func TestHooks_Registration_ExistingTarget_IsNeverModified(t *testing.T) {
 	}
 
 	req := deploy.ExecRequest{
-		Plan:       newPlan(workspace),
+		Plan:       newPlan(workspace, hookItemsFor(workspace, hookPlan)...),
 		MosaicRoot: mosaicRoot,
 		Content:    fixedContent(nil),
 		Hooks:      []domain.HookPlan{hookPlan},
@@ -349,7 +349,7 @@ func TestHooks_Registration_ExistingTarget_EmitsGapHookRegistration(t *testing.T
 	}
 
 	req := deploy.ExecRequest{
-		Plan:       newPlan(workspace),
+		Plan:       newPlan(workspace, hookItemsFor(workspace, hookPlan)...),
 		MosaicRoot: mosaicRoot,
 		Content:    fixedContent(nil),
 		Hooks:      []domain.HookPlan{hookPlan},
@@ -394,7 +394,7 @@ func TestHooks_Registration_ExistingTarget_GapCarriesFragment(t *testing.T) {
 	}
 
 	req := deploy.ExecRequest{
-		Plan:       newPlan(workspace),
+		Plan:       newPlan(workspace, hookItemsFor(workspace, hookPlan)...),
 		MosaicRoot: mosaicRoot,
 		Content:    fixedContent(nil),
 		Hooks:      []domain.HookPlan{hookPlan},
@@ -446,7 +446,7 @@ func TestHooks_Registration_NonPerformable_AlwaysEmitsGapManualStep(t *testing.T
 	}
 
 	req := deploy.ExecRequest{
-		Plan:       newPlan(workspace),
+		Plan:       newPlan(workspace, hookItemsFor(workspace, hookPlan)...),
 		MosaicRoot: mosaicRoot,
 		Content:    fixedContent(nil),
 		Hooks:      []domain.HookPlan{hookPlan},
@@ -485,7 +485,7 @@ func TestHooks_Registration_NonPerformable_NothingWrittenToFilesystem(t *testing
 	}
 
 	req := deploy.ExecRequest{
-		Plan:       newPlan(workspace),
+		Plan:       newPlan(workspace, hookItemsFor(workspace, hookPlan)...),
 		MosaicRoot: mosaicRoot,
 		Content:    fixedContent(nil),
 		Hooks:      []domain.HookPlan{hookPlan},

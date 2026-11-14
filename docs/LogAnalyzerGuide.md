@@ -53,8 +53,74 @@ The first screen lists the runs of the source with their cost, invocations, dura
 | `m`, then `c` | Mark two runs (A, then B) and compare them by agent type: invocations, tokens, cost and peak context, with the change from A to B |
 | `a` | Across-runs view: every run's cost, and each agent type summed over all runs |
 | `e` / `E` | Export the selected run / all runs as a digest |
+| `f` | Open the [findings overlay](#findings-overlay-and-export) |
 | `p` | Enter model prices |
 | `s` | Choose another log source |
+
+#### The head of the runs list
+
+Above the table, three lines sum up the runs:
+
+```
+All runs  12 runs (2 in progress) · Jan 3 – Jan 9 · total $41.20 · 5.2M tokens
+Per run   cost  avg $3.43 · median $2.90 · p90 $7.10   (over 9 of 12 runs)
+          time  avg 14m 20s · median 11m 05s   (over 10 of 12 runs)
+```
+
+- **All runs** shows the number of runs (and how many are still in progress), the period they cover, the total cost and the total tokens. On a narrow terminal the period is dropped first.
+- **Per run** shows what one run typically costs and how long it lasts. The **average** is the sum divided by the number of runs counted. The **median** is the middle value of the runs sorted by size; with an even number of runs it is the mean of the two middle values. The **p90** is the value that 90 % of the runs stay at or below (nearest rank: the run at position 0.9 times the count, rounded up). It is shown only with at least 10 priced runs.
+
+Which runs count:
+
+- A run still in progress counts in the run total and the period, but not in the cost and time statistics.
+- A run with a model that has no price is left out of the cost statistics. A run without a timeline is left out of the time statistics.
+- Usage that cannot be attributed to a run never counts in the statistics.
+- When a statistic covers fewer runs than the list has, the note `(over X of Y runs)` says how many it covers. With no run to count, the line reads `no priced runs` or `no timed runs`.
+
+#### Findings overlay and export
+
+Press `f` on the runs list, or inside a run, to see what the log analysis found. The overlay shows one row per kind of finding: its severity (`warning` or `info`), how many findings of that kind exist, the kind, and an explanation of what it means and what it does to the figures. On the runs list the rows also say `in N runs`, the number of runs the kind occurs in.
+
+- **Scope:** on the runs list the overlay covers every finding of the source. Inside a run it covers only that run's findings.
+- **Order:** warnings before infos, then the larger count first, then the kind name.
+- **Keys:** `up`/`down` scroll, `e` exports, `f` or `esc` closes. While the overlay is open it takes all keys.
+
+`e` asks for a file name and writes the findings the overlay shows, so the file holds exactly the counted findings. The file name is pre-filled with `findings.json` on the runs list and `findings-<run>.json` inside a run. It must end in `.json` but not in `.digest.json`. A file that already exists is replaced only after you confirm.
+
+The file has a `counts` object (findings per kind) and a `findings` list. Every finding has `kind`, `severity`, `path`, `line`, `run_id`, `actor` and `detail`; none is left out when empty. Findings that come from a digest have an empty `detail`, because a digest does not keep it.
+
+##### Finding kinds
+
+| Kind | What it means |
+|------|---------------|
+| `malformed_line` | a log line is not valid JSON; it is skipped, so its event is missing from the figures |
+| `truncated_line` | the last line of a log file was cut off mid-write; it is skipped, so its event is missing from the figures |
+| `unreadable_file` | a log file could not be read; none of its events are in the figures |
+| `unknown_schema_version` | a log line uses a schema version this tool does not know; it is skipped, so its event is missing from the figures |
+| `unrecognised_harness` | an event comes from a harness this tool does not recognise; it is skipped, so its event is missing from the figures |
+| `missing_token_usage` | a model call has no token usage; it counts as zero tokens and its cost is incomplete |
+| `missing_model` | a model call names no model; its cost cannot be priced and is left out of the totals |
+| `unidentified_event` | an event could not be tied to an agent or dispatch; it is counted in the totals but not attributed |
+| `unrecognised_folder` | a folder in the log directory is not a run or actor folder; it is ignored |
+| `missing_event_file` | a run or actor folder has no event file; nothing is read from it, so its figures are missing |
+| `invalid_pricing_entry` | a pricing entry is invalid; it is ignored, so the models it covers may be unpriced |
+| `invalid_settings_entry` | a settings entry is invalid; it is ignored and the default applies |
+| `cross_stream_record` | the same usage record appeared in two actors' logs; counted once, for the first actor read |
+| `invalid_cache_tier_split` | cache-write tokens split across tiers do not add up; the figures use the assumed tier for them |
+| `compaction_mismatch` | a context compaction does not match the surrounding token counts; the context growth figures may be off |
+| `invalid_digest` | a digest file is not valid; it is ignored, so its runs are missing from the report |
+| `unsupported_digest_version` | a digest file has a version this tool does not support; it is ignored, so its runs are missing |
+| `duplicate_run` | the same run was found more than once (logs and digest); it is counted once |
+| `transcript_format_changed` | the transcript format differs from what this tool expects; transcript-based figures may be incomplete |
+| `pricing_currency_mismatch` | a pricing entry uses a different currency than the rest; its amounts are not converted, so totals may mix currencies |
+| `instance_type_mismatch` | an agent instance reports different agent types in different places; the figures use the first one seen |
+| `unresolved_invocation` | an invocation could not be tied to a dispatch; it is counted but not attributed to one |
+| `overlapping_invocation_start` | an invocation started while another of the same agent was still open; the overlap may blur per-invocation figures |
+| `dispatch_without_invocation` | a dispatch has no matching invocation; it counts as a dispatch with no recorded work |
+| `transcript_capture_gap` | part of an agent's transcript was not captured; its usage and cost may be incomplete |
+| `instance_prompt_mismatch` | an agent instance received a prompt that differs from its dispatch; the figures are kept but may be mis-attributed |
+
+The `report` command lists the same findings; new kinds appear there as additional entries.
 
 ---
 

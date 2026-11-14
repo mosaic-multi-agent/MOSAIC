@@ -1,6 +1,6 @@
 # Roadmap
 
-_Last updated: 2026-11-2_
+_Last updated: 2026-11-08_
 
 Informal, hand-maintained list of what's next for this project. Order within each section does not indicate priority. Items can be moved between sections at any time.
 

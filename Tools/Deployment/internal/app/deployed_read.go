@@ -35,6 +35,8 @@ package app
 //     readDeployedArtifact (or decodeDeployedBytes for bytes captured before a migration)
 //     and derives the operation from the plan item action, so the encoder always receives
 //     the prior deployed bytes it needs for an update.
+//     deployedBytes.canonicalReader wraps it for read-only consumers (annotateToolsChanges);
+//     their decode reports are surfaced by the probe of the same files (logProbeDecodeNotices).
 //   - deployed_bytes_migration.go: captures the raw bytes of a recorded legacy file; the
 //     funnelReader decodes them through decodeDeployedBytes.
 //   - deployedstate.go (probeDeployedArtifact): readDeployedArtifact.
@@ -42,6 +44,7 @@ package app
 //     agent extension.
 //   - deployed_decode_problem.go: readDeployedArtifact.
 //   - deployed_parse_check.go: readDeployedArtifact.
+//   - orchestrator_parse_check.go (unreadableAgentProblem): readDeployedArtifact.
 //   - harness_only_discovery.go (scanHarnessOnlyAgents): readDeployedArtifact.
 //   - workspace_agent_scan.go: decodeDeployedBytes in the scan.
 //   - update_kept_workflows.go: readDeployedArtifact.

@@ -74,8 +74,9 @@ func writeGhcpFile(t *testing.T, ws, rel string) {
 	}
 }
 
-func ghcpAgentEntry(key, rel string) domain.ManifestEntry {
+func ghcpAgentEntry(harnessID, key, rel string) domain.ManifestEntry {
 	return domain.ManifestEntry{
+		Harness:    harnessID,
 		Ref:        domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: key},
 		TargetPath: rel,
 	}
@@ -127,11 +128,21 @@ func newGhcpFixtureHeld(t *testing.T, harnessID string, held *[2]bool, agentRels
 	stub := interactiontest.NewBuilder().Build()
 	deps, ws := newBaseDeps(t, stub)
 
-	m := domain.Manifest{HarnessID: harnessID}
+	m := domain.Manifest{Harnesses: []domain.HarnessSection{{HarnessID: harnessID}}}
 	for _, rel := range agentRels {
 		key := strings.TrimSuffix(strings.TrimSuffix(path.Base(rel), ".agent.md"), ".md")
-		m.Entries = append(m.Entries, ghcpAgentEntry(key, rel))
+		m.Entries = append(m.Entries, ghcpAgentEntry(harnessID, key, rel))
 		writeGhcpFile(t, ws, rel)
+	}
+	if len(agentRels) == 0 {
+		// A workspace is held through its entries, so a fixture without agents records a skill.
+		const anchorRel = ".github/skills/anchor/SKILL.md"
+		m.Entries = append(m.Entries, domain.ManifestEntry{
+			Harness:    harnessID,
+			Ref:        domain.ArtifactRef{Kind: domain.ArtifactSkill, Key: "anchor"},
+			TargetPath: anchorRel,
+		})
+		writeGhcpFile(t, ws, anchorRel)
 	}
 	if harnessID != nonGhcpHarness {
 		writeGhcpFile(t, ws, hookFileRel)

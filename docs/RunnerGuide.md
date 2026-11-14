@@ -112,11 +112,11 @@ There is no `--orchestrator-file` flag. The Runner derives the orchestrator path
 
 ### Agent Snapshot Directories
 
-At run start, the Runner creates a snapshot or backup of agent files so it can apply harness-specific transforms (e.g., `mode: primary` for OpenCode) without permanently altering the deployed agents. The strategy used depends on how the harness loads agents:
+Every harness loads agents by name from its deployed agents directory. Some harnesses need harness-specific transforms (e.g., `mode: primary` for OpenCode); for those, the Runner backs up the agent files at run start so it can transform them without permanently altering the deployed agents.
 
-**Copy-and-invoke (path-based harnesses -- Claude Code):** The Runner copies the agents directory to a run-scoped sibling directory (e.g., `.claude/agents-runner-{run_id}/`), applies transforms to the copies, and invokes agents from there. Originals are never modified. On completion, the copy is deleted automatically. If the Runner crashes mid-run, an orphaned `agents-runner-{run_id}/` directory may remain; it is safe to delete manually and does not affect other runs.
+**Claude Code -- no snapshot:** The Runner runs the deployed agents in `.claude/agents/` directly, by name, and nothing is copied. An `agents-runner-{run_id}/` directory left by an older Runner version is safe to delete.
 
-**Backup-and-transform (name-based harnesses -- OpenCode, GHCP CLI):** These harnesses always resolve agents by name from their canonical directory and cannot be redirected to a copy. Instead, the Runner copies originals to a shared backup directory (e.g., `.opencode/.agents-backup/`), transforms the originals in-place, and restores from backup on completion. Multiple concurrent runs share the same backup directory and coordinate via per-run lock files inside it.
+**Backup-and-transform (OpenCode, GHCP CLI):** These harnesses always resolve agents by name from their canonical directory and cannot be redirected to a copy. Instead, the Runner copies originals to a shared backup directory (e.g., `.opencode/.agents-backup/`), transforms the originals in-place, and restores from backup on completion. Multiple concurrent runs share the same backup directory and coordinate via per-run lock files inside it.
 
 **Automatic crash recovery:** If the Runner crashes mid-run while using backup-and-transform, it leaves a human-readable `RUNNER-RECOVERY.txt` marker inside the agents directory explaining what happened and providing step-by-step manual restore instructions. On the next run start, the Runner automatically detects and recovers any orphaned backup state. The `.txt` extension is used for the marker so that no harness indexes it as an agent definition.
 

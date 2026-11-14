@@ -70,6 +70,8 @@ func Run(ctx context.Context, args []string, store domain.ArtifactStore, identit
 	// intermix with the machine-readable output written to out.
 	root.SetOut(errOut)
 	root.SetErr(errOut)
+	// Listed for help only: the entry point answers --version before cobra runs.
+	root.Flags().Bool("version", false, "Print the version and exit")
 
 	// ------------------------------------------------------------------
 	// run subcommand: non-interactive orchestration execution

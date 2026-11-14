@@ -116,12 +116,23 @@ func gplAssertRename(t *testing.T, p domain.Plan, key string, wantStale bool) {
 		t.Errorf("%s: RenamedFrom = %q, want %q", key, it.RenamedFrom, legacy)
 	}
 	reason := "renamed from " + legacy
-	if wantStale {
-		if !strings.HasPrefix(it.Reason, reason+"; stale: ") || len(it.Stale) == 0 {
-			t.Errorf("%s: reason = %q, stale = %v, want %q followed by \"; stale: ...\" and version deltas", key, it.Reason, it.Stale, reason)
+	hasRename := false
+	for _, r := range it.Reasons {
+		if r == reason {
+			hasRename = true
 		}
-	} else if it.Reason != reason || len(it.Stale) != 0 {
-		t.Errorf("%s: reason = %q, stale = %v, want exactly %q and no deltas", key, it.Reason, it.Stale, reason)
+		if strings.Contains(r, reason) && r != reason {
+			t.Errorf("%s: reason %q joins the rename with another cause; each cause is its own reason", key, r)
+		}
+	}
+	if !hasRename {
+		t.Errorf("%s: reasons = %q, want the separate reason %q", key, it.Reasons, reason)
+	}
+	if wantStale && (len(it.Stale) == 0 || len(it.Reasons) < 2) {
+		t.Errorf("%s: reasons = %q, stale = %v, want the rename plus the staleness as further reasons and version deltas", key, it.Reasons, it.Stale)
+	}
+	if !wantStale && len(it.Stale) != 0 {
+		t.Errorf("%s: stale = %v, want no deltas", key, it.Stale)
 	}
 	if !gplRemovesPath(p, legacy) {
 		t.Errorf("%s: plan does not remove the legacy %s", key, legacy)
@@ -135,8 +146,8 @@ func gplAssertNoNewAgent(t *testing.T, p domain.Plan) {
 		if it.Ref.Kind != domain.ArtifactAgent {
 			continue
 		}
-		if it.Action == domain.ActionCreate || strings.Contains(it.Reason, "new artifact") {
-			t.Errorf("agent %s is shown as new: action = %q, reason = %q", it.Ref.Key, it.Action, it.Reason)
+		if it.Action == domain.ActionCreate || strings.Contains(reasonText(it), "new artifact") {
+			t.Errorf("agent %s is shown as new: action = %q, reason = %q", it.Ref.Key, it.Action, reasonText(it))
 		}
 	}
 }
@@ -273,8 +284,8 @@ func TestGhcpFlows_UnrecordedLegacyFile_IsLeftAloneAndNotShownAsRename(t *testin
 					t.Fatalf("%s for %s: %v", flow.name, h, err)
 				}
 				p := gplReviewedPlan(t, c)
-				if it, ok := gplAgentItem(p, loose); ok && (it.RenamedFrom != "" || strings.Contains(it.Reason, "renamed from")) {
-					t.Errorf("%s: unrecorded %s reported as a rename: %q", loose, gamRel(loose, ".md"), it.Reason)
+				if it, ok := gplAgentItem(p, loose); ok && (it.RenamedFrom != "" || strings.Contains(reasonText(it), "renamed from")) {
+					t.Errorf("%s: unrecorded %s reported as a rename: %q", loose, gamRel(loose, ".md"), reasonText(it))
 				}
 				if gplRemovesPath(p, gamRel(loose, ".md")) {
 					t.Errorf("%s: plan removes the unrecorded %s", loose, gamRel(loose, ".md"))

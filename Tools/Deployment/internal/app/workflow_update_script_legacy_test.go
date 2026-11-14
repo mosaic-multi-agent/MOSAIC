@@ -7,7 +7,7 @@ package app_test
 // legacy file, never as a new artifact. Both GHCP targets run over real files.
 
 import (
-	"strings"
+	"slices"
 	"testing"
 
 	"mosaic-deploy/internal/domain"
@@ -107,8 +107,8 @@ func TestWorkflowUpdate_LegacyScript_IsShownAsARenameNotANewArtifact(t *testing.
 				if item.RenamedFrom != gamRel(key, ".md") {
 					t.Errorf("%s RenamedFrom = %q, want %q", key, item.RenamedFrom, gamRel(key, ".md"))
 				}
-				if !strings.HasPrefix(item.Reason, "renamed from ") {
-					t.Errorf("%s reason = %q, want it to start with \"renamed from \"", key, item.Reason)
+				if !slices.Contains(item.Reasons, "renamed from "+gamRel(key, ".md")) {
+					t.Errorf("%s reasons = %q, want the separate reason %q", key, item.Reasons, "renamed from "+gamRel(key, ".md"))
 				}
 			}
 			removed := map[string]bool{}

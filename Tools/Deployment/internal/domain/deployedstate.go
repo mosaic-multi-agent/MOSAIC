@@ -54,6 +54,15 @@ type DeployedArtifactState struct {
 	// "no frontmatter", or "frontmatter has no id". Non-empty only when ParseFailed is true;
 	// "" for every other state.
 	ParseProblem string
+
+	// Owned is the Deploy-owned content record recomputed from the file on disk; nil when the
+	// file is absent or the record could not be computed (ParseFailed agents).
+	Owned *OwnedContent
+
+	// Tools is the deployed agent's frontmatter value under the harness's tools key; nil when
+	// the file is absent, its frontmatter cannot be parsed, the key is absent, or the artifact
+	// is not an agent. Read by the plan-time tools reasons.
+	Tools *FieldValue
 }
 
 // HasVersionInfo reports whether the deployed file carries at least one readable version stamp.

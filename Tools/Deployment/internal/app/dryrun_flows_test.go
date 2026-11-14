@@ -49,9 +49,9 @@ func drPlan(ws string) domain.Plan {
 	p := newMinimalPlan(ws)
 	p.Items = append(p.Items, domain.PlanItem{
 		Ref:        domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "other-agent"},
-		TargetPath: "other-agent.md", Action: domain.ActionUpdate, Reason: "stale: version 1.0 -> 2.0"})
+		TargetPath: "other-agent.md", Action: domain.ActionUpdate, Reasons: []string{"version changed from \"1.0\" to \"2.0\""}})
 	p.Removals = []domain.Removal{{Path: "legacy.md", DropEntry: true, Reason: "replaced by test-runner.md"}}
-	p.Replacements = []domain.Replacement{{Path: "test-runner.md", Reason: "existing file is backed up"}}
+	p.Replacements = []domain.Replacement{{Path: "test-runner.md", Reason: "existing file is replaced by the migrated file"}}
 	return p
 }
 

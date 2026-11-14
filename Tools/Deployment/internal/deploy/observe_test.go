@@ -430,7 +430,7 @@ func TestObserve_NonPerformableRegistrationStep_ReachesCollector(t *testing.T) {
 	}
 
 	req := deploy.ExecRequest{
-		Plan:       newPlan(workspace),
+		Plan:       newPlan(workspace, hookItemsFor(workspace, hookPlan)...),
 		MosaicRoot: mosaicRoot,
 		Content:    fixedContent(nil),
 		Hooks:      []domain.HookPlan{hookPlan},

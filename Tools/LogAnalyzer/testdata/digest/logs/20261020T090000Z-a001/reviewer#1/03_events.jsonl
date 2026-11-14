@@ -1,0 +1,2 @@
+{"schema_version":"1.3.0","event":"invocation_start","timestamp":"2026-10-20T09:03:00.000Z","harness":"claude-code","session_id":"s-a1","run_id":"20261020T090000Z-a001","agent_instance_id":"reviewer#1","agent_type":"reviewer"}
+{"schema_version":"1.3.0","event":"invocation_end","timestamp":"2026-10-20T09:03:30.000Z","harness":"claude-code","session_id":"s-a1","run_id":"20261020T090000Z-a001","agent_instance_id":"reviewer#1","status_code":"NEEDS_CLARIFICATION","model":"claude-sonnet-4","token_usage":{"input_tokens":40,"cache_read_tokens":0,"output_tokens":9}}

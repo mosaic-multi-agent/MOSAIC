@@ -282,10 +282,9 @@ documentation for details.
 **Note on runtime directories:** The Runner creates a `.agents-backup/` sibling
 directory (e.g., `.opencode/.agents-backup/`) at runtime for name-based harnesses
 (OpenCode, GHCP CLI) as a safety backup during active runs. This directory is
-created and deleted by the Runner and is not a deployment artifact. For
-path-based harnesses (Claude Code), the Runner creates a run-scoped
-`agents-runner-{run_id}/` directory at runtime; these are also not deployment
-artifacts and are safe to delete if orphaned.
+created and deleted by the Runner and is not a deployment artifact. On Claude Code
+the Runner creates no directory; an `agents-runner-{run_id}/` directory left by an
+older Runner version is not a deployment artifact and is safe to delete.
 
 **Known Runner-specific transformations:**
 

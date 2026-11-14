@@ -143,7 +143,23 @@ The `--conflict` flag controls what happens when the tool cannot confirm a file 
 - `overwrite`: replace the file with the latest version
 - `backup`: copy the file to `.mosaic/backups/<path>.<timestamp>.bak`, then overwrite
 
-**What an update keeps.** Only project and custom regions, models and tool choices survive an update. Edits elsewhere in an agent or skill file are replaced the next time the file is rewritten, and `--conflict` does not protect them. Keep your own content in project and custom regions.
+**What an update keeps.** Project and custom regions, the frontmatter, models and tool choices belong to you and survive an update. In the tools field, built-in tools follow the catalog (the plan lists those an update adds or removes), tools you added are kept, and custom tools the run produces are added.
+
+**Edits to Deploy-owned content.** The agent body outside the project and custom regions, and whole skill and hook files, are Deploy-owned. When the content on disk differs from what Deploy recorded at its last write, the item becomes an update with the reason "Deploy-owned content was edited locally" (naming the differing regions of an agent) and the current file is backed up under `.mosaic/backups/` before it is replaced. Entries recorded before this check existed carry no record and get no edit check until their next write. `--conflict` applies to files Deploy cannot confirm as its own, not to these edits.
+
+**Plan reasons.** A plan item lists every reason for its action (version changes, workflow, protocol or bundle drift, catalog change, local edit, legacy file migration), one line each, in the plan review and in the `--dry-run` output. An item that is backed up before it is replaced says so. A catalog id recorded for a differently named catalog adds a name-collision warning to the item.
+
+### Manifest and reconciliation
+
+The manifest (`<workspace>/.mosaic/manifest.yaml`, schema version `2`) holds the deployments of several harnesses side by side. Every entry names its `harness`; a section per harness records `protocol_source`, `bundle_source` and `updated_at`; `tool_version` and the catalog stack are recorded once at the top level. There is no top-level `harness_id`, and older Deploy builds refuse a schema-2 manifest. A run reads and writes only the entries of the harness it runs for and leaves the others as they are.
+
+Before every action the manifest is reconciled with the disk, in memory: an entry whose file is missing is dropped, and a hook bundle with some files missing is kept and completed by the next update or hook deploy (all files missing drops it). The dropped entries are listed before you confirm the plan (`dropped manifest entries:` in the plan review and the dry-run output; `droppedEntries` in the transform JSON document), each with its path and reason.
+
+An old single-harness manifest (schema `1`) is converted when it is read and written in the new form on the next write:
+
+- an entry under `.claude/` or `.opencode/` takes its harness from the path;
+- any other entry takes the old `harness_id` when that harness deploys to the entry's path (this is how `.github/` entries are attributed to `ghcp-cli` or `vscode-ghcp`);
+- an entry that cannot be attributed is dropped and reported; its file is left untouched and counts as unrecorded, so the next run may ask the `--conflict` question for it.
 
 ### Orchestrator declaration refresh
 
@@ -153,14 +169,14 @@ Update also refreshes catalog-backed infrastructure agent declarations in the or
 
 Update also refreshes hook bundles that are already deployed in the workspace (files of the harness's hook variant found on disk) when the Catalog version is newer than the version recorded in the manifest. Up-to-date hooks are reported unchanged and not rewritten. It never adds a hook that is not deployed (use `deploy` or the deploy-hooks mode for that).
 
-- Refreshed hook files are overwritten with the Catalog version (local edits are lost); files the new version no longer has are left in place.
+- Each hook file is recorded in the manifest on its own (kind hook, the bundle as key, the file's own path and content hash); registration files you own get no entry. A refreshed hook file is overwritten with the Catalog version. A file whose content you edited is reported as an update with the reason "Deploy-owned content was edited locally" and is backed up under `.mosaic/backups/` before it is overwritten; files the new version no longer has are left in place.
 - An existing registration target (e.g. `.claude/settings.json`, `.github/hooks/mosaic-logger.json`) is never modified; a TODO with the registration fragment is reported for every refreshed hook whose target exists, whether or not the fragment changed. A missing target is created. The TODO is emitted when the update is applied, so the plan review and `--dry-run` show none. Up-to-date hooks and hooks skipped in a conflict produce no registration TODO.
-- A deployed hook with no manifest record is treated as a conflict: `--conflict skip` (default) leaves it as is; `overwrite` and `backup` refresh it.
+- A deployed hook file with no manifest record is treated as a conflict: `--conflict skip` (default) leaves it as is; `overwrite` refreshes it without a backup and `backup` backs it up first. A bundle recorded before per-file records (one manifest entry for the whole bundle) is overwritten without a conflict prompt on its next deploy or update and recorded file by file. A bundle with some files missing is completed by the next update or hook deploy.
 - Both GHCP harnesses keep hooks in `.github/hooks/`, and `claude-code` in `.claude/hooks/`; Update refreshes the hook folder of the harness it runs for.
 
 ### GHCP workspaces
 
-A workspace holds one GHCP target at a time (decided by the manifest `harness_id`); Update for the other one is refused and points to `transform`. Update also migrates agents the manifest records as `X.md` to `X.agent.md`, with backups under `.mosaic/backups/` (see "GHCP agent file names" under `transform`).
+A workspace holds one GHCP target at a time (decided by the harness of the manifest entries); Update for the other one is refused and points to `transform`. Update also migrates agents the manifest records as `X.md` to `X.agent.md`, with backups under `.mosaic/backups/` (see "GHCP agent file names" under `transform`).
 
 ---
 
@@ -181,6 +197,7 @@ mosaic-deploy transform [flags]
 | `--workspace <path>` | string | - | Workspace root whose deployment is moved (required) |
 | `--target-model <id>` | string | - | Default target model for source models not covered by `--model-map`; absent means those agents' model field is left empty |
 | `--model-map <src=tgt>` | string (repeatable) | - | Map a source model to a target model as `sourceModel=targetModel`; repeat once per source model. Use an empty source (`=targetModel`) for agents with no model set. Unmapped source models fall back to `--target-model` |
+| `--mcp-split <name=server>` | string (repeatable) | - | Answer how an ambiguous OpenCode MCP tool name splits into server and tool as `sourceName=server`, for example `azure-devops_get_pull_request=azure-devops`; repeat once per name |
 | `--overwrite` | bool | false | Overwrite an existing destination file |
 | `--dry-run` | bool | false | Show the plan and outcomes without writing any file |
 | `--yes` | bool | false | Confirm the transform plan without prompting |
@@ -200,7 +217,7 @@ Transform never upgrades the deployment. From the source it keeps unchanged: age
 
 Hooks are deployed from the target harness's catalog variant for the bundles present in the source. A bundle is not carried when the target cannot carry it. Because of this, injections and hooks in the target may be newer than the source. `update` is the explicit way to upgrade a deployment.
 
-For every pair except the GHCP pair below, source files and source manifest entries are never changed. The target deployment is recorded in the manifest. Agents written into `vscode-ghcp` are named `X.agent.md`, like the `ghcp-cli` agents.
+For every pair except the GHCP pair below, source files and source manifest entries are never changed. The target deployment is recorded in the manifest with the identity of the catalog each item came from. Agents written into `vscode-ghcp` are named `X.agent.md`, like the `ghcp-cli` agents.
 
 ### GHCP pair
 
@@ -217,15 +234,21 @@ A workspace that holds both GHCP targets is refused by Transform and by every de
 
 ### One GHCP target per workspace
 
-The manifest `harness_id` decides which GHCP target a workspace holds. `deploy`, `update` and the other deploy flows for `ghcp-cli` or `vscode-ghcp` refuse to run in a workspace that holds the other one, change nothing, and point to `mosaic-deploy transform --harness <held> --target-harness <requested> --workspace <path>`. A workspace that holds both must have one of them removed by hand (its agent files in `.github/agents` and its hook files in `.github/hooks`).
+The harness recorded on the manifest entries decides which GHCP target a workspace holds (file names never decide it). `deploy`, `update` and the other deploy flows for `ghcp-cli` or `vscode-ghcp` refuse to run in a workspace that holds the other one, change nothing, and point to `mosaic-deploy transform --harness <held> --target-harness <requested> --workspace <path>`. A workspace that holds both must have one of them removed by hand (its agent files in `.github/agents` and its hook files in `.github/hooks`).
 
 ### GHCP agent file names
 
-Both GHCP targets write agents as `.github/agents/X.agent.md`, with content specific to each target. A workspace deployed earlier with `X.md` agents is migrated by the next full `deploy`, `agents` deploy, `update` or workflow update for its target: each old file is backed up under `.mosaic/backups/` and replaced by `X.agent.md`, and an existing `X.agent.md` for the same agent is backed up and replaced too. Only agents recorded as `X.md` in the manifest are migrated. `render` for `vscode-ghcp` also uses `X.agent.md`.
+Both GHCP targets write agents as `.github/agents/X.agent.md`, with content specific to each target. A workspace deployed earlier with `X.md` agents is migrated by the next full `deploy`, `agents` deploy, `update` or workflow update for its target: each old file is backed up under `.mosaic/backups/` and replaced by `X.agent.md`, and an existing `X.agent.md` for the same agent is backed up and replaced too. Only agents recorded as `X.md` in the manifest are migrated, and only for the agents the run deploys; the rename alone never forces a write, and a file that is in conflict stays as it is. A transform to a GHCP target leaves no `X.md` entry in the manifest. `render` for `vscode-ghcp` also uses `X.agent.md`.
 
 ### Models
 
 Each source model is mapped through `--model-map`, else `--target-model`, else asked interactively. A model that stays unresolved is omitted: the agent is written without a `model` key and is named in the summary and in the TODO file.
+
+### MCP tool names
+
+MCP tool names are never carried as written in the source. Each is read with the source harness's forms and written with the target's (whole server `contact-user*` in OpenCode becomes `contact-user/*` in GHCP CLI; single tool `azure-devops_get_pull_request` becomes `azure-devops/get_pull_request`). A name denied in the source is never granted: it is written as a deny where the target has deny, otherwise omitted and reported dropped. A name that is no MCP name and no known tool of the source is dropped.
+
+An OpenCode single-tool name can split at several `_`. It is resolved in this order: a tool mapping naming it; the servers declared in the `mcp` section of `opencode.json` or `opencode.jsonc` at the workspace root (read only; the longest declared server followed by `_` decides); then the split question, with the split at the first `_` offered first, answerable with `--mcp-split`. A name left unanswered or skipped is reported as unmapped and not written.
 
 ### Per-item outcomes
 
@@ -248,11 +271,11 @@ Esc at a question cancels the run: nothing is written.
 | 0 | Everything transformed; nothing to follow up |
 | 1 | An item failed, or an unrecoverable error (unresolvable harness, unreadable workspace, cancellation, plan not confirmed) |
 | 2 | Completed, but something needs follow-up: agents without a model, tools without a target equivalent, or hook bundles not carried. Removals and replacements of the GHCP pair are reported in the plan and do not by themselves give exit code 2 |
-| 3 | Invalid arguments (missing required flag or malformed `--model-map`) |
+| 3 | Invalid arguments (missing required flag or malformed `--model-map` or `--mcp-split`) |
 
 ### JSON output
 
-With `--output json`, a single document is written to stdout containing `sourceHarnessId`, `targetHarnessId`, `workspace`, `sourceAgentsDir`, `dryRun`, `cancelled`, `targetModel`, `appliedModelMap`, `unresolvedModels`, the per-item `files` array, `notes`, `todoPath`, and the counts `transformed`, `skipped` and `failed`, plus `stackInEffect`. A document is also written when the run was cancelled.
+With `--output json`, a single document is written to stdout containing `sourceHarnessId`, `targetHarnessId`, `workspace`, `sourceAgentsDir`, `dryRun`, `cancelled`, `targetModel`, `appliedModelMap`, `unresolvedModels`, the per-item `files` array, `notes`, `todoPath`, and the counts `transformed`, `skipped` and `failed`, plus `stackInEffect`. When manifest entries were dropped before planning, the document carries `droppedEntries` (absent when empty); each entry has `harness`, `kind`, `key`, `path` (workspace-relative, forward slashes) and `reason`. A document is also written when the run was cancelled.
 
 For the GHCP pair, the document also carries two arrays, each absent when empty: `removals` (files the run removes, or would remove under `--dry-run`) and `replacements` (existing files the run overwrites after backing them up). Each entry has `kind` (`agent` or `hook`), `key` (the agent or hook key, when there is one), `path` (workspace-relative, forward slashes), `reason`, and `backupPath` (the absolute backup file; set only after a real run that backed the file up). The human output lists the same entries under `removals:` and `replacements:` and ends the summary line with `removed: N` and `replaced: N`.
 

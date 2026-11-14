@@ -535,17 +535,21 @@ class TestConcurrentSubagents(_Base):
 
 class TestResumedSubagent(_Base):
 
-    def test_new_cycle_for_same_agent_id_is_not_suppressed(self):
+    def test_restart_of_same_agent_id_continues_the_invocation_without_second_end(self):
         self.handback_post()
         invocation.handle_subagent_start(_ctx(
             self.tmp, "SubagentStart", _TS_STOP,
             agent_id=_AGENT_ID, agent_type="Reviewer"))
         self.stop(message="resumed cycle reply")
-        resumed = self.of("invocation_end", "unknown-agent")
-        self.assertEqual(1, len(resumed))
-        self.assertEqual("resumed cycle reply", resumed[0]["response"])
-        self.assertNotIn("completion_source", resumed[0])
-        self.assertEqual(1, len(self.of("invocation_end", _INSTANCE)))
+        ends = self.of("invocation_end", _INSTANCE)
+        self.assertEqual(1, len(ends))
+        self.assertEqual("handback", ends[0]["completion_source"])
+        self.assertEqual(_REPLY, ends[0]["response"])
+        self.assertEqual(0, len(self.of("invocation_start", _INSTANCE)),
+                         "a re-fired start writes no second invocation_start")
+        run_root = self.paths.run_root(_RUN_ID)
+        self.assertEqual([], [d.name for d in run_root.iterdir()
+                              if d.name.startswith(("unknown-agent", "Reviewer_"))])
 
 
 # ---------------------------------------------------------------------------

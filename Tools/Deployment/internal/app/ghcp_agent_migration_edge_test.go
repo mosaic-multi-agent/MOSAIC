@@ -1,8 +1,9 @@
 package app_test
 
 // ghcp_agent_migration_edge_test.go covers the edges of the legacy X.md migration: an
-// X.agent.md that already exists beside a recorded X.md (recorded or not, edited or not), an
-// X.md the manifest does not record, agents the run does not deploy, and a dry run.
+// X.md the manifest does not record, agents the run does not deploy, and a dry run. An
+// X.agent.md that already exists beside a recorded X.md is covered by
+// ghcp_agent_migration_existing_*_test.go.
 
 import (
 	"testing"
@@ -18,55 +19,9 @@ type gamExistingVariant struct {
 	body         string // content on disk
 }
 
-func gamExistingVariants() []gamExistingVariant {
-	return []gamExistingVariant{
-		{name: "unrecorded", body: "stale user copy\n"},
-		{name: "recorded unedited", recorded: true, recordedBody: "recorded copy\n", body: "recorded copy\n"},
-		{name: "recorded edited", recorded: true, recordedBody: "recorded copy\n", body: "edited by the user\n"},
-	}
-}
-
 // gamConflictDefaults are the conflict defaults a migration must be independent of.
 var gamConflictDefaults = []domain.ConflictDecision{
 	domain.DecisionSkip, domain.DecisionOverwrite, domain.DecisionBackupThenOverwrite,
-}
-
-// TestGhcpDeployFlows_ExistingAgentDotMd_IsBackedUpAndReplaced verifies an existing
-// X.agent.md is replaced by the new one whatever its record or edits and whatever the
-// conflict default, and that both prior files are recoverable from backup.
-func TestGhcpDeployFlows_ExistingAgentDotMd_IsBackedUpAndReplaced(t *testing.T) {
-	for _, h := range gamTargets {
-		for _, flow := range gamFlows() {
-			for _, v := range gamExistingVariants() {
-				for _, cd := range gamConflictDefaults {
-					t.Run(h+"/"+flow.name+"/"+v.name+"/"+string(cd), func(t *testing.T) {
-						// Arrange
-						ws, legacy := gamLegacyWorkspace(t, h)
-						newRel := gamRel(flow.subject, ".agent.md")
-						gamWrite(t, ws, newRel, v.body)
-						if v.recorded {
-							gamRecordAgentAt(t, ws, flow.subject, newRel, v.recordedBody)
-						}
-
-						// Act
-						err := flow.run(t, ws, h, gamOpts{conflict: cd})
-
-						// Assert
-						if err != nil {
-							t.Fatalf("%s for %s: %v", flow.name, h, err)
-						}
-						gamAssertMigrated(t, ws, flow.subject, legacy[flow.subject])
-						if got := string(gamRead(t, ws, newRel)); got == v.body {
-							t.Errorf("existing %s was kept instead of replaced", newRel)
-						}
-						if !gamHasBackup(t, ws, newRel, []byte(v.body)) {
-							t.Errorf("existing %s was replaced without a backup holding its bytes", newRel)
-						}
-					})
-				}
-			}
-		}
-	}
 }
 
 // TestGhcpDeployFlows_UnrecordedAgentMd_Stays verifies an X.md the manifest does not record is

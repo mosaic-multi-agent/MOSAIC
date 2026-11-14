@@ -7,6 +7,7 @@ package app_test
 // targets the source-only hook files are removed (transform_ghcp_pair_exec_test.go).
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -80,20 +81,31 @@ func TestTransformHooks_BundleAbsentFromTheSourceDeploymentIsNotCarried(t *testi
 	}
 }
 
-func TestTransformHooks_ManifestRecordsTheBundleWithCatalogVersionAndEmptyContentHash(t *testing.T) {
+func TestTransformHooks_ManifestRecordsEachWrittenFileWithCatalogVersionAndRealHash(t *testing.T) {
 	r := trHookRun(t, trHookKey)
 
 	r.mustRun(r.request())
 
 	entries := trEntryByRef(trLoadManifest(t, r.ws), domain.ArtifactHook, trHookKey)
-	if len(entries) != 1 {
-		t.Fatalf("hook manifest entries = %+v, want exactly one", entries)
+	want := map[string]string{
+		r.hooksDir(hOpen) + "/logger.ts":   r.read(r.hooksDir(hOpen) + "/logger.ts"),
+		r.hooksDir(hOpen) + "/lib/util.ts": r.read(r.hooksDir(hOpen) + "/lib/util.ts"),
 	}
-	if entries[0].Version != trHookVersion {
-		t.Errorf("version = %q, want the catalog bundle version %q", entries[0].Version, trHookVersion)
+	if len(entries) != len(want) {
+		t.Fatalf("hook manifest entries = %+v, want exactly one per written file", entries)
 	}
-	if entries[0].ContentHash != manifest.Hash(nil) {
-		t.Errorf("content hash = %q, want the empty-content hash deploy records for hooks", entries[0].ContentHash)
+	for _, e := range entries {
+		content, ok := want[filepath.ToSlash(e.TargetPath)]
+		if !ok {
+			t.Errorf("entry path %q is not a written hook file; want one of %v", e.TargetPath, want)
+			continue
+		}
+		if e.Version != trHookVersion {
+			t.Errorf("%s: version = %q, want the catalog bundle version %q", e.TargetPath, e.Version, trHookVersion)
+		}
+		if e.ContentHash != manifest.Hash([]byte(content)) {
+			t.Errorf("%s: content hash = %q, want the hash of the written bytes", e.TargetPath, e.ContentHash)
+		}
 	}
 }
 
@@ -168,8 +180,13 @@ func TestTransformHooks_GhcpPairCarriesTheBundleWithTheTargetVariantInsteadOfSki
 			if got, want := r.read(dest), trReadTestdata(t, "hooks/flat/logger.sh"); got != want {
 				t.Error("the shared hook file is not the target variant's file")
 			}
-			if got := trEntryByRef(trLoadManifestIfAny(t, r.ws), domain.ArtifactHook, trHookKey); len(got) != 1 {
-				t.Errorf("manifest records %d hook entries for the carried bundle, want 1", len(got))
+			got := trEntryByRef(trLoadManifestIfAny(t, r.ws), domain.ArtifactHook, trHookKey)
+			if len(got) != 1 {
+				t.Fatalf("manifest records %d hook entries for the carried bundle, want 1", len(got))
+			}
+			if filepath.ToSlash(got[0].TargetPath) != dest || got[0].Version != trHookVersion ||
+				got[0].ContentHash != manifest.Hash([]byte(r.read(dest))) {
+				t.Errorf("hook entry = %+v, want the written file %s at version %s with the hash of its bytes", got[0], dest, trHookVersion)
 			}
 		})
 	}

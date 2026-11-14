@@ -162,7 +162,7 @@ func buildReviewLines(p domain.Plan) []reviewLine {
 		countParts = append(countParts, fmt.Sprintf("%d unchanged", n))
 	}
 
-	removalParts := removalCountParts(p)
+	removalParts := append(removalCountParts(p), droppedCountParts(p)...)
 	countParts = append(countParts, removalParts...)
 
 	if p.Empty() && len(removalParts) == 0 {
@@ -205,17 +205,8 @@ func buildReviewLines(p domain.Plan) []reviewLine {
 			)
 			add(line, g.style)
 
-			// Show the Reason line only when there are no per-field delta lines to display.
-			// When Stale deltas are present, the per-delta loop below already shows the
-			// version changes with before/after values; the Reason string would duplicate that.
-			if item.Reason != "" && len(item.Stale) == 0 {
-				add("               "+item.Reason, "muted")
-			}
-
-			// For updates, list each version delta that drove the update.
-			for _, delta := range item.Stale {
-				add("               "+formatReviewVersionDelta(delta), "muted")
-			}
+			// Every reason of the item (each version delta is one of them), then its warnings.
+			lines = append(lines, itemReasonLines(item)...)
 
 			// For conflicts, remind the user of the local modification.
 			if item.Action == domain.ActionConflict && item.Conflict != nil {
@@ -231,6 +222,7 @@ func buildReviewLines(p domain.Plan) []reviewLine {
 	}
 
 	lines = append(lines, removalReviewLines(p)...)
+	lines = append(lines, droppedReviewLines(p)...)
 
 	// Gaps summary.
 	if len(p.Gaps) > 0 {

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/goccy/go-yaml"
+
 	"mosaic-deploy/internal/catalog/catalogpaths"
 )
 
@@ -175,6 +177,71 @@ func migToLegacyLayout(t *testing.T, text string) string {
 		t.Fatalf("legacy conversion left the second region in place:\n%s", legacy)
 	}
 	return legacy
+}
+
+// migClearOwnedContentRecords removes the Deploy-owned content record from the manifest entries
+// of the orchestrators, as a deployment made before the record existed looks: the entries then
+// carry no baseline for edit detection, so the rewritten harness regions are not seen as an edit.
+func migClearOwnedContentRecords(t *testing.T, ws string) {
+	t.Helper()
+	var doc yaml.MapSlice
+	if err := yaml.UnmarshalWithOptions(readManifestBytes(t, ws), &doc, yaml.UseOrderedMap()); err != nil {
+		t.Fatalf("parse manifest: %v", err)
+	}
+	cleared := 0
+	for i, top := range doc {
+		if top.Key != "entries" {
+			continue
+		}
+		entries, _ := top.Value.([]interface{})
+		for j, e := range entries {
+			fields, ok := e.(yaml.MapSlice)
+			if !ok || !migIsOrchestratorEntry(fields) {
+				continue
+			}
+			kept := yaml.MapSlice{}
+			for _, f := range fields {
+				if f.Key == "owned_content" {
+					cleared++
+					continue
+				}
+				kept = append(kept, f)
+			}
+			entries[j] = kept
+		}
+		doc[i].Value = entries
+	}
+	if cleared != len(migOrchestrators) {
+		t.Fatalf("cleared %d owned content records, want %d (one per orchestrator)", cleared, len(migOrchestrators))
+	}
+	out, err := yaml.Marshal(doc)
+	if err != nil {
+		t.Fatalf("encode manifest: %v", err)
+	}
+	if err := os.WriteFile(manifestPath(ws), out, 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+}
+
+// migIsOrchestratorEntry reports whether a manifest entry is one of the fixture orchestrators.
+func migIsOrchestratorEntry(fields yaml.MapSlice) bool {
+	for _, f := range fields {
+		if f.Key != "ref" {
+			continue
+		}
+		ref, _ := f.Value.(yaml.MapSlice)
+		for _, r := range ref {
+			if r.Key != "key" {
+				continue
+			}
+			for _, name := range migOrchestrators {
+				if r.Value == name {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // migWithProjectNote fills the project IdentityExtension region of a deployed file with a

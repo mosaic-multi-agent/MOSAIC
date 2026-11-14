@@ -91,8 +91,6 @@ package session
 import (
 	"context"
 	"errors"
-	"fmt"
-	"os"
 
 	commonharness "mosaic-common/harness"
 	"mosaic-run/internal/domain"
@@ -240,6 +238,12 @@ type Deps struct {
 	// (an injectable error seam on BackupState) so that Cleanup can be forced
 	// to fail without relying on filesystem tricks. Nil in production.
 	BackupStateHook func(*lockprotocol.BackupState)
+
+	// Evidence gives access to the last-good artifact copy and saves damaged
+	// copies for diagnosis. Optional: nil is normalised in New to Store when it
+	// implements domain.ArtifactEvidence, otherwise to
+	// domain.NopArtifactEvidence{}.
+	Evidence domain.ArtifactEvidence
 }
 
 // New creates a new Session with the given port dependencies.
@@ -285,6 +289,13 @@ func New(deps Deps) Session {
 	if deps.Guidance == nil {
 		deps.Guidance = NewStandingGuidance()
 	}
+	if deps.Evidence == nil {
+		if ev, ok := deps.Store.(domain.ArtifactEvidence); ok {
+			deps.Evidence = ev
+		} else {
+			deps.Evidence = domain.NopArtifactEvidence{}
+		}
+	}
 	return &sessionImpl{deps: deps}
 }
 
@@ -323,15 +334,10 @@ type sessionImpl struct {
 	// outputBaseline is the pre-invocation output snapshot of the step in
 	// flight. It is set before the first attempt and reused by re-dispatches.
 	outputBaseline domain.OutputBaseline
-	// snapshotDir is the absolute path to the run-scoped agent snapshot
-	// directory created by the copy-and-invoke strategy at step 5b. Empty
-	// until step 5b succeeds for path-based harnesses. Used by cleanup to
-	// know what to delete on terminal completion.
-	snapshotDir string
 	// backupState is the handle returned by SetupBackupAndTransform for
-	// name-based harnesses (backup-and-transform strategy). Nil for path-based
-	// harnesses and non-CLI harnesses. Its Cleanup method is registered in a
-	// defer immediately after setup succeeds.
+	// CLI harnesses (backup-and-transform strategy). Nil when no backup was
+	// needed (no transformation rules, e.g. Claude Code) and for non-CLI
+	// harnesses. Its Cleanup method runs in a defer registered before setup.
 	backupState *lockprotocol.BackupState
 	// consultOutputs holds the outputs of the latest consultation-routed step
 	// until the dispatch loop hands them to the next engine decision.
@@ -399,15 +405,6 @@ func (s *sessionImpl) Start(ctx context.Context, config domain.RunConfig) (outco
 	if outcome, done, err = s.admitAndResolveAgents(ctx, rs); done {
 		return outcome, err
 	}
-	defer func() {
-		if s.snapshotDir == "" {
-			return
-		}
-		if rmErr := os.RemoveAll(s.snapshotDir); rmErr != nil {
-			s.deps.Debug.Log(domain.EventSnapshotCleanupFailed,
-				fmt.Sprintf("failed to remove snapshot directory %s: %v", s.snapshotDir, rmErr))
-		}
-	}()
 	defer func() {
 		if s.backupState == nil {
 			return

@@ -81,14 +81,11 @@ func (m *moveRun) fail(err error) {
 	}
 }
 
-// writtenPaths lists the workspace-relative paths the run writes: plan item files, hook
-// files, and registration targets that are absent or requested for replacement.
+// writtenPaths lists the workspace-relative paths the run writes: plan item files (hook files
+// included) and registration targets that are absent or requested for replacement.
 func (m *moveRun) writtenPaths(req ExecRequest) map[string]bool {
 	set := map[string]bool{}
 	for _, it := range req.Plan.Items {
-		if it.Ref.Kind == domain.ArtifactHook {
-			continue
-		}
 		switch it.Action {
 		case domain.ActionCreate, domain.ActionUpdate:
 			set[normRel(it.TargetPath)] = true
@@ -101,9 +98,6 @@ func (m *moveRun) writtenPaths(req ExecRequest) map[string]bool {
 	for _, hp := range req.Hooks {
 		if !hp.Supported {
 			continue
-		}
-		for _, hf := range hp.Files {
-			set[normRel(path.Join(strings.ReplaceAll(hp.TargetDir, "\\", "/"), hf.TargetName))] = true
 		}
 		for _, step := range hp.Registration {
 			if !step.Performable {
@@ -148,7 +142,7 @@ func (m *moveRun) backupReplacements(dryRun bool) {
 // entries of those removals that ask for it. Files the run writes are kept. In fallback
 // mode the workspace is untouched. journal is non-nil in atomic mode, where the first
 // failure stops further removals.
-func (m *moveRun) removeFiles(req ExecRequest, fallback domain.FallbackTier, journal *writeJournal, entryMap map[entryKey]domain.ManifestEntry) {
+func (m *moveRun) removeFiles(req ExecRequest, fallback domain.FallbackTier, journal *writeJournal, entryMap map[entryKey]domain.ManifestEntry, harness string) {
 	if journal != nil && m.err != nil {
 		return
 	}
@@ -164,7 +158,7 @@ func (m *moveRun) removeFiles(req ExecRequest, fallback domain.FallbackTier, jou
 			m.removeOne(req.DryRun, rel, journal, &rec)
 		}
 		if rm.DropEntry && (rec.Taken == domain.RemovalRemoved || rec.Taken == domain.RemovalAbsent) {
-			delete(entryMap, entryKey{Ref: rm.Ref, Target: rel})
+			delete(entryMap, keyOf(harness, rm.Ref, rel))
 		}
 		m.removals = append(m.removals, rec)
 		if rec.Taken == domain.RemovalFailed {
@@ -218,7 +212,7 @@ func (m *moveRun) unblockedItems(items []domain.PlanItem, actions *[]domain.Acti
 	}
 	kept := make([]domain.PlanItem, 0, len(items))
 	for _, it := range items {
-		if it.Ref.Kind != domain.ArtifactHook && m.blocked[normRel(it.TargetPath)] {
+		if m.blocked[normRel(it.TargetPath)] {
 			*actions = append(*actions, domain.ActionRecord{
 				Ref:        it.Ref,
 				TargetPath: filepath.Join(deployRoot, it.TargetPath),

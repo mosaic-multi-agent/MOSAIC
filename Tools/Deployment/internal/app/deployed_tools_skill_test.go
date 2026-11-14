@@ -86,8 +86,8 @@ func TestConvertDeployedTools_SkillAccessNotAddedWhenTargetHasNoSkillMappingEntr
 func TestConvertDeployedTools_SkillAccessAddedToAgentWithOnlyCustomTools(t *testing.T) {
 	got := convertTools(t, harnessClaude, harnessOpen, []string{"mcp__srv__*"}, withRole(domain.RoleUtility))
 
-	assertStrings(t, "Generic", []string{"srv", "skill"}, got.Generic)
-	assertCustomTools(t, map[string]string{"srv": "srv"}, got.CustomTools)
+	assertStrings(t, "Generic", []string{"skill"}, got.Generic)
+	assertStrings(t, "TargetTools", []string{"srv_*"}, got.TargetTools)
 }
 
 func TestConvertDeployedTools_SkillAccessAddsNoAuditEntry(t *testing.T) {

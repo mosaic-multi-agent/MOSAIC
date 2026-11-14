@@ -4,11 +4,13 @@ Handles: subagentStart, subagentStop. Writes invocation_start, invocation_end,
 boundary turn events, artifact files, and transcript exports for each subagent.
 """
 
+import os
 import re
 
 import mosaic_logger_core as core
 import mosaic_logger_runstate as runstate
 import mosaic_logger_spawn_key as spawn_key
+import mosaic_logger_start_identity as start_identity
 import mosaic_logger_export as export
 import mosaic_logger_transcript as transcript
 import mosaic_logger_artifacts as artifacts
@@ -63,42 +65,15 @@ def extract_status_code(message: "str | None") -> "str | None":
 # Handlers
 # ---------------------------------------------------------------------------
 
-def handle_subagent_start(ctx: "core.HookContext") -> None:
-    """Handle subagentStart: pop pending dispatch, register agent mapping,
-    emit invocation_start and input turn, write 01_input.md.
-    Reads agentName (camelCase), agentId (camelCase) from payload.
-    Uses ctx.agent_id (mapped from payload 'agentId' by HookContext).
-    Never raises."""
-    if not ctx.agent_id:
-        return
+def _write_invocation_start(ctx: "core.HookContext", identity) -> None:
+    """Write the mapping, agent-to-run association, invocation_start, the initial user
+    turn and 01_input.md for a newly resolved invocation."""
+    run_id = identity.run_id
+    agent_instance_id = identity.agent_instance_id
+    agent_prompt = identity.prompt
+    agent_type = start_identity.started_agent_type(ctx)
 
-    # 1. Pop pending dispatch (before path resolution)
-    dispatch_path_run_id = core.effective_run_id(ctx)
-    dispatch = runstate.pop_pending_dispatch(
-        ctx.paths, dispatch_path_run_id, ctx.session_id
-    )
-
-    # 2. Optionally set ctx.run_id from the dispatch's run_id when not yet set
-    if dispatch and dispatch.get("run_id") and not ctx.run_id:
-        ctx.run_id = dispatch["run_id"]
-
-    # 3. Compute effective run_id for all downstream path routing
-    run_id = core.effective_run_id(ctx)
-
-    # 4. Resolve agent_prompt: prefer dispatch prompt; fall back to payload agentPrompt
-    dispatch_prompt = dispatch.get("prompt") if dispatch else None
-    agent_prompt = dispatch_prompt if dispatch_prompt is not None else ctx.field("agentPrompt")
-
-    # 5. Resolve agent_instance_id: pending dispatch takes priority; fall back to
-    #    extracting from agentPrompt; final fallback is 'unknown-agent'
-    if dispatch:
-        agent_instance_id = dispatch["agent_instance_id"]
-    else:
-        extracted = runstate.extract_instance_id(agent_prompt)
-        agent_instance_id = extracted if extracted else "unknown-agent"
-    agent_type = ctx.agent_type
-
-    # 6. Persist mapping FIRST -- before any event write
+    # Persist mapping FIRST -- before any event write
     runstate.put_agent_mapping(
         ctx.paths, run_id, ctx.agent_id, agent_instance_id, agent_type
     )
@@ -106,9 +81,9 @@ def handle_subagent_start(ctx: "core.HookContext") -> None:
 
     sink = ctx.paths.invocation_events(run_id, agent_instance_id)
 
-    # 7. Emit invocation_start (spawn_call_id only when a payload supplied one)
+    # invocation_start (spawn_call_id only when a payload or a remembered dispatch supplied one)
     spawn_call_id = spawn_key.spawn_call_id_from(ctx) or spawn_key.take_spawn_call(
-        ctx.paths, dispatch_path_run_id, ctx.session_id, agent_instance_id)
+        ctx.paths, identity.queue_run_id, ctx.session_id, agent_instance_id)
     event = core.build_event(
         "invocation_start", ctx,
         agent_instance_id=agent_instance_id,
@@ -118,25 +93,83 @@ def handle_subagent_start(ctx: "core.HookContext") -> None:
     )
     core.append_event(sink, event)
 
-    # 8. Emit initial user turn (only when agent_prompt is present)
+    # Initial user turn (only when agent_prompt is present)
     if agent_prompt is not None:
         turn = core.build_event("turn", ctx, role="user", content=agent_prompt)
         core.append_event(sink, turn)
 
-    # 9. Write 01_input.md
-    input_text = artifacts.render_input(ctx, agent_instance_id, agent_prompt)
-    artifacts.write_artifact(ctx.paths.invocation_input(run_id, agent_instance_id), input_text)
+    artifacts.write_artifact(
+        ctx.paths.invocation_input(run_id, agent_instance_id),
+        artifacts.render_input(ctx, agent_instance_id, agent_prompt))
 
-    # 10. Refresh orchestrator raw transcript (best-effort)
+
+def handle_subagent_start(ctx: "core.HookContext") -> None:
+    """Handle subagentStart: resolve the invocation identity, register the agent mapping,
+    emit invocation_start and input turn, write 01_input.md.
+
+    The identity comes from start_identity.resolve_start_identity: an existing
+    invocation of this agentId (a re-fired start writes nothing into its folder and
+    keeps its mapping, agent-to-run association and spawn call id), else the
+    type-matched pending dispatch, else an explicit agent_instance_id line in the task
+    message, else a unique fallback id. Usage is logged for every start, into the
+    stream the mapping names.
+    Never raises."""
+    if not ctx.agent_id:
+        return
+
+    identity = start_identity.resolve_start_identity(ctx)
+    if identity.source == start_identity.SOURCE_EXISTING:
+        core.debug_log(
+            f"subagent-start: continued existing invocation for agent_id={ctx.agent_id!r} "
+            f"agent_instance_id={identity.agent_instance_id!r}")
+    else:
+        _write_invocation_start(ctx, identity)
+
+    # Refresh orchestrator raw transcript (best-effort)
+    export.export_transcript(
+        ctx.transcript_path,
+        ctx.paths.orchestrator_raw(identity.run_id, ctx.session_id),
+        "transcript_path",
+        owner_session_id=ctx.session_id,
+    )
+
+    # Log the transcript's usage; the mapping places this agent's calls
+    transcript_logging.log_transcript_usage(ctx)
+
+
+COMPLETION_DIRNAME = ".completion"
+
+
+def _claim_completion(ctx: "core.HookContext", run_id: str) -> bool:
+    """Atomically create the completion marker of this agent id; True when this stop
+    owns the invocation's end. When the marker cannot be attempted the stop proceeds
+    (a possible duplicate is preferred to a lost end)."""
+    try:
+        path = (ctx.paths.run_root(run_id) / COMPLETION_DIRNAME
+                / f"{core.sanitize_component(ctx.agent_id)}.json")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+        return True
+    except FileExistsError:
+        return False
+    except Exception as exc:
+        core.debug_log("subagent-stop: completion claim failed", exc)
+        return True
+
+
+def _refresh_exports(ctx: "core.HookContext", run_id: str, agent_instance_id: str,
+                     subagent_transcript_path: "str | None") -> None:
+    export.export_transcript(
+        subagent_transcript_path,
+        ctx.paths.invocation_raw(run_id, agent_instance_id),
+        "transcriptPath",
+    )
     export.export_transcript(
         ctx.transcript_path,
         ctx.paths.orchestrator_raw(run_id, ctx.session_id),
         "transcript_path",
         owner_session_id=ctx.session_id,
     )
-
-    # 11. Log the transcript's usage; the mapping written above places this agent's calls
-    transcript_logging.log_transcript_usage(ctx)
 
 
 def handle_subagent_stop(ctx: "core.HookContext") -> None:
@@ -164,8 +197,18 @@ def handle_subagent_stop(ctx: "core.HookContext") -> None:
     # Log the transcript's usage first so the stream's usage precedes invocation_end
     transcript_logging.log_transcript_usage(ctx)
 
-    # 2. Read subagent transcript facts
     subagent_transcript_path = ctx.field("transcriptPath")
+
+    # A later stop of an invocation that already ended writes no second end, final turn
+    # or output; its usage and transcript export still run.
+    if not _claim_completion(ctx, run_id):
+        core.debug_log(
+            f"subagent-stop: invocation already ended for agent_id={ctx.agent_id!r}; "
+            f"skipping invocation_end, final turn and 02_output.md")
+        _refresh_exports(ctx, run_id, agent_instance_id, subagent_transcript_path)
+        return
+
+    # 2. Read subagent transcript facts
     facts = transcript.read_last_assistant_facts(subagent_transcript_path)
 
     # GHCP CLI uses 'response' field (not 'last_assistant_message')
@@ -198,20 +241,8 @@ def handle_subagent_stop(ctx: "core.HookContext") -> None:
     output_text = artifacts.render_output(ctx, agent_instance_id, response, status_code, facts)
     artifacts.write_artifact(ctx.paths.invocation_output(run_id, agent_instance_id), output_text)
 
-    # 6. Export subagent transcript
-    export.export_transcript(
-        subagent_transcript_path,
-        ctx.paths.invocation_raw(run_id, agent_instance_id),
-        "transcriptPath",
-    )
-
-    # 7. Refresh orchestrator raw transcript
-    export.export_transcript(
-        ctx.transcript_path,
-        ctx.paths.orchestrator_raw(run_id, ctx.session_id),
-        "transcript_path",
-        owner_session_id=ctx.session_id,
-    )
+    # 6-7. Export subagent transcript and refresh the orchestrator raw transcript
+    _refresh_exports(ctx, run_id, agent_instance_id, subagent_transcript_path)
 
 
 HANDLERS: dict = {

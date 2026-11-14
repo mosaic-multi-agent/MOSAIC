@@ -21,7 +21,6 @@ subject:
   infrastructure_agents: []
   opening_message: |
     Ask the effecter to do its one thing, then finish.
-  invocation_kind: subagent
   allowed_tools: [Task]
 
 stub_registry: cost-check.stubs.json

@@ -64,9 +64,9 @@ func permissionValue(pairs []domain.FieldPair, key string) (string, int) {
 func TestDeploy_CustomToolServerIsWrittenAsAllowInPermission(t *testing.T) {
 	pairs := applyCustomToolAgent(t, map[string]string{"web_search": "my-server"})
 
-	value, count := permissionValue(pairs, "my-server")
+	value, count := permissionValue(pairs, "my-server_*")
 	if count != 1 || value != "allow" {
-		t.Errorf("my-server: want exactly one pair with value allow, got %d pair(s) value %q; pairs: %v",
+		t.Errorf("my-server_*: want exactly one pair with value allow, got %d pair(s) value %q; pairs: %v",
 			count, value, pairs)
 	}
 }
@@ -83,8 +83,8 @@ func TestDeploy_CustomToolKeepsBuiltInPermissionPairsAndPutsServerLast(t *testin
 			t.Errorf("pair %d key changed: want %q, got %q", i, p.Key, withCustom[i].Key)
 		}
 	}
-	if last := withCustom[len(withCustom)-1]; last.Key != "my-server" || last.Value.Scalar != "allow" {
-		t.Errorf("last pair: want my-server: allow, got %s: %s", last.Key, last.Value.Scalar)
+	if last := withCustom[len(withCustom)-1]; last.Key != "my-server_*" || last.Value.Scalar != "allow" {
+		t.Errorf("last pair: want my-server_*: allow, got %s: %s", last.Key, last.Value.Scalar)
 	}
 	if v, _ := permissionValue(withCustom, "read"); v != "allow" {
 		t.Errorf("read: want allow, got %q", v)

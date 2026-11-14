@@ -177,14 +177,15 @@ current_state:
 <ExecutionLog type="core">
 | Seq | Agent   | Phase     | Iteration | Status  | Timestamp            | Summary | Checkpoint |
 | --- | ------- | --------- | ----- | ------- | -------------------- | ------- | ---------- |
-| 1   | agent#1 | EXECUTION | -     | SUCCESS | 2026-01-01T00:00:00Z | done    | -          |
+| %s | %s | EXECUTION | -     | SUCCESS | 2026-01-01T00:00:00Z | done    | -          |
 </ExecutionLog>
 
 <Artifacts type="core">
 | Artifact | Created In | Created By |
 | -------- | ---------- | ---------- |
 </Artifacts>
-`, folderRunID(dir), lastUpdated.UTC().Format(time.RFC3339), phase, stage, lastAgent)
+`, folderRunID(dir), lastUpdated.UTC().Format(time.RFC3339), phase, stage, lastAgent,
+		lastAgent[strings.LastIndex(lastAgent, "#")+1:], lastAgent)
 
 	if err := os.WriteFile(filepath.Join(dir, "Orchestration.md"), []byte(content), 0600); err != nil {
 		t.Fatalf("writeArtifactWithState: %v", err)

@@ -1,6 +1,6 @@
 package harness_test
 
-// Tests for BuildArgs: argument construction per invocation kind, ported and
+// Tests for BuildArgs: argument construction, ported and
 // adapted from mosaic-run/internal/harness's claudecode_test.go CLI argument
 // construction coverage. BuildArgs is now a directly testable, pure step
 // rather than being inlined into the spawn call.
@@ -11,10 +11,9 @@ package harness_test
 // the delivery contract turns on both:
 //   - no argv element ever contains a newline
 //   - the prompt content travels on stdin, not as the value following -p
-//   - an empty ordinary-invocation prompt yields nil stdin (no error)
+//   - an empty prompt yields nil stdin (no error)
 
 import (
-	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -26,7 +25,6 @@ func ordinaryAgent() harness.AgentRef {
 	return harness.AgentRef{
 		Identifier:     "test-agent",
 		DefinitionPath: "/agents/test-agent.md",
-		Kind:           harness.InvocationOrdinary,
 	}
 }
 
@@ -34,24 +32,12 @@ func orchestratorAgent() harness.AgentRef {
 	return harness.AgentRef{
 		Identifier:     "orchestrator-agent",
 		DefinitionPath: "/agents/orchestrator-agent.md",
-		Kind:           harness.InvocationOrchestrator,
 	}
 }
 
 // ---------------------------------------------------------------------------
-// Ordinary invocations
+// Argument construction
 // ---------------------------------------------------------------------------
-
-func TestBuildArgs_Ordinary_IncludesAppendSystemPromptFile(t *testing.T) {
-	agent := ordinaryAgent()
-	args, _, err := harness.BuildArgs(harness.SpawnRequest{Agent: agent, Prompt: "do the thing", OutputFormat: "json"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !containsSequence(args, "--append-system-prompt-file", agent.DefinitionPath) {
-		t.Errorf("want --append-system-prompt-file %q in args, got %v", agent.DefinitionPath, args)
-	}
-}
 
 func TestBuildArgs_Ordinary_IncludesPromptFlag(t *testing.T) {
 	args, stdin, err := harness.BuildArgs(harness.SpawnRequest{Agent: ordinaryAgent(), Prompt: "do the thing", OutputFormat: "json"})
@@ -117,15 +103,15 @@ func TestBuildArgs_Ordinary_NoEnvBlockInPrompt(t *testing.T) {
 	if !containsArg(args, "-p") {
 		t.Fatalf("want bare -p flag in args, got %v", args)
 	}
-	// Ordinary invocation must not include a synthesized <env> block in the
+	// BuildArgs must not include a synthesized <env> block in the
 	// stdin payload.
 	if strings.Contains(string(stdin), "<env>") {
-		t.Errorf("want no synthesized <env> block in ordinary stdin payload, got %q", stdin)
+		t.Errorf("want no synthesized <env> block in stdin payload, got %q", stdin)
 	}
 }
 
 // ---------------------------------------------------------------------------
-// Orchestrator invocations
+// Orchestrator agents
 // ---------------------------------------------------------------------------
 
 func TestBuildArgs_Orchestrator_IncludesAgentFlag(t *testing.T) {
@@ -189,40 +175,8 @@ func TestBuildArgs_Orchestrator_NeverDangerouslySkipPermissions(t *testing.T) {
 	}
 }
 
-func TestBuildArgs_Orchestrator_IncludesEnvBlockWithWorkingDirPlatformDate(t *testing.T) {
-	args, stdin, err := harness.BuildArgs(harness.SpawnRequest{Agent: orchestratorAgent(), Prompt: "x", OutputFormat: "json"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	// -p must be a bare flag.
-	if !containsArg(args, "-p") {
-		t.Fatalf("want bare -p flag in args, got %v", args)
-	}
-	// The synthesized <env> block must be present in the stdin payload.
-	stdinStr := string(stdin)
-	for _, want := range []string{"<env>", "</env>", "Working directory:", "Platform:", "Current date:"} {
-		if !strings.Contains(stdinStr, want) {
-			t.Errorf("want %q in synthesized env block (stdin payload), got %q", want, stdinStr)
-		}
-	}
-}
-
-func TestBuildArgs_Orchestrator_IncludesPromptAfterEnvBlock(t *testing.T) {
-	args, stdin, err := harness.BuildArgs(harness.SpawnRequest{Agent: orchestratorAgent(), Prompt: "unique-prompt-marker", OutputFormat: "json"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	// -p must be a bare flag.
-	if !containsArg(args, "-p") {
-		t.Fatalf("want bare -p flag in args, got %v", args)
-	}
-	if !strings.Contains(string(stdin), "unique-prompt-marker") {
-		t.Errorf("want the request prompt present in the stdin payload alongside the env block, got %q", stdin)
-	}
-}
-
 // ---------------------------------------------------------------------------
-// ExtraArgs passthrough (applies to both invocation kinds)
+// ExtraArgs passthrough
 // ---------------------------------------------------------------------------
 
 func TestBuildArgs_ExtraArgs_AppendedToBuiltArgs(t *testing.T) {
@@ -265,8 +219,7 @@ func TestBuildArgs_NoArgContainsNewline_Ordinary(t *testing.T) {
 }
 
 // TestBuildArgs_NoArgContainsNewline_Orchestrator is the same guard for
-// orchestrator invocations, whose stdin payload also carries the synthesized
-// <env> block (itself multi-line).
+// orchestrator agents.
 func TestBuildArgs_NoArgContainsNewline_Orchestrator(t *testing.T) {
 	args, _, err := harness.BuildArgs(harness.SpawnRequest{
 		Agent:        orchestratorAgent(),
@@ -278,13 +231,13 @@ func TestBuildArgs_NoArgContainsNewline_Orchestrator(t *testing.T) {
 	}
 	for i, a := range args {
 		if strings.Contains(a, "\n") {
-			t.Errorf("args[%d] = %q: argv elements must never contain a newline (prompt and env block must travel on stdin)", i, a)
+			t.Errorf("args[%d] = %q: argv elements must never contain a newline (prompt must travel on stdin)", i, a)
 		}
 	}
 }
 
 // TestBuildArgs_EmptyPrompt_Ordinary_YieldsNilStdin pins the contract that
-// an empty ordinary-invocation prompt produces nil stdin (not an error and
+// an empty prompt produces nil stdin (not an error and
 // not an empty-but-non-nil slice), so the caller's existing
 // `if o.Stdin != nil` guard behaves as it did before the delivery change.
 func TestBuildArgs_EmptyPrompt_Ordinary_YieldsNilStdin(t *testing.T) {
@@ -297,35 +250,12 @@ func TestBuildArgs_EmptyPrompt_Ordinary_YieldsNilStdin(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if stdin != nil {
-		t.Errorf("want nil stdin for empty ordinary-invocation prompt, got %q", stdin)
-	}
-}
-
-// TestBuildArgs_EmptyPrompt_Orchestrator_YieldsNonNilStdinContainingEnvBlock
-// pins the boundary case that an orchestrator invocation with an empty request
-// prompt still yields non-nil stdin, because the synthesized <env> block is
-// always prepended. Nil stdin may only occur when there is neither prompt
-// content nor an <env> block; for orchestrators the <env> block is always
-// present, so the `if o.Stdin != nil` guard in Run behaves correctly.
-func TestBuildArgs_EmptyPrompt_Orchestrator_YieldsNonNilStdinContainingEnvBlock(t *testing.T) {
-	_, stdin, err := harness.BuildArgs(harness.SpawnRequest{
-		Agent:        orchestratorAgent(),
-		Prompt:       "",
-		OutputFormat: "json",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if stdin == nil {
-		t.Fatalf("want non-nil stdin for empty orchestrator prompt: the <env> block is always prepended, so stdin is never nil for orchestrator invocations")
-	}
-	if !strings.Contains(string(stdin), "<env>") {
-		t.Errorf("want <env> block in orchestrator stdin payload even when prompt is empty, got %q", stdin)
+		t.Errorf("want nil stdin for empty prompt, got %q", stdin)
 	}
 }
 
 // TestBuildArgs_Ordinary_PromptDeliveredViaStdin verifies the core delivery
-// contract for ordinary invocations: the prompt appears in the stdin payload,
+// contract for BuildArgs: the prompt appears in the stdin payload,
 // not as an argv element.
 func TestBuildArgs_Ordinary_PromptDeliveredViaStdin(t *testing.T) {
 	const prompt = "the task content for delivery verification"
@@ -350,89 +280,12 @@ func TestBuildArgs_Ordinary_PromptDeliveredViaStdin(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Orchestrator working directory in env block
-// ---------------------------------------------------------------------------
-
-// TestBuildArgs_Orchestrator_WorkingDirNamedInEnvBlock verifies that when a
-// SpawnRequest for an orchestrator invocation carries a non-empty WorkingDir,
-// the synthesized <env> block in the stdin payload names that directory.
-// Without the fix, BuildArgs passes "" to EnvBlock, which falls back to the
-// process's own working directory — not the request's working directory.
-func TestBuildArgs_Orchestrator_WorkingDirNamedInEnvBlock(t *testing.T) {
-	const wantDir = "/the/sandbox/subject/dir"
-	_, stdin, err := harness.BuildArgs(harness.SpawnRequest{
-		Agent:        orchestratorAgent(),
-		Prompt:       "x",
-		OutputFormat: "json",
-		WorkingDir:   wantDir,
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(string(stdin), wantDir) {
-		t.Errorf("want orchestrator env block to name the request's working directory %q, got stdin %q", wantDir, stdin)
-	}
-}
-
-// TestBuildArgs_Orchestrator_EmptyWorkingDirFallsBackToProcessCwd verifies
-// that when a SpawnRequest carries no working directory, the synthesized <env>
-// block falls back to the process's own current working directory — preserving
-// the behaviour every existing caller that passes no working directory relies on.
-func TestBuildArgs_Orchestrator_EmptyWorkingDirFallsBackToProcessCwd(t *testing.T) {
-	processCwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("os.Getwd: %v", err)
-	}
-	_, stdin, err := harness.BuildArgs(harness.SpawnRequest{
-		Agent:        orchestratorAgent(),
-		Prompt:       "x",
-		OutputFormat: "json",
-		// WorkingDir intentionally absent — exercises the fallback path.
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(string(stdin), processCwd) {
-		t.Errorf("want orchestrator env block to fall back to process cwd %q when request WorkingDir is empty, got stdin %q", processCwd, stdin)
-	}
-}
-
-// TestBuildArgs_Orchestrator_EnvBlockAndPromptDeliveredViaStdin verifies the
-// delivery contract for orchestrator invocations: both the synthesized <env>
-// block and the request prompt appear in the stdin payload, not in argv.
-func TestBuildArgs_Orchestrator_EnvBlockAndPromptDeliveredViaStdin(t *testing.T) {
-	const prompt = "unique-orchestrator-delivery-marker"
-	args, stdin, err := harness.BuildArgs(harness.SpawnRequest{
-		Agent:        orchestratorAgent(),
-		Prompt:       prompt,
-		OutputFormat: "json",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	// The raw prompt must not appear as any argv element.
-	for _, a := range args {
-		if a == prompt {
-			t.Errorf("prompt must not appear as a raw argv element, but found %q in args %v", prompt, args)
-		}
-	}
-	stdinStr := string(stdin)
-	// Both the env block and the request prompt must be in the stdin payload.
-	if !strings.Contains(stdinStr, "<env>") {
-		t.Errorf("want <env> block in orchestrator stdin payload, got %q", stdinStr)
-	}
-	if !strings.Contains(stdinStr, prompt) {
-		t.Errorf("want request prompt %q in orchestrator stdin payload, got %q", prompt, stdinStr)
-	}
-}
-
-// ---------------------------------------------------------------------------
 // Session persistence opt-in (argument construction for transcript capture)
 // ---------------------------------------------------------------------------
 
 // TestBuildArgs_Ordinary_SessionPersistenceOptIn_OmitsNoSessionPersistence
 // verifies that when SessionPersistence is true, --no-session-persistence is
-// absent from the constructed args for an ordinary invocation. Omitting the
+// absent from the constructed args. Omitting the
 // flag allows the Claude Code CLI to write its transcript file, which is
 // required for the logger bundle to capture token usage and model identity.
 func TestBuildArgs_Ordinary_SessionPersistenceOptIn_OmitsNoSessionPersistence(t *testing.T) {
@@ -451,7 +304,7 @@ func TestBuildArgs_Ordinary_SessionPersistenceOptIn_OmitsNoSessionPersistence(t 
 }
 
 // TestBuildArgs_Orchestrator_SessionPersistenceOptIn_OmitsNoSessionPersistence
-// is the same assertion for orchestrator invocations.
+// is the same assertion for orchestrator agents.
 func TestBuildArgs_Orchestrator_SessionPersistenceOptIn_OmitsNoSessionPersistence(t *testing.T) {
 	args, _, err := harness.BuildArgs(harness.SpawnRequest{
 		Agent:              orchestratorAgent(),
@@ -469,7 +322,7 @@ func TestBuildArgs_Orchestrator_SessionPersistenceOptIn_OmitsNoSessionPersistenc
 
 // TestBuildArgs_Ordinary_ExplicitOptOut_StillEmitsNoSessionPersistence
 // verifies that an explicit SessionPersistence: false (the zero value) still
-// produces --no-session-persistence for ordinary invocations. This pins the
+// produces --no-session-persistence. This pins the
 // invariant that the field is truly opt-in: the zero value is opt-out, and
 // every existing caller that does not set it continues to get the flag.
 func TestBuildArgs_Ordinary_ExplicitOptOut_StillEmitsNoSessionPersistence(t *testing.T) {
@@ -488,7 +341,7 @@ func TestBuildArgs_Ordinary_ExplicitOptOut_StillEmitsNoSessionPersistence(t *tes
 }
 
 // TestBuildArgs_Orchestrator_ExplicitOptOut_StillEmitsNoSessionPersistence
-// is the same assertion for orchestrator invocations.
+// is the same assertion for orchestrator agents.
 func TestBuildArgs_Orchestrator_ExplicitOptOut_StillEmitsNoSessionPersistence(t *testing.T) {
 	args, _, err := harness.BuildArgs(harness.SpawnRequest{
 		Agent:              orchestratorAgent(),
@@ -505,7 +358,7 @@ func TestBuildArgs_Orchestrator_ExplicitOptOut_StillEmitsNoSessionPersistence(t 
 }
 
 // TestBuildArgs_Ordinary_SessionPersistenceOptIn_OnlyFlagDiffers verifies that
-// when SessionPersistence is true, the only change to the ordinary invocation's
+// when SessionPersistence is true, the only change to the built
 // args is the absence of --no-session-persistence: every other flag is present
 // and in the same relative order. No other argument or stdin content changes.
 func TestBuildArgs_Ordinary_SessionPersistenceOptIn_OnlyFlagDiffers(t *testing.T) {
@@ -533,7 +386,7 @@ func TestBuildArgs_Ordinary_SessionPersistenceOptIn_OnlyFlagDiffers(t *testing.T
 }
 
 // TestBuildArgs_Orchestrator_SessionPersistenceOptIn_OnlyFlagDiffers is the
-// same assertion for orchestrator invocations.
+// same assertion for orchestrator agents.
 func TestBuildArgs_Orchestrator_SessionPersistenceOptIn_OnlyFlagDiffers(t *testing.T) {
 	req := harness.SpawnRequest{
 		Agent:        orchestratorAgent(),
@@ -557,8 +410,8 @@ func TestBuildArgs_Orchestrator_SessionPersistenceOptIn_OnlyFlagDiffers(t *testi
 }
 
 // TestBuildArgs_Ordinary_SessionPersistenceOptIn_StdinUnchanged verifies that
-// the stdin payload is not affected by the SessionPersistence field for an
-// ordinary invocation: the prompt travels on stdin identically regardless of
+// the stdin payload is not affected by the SessionPersistence field:
+// the prompt travels on stdin identically regardless of
 // whether the opt-in is set.
 func TestBuildArgs_Ordinary_SessionPersistenceOptIn_StdinUnchanged(t *testing.T) {
 	const prompt = "stdin-unchanged-ordinary-marker"
@@ -583,8 +436,7 @@ func TestBuildArgs_Ordinary_SessionPersistenceOptIn_StdinUnchanged(t *testing.T)
 }
 
 // TestBuildArgs_Orchestrator_SessionPersistenceOptIn_StdinUnchanged is the
-// same assertion for orchestrator invocations, which carry both the
-// synthesized <env> block and the prompt in their stdin payload.
+// same assertion for orchestrator agents.
 func TestBuildArgs_Orchestrator_SessionPersistenceOptIn_StdinUnchanged(t *testing.T) {
 	const prompt = "stdin-unchanged-orchestrator-marker"
 	req := harness.SpawnRequest{
@@ -612,8 +464,8 @@ func TestBuildArgs_Orchestrator_SessionPersistenceOptIn_StdinUnchanged(t *testin
 // ---------------------------------------------------------------------------
 
 // TestBuildArgs_DerivedTools_Ordinary_EmitsDontAskMode verifies that when
-// DerivedTools is non-empty, BuildArgs emits --permission-mode dontAsk for
-// ordinary invocations. This is the deterministic permission mode that replaces
+// DerivedTools is non-empty, BuildArgs emits --permission-mode dontAsk.
+// This is the deterministic permission mode that replaces
 // the hardcoded auto mode for Runner's production paths.
 func TestBuildArgs_DerivedTools_Ordinary_EmitsDontAskMode(t *testing.T) {
 	args, _, err := harness.BuildArgs(harness.SpawnRequest{
@@ -631,8 +483,8 @@ func TestBuildArgs_DerivedTools_Ordinary_EmitsDontAskMode(t *testing.T) {
 }
 
 // TestBuildArgs_DerivedTools_Ordinary_DoesNotEmitAutoMode verifies that when
-// DerivedTools is non-empty, BuildArgs does NOT emit --permission-mode auto for
-// ordinary invocations. The dontAsk mode replaces auto on the deterministic path.
+// DerivedTools is non-empty, BuildArgs does NOT emit --permission-mode auto.
+// The dontAsk mode replaces auto on the deterministic path.
 func TestBuildArgs_DerivedTools_Ordinary_DoesNotEmitAutoMode(t *testing.T) {
 	args, _, err := harness.BuildArgs(harness.SpawnRequest{
 		Agent:        ordinaryAgent(),
@@ -650,7 +502,7 @@ func TestBuildArgs_DerivedTools_Ordinary_DoesNotEmitAutoMode(t *testing.T) {
 
 // TestBuildArgs_DerivedTools_Ordinary_EmitsAllowedToolsForEachTool verifies
 // that when DerivedTools is non-empty, BuildArgs emits one --allowedTools flag
-// per tool name for ordinary invocations. Each tool name is a separate
+// per tool name. Each tool name is a separate
 // --allowedTools flag rather than a comma-separated value.
 func TestBuildArgs_DerivedTools_Ordinary_EmitsAllowedToolsForEachTool(t *testing.T) {
 	tools := []string{"Read", "Write", "Edit", "Bash"}
@@ -690,7 +542,7 @@ func TestBuildArgs_DerivedTools_Ordinary_NeverDangerouslySkipPermissions(t *test
 
 // TestBuildArgs_DerivedTools_Orchestrator_EmitsDontAskMode verifies that when
 // DerivedTools is non-empty, BuildArgs emits --permission-mode dontAsk for
-// orchestrator invocations.
+// orchestrator agents.
 func TestBuildArgs_DerivedTools_Orchestrator_EmitsDontAskMode(t *testing.T) {
 	args, _, err := harness.BuildArgs(harness.SpawnRequest{
 		Agent:        orchestratorAgent(),
@@ -708,7 +560,7 @@ func TestBuildArgs_DerivedTools_Orchestrator_EmitsDontAskMode(t *testing.T) {
 
 // TestBuildArgs_DerivedTools_Orchestrator_DoesNotEmitAutoMode verifies that
 // when DerivedTools is non-empty, BuildArgs does NOT emit --permission-mode auto
-// for orchestrator invocations.
+// for orchestrator agents.
 func TestBuildArgs_DerivedTools_Orchestrator_DoesNotEmitAutoMode(t *testing.T) {
 	args, _, err := harness.BuildArgs(harness.SpawnRequest{
 		Agent:        orchestratorAgent(),
@@ -726,7 +578,7 @@ func TestBuildArgs_DerivedTools_Orchestrator_DoesNotEmitAutoMode(t *testing.T) {
 
 // TestBuildArgs_DerivedTools_Orchestrator_EmitsAllowedToolsForEachTool verifies
 // that when DerivedTools is non-empty, BuildArgs emits one --allowedTools flag
-// per tool name for orchestrator invocations.
+// per tool name for orchestrator agents.
 func TestBuildArgs_DerivedTools_Orchestrator_EmitsAllowedToolsForEachTool(t *testing.T) {
 	tools := []string{"Read", "Write", "Edit", "Bash", "Glob", "Grep", "Task", "TaskStop", "AskUserQuestion"}
 	args, _, err := harness.BuildArgs(harness.SpawnRequest{

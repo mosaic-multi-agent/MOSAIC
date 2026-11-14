@@ -25,6 +25,7 @@ func newTransformCmd(ctx context.Context, svc app.Service, out, errOut io.Writer
 		workspace     string
 		targetModel   string
 		modelMap      []string
+		mcpSplits     []string
 		overwrite     bool
 		dryRun        bool
 		autoConfirm   bool
@@ -76,6 +77,16 @@ anything, and --yes to confirm the plan without prompting.`,
 				req.SkipAll = map[domain.QuestionID]bool{domain.QTransformTargetModel: true}
 			}
 
+			if len(mcpSplits) > 0 {
+				parsed, parseErr := parseMCPSplits(mcpSplits)
+				if parseErr != nil {
+					fmt.Fprintf(errOut, "error: %s\n", parseErr)
+					*exitCode = ExitUsage
+					return nil
+				}
+				req.MCPSplits = parsed
+			}
+
 			result, svcErr := svc.TransformHarness(ctx, req)
 			out := withDocStackInEffect(out, svc, output)
 			*exitCode = renderTransformOutput(out, errOut, output, result, svcErr)
@@ -94,6 +105,10 @@ anything, and --yes to confirm the plan without prompting.`,
 	cmd.Flags().StringVar(&targetModel, "target-model", "",
 		"Default target model for source models not covered by --model-map; absent means "+
 			"those agents' model field is left empty")
+	cmd.Flags().StringArrayVar(&mcpSplits, "mcp-split", nil,
+		"Answer how an ambiguous OpenCode MCP tool name splits into server and tool as "+
+			"sourceName=server, for example azure-devops_get_pull_request=azure-devops; repeat "+
+			"once per name. A name left unanswered is reported as unmapped and not written.")
 	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "Overwrite an existing destination file")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show the plan and outcomes without writing any file")
 	cmd.Flags().BoolVar(&autoConfirm, "yes", false, "Confirm the transform plan without prompting")

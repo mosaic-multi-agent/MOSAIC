@@ -28,6 +28,24 @@ type ConsultationActivity struct {
 	// HasUserMessage is true when this routing consultation carries a
 	// non-null user_message.
 	HasUserMessage bool
+	// RepairAttempt is 1 or 2 for a routing consultation carrying
+	// artifact_damage (which repair consultation of the occurrence it is); 0
+	// otherwise and for pre-consultation.
+	RepairAttempt int
+}
+
+// RepairOutcome is the verdict on one repair consultation, for display.
+type RepairOutcome struct {
+	Attempt  int // 1 or 2
+	Accepted bool
+	Problems int // problems remaining; 0 when Accepted
+}
+
+// RepairOutcomeObserver is an optional capability of a ConsultationObserver.
+// The session calls RepairJudged after each repair verification when
+// Deps.Consultations implements it.
+type RepairOutcomeObserver interface {
+	RepairJudged(ctx context.Context, o RepairOutcome)
 }
 
 // ConsultationObserver receives the start and end of every consultation the

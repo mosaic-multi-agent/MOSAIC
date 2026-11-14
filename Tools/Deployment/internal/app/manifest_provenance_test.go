@@ -27,6 +27,7 @@ import (
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 )
 
 func TestWritePaths_StampTheCatalogOfEachItem(t *testing.T) {
@@ -156,9 +157,10 @@ func TestPartialRunAfterFullRun_KeepsRecordedSuppliers(t *testing.T) {
 	if err != nil || snap.State != manifest.StatePresent {
 		t.Fatalf("manifest: state %q, err %v / %v", snap.State, snap.Err, err)
 	}
-	if snap.Manifest.ProtocolSource != provDefaultIdentity || snap.Manifest.BundleSource != provUserIdentity {
+	sec, _ := snap.Manifest.Section("stub-harness")
+	if sec.ProtocolSource != provDefaultIdentity || sec.BundleSource != provUserIdentity {
 		t.Errorf("suppliers after the partial run = %+v / %+v, want %+v / %+v",
-			snap.Manifest.ProtocolSource, snap.Manifest.BundleSource, provDefaultIdentity, provUserIdentity)
+			sec.ProtocolSource, sec.BundleSource, provDefaultIdentity, provUserIdentity)
 	}
 	if e, ok := snap.Manifest.Lookup(provAgentRef); !ok || e.Catalog != provAgentSource {
 		t.Errorf("agent entry Catalog = %+v (found %v), want %+v", e.Catalog, ok, provAgentSource)
@@ -174,8 +176,8 @@ func TestUpdate_ManifestWithoutProvenance_UpdatesAndStampsProvenance(t *testing.
 		State: manifest.StatePresent,
 		Manifest: domain.Manifest{
 			SchemaVersion: manifest.SchemaVersion,
-			HarnessID:     "stub-harness",
-			Entries:       []domain.ManifestEntry{{Ref: provOrchRef, TargetPath: "orchestrator.md", Version: "1.0", ContentHash: "sha256:00"}},
+			Harnesses:     []domain.HarnessSection{{HarnessID: "stub-harness"}},
+			Entries:       manifesttest.WithHarness("stub-harness", []domain.ManifestEntry{{Ref: provOrchRef, TargetPath: "orchestrator.md", Version: "1.0", ContentHash: "sha256:00"}}),
 		},
 	}}
 

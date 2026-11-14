@@ -200,8 +200,8 @@ frontmatter:
   tools_key: "tools"
 `
 
-// customToolDescriptorYAML is a list-shape harness with custom_tool_template set to
-// "mcp:%s". The "terminal" generic tool has no explicit mapping; a CustomTools entry for
+// customToolDescriptorYAML is a list-shape harness with a tools.mcp server form of
+// "mcp:{server}". The "terminal" generic tool has no explicit mapping; a CustomTools entry for
 // "terminal" must therefore produce a ToolCustom resolution with the formatted name.
 const customToolDescriptorYAML = `schema_version: "1"
 id: "custom-tool-harness"
@@ -218,7 +218,9 @@ tools:
         - to: main
           names:
             - "read-file"
-  custom_tool_template: "mcp:%s"
+  mcp:
+    server_form: "mcp:{server}"
+    tool_form: "mcp:{server}:{tool}"
 frontmatter:
   tools_key: "tools"
 `
@@ -786,7 +788,7 @@ func TestToolMapping_PlaceholderWithEmptyExpansion_ExpandsToFullUniverse(t *test
 
 // TestToolMapping_CustomTool_AppearsInOutputFrontmatter asserts that when a user
 // supplies a custom MCP server name for an unmapped generic tool, Apply produces the
-// formatted name (via custom_tool_template) in the output frontmatter tools field.
+// formatted name (via the tools.mcp server form) in the output frontmatter tools field.
 // Without this, a harness that requires every tool to be listed would receive a
 // deployment that silently omits the MCP server entry.
 //
@@ -814,7 +816,7 @@ func TestToolMapping_CustomTool_AppearsInOutputFrontmatter(t *testing.T) {
 		t.Fatalf("Parse output: %v", err)
 	}
 
-	// custom_tool_template is "mcp:%s", so "my-server" must become "mcp:my-server".
+	// the tools.mcp server form is "mcp:{server}", so "my-server" must become "mcp:my-server".
 	const wantName = "mcp:my-server"
 	items := listFieldScalars(t, doc, "tools")
 	if items == nil {

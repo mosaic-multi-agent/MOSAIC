@@ -1,30 +1,21 @@
 package transform_test
 
-// permission_ownership_test.go covers the tools/permission field user-ownership behavior
-// added in Stage 4. On Update (req.Deployed != nil), the tools/permission field from the
-// deployed file is preserved byte-exact in the output instead of being re-generated from
-// source. On Create (req.Deployed == nil), tools are still computed from source as before.
+// permission_ownership_test.go covers which part of the tools/permission field belongs to
+// the catalog and which to the user on Update (req.Deployed != nil). Built-in tools (the
+// descriptor's tool universe) follow the catalog exactly; custom tools of the deployed file
+// are kept. On Create (req.Deployed == nil), tools are computed from source.
 //
-// These tests are in the TDD RED phase: they compile but fail until Stage 4 is implemented
-// in applyFrontmatter. Some tests also depend on Stage 1 (docformat flow-mapping tolerance)
-// and will fail at the Apply call until Stage 1 is complete.
-//
-// Coverage (Stage 4 plan clause references):
-//   (a) On Update, source-computed tools are NOT written to the output
-//   (b) A deployed file with a per-command sub-permission flow-mapping is preserved verbatim
-//   (c) A deployed file with standard scalar permissions is preserved verbatim (regression guard)
+// Coverage:
+//   (a) On Update, built-in tools come from the catalog; deployed built-ins it no longer
+//       produces are removed; custom tools are kept
+//   (b) A deployed per-command flow-mapping on a built-in tool is replaced by the catalog's value
+//   (c) A deployed file with standard scalar permissions keeps the same result (regression guard)
 //   (d) Create (req.Deployed == nil) still computes tools from source (regression guard)
-//   (e) User-added tools in the deployed file are preserved (covered by tool_preservation_test.go;
-//       verbatim copy achieves the same result as the old mergeDeployedTools for that subset)
-//
-// NOTE: The existing TestToolPreservation_NewSourceTool_AddedAlongsidePreservedUserTool in
-// tool_preservation_test.go tests that a new source tool (delta) is added alongside preserved
-// user tools. Stage 4's verbatim-copy behavior contradicts this: on Update, source-computed
-// fields are not written, so new source tools are NOT added. That existing test will require
-// an update once Stage 4 is implemented. This is a known design trade-off (FR-6: tools are
-// user-owned after initial Deploy; new tools only appear on a fresh Deploy).
+//   (e) Fallbacks: unparseable deployed file, deployed file without a tools key, descriptor
+//       without a tools key
 
 import (
+	"reflect"
 	"testing"
 
 	"mosaic-common/docformat"
@@ -209,18 +200,14 @@ Body.
 // Tests — plan clause (a): source-computed tools NOT written on Update
 // ---------------------------------------------------------------------------
 
-// TestPermissionOwnership_Update_SourceComputedToolsAbsentFromOutput asserts that on Update
-// (req.Deployed != nil), tools computed from the generic source are NOT written to the output.
-// The tools/permission field is user-owned after initial Deploy; on Update, only the deployed
-// file's value is used. Source computation (Step 5) must be skipped for the tools/permission
-// field when req.Deployed is non-nil.
+// TestPermissionOwnership_Update_BuiltInFollowsCatalogNotDeployed asserts that on Update
+// (req.Deployed != nil), the built-in tools of the output are those the catalog produces:
+// a built-in tool the deployed file holds but the catalog does not produce is removed, and the
+// catalog's tool is written.
 //
-// Source maps generic_a -> alpha. Deployed has only [gamma] (user replaced all tools).
-// Expected: alpha is NOT in the output. gamma IS in the output (verbatim from deployed).
-//
-// This test is RED: the current implementation writes alpha via Step 5, then merges gamma
-// via Step 5b (mergeDeployedTools). The output is [alpha, gamma] — alpha should not appear.
-func TestPermissionOwnership_Update_SourceComputedToolsAbsentFromOutput(t *testing.T) {
+// Source maps generic_a -> alpha. Deployed has only [gamma]; gamma and alpha are both in the
+// descriptor's universe, so both are built-in. Expected: alpha is in the output, gamma is not.
+func TestPermissionOwnership_Update_BuiltInFollowsCatalogNotDeployed(t *testing.T) {
 	mod := newDescriptorModule(t, ownershipListDescriptorYAML, "inline:ownership-list")
 	req := transform.Request{
 		Source:   []byte(ownershipSourceA),
@@ -242,39 +229,25 @@ func TestPermissionOwnership_Update_SourceComputedToolsAbsentFromOutput(t *testi
 		t.Fatalf("Parse output: %v", err)
 	}
 
-	// The source-computed tool "alpha" must NOT appear in the output on Update.
-	// On Update, the tools/permission field is user-owned (verbatim from deployed), not
-	// re-generated from source. Source computation must be skipped entirely for this field.
-	if toolListContains(doc, "tools", "alpha") {
-		items := listFieldScalars(t, doc, "tools")
-		t.Errorf("source-computed tool %q must not appear in output tools field on Update; "+
-			"on Update, the tools/permission field is user-owned — it is copied verbatim from "+
-			"the deployed file, not re-generated from source; got output tools: %v",
-			"alpha", items)
+	items := listFieldScalars(t, doc, "tools")
+	if !toolListContains(doc, "tools", "alpha") {
+		t.Errorf("catalog tool %q absent from output tools field on Update; built-in tools "+
+			"follow the catalog; got output tools: %v", "alpha", items)
 	}
-
-	// The deployed tool "gamma" must be present (verbatim from deployed file).
-	if !toolListContains(doc, "tools", "gamma") {
-		items := listFieldScalars(t, doc, "tools")
-		t.Errorf("deployed tool %q absent from output tools field on Update; "+
-			"the deployed file's tools field must be preserved verbatim; got output tools: %v",
-			"gamma", items)
+	if toolListContains(doc, "tools", "gamma") {
+		t.Errorf("built-in tool %q still in output tools field on Update; the catalog does not "+
+			"produce it, so it is removed; got output tools: %v", "gamma", items)
 	}
 }
 
-// TestPermissionOwnership_Update_DeployedToolsFieldPreservedVerbatim asserts that on Update,
-// the entire output tools field is the verbatim value from the deployed file — not a merge
-// of source-computed tools and deployed extras.
+// TestPermissionOwnership_Update_BuiltInFromCatalogCustomKeptFromDeployed asserts that on
+// Update the output tools field is the catalog's built-in tools followed by the deployed
+// file's custom tools.
 //
-// Source maps generic_a, generic_b -> [alpha, beta]. Deployed has [gamma, delta, user-custom].
-// Expected output tools: exactly [gamma, delta, user-custom] (verbatim from deployed), with
-// no alpha or beta. The source-computed values must not appear, and no extra tools must be
-// added or removed.
-//
-// This test is RED: the current pipeline (Step 5 sets [alpha, beta], Step 5b merges
-// [gamma, delta, user-custom]) produces [alpha, beta, gamma, delta, user-custom] — five items
-// instead of the three verbatim items from the deployed file.
-func TestPermissionOwnership_Update_DeployedToolsFieldPreservedVerbatim(t *testing.T) {
+// Source maps generic_a, generic_b -> [alpha, beta]. Deployed has [gamma, delta, user-custom];
+// gamma and delta are built-in (in the universe), user-custom is custom.
+// Expected output: exactly [alpha, beta, user-custom].
+func TestPermissionOwnership_Update_BuiltInFromCatalogCustomKeptFromDeployed(t *testing.T) {
 	mod := newDescriptorModule(t, ownershipListDescriptorYAML, "inline:ownership-list")
 	req := transform.Request{
 		Source:   []byte(ownershipSourceAB),
@@ -296,53 +269,22 @@ func TestPermissionOwnership_Update_DeployedToolsFieldPreservedVerbatim(t *testi
 		t.Fatalf("Parse output: %v", err)
 	}
 
-	// Source-computed tools must NOT appear in the output on Update.
-	for _, sourceTool := range []string{"alpha", "beta"} {
-		if toolListContains(doc, "tools", sourceTool) {
-			items := listFieldScalars(t, doc, "tools")
-			t.Errorf("source-computed tool %q must not appear in output on Update; "+
-				"tools/permission field is user-owned and verbatim from deployed; got: %v",
-				sourceTool, items)
-		}
-	}
-
-	// All deployed tools must be present verbatim in the output.
-	for _, deployedTool := range []string{"gamma", "delta", "user-custom"} {
-		if !toolListContains(doc, "tools", deployedTool) {
-			items := listFieldScalars(t, doc, "tools")
-			t.Errorf("deployed tool %q absent from output on Update; "+
-				"the deployed file's tools field must be copied verbatim to the output; got: %v",
-				deployedTool, items)
-		}
-	}
-
-	// The output must contain exactly the three deployed tools — no extras from source.
-	items := listFieldScalars(t, doc, "tools")
-	if len(items) != 3 {
-		t.Errorf("output tools field has %d items, want exactly 3 "+
-			"(the verbatim deployed set [gamma, delta, user-custom]); "+
-			"source-computed tools must not be merged into the output on Update; got: %v",
-			len(items), items)
+	want := []string{"alpha", "beta", "user-custom"}
+	if got := listFieldScalars(t, doc, "tools"); !reflect.DeepEqual(got, want) {
+		t.Errorf("output tools = %v, want %v (catalog built-ins, then the deployed custom tool)", got, want)
 	}
 }
 
 // ---------------------------------------------------------------------------
-// Tests — plan clause (b): flow-mapping permission value preserved verbatim
+// Tests — permission shape: the catalog's disposition wins for built-in tools
 // ---------------------------------------------------------------------------
 
-// TestPermissionOwnership_Update_FlowMappingPermission_PreservedVerbatim asserts that on
-// Update, when the deployed file's permission.bash contains a per-command sub-permission
-// flow-mapping (`bash: {"*": "deny", "dotnet *": "allow"}`), that value is preserved
-// byte-exact in the output.
-//
-// This test depends on Stage 1 (docformat flow-mapping tolerance). Without Stage 1,
-// transform.Apply fails with a parse error when it processes the deployed file containing
-// `{"*": "deny", "dotnet *": "allow"}` — the test is RED for that reason. After Stage 1
-// is implemented but before Stage 4, Apply succeeds but Step 5 overwrites the permission
-// field with the source-computed value (bash: allow), destroying the user-customized
-// flow-mapping — the test is RED for that reason. Only after both Stage 1 and Stage 4
-// are implemented does this test pass.
-func TestPermissionOwnership_Update_FlowMappingPermission_PreservedVerbatim(t *testing.T) {
+// TestPermissionOwnership_Update_FlowMappingPermission_CatalogDispositionWins asserts that on
+// Update, when the deployed file's permission.bash holds a per-command flow-mapping
+// (`bash: {"*": "deny", "dotnet *": "allow"}`) and bash is a built-in tool of the harness, the
+// catalog's disposition replaces it: built-in tools follow the catalog exactly. The deployed
+// file must still parse (flow-mapping tolerance of docformat).
+func TestPermissionOwnership_Update_FlowMappingPermission_CatalogDispositionWins(t *testing.T) {
 	mod := newDescriptorModule(t, ownershipPermissionDescriptorYAML, "inline:ownership-permission")
 	req := transform.Request{
 		Source:   []byte(ownershipPermissionSource),
@@ -354,11 +296,9 @@ func TestPermissionOwnership_Update_FlowMappingPermission_PreservedVerbatim(t *t
 		Scope:    domain.ScopeProject,
 	}
 
-	// Apply requires Stage 1 (docformat flow-mapping tolerance) to parse the deployed
-	// file's `bash: {"*": "deny", ...}` value without a parse error.
 	result, err := transform.Apply(req)
 	if err != nil {
-		t.Fatalf("Apply (requires Stage 1 docformat flow-mapping tolerance for deployed file): %v", err)
+		t.Fatalf("Apply (the deployed flow-mapping value must parse): %v", err)
 	}
 
 	doc, err := docformat.Parse(result.Output)
@@ -368,39 +308,24 @@ func TestPermissionOwnership_Update_FlowMappingPermission_PreservedVerbatim(t *t
 
 	permV, ok := doc.Frontmatter().Get("permission")
 	if !ok {
-		t.Fatal("permission field absent from output frontmatter; " +
-			"the permission field from the deployed file must be preserved verbatim on Update")
+		t.Fatal("permission field absent from output frontmatter")
 	}
-
 	if permV.Kind != domain.KindMapping {
-		t.Fatalf("permission field kind: want %q (deployed was a mapping with bash sub-key), "+
-			"got %q; verbatim preservation must maintain the original field kind",
-			domain.KindMapping, permV.Kind)
+		t.Fatalf("permission field kind: want %q, got %q", domain.KindMapping, permV.Kind)
 	}
-
-	// The bash sub-key must be present with the exact opaque scalar value from the deployed file.
-	// After Stage 1, `{"*": "deny", "dotnet *": "allow"}` is stored as a KindScalar opaque string.
-	const wantBashValue = `{"*": "deny", "dotnet *": "allow"}`
 	bashFound := false
 	for _, pair := range permV.Pairs {
-		if pair.Key == "bash" {
-			bashFound = true
-			if pair.Value.Kind != domain.KindScalar {
-				t.Errorf("permission.bash value kind: want %q (opaque scalar from Stage 1 "+
-					"flow-mapping parse), got %q",
-					domain.KindScalar, pair.Value.Kind)
-			} else if pair.Value.Scalar != wantBashValue {
-				t.Errorf("permission.bash value: want %q (byte-exact from deployed file), "+
-					"got %q; the user-customized flow-mapping must be preserved verbatim "+
-					"on Update — not overwritten by the source-computed %q",
-					wantBashValue, pair.Value.Scalar, "allow")
-			}
+		if pair.Key != "bash" {
+			continue
+		}
+		bashFound = true
+		if pair.Value.Kind != domain.KindScalar || pair.Value.Scalar != "allow" {
+			t.Errorf("permission.bash = %+v, want the catalog's scalar %q (built-in tools follow "+
+				"the catalog; the deployed per-command mapping is replaced)", pair.Value, "allow")
 		}
 	}
 	if !bashFound {
-		t.Errorf("permission.bash sub-key absent from output; "+
-			"the deployed file's permission mapping must be preserved verbatim; "+
-			"permission field pair count: %d", len(permV.Pairs))
+		t.Errorf("permission.bash sub-key absent from output; pair count: %d", len(permV.Pairs))
 	}
 }
 

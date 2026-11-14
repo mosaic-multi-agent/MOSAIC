@@ -48,7 +48,7 @@ func (s *ContextScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s, nil
 	}
 	k := key.String()
-	if s.help.handle(k) {
+	if s.handleOverlays(k) {
 		return s, nil
 	}
 	switch k {
@@ -108,7 +108,7 @@ func (s *ContextScreen) View(width, height int) string {
 // helpKeys are the short help keys of the view.
 func (s *ContextScreen) helpKeys() []tuicommon.HelpEntry {
 	return []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: "enter", Desc: "session"},
-		{Key: KeySort, Desc: "sort"}, exportKeyEntry, {Key: "esc", Desc: "back"}}
+		{Key: KeySort, Desc: "sort"}, findingsKeyEntry, exportKeyEntry, {Key: "esc", Desc: "back"}}
 }
 
 // screenKeys are the overlay entries of the keys this view has of its own.

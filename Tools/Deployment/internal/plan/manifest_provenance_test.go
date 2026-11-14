@@ -13,6 +13,7 @@ import (
 
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 )
 
@@ -47,8 +48,8 @@ func classifyAgentWithEntryCatalog(t *testing.T, catalog domain.CatalogIdentity)
 	entry.Catalog = catalog
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness"}},
+		Entries:       manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 	deployed := map[string]domain.DeployedArtifactState{targetPath: deployedState(hash, "1.0", "1.0", "1.0")}
 

@@ -47,7 +47,6 @@ func agentRef(id string) domain.AgentReference {
 	return domain.AgentReference{
 		Identifier:     id,
 		DefinitionPath: "/agents/" + id + ".md",
-		InvocationKind: domain.InvocationOrdinary,
 	}
 }
 

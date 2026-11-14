@@ -93,20 +93,24 @@ func responseWithCode(entry domain.ExecutionLogEntry) *domain.ProtocolResponse {
 
 // next runs engine.Next for the step that ended the log. With resume, no
 // response is supplied and the status and code come from the recorded state.
+// Any lastOutputs are passed as the previous-step outputs override; without
+// them the engine derives the previous outputs from the row's Output column.
 func (f retryFixture) next(mode domain.ExecutionMode, log *runLog, resume bool,
 	lastOutputs ...string) domain.EngineDecision {
 	last := log.last()
 	state := log.state()
 	state.CurrentState.ErrorCode = last.ErrorCode
 	in := engine.NextInput{
-		Workflow:            f.aw,
-		Schedules:           f.schedules,
-		State:               state,
-		Agents:              f.agents,
-		Seq:                 last.Seq,
-		Now:                 fixedNow,
-		Mode:                mode,
-		LastOutputArtifacts: lastOutputs,
+		Workflow:  f.aw,
+		Schedules: f.schedules,
+		State:     state,
+		Agents:    f.agents,
+		Seq:       last.Seq,
+		Now:       fixedNow,
+		Mode:      mode,
+	}
+	if len(lastOutputs) > 0 {
+		in.LastOutputsOverride = &lastOutputs
 	}
 	if !resume {
 		in.LastResponse = responseWithCode(last)

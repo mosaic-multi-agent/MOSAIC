@@ -39,7 +39,10 @@ type wireToolSpec struct {
 	Shape                  string                      `yaml:"shape"`
 	Universe               []wireHarnessTool           `yaml:"universe"`
 	Mappings               []wireToolMapping           `yaml:"mappings"`
-	CustomToolTemplate     string                      `yaml:"custom_tool_template"`
+	// RetiredCustomToolTemplate is decoded only to reject it with guidance; tools.mcp replaces it.
+	RetiredCustomToolTemplate string `yaml:"custom_tool_template"`
+	MCP                       wireMCPForms `yaml:"mcp"`
+	ReportUnknownNames        bool         `yaml:"report_unknown_tool_names"`
 	CustomToolDestinations []wireCustomToolDestination `yaml:"custom_tool_destination"`
 	PlaceholderExpansion   []string                    `yaml:"placeholder_expansion"`
 }
@@ -134,6 +137,12 @@ func Parse(src []byte, origin string) (*domain.HarnessDescriptor, error) {
 	var w wireDescriptor
 	if err := yaml.UnmarshalWithOptions(src, &w, yaml.DisallowUnknownField(), yaml.UseOrderedMap()); err != nil {
 		return nil, fmt.Errorf("%s: %w", origin, err)
+	}
+
+	if w.Tools.RetiredCustomToolTemplate != "" {
+		e := retiredCustomToolTemplateError()
+		e.File = origin
+		return nil, e
 	}
 
 	// Check schema version before other validation. A declared-but-unsupported version is a
@@ -266,7 +275,13 @@ func mapWireToolSpec(w *wireToolSpec) domain.ToolSpec {
 		Shape:                  domain.ToolShape(w.Shape),
 		Universe:               universe,
 		Mappings:               mappings,
-		CustomToolTemplate:     w.CustomToolTemplate,
+		MCP: domain.MCPNameForms{
+			ServerForm:           w.MCP.ServerForm,
+			ToolForm:             w.MCP.ToolForm,
+			ExtraServerReadForms: w.MCP.ExtraServerReadForms,
+			NormalizeServerName:  w.MCP.NormalizeServerName,
+		},
+		ReportUnknownNames:     w.ReportUnknownNames,
 		CustomToolDestinations: customDests,
 		PlaceholderExpansion:   w.PlaceholderExpansion,
 	}

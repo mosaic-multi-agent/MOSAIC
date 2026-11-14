@@ -7,7 +7,7 @@ Covers:
 - Invocation events (SubagentStart) with run_id extraction failure but agent_instance_id
   success route to OrchestrationLogs/unknown-run/{agent_instance_id}/03_events.jsonl
 - Invocation events with both extractions failing route to
-  OrchestrationLogs/unknown-run/unknown-agent/03_events.jsonl
+  OrchestrationLogs/unknown-run/{unique fallback id}/03_events.jsonl
 - No path component is the literal string "None"
 - The logger never crashes, halts, or drops events regardless of extraction outcome
 
@@ -361,16 +361,19 @@ class TestUnknownRunRoutingInvocationEventsWithAgentId(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Both extractions fail → unknown-run/unknown-agent/
+# Both extractions fail -> unknown-run/{unique fallback id}/
 # ---------------------------------------------------------------------------
 
-class TestUnknownRunUnknownAgentRouting(unittest.TestCase):
-    """When both run_id and agent_instance_id extraction fail, route to
-    OrchestrationLogs/unknown-run/unknown-agent/.
+class TestUnknownRunFallbackAgentRouting(unittest.TestCase):
+    """When both run_id and agent_instance_id extraction fail, the invocation is
+    routed to OrchestrationLogs/unknown-run/{agent_}{timestamp}-{hex}/ -- a unique
+    fallback id, never a shared 'unknown-agent' folder.
 
-    This is the fallback-of-fallbacks bucket for SubagentStart events where the
-    agent_prompt is absent or carries no extractable identifiers of either kind.
+    This is the bucket for SubagentStart events where the agent_prompt is absent
+    or carries no explicit agent_instance_id.
     """
+
+    _FALLBACK_RE = r"^agent_\d{8}T\d{6}Z-[0-9a-f]{4}$"
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -379,9 +382,15 @@ class TestUnknownRunUnknownAgentRouting(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_subagent_start_with_no_extractable_identifiers_uses_unknown_agent(self):
-        """SubagentStart with no agent_prompt (both extractions fail) routes to
-        unknown-run/unknown-agent/."""
+    def _fallback_dirs(self):
+        root = self.tmp_path / "OrchestrationLogs" / "unknown-run"
+        if not root.exists():
+            return []
+        return [d for d in root.iterdir() if d.is_dir() and not d.name.startswith(".")]
+
+    def test_subagent_start_with_no_extractable_identifiers_uses_unique_fallback(self):
+        """SubagentStart with no agent_prompt (both extractions fail) routes to a
+        unique fallback folder under unknown-run/."""
         payload = {
             "hook_event_name": "SubagentStart",
             "session_id": "unknown-agent-sess-001",
@@ -390,17 +399,12 @@ class TestUnknownRunUnknownAgentRouting(unittest.TestCase):
         }
         _dispatch_with_env(payload, self.tmp_path)
 
-        unknown_agent_dir = (
-            self.tmp_path / "OrchestrationLogs" / "unknown-run" / "unknown-agent"
-        )
-        self.assertTrue(
-            unknown_agent_dir.exists(),
-            "unknown-run/unknown-agent/ must be created when both run_id and "
-            "agent_instance_id extraction fail"
-        )
+        dirs = self._fallback_dirs()
+        self.assertEqual(1, len(dirs))
+        self.assertRegex(dirs[0].name, self._FALLBACK_RE)
 
-    def test_subagent_start_unknown_agent_folder_has_events_file(self):
-        """invocation_start event lands in unknown-run/unknown-agent/03_events.jsonl."""
+    def test_subagent_start_fallback_folder_has_events_file(self):
+        """invocation_start event lands in the fallback folder's 03_events.jsonl."""
         payload = {
             "hook_event_name": "SubagentStart",
             "session_id": "unknown-agent-sess-002",
@@ -408,18 +412,13 @@ class TestUnknownRunUnknownAgentRouting(unittest.TestCase):
         }
         _dispatch_with_env(payload, self.tmp_path)
 
-        events_file = (
-            self.tmp_path / "OrchestrationLogs" / "unknown-run" /
-            "unknown-agent" / "03_events.jsonl"
-        )
-        self.assertTrue(
-            events_file.exists(),
-            "03_events.jsonl not found in unknown-run/unknown-agent/"
-        )
+        dirs = self._fallback_dirs()
+        self.assertEqual(1, len(dirs))
+        self.assertTrue((dirs[0] / "03_events.jsonl").exists())
 
-    def test_subagent_start_with_empty_agent_prompt_uses_unknown_agent(self):
-        """SubagentStart where agent_prompt contains no valid identifiers routes to
-        unknown-run/unknown-agent/ rather than producing a timestamp-based fallback ID."""
+    def test_subagent_start_with_plain_agent_prompt_uses_unique_fallback(self):
+        """SubagentStart where agent_prompt contains no explicit agent_instance_id
+        line gets the unique fallback id, and never an 'unknown-agent' folder."""
         payload = {
             "hook_event_name": "SubagentStart",
             "session_id": "unknown-agent-sess-003",
@@ -428,28 +427,35 @@ class TestUnknownRunUnknownAgentRouting(unittest.TestCase):
         }
         _dispatch_with_env(payload, self.tmp_path)
 
-        unknown_agent_dir = (
-            self.tmp_path / "OrchestrationLogs" / "unknown-run" / "unknown-agent"
-        )
-        self.assertTrue(
-            unknown_agent_dir.exists(),
-            "unknown-run/unknown-agent/ not created when agent_instance_id extraction fails"
-        )
+        dirs = self._fallback_dirs()
+        self.assertEqual(1, len(dirs))
+        self.assertRegex(dirs[0].name, self._FALLBACK_RE)
+        self.assertNotIn("unknown-agent", [d.name for d in dirs])
 
-    def test_unknown_agent_events_contain_invocation_start(self):
-        """The invocation_start event is written to unknown-run/unknown-agent/."""
+    def test_two_starts_without_identifiers_get_distinct_folders(self):
+        """Two unrelated starts never share a folder."""
+        for n in (1, 2):
+            _dispatch_with_env({
+                "hook_event_name": "SubagentStart",
+                "session_id": "unknown-agent-sess-004",
+                "agent_id": f"agt-ua-00{n}x",
+            }, self.tmp_path)
+
+        names = [d.name for d in self._fallback_dirs()]
+        self.assertEqual(2, len(set(names)))
+
+    def test_fallback_events_contain_invocation_start(self):
+        """The invocation_start event is written to the fallback folder."""
         payload = {
             "hook_event_name": "SubagentStart",
-            "session_id": "unknown-agent-sess-004",
+            "session_id": "unknown-agent-sess-005",
             "agent_id": "agt-ua-004",
         }
         _dispatch_with_env(payload, self.tmp_path)
 
-        events_file = (
-            self.tmp_path / "OrchestrationLogs" / "unknown-run" /
-            "unknown-agent" / "03_events.jsonl"
-        )
-        events = _read_events(events_file)
+        dirs = self._fallback_dirs()
+        self.assertEqual(1, len(dirs))
+        events = _read_events(dirs[0] / "03_events.jsonl")
         event_types = [e["event"] for e in events]
         self.assertIn("invocation_start", event_types)
 
@@ -573,13 +579,13 @@ class TestNoCrashOnExtractionFailure(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# run_id extracted, agent_instance_id extraction fails → {run_id}/unknown-agent/
+# run_id extracted, agent_instance_id extraction fails -> unique fallback folder
 # ---------------------------------------------------------------------------
 
 class TestKnownRunIdUnknownAgentRouting(unittest.TestCase):
     """SubagentStart whose agent_prompt names a run id but carries no agent
     instance id is not a MOSAIC dispatch: it does not bind the session, so it
-    routes to OrchestrationLogs/unknown-run/unknown-agent/ and nothing is
+    routes to a unique fallback folder under OrchestrationLogs/unknown-run/ and nothing is
     written under the named run's folder.
     """
 
@@ -590,9 +596,9 @@ class TestKnownRunIdUnknownAgentRouting(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_subagent_start_with_run_id_but_no_agent_id_creates_unknown_agent_folder(self):
+    def test_subagent_start_with_run_id_but_no_agent_id_creates_unique_fallback_folder(self):
         """SubagentStart carrying a valid run_id but no extractable agent_instance_id
-        must create OrchestrationLogs/unknown-run/unknown-agent/ and no run folder."""
+        must create a unique fallback folder under unknown-run/ and no run folder."""
         payload = {
             "hook_event_name": "SubagentStart",
             "session_id": "known-run-unknown-agent-001",
@@ -602,22 +608,20 @@ class TestKnownRunIdUnknownAgentRouting(unittest.TestCase):
         }
         _dispatch_with_env(payload, self.tmp_path)
 
-        unknown_agent_dir = (
-            self.tmp_path / "OrchestrationLogs" / "unknown-run" / "unknown-agent"
-        )
-        self.assertTrue(
-            unknown_agent_dir.exists(),
-            "OrchestrationLogs/unknown-run/unknown-agent/ was not created for a "
-            "SubagentStart prompt without an agent instance id"
-        )
+        unknown_run_root = self.tmp_path / "OrchestrationLogs" / "unknown-run"
+        folders = [d.name for d in unknown_run_root.iterdir()
+                   if d.is_dir() and not d.name.startswith(".")]
+        self.assertEqual(1, len(folders),
+                         "a unique fallback folder must be created under unknown-run/")
+        self.assertRegex(folders[0], r"^agent_\d{8}T\d{6}Z-[0-9a-f]{4}$")
         self.assertFalse(
             (self.tmp_path / "OrchestrationLogs" / VALID_RUN_ID).exists(),
             "A prompt without an agent instance id must not bind to its run id"
         )
 
-    def test_subagent_start_events_file_at_run_id_unknown_agent(self):
+    def test_subagent_start_events_file_in_fallback_folder(self):
         """The invocation_start event lands in
-        OrchestrationLogs/unknown-run/unknown-agent/03_events.jsonl."""
+        the fallback folder's 03_events.jsonl."""
         payload = {
             "hook_event_name": "SubagentStart",
             "session_id": "known-run-unknown-agent-002",
@@ -626,19 +630,20 @@ class TestKnownRunIdUnknownAgentRouting(unittest.TestCase):
         }
         _dispatch_with_env(payload, self.tmp_path)
 
-        events_file = (
-            self.tmp_path / "OrchestrationLogs" / "unknown-run" /
-            "unknown-agent" / "03_events.jsonl"
-        )
+        unknown_run_root = self.tmp_path / "OrchestrationLogs" / "unknown-run"
+        folders = [d for d in unknown_run_root.iterdir()
+                   if d.is_dir() and not d.name.startswith(".")]
+        self.assertEqual(1, len(folders))
+        events_file = folders[0] / "03_events.jsonl"
         self.assertTrue(
             events_file.exists(),
-            "03_events.jsonl not found at OrchestrationLogs/unknown-run/unknown-agent/"
+            "03_events.jsonl not found in the unknown-run fallback folder"
         )
         events = _read_events(events_file)
         event_types = [e["event"] for e in events]
         self.assertIn(
             "invocation_start", event_types,
-            "invocation_start not found in unknown-run/unknown-agent/03_events.jsonl"
+            "invocation_start not found in the fallback folder's 03_events.jsonl"
         )
 
     def test_subagent_start_without_instance_id_does_not_route_to_the_named_run(self):

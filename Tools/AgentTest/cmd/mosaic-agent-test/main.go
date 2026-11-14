@@ -51,7 +51,7 @@ import (
 	"mosaic-agent-test/internal/tui"
 )
 
-const ToolVersion = "1.2.0"
+const ToolVersion = "1.2.2"
 
 func main() {
 	args := os.Args[1:]
@@ -59,6 +59,8 @@ func main() {
 	switch selectFrontend(args, realTerminalCheck) {
 	case FrontendInterceptor:
 		os.Exit(runIntercept(args[1:], os.Stdin, os.Stdout, os.Stderr))
+	case FrontendVersion:
+		os.Exit(runVersion(os.Stdout))
 	case FrontendTUI:
 		os.Exit(runFrontend(func() int { return runTUIMode(args) }))
 	default:

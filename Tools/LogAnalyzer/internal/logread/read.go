@@ -71,6 +71,7 @@ type wireEvent struct {
 	CallKind        string           `json:"call_kind"`
 	CallLabel       string           `json:"call_label"`
 	RequestedTools  json.RawMessage  `json:"requested_tools"`
+	ToolInput       json.RawMessage  `json:"tool_input"`
 
 	wireLifecycle
 }
@@ -274,7 +275,10 @@ func buildEvent(wire wireEvent) domain.Event {
 		ev.UsageRecord = fields
 	case domain.EventToolCallStart:
 		ev.Type = domain.EventToolCallStart
-		ev.ToolCallStart = &domain.ToolCallStartFields{CallID: wire.CallID, ToolName: wire.ToolName}
+		ev.ToolCallStart = &domain.ToolCallStartFields{
+			CallID: wire.CallID, ToolName: wire.ToolName,
+			DispatchedInstance: dispatchedInstance(wire.ToolName, wire.ToolInput),
+		}
 	case domain.EventToolCallEnd:
 		ev.Type = domain.EventToolCallEnd
 		ev.ToolCallEnd = &domain.ToolCallEndFields{CallID: wire.CallID, Status: domain.ToolCallStatus(wire.Status), ToolName: wire.ToolName}

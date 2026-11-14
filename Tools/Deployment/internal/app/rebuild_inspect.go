@@ -14,6 +14,21 @@ type DeployedAgentInspection struct {
 	Converted ConvertedTools
 }
 
+// deployedToolsInput builds the tool conversion input of a rebuild: the source grants with
+// their dispositions, the servers the source configuration declares and the answered splits.
+func deployedToolsInput(in RebuildInput, facts deployedAgentFacts, role domain.AgentRole,
+	placeholderAgent bool, catalogTools []string) DeployedToolsInput {
+	grants := facts.Grants
+	if grants == nil {
+		grants = allowGrants(facts.Tools)
+	}
+	return DeployedToolsInput{
+		Source: in.SourceModule.Descriptor(), Target: in.TargetModule.Descriptor(), Tools: grants, Role: role,
+		PlaceholderAgent: placeholderAgent, CatalogTools: catalogTools,
+		DeclaredServers: in.DeclaredServers, SplitAnswers: in.MCPSplits,
+	}
+}
+
 // InspectDeployedAgent reads a deployed source agent the way RebuildDeployedAgent does and
 // returns its role, ref key and tool conversion without building any output. It returns the
 // same error as RebuildDeployedAgent for unparseable input or a missing frontmatter block.

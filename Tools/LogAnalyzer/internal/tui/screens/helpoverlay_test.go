@@ -44,7 +44,7 @@ func TestHelpOverlay_ListsViewExportAndNavigationKeys(t *testing.T) {
 			assertContains(t, overlay, "Views", "Export", "Navigation")
 			for _, k := range []string{
 				screens.KeyViewDispatches, screens.KeyViewOverview, screens.KeyViewAgentTypes,
-				screens.KeyViewStatus, screens.KeyViewTools, screens.KeyViewTimeline, "esc", "enter",
+				screens.KeyViewStatus, screens.KeyViewTools, screens.KeyViewTimeline, screens.KeyFindings, "esc", "enter",
 			} {
 				if !regexp.MustCompile(`(?m)^\s+` + regexp.QuoteMeta(k) + `\s+\S`).MatchString(overlay) {
 					t.Errorf("overlay must list key %q on its own entry\n%s", k, overlay)

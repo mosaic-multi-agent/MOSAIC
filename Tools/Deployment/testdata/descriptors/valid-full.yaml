@@ -51,7 +51,13 @@ tools:
             - "search/textSearch"
     - generic: "file_search"
       destinations: []
-  custom_tool_template: "mcp/%s"
+  mcp:
+    server_form: "mcp/{server}/*"
+    tool_form: "mcp/{server}/{tool}"
+    extra_server_read_forms:
+      - "mcp/{server}*"
+    normalize_server_name: true
+  report_unknown_tool_names: true
   placeholder_expansion:
     - "read/readFile"
     - "write/createFile"

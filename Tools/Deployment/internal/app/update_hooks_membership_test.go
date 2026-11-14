@@ -18,8 +18,14 @@ func TestUpdate_DeployedHook_ReachesPlannerWithItsPresence(t *testing.T) {
 	if len(run.planIn.HookIDs) != 1 || run.planIn.HookIDs[0] != uhHookKey {
 		t.Fatalf("planner HookIDs = %v, want [%s]", run.planIn.HookIDs, uhHookKey)
 	}
-	if !run.planIn.DeployedState[uhHookTarget].Present {
-		t.Errorf("planner DeployedState[%q].Present = false for a deployed hook", uhHookTarget)
+	for _, name := range []string{"logger.sh"} {
+		target := uhHooksDir + "/" + name
+		if !run.planIn.DeployedState[target].Present {
+			t.Errorf("planner DeployedState[%q].Present = false for a deployed hook file", target)
+		}
+	}
+	if _, bundle := run.planIn.DeployedState[uhHookTarget]; bundle {
+		t.Errorf("planner DeployedState holds a bundle-level entry at %q", uhHookTarget)
 	}
 }
 

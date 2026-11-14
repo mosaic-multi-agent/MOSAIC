@@ -113,7 +113,7 @@ Map an agent's generic tool list to harness-specific frontmatter fields.
 | `agent_key` | string | The agent being transformed |
 | `generic` | string[] | Generic tool names from the agent source |
 | `placeholder` | string | Non-empty when the source used a placeholder (e.g. `{tool-permissions}`) instead of a list |
-| `custom_names` | object | Map from generic tool name to user-supplied MCP server name |
+| `custom_names` | object | Map from generic tool name to user-supplied bare MCP server name. Write it in your harness's own MCP syntax; MOSAIC's whole-server and single-tool forms (`tools.mcp`) belong to descriptors and do not travel on this wire |
 | `skipped_tools` | object | Map from generic tool name to `true` when the user chose to skip it |
 
 **Response result:**

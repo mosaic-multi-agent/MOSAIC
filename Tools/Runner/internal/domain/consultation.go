@@ -77,6 +77,13 @@ type ConsultationRequest struct {
 	// pre-consultation and when the user left the message step empty. Always
 	// encoded on the wire. Never persisted.
 	UserMessage *string
+
+	// ArtifactDamage is the damage report of a repair consultation: non-nil
+	// exactly when this routing consultation is made because a read found
+	// Orchestration.md damaged. Nil for every other routing consultation and
+	// always for pre-consultation. Encoded on the routing wire only (null when
+	// nil). Never persisted.
+	ArtifactDamage *ArtifactDamageReport
 }
 
 // RowDefaultsFunc resolves the DispatchDefaults of row at iteration ("" for a

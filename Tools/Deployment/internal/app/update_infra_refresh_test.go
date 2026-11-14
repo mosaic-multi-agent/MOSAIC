@@ -31,8 +31,8 @@ func TestUpdate_DeclaredAgentAtOlderVersion_RefreshedToCatalogVersion(t *testing
 	if !ok || item.Action != domain.ActionUpdate {
 		t.Fatalf("orchestrator plan item = %+v (found %v), want ActionUpdate", item, ok)
 	}
-	if !strings.Contains(item.Reason, injSecurityKey) {
-		t.Errorf("plan reason does not name the stale key: %q", item.Reason)
+	if !strings.Contains(reasonText(item), injSecurityKey) {
+		t.Errorf("plan reason does not name the stale key: %q", reasonText(item))
 	}
 }
 

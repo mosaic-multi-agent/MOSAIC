@@ -61,3 +61,17 @@ func (d deployedBytes) funnelReader(desc *domain.HarnessDescriptor) func(domain.
 		return readDeployedArtifact(filepath.Join(d.workspace, d.readPathFor(item)), item.Ref.Kind, desc), op, nil
 	}
 }
+
+// canonicalReader returns the deployed bytes of each plan item in canonical form, decoded
+// through funnelReader, for callers that only inspect the deployed file (no write). It yields
+// nil when the item has no deployed file or its bytes cannot be read or decoded.
+func (d deployedBytes) canonicalReader(desc *domain.HarnessDescriptor) func(domain.PlanItem) []byte {
+	read := d.funnelReader(desc)
+	return func(item domain.PlanItem) []byte {
+		dr, _, err := read(item)
+		if err != nil || !dr.Present || dr.ReadErr != nil || dr.DecodeErr != nil {
+			return nil
+		}
+		return dr.Canonical
+	}
+}

@@ -156,7 +156,6 @@ func TestGHCPCLIAdapterWithMode_PartialAllowlist_InvokeRaw_MissingDefinitionPath
 	agentRef := domain.AgentReference{
 		Identifier:     "test-agent",
 		DefinitionPath: "/nonexistent/path/to/agent.md",
-		InvocationKind: domain.InvocationOrdinary,
 	}
 
 	adapter := ghcpcli.NewGHCPCLIAdapterWithMode(

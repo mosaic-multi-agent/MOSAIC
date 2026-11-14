@@ -49,6 +49,8 @@ type TransformHarnessRequest struct {
 	// SkipAll suppresses the named questions. QTransformTargetModel and QCustomTool are
 	// honoured; a target harness is a mandatory input and has no "none, don't ask" answer.
 	SkipAll map[domain.QuestionID]bool
+	// MCPSplits pre-answers QMCPNameSplit: source tool name -> server.
+	MCPSplits map[string]string
 }
 
 // TransformFileStatus is the per-file outcome kind.
@@ -122,6 +124,17 @@ type TransformHarnessResult struct {
 	// Replacements lists existing files a GHCP-pair run overwrites, or would overwrite, after
 	// backing them up. Absent otherwise.
 	Replacements []TransformFileChange `json:"replacements,omitempty"`
+	// DroppedEntries lists manifest entries dropped before planning (upgrade and reconciliation).
+	DroppedEntries []TransformDroppedEntry `json:"droppedEntries,omitempty"`
+}
+
+// TransformDroppedEntry is one manifest entry removed before the transform was planned.
+type TransformDroppedEntry struct {
+	Harness string              `json:"harness,omitempty"`
+	Kind    domain.ArtifactKind `json:"kind"`
+	Key     string              `json:"key,omitempty"`
+	Path    string              `json:"path"` // workspace-relative, forward slashes
+	Reason  string              `json:"reason"`
 }
 
 // TransformFileChange is one file a GHCP-pair transform removes or replaces.

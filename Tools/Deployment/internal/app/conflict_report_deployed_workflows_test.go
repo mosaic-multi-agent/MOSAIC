@@ -15,6 +15,7 @@ import (
 	"mosaic-deploy/internal/app/interactiontest"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 )
 
 // crDeployedWorkflowOpts adds the three workflows the deployed-file tests embed: one that
@@ -131,11 +132,11 @@ func TestConflictReport_ManifestAlone_ContributesNoWorkflows(t *testing.T) {
 			deps.Manifest = &stubManifestStore{snap: manifest.Snapshot{
 				State: manifest.StatePresent,
 				Manifest: domain.Manifest{
-					SchemaVersion: "1", HarnessID: "stub-harness",
-					Entries: []domain.ManifestEntry{
+					SchemaVersion: "1", Harnesses: []domain.HarnessSection{{HarnessID: "stub-harness"}},
+					Entries: manifesttest.WithHarness("stub-harness", []domain.ManifestEntry{
 						{Ref: domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "orchestrator"}, TargetPath: "orchestrator.md", Version: "1.0", DeployedAt: time.Unix(0, 0)},
 						{Ref: domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: crAgentKey}, TargetPath: "test-runner.md", Version: "1.0", DeployedAt: time.Unix(0, 0)},
-					},
+					}),
 				},
 			}}
 			want := []string(nil)

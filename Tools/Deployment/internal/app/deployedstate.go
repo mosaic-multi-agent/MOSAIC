@@ -107,6 +107,9 @@ func probeDeployedArtifact(workspace, targetPath, modelKey string, kind domain.A
 	// stale by the planner. This call never fails the scan.
 	state.ProtocolVersion = extractDeployedProtocolVersion(canonical)
 
+	// Record the Deploy-owned content recomputed from these bytes (agents and skills).
+	attachOwnedContent(&state, kind, dr.Raw)
+
 	return state
 }
 
@@ -292,11 +295,9 @@ func probeDeployedStateWithIndex(
 			continue
 		}
 
-		// Hook bundles deploy as files directly in the hooks directory, not at the planned
-		// <hooks dir>/<key> path, so a read at that path cannot observe them. Record absent here;
-		// callers that plan hooks apply the layout-aware presence post-pass (applyHookPresence).
+		// A hook file is probed on its own: presence, real content hash and Deploy-owned record.
 		if pp.Ref.Kind == domain.ArtifactHook {
-			result[pp.TargetPath] = domain.DeployedArtifactState{}
+			result[pp.TargetPath] = probeHookFile(workspace, pp.TargetPath)
 			continue
 		}
 

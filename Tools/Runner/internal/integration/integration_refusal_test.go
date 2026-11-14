@@ -133,17 +133,17 @@ func TestIntegration_IncompatibleWorkflow_RefusedFR18a(t *testing.T) {
 	}
 }
 
-// ===== Non-canonical existing file refused per FR-7a (file store) =====
+// ===== Non-canonical existing file goes to start repair (file store) =====
 
-// TestIntegration_NonCanonicalArtifact_Refused_FR7a verifies that when a file
-// exists at the artifact location but is not in the canonical Orchestration.md
-// format (FR-7a), the real file-based artifact store returns a RefusalError and
-// the session returns RunRefused without invoking any agents.
+// TestIntegration_NonCanonicalArtifact_GoesToStartRepair verifies that when a
+// file exists at the artifact location with no frontmatter and the run
+// configuration names a workflow, the session does not refuse the resume but
+// routes it to start repair, ending the run failed when no consultant is
+// available, without invoking any agents.
 //
-// This differs from the session unit test (which injects a mock store that
-// returns RefusalError directly) by exercising the real FileStore.Read and
-// artifact.Parse path against actual non-canonical file bytes.
-func TestIntegration_NonCanonicalArtifact_Refused_FR7a(t *testing.T) {
+// This exercises the real FileStore.Read and artifact.Parse path against
+// actual non-canonical file bytes.
+func TestIntegration_NonCanonicalArtifact_GoesToStartRepair(t *testing.T) {
 	dir := t.TempDir()
 	orchPath := copyFile(t, dir, "orchestrator.md",
 		filepath.Join(sessionTestdataDir, "linear-orch.md"))
@@ -177,19 +177,23 @@ It has no YAML frontmatter and no SECTION boundary tags.
 	}
 
 	got, err := sess.Start(context.Background(), cfg)
-	msg := requireRefused(t, got, err)
 
-	// The refusal message must describe the non-canonical artifact condition.
-	// The artifact.Parse function returns "artifact: refused ...: missing
-	// frontmatter ..." which contains both "artifact" and "frontmatter".
-	if !strings.Contains(msg, "artifact") && !strings.Contains(msg, "frontmatter") {
-		t.Errorf("want refusal message to mention non-canonical artifact condition, got %q", msg)
+	// With a configured workflow, a frontmatter-damaged resume is no longer
+	// refused: it goes to start repair. No consultant is wired here, so the
+	// repair cannot run and the run ends failed rather than refused.
+	if err != nil {
+		t.Fatalf("want nil error, got %v", err)
+	}
+	if got.Status == domain.RunRefused {
+		t.Fatalf("want the frontmatter-damaged resume routed to repair, not refused (message: %q)", got.Message)
+	}
+	if got.Status != domain.RunFailed {
+		t.Errorf("want RunFailed when start repair cannot be consulted, got %q (message: %q)", got.Status, got.Message)
 	}
 
-	// The harness must not have been invoked: refusal happens at the artifact
-	// read step (step 3) before any agent is dispatched.
+	// No agent is dispatched: the run never gets past the failed start repair.
 	if len(f.Invocations()) > 0 {
-		t.Error("want no harness invocations when artifact is non-canonical, but got some")
+		t.Error("want no harness invocations when start repair fails, but got some")
 	}
 }
 

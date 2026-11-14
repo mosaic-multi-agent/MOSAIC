@@ -31,6 +31,7 @@ import (
 
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 )
 
@@ -140,7 +141,7 @@ func TestBuild_AllAgentsHaveResolvedModels_NoGapNoModel(t *testing.T) {
 		Manifest:      absentSnapshot(),
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 	}
@@ -200,7 +201,7 @@ func TestBuild_AgentWithUnmappedTool_ProducesGapUnmappedTool(t *testing.T) {
 		Manifest:      absentSnapshot(),
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 	}
@@ -335,9 +336,9 @@ func TestBuild_ActionUpdate_ReasonIsNonEmpty(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	input := plan.Input{
@@ -350,7 +351,7 @@ func TestBuild_ActionUpdate_ReasonIsNonEmpty(t *testing.T) {
 		Manifest:      snap,
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		// Deployed file present with matching hash; version "1.0" in file vs "1.1" in source → update.
@@ -363,7 +364,7 @@ func TestBuild_ActionUpdate_ReasonIsNonEmpty(t *testing.T) {
 	must(t, err)
 
 	for _, item := range p.Items {
-		if item.Action == domain.ActionUpdate && item.Reason == "" {
+		if item.Action == domain.ActionUpdate && reasonText(item) == "" {
 			t.Errorf("ActionUpdate item %v has empty Reason; every update must explain why it is stale",
 				item.Ref)
 		}
@@ -392,9 +393,9 @@ func TestBuild_ActionUpdate_StaleFieldsMatchVersionDeltas(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	input := plan.Input{
@@ -407,7 +408,7 @@ func TestBuild_ActionUpdate_StaleFieldsMatchVersionDeltas(t *testing.T) {
 		Manifest:      snap,
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		// Deployed file has version "1.0" in the file; source is "1.1" → one version delta.
@@ -463,7 +464,7 @@ func TestBuild_ActionCreate_ReasonIsNonEmpty(t *testing.T) {
 		Manifest:      absentSnapshot(),
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 	}
@@ -472,7 +473,7 @@ func TestBuild_ActionCreate_ReasonIsNonEmpty(t *testing.T) {
 	must(t, err)
 
 	for _, item := range p.Items {
-		if item.Action == domain.ActionCreate && item.Reason == "" {
+		if item.Action == domain.ActionCreate && reasonText(item) == "" {
 			t.Errorf("ActionCreate item %v has empty Reason; every create must provide a human-readable explanation",
 				item.Ref)
 		}
@@ -499,9 +500,9 @@ func TestBuild_ActionConflict_ReasonIsNonEmpty(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	input := plan.Input{
@@ -514,7 +515,7 @@ func TestBuild_ActionConflict_ReasonIsNonEmpty(t *testing.T) {
 		Manifest:      snap,
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		// Deployed file has a hash that differs from the manifest's recorded hash → conflict.
@@ -527,7 +528,7 @@ func TestBuild_ActionConflict_ReasonIsNonEmpty(t *testing.T) {
 	must(t, err)
 
 	for _, item := range p.Items {
-		if item.Action == domain.ActionConflict && item.Reason == "" {
+		if item.Action == domain.ActionConflict && reasonText(item) == "" {
 			t.Errorf("ActionConflict item %v has empty Reason; every conflict must provide a human-readable explanation",
 				item.Ref)
 		}
@@ -554,9 +555,9 @@ func TestBuild_ActionUnchanged_StaleIsEmpty(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	input := plan.Input{
@@ -569,7 +570,7 @@ func TestBuild_ActionUnchanged_StaleIsEmpty(t *testing.T) {
 		Manifest:      snap,
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		// Deployed file present with matching hash and all version stamps matching source.
@@ -609,9 +610,9 @@ func TestBuild_ActionUnchanged_ConflictIsNil(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	input := plan.Input{
@@ -624,7 +625,7 @@ func TestBuild_ActionUnchanged_ConflictIsNil(t *testing.T) {
 		Manifest:      snap,
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		// Deployed file present with matching hash and version stamps → unchanged (no conflict).
@@ -671,9 +672,9 @@ func TestBuild_LoggingConsumer_ActionRecordFields(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{entry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{entry}),
 	})
 
 	input := plan.Input{
@@ -686,7 +687,7 @@ func TestBuild_LoggingConsumer_ActionRecordFields(t *testing.T) {
 		Manifest:      snap,
 		WorkflowIDs:   []string{"test-wf"},
 		Models: map[string]domain.ModelSelection{
-			agent.Key:    {ModelID: "test-model", Origin: domain.OriginHarnessList},
+			agent.Key:      {ModelID: "test-model", Origin: domain.OriginHarnessList},
 			"orchestrator": {ModelID: "test-model", Origin: domain.OriginHarnessList},
 		},
 		// Deployed file has version "1.0"; source is "1.1" → version delta fires.

@@ -8,7 +8,6 @@ package agentresolve_test
 //   Happy path — orchestrator reference identity:
 //   - Identifier is the file's name with its extension removed (filename stem).
 //   - DefinitionPath is the absolute path to the file.
-//   - InvocationKind is InvocationOrchestrator (not InvocationOrdinary).
 //
 //   Refusal — unresolvable orchestrator:
 //   - A path to a file that does not exist returns *domain.RefusalError.
@@ -20,8 +19,6 @@ package agentresolve_test
 //   Separation from dispatchable agents:
 //   - Calling ResolveAll with only workflow agent identifiers does not include
 //     the orchestrator in the result even when its file is in the same directory.
-//   - The reference from ResolveOrchestrator carries InvocationOrchestrator,
-//     not InvocationOrdinary, asserting it is not a regular agent dispatch.
 //   - ResolveAll's refusal for a missing agent definition file is unchanged
 //     regardless of whether ResolveOrchestrator is also called.
 
@@ -101,24 +98,6 @@ func TestResolveOrchestrator_DefinitionPathMatchesSuppliedFile(t *testing.T) {
 	}
 	if ref.DefinitionPath != path {
 		t.Errorf("want DefinitionPath %q, got %q", path, ref.DefinitionPath)
-	}
-}
-
-// TestResolveOrchestrator_InvocationKindIsOrchestrator verifies that the
-// returned reference carries InvocationOrchestrator so the orchestrator retains
-// native subagent-spawning capability during a consultation.
-func TestResolveOrchestrator_InvocationKindIsOrchestrator(t *testing.T) {
-	dir := t.TempDir()
-	path := writeOrchFile(t, dir, "my-orchestrator.md")
-
-	ref, err := agentresolve.ResolveOrchestrator(path)
-
-	if err != nil {
-		t.Fatalf("ResolveOrchestrator: unexpected error: %v", err)
-	}
-	if ref.InvocationKind != domain.InvocationOrchestrator {
-		t.Errorf("want InvocationKind %q, got %q",
-			domain.InvocationOrchestrator, ref.InvocationKind)
 	}
 }
 
@@ -266,40 +245,6 @@ func TestResolveAll_OrchestratorFilePresent_NotIncludedWhenNotRequested(t *testi
 	}
 }
 
-// TestResolveOrchestrator_InvocationKindDistinguishesOrchestratorFromAgents
-// verifies that the reference from ResolveOrchestrator carries a different
-// InvocationKind than the references from ResolveAll. This is the observable
-// property that prevents the orchestrator from being treated as an ordinary
-// dispatchable agent.
-func TestResolveOrchestrator_InvocationKindDistinguishesOrchestratorFromAgents(t *testing.T) {
-	dir := t.TempDir()
-	orchPath := writeOrchFile(t, dir, "orchestrator.md")
-	agentPath := filepath.Join(dir, "agent-a.md")
-	if err := os.WriteFile(agentPath, []byte("# Agent-A\n"), 0600); err != nil {
-		t.Fatalf("write agent-a.md: %v", err)
-	}
-
-	orchRef, orchErr := agentresolve.ResolveOrchestrator(orchPath)
-	agentMap, agentErr := agentresolve.ResolveAll(dir, []string{"agent-a"})
-
-	if orchErr != nil {
-		t.Fatalf("ResolveOrchestrator: %v", orchErr)
-	}
-	if agentErr != nil {
-		t.Fatalf("ResolveAll: %v", agentErr)
-	}
-
-	agentRef := agentMap["agent-a"]
-	// The orchestrator must not carry InvocationOrdinary (what agents carry).
-	if orchRef.InvocationKind == domain.InvocationOrdinary {
-		t.Error("want orchestrator reference to carry InvocationOrchestrator, not InvocationOrdinary")
-	}
-	// A workflow agent must carry InvocationOrdinary.
-	if agentRef.InvocationKind != domain.InvocationOrdinary {
-		t.Errorf("want agent reference to carry InvocationOrdinary, got %q", agentRef.InvocationKind)
-	}
-}
-
 // ===== .agent.md recognition in ResolveOrchestrator =====
 
 // TestResolveOrchestrator_AgentMdFile_IdentifierIsBaseStem verifies that a
@@ -333,24 +278,6 @@ func TestResolveOrchestrator_AgentMdFile_DefinitionPathMatchesFile(t *testing.T)
 	}
 	if ref.DefinitionPath != path {
 		t.Errorf("want DefinitionPath %q, got %q", path, ref.DefinitionPath)
-	}
-}
-
-// TestResolveOrchestrator_AgentMdFile_InvocationKindIsOrchestrator verifies
-// that a .agent.md orchestrator file carries InvocationOrchestrator, the same
-// as a .md orchestrator file.
-func TestResolveOrchestrator_AgentMdFile_InvocationKindIsOrchestrator(t *testing.T) {
-	dir := t.TempDir()
-	path := writeOrchFile(t, dir, "orchestrator-script.agent.md")
-
-	ref, err := agentresolve.ResolveOrchestrator(path)
-
-	if err != nil {
-		t.Fatalf("ResolveOrchestrator: unexpected error: %v", err)
-	}
-	if ref.InvocationKind != domain.InvocationOrchestrator {
-		t.Errorf("want InvocationKind %q, got %q",
-			domain.InvocationOrchestrator, ref.InvocationKind)
 	}
 }
 

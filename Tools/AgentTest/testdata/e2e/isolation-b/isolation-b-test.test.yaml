@@ -17,7 +17,6 @@ subject:
   infrastructure_agents: []
   opening_message: |
     Ask worker-b to do its one thing, then finish.
-  invocation_kind: subagent
   allowed_tools: [Task]
 
 stub_registry: isolation-b-test.stubs.json

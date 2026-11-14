@@ -44,7 +44,7 @@ import (
 // Communication Protocol message, so the text path is exercised specifically.
 var rawPayload = []byte(`{"action":"route","agent":"agent-b","task_description":"do the thing"}`)
 
-// orchestratorRef returns an AgentReference with InvocationOrchestrator using a
+// orchestratorRef returns an AgentReference using a
 // static (non-existent) definition path. Suitable for OpenCode and GHCP CLI
 // adapter tests that do not read the definition file. ClaudeCodeAdapter tests
 // must use ccOrchestratorRef(t) instead.
@@ -52,7 +52,6 @@ func orchestratorRef() domain.AgentReference {
 	return domain.AgentReference{
 		Identifier:     "orchestrator-agent",
 		DefinitionPath: "/agents/orchestrator-agent.md",
-		InvocationKind: domain.InvocationOrchestrator,
 	}
 }
 

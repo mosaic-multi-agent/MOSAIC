@@ -67,6 +67,7 @@ var flagSpecs = []FlagSpec{
 	{Name: "--keep-sandbox-on-failure", Summary: "Retain a sandbox when the attempt failed", ConsumesValue: false},
 	{Name: "--dir", Placeholder: "<folder>", Summary: "Directory of reports to store (store only)", ConsumesValue: true},
 	{Name: "--for-version", Placeholder: "<ver>", Summary: "Restrict summary to one orchestrator version (summary only)", ConsumesValue: true},
+	{Name: "--version", Summary: "Print the tool version and exit", ConsumesValue: false},
 	{Name: "--help", Summary: "Show this usage surface and exit (-h)", ConsumesValue: false},
 }
 

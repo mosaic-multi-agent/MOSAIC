@@ -58,9 +58,16 @@ but know there is more to do.
 ### Tool mapping (`MapTools`)
 The single implementation of "map an agent's generic tool list to
 harness-specific names" for every tier. Per generic tool, in priority order:
-explicitly skipped by the user → user-supplied custom name (via
-`CustomToolTemplate`) → an entry in `descriptor.Tools.Mappings` (present even
-with an empty `HarnessTools`, meaning "explicitly unsupported") → unmapped.
+explicitly skipped by the user → user-supplied custom name (the bare server
+name, written in the harness's whole-server form from `Tools.MCP` by `mcpname.Format`) → an
+entry in `descriptor.Tools.Mappings` (present even with an empty `HarnessTools`, meaning
+"explicitly unsupported") → unmapped.
+`Tools.MCP` (`domain.MCPNameForms`: `ServerForm`, `ToolForm`, `ExtraServerReadForms`,
+`NormalizeServerName`) replaces the retired `custom_tool_template`, which the loader rejects
+with a message naming the new keys (`descriptor/mcp_forms.go`). `harness/mcpname` parses a name
+into server and optional tool (several readings for an ambiguous single-tool name) and formats it
+again; transform uses it to convert MCP names between harnesses. A descriptor with
+`report_unknown_tool_names` (both GHCP harnesses) has unknown tool names reported as gaps.
 Output rendering then branches on `ToolSpec.Shape`:
 - **List shape** (`buildListToolFields`) — by-convention tools are always
   included; mapped/custom tools are deduplicated and sorted by descriptor

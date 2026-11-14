@@ -26,13 +26,9 @@ import (
 // harness agents-directory convention (.claude/agents/) and populates it with
 // the linear workflow orchestrator file and both agent definition files.
 //
-// Returns the work directory root, the orchestrator file path (inside the
-// agents dir), and the expected snapshot directory path for the given run ID.
-// The snapshot path is computed using the same convention as
-// harness.SnapshotDirPath for the "claude-code" harness:
-//
-//	filepath.Join(workDir, ".claude", "agents-runner-"+runID)
-func writeCLIHarnessDir(t *testing.T, runID string) (workDir, orchPath, snapshotDir string) {
+// Returns the work directory root and the orchestrator file path (inside the
+// agents dir).
+func writeCLIHarnessDir(t *testing.T) (workDir, orchPath string) {
 	t.Helper()
 	workDir = t.TempDir()
 	agentsDir := filepath.Join(workDir, ".claude", "agents")
@@ -40,28 +36,14 @@ func writeCLIHarnessDir(t *testing.T, runID string) (workDir, orchPath, snapshot
 		t.Fatalf("writeCLIHarnessDir: create agents dir: %v", err)
 	}
 
-	data, err := os.ReadFile(orchFilePath("linear-orch.md"))
-	if err != nil {
-		t.Fatalf("writeCLIHarnessDir: read linear-orch.md: %v", err)
-	}
-	orchPath = filepath.Join(agentsDir, "orchestrator.md")
-	if err := os.WriteFile(orchPath, data, 0o600); err != nil {
-		t.Fatalf("writeCLIHarnessDir: write orchestrator: %v", err)
-	}
-
-	writeAgentFile(t, agentsDir, "agent-a")
-	writeAgentFile(t, agentsDir, "agent-b")
-
-	// Snapshot dir is a sibling of the agents dir, following SnapshotDirPath:
-	//   filepath.Join(workDir, filepath.Dir(agentsDir_relative), filepath.Base(agentsDir_relative)+"-runner-"+runID)
-	// For claude-code, agentsDir_relative = ".claude/agents", so:
-	snapshotDir = filepath.Join(workDir, ".claude", "agents-runner-"+runID)
+	orchPath = writeOrchestratorDefinition(t, agentsDir, "claude-code", "linear-orch.md")
+	writeDefinitionFile(t, agentsDir, "claude-code", "agent-a")
+	writeDefinitionFile(t, agentsDir, "claude-code", "agent-b")
 	return
 }
 
 // baseCLIHarnessConfig returns a RunConfig for the linear workflow with the
-// claude-code harness identity and an explicit run ID, so that step 5a
-// activates and writes to a predictable snapshot directory path.
+// claude-code harness identity and an explicit run ID.
 func baseCLIHarnessConfig(orchPath, runID string) domain.RunConfig {
 	return domain.RunConfig{
 		OrchestratorFilePath: orchPath,
@@ -74,24 +56,45 @@ func baseCLIHarnessConfig(orchPath, runID string) domain.RunConfig {
 	}
 }
 
-// containsSnapshotPathSegment reports whether path contains the run-scoped
-// snapshot directory name component for the given run ID.
-func containsSnapshotPathSegment(path, runID string) bool {
-	return strings.Contains(filepath.ToSlash(path), "agents-runner-"+runID)
+// runnerCopyDirs returns every per-run agents copy directory
+// (.claude/agents-runner-*) that currently exists under workDir.
+func runnerCopyDirs(t *testing.T, workDir string) []string {
+	t.Helper()
+	matches, err := filepath.Glob(filepath.Join(workDir, ".claude", "agents-runner-*"))
+	if err != nil {
+		t.Fatalf("runnerCopyDirs: glob: %v", err)
+	}
+	return matches
+}
+
+// snapshotAgentFiles reads every file in dir and returns name -> content.
+func snapshotAgentFiles(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("snapshotAgentFiles: read dir: %v", err)
+	}
+	out := make(map[string]string, len(entries))
+	for _, e := range entries {
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			t.Fatalf("snapshotAgentFiles: read %s: %v", e.Name(), err)
+		}
+		out[e.Name()] = string(data)
+	}
+	return out
 }
 
 // ---- OpenCode harness helpers ----
 
 // writeOpenCodeAgentFile writes an agent definition file in dir for the given
 // agent ID. The file has YAML frontmatter with mode=subagent so that the
-// opencode backup-and-transform rules can rewrite it to mode=primary in-place.
+// opencode backup-and-transform rules can rewrite it to mode=primary in-place,
+// and the model every CLI-harness run requires.
 // After Cleanup, the file should be restored to mode=subagent.
 func writeOpenCodeAgentFile(t *testing.T, dir, agentID string) {
 	t.Helper()
-	content := "---\nmode: subagent\n---\n# Agent: " + agentID + "\n"
-	if err := os.WriteFile(filepath.Join(dir, agentID+".md"), []byte(content), 0o600); err != nil {
-		t.Fatalf("writeOpenCodeAgentFile(%q): %v", agentID, err)
-	}
+	writeDefinitionFile(t, dir, "opencode", agentID)
 }
 
 // writeOpenCodeHarnessDir creates a temporary working directory for the
@@ -108,14 +111,7 @@ func writeOpenCodeHarnessDir(t *testing.T) (workDir, orchPath, backupDir string)
 		t.Fatalf("writeOpenCodeHarnessDir: create agents dir: %v", err)
 	}
 
-	data, err := os.ReadFile(orchFilePath("linear-orch.md"))
-	if err != nil {
-		t.Fatalf("writeOpenCodeHarnessDir: read linear-orch.md: %v", err)
-	}
-	orchPath = filepath.Join(agentsDir, "orchestrator.md")
-	if err := os.WriteFile(orchPath, data, 0o600); err != nil {
-		t.Fatalf("writeOpenCodeHarnessDir: write orchestrator: %v", err)
-	}
+	orchPath = writeOrchestratorDefinition(t, agentsDir, "opencode", "linear-orch.md")
 
 	writeOpenCodeAgentFile(t, agentsDir, "agent-a")
 	writeOpenCodeAgentFile(t, agentsDir, "agent-b")
@@ -154,17 +150,9 @@ func writeGHCPCLIHarnessDir(t *testing.T) (workDir, orchPath string) {
 		t.Fatalf("writeGHCPCLIHarnessDir: create agents dir: %v", err)
 	}
 
-	data, err := os.ReadFile(orchFilePath("linear-orch.md"))
-	if err != nil {
-		t.Fatalf("writeGHCPCLIHarnessDir: read linear-orch.md: %v", err)
-	}
-	orchPath = filepath.Join(agentsDir, "orchestrator.md")
-	if err := os.WriteFile(orchPath, data, 0o600); err != nil {
-		t.Fatalf("writeGHCPCLIHarnessDir: write orchestrator: %v", err)
-	}
-
-	writeAgentFile(t, agentsDir, "agent-a")
-	writeAgentFile(t, agentsDir, "agent-b")
+	orchPath = writeOrchestratorDefinition(t, agentsDir, "ghcp-cli", "linear-orch.md")
+	writeDefinitionFile(t, agentsDir, "ghcp-cli", "agent-a")
+	writeDefinitionFile(t, agentsDir, "ghcp-cli", "agent-b")
 	return
 }
 

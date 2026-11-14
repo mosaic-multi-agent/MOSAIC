@@ -1,17 +1,15 @@
-"""Tests for the pending-dispatch correlation mechanism in mosaic_logger_runstate
+"""Tests for the pending-dispatch capture side in mosaic_logger_runstate
 (ghcp-cli variant).
 
 In GHCP CLI, the pending-dispatch queue bridges the gap between preToolUse
 (where agent/task tool input contains the agent_instance_id in 'toolArgs.prompt')
-and subagentStart (where the agentId is first known). The queue mechanism is
-identical to the claude-code variant.
+and subagentStart (where the agentId is first known). Consumption (type-matched
+take, stale and corrupt entries, atomicity) is covered in
+test_pending_dispatch_take / _robustness / _concurrency.
 
 Covers:
-- put_pending_dispatch: persistence, JSONL append (FIFO), parent-dir creation,
-  success/failure return, never-raises, prompt field round-trip
-- pop_pending_dispatch: FIFO ordering, stale-entry eviction, empty-queue
-  resilience, corrupt-file resilience, absent-file resilience,
-  concurrent session isolation, max_age_seconds parameter
+- put_pending_dispatch: persistence, JSONL append (order), parent-dir creation,
+  success/failure return, never-raises, prompt field round-trip through take
 - Concurrent write safety
 """
 
@@ -27,15 +25,19 @@ import threading
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import mosaic_logger_core as core
 import mosaic_logger_runstate as runstate
+from runner_mode_support import LazyModule
 
+pending = LazyModule("mosaic_logger_pending_dispatch")
 
 _RUN_ID = "20260101T120000Z-d7e3"
 _SESSION_ID = "ghcp-sess-pd-main"
 _SESSION_ID_ALT = "ghcp-sess-pd-alt"
 _AGENT_INSTANCE_ID = "planner-tdd-soft#6"
+_AGENT_TYPE = "planner-tdd-soft"
 _EXTRACTED_RUN_ID = "20260101T110000Z-a1b2"
 
 _ADAPTER_ROOT = pathlib.Path(__file__).parent.parent
@@ -45,11 +47,6 @@ _DISPATCH_PROMPT = (
     '"run_id": "20260101T110000Z-a1b2", '
     '"task_description": "Write the plan."}'
 )
-
-
-def _old_timestamp():
-    """Return an ISO 8601 UTC timestamp that is definitely stale (year 2020)."""
-    return "2020-01-01T00:00:00.000Z"
 
 
 def _fresh_timestamp():
@@ -63,15 +60,6 @@ def _read_jsonl(path):
     """Read all non-empty lines of a JSONL file as parsed dicts."""
     return [json.loads(ln) for ln in pathlib.Path(path).read_text("utf-8").splitlines()
             if ln.strip()]
-
-
-def _write_pending_dispatch_file(path, entries):
-    """Write a JSONL pending-dispatch file directly (for test setup)."""
-    path = pathlib.Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as fh:
-        for entry in entries:
-            fh.write(json.dumps(entry) + "\n")
 
 
 class TestPutPendingDispatch(unittest.TestCase):
@@ -180,7 +168,7 @@ class TestPutPendingDispatch(unittest.TestCase):
 
 class TestPutPendingDispatchPromptField(unittest.TestCase):
     """put_pending_dispatch accepts and persists a 'prompt' keyword argument.
-    pop_pending_dispatch returns the stored prompt value.
+    take_pending_dispatch returns the stored prompt value.
 
     In GHCP CLI, this prompt is the raw text from toolArgs.prompt on a preToolUse
     event with toolName 'agent' or 'task'. The full text is stored so that
@@ -237,27 +225,18 @@ class TestPutPendingDispatchPromptField(unittest.TestCase):
         entry = json.loads(line)
         self.assertNotIn("prompt", entry)
 
-    def test_pop_includes_prompt_key_in_returned_dict(self):
+    def test_take_returns_correct_prompt_value(self):
         runstate.put_pending_dispatch(
             self.paths, _RUN_ID, _SESSION_ID,
             _AGENT_INSTANCE_ID, _EXTRACTED_RUN_ID,
             prompt=self._SAMPLE_PROMPT,
         )
-        result = runstate.pop_pending_dispatch(self.paths, _RUN_ID, _SESSION_ID)
+        result = pending.take_pending_dispatch(
+            self.paths, _RUN_ID, _SESSION_ID, _AGENT_TYPE)
         self.assertIsNotNone(result)
-        self.assertIn("prompt", result)
+        self.assertEqual(self._SAMPLE_PROMPT, result.prompt)
 
-    def test_pop_returns_correct_prompt_value(self):
-        runstate.put_pending_dispatch(
-            self.paths, _RUN_ID, _SESSION_ID,
-            _AGENT_INSTANCE_ID, _EXTRACTED_RUN_ID,
-            prompt=self._SAMPLE_PROMPT,
-        )
-        result = runstate.pop_pending_dispatch(self.paths, _RUN_ID, _SESSION_ID)
-        self.assertIsNotNone(result)
-        self.assertEqual(self._SAMPLE_PROMPT, result["prompt"])
-
-    def test_pop_returns_none_for_prompt_when_entry_lacks_prompt_field(self):
+    def test_take_returns_none_for_prompt_when_entry_lacks_prompt_field(self):
         """Backward-compatible: old-format entry without 'prompt' yields None."""
         entry_path = self.paths.pending_dispatch_entry(_RUN_ID, _SESSION_ID)
         entry_path.parent.mkdir(parents=True, exist_ok=True)
@@ -269,181 +248,10 @@ class TestPutPendingDispatchPromptField(unittest.TestCase):
             }) + "\n",
             encoding="utf-8",
         )
-        result = runstate.pop_pending_dispatch(self.paths, _RUN_ID, _SESSION_ID)
+        result = pending.take_pending_dispatch(
+            self.paths, _RUN_ID, _SESSION_ID, _AGENT_TYPE)
         self.assertIsNotNone(result)
-        self.assertIn("prompt", result)
-        self.assertIsNone(result["prompt"])
-
-
-class TestPopPendingDispatch(unittest.TestCase):
-    """pop_pending_dispatch: FIFO, stale eviction, resilience."""
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.paths = core.build_paths(pathlib.Path(self.tmp.name))
-
-    def tearDown(self):
-        self.tmp.cleanup()
-
-    def _entry_path(self, session_id=_SESSION_ID):
-        return self.paths.pending_dispatch_entry(_RUN_ID, session_id)
-
-    def _pop(self, session_id=_SESSION_ID, max_age_seconds=120):
-        return runstate.pop_pending_dispatch(
-            self.paths, _RUN_ID, session_id, max_age_seconds=max_age_seconds
-        )
-
-    def _put(self, session_id=_SESSION_ID, agent_instance_id=_AGENT_INSTANCE_ID,
-             extracted_run_id=_EXTRACTED_RUN_ID):
-        runstate.put_pending_dispatch(
-            self.paths, _RUN_ID, session_id, agent_instance_id, extracted_run_id
-        )
-
-    def test_returns_none_when_file_absent(self):
-        result = self._pop()
-        self.assertIsNone(result)
-
-    def test_returns_none_for_empty_file(self):
-        path = self._entry_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(b"")
-        result = self._pop()
-        self.assertIsNone(result)
-
-    def test_returns_dict_with_agent_instance_id(self):
-        self._put(agent_instance_id="reviewer-tdd#7")
-        result = self._pop()
-        self.assertIsNotNone(result)
-        self.assertEqual("reviewer-tdd#7", result["agent_instance_id"])
-
-    def test_returns_dict_with_run_id(self):
-        self._put(extracted_run_id="20260201T080000Z-ff99")
-        result = self._pop()
-        self.assertIsNotNone(result)
-        self.assertEqual("20260201T080000Z-ff99", result["run_id"])
-
-    def test_returns_dict_with_none_run_id_when_stored_as_null(self):
-        self._put(extracted_run_id=None)
-        result = self._pop()
-        self.assertIsNotNone(result)
-        self.assertIn("run_id", result)
-        self.assertIsNone(result["run_id"])
-
-    def test_pops_oldest_entry_first_fifo(self):
-        self._put(agent_instance_id="first-agent#1")
-        self._put(agent_instance_id="second-agent#2")
-        result = self._pop()
-        self.assertIsNotNone(result)
-        self.assertEqual("first-agent#1", result["agent_instance_id"])
-
-    def test_removes_popped_entry_from_queue(self):
-        self._put(agent_instance_id="first-agent#1")
-        self._put(agent_instance_id="second-agent#2")
-        self._pop()
-        result2 = self._pop()
-        self.assertIsNotNone(result2)
-        self.assertEqual("second-agent#2", result2["agent_instance_id"])
-
-    def test_queue_empty_after_all_entries_popped(self):
-        self._put(agent_instance_id="only-agent#1")
-        self._pop()
-        result = self._pop()
-        self.assertIsNone(result)
-
-    def test_preserves_remaining_entries_in_order(self):
-        self._put(agent_instance_id="first#1")
-        self._put(agent_instance_id="second#2")
-        self._put(agent_instance_id="third#3")
-        self._pop()
-        result2 = self._pop()
-        self.assertEqual("second#2", result2["agent_instance_id"])
-        result3 = self._pop()
-        self.assertEqual("third#3", result3["agent_instance_id"])
-
-    def test_stale_entries_are_evicted_during_pop(self):
-        path = self._entry_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        _write_pending_dispatch_file(path, [
-            {"agent_instance_id": "stale-agent#1", "run_id": None,
-             "created_at": _old_timestamp()},
-        ])
-        result = self._pop(max_age_seconds=120)
-        self.assertIsNone(result, "Stale entry must be evicted, not returned")
-
-    def test_fresh_entry_returned_after_stale_entries_evicted(self):
-        path = self._entry_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        _write_pending_dispatch_file(path, [
-            {"agent_instance_id": "stale-agent#1", "run_id": None,
-             "created_at": _old_timestamp()},
-            {"agent_instance_id": "fresh-agent#2", "run_id": "20260101T110000Z-a1b2",
-             "created_at": _fresh_timestamp()},
-        ])
-        result = self._pop(max_age_seconds=120)
-        self.assertIsNotNone(result)
-        self.assertEqual("fresh-agent#2", result["agent_instance_id"])
-
-    def test_all_stale_entries_returns_none(self):
-        path = self._entry_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        _write_pending_dispatch_file(path, [
-            {"agent_instance_id": "stale#1", "run_id": None,
-             "created_at": _old_timestamp()},
-            {"agent_instance_id": "stale#2", "run_id": None,
-             "created_at": _old_timestamp()},
-        ])
-        result = self._pop(max_age_seconds=120)
-        self.assertIsNone(result)
-
-    def test_max_age_seconds_zero_evicts_all_entries(self):
-        self._put(agent_instance_id="any-agent#1")
-        result = self._pop(max_age_seconds=0)
-        self.assertIsNone(result)
-
-    def test_returns_none_on_corrupt_file(self):
-        path = self._entry_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("this is not json at all\n{broken\n", encoding="utf-8")
-        result = self._pop()
-        self.assertIsNone(result)
-
-    def test_never_raises_on_absent_file(self):
-        try:
-            runstate.pop_pending_dispatch(self.paths, _RUN_ID, _SESSION_ID)
-        except Exception as exc:
-            self.fail(f"pop_pending_dispatch raised on absent file: {exc}")
-
-    def test_never_raises_on_corrupt_file(self):
-        path = self._entry_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("}{totally broken{{", encoding="utf-8")
-        try:
-            runstate.pop_pending_dispatch(self.paths, _RUN_ID, _SESSION_ID)
-        except Exception as exc:
-            self.fail(f"pop_pending_dispatch raised on corrupt file: {exc}")
-
-    def test_concurrent_session_isolation(self):
-        """pop for one session_id must not affect the queue of another session_id."""
-        runstate.put_pending_dispatch(
-            self.paths, _RUN_ID, "session-alpha", "alpha-agent#1", None
-        )
-        runstate.put_pending_dispatch(
-            self.paths, _RUN_ID, "session-beta", "beta-agent#2", None
-        )
-        runstate.pop_pending_dispatch(self.paths, _RUN_ID, "session-alpha")
-        result = runstate.pop_pending_dispatch(self.paths, _RUN_ID, "session-beta")
-        self.assertIsNotNone(result)
-        self.assertEqual("beta-agent#2", result["agent_instance_id"])
-
-    def test_path_run_id_mismatch_returns_none(self):
-        """put and pop targeting different path_run_ids land in different buckets."""
-        runstate.put_pending_dispatch(
-            self.paths, "run-bucket-A", _SESSION_ID, _AGENT_INSTANCE_ID, None
-        )
-        result = runstate.pop_pending_dispatch(
-            self.paths, "run-bucket-B", _SESSION_ID
-        )
-        self.assertIsNone(result)
+        self.assertIsNone(result.prompt)
 
 
 class TestConcurrentPutPendingDispatch(unittest.TestCase):

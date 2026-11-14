@@ -43,6 +43,7 @@ import (
 
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 )
 
@@ -436,9 +437,9 @@ func TestBuild_WorkerAgent_NotAffectedByWorkflowStaleness(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{manifestEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{manifestEntry}),
 	})
 
 	// The worker agent's deployed state deliberately includes workflow markers that would
@@ -489,9 +490,9 @@ func TestBuild_OrchestratorWorkflowOnly_Stale_SingleUpdateItem(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{manifestEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{manifestEntry}),
 	})
 
 	// Deployed orchestrator carries only "quick-fix"; selection expands with "greenfield-tdd".
@@ -562,9 +563,9 @@ func TestBuild_OrchestratorWorkflowStaleness_ComposesWithVersionDeltas(t *testin
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{manifestEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{manifestEntry}),
 	})
 
 	// Deployed: version "1.0" (stale), carries "quick-fix"; selection also adds "greenfield-tdd"
@@ -655,9 +656,9 @@ func TestBuild_OrchestratorUnchangedWorkflows_StayUnchanged(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{manifestEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{manifestEntry}),
 	})
 
 	// Both deployed and selected contain exactly "quick-fix" at version "1.0".
@@ -725,9 +726,9 @@ func TestBuild_WorkflowVersionBump_OrchestratorStale(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{manifestEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{manifestEntry}),
 	})
 
 	// Deployed: "quick-fix" at version "1.0"; catalog now has "quick-fix" at "2.0"
@@ -857,9 +858,9 @@ func TestBuild_OrchestratorWorkflowRemoved_Stale(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{manifestEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{manifestEntry}),
 	})
 
 	// Deployed orchestrator carries both "quick-fix" and "greenfield-tdd".
@@ -929,9 +930,9 @@ func TestBuild_Orchestrator_PlanItemReason_NamesWorkflows(t *testing.T) {
 
 	snap := presentSnapshot(domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "test-harness",
-		UpdatedAt:     time.Now(),
-		Entries:       []domain.ManifestEntry{manifestEntry},
+		Harnesses:     []domain.HarnessSection{{HarnessID: "test-harness", UpdatedAt: time.Now()}},
+
+		Entries: manifesttest.WithHarness("test-harness", []domain.ManifestEntry{manifestEntry}),
 	})
 
 	// Deployed orchestrator carries "quick-fix"; selection adds "greenfield-tdd".
@@ -982,10 +983,10 @@ func TestBuild_Orchestrator_PlanItemReason_NamesWorkflows(t *testing.T) {
 		t.Fatalf("orchestrator with workflow addition: Action = %q, want %q",
 			item.Action, domain.ActionUpdate)
 	}
-	if !strings.Contains(item.Reason, "greenfield-tdd") {
+	if !strings.Contains(reasonText(item), "greenfield-tdd") {
 		t.Errorf("PlanItem.Reason = %q; expected to contain %q (the added workflow ID); "+
 			"build.go must propagate WorkflowDrift.Reason() into PlanItem.Reason",
-			item.Reason, "greenfield-tdd")
+			reasonText(item), "greenfield-tdd")
 	}
 }
 

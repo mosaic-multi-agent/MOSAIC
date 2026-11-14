@@ -1,23 +1,20 @@
 package transform_test
 
-// tool_preservation_test.go covers the tool preservation behavior of the Apply pipeline.
-// When req.Deployed is non-nil (Update scenario), any tools present in the deployed
-// file but absent from the current generic-source-derived output must be preserved in
-// the output unchanged. This prevents user-added harness tools from being discarded on
-// every Update.
-//
-// These tests are in the TDD RED phase: they compile but fail until mergeDeployedTools
-// is implemented in applyFrontmatter after Step 5.
+// tool_preservation_test.go covers the custom-tool preservation behavior of the Apply
+// pipeline. When req.Deployed is non-nil (Update scenario), built-in tools (the descriptor's
+// tool universe) follow the catalog, while custom tools of the deployed file (every other
+// name) are kept. This prevents user-added harness tools from being discarded on every Update.
 //
 // Coverage:
-//   - User-added tools survive Update when the deployed tools field is a flow-style list
-//   - User-added tools survive Update when the deployed tools field is a comma-separated scalar
-//   - New tools added by the generic source appear alongside preserved user tools
-//   - Tools dropped from the generic source are never auto-removed from deployed files
+//   - Custom tools survive Update when the deployed tools field is a flow-style list
+//   - Custom tools survive Update when the deployed tools field is a comma-separated scalar
+//   - Tools the catalog gains are added alongside the preserved custom tools
+//   - Built-in tools the catalog stopped producing are removed; custom tools stay
 //   - Preservation works for permission-shape (KindMapping) deployed tool fields
-//   - Placeholder source: user-added tools beyond the placeholder expansion are preserved
+//   - Placeholder source: custom tools beyond the placeholder expansion are preserved
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -196,18 +193,6 @@ mosaic_id: 101
 version: 1.0.0
 transform_version: 1.0.0
 tools: [alpha, beta, user-extra]
----
-Body.
-`
-
-// deployedListABGamma is a deployed file that includes gamma, previously produced
-// when the generic source included generic_c. In T4.3, the source has since dropped
-// generic_c, but gamma must remain in the output (never auto-removed).
-const deployedListABGamma = `---
-mosaic_id: 100
-version: 1.0.0
-transform_version: 1.0.0
-tools: [alpha, beta, gamma]
 ---
 Body.
 `
@@ -409,25 +394,16 @@ func TestToolPreservation_ScalarShapeDeployed_UserAddedToolPreserved(t *testing.
 }
 
 // ---------------------------------------------------------------------------
-// Stage 4 contract: verbatim copy from deployed — new source tools NOT added
+// Built-in tools follow the catalog: a tool the catalog gained is added on update
 // ---------------------------------------------------------------------------
 
-// TestToolPreservation_NewSourceTool_AddedAlongsidePreservedUserTool asserts the Stage 4
-// contract: on Update, the output tools field is a verbatim copy of the deployed file's
-// tools field. When the source gains a new tool mapping (generic_d → delta) that was NOT
-// in the deployed file, delta is NOT added to the output. The deployed file's tools field
-// — [alpha, beta, user-extra] — is preserved byte-exact. Source-computed tools (including
-// new ones like delta) are not written to the output on Update; tools are user-owned after
-// initial Deploy.
+// TestToolPreservation_NewSourceTool_AddedAlongsidePreservedUserTool asserts that on Update
+// the output tools field holds the built-in tools the catalog produces now plus the custom
+// tools of the deployed file. The source gains generic_d (-> delta) that the deployed file
+// lacks, so delta is added; user-extra (custom) is kept; nothing else appears.
 //
 // Deployed file contains: [alpha, beta, user-extra]. Source maps to: [alpha, beta, delta].
-// Expected output: exactly [alpha, beta, user-extra] (verbatim from deployed). delta must
-// be absent (it is source-computed, not user-deployed). user-extra must be present
-// (verbatim from deployed). The total count must be exactly 3.
-//
-// This test is RED until Stage 4 verbatim-copy behavior is implemented in applyFrontmatter:
-// the current pipeline (Steps 5/5b) sets [alpha, beta, delta] from source and then merges
-// user-extra, producing [alpha, beta, delta, user-extra] — delta appears when it should not.
+// Expected output: [alpha, beta, delta, user-extra].
 func TestToolPreservation_NewSourceTool_AddedAlongsidePreservedUserTool(t *testing.T) {
 	mod := newDescriptorModule(t, preservationListDescriptorYAML, "inline:preservation-list")
 	req := transform.Request{
@@ -450,42 +426,9 @@ func TestToolPreservation_NewSourceTool_AddedAlongsidePreservedUserTool(t *testi
 		t.Fatalf("Parse output: %v", err)
 	}
 
-	// delta must NOT appear: it is a source-computed tool not present in the deployed file.
-	// On Update, tools are user-owned and copied verbatim from the deployed file; new source
-	// tools are not automatically added.
-	if toolListContains(doc, "tools", "delta") {
-		items := listFieldScalars(t, doc, "tools")
-		t.Errorf("source-computed tool %q must not appear in output tools field on Update; "+
-			"on Update, the tools field is user-owned and copied verbatim from the deployed "+
-			"file — new source tools are not added; deployed was [alpha, beta, user-extra]; "+
-			"got output tools: %v", "delta", items)
-	}
-
-	// user-extra must appear: it is present in the deployed file and must be preserved verbatim.
-	if !toolListContains(doc, "tools", "user-extra") {
-		items := listFieldScalars(t, doc, "tools")
-		t.Errorf("deployed tool %q absent from output tools field after Update; "+
-			"the deployed file's tools field must be preserved verbatim — [alpha, beta, user-extra]; "+
-			"got output tools: %v", "user-extra", items)
-	}
-
-	// alpha and beta must appear: they are present in the deployed file.
-	for _, tool := range []string{"alpha", "beta"} {
-		if !toolListContains(doc, "tools", tool) {
-			items := listFieldScalars(t, doc, "tools")
-			t.Errorf("deployed tool %q absent from output tools field after Update; "+
-				"the deployed file's tools field must be preserved verbatim — [alpha, beta, user-extra]; "+
-				"got output tools: %v", tool, items)
-		}
-	}
-
-	// The output must contain exactly 3 tools — the verbatim deployed set [alpha, beta, user-extra].
-	items := listFieldScalars(t, doc, "tools")
-	if len(items) != 3 {
-		t.Errorf("output tools field has %d items, want exactly 3 "+
-			"(verbatim deployed set [alpha, beta, user-extra]); "+
-			"source-computed tools must not be merged into the output on Update; got: %v",
-			len(items), items)
+	want := []string{"alpha", "beta", "delta", "user-extra"}
+	if got := listFieldScalars(t, doc, "tools"); !reflect.DeepEqual(got, want) {
+		t.Errorf("output tools = %v, want %v (catalog built-ins, then the deployed custom tool)", got, want)
 	}
 }
 
@@ -535,24 +478,27 @@ Body.
 }
 
 // ---------------------------------------------------------------------------
-// T4.3: Tool dropped from source is never auto-removed from deployed file
+// Built-in tools follow the catalog: a tool the catalog stopped producing is removed
 // ---------------------------------------------------------------------------
 
-// TestToolPreservation_SourceDroppedTool_NeverAutoRemovedFromOutput asserts that when
-// the generic source previously mapped generic_c to gamma but now declares only
-// generic_a and generic_b (generic_c dropped), gamma survives in the output because
-// it is present in the deployed file. The "never auto-remove" rule means that a tool
-// in the deployed file is preserved regardless of whether the source ever mapped to it
-// or not (AC4.3).
-//
-// This test will be RED until mergeDeployedTools is implemented: currently Step 5
-// overwrites the tools field with alpha and beta only, dropping gamma.
-func TestToolPreservation_SourceDroppedTool_NeverAutoRemovedFromOutput(t *testing.T) {
-	// Source has dropped generic_c (which mapped to gamma). The deployed file still has gamma.
+// TestToolPreservation_SourceDroppedBuiltInTool_RemovedWhileCustomKept asserts that when the
+// generic source previously mapped generic_c to gamma but now declares only generic_a and
+// generic_b, gamma (a built-in tool: it is in the descriptor's universe) is removed from the
+// output because built-in tools follow the catalog exactly, while the user-added custom tool
+// in the same deployed field survives.
+func TestToolPreservation_SourceDroppedBuiltInTool_RemovedWhileCustomKept(t *testing.T) {
+	const deployedABGammaUserExtra = `---
+mosaic_id: 100
+version: 1.0.0
+transform_version: 1.0.0
+tools: [alpha, beta, gamma, user-extra]
+---
+Body.
+`
 	mod := newDescriptorModule(t, preservationListDescriptorYAML, "inline:preservation-list")
 	req := transform.Request{
 		Source:   []byte(preservationSourceAB),
-		Deployed: []byte(deployedListABGamma),
+		Deployed: []byte(deployedABGammaUserExtra),
 		Kind:     domain.ArtifactAgent,
 		Key:      "drop-preservation-agent",
 		Module:   mod,
@@ -570,11 +516,14 @@ func TestToolPreservation_SourceDroppedTool_NeverAutoRemovedFromOutput(t *testin
 		t.Fatalf("Parse output: %v", err)
 	}
 
-	if !toolListContains(doc, "tools", "gamma") {
-		items := listFieldScalars(t, doc, "tools")
-		t.Errorf("tool %q absent from output tools field; tools present in the deployed file "+
-			"must never be auto-removed even when the generic source no longer maps to them (AC4.3); "+
-			"got output tools: %v", "gamma", items)
+	items := listFieldScalars(t, doc, "tools")
+	if toolListContains(doc, "tools", "gamma") {
+		t.Errorf("built-in tool %q still in the output tools field; a built-in tool the catalog "+
+			"no longer produces must be removed on update; got output tools: %v", "gamma", items)
+	}
+	if !toolListContains(doc, "tools", "user-extra") {
+		t.Errorf("custom tool %q absent from the output tools field; custom tools are kept; "+
+			"got output tools: %v", "user-extra", items)
 	}
 }
 

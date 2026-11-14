@@ -24,6 +24,22 @@ func (r *ProgramRef) ConsultationEnded(context.Context) {
 	}
 }
 
+// RepairJudged implements domain.RepairOutcomeObserver. It posts a
+// repairJudgedMsg to the program and is a no-op before the program is wired.
+func (r *ProgramRef) RepairJudged(_ context.Context, o domain.RepairOutcome) {
+	if p := r.program(); p != nil {
+		p.Send(repairJudgedMsg{outcome: o})
+	}
+}
+
+// handleRepairJudged records the repair verdict on the progress screen.
+func (m *rootModel) handleRepairJudged(msg repairJudgedMsg) (tea.Model, tea.Cmd) {
+	if m.progressScreen != nil {
+		m.progressScreen.RecordRepairOutcome(msg.outcome)
+	}
+	return m, nil
+}
+
 // handleConsultStarted shows the consultation row.
 func (m *rootModel) handleConsultStarted(msg consultStartedMsg) (tea.Model, tea.Cmd) {
 	if m.progressScreen != nil {

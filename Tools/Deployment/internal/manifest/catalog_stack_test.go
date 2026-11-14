@@ -4,7 +4,7 @@ package manifest_test
 //
 //   - A stack survives a Save/Load round trip in order, including the default entry.
 //   - The stack is stored under the top-level key catalog_stack as {path, catalog_id, default},
-//     each omitted when empty or false, within schema "1".
+//     each omitted when empty or false, in schema "2".
 //   - A manifest without a stack writes no catalog_stack key and loads with no stack, and a
 //     manifest written before the feature loads normally with no stack.
 
@@ -69,7 +69,7 @@ func TestCatalogStack_WireKeysAreOmittedWhenEmpty(t *testing.T) {
 
 	text := readManifestText(t, ws)
 
-	for _, want := range []string{"catalog_stack:", "path:", "catalog_id: user-cat", "default: true", `schema_version: "1"`} {
+	for _, want := range []string{"catalog_stack:", "path:", "catalog_id: user-cat", "default: true", `schema_version: "2"`} {
 		if !strings.Contains(text, want) {
 			t.Errorf("manifest lacks %q:\n%s", want, text)
 		}

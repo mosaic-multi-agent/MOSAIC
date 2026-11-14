@@ -2,12 +2,9 @@ package artifact
 
 import (
 	"bytes"
-	"errors"
 	"strings"
 
 	"mosaic-common/docformat"
-	"mosaic-common/mdtable"
-	"mosaic-run/internal/domain"
 )
 
 // bodyLine is one line of the document body with its 1-based line number in
@@ -22,6 +19,7 @@ type sectionScan struct {
 	name      string
 	openTag   string // opening tag as written by the canonical renderer
 	openFound bool
+	openLine  int // file line of the opening tag; 0 when not found
 	closed    bool
 	lines     []int  // file line of each content line
 	content   []byte // content lines, blank lines dropped, closing tag removed
@@ -54,6 +52,7 @@ func scanSection(lines []bodyLine, name string) sectionScan {
 	for ; i < len(lines); i++ {
 		if strings.TrimSpace(lines[i].text) == sc.openTag {
 			sc.openFound = true
+			sc.openLine = lines[i].no
 			break
 		}
 	}
@@ -73,6 +72,8 @@ func scanSection(lines []bodyLine, name string) sectionScan {
 	for i++; i < len(lines); i++ {
 		trimmed := strings.TrimRight(lines[i].text, " \t\r")
 		if strings.HasSuffix(trimmed, closeTag) {
+			// Tolerated, not damage: the closing tag may follow content on the
+			// same line; the text before it is the last content line.
 			add(lines[i], strings.TrimSuffix(trimmed, closeTag))
 			sc.closed = true
 			break
@@ -90,42 +91,4 @@ func (sc sectionScan) fileLine(contentLine int) int {
 		return 0
 	}
 	return sc.lines[contentLine-1]
-}
-
-// refuse builds a refusal for this section. A table structure error
-// carries the file line of its row; the cause is kept.
-func (sc sectionScan) refuse(prefix string, cause error) error {
-	re := &domain.RefusalError{
-		Component: "artifact",
-		Reason:    prefix + cause.Error(),
-		Cause:     cause,
-		Section:   sc.name,
-	}
-	var se *mdtable.StructureError
-	if errors.As(cause, &se) {
-		re.Line = sc.fileLine(se.Line)
-	}
-	return re
-}
-
-// requireSections checks the required sections are present and closed, in the
-// order the original check used.
-func requireSections(exec, arts sectionScan) error {
-	for _, sc := range []sectionScan{exec, arts} {
-		if !sc.openFound {
-			return &domain.RefusalError{
-				Component: "artifact",
-				Reason:    "missing " + sc.openTag + " section",
-				Section:   sc.name,
-			}
-		}
-		if !sc.closed {
-			return &domain.RefusalError{
-				Component: "artifact",
-				Reason:    "file appears truncated: missing </" + sc.name + "> closing tag",
-				Section:   sc.name,
-			}
-		}
-	}
-	return nil
 }

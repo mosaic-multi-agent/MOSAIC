@@ -35,11 +35,11 @@ import (
 func codexManifest() domain.Manifest {
 	return domain.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
-		HarnessID:     "codex",
-		UpdatedAt:     time.Date(2024, 6, 15, 12, 30, 0, 0, time.UTC),
+		Harnesses:     []domain.HarnessSection{{HarnessID: "codex", UpdatedAt: time.Date(2024, 6, 15, 12, 30, 0, 0, time.UTC)}},
 		Entries: []domain.ManifestEntry{
 			{
 				Ref:               domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "my-agent"},
+				Harness:           "codex",
 				TargetPath:        ".codex/agents/my-agent.toml",
 				Version:           "1.0.0",
 				HarnessVersion:    "2.0.0",
@@ -49,6 +49,7 @@ func codexManifest() domain.Manifest {
 			},
 			{
 				Ref:               domain.ArtifactRef{Kind: domain.ArtifactSkill, Key: "lean-tdd"},
+				Harness:           "codex",
 				TargetPath:        ".agents/skills/lean-tdd/SKILL.md",
 				Version:           "1.0.0",
 				HarnessVersion:    "2.0.0",
@@ -79,9 +80,9 @@ func TestCodexManifest_WriteRead_HarnessIDIsCodex(t *testing.T) {
 	if snap.State != manifest.StatePresent {
 		t.Fatalf("Load after Save: State = %q, want %q", snap.State, manifest.StatePresent)
 	}
-	if snap.Manifest.HarnessID != "codex" {
-		t.Errorf("HarnessID = %q, want %q; the manifest store must record the Codex harness ID verbatim",
-			snap.Manifest.HarnessID, "codex")
+	if ids := snap.Manifest.HarnessIDs(); len(ids) != 1 || ids[0] != "codex" {
+		t.Errorf("harness IDs = %v, want [%q]; the manifest store must record the Codex harness ID verbatim",
+			ids, "codex")
 	}
 }
 

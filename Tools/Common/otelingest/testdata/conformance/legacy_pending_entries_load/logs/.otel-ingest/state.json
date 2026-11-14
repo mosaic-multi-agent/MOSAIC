@@ -1,0 +1,59 @@
+{
+  "state_version": 1,
+  "cursor": {
+    "offset": 0,
+    "head_len": 0,
+    "head_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "placements": {},
+  "pending": [
+    {
+      "record": {
+        "record_id": "cli-legacy-1",
+        "record_index": 0,
+        "model": "m-cli",
+        "provider": "github-copilot",
+        "token_usage": {
+          "input_tokens": 2000,
+          "output_tokens": 150
+        },
+        "timestamp": "2026-10-28T09:00:00.000Z"
+      },
+      "parent_span_id": "cli-invoke-legacy",
+      "conversation_id": "vsc-session-6"
+    },
+    {
+      "record": {
+        "record_id": "cli-legacy-untied",
+        "record_index": 0,
+        "model": "m-cli",
+        "provider": "github-copilot",
+        "token_usage": {
+          "input_tokens": 700,
+          "output_tokens": 70
+        },
+        "timestamp": "2026-10-28T09:00:00.000Z"
+      },
+      "parent_span_id": "cli-invoke-untied",
+      "conversation_id": "unlogged-session"
+    },
+    {
+      "record": {
+        "record_id": "chat-sub-1",
+        "record_index": 0,
+        "model": "m-sub",
+        "provider": "github-copilot",
+        "token_usage": {
+          "input_tokens": 100,
+          "output_tokens": 10
+        },
+        "timestamp": "2026-10-28T09:00:00.000Z"
+      },
+      "parent_span_id": "inv-sub",
+      "conversation_id": "vsc-session-6",
+      "chat_session_id": "toolu_L1",
+      "parent_chat_session_id": "vsc-session-6"
+    }
+  ],
+  "links": {}
+}

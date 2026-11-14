@@ -75,9 +75,11 @@ func writeStackSkill(t *testing.T, catalogRoot, key string) {
 func writeStackHook(t *testing.T, catalogRoot, id string) {
 	t.Helper()
 	y := "schema_version: \"1\"\nid: " + id + "\nversion: 1.0.0\ndescription: Hook " + id + ".\nplaceholder: false\n" +
-		"variants:\n  h1:\n    supported: true\n    files:\n      - source: f.sh\n        target: f.sh\n    registration: []\n"
+		"variants:\n  h1:\n    supported: true\n    files:\n      - source: f.sh\n        target: f.sh\n    registration: []\n" +
+		"  claude-code:\n    supported: true\n    files:\n      - source: f.sh\n        target: f.sh\n    registration: []\n"
 	writeStackFile(t, catalogRoot, filepath.Join("Hooks", id, "hook.yaml"), []byte(y))
 	writeStackFile(t, catalogRoot, filepath.Join("Hooks", id, "h1", "f.sh"), []byte("#!/bin/sh\n"))
+	writeStackFile(t, catalogRoot, filepath.Join("Hooks", id, "claude-code", "f.sh"), []byte("#!/bin/sh\n"))
 }
 
 // newStackMosaicRoot returns a MOSAIC root whose default catalog (<root>/Catalog) carries

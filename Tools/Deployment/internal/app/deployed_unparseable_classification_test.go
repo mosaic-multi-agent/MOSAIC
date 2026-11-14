@@ -26,6 +26,7 @@ import (
 	"mosaic-deploy/internal/app/interactiontest"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 )
 
@@ -170,13 +171,13 @@ func manifestWithAgentEntry(content []byte) manifest.Snapshot {
 		State: manifest.StatePresent,
 		Manifest: domain.Manifest{
 			SchemaVersion: manifest.SchemaVersion,
-			HarnessID:     "stub-harness",
-			Entries: []domain.ManifestEntry{{
+			Harnesses:     []domain.HarnessSection{{HarnessID: "stub-harness"}},
+			Entries: manifesttest.WithHarness("stub-harness", []domain.ManifestEntry{{
 				Ref:         domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: classificationIDAgent.Key},
 				TargetPath:  idAgentTargetPath(),
 				Version:     "0.5",
 				ContentHash: manifest.Hash(content),
-			}},
+			}}),
 		},
 	}
 }
@@ -219,11 +220,11 @@ func TestDeployAgents_IDBearingAgent_UnusableFileAtPlannedPath_PlansConflictNotC
 			if item.Conflict == nil || !item.Conflict.ManifestMissing {
 				t.Errorf("Conflict = %+v; want ManifestMissing set", item.Conflict)
 			}
-			if !strings.Contains(item.Reason, "could not be read/parsed") {
-				t.Errorf("Reason = %q; want the parse-failed wording", item.Reason)
+			if !strings.Contains(reasonText(item), "could not be read/parsed") {
+				t.Errorf("Reason = %q; want the parse-failed wording", reasonText(item))
 			}
-			if !strings.Contains(item.Reason, fx.wantReason) {
-				t.Errorf("Reason = %q; want it to carry the parse problem (%q)", item.Reason, fx.wantReason)
+			if !strings.Contains(reasonText(item), fx.wantReason) {
+				t.Errorf("Reason = %q; want it to carry the parse problem (%q)", reasonText(item), fx.wantReason)
 			}
 		})
 	}
@@ -266,7 +267,7 @@ func TestDeployAgents_BOMDeployedAgent_WithManifestEntry_ClassifiedByStamps(t *t
 	// Assert
 	item := run.item(t, classificationIDAgent.Key)
 	if item.Action != domain.ActionUpdate {
-		t.Errorf("Action = %v (reason %q), want update; the BOM'd file must be read for its version stamp", item.Action, item.Reason)
+		t.Errorf("Action = %v (reason %q), want update; the BOM'd file must be read for its version stamp", item.Action, reasonText(item))
 	}
 }
 
@@ -287,8 +288,8 @@ func TestDeployAgents_BOMDeployedAgent_WithoutManifestEntry_ManifestMissingConfl
 	if item.Conflict == nil || !item.Conflict.ManifestMissing {
 		t.Errorf("Conflict = %+v; want ManifestMissing set", item.Conflict)
 	}
-	if strings.Contains(item.Reason, "could not be read/parsed") {
-		t.Errorf("Reason = %q; a BOM'd file parses cleanly and must not be reported as parse-failed", item.Reason)
+	if strings.Contains(reasonText(item), "could not be read/parsed") {
+		t.Errorf("Reason = %q; a BOM'd file parses cleanly and must not be reported as parse-failed", reasonText(item))
 	}
 }
 

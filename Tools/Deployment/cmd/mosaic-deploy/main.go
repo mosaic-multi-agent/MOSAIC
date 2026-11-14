@@ -29,7 +29,6 @@ import (
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/registry"
 	"mosaic-deploy/internal/logging"
-	"mosaic-deploy/internal/manifest"
 	"mosaic-deploy/internal/pathinput"
 	"mosaic-deploy/internal/plan"
 	"mosaic-deploy/internal/todo"
@@ -83,6 +82,10 @@ func isFreshConsole(args []string) bool {
 
 func main() {
 	args := os.Args[1:]
+
+	if versionRequested(args) {
+		os.Exit(runVersion(os.Stdout))
+	}
 
 	if len(args) == 0 && !wantsTUI(args) {
 		fmt.Fprintln(os.Stderr, "usage: mosaic-deploy <deploy|update> [flags]")
@@ -190,7 +193,7 @@ func main() {
 	// collector is shared between the Interaction port and the executor so
 	// both sinks write to the same checklist.
 	todoCollector := todo.NewCollector()
-	manifestStore := manifest.NewStore()
+	manifestStore := newManifestStore(reg)
 
 	// The Interaction port differs by frontend: the TUI needs a ProgramRef so the
 	// service's blocking calls can round-trip through the Bubble Tea program; the

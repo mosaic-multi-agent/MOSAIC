@@ -28,6 +28,7 @@ package descriptor_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -256,11 +257,25 @@ func TestLoad_WellFormedDescriptor_OneToManyMappingPreservesAllNames(t *testing.
 	t.Fatal("mapping for file_write not found")
 }
 
-func TestLoad_WellFormedDescriptor_CustomToolTemplatePopulated(t *testing.T) {
+func TestLoad_WellFormedDescriptor_MCPFormsPopulated(t *testing.T) {
 	d := loadFixture(t, "valid-full.yaml")
 
-	if d.Tools.CustomToolTemplate != "mcp/%s" {
-		t.Errorf("Tools.CustomToolTemplate: want %q, got %q", "mcp/%s", d.Tools.CustomToolTemplate)
+	want := domain.MCPNameForms{
+		ServerForm:           "mcp/{server}/*",
+		ToolForm:             "mcp/{server}/{tool}",
+		ExtraServerReadForms: []string{"mcp/{server}*"},
+		NormalizeServerName:  true,
+	}
+	if !reflect.DeepEqual(d.Tools.MCP, want) {
+		t.Errorf("Tools.MCP: want %+v, got %+v", want, d.Tools.MCP)
+	}
+}
+
+func TestLoad_WellFormedDescriptor_ReportUnknownNamesPopulated(t *testing.T) {
+	d := loadFixture(t, "valid-full.yaml")
+
+	if !d.Tools.ReportUnknownNames {
+		t.Error("Tools.ReportUnknownNames: want true for report_unknown_tool_names: true")
 	}
 }
 

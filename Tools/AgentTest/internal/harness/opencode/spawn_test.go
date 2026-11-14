@@ -37,7 +37,6 @@ func spawnTestSubject() domain.SubjectUnderTest {
 		Identity:       "orchestrator",
 		DefinitionPath: "agents/orchestrator.md",
 		OpeningMessage: "begin the run",
-		InvocationKind: "orchestrator",
 		Model:          "test-model",
 	}
 }
@@ -104,7 +103,6 @@ func TestSpawnPlan_ArgsMatchSharedOpenCodeArgumentBuilder(t *testing.T) {
 	want, wantStdin, err := commonharness.BuildOpenCodeArgs(commonharness.SpawnRequest{
 		Agent: commonharness.AgentRef{
 			Identifier: subject.Identity,
-			Kind:       commonharness.InvocationKind(subject.InvocationKind),
 		},
 		Prompt:       subject.OpeningMessage,
 		SystemPrompt: commonharness.EnvBlock(sb.SubjectDir),
@@ -128,7 +126,7 @@ func TestSpawnPlan_ArgsMatchSharedOpenCodeArgumentBuilder(t *testing.T) {
 // directory — where the subject actually runs — and not an empty working
 // directory (which EnvBlock resolves to the tool's own process cwd). This is
 // the one place OpenCode's SpawnPlan diverges from Runner's OpenCodeAdapter,
-// which passes EnvBlock("") for both invocation kinds; AgentTest's subject
+// which passes EnvBlock(""); AgentTest's subject
 // runs in a sandbox, not in the tool's own working directory, so describing
 // the wrong place would corrupt the subject's own picture of where it is.
 func TestSpawnPlan_SystemPromptUsesSandboxSubjectDirNotProcessCwd(t *testing.T) {
@@ -144,7 +142,6 @@ func TestSpawnPlan_SystemPromptUsesSandboxSubjectDirNotProcessCwd(t *testing.T) 
 	_, wrongCwdStdin, err := commonharness.BuildOpenCodeArgs(commonharness.SpawnRequest{
 		Agent: commonharness.AgentRef{
 			Identifier: subject.Identity,
-			Kind:       commonharness.InvocationKind(subject.InvocationKind),
 		},
 		Prompt:       subject.OpeningMessage,
 		SystemPrompt: commonharness.EnvBlock(""),

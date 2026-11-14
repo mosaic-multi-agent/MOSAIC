@@ -2,12 +2,12 @@ package app
 
 // ghcp_agent_migration.go moves agents an earlier deploy recorded as X.md to X.agent.md for
 // the GHCP targets. The deploy flows call it on the plan they built, before conflicts are
-// decided: each agent the run deploys whose X.md the manifest records gets a removal of that
-// file (with its manifest entry), and an X.agent.md already on disk is planned as a replacement
-// so the executor backs it up before the new one is written.
+// decided: each agent the run deploys whose recorded X.md is present on disk gets a removal of
+// that file (with its manifest entry). The agent item keeps the action, conflict, backup marker
+// and reasons the planner gave it; the migration only adds its own reason, and lists an existing
+// X.agent.md as a replacement only where the plan writes it over without a backup.
 
 import (
-	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -17,7 +17,7 @@ import (
 )
 
 // migrateLegacyGhcpAgents adds the legacy X.md migration to p for the agents p deploys. It does
-// nothing for other harnesses, an unreadable manifest, or agents without a recorded X.md.
+// nothing for other harnesses, an unreadable manifest, or agents whose recorded X.md is absent.
 func migrateLegacyGhcpAgents(p *domain.Plan, snap manifest.Snapshot) {
 	if p.Harness.ID != ghcpCLIHarnessID && p.Harness.ID != ghcpVSCodeHarnessID {
 		return
@@ -38,43 +38,36 @@ func migrateLegacyGhcpAgents(p *domain.Plan, snap manifest.Snapshot) {
 		}
 		legacyPath := strings.TrimSuffix(item.TargetPath, agentFileExtAgent) + agentFileExtPlain
 		entry, ok := recorded[legacyLookupKey(item.Ref.Key, legacyPath)]
-		if !ok {
+		if !ok || !pathExists(filepath.Join(p.WorkspacePath, filepath.FromSlash(entry.TargetPath))) {
 			continue
 		}
 		p.Removals = append(p.Removals, domain.Removal{
 			Ref: entry.Ref, Path: entry.TargetPath, DropEntry: true,
 			Reason: "the legacy agent file is replaced by " + item.TargetPath,
 		})
-		exists := false
-		if _, err := os.Lstat(filepath.Join(p.WorkspacePath, filepath.FromSlash(item.TargetPath))); err == nil {
-			exists = true
-			p.Replacements = append(p.Replacements, domain.Replacement{
-				Ref: item.Ref, Path: item.TargetPath,
-				Reason: "the existing agent file is replaced by the migrated agent file",
-			})
+		planMigrationReplacement(p, item)
+		if item.RenamedFrom == "" {
+			// The migration reason joins the item's own reasons; it never replaces them. A
+			// planner-detected rename already carries its own rename reason.
+			item.AddReason("migrates from the legacy file " + legacyPath)
 		}
-		forceAgentWrite(item, exists)
 	}
 }
 
-// forceAgentWrite makes a migrated agent item a write whatever its state was: the legacy file
-// is removed, so the agent must not be skipped as unchanged or decided as a conflict. An
-// existing X.agent.md is replaced after backup.
-func forceAgentWrite(item *domain.PlanItem, exists bool) {
-	if item.RenamedFrom != "" {
-		return // the planner already planned the rename as an update and gave its reason
-	}
-	if item.Action == domain.ActionCreate || (item.Action == domain.ActionUpdate && exists) {
+// planMigrationReplacement lists the existing X.agent.md as a replacement only when the plan
+// writes it over without a backup of its own: an unchanged or conflicting agent keeps its
+// planned state, and an edited one is backed up through its own marker.
+func planMigrationReplacement(p *domain.Plan, item *domain.PlanItem) {
+	if (item.Action != domain.ActionUpdate && item.Action != domain.ActionCreate) || item.BackupBeforeWrite || item.RenamedFrom != "" {
 		return
 	}
-	item.Conflict = nil
-	if exists {
-		item.Action = domain.ActionUpdate
-		item.Reason = "replaces the existing agent file after backup"
+	if !pathExists(filepath.Join(p.WorkspacePath, filepath.FromSlash(item.TargetPath))) {
 		return
 	}
-	item.Action = domain.ActionCreate
-	item.Reason = "replaces the legacy agent file"
+	p.Replacements = append(p.Replacements, domain.Replacement{
+		Ref: item.Ref, Path: item.TargetPath,
+		Reason: "the existing agent file is replaced by the migrated agent file",
+	})
 }
 
 // legacyLookupKey identifies an agent file by key and case-folded slash path.

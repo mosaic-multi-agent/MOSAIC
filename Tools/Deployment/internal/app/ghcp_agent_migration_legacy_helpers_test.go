@@ -23,7 +23,7 @@ const (
 	gamProjectSentinel = "LEGACY-PROJECT-REGION-SENTINEL"
 	gamCustomSentinel  = "LEGACY-CUSTOM-REGION-SENTINEL"
 	gamInfraSentinel   = "LEGACY-INFRASTRUCTURE-DECLARATION-SENTINEL"
-	gamHandSetTools    = "tools: ['hand-set-legacy-tool']"
+	gamHandSetTools    = "'hand-set-legacy-tool'" // a custom tool: kept by a run, unlike built-in tools
 )
 
 // gamLegacyOpts shapes the legacy workspace.
@@ -88,7 +88,7 @@ func gamPlantState(doc string) string {
 	lines := strings.Split(doc, "\n")
 	for i, l := range lines {
 		if strings.HasPrefix(l, "tools:") {
-			lines[i] = gamHandSetTools
+			lines[i] = "tools: [" + gamHandSetTools + "]"
 			break
 		}
 	}

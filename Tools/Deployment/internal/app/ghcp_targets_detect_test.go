@@ -1,7 +1,7 @@
 package app
 
 // ghcp_targets_detect_test.go verifies which GHCP targets a workspace is classified as
-// holding. The only signal is the manifest harness_id of a usable manifest; agent file names
+// holding. The only signal is the harness recorded on the entries of a usable manifest; agent file names
 // (X.md or X.agent.md, recorded or not) never change the result.
 
 import (
@@ -11,13 +11,23 @@ import (
 	"mosaic-deploy/internal/manifest"
 )
 
-// ghcpSnap builds a manifest snapshot with the given state, harness id and agent entries.
+// ghcpSnap builds a manifest snapshot with the given state and harness id. Every entry belongs
+// to harnessID; a workspace is held by a harness through its entries, so the snapshot always
+// carries at least one entry (a skill entry when no agent paths are given).
 func ghcpSnap(state manifest.State, harnessID string, agentPaths ...string) manifest.Snapshot {
-	m := domain.Manifest{HarnessID: harnessID}
+	m := domain.Manifest{Harnesses: []domain.HarnessSection{{HarnessID: harnessID}}}
 	for i, p := range agentPaths {
 		m.Entries = append(m.Entries, domain.ManifestEntry{
+			Harness:    harnessID,
 			Ref:        domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "k" + string(rune('a'+i))},
 			TargetPath: p,
+		})
+	}
+	if len(agentPaths) == 0 {
+		m.Entries = append(m.Entries, domain.ManifestEntry{
+			Harness:    harnessID,
+			Ref:        domain.ArtifactRef{Kind: domain.ArtifactSkill, Key: "anchor"},
+			TargetPath: ".github/skills/anchor/SKILL.md",
 		})
 	}
 	return manifest.Snapshot{State: state, Manifest: m}
@@ -97,11 +107,12 @@ func TestDetectGhcpTargets_NonGhcpHarnessHoldsNoTarget(t *testing.T) {
 }
 
 // TestDetectGhcpTargets_HookEntriesAreNotASignal verifies that hook entries recorded in the
-// manifest do not change the result: only the harness_id decides.
+// manifest belong to their harness like any other entry and do not change the result.
 func TestDetectGhcpTargets_HookEntriesAreNotASignal(t *testing.T) {
 	withHook := func(id string) manifest.Snapshot {
 		s := ghcpSnap(manifest.StatePresent, id)
 		s.Manifest.Entries = append(s.Manifest.Entries, domain.ManifestEntry{
+			Harness:    id,
 			Ref:        domain.ArtifactRef{Kind: domain.ArtifactHook, Key: "mosaic-logger"},
 			TargetPath: ".github/hooks/mosaic-logger.json",
 		})

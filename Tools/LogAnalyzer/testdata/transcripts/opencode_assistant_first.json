@@ -1,0 +1,15 @@
+{
+  "data": [
+    {
+      "info": {"id": "msg_1", "role": "assistant", "summary": {"diffs": [{"file": "x.go", "after": "package x"}]}},
+      "parts": [{"id": "p1", "type": "text", "text": "assistant text that is not the prompt"}]
+    },
+    {
+      "info": {"id": "msg_2", "role": "user"},
+      "parts": [
+        {"id": "p2", "type": "text", "text": "agent_instance_id: reviewer#3"},
+        {"id": "p3", "type": "text", "text": "Review the change."}
+      ]
+    }
+  ]
+}

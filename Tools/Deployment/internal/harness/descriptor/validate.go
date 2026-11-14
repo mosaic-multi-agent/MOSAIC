@@ -185,6 +185,8 @@ func Validate(d *domain.HarnessDescriptor) []ValidationError {
 	// Validate tool mappings (R1–R10 including duplicate generic name check).
 	errs = append(errs, ValidateToolMappings(d.Tools.Mappings, "tools.mappings")...)
 
+	errs = append(errs, validateMCPForms(d.Tools.MCP)...)
+
 	// Validate custom_tool_destination entries (mirrors R3–R9, omits R10).
 	errs = append(errs, validateCustomToolDestinations(d.Tools.CustomToolDestinations, "tools.custom_tool_destination")...)
 

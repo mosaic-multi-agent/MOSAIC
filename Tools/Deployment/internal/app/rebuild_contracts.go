@@ -35,6 +35,9 @@ type RebuildInput struct {
 	// transform.Request.DeployedRaw. Nil on create and when no readable destination exists;
 	// Markdown-format targets ignore it.
 	DestinationRaw []byte
+	// DeclaredServers are server names from the source harness's MCP configuration.
+	DeclaredServers []string
+	MCPSplits       map[string]string // source name -> chosen server
 }
 
 // RebuildResult is the output of RebuildDeployedAgent.

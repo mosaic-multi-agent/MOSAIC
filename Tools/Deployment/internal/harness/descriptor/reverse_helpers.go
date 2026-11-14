@@ -1,9 +1,8 @@
 package descriptor
 
 import (
-	"strings"
-
 	"mosaic-deploy/internal/domain"
+	"mosaic-deploy/internal/harness/mcpname"
 )
 
 // ReverseMapToolCandidates returns every generic tool whose mapping lists harnessName in
@@ -33,22 +32,13 @@ func mappingNamesTool(mapping *domain.ToolMapping, name string) bool {
 	return false
 }
 
-// ReverseCustomTool reports whether harnessName is the descriptor's custom tool template
-// applied to a server name, and returns that server name. ok is false when the
-// descriptor declares no CustomToolTemplate, when the template does not contain exactly
-// one "%s", or when harnessName does not start with the text before "%s" and end with
-// the text after it with a non-empty server in between.
+// ReverseCustomTool reports whether harnessName is a whole-server MCP name in the descriptor's
+// own syntax, and returns that server name. ok is false when the descriptor declares no
+// whole-server form or harnessName is not a whole-server name in it.
 func ReverseCustomTool(d *domain.HarnessDescriptor, harnessName string) (server string, ok bool) {
-	tmpl := d.Tools.CustomToolTemplate
-	if strings.Count(tmpl, "%s") != 1 {
+	names := mcpname.Parse(d.Tools.MCP, harnessName)
+	if len(names) != 1 || !names[0].IsWholeServer() {
 		return "", false
 	}
-	prefix, suffix, _ := strings.Cut(tmpl, "%s")
-	if len(harnessName) <= len(prefix)+len(suffix) {
-		return "", false
-	}
-	if !strings.HasPrefix(harnessName, prefix) || !strings.HasSuffix(harnessName, suffix) {
-		return "", false
-	}
-	return harnessName[len(prefix) : len(harnessName)-len(suffix)], true
+	return names[0].Server, true
 }

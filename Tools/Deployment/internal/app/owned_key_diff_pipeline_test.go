@@ -285,7 +285,7 @@ func TestOwnedKeyDiff_Pipeline_ConflictNoManifestRecord_ReportsDifferingKey(t *t
 	snap := manifest.Snapshot{
 		State: manifest.StatePresent,
 		Manifest: domain.Manifest{
-			HarnessID: "stub-harness",
+			Harnesses: []domain.HarnessSection{{HarnessID: "stub-harness"}},
 			Entries:   nil,
 		},
 	}
@@ -456,7 +456,7 @@ func TestOwnedKeyDiff_Pipeline_UpdateNotConflict_NoDifferences(t *testing.T) {
 	snap := manifest.Snapshot{
 		State: manifest.StatePresent,
 		Manifest: domain.Manifest{
-			HarnessID: "stub-harness",
+			Harnesses: []domain.HarnessSection{{HarnessID: "stub-harness"}},
 			Entries: []domain.ManifestEntry{
 				{
 					Ref:     domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "test-runner"},
@@ -499,7 +499,7 @@ func TestOwnedKeyDiff_Pipeline_ChangedModel_NoDifferences(t *testing.T) {
 	snap := manifest.Snapshot{
 		State: manifest.StatePresent,
 		Manifest: domain.Manifest{
-			HarnessID: "stub-harness",
+			Harnesses: []domain.HarnessSection{{HarnessID: "stub-harness"}},
 			Entries: []domain.ManifestEntry{
 				{Ref: domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "test-runner"}, Version: "0.9"},
 			},
@@ -537,7 +537,7 @@ func TestOwnedKeyDiff_Pipeline_BumpedVersion_NoDifferences(t *testing.T) {
 	snap := manifest.Snapshot{
 		State: manifest.StatePresent,
 		Manifest: domain.Manifest{
-			HarnessID: "stub-harness",
+			Harnesses: []domain.HarnessSection{{HarnessID: "stub-harness"}},
 			Entries: []domain.ManifestEntry{
 				{Ref: domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "test-runner"}, Version: "0.9"},
 			},

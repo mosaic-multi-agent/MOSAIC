@@ -17,6 +17,7 @@ import (
 	"mosaic-deploy/internal/app"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 )
 
 // trCarriedVersions is the mosaic_version each agent fixture carries; harness-only has none.
@@ -33,8 +34,8 @@ func TestTransformManifest_RecordsTargetEntriesWithCarriedVersionsAndRealHashes(
 	r.mustRun(req)
 
 	m := trLoadManifest(t, r.ws)
-	if m.HarnessID != hOpen {
-		t.Errorf("manifest harness = %q, want the target %q", m.HarnessID, hOpen)
+	if _, ok := m.Section(hOpen); !ok {
+		t.Errorf("manifest has no section for the target %q", hOpen)
 	}
 	for _, key := range trAgentFixtures {
 		e, ok := trEntryAt(m, r.dest(key))
@@ -72,7 +73,7 @@ func TestTransformManifest_OutsideTheGhcpPair_SourceHarnessEntriesAreUnchanged(t
 		})
 	}
 	err := manifest.NewStore().Save(r.ws, domain.Manifest{
-		SchemaVersion: manifest.SchemaVersion, HarnessID: hClaude, Entries: seeded, ToolVersion: "1.0.0",
+		SchemaVersion: manifest.SchemaVersion, Harnesses: []domain.HarnessSection{{HarnessID: hClaude}}, Entries: manifesttest.WithHarness(hClaude, seeded), ToolVersion: "1.0.0",
 	})
 	if err != nil {
 		t.Fatalf("seed manifest: %v", err)

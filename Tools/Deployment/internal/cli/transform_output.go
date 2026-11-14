@@ -108,6 +108,7 @@ func renderTransformHuman(out io.Writer, result app.TransformHarnessResult) {
 		writeTransformFileDetails(out, f)
 	}
 	writeTransformChanges(out, result)
+	writeTransformDroppedEntries(out, result.DroppedEntries)
 	fmt.Fprintf(out, "transformed: %d  skipped: %d  failed: %d%s\n",
 		result.Transformed, result.Skipped, result.Failed, transformChangeCounts(result))
 	if len(result.UnresolvedModels) > 0 {

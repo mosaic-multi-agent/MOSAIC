@@ -19,18 +19,21 @@ var quitKeyEntry = tuicommon.HelpEntry{Key: "esc", Desc: "quit"}
 // Drop tiers of a footer entry: higher tiers are dropped later.
 const (
 	footerTierPlain = iota
+	footerTierFindings
 	footerTierQuit
 	footerTierExport
 )
 
 // footerTier ranks an entry; the export entry outlasts the quit entry, which
-// outlasts every other entry.
+// outlasts the findings entry, which outlasts every other entry.
 func footerTier(entry string) int {
 	switch entry {
 	case exportKeyEntry.Key + " " + exportKeyEntry.Desc:
 		return footerTierExport
 	case quitKeyEntry.Key + " " + quitKeyEntry.Desc:
 		return footerTierQuit
+	case findingsKeyEntry.Key + " " + findingsKeyEntry.Desc:
+		return footerTierFindings
 	}
 	return footerTierPlain
 }

@@ -134,8 +134,9 @@ class TestAgentInstanceIdResolution(unittest.TestCase):
         event = _read_jsonl(event_path)[0]
         self.assertEqual("TestWriter#28", event["agent_instance_id"])
 
-    def test_extracts_bare_agent_name_hash_number_from_prompt(self):
-        """Bare AgentName#Number form is used when no structured key is present."""
+    def test_bare_agent_name_hash_number_in_prompt_is_not_used(self):
+        """A bare AgentName#Number mention is never an id source; the unique
+        fallback id applies instead."""
         prompt = "Execute the task for DataProcessor#5. Here is the context..."
         ctx = _make_start_ctx(
             self.tmp.name, self.run_id,
@@ -143,11 +144,15 @@ class TestAgentInstanceIdResolution(unittest.TestCase):
             agent_prompt=prompt,
         )
         invocation.handle_subagent_start(ctx)
-        event_path = self._paths().invocation_events(self.run_id, "DataProcessor#5")
-        self.assertTrue(event_path.exists())
+        self.assertFalse(
+            self._paths().invocation_events(self.run_id, "DataProcessor#5").exists())
+        dirs = self._invocation_dirs()
+        self.assertEqual(1, len(dirs))
+        self.assertRegex(dirs[0].name, r"^DataProcessor_\d{8}T\d{6}Z-[0-9a-f]{4}$")
 
-    def test_fallback_uses_unknown_agent_when_prompt_absent(self):
-        """When agent_prompt is absent and extraction fails, fallback is 'unknown-agent'."""
+    def test_fallback_is_unique_id_with_type_prefix_when_prompt_absent(self):
+        """When agent_prompt is absent and nothing is pending, the folder is the
+        unique fallback id prefixed with the agent type."""
         ctx = _make_start_ctx(
             self.tmp.name, self.run_id,
             agent_id="harness-c3d4", agent_type="RequirementsRefinement",
@@ -155,11 +160,12 @@ class TestAgentInstanceIdResolution(unittest.TestCase):
         invocation.handle_subagent_start(ctx)
         dirs = self._invocation_dirs()
         self.assertEqual(1, len(dirs))
-        self.assertEqual("unknown-agent", dirs[0].name,
-                         f"Expected 'unknown-agent', got {dirs[0].name!r}")
+        self.assertRegex(dirs[0].name,
+                         r"^RequirementsRefinement_\d{8}T\d{6}Z-[0-9a-f]{4}$")
 
-    def test_fallback_uses_unknown_agent_when_neither_prompt_nor_type_present(self):
-        """When both agent_prompt and agent_type are absent, fallback is 'unknown-agent'."""
+    def test_fallback_uses_agent_prefix_when_neither_prompt_nor_type_present(self):
+        """When both agent_prompt and agent_type are absent, the fallback prefix
+        is the literal 'agent' -- never 'unknown-agent'."""
         ctx = _make_start_ctx(
             self.tmp.name, self.run_id,
             agent_id="harness-d4e5",
@@ -167,11 +173,11 @@ class TestAgentInstanceIdResolution(unittest.TestCase):
         invocation.handle_subagent_start(ctx)
         dirs = self._invocation_dirs()
         self.assertEqual(1, len(dirs))
-        self.assertEqual("unknown-agent", dirs[0].name,
-                         f"Expected 'unknown-agent', got {dirs[0].name!r}")
+        self.assertRegex(dirs[0].name, r"^agent_\d{8}T\d{6}Z-[0-9a-f]{4}$")
 
-    def test_fallback_id_is_unknown_agent_when_extraction_fails(self):
-        """When agent_instance_id cannot be extracted, fallback is the literal 'unknown-agent'."""
+    def test_fallback_id_is_never_unknown_agent_when_extraction_fails(self):
+        """When agent_instance_id cannot be extracted, no 'unknown-agent' folder
+        is created and the fallback is a valid path component."""
         ctx = _make_start_ctx(
             self.tmp.name, self.run_id,
             agent_id="harness-e5f6", agent_type="SomeAgent",
@@ -180,8 +186,8 @@ class TestAgentInstanceIdResolution(unittest.TestCase):
         dirs = self._invocation_dirs()
         self.assertEqual(1, len(dirs))
         folder = dirs[0].name
-        self.assertEqual("unknown-agent", folder,
-                         f"Expected 'unknown-agent', got {folder!r}")
+        self.assertNotEqual("unknown-agent", folder)
+        self.assertRegex(folder, r"^SomeAgent_\d{8}T\d{6}Z-[0-9a-f]{4}$")
 
     def test_invocation_start_event_always_has_agent_instance_id(self):
         """invocation_start always carries a non-empty agent_instance_id."""
@@ -1370,7 +1376,9 @@ class TestPerInvocationArtifactFiles(unittest.TestCase):
         self.tmp.cleanup()
 
     def _run_start(self, agent_id, agent_instance_id, **kwargs):
-        _register_mapping(str(self.tmp_path), _RUN_ID, agent_id, agent_instance_id)
+        # No pre-registered mapping: a start for an already-mapped agent id is a
+        # re-fired start of an existing invocation and writes no 01_input.md.
+        # The explicit agent_instance_id line in the prompt supplies the id.
         ctx = _make_start_ctx(
             str(self.tmp_path),
             agent_id=agent_id,
@@ -1698,7 +1706,6 @@ class TestNoInvocationEventToOrchestratorStream(unittest.TestCase):
     def test_invocation_boundary_turns_not_in_orchestrator_events(self):
         """Neither the initial nor the final invocation turn is in the orchestrator stream."""
         prompt = '{"agent_instance_id": "SomeAgent#5"}'
-        _register_mapping(str(self.tmp_path), _RUN_ID, "aid-orc5", "SomeAgent#5")
 
         start_ctx = _make_start_ctx(
             str(self.tmp_path),
@@ -1719,7 +1726,6 @@ class TestNoInvocationEventToOrchestratorStream(unittest.TestCase):
     def test_invocation_events_are_in_invocation_stream_not_orchestrator(self):
         """Full round-trip: both start and stop events appear in the invocation stream."""
         prompt = '{"agent_instance_id": "SomeAgent#6"}'
-        _register_mapping(str(self.tmp_path), _RUN_ID, "aid-orc6", "SomeAgent#6")
 
         start_ctx = _make_start_ctx(
             str(self.tmp_path),
@@ -1803,7 +1809,7 @@ class TestSubagentStartPromptFromDispatch(unittest.TestCase):
       (c) pass the prompt to render_input so 01_input.md contains '## Prompt'.
 
     All three positive tests will FAIL until both fixes are in place:
-      1. pop_pending_dispatch returns 'prompt' from the stored entry.
+      1. take_pending_dispatch returns 'prompt' from the stored entry.
       2. handle_subagent_start reads the prompt from dispatch.get('prompt')
          instead of ctx.field('agent_prompt').
     """
@@ -1828,6 +1834,7 @@ class TestSubagentStartPromptFromDispatch(unittest.TestCase):
             "hook_event_name": "SubagentStart",
             "session_id": _PROMPT_THREADING_SESSION,
             "agent_id": agent_id,
+            "agent_type": "test-writer-tdd",
         }
         workspace_root = pathlib.Path(self.tmp.name)
         ctx = core.HookContext(payload, workspace_root, self.paths, _TS)
@@ -1860,7 +1867,7 @@ class TestSubagentStartPromptFromDispatch(unittest.TestCase):
         """When the pending dispatch carries a prompt, invocation_start must include
         the prompt text in its 'prompt' field.
 
-        Currently FAILS: pop_pending_dispatch does not return 'prompt', and
+        Currently FAILS: take_pending_dispatch does not return 'prompt', and
         handle_subagent_start reads agent_prompt from the payload (absent here)
         rather than from the dispatch.
         """
@@ -1964,6 +1971,7 @@ class TestSubagentStartPromptDegradeNeverFabricate(unittest.TestCase):
             "hook_event_name": "SubagentStart",
             "session_id": session_id,
             "agent_id": agent_id,
+            "agent_type": "test-writer-tdd",
         }
         workspace_root = pathlib.Path(self.tmp.name)
         ctx = core.HookContext(payload, workspace_root, self.paths, _TS)
@@ -2040,7 +2048,7 @@ class TestSubagentStartPromptDegradeNeverFabricate(unittest.TestCase):
         must be absent from invocation_start (backward-compatible degrade path)."""
         _write_dispatch_entry_for_prompt_tests(
             self.paths, self._DEGRADE_SESSION,
-            "unknown-agent",
+            "test-writer-tdd#1",
             # prompt omitted -> old-format entry
         )
         ctx = self._start_ctx("harness-dg-004", session_id=self._DEGRADE_SESSION)
@@ -2059,7 +2067,7 @@ class TestSubagentStartPromptDegradeNeverFabricate(unittest.TestCase):
         """No user turn must be emitted when the dispatch entry has no 'prompt' field."""
         _write_dispatch_entry_for_prompt_tests(
             self.paths, self._DEGRADE_SESSION,
-            "unknown-agent",
+            "test-writer-tdd#1",
         )
         ctx = self._start_ctx("harness-dg-005", session_id=self._DEGRADE_SESSION)
         invocation.handle_subagent_start(ctx)
@@ -2077,7 +2085,7 @@ class TestSubagentStartPromptDegradeNeverFabricate(unittest.TestCase):
         """01_input.md must not have '## Prompt' when the dispatch entry has no prompt."""
         _write_dispatch_entry_for_prompt_tests(
             self.paths, self._DEGRADE_SESSION,
-            "unknown-agent",
+            "test-writer-tdd#1",
         )
         ctx = self._start_ctx("harness-dg-006", session_id=self._DEGRADE_SESSION)
         invocation.handle_subagent_start(ctx)

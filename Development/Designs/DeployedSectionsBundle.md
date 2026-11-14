@@ -1,7 +1,7 @@
 ---
 id: deployed-sections-bundle
 type: specification
-version: "1.4"
+version: "1.5"
 name: "Deployed Sections Bundle"
 description: "The design of the canonical block bundle: what qualifies as a block, why contracts are excluded, how bundle_version works, how the tool deploys blocks, and how staleness is detected."
 author: MOSAIC
@@ -136,7 +136,7 @@ Step 4 is not optional bookkeeping. A block whose text changed and whose specify
 
 One string comparison per agent: the deployed file's `mosaic_bundle_version` against the bundle source's `bundle_version`. No prose parsing, no dependence on the wording that follows, and no per-block bookkeeping.
 
-What it does not catch is a **local edit that preserves the version** — someone hand-editing a deployed region in place. Consolidating to one bundle narrows that gap, since there is now one number to forge rather than three, without closing it. The interim mitigation is validator rule 22 in `AgentTemplateArchitecture.md` §9, which compares each bundle-sourced managed region's canonical projection against its block byte-for-byte. The projection removes direct nested project/custom regions and trims outer whitespace; their preserved content does not make a canonical region stale. A recorded per-block hash would catch both and is still open (§10).
+What it does not catch is a **local edit that preserves the version** — someone hand-editing a deployed region in place. The deploy tool closes that gap for all Deploy-owned text at once, not per block: at every write it records in its manifest a hash of the agent body with the content of project and custom regions left out, and every later run recomputes it. A difference makes the agent an update even when every version matches; the file is backed up and the plan names the reason. Edits inside project and custom regions, and anywhere in the frontmatter, never change the hash. Protocol-sourced and bundle-sourced regions are covered alike, so neither source needs a hash of its own. Validator rule 22 in `AgentTemplateArchitecture.md` §9 remains as a catalog-side check: it compares each bundle-sourced managed region's canonical projection against its block byte-for-byte. The projection removes direct nested project/custom regions and trims outer whitespace; their preserved content does not make a canonical region stale.
 
 ---
 
@@ -183,7 +183,7 @@ Rule 22 catches a hand-edited deployed file. Rule 23 catches a design document t
 
 ## 10. Open Items
 
-- **A conformance hash per block.** Version comparison catches staleness but not a local edit preserving the version (§6). A hash of each block, recorded at deployment, catches both. The bundle makes this materially easier than it was — one file to hash from, one frontmatter field to extend.
+None.
 
 ---
 
@@ -191,6 +191,7 @@ Rule 22 catches a hand-edited deployed file. Rule 23 catches a design document t
 
 | Version | Date | Summary |
 |---------|------|---------|
+| 1.5 | 2026-11-10 | **Local edits that keep the version are detected by deployment.** §6 no longer leaves them open: the deploy tool records a hash of each agent body without project and custom regions and turns a difference into a visible update with backup, for protocol-sourced and bundle-sourced regions alike. A conformance hash per block was considered and is rejected in §12. §10 is empty. |
 | 1.4 | 2026-10-17 | **The contract followed the same split.** `CommunicationProtocol.md` v2.0 moved its deployed blocks to `Catalog/CommunicationProtocol.md` for the reasons §7 gives against keeping deployable text inside a design document. §7 no longer describes that arrangement as current. The contract is still outside the bundle and still carries its own version (§2.1). |
 | 1.3 | 2026-09-26 | **Membership aligned with bundle 2.0.0.** `ProtocolConstraints:Subagent` was removed because it restated the Communication Protocol; its remaining rules moved to their proper owners. The bundle now contains four blocks. Historical rows retain the five-block membership that existed at those versions. §8 no longer rests on there being a single orchestrator: the role has two hand-maintained sources, and the argument for keeping their text out of the bundle is restated on that basis. §5 step 4 now states that changing a block bumps the specifying document's own `version` as well as adding its changelog entry — the field tracks that document's prose, and leaving it unstated had produced one bumped block document and three unbumped ones for the same bundle change. §2's version-mismatch example no longer gives the orchestrator a bundle version (it carries none, §3.1), and §4 step 5 writes a project region's source content — empty or default — on create rather than always leaving it empty. |
 | 1.2 | 2026-08-08 | **Per-deployment region list corrected** to follow `AgentTemplateArchitecture.md` v1.4. `LanguagePatterns` and `CustomConstraints` are removed from §4's list of assembled managed-type regions: neither had a generator, both were listed under a content source that was never implemented, and both leave the deployed vocabulary entirely. No change to the bundle itself — it never held either one, and the five blocks are untouched. |
@@ -205,5 +206,6 @@ Rule 22 catches a hand-edited deployed file. Rule 23 catches a design document t
 - **A per-block version in the bundle.** Would let a stamp say which block changed. Rejected because there is no partial deploy, so per-block precision describes a granularity nothing can act on, and it restores the marker proliferation the bundle exists to end. The manifest answers "what changed in this version" without putting the answer in every agent file (§3).
 - **Holding contract versions in the bundle frontmatter.** The form this design took before the contract was excluded from the bundle entirely. Once the bundle holds no contracts, there is no contract version for it to declare, and a version field describing text the file does not ship is a fiction (§2.1).
 - **Merging the contract version into `bundle_version`.** A single number is tempting. Rejected because a typo fix in an unrelated block would promote the orchestration contract to a new version, and everything downstream reasoning about compatibility would be reasoning about noise (§2.1).
+- **A conformance hash per block.** Would catch a local edit that keeps the version, but only inside bundle regions, and protocol regions would need the same mechanism again. One hash of the Deploy-owned agent body covers every source at once (§6).
 - **Writing `<!-- bundle-version: X -->` into each deployed region body.** The original design. Rejected: it repeats a token cost in every agent's context window, once per region, to serve the tool rather than the model. Frontmatter is already parsed (§3.2).
 - **A plain integer for `bundle_version`.** Honest about there being no compatibility semantics on the wire, but wrong about the consumer — the reader is a person with a deployed project deciding whether to redeploy now or later. It would also be the one version field in MOSAIC that parses differently from every other (§3).

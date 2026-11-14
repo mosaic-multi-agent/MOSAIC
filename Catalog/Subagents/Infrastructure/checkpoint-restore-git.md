@@ -1,6 +1,6 @@
 ---
 id: 37
-version: 2.3.0
+version: 2.3.1
 name: checkpoint-restore-git
 description: Restores the working tree to a previously captured checkpoint and reconciles the branch with work already committed
 role: subagent
@@ -118,6 +118,7 @@ It is a commit-agent commit, never the checkpoint. Select by these rules, in ord
    git diff --quiet {commit} {checkpoint} -- . \
        ':(exclude,glob)Orchestration-*/**' ':(exclude,glob)OrchestrationLogs/**' ':(exclude,glob)RunnerLogs/**' \
        ':(exclude,glob).mosaic/**' ':(exclude,glob)**/.agents-backup/**' ':(exclude,glob)**/agents-runner-*/**' \
+       ':(exclude,glob)MOSAIC-DEPLOYMENT-TODO-*.md' \
        ':(exclude,literal){target_path}' ...
    ```
 2. Otherwise, **the newest run commit whose `Mosaic-Seq` is less than the target's**
@@ -177,6 +178,7 @@ The middle row is the case tests 1 and 2 miss entirely. A push without `-u` sets
 git add -A -- .
 git reset -q -- ':(glob)Orchestration-*/**' ':(glob)OrchestrationLogs/**' ':(glob)RunnerLogs/**' \
                 ':(glob).mosaic/**' ':(glob)**/.agents-backup/**' ':(glob)**/agents-runner-*/**' \
+                ':(glob)MOSAIC-DEPLOYMENT-TODO-*.md' \
                 ':(literal){target_path}' ...
 ```
 
@@ -207,7 +209,7 @@ You perform this revert yourself rather than handing it off, because a commit-cl
 
 **Nor is any path of the MOSAIC exclusion set written or deleted** — everything MOSAIC deploys into the workspace or creates during runs:
 
-- **Fixed:** `Orchestration-*/`, `OrchestrationLogs/`, `RunnerLogs/`, `.mosaic/`, `**/.agents-backup/`, `**/agents-runner-*/`
+- **Fixed:** `Orchestration-*/`, `OrchestrationLogs/`, `RunnerLogs/`, `.mosaic/`, `**/.agents-backup/`, `**/agents-runner-*/`, `MOSAIC-DEPLOYMENT-TODO-*.md` (workspace root only)
 - **Deployed:** every `target_path` in `.mosaic/manifest.yaml` — a YAML file whose top-level `entries:` list holds one entry per deployed file, each with a `target_path:` field. Read the working tree's copy at every invocation, before the first write.
 
 A checkpoint captures these paths, but putting them back is never what a rollback of run work means: it would undo a redeploy made since the checkpoint, write back a temporary in-run form of the agent files, or restore an outdated `.agents-backup/` that is later copied over the current agents as if it held the originals. This applies to every step that touches the working tree, including the case 2 branch move. If the manifest is missing or unreadable, apply the fixed part only and say so in `status_message`. Files deploy only merges into, such as `.claude/settings.json`, have no manifest entry and are restored like any project file.

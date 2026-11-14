@@ -22,13 +22,20 @@ func (s *sessionImpl) runDispatchLoop(ctx context.Context, rs *runStartCtx) (dom
 
 	for {
 		if s.consultOutputs.set {
-			rs.lastOutputArtifacts = s.consultOutputs.paths
+			override := append([]string{}, s.consultOutputs.paths...)
+			rs.lastOutputsOverride = &override
 			s.consultOutputs = consultOutputs{}
 		}
 		// A defective produced schedule is acted on before the engine routes
 		// onwards: the engine never sees a block row to dispatch against it.
 		if s.scheduleDefect != nil {
 			out, done, err := s.handleScheduleDefect(ctx, rs)
+			if done {
+				return out, err
+			}
+			continue
+		}
+		if out, done, handled, err := s.runRepairDispatch(ctx, rs); handled {
 			if done {
 				return out, err
 			}
@@ -51,7 +58,8 @@ func (s *sessionImpl) runDispatchLoop(ctx context.Context, rs *runStartCtx) (dom
 			Now:                 s.deps.Clock.Now(),
 			StageSources:        rs.stageSources,
 			Mode:                rs.state.Mode,
-			LastOutputArtifacts: rs.lastOutputArtifacts,
+			LastOutputsOverride: rs.lastOutputsOverride,
+			ArtifactRegistry:    recordedRegistry(rs.state),
 		})
 
 		if decision.Dispatch != nil {
@@ -207,8 +215,9 @@ func (s *sessionImpl) prepareAutoDispatchRequest(ctx context.Context, rs *runSta
 	}
 	step.Request.RunID = rs.state.RunID
 	folder := domain.RunScopedFolder(rs.state.RunID) + "/"
-	step.Request.InputArtifacts = expandInputWildcards(rs.config.RunFolder, rs.state.RunID,
-		resolveToRunScoped(step.Request.InputArtifacts, folder))
+	step.Request.InputArtifacts = domain.DedupArtifactPaths(rs.state.RunID,
+		expandInputWildcards(rs.config.RunFolder, rs.state.RunID,
+			resolveToRunScoped(step.Request.InputArtifacts, folder)))
 	step.Request.OutputArtifacts = resolveToRunScoped(step.Request.OutputArtifacts, folder)
 	s.deps.Debug.Log(domain.EventSessionDispatchStart, "dispatching step",
 		domain.F("agent", step.Request.AgentInstanceID),
@@ -313,7 +322,7 @@ func (s *sessionImpl) postAutoDispatchApply(ctx context.Context, rs *runStartCtx
 		// Routing follows the original attempt, not the repairing re-dispatch.
 		rs.lastResponse = routedResp
 	}
-	rs.lastOutputArtifacts = written
+	rs.lastOutputsOverride = nil
 	s.deps.Interact.Notify(ctx, interaction.Notice{
 		Level:   interaction.NoticeInfo,
 		Title:   completedStep.AgentInstance,

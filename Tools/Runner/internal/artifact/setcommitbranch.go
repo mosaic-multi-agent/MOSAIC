@@ -27,7 +27,7 @@ func (f *fileStore) SetCommitBranch(_ context.Context, branch string, now time.T
 	if err != nil {
 		return domain.ArtifactState{}, fmt.Errorf("SetCommitBranch: read: %w", err)
 	}
-	current, err := Parse(data)
+	current, err := f.readForWrite(data)
 	if err != nil {
 		return domain.ArtifactState{}, fmt.Errorf("SetCommitBranch: parse: %w", err)
 	}
@@ -46,7 +46,7 @@ func (f *fileStore) SetCommitBranch(_ context.Context, branch string, now time.T
 	if err != nil {
 		return domain.ArtifactState{}, fmt.Errorf("SetCommitBranch: render: %w", err)
 	}
-	if err := atomicWrite(f.path, rendered); err != nil {
+	if err := f.writeArtifact(rendered); err != nil {
 		return domain.ArtifactState{}, fmt.Errorf("SetCommitBranch: write: %w", err)
 	}
 	return current, nil

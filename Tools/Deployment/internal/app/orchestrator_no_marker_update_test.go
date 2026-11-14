@@ -23,6 +23,7 @@ import (
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
+	"mosaic-deploy/internal/manifest/manifesttest"
 	"mosaic-deploy/internal/plan"
 )
 
@@ -138,7 +139,7 @@ func (w *nmWorkspace) update() nmRun {
 		})
 	}
 	w.deps.Manifest = &stubManifestStore{snap: manifest.Snapshot{State: manifest.StatePresent, Manifest: domain.Manifest{
-		SchemaVersion: manifest.SchemaVersion, HarnessID: "stub-harness", Entries: entries,
+		SchemaVersion: manifest.SchemaVersion, Harnesses: []domain.HarnessSection{{HarnessID: "stub-harness"}}, Entries: manifesttest.WithHarness("stub-harness", entries),
 	}}}
 	spy := &spyTodo{}
 	w.deps.Todo = spy
@@ -179,7 +180,7 @@ func (r nmRun) undeliveredWarnings(key string) int {
 func (r nmRun) reason(key string) string {
 	for _, item := range r.plan.Items {
 		if item.Ref.Key == key {
-			return item.Reason
+			return reasonText(item)
 		}
 	}
 	return ""

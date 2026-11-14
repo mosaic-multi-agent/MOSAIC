@@ -89,7 +89,7 @@ func (s *service) planHarnessOnlyRefresh(ctx context.Context, harnessOnlyAgents 
 				SourcePath: "",
 				TargetPath: agent.TargetPath,
 				Action:     domain.ActionUpdate,
-				Reason:     "harness-only agent (no generic counterpart): refreshing " + string(decision.Scope),
+				Reasons:    []string{"harness-only agent (no generic counterpart): refreshing " + string(decision.Scope)},
 			})
 		}
 	}

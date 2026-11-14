@@ -2,7 +2,7 @@
 
 > **Status:** Draft for review
 > **Created:** 2026-07-27
-> **Last Updated:** 2026-10-31
+> **Last Updated:** 2026-11-12
 > **Scope:** The canonical log event schema, the on-disk artifact layout, run identity, and the merge utility's contract. 
 
 ---
@@ -122,6 +122,12 @@ No `duration_ms` field — see §3.5.
 | `agent_type` | string | Optional | Bare agent name (e.g., `"RequirementsRefinement"`). May be unreliable on some harnesses; adapters must not attempt to work around known harness bugs here, and consumers must tolerate incorrect values. |
 | `prompt` | string | Optional | Full invocation prompt text sent to the subagent. |
 | `spawn_call_id` | string | Optional | Harness-native ID of the tool call that spawned this invocation (`runSubagent`, `task`, `Agent` and similar), in the form the harness's other records use for that call, so a consumer can join on it without adapter state. Adapters strip harness-specific decorations that the other records don't carry; which ones is adapter design. Omitted when the harness doesn't expose it, and in Runner mode, where each process is its own invocation. Used by the OTel ingest (§4.7). |
+
+**Invocation identity rules** (native mode):
+- An invocation's `agent_instance_id` must belong to that invocation's own dispatch. Where the harness reports the started agent's type, an instance id is taken only from a dispatch of that type; correlation by arrival order alone is not enough when dispatches are parallel or starts arrive late.
+- A dispatch is captured before its agent starts. A harness does not wait for an async hook, so the dispatch capture runs in a synchronous hook. In Claude Code an async `PreToolUse` let `SubagentStart` reach the queue first. That start fell back to a unique id, and the late entry was then consumed by the next start of the same type. On Claude Code this means a synchronous `PreToolUse` registration limited to the dispatch tools, which does only the capture. The catch-all `PreToolUse` registration stays async, because in orchestrator scope it re-reads the transcript on every tool call.
+- One harness agent is one invocation. A start event for a harness agent the adapter has already mapped (a resume, or a harness re-firing the start of an agent that already finished) continues that invocation: same `agent_instance_id`, same folder and stream. It neither consumes a pending dispatch nor writes usage records a second time.
+- When no instance id can be resolved, the adapter uses the unique fallback described for `agent_instance_id` above. Unresolved invocations never share one folder.
 
 **`invocation_end`**
 

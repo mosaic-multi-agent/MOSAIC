@@ -23,11 +23,8 @@ func rebuildToolsConversion(in RebuildInput, facts deployedAgentFacts, role doma
 	if entry != nil {
 		catalogTools, placeholder = entry.Tools, entry.ToolsPlaceholder
 	}
-	if !srcDesc.ToolInfoUnrecoverable || len(facts.Tools) > 0 {
-		conv = ConvertDeployedTools(DeployedToolsInput{
-			Source: srcDesc, Target: tgtDesc, Tools: facts.Tools, Role: role,
-			PlaceholderAgent: placeholder != "", CatalogTools: catalogTools,
-		})
+	if !srcDesc.ToolInfoUnrecoverable || len(facts.Grants) > 0 || len(facts.Tools) > 0 {
+		conv = ConvertDeployedTools(deployedToolsInput(in, facts, role, placeholder != "", catalogTools))
 		return conv, false, nil
 	}
 	switch {

@@ -9,17 +9,13 @@ import (
 )
 
 // ResolveOrchestrator resolves the orchestrator agent file the run was given
-// into an AgentReference carrying the orchestrator invocation kind.
+// into an AgentReference for the orchestrator.
 //
 // path is domain.RunConfig.OrchestratorFilePath — the same file whose
 // workflow regions orchfile enumerated. The returned reference's Identifier
 // is the file's name with its extension removed, matching the filename-stem
 // identity rule ResolveAll uses for ordinary agents. DefinitionPath is the
 // absolute path to that file.
-//
-// The returned reference always carries InvocationKind ==
-// domain.InvocationOrchestrator, so the orchestrator retains native
-// subagent-spawning capability during a consultation.
 //
 // Returns *domain.RefusalError{Component: "agentresolve", Resource: path}
 // when the file does not exist, cannot be read, is a directory, or has an
@@ -66,6 +62,5 @@ func ResolveOrchestrator(path string) (domain.AgentReference, error) {
 	return domain.AgentReference{
 		Identifier:     stem,
 		DefinitionPath: absPath,
-		InvocationKind: domain.InvocationOrchestrator,
 	}, nil
 }

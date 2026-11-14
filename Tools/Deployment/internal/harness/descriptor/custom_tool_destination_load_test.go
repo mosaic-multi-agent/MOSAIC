@@ -9,7 +9,7 @@ package descriptor_test
 //   - A descriptor omitting custom_tool_destination loads successfully and the slice is empty.
 //   - A descriptor declaring custom_tool_destination: [] loads successfully and yields
 //     no destinations (identical treatment to the field being absent).
-//   - A descriptor declaring both custom_tool_template and custom_tool_destination loads
+//   - A descriptor declaring both tools.mcp forms and custom_tool_destination loads
 //     successfully and both fields are independently populated.
 //   - A custom_tool_destination entry that declares a names key fails to parse, for both
 //     a populated names list (names: ["x"]) and an empty names list (names: []).
@@ -80,15 +80,17 @@ frontmatter:
   tools_key: "tools"
 `
 
-// customToolDestWithTemplateYAML declares a descriptor with both custom_tool_template and
-// custom_tool_destination. The two fields are independent: the template controls name
-// formatting, the destination list controls where that name is written.
+// customToolDestWithTemplateYAML declares a descriptor with both tools.mcp forms and
+// custom_tool_destination. The two are independent: the forms control name formatting, the
+// destination list controls where that name is written.
 const customToolDestWithTemplateYAML = `schema_version: "1"
 id: "ctd-template-test"
 display_name: "CTD Template Test"
 tools:
   shape: list
-  custom_tool_template: "mcp:%s"
+  mcp:
+    server_form: "mcp:{server}"
+    tool_form: "mcp:{server}:{tool}"
   custom_tool_destination:
     - to: field
       field: mcpServers
@@ -309,40 +311,40 @@ func TestParse_CustomToolDestination_EmptyList_YieldsNoDestinations(t *testing.T
 	}
 }
 
-// --- T1.1: Coexistence with custom_tool_template ---
+// --- Coexistence with tools.mcp forms ---
 
 // TestParse_CustomToolDestination_WithCustomToolTemplate_LoadsWithoutError asserts that
-// declaring both custom_tool_template and custom_tool_destination on the same descriptor
+// declaring both tools.mcp forms and custom_tool_destination on the same descriptor
 // succeeds. The two fields are independent.
 func TestParse_CustomToolDestination_WithCustomToolTemplate_LoadsWithoutError(t *testing.T) {
 	_, err := parseCustomToolDest(t, customToolDestWithTemplateYAML, "inline:ctd-template")
 	if err != nil {
-		t.Fatalf("Parse: unexpected error for descriptor with both custom_tool_template and custom_tool_destination: %v", err)
+		t.Fatalf("Parse: unexpected error for descriptor with both tools.mcp and custom_tool_destination: %v", err)
 	}
 }
 
 // TestParse_CustomToolDestination_WithCustomToolTemplate_TemplateFieldPreserved asserts
-// that the custom_tool_template value is unchanged when custom_tool_destination is also set.
+// that the tools.mcp forms are unchanged when custom_tool_destination is also set.
 func TestParse_CustomToolDestination_WithCustomToolTemplate_TemplateFieldPreserved(t *testing.T) {
 	d, err := parseCustomToolDest(t, customToolDestWithTemplateYAML, "inline:ctd-template")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if d.Tools.CustomToolTemplate != "mcp:%s" {
-		t.Errorf("CustomToolTemplate: want %q, got %q — custom_tool_template must not be affected by custom_tool_destination",
-			"mcp:%s", d.Tools.CustomToolTemplate)
+	if d.Tools.MCP.ServerForm != "mcp:{server}" || d.Tools.MCP.ToolForm != "mcp:{server}:{tool}" {
+		t.Errorf("MCP forms: want server %q and tool %q, got %+v; tools.mcp must not be affected by custom_tool_destination",
+			"mcp:{server}", "mcp:{server}:{tool}", d.Tools.MCP)
 	}
 }
 
 // TestParse_CustomToolDestination_WithCustomToolTemplate_DestinationFieldPreserved asserts
-// that CustomToolDestinations is correctly loaded when custom_tool_template is also set.
+// that CustomToolDestinations is correctly loaded when tools.mcp is also set.
 func TestParse_CustomToolDestination_WithCustomToolTemplate_DestinationFieldPreserved(t *testing.T) {
 	d, err := parseCustomToolDest(t, customToolDestWithTemplateYAML, "inline:ctd-template")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
 	if len(d.Tools.CustomToolDestinations) != 1 {
-		t.Fatalf("CustomToolDestinations: want 1 entry, got %d — custom_tool_destination must be loaded independently of custom_tool_template",
+		t.Fatalf("CustomToolDestinations: want 1 entry, got %d — custom_tool_destination must be loaded independently of tools.mcp",
 			len(d.Tools.CustomToolDestinations))
 	}
 	dest := d.Tools.CustomToolDestinations[0]

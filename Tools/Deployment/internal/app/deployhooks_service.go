@@ -80,7 +80,8 @@ func deployHooks(ctx context.Context, s *service, req DeployHooksRequest) (domai
 		return domain.RunSummary{}, err
 	}
 
-	snap, _ := s.deps.Manifest.Load(workspace)
+	reconciled := loadReconciledManifest(s.deps.Manifest, workspace)
+	snap := reconciled.forHarness(module.Ref().ID) // the run sees only its own harness's entries
 
 	agentsDir := module.Descriptor().Paths.Agents.Project
 	var deployedAgentIndex DeployedAgentIndex
@@ -105,7 +106,6 @@ func deployHooks(ctx context.Context, s *service, req DeployHooksRequest) (domai
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
-	applyHookPresence(workspace, deployedState, hookPlansByTargetPath(module, probeSet.Hooks, plannedPaths, scope))
 
 	toolCfg, _ := s.deps.ToolConfig.Load()
 	userCfg, err := s.deps.UserConfig.Load()
@@ -145,6 +145,7 @@ func deployHooks(ctx context.Context, s *service, req DeployHooksRequest) (domai
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
+	reconciled.attachTo(&p)
 	for _, g := range p.Gaps {
 		s.deps.Todo.AddGap(g)
 	}

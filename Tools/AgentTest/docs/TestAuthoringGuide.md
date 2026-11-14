@@ -155,8 +155,6 @@ subject:
     Task: Add rate limiting to the API gateway in src/gateway/
     Workflow: brownfield-tdd
     Checkpoints: disabled
-  invocation_kind: orchestrator
-  model: sonnet
   allowed_tools: [Task, Read, Write, Edit]
 
 stub_registry: research-dispatch.stubs.json
@@ -245,8 +243,6 @@ subject:
     Task: Add rate limiting to the API gateway in src/gateway/
     Workflow: brownfield-tdd
     Checkpoints: disabled
-  invocation_kind: orchestrator
-  model: sonnet
   allowed_tools: [Task, Read, Write, Edit]
 
 stub_registry: research-planning-happy-path.stubs.json
@@ -321,10 +317,9 @@ assertions:
 | `workflows` | No | list of strings | Workflow IDs to inject. `null`/absent = all, `[]` = none, `["id"]` = exactly these |
 | `infrastructure_agents` | **Yes** | list of strings | Infrastructure agent IDs to deploy. `[]` = none (region stays empty), `["id"]` = exactly these. **Absent field is a parse error** — every test must declare this explicitly |
 | `opening_message` | Yes | string | The initial message the subject receives |
-| `invocation_kind` | Yes | string | `orchestrator` or `subagent` |
-| `model` | No | string | Model identifier for the subject (e.g. `sonnet`, `claude-sonnet-4-5`) |
-| `stub_model` | No | string | Model identifier for stubs deployed alongside the subject on the catalogue path. Optional: omitting it gives stubs the same model as `subject.model`. |
 | `allowed_tools` | No | list | Tools the subject may use |
+
+The subject block accepts no other keys. Models are chosen per run (`--subject-model` / `--stub-model`, or the TUI model screen; see LaunchGuide.md), never in the test file: a definition declaring `model` or `stub_model` is rejected. `invocation_kind` is likewise rejected: every subject is launched by agent name, so the key had no effect.
 
 **`stub_agents` entries:**
 
@@ -1229,8 +1224,6 @@ subject:
     Task: Add rate limiting to the API gateway in src/gateway/
     Workflow: brownfield-tdd
     Checkpoints: disabled
-  invocation_kind: orchestrator
-  model: sonnet
   allowed_tools: [Task, Read, Write, Edit]
 
 stub_registry: findings-reroute.stubs.json

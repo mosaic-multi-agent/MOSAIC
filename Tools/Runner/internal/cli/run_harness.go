@@ -14,6 +14,10 @@ import (
 // (the tool-local test double plus every catalog-declared CLI harness), so a
 // catalog addition is accepted here without an edit.
 func validateHarnessFlag(harnessFlag string, errOut io.Writer) (exitCode int, ok bool) {
+	if reason, disabled := harness.DisabledReason(harnessFlag); disabled {
+		fmt.Fprintf(errOut, "error: --harness %q: %s\n", harnessFlag, reason)
+		return ExitUsage, false
+	}
 	if !harness.Accepts(harnessFlag) {
 		fmt.Fprintf(errOut, "error: invalid --harness value %q; valid values: %s\n", harnessFlag, harness.FlagValueList())
 		return ExitUsage, false

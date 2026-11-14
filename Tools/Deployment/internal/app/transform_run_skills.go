@@ -74,7 +74,7 @@ func (r *transformRun) skillItems() []domain.PlanItem {
 				Ref:        domain.ArtifactRef{Kind: domain.ArtifactSkill, Key: sk.Key},
 				SourcePath: filepath.Join(sk.SourceDir, filepath.FromSlash(f)),
 				TargetPath: slashJoin(sk.DestinationDir, f),
-				Action:     action, Reason: reason,
+				Action:     action, Reasons: []string{reason},
 			})
 		}
 	}
@@ -91,7 +91,10 @@ func (r *transformRun) addSkillContent(content map[string][]byte, stamps map[str
 		for _, f := range sk.Files {
 			target := slashJoin(sk.DestinationDir, f)
 			content[target] = r.skills[i].files[f]
-			stamps[target] = domain.VersionStamp{Version: sk.Version}
+			stamps[target] = domain.VersionStamp{
+				Version: sk.Version,
+				Catalog: r.sourceFileCatalog(domain.ArtifactSkill, filepath.Join(sk.SourceDir, filepath.FromSlash(f))),
+			}
 		}
 	}
 }

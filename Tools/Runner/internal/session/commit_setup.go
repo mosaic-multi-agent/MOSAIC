@@ -99,10 +99,11 @@ func needsCommitSetup(state domain.ArtifactState) bool {
 // commit_branch. A store failure is returned as an error.
 func (s *sessionImpl) runCommitSetup(
 	ctx context.Context,
+	rs *runStartCtx,
 	agentRef domain.AgentReference,
 	state domain.ArtifactState,
-	runID string,
 ) (domain.ArtifactState, domain.RunOutcome, bool, error) {
+	runID := rs.config.RunID
 	seq := state.GlobalSequence + 1
 	req := domain.ProtocolRequest{
 		AgentInstanceID: fmt.Sprintf("%s#%d", agentRef.Identifier, seq),
@@ -168,7 +169,12 @@ func (s *sessionImpl) runCommitSetup(
 		out := s.startFailed("commit setup: no [branch:{name}] marker in status_message", nil)
 		return recorded, out, true, nil
 	}
-	withBranch, err := s.deps.Store.SetCommitBranch(ctx, branch, s.deps.Clock.Now())
+	withBranch, outcome, ended, err := s.writeRepairingDamage(ctx, rs, recorded, func() (domain.ArtifactState, error) {
+		return s.deps.Store.SetCommitBranch(ctx, branch, s.deps.Clock.Now())
+	})
+	if ended {
+		return recorded, outcome, true, nil
+	}
 	if err != nil {
 		return recorded, domain.RunOutcome{Status: domain.RunFailed, Message: "recording commit_branch failed: " + err.Error()}, true, err
 	}

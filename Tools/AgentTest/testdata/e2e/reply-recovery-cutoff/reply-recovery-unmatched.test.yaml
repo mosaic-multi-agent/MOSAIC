@@ -21,7 +21,6 @@ subject:
   infrastructure_agents: []
   opening_message: |
     Dispatch the greeter, then the helper.
-  invocation_kind: subagent
   allowed_tools: [Task]
 
 stub_registry: reply-recovery-unmatched.stubs.json

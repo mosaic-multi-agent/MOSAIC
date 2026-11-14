@@ -1181,15 +1181,15 @@ func TestGhcpCli_CustomTool_RoutesToMainToolsNotMcpServers(t *testing.T) {
 	for _, f := range result.Fields {
 		if f.Key == toolsKey && f.Value.Kind == domain.KindList {
 			for _, item := range f.Value.Items {
-				if item.Scalar == "human-in-the-loop" {
+				if item.Scalar == "human-in-the-loop/*" {
 					foundInMainTools = true
 				}
 			}
 		}
 	}
 	if !foundInMainTools {
-		t.Errorf("custom tool human-in-the-loop not found in main tools list field %q; "+
-			"without custom_tool_destination, custom tools must appear in the main tools list",
+		t.Errorf("custom tool human-in-the-loop/* not found in main tools list field %q; "+
+			"custom tools must appear in the main tools list in the whole-server form <server>/*",
 			toolsKey)
 	}
 }

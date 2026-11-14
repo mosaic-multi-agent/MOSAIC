@@ -540,9 +540,8 @@ class TestSubagentLifecycle(unittest.TestCase):
             paths, "unknown-run", _SESSION_ID, _INSTANCE_ID_ALPHA, None,
             prompt="Task prompt."
         )
-        runstate.put_agent_mapping(
-            paths, "unknown-run", _AGENT_ID_ALPHA, _INSTANCE_ID_ALPHA, None
-        )
+        # No pre-registered mapping: a start for an already-mapped agent id is a
+        # re-fired start of an existing invocation and writes no invocation_start.
         with _GhcpReplayHarness(self.tmp_path) as h:
             h.dispatch("sessionStart", {"sessionId": _SESSION_ID})
             h.dispatch("subagentStart", {
@@ -555,6 +554,10 @@ class TestSubagentLifecycle(unittest.TestCase):
                 "agentId": _AGENT_ID_ALPHA,
                 "response": "Done.",
             })
+            inv_types = {e.get("event")
+                         for e in h.invocation_events("unknown-run", _INSTANCE_ID_ALPHA)}
+            self.assertIn("invocation_start", inv_types)
+            self.assertIn("invocation_end", inv_types)
             orch_events = h.orchestrator_events("unknown-run")
             orch_types = {e.get("event") for e in orch_events}
             self.assertNotIn("invocation_start", orch_types)

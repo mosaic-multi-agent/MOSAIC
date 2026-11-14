@@ -409,7 +409,7 @@ func indexOfArg(args []string, arg string) int {
 	return -1
 }
 
-// ordinaryAgentRef returns an AgentReference with InvocationOrdinary using a
+// ordinaryAgentRef returns an AgentReference using a
 // static (non-existent) definition path. Used by adapter tests that do not
 // exercise tool extraction (e.g., GHCP CLI and OpenCode adapters).
 // ClaudeCodeAdapter tests must use ordinaryAgentRefCC(t) instead.
@@ -417,11 +417,10 @@ func ordinaryAgentRef() domain.AgentReference {
 	return domain.AgentReference{
 		Identifier:     "test-agent",
 		DefinitionPath: "/agents/test-agent.md",
-		InvocationKind: domain.InvocationOrdinary,
 	}
 }
 
-// orchestratorAgentRef returns an AgentReference with InvocationOrchestrator
+// orchestratorAgentRef returns an AgentReference
 // using a static (non-existent) definition path. Used by adapter tests that do
 // not exercise tool extraction. ClaudeCodeAdapter tests must use
 // orchestratorAgentRefCC(t) instead.
@@ -429,11 +428,10 @@ func orchestratorAgentRef() domain.AgentReference {
 	return domain.AgentReference{
 		Identifier:     "orchestrator-agent",
 		DefinitionPath: "/agents/orchestrator-agent.md",
-		InvocationKind: domain.InvocationOrchestrator,
 	}
 }
 
-// ordinaryAgentRefCC returns an AgentReference with InvocationOrdinary backed
+// ordinaryAgentRefCC returns an AgentReference backed
 // by a temporary definition file containing valid Claude Code tools frontmatter.
 // Use this in ClaudeCodeAdapter tests: the adapter's FR-10 extraction reads the
 // definition file before spawning.
@@ -443,11 +441,10 @@ func ordinaryAgentRefCC(t *testing.T) domain.AgentReference {
 	return domain.AgentReference{
 		Identifier:     "test-agent",
 		DefinitionPath: defPath,
-		InvocationKind: domain.InvocationOrdinary,
 	}
 }
 
-// orchestratorAgentRefCC returns an AgentReference with InvocationOrchestrator
+// orchestratorAgentRefCC returns an AgentReference
 // backed by a temporary definition file containing valid Claude Code tools
 // frontmatter. Use this in ClaudeCodeAdapter tests.
 func orchestratorAgentRefCC(t *testing.T) domain.AgentReference {
@@ -456,7 +453,6 @@ func orchestratorAgentRefCC(t *testing.T) domain.AgentReference {
 	return domain.AgentReference{
 		Identifier:     "orchestrator-agent",
 		DefinitionPath: defPath,
-		InvocationKind: domain.InvocationOrchestrator,
 	}
 }
 

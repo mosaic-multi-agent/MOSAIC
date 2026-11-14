@@ -930,12 +930,9 @@ class TestMissingMappingDegradation(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestPreToolUseToolNameGate(unittest.TestCase):
-    """handle_pre_tool_use must capture a pending dispatch for tool_name='Task'
+    """capture_dispatch must capture a pending dispatch for tool_name='Task'
     as well as tool_name='Agent'. All other tool names must leave the
     pending-dispatch queue untouched.
-
-    Tests that verify 'Task' capture will FAIL until the gate is widened from
-    `if tool_name == 'Agent':` to `if tool_name in ('Agent', 'Task'):`.
     """
 
     # A realistic dispatch JSON containing an extractable agent_instance_id and run_id.
@@ -973,16 +970,13 @@ class TestPreToolUseToolNameGate(unittest.TestCase):
             if ln.strip()
         ]
 
-    # --- Task capture (RED until gate is widened) ---
+    # --- Task capture ---
 
     def test_task_tool_name_creates_pending_dispatch_entry(self):
         """Dispatching with tool_name='Task' must create a pending dispatch entry.
-
-        Currently FAILS because the gate only matches tool_name='Agent'.
-        After the fix the gate must accept both 'Agent' and 'Task'.
         """
         ctx = self._dispatch_tool_ctx("Task")
-        tools.handle_pre_tool_use(ctx)
+        tools.capture_dispatch(ctx)
         entries = self._read_queue()
         self.assertEqual(
             1, len(entries),
@@ -992,11 +986,9 @@ class TestPreToolUseToolNameGate(unittest.TestCase):
     def test_task_tool_name_extracts_agent_instance_id_from_prompt(self):
         """The pending dispatch created for tool_name='Task' must carry the
         agent_instance_id extracted from tool_input.prompt.
-
-        Currently FAILS because the 'Task' branch is not entered.
         """
         ctx = self._dispatch_tool_ctx("Task")
-        tools.handle_pre_tool_use(ctx)
+        tools.capture_dispatch(ctx)
         entries = self._read_queue()
         self.assertEqual(1, len(entries))
         self.assertEqual(
@@ -1007,11 +999,9 @@ class TestPreToolUseToolNameGate(unittest.TestCase):
     def test_task_tool_name_extracts_run_id_from_prompt(self):
         """The pending dispatch created for tool_name='Task' must carry the
         run_id extracted from tool_input.prompt.
-
-        Currently FAILS because the 'Task' branch is not entered.
         """
         ctx = self._dispatch_tool_ctx("Task")
-        tools.handle_pre_tool_use(ctx)
+        tools.capture_dispatch(ctx)
         entries = self._read_queue()
         self.assertEqual(1, len(entries))
         self.assertEqual(
@@ -1024,7 +1014,7 @@ class TestPreToolUseToolNameGate(unittest.TestCase):
     def test_agent_tool_name_still_creates_pending_dispatch(self):
         """tool_name='Agent' must still create a pending dispatch (regression guard)."""
         ctx = self._dispatch_tool_ctx("Agent")
-        tools.handle_pre_tool_use(ctx)
+        tools.capture_dispatch(ctx)
         entries = self._read_queue()
         self.assertEqual(
             1, len(entries),
@@ -1041,7 +1031,7 @@ class TestPreToolUseToolNameGate(unittest.TestCase):
             tool_name="Read",
             tool_input={"file_path": "/some/file.py"},
         )
-        tools.handle_pre_tool_use(ctx)
+        tools.capture_dispatch(ctx)
         entries = self._read_queue()
         self.assertEqual(
             0, len(entries),
@@ -1056,7 +1046,7 @@ class TestPreToolUseToolNameGate(unittest.TestCase):
             tool_name="Bash",
             tool_input={"command": "echo hello"},
         )
-        tools.handle_pre_tool_use(ctx)
+        tools.capture_dispatch(ctx)
         entries = self._read_queue()
         self.assertEqual(
             0, len(entries),
@@ -1071,7 +1061,7 @@ class TestPreToolUseToolNameGate(unittest.TestCase):
             tool_name="Write",
             tool_input={"file_path": "/f", "content": "x"},
         )
-        tools.handle_pre_tool_use(ctx)
+        tools.capture_dispatch(ctx)
         entries = self._read_queue()
         self.assertEqual(
             0, len(entries),

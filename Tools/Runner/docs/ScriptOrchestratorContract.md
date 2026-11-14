@@ -2,7 +2,7 @@
 
 > **Status:** Draft
 > **Created:** 2026-08-15
-> **Last Updated:** 2026-11-08
+> **Last Updated:** 2026-11-09
 > **Scope:** The contract between the Runner (`mosaic-run`) and the script-mode orchestrator agent. Defines when the Runner invokes the orchestrator, what it sends, what it expects back, and the constraints both sides must respect. This is not the orchestrator's internal design (how it reasons about routing) — it is the wire protocol between two systems.
 
 ---
@@ -55,6 +55,7 @@ This context is used:
 - **Mode 1 (every step):** After every subagent completion, regardless of status code. The orchestrator makes all routing decisions, including for `PARTIALLY_DONE`, `BLOCKED` with `E501` and `HARNESS_ERROR`.
 - **Modes 2/3 (deviation):** When the engine cannot determine the next step from the workflow table — non-SUCCESS status codes the engine can't auto-route, harness errors whose retry budget is spent (`last_status` `HARNESS_ERROR`, §3.2), ambiguous routing — and after a `SUCCESS` whose next step already finished: the table leads to a row that has a `SUCCESS` in the Execution Log at that iteration, so following it would repeat finished work (`Design.md` §2.10). In these modes the Runner handles two outcomes itself before consulting (§2.3).
 - **After orchestration-review:** When the review infrastructure agent fires and produces observations, the Runner follows up with a routing consultation that includes the review's `status_message`. This gives the orchestrator the chance to act on the findings.
+- **Damaged artifact (all modes):** When the Runner finds `Orchestration.md` damaged — at run start, on resume, on Retry, or after any consultation — it consults with `artifact_damage` set. The orchestrator repairs the artifact, then routes as usual (§2.5).
 
 The orchestrator does not need to know whether it is being consulted for routine routing (Mode 1) or because something went wrong (Modes 2/3). It reads the artifact, sees the current state, and decides. The `last_status`, `last_status_message` and `last_error_reason` fields (§3.2) carry the triggering response's status, its full verbatim `status_message` and, for `BLOCKED`, its `error_reason`; for a harness error they carry `HARNESS_ERROR` and the Runner's failure description. When the user handed the decision over in the manual routing dialogue, `user_message` (§3.2) carries the user's own words. These are the only pieces of context not already in the artifact: the Execution Log truncates `status_message` and has no column for `error_reason`.
 
@@ -94,6 +95,24 @@ All three use the same numbering: the table's `Row` column value, or the 1-based
 
 A row inside a block also has an iteration. The routing reply names it in `iteration` (§4.1) in exactly the form the Execution Log writes in its `Iteration` column for that row, so the orchestrator copies the value from the log.
 
+### 2.5 Artifact Repair
+
+The orchestrator edits `Orchestration.md` to write Workflow Notes, and an edit that misses its anchor can damage a Runner-owned section: a split Execution Log row, a note inserted into the log table. A conversational run recovers from this because its orchestrator, an LLM, repairs the artifact and goes on routing. A Runner run recovers the same way, through the same routing consultation, not through a separate repair context: repairing is bookkeeping that precedes the decision, and the decision is still exactly one `dispatch` or `stop`.
+
+**Detection.** The Runner reads the artifact strictly (`Design.md` §4.4): a table that ends before its closing tag, a row with fewer cells than its header, Execution Log `Seq` values that are not integers or not strictly increasing, an `Agent` cell that is not `{AgentName}#{Seq}` with the row's own `Seq`, and a `current_state.last_agent` with no log row are damage, never parsed around. Deliberate tolerances are not damage: a closing tag after content on the same line, CRLF, a `global_sequence` lagging behind the logged `Seq` values (corrected upward), a last `Seq` above `global_sequence`, gaps in `Seq` (sequences consumed but never logged), and an empty `last_agent` (nothing accepted yet). The pre-3.0 layout and run-identity refusals keep their own handling. A run whose frontmatter is itself damaged takes its recorded values from the last-good copy when a usable one exists; without one it records no workflow, so there is no routing table to consult against, and the Runner refuses it without a repair consultation. The Runner never writes after a read that found damage, because its store re-renders the whole artifact from what it read and would make the loss permanent. It reads the artifact after every consultation, including one that failed or timed out, so damage is found where it happened.
+
+**Evidence.** After every successful write the Runner keeps a last-good copy of the artifact outside the run folder (`RunnerLogs/{run_id}/Orchestration.last-good.md`, beside the run folder). Before the first repair consultation for a damage occurrence it saves the damaged file beside that copy; that file is not part of the request, since the damaged artifact is still in place at `orchestration_artifact`. The consultation carries the last-good copy path and, when a usable log exists, the Runner's dispatch log path in `artifact_damage` (§3.2). The Runner restores nothing itself: the copy, the dispatch log and the damaged file in place are evidence for the orchestrator, standing in for what a conversational orchestrator reads from the run's files.
+
+**The consultation.** Everything else in the request keeps its normal meaning. A consultation repeated because the previous one damaged the artifact carries that previous request's trigger fields again; one made at run start, on resume or on Retry carries the resume values (§3.2). On resume and Retry this consultation replaces the Runner's resume-position resolution: the returned `dispatch` says where the run continues. The orchestrator repairs first, within the exception of §6.2, then decides against the repaired artifact and returns the usual reply (§4).
+
+**Verification.** Before acting on the reply, the Runner reads the artifact again and accepts the repair only if:
+
+- the read finds no damage;
+- every Execution Log row present in the last-good copy, when there is one, is present and unchanged;
+- the last `Seq`, `last_agent`, `last_status` and `error_code` agree with the dispatch log, counting only responses that advanced the run (skipped without a usable log).
+
+An accepted repair is followed by the reply as usual: a `dispatch` is carried out, a `stop` is a consultant stop. A repair that is not accepted voids the reply, however valid (§7.6).
+
 ---
 
 ## 3. Request Format
@@ -107,11 +126,12 @@ A row inside a block also has an iteration. The routing reply names it in `itera
   "last_status": "COMPLETED_NEEDS_ACTION",
   "last_status_message": "COMPLETED_NEEDS_ACTION: Found 3 issues — (1) PaymentProcessor.validate() accepts raw string but schema defines Decimal, (2) error response type missing 'retryable' field, (3) retry policy not specified for timeout scenarios. See contracts-review.md for details.",
   "last_error_reason": null,
-  "user_message": null
+  "user_message": null,
+  "artifact_damage": null
 }
 ```
 
-All six members are always present; the nullable ones are `null`, never absent. A harness error reaches the orchestrator like this (`last_status` `HARNESS_ERROR`, the failure description in both text members):
+All seven members of the routing request are always present; the nullable ones are `null`, never absent. The pre-consultation request has no `artifact_damage` member and so carries six. The examples below omit `artifact_damage`, which is `null` in them. A harness error reaches the orchestrator like this (`last_status` `HARNESS_ERROR`, the failure description in both text members):
 
 ```json
 {
@@ -137,6 +157,29 @@ A consultation the user handed over in the manual routing dialogue carries the u
 }
 ```
 
+A consultation on resume of a damaged artifact carries `artifact_damage` (§2.5):
+
+```json
+{
+  "orchestration_artifact": "Orchestration-20260815T143000Z-a3f9/Orchestration.md",
+  "context": "routing",
+  "last_status": null,
+  "last_status_message": null,
+  "last_error_reason": null,
+  "user_message": null,
+  "artifact_damage": {
+    "problems": [
+      "ExecutionLog, line 101: row has 8 cells, the header has 10",
+      "ExecutionLog, line 103: non-table line before the closing tag"
+    ],
+    "last_good_copy": "C:/.../RunnerLogs/20260815T143000Z-a3f9/Orchestration.last-good.md",
+    "dispatch_log": "C:/.../RunnerLogs/20260815T143000Z-a3f9/20260815T143000Z-a3f9-dispatch.log"
+  }
+}
+```
+
+The paths are illustrative; where the Runner keeps the copies is its own concern (`Design.md` §4.4).
+
 ### 3.2 Fields
 
 | Field | Type | Required | Description |
@@ -147,6 +190,7 @@ A consultation the user handed over in the manual routing dialogue carries the u
 | `last_status_message` | string or null | Yes | The full verbatim `status_message` from the agent that triggered this consultation. The artifact does not carry it in full: the Execution Log truncates `status_message` for readability. `null` on the first step of a new run (no prior agent), for pre-consultation, and for a consultation made on resume: a resumed run holds no response from the process that produced the last step, so the Runner has no verbatim message to send, and a finished-work consultation (§2.1) made on resume carries `null` too (the artifact's Execution Log row is then the only record of that step). For harness errors, which the Runner records as `HARNESS_ERROR` (`Design.md` §3.3), this carries the Runner-constructed description: the failure kind followed by its detail, on one line (`timeout: ...`, `process-failure: ...`, `unparseable-response: ...`). |
 | `last_error_reason` | string or null | Yes | The full verbatim `error_reason` from the triggering agent's response when its status is `BLOCKED`; for a harness error, the Runner-constructed error description; when the consultation follows a block schedule that stayed defective after the Runner's re-dispatches of the producing row, the Runner-constructed defect description (the rule ID, or that the Source is missing or unreadable, the block, the Source and Section, and the offending row, ID or token), while `last_status_message` stays the producer's verbatim `status_message` (`Design.md` §3.6). `null` for every other status, on the first step of a new run, on resume, and for pre-consultation. Like `last_status_message`, it is not persisted in the artifact. It is what lets the orchestrator correct the defect an `E100` names. |
 | `user_message` | string or null | Yes | The text the user entered in the manual routing dialogue after choosing `Ask the orchestrator to decide` (`Design.md` §2.9), verbatim with its line breaks. It is a message from the human in the loop to the orchestrator for this one routing decision and is to be taken into account in it. `null` for every other consultation, for every pre-consultation and when the user left the message empty. It is carried on that one consultation only: not stored by the Runner, not in the artifact and not sent again with later consultations. |
+| `artifact_damage` | object or null | Yes | Set when the Runner found `Orchestration.md` damaged (§2.5), `null` otherwise. It is a member of the routing request only: the pre-consultation request has no such member. Members: `problems`, a non-empty array of strings, one per finding, each naming the section, line and problem; `last_good_copy`, the path of the last artifact the Runner wrote, or `null` when it has none (it may be older than the damaged file); `dispatch_log`, the path of the Runner's dispatch log for this run, which holds every request and response verbatim, present as a path only when a usable log exists and `null` otherwise (it is not a required string). There is no member for the damaged file: it is the artifact at `orchestration_artifact`, in place. It cannot be carried in `last_error_reason`, which keeps carrying the triggering response's own reason. |
 
 ---
 
@@ -276,6 +320,7 @@ The orchestrator may end the run at pre-consultation, before any workflow dispat
 | May read the full artifact (execution log, current state, workflow notes) | This is how the orchestrator understands the run's history and current position. |
 | May write to the Workflow Notes section | This is the orchestrator's scratchpad for recording reasoning across invocations. |
 | Must NOT modify the execution log, current state, artifact registry, or frontmatter | These are managed exclusively by the Runner's artifact store. Concurrent writes would corrupt the artifact. |
+| Exception: while `artifact_damage` is non-null, may edit those sections to repair them, and only to repair them: fix table structure, restore rows and values the evidence (the last-good copy, the dispatch log when one is given, the damaged file in place) supports, and move a misplaced note to Workflow Notes. Never invent a row, status or sequence number the evidence does not support | The Runner is blocked during the consultation, so the edit races nothing. Without the exception the damage could only be fixed by hand. The evidence bound keeps a repair from becoming a rewrite of history; the Runner checks it (§2.5). |
 
 ### 6.3 Behavioral Constraints
 
@@ -321,7 +366,13 @@ The Runner creates or resumes the artifact before pre-consultation. If pre-consu
 
 ### 7.5 All Orchestrator Failures Are Terminal
 
-Unlike subagent failures (which become deviations that the orchestrator can resolve), orchestrator failures are terminal once final. The Runner has no higher authority to escalate to. After the malformed-reply retries of §7.1 are spent, or on any failure that is not retried, the run stops, the artifact is left in a resumable state, and the user must intervene.
+Unlike subagent failures (which become deviations that the orchestrator can resolve), orchestrator failures are terminal once final. The Runner has no higher authority to escalate to. After the malformed-reply retries of §7.1 are spent, or on any failure that is not retried, the run stops, the artifact is left in a resumable state, and the user must intervene. A repair consultation is the one recovery attempt the Runner has for a damaged artifact (§7.6), and a repair consultation that fails or is stopped stops the run at once: there is no retry and no manual fallback, and the next resume finds the damage and consults again.
+
+### 7.6 Repair Not Accepted
+
+When the verification of §2.5 fails, the Runner discards the reply, even a valid `dispatch`, and consults again with a fresh `artifact_damage`. At most two consultations per damage occurrence; the malformed-reply retries of §7.1 apply inside each. When the second repair is also not accepted, the run stops naming the remaining problems and the paths of the saved damaged copy and the last-good copy, with the artifact as the orchestrator last left it.
+
+The reply may well be sound, since the orchestrator had the full evidence, but the Runner cannot carry it out. It checks a dispatch against the state it reads from the artifact, and it would have to write the step's Execution Log row into a table it still cannot read: re-rendering it would make the damage permanent, and appending to it would leave the damage for the next read to find again. A harness error, failure or stop during a repair consultation stops the run at once (§7.5), without the malformed-reply retries of §7.1 beyond those already spent inside that consultation; the next resume finds the damage and consults again.
 
 ---
 
@@ -334,7 +385,8 @@ Unlike subagent failures (which become deviations that the orchestrator can reso
 | Always provide the full `status_message` from the triggering agent in `last_status_message` | The Execution Log truncates messages. The orchestrator needs the full response to make informed routing decisions. |
 | Provide the triggering response's status in `last_status`, and the triggering agent's `error_reason` in `last_error_reason` when its status is `BLOCKED`, and the Runner-constructed description for a harness error or for a block schedule that stayed defective after the re-dispatch limit; otherwise `null` | The artifact has no column for `error_reason`. Without it, the shared Routing Policy's `E100` rule ("correct the invocation or routing named in `error_reason`") cannot be applied in script mode, and the orchestrator could not tell why a producer that returned `SUCCESS` is being consulted about. |
 | Never offer the orchestrator a block schedule the Runner found defective: its consultation request holds no schedule for that block, and a reply that dispatches a row of that block is invalid | A block row dispatched against a defective schedule would run on guessed iterations. The producing row may be dispatched again; the reply is otherwise handled like any invalid dispatch target (§7.1). |
-| Re-read the artifact after the orchestrator returns | The orchestrator may have updated Workflow Notes. The Runner must pick up those changes before the next dispatch. |
+| Re-read the artifact after the orchestrator returns, and after a consultation that failed or timed out | The orchestrator may have updated Workflow Notes. The Runner must pick up those changes before the next dispatch, and must find any damage the edit caused where it happened (§2.5). |
+| Never write the artifact after a read that found damage; keep a last-good copy after every write; set `artifact_damage` whenever the artifact is damaged, and `null` otherwise | The store re-renders the whole artifact from what it read, so writing after a damaged read makes the loss permanent. The last-good copy and the dispatch log are the evidence the orchestrator repairs from (§2.5). |
 | Keep consultation diagnostics outside `Orchestration.md` | A consultation is a fresh turn of the run's coordinator, not a protocol subagent invocation. It does not consume `global_sequence`, create an Execution Log row, or update `current_state`. Runner diagnostic/MOSAIC logs record the individual call; continuity needed for routing belongs in Workflow Notes. |
 | Re-invoke the orchestrator on a malformed reply, within the attempt budget of §7.1 | A reply with invalid JSON or an invalid `row`/`iteration` is a recoverable orchestrator slip; the retry costs one consultation, not the run. |
 | Run sequentially and refuse another `dispatch` value on resume | The artifact's `dispatch` field records how the run is scheduled. The Runner writes `sequential` on new runs and refuses a present value other than exactly `sequential`; a missing field is read as `sequential`. The orchestrator's consultation never carries a parallel schedule. |
@@ -393,6 +445,7 @@ Considered treating the orchestrator as another row in the routing table (a "met
 
 | Version | Date | Summary |
 |---------|------|---------|
+| 0.10 | 2026-11-09 | **Artifact repair (implemented, Runner v1.12.0).** A damaged `Orchestration.md` is repaired by the orchestrator inside a regular routing consultation, as a conversational orchestrator does, not in a separate context (§2.1, §2.5). The routing request gains `artifact_damage` (findings, last-good copy path, dispatch log path only when a usable log exists), always present and `null` without damage; the pre-consultation request has no such member (§3.1, §3.2). While it is set the orchestrator may edit Runner-owned sections to repair them, bounded by the evidence (§6.2). The Runner verifies the repair before acting on the reply and discards the reply when the repair is not accepted, at most two consultations per damage occurrence (§7.6). The Runner reads strictly, never writes after a damaged read, checks the artifact after failed consultations too, and keeps a last-good copy (§8). A run whose frontmatter is damaged and has no usable last-good copy gets no repair consultation (§2.5). The reply schema is unchanged. Runner v1.12.0 implements this; the `orchestrator-script` version is set by the separate orchestrator change (pending). |
 | 0.9 | 2026-11-08 | **`HARNESS_ERROR` and `user_message`.** The Runner records an invocation that ended without a usable subagent response as `HARNESS_ERROR` (Runner-recorded only, not a Communication Protocol status) instead of a synthetic `BLOCKED` with `E501`; it is re-dispatched mechanically in Modes 2/3 within its own budget of 3 (§2.3). The request gains `last_status` (the status of the response whose message is in `last_status_message`, `HARNESS_ERROR` for a harness error) and `user_message` (the text the user entered when handing a routing decision over in the manual dialogue; `null` otherwise), both always present (§3.1, §3.2). For a harness error `last_status_message` and `last_error_reason` carry the failure description. The script orchestrator agent must know `HARNESS_ERROR` and `user_message`; the Runner requires `orchestrator-script` v3.5.0, which ships together with Runner 1.11.0. |
 | 0.8 | 2026-10-13 | A pre-consultation reply may be the routing `stop` (§5.1): a decision that ends the run before any dispatch as a consultant stop (exit code 6), leaving the artifact as a pre-consultation failure does. Any other `action`, and a stop with a missing or empty `reason`, is malformed (pre-consultation failure, §7.4). A routing reply with no `action` field is a missing required field and stops at once, not retried (§7.1). A consultation made on resume, a finished-work consultation included, carries `last_status_message: null` (§3.2). §4.2 states that the stop reason is not persisted. No schema field is added. `orchestrator-script` stays at v3.3.0. |
 | 0.7 | 2026-10-13 | Modes 2/3 also consult after a `SUCCESS` whose next step already finished (`Design.md` §2.10); §2.1 lists the trigger and §6.3 states the judgement the orchestrator makes there. The wire schema is unchanged: the request carries the succeeding step's message in `last_status_message`, and no deviation kind is sent. The Runner requires `orchestrator-script` v3.3.0, whose Routing Policy states that judgement and whose Deviation Triggers list the case. |

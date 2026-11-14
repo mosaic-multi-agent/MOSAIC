@@ -45,13 +45,13 @@ func dryRunPlan(ws string, mode domain.RunMode, withRemovalsAndReplacements bool
 		WorkspacePath: ws,
 		Items: []domain.PlanItem{
 			{Ref: domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "alpha"}, TargetPath: ".github/agents/alpha.agent.md",
-				Action: domain.ActionCreate, Reason: "new artifact"},
+				Action: domain.ActionCreate, Reasons: []string{"new artifact"}},
 			{Ref: domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "beta"}, TargetPath: ".github/agents/beta.agent.md",
-				Action: domain.ActionUpdate, Reason: "renamed from .github/agents/beta.md"},
+				Action: domain.ActionUpdate, Reasons: []string{"renamed from .github/agents/beta.md", `version changed from "1.0" to "2.0"`}, Warnings: []string{"two catalogs may share this id"}},
 			{Ref: domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "gamma"}, TargetPath: ".github/agents/gamma.agent.md",
-				Action: domain.ActionUnchanged, Reason: "up to date"},
+				Action: domain.ActionUnchanged, Reasons: []string{"up to date"}},
 			{Ref: domain.ArtifactRef{Kind: domain.ArtifactAgent, Key: "delta"}, TargetPath: ".github/agents/delta.agent.md",
-				Action: domain.ActionConflict, Reason: "locally modified"},
+				Action: domain.ActionConflict, Reasons: []string{"locally modified"}},
 		},
 	}
 	if withRemovalsAndReplacements {
@@ -60,7 +60,7 @@ func dryRunPlan(ws string, mode domain.RunMode, withRemovalsAndReplacements bool
 			{Path: ".github/agents/old.md", Reason: "superseded"},
 		}
 		p.Replacements = []domain.Replacement{
-			{Path: ".github/agents/alpha.agent.md", Reason: "existing file is backed up and overwritten"},
+			{Path: ".github/agents/alpha.agent.md", Reason: "existing file is replaced by the migrated file"},
 		}
 	}
 	return p
@@ -100,10 +100,16 @@ func TestDryRunCommands_WithoutConfirmationFlag_PrintPlanReport(t *testing.T) {
 			want := "dry run: nothing was written\n" +
 				"workspace: " + ws + "\n" +
 				"plan:\n" +
-				"  create .github/agents/alpha.agent.md - new artifact\n" +
-				"  update .github/agents/beta.agent.md - renamed from .github/agents/beta.md\n" +
-				"  unchanged .github/agents/gamma.agent.md - up to date\n" +
-				"  locally-modified .github/agents/delta.agent.md - locally modified\n"
+				"  create .github/agents/alpha.agent.md\n" +
+				"    - new artifact\n" +
+				"  update .github/agents/beta.agent.md\n" +
+				"    - renamed from .github/agents/beta.md\n" +
+				"    - version changed from \"1.0\" to \"2.0\"\n" +
+				"    ! warning: two catalogs may share this id\n" +
+				"  unchanged .github/agents/gamma.agent.md\n" +
+				"    - up to date\n" +
+				"  locally-modified .github/agents/delta.agent.md\n" +
+				"    - locally modified\n"
 			if !strings.HasPrefix(out, want) {
 				t.Errorf("report does not start with the expected text.\nwant prefix:\n%s\ngot:\n%s", want, out)
 			}
@@ -147,9 +153,12 @@ func TestDryRunCommands_ListRemovalsAndReplacements(t *testing.T) {
 
 			want := "removals:\n" +
 				"  remove .github/agents/beta.md - legacy name replaced by beta.agent.md\n" +
+				"    - " + domain.BackupThenRemoveText + "\n" +
 				"  remove .github/agents/old.md - superseded\n" +
+				"    - " + domain.BackupThenRemoveText + "\n" +
 				"replacements:\n" +
-				"  replace .github/agents/alpha.agent.md - existing file is backed up and overwritten\n"
+				"  replace .github/agents/alpha.agent.md - existing file is replaced by the migrated file\n" +
+				"    - " + domain.BackupThenReplaceText + "\n"
 			if !strings.Contains(out, want) {
 				t.Errorf("removals/replacements sections missing or malformed.\nwant:\n%s\ngot:\n%s", want, out)
 			}
@@ -356,5 +365,30 @@ func TestDeployDryRunAutoConfirmStrictJson_KeepsDocumentFields(t *testing.T) {
 		"Logs", "Mode", "Outcome", "OwnedKeyDifferences", "StackInEffect", "TodoFilePath", "Todos", "WorkspacePath"}
 	if !reflect.DeepEqual(keys, want) {
 		t.Errorf("JSON top-level fields = %v, want %v", keys, want)
+	}
+}
+
+// TestDryRunCommands_ItemWithSeveralReasons_PrintsEveryReasonOnItsOwnLine verifies an item with
+// version-related and other causes prints each as its own line, in order.
+func TestDryRunCommands_ItemWithSeveralReasons_PrintsEveryReasonOnItsOwnLine(t *testing.T) {
+	ws := "/ws/dry-run"
+	for _, c := range dryRunCommands(ws) {
+		t.Run(c.name, func(t *testing.T) {
+			plan := &domain.Plan{Mode: c.mode, WorkspacePath: ws, Items: []domain.PlanItem{
+				{TargetPath: "a.md", Action: domain.ActionUpdate,
+					Stale:   []domain.VersionDelta{{Field: "version", Deployed: "1.0", Source: "2.0"}},
+					Reasons: []string{`version changed from "1.0" to "2.0"`, "migrates from the legacy file a-old.md", "third cause"}},
+			}}
+
+			out, _, _, _ := runDryRun(t, c, dryRunSummary(ws, c.mode, plan))
+
+			want := "\n  update a.md\n" +
+				"    - version changed from \"1.0\" to \"2.0\"\n" +
+				"    - migrates from the legacy file a-old.md\n" +
+				"    - third cause\n"
+			if !strings.Contains(out, want) {
+				t.Errorf("report lacks one line per reason.\nwant:\n%s\ngot:\n%s", want, out)
+			}
+		})
 	}
 }

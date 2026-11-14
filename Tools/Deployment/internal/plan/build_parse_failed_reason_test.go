@@ -53,17 +53,17 @@ func TestClassifyAgentItem_ParseFailed_ReasonIncludesParseProblemAndLine(t *test
 	if item.Action != domain.ActionConflict {
 		t.Fatalf("Action = %v, want conflict", item.Action)
 	}
-	if !strings.Contains(item.Reason, "could not be read/parsed") {
-		t.Errorf("Reason = %q; want it to keep the 'could not be read/parsed' wording", item.Reason)
+	if !strings.Contains(reasonText(item), "could not be read/parsed") {
+		t.Errorf("Reason = %q; want it to keep the 'could not be read/parsed' wording", reasonText(item))
 	}
-	if !strings.Contains(item.Reason, problem) {
-		t.Errorf("Reason = %q; want it to contain the parse problem %q", item.Reason, problem)
+	if !strings.Contains(reasonText(item), problem) {
+		t.Errorf("Reason = %q; want it to contain the parse problem %q", reasonText(item), problem)
 	}
-	if !strings.Contains(item.Reason, "line 7") {
-		t.Errorf("Reason = %q; want it to contain the line number", item.Reason)
+	if !strings.Contains(reasonText(item), "line 7") {
+		t.Errorf("Reason = %q; want it to contain the line number", reasonText(item))
 	}
-	if !strings.Contains(item.Reason, "<U+200B>") {
-		t.Errorf("Reason = %q; want it to contain the visible excerpt", item.Reason)
+	if !strings.Contains(reasonText(item), "<U+200B>") {
+		t.Errorf("Reason = %q; want it to contain the visible excerpt", reasonText(item))
 	}
 }
 
@@ -76,8 +76,8 @@ func TestClassifyAgentItem_ParseFailed_NoFrontmatterProblemAppearsInReason(t *te
 	item := buildParseFailedItem(t, state)
 
 	// Assert
-	if !strings.Contains(item.Reason, "no frontmatter") {
-		t.Errorf("Reason = %q; want it to contain the parse problem 'no frontmatter'", item.Reason)
+	if !strings.Contains(reasonText(item), "no frontmatter") {
+		t.Errorf("Reason = %q; want it to contain the parse problem 'no frontmatter'", reasonText(item))
 	}
 }
 
@@ -89,7 +89,7 @@ func TestClassifyAgentItem_ParseFailed_EmptyParseProblem_KeepsExistingReason(t *
 	item := buildParseFailedItem(t, state)
 
 	// Assert
-	if item.Reason != "deployed file could not be read/parsed" {
-		t.Errorf("Reason = %q; want the unchanged reason when no parse problem is carried", item.Reason)
+	if len(item.Reasons) != 1 || item.Reasons[0] != "deployed file could not be read/parsed" {
+		t.Errorf("Reason = %q; want the unchanged reason when no parse problem is carried", reasonText(item))
 	}
 }

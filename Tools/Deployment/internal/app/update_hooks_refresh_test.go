@@ -110,9 +110,9 @@ func TestUpdate_NestedHookWithOnlyLibFilePresent_IsDeployedAndRefreshed(t *testi
 }
 
 func TestUpdate_UpToDateHook_ReportedUnchangedAndFilesNotRewritten(t *testing.T) {
-	files := uhEditedFiles(uhFlat)
+	files := uhFixtureFiles(t, uhFlat)
 
-	run := runUpdateHooks(t, uhConfig{recorded: uhCatalogVersion, files: files})
+	run := runUpdateHooks(t, uhConfig{entries: uhFileEntries(t, uhFlat, uhCatalogVersion), files: files})
 
 	requireUpdateHooksOK(t, run)
 	if a, ok := run.hookAction(); !ok || a.Taken != domain.TakenUnchanged {
@@ -130,9 +130,9 @@ func TestUpdate_UpToDateHook_ReportedUnchangedAndFilesNotRewritten(t *testing.T)
 
 func TestUpdate_UpToDateNestedHook_FilesNotRewritten(t *testing.T) {
 	module := newTestHookModule(uhHarnessID, newTestHookPlan(t, uhNested))
-	files := uhEditedFiles(uhNested)
+	files := uhFixtureFiles(t, uhNested)
 
-	run := runUpdateHooks(t, uhConfig{module: module, recorded: uhCatalogVersion, files: files})
+	run := runUpdateHooks(t, uhConfig{module: module, entries: uhFileEntries(t, uhNested, uhCatalogVersion), files: files})
 
 	requireUpdateHooksOK(t, run)
 	if a, ok := run.hookAction(); !ok || a.Taken != domain.TakenUnchanged {

@@ -204,10 +204,10 @@ func TestClaudeCodeAdapterWithLogger_NonZeroExit_LogsInvokeError(t *testing.T) {
 	}
 }
 
-// TestClaudeCodeAdapterWithLogger_InvokeStart_CarriesAgentAndKindFields
+// TestClaudeCodeAdapterWithLogger_InvokeStart_CarriesAgentField
 // verifies that the EventHarnessInvokeStart entry carries the agent instance ID
-// (from the request) and the invocation kind as structured fields.
-func TestClaudeCodeAdapterWithLogger_InvokeStart_CarriesAgentAndKindFields(t *testing.T) {
+// (from the request) as a structured field.
+func TestClaudeCodeAdapterWithLogger_InvokeStart_CarriesAgentField(t *testing.T) {
 	setHelperEnv(t, "success")
 	logger := &recordingLogger{}
 	adapter := claudecode.NewClaudeCodeAdapterWithLogger(helperExe(t), 5*time.Second, logger)
@@ -220,13 +220,6 @@ func TestClaudeCodeAdapterWithLogger_InvokeStart_CarriesAgentAndKindFields(t *te
 			domain.EventHarnessInvokeStart, logger.allEvents())
 	} else if agentVal != "test-agent#1" {
 		t.Errorf("want agent=test-agent#1 on %s, got %q", domain.EventHarnessInvokeStart, agentVal)
-	}
-
-	kindVal, ok := logger.fieldValue(domain.EventHarnessInvokeStart, "kind")
-	if !ok {
-		t.Errorf("want 'kind' field on %s entry", domain.EventHarnessInvokeStart)
-	} else if kindVal != "ordinary" {
-		t.Errorf("want kind=ordinary on %s, got %q", domain.EventHarnessInvokeStart, kindVal)
 	}
 }
 

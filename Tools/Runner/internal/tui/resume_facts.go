@@ -15,7 +15,27 @@ import (
 
 // readRunState reads and parses the chosen run's artifact. A new run, and a run
 // with no folder, has none to read.
+//
+// A damaged artifact reads as the values it records (its own frontmatter or its
+// last-good copy's), so the wizard keeps using what the run recorded and the
+// session repairs the damage at start. Damage with no recorded values is
+// returned as the error.
 func (m *rootModel) readRunState() (domain.ArtifactState, error) {
+	state, err := m.readRunStateRaw()
+	if recorded, damaged := artifact.DamagedRunFrontmatter(m.runArtifactPath(), err); damaged {
+		return recorded, nil
+	}
+	return state, err
+}
+
+// runArtifactPath is the chosen run's Orchestration.md.
+func (m *rootModel) runArtifactPath() string {
+	return filepath.Join(m.selections.runFolder, "Orchestration.md")
+}
+
+// readRunStateRaw is readRunState without the damaged-artifact degradation:
+// a damaged artifact is returned as its *domain.ArtifactDamageError.
+func (m *rootModel) readRunStateRaw() (domain.ArtifactState, error) {
 	if m.selections.isNewRun || m.selections.runFolder == "" {
 		return domain.ArtifactState{}, os.ErrNotExist
 	}
@@ -62,6 +82,8 @@ func (m *rootModel) announceIdentity() runselect.Identity {
 		IsNewRun:  m.selections.isNewRun,
 	}
 	state, err := m.readRunState()
+	_, rawErr := m.readRunStateRaw()
+	id.Damaged = domain.IsArtifactDamage(rawErr)
 	if err != nil {
 		return id
 	}
@@ -98,7 +120,10 @@ func (m *rootModel) artifactRefusal() error {
 	if m.selections.isNewRun || m.selections.runFolder == "" {
 		return nil
 	}
-	state, readErr := m.readRunState()
+	state, readErr := m.readRunStateRaw()
+	if recorded, damaged := artifact.DamagedRunFrontmatter(m.runArtifactPath(), readErr); damaged {
+		state = recorded
+	}
 	return resumecheck.CheckArtifact(m.selections.runID, state, readErr)
 }
 

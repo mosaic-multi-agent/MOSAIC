@@ -93,7 +93,7 @@ func TestBuildArgs_JSON_Ordinary_ExactArgsWithoutVerbose(t *testing.T) {
 	}
 	want := []string{
 		"-p",
-		"--append-system-prompt-file", ordinaryAgent().DefinitionPath,
+		"--agent", ordinaryAgent().Identifier,
 		"--output-format", "json",
 		"--permission-mode", "auto",
 		"--no-session-persistence",
@@ -112,8 +112,8 @@ func TestBuildArgs_JSON_Orchestrator_ExactArgsWithoutVerbose(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	want := []string{
-		"--agent", orchestratorAgent().Identifier,
 		"-p",
+		"--agent", orchestratorAgent().Identifier,
 		"--output-format", "json",
 		"--permission-mode", "dontAsk",
 		"--allowedTools", "Read",

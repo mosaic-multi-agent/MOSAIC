@@ -79,6 +79,7 @@ func (r *transformRun) result(todoPath string) TransformHarnessResult {
 	for _, x := range r.plan.Replacements {
 		res.Replacements = append(res.Replacements, newFileChange(x.Ref, x.Path, x.Reason))
 	}
+	res.DroppedEntries = r.droppedEntryResults()
 	res.Notes = append([]TransformNote(nil), r.plan.Notes...)
 	if note, ok := r.minimalGrantNote(); ok {
 		res.Notes = append(res.Notes, note)

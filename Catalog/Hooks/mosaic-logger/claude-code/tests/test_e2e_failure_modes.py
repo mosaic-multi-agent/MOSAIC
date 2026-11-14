@@ -505,6 +505,10 @@ class TestAttributionCascadeAndStopQuarantine(unittest.TestCase):
     def _dispatch(self, payload: dict) -> None:
         mosaic_logger.dispatch(json.dumps(payload))
 
+    def _capture(self, payload: dict) -> None:
+        """Fire the synchronous dispatch-capture entry that queues a dispatch."""
+        mosaic_logger.dispatch_capture(json.dumps(payload))
+
     def test_resolvable_run_tool_event_lands_in_same_dir_as_invocation_start(self):
         """AC3.2: for a session with a resolvable run, a subagent's tool event
         lands in the same invocation directory as its invocation_start, and no
@@ -516,7 +520,7 @@ class TestAttributionCascadeAndStopQuarantine(unittest.TestCase):
         prompt = f'{{"agent_instance_id": "{instance_id}", "run_id": "{run_id}"}}'
 
         # Establishes the session-run binding for this session (D4/A4).
-        self._dispatch({
+        self._capture({
             "hook_event_name": "PreToolUse",
             "session_id": session_id,
             "tool_name": "Task",
@@ -612,7 +616,7 @@ class TestAttributionCascadeAndStopQuarantine(unittest.TestCase):
         instance_id = "Reviewer#88"
         prompt = f'{{"agent_instance_id": "{instance_id}", "run_id": "{run_id}"}}'
 
-        self._dispatch({
+        self._capture({
             "hook_event_name": "PreToolUse",
             "session_id": session_id,
             "tool_name": "Task",
