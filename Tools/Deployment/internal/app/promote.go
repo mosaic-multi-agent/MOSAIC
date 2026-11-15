@@ -39,7 +39,7 @@ import (
 	"errors"
 	"fmt"
 
-	"mosaic-deploy/internal/agentfields"
+	"mosaic-common/agentfields"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
 )

@@ -4,7 +4,7 @@ package app
 // path of an id-bearing agent that no indexed file resolved to.
 
 import (
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/domain"
 )
 

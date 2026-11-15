@@ -2,7 +2,7 @@
 
 > **Status:** Draft
 > **Created:** 2026-08-15
-> **Last Updated:** 2026-11-11
+> **Last Updated:** 2026-11-14
 > **Scope:** The design of `mosaic-run`, the CLI tool that executes orchestration workflows without a human orchestrator in the loop. Covers execution modes (how much routing intelligence the Runner handles autonomously versus delegating to a script-mode orchestrator agent), the architectural layers that implement those modes, the dispatch loop lifecycle, and the contract boundaries between the Runner and the systems it drives (harness adapters, orchestrator agents, the orchestration artifact).
 
 ---
@@ -56,6 +56,8 @@ The environment context gap is a different class of problem: a subagent that can
 The Runner is not a replacement for the orchestrator agent. The orchestrator agent holds domain knowledge (how to recover from a failed test run, when to skip a stage, how to interpret ambiguous findings). The Runner holds workflow-table knowledge (which row comes next, how block iterations are ordered, how groups work). The Runner replaces the orchestrator's *mechanical* work; the orchestrator retains its *intelligent* work and is invoked when judgement is needed.
 
 The Runner is also not protocol-agnostic. It parses subagent responses against the MOSAIC Communication Protocol's status and error vocabularies, which are compiled into it. It does not check which protocol a deployment carries. A catalog-supplied replacement protocol that changes either vocabulary is unsupported and fails at the first subagent response (`Development/Designs/CommunicationProtocol.md` §10.7). The test catalog (`Tools/Runner/TestCatalog`) deploys as a standalone catalog stack with its own copies of the protocol, bundle and harness injections; keeping them in sync with the default ones is a maintenance obligation (see `TestCatalogDesign.md`).
+
+**Native parity.** The Runner reproduces native orchestration as closely as the harness allows, so users never have to learn two behaviours. A Runner-only mechanism (its own HITL channel, its own logging) is not introduced just because the Runner could do it; a harness limitation alone is not a reason either, when the gap can simply be documented (for example, Codex runs have no MOSAIC log).
 
 The Runner is also not a workflow engine in the general sense. It executes MOSAIC workflow tables — a specific format with specific semantics. It does not interpret arbitrary DAGs, BPMN diagrams, or pipeline definitions.
 
@@ -503,7 +505,7 @@ The same failure kinds apply at the other dispatch sites. A failed HITL repair r
 
 Every Runner surface shows the status as its own: the progress screen draws `HARNESS_ERROR` and `CONFIG_ERROR` rows in bold italic error colour so they never look like a subagent-returned `BLOCKED`, the history rebuilt from the Execution Log does the same (row parity, §3.4), and the CLI progress notices, the ending infrastructure failure list and the dispatch log name the status and, in the dispatch log, the failure kind (`failure_kind`). The consultation request reports `HARNESS_ERROR` in `last_status` and carries the failure description in `last_status_message` and `last_error_reason` (`ScriptOrchestratorContract.md` §3.2).
 
-The GHCP CLI adapter classifies two events of its JSON stream as harness errors, whatever else the stream holds: `subagent.deselected` (GHCP ran its default agent instead of the requested one; the error names the requested agent) and `session.error` (a failed model call such as an exhausted quota; the error carries the event's type, code, status and message, which appear nowhere on stderr). Both are recorded as `HARNESS_ERROR` for a dispatch (kinds `ghcp-agent-deselected` and `ghcp-session-error`) and are a transport failure for a consultation. The adapter's debug-log entry for each invocation also records the GHCP version (`ghcp_version`) read from the `pkg/<platform>/<version>` paths in the stream, because the CLI self-updates between invocations. A harness error is no `E501`: the shared Routing Policy picks its recovery tier by `error_code`, and `E501` (a subagent reporting an unavailable tool) retries the same agent within the Repeated Failures cap and then escalates, whereas the Runner answers a harness error with its own bounded retry above.
+The GHCP CLI adapter classifies two events of its JSON stream as harness errors, whatever else the stream holds: `subagent.deselected` (GHCP ran its default agent instead of the requested one; the error names the requested agent) and `session.error` (a failed model call such as an exhausted quota; the error carries the event's type, code, status and message, which appear nowhere on stderr). Both are recorded as `HARNESS_ERROR` for a dispatch (kinds `ghcp-agent-deselected` and `ghcp-session-error`) and are a transport failure for a consultation. The adapter's debug-log entry for each invocation also records the GHCP version (`ghcp_version`) read from the `pkg/<platform>/<version>` paths in the stream, because the CLI self-updates between invocations. The Codex adapter maps its failures, Windows sandbox setup failures included, onto the existing failure kinds. A harness error is no `E501`: the shared Routing Policy picks its recovery tier by `error_code`, and `E501` (a subagent reporting an unavailable tool) retries the same agent within the Repeated Failures cap and then escalates, whereas the Runner answers a harness error with its own bounded retry above.
 
 ### 3.4 Stop Handling
 
@@ -747,7 +749,7 @@ Infrastructure agents are declared outside workflow tables and reached either by
 
 ## 6. Runner Agent Snapshot
 
-Regular orchestration and Runner execution have different deployment requirements. In regular orchestration, the orchestrator agent (`mode: primary`) spawns subagents via the harness's task/subagent tool, and the subagent's `mode: subagent` frontmatter enforces isolation. The Runner invokes every agent by name via the harness CLI (`opencode run --agent <id>`, `claude -p --agent <id>`, `copilot -p --agent <id>`), and some harnesses block CLI invocation of agents marked `mode: subagent`. OpenCode is the first harness with this constraint, but others may follow.
+Regular orchestration and Runner execution have different deployment requirements. In regular orchestration, the orchestrator agent (`mode: primary`) spawns subagents via the harness's task/subagent tool, and the subagent's `mode: subagent` frontmatter enforces isolation. The Runner invokes agents by name via the harness CLI where the harness supports it (`opencode run --agent <id>`, `claude -p --agent <id>`, `copilot -p --agent <id>`), and some harnesses block CLI invocation of agents marked `mode: subagent`. OpenCode is the first harness with this constraint, but others may follow. Codex has no agent flag; the Runner loads its agents itself (§6.7).
 
 ### 6.1 The Problem
 
@@ -760,8 +762,9 @@ Harnesses differ fundamentally in how they load agent definitions:
 | Claude Code | **Name-based** | `-p --agent <name>` — resolves the name from `.claude/agents/` and applies the frontmatter (`model:`, `tools:`) |
 | OpenCode | **Name-based** | `--agent <name>` — resolves the name from its canonical agents directory |
 | GitHub Copilot CLI | **Name-based** | `--agent <name>` — resolves the name from its scoped agent directories |
+| Codex CLI | **Runner-loaded** | No agent flag. The Runner decodes `.codex/agents/<id>.toml` and supplies model, sandbox, settings and instructions on each `codex exec` call (§6.7) |
 
-All supported harnesses load agents by name. Name-based harnesses always read from their canonical directory regardless of what path the Runner has resolved internally. A snapshot sitting in a sibling directory is invisible to them.
+Name-based harnesses always read from their canonical directory regardless of what path the Runner has resolved internally. A snapshot sitting in a sibling directory is invisible to them.
 
 ### 6.2 Snapshot Strategy per Harness
 
@@ -769,12 +772,13 @@ The Runner selects a snapshot strategy per harness:
 
 | Strategy | How it works | Used by |
 |----------|-------------|---------|
-| **None** | The Runner invokes the deployed agents by name. No copy, no transform. | Harnesses with no transformations (Claude Code) |
+| **None** | The Runner invokes the deployed agents by name, or loads them itself (§6.7). No copy, no transform. | Harnesses with no transformations (Claude Code, Codex) |
 | **Backup-and-transform** | Copy originals to a shared backup dir, transform originals in-place, restore from backup on completion. | Harnesses with transformations (OpenCode, GHCP CLI) |
 
 | Harness | Regular directory | Sibling directory | Role |
 |---------|------------------|-------------------|------|
 | Claude Code | `.claude/agents/` | none | — |
+| Codex | `.codex/agents/` | none | — |
 | OpenCode | `.opencode/agents/` | `.opencode/.agents-backup/` | Shared safety backup (restore source); one per workspace |
 | GHCP CLI | `.github/agents/` | `.github/.agents-backup/` | Shared safety backup (restore source); one per workspace |
 
@@ -914,6 +918,16 @@ Step 4b runs unconditionally for CLI harnesses — it is a no-op when no recover
 **Cleanup:** On run completion (any terminal outcome):
 - **Backup-and-transform:** Release lock, delete own lock file, perform last-out check (§6.2.2). If last out: restore originals, remove marker, delete backup directory. If not last out: leave everything for the remaining active runs. Restore failure is logged as an error but does not change the run's exit code — the run itself succeeded, and the next Runner start will retry recovery automatically.
 
+### 6.7 Agent File Formats and Runner-Loaded Harnesses
+
+**Format-neutral reading.** Deployed agent files are not always Markdown: Codex agents are TOML (`agent_format_id: codex-toml` in Deploy's descriptor). The Runner never parses an agent file in its on-disk format. It reads every deployed agent file through the agent-format layer shared with Deploy (`Tools/Common`): the harness's translator decodes the file to the canonical MOSAIC document, and all Runner reads (run-start definition check, orchestrator-script workflow and `<InfrastructureAgents>` regions, test-catalog resolution) work on that document. The shared CLI harness catalog names each harness's format ID and agent file extension, drift-guarded against Deploy's descriptors; discovery builds file names from that extension. A file that cannot be decoded refuses the run at start. A new agent file format therefore needs a translator and catalog values, never a Runner change; only the harness adapter is harness-specific.
+
+**Experimental harnesses.** The Runner keeps its own experimental marking per harness, with a required reason, independent of Deploy's descriptor field: a harness can be proven in one tool and not in the other. An experimental harness stays selectable; the TUI marks it and shows the reason, and the CLI warns once at run start or resume, as Deploy does.
+
+**Runner-loaded agents (Codex).** Codex has no way to start an agent by name from the CLI, so the Runner loads each Codex agent itself on every invocation, subagent and orchestrator-script alike. It supplies the agent's deployed instructions, model, permissions and every other Codex setting declared in the decoded file. Codex has no per-agent tool list. Deploy expresses an agent's capabilities as Codex settings, and the Runner applies them as declared. Agent files are never modified.
+
+This differs from the path loading abandoned for Claude Code (§7.6). There the harness ignored the frontmatter. Here the Runner applies the whole file itself, so the agent runs with its own model, permissions and settings. HITL goes through `contact-user` without manual approval prompts. Setup problems that would silently break a run (workspace not trusted by Codex, `contact-user` unavailable) are warned about at start. Native Codex orchestration is not supported: Codex is a Runner-only harness. Codex is experimental in the Runner until real runs prove it. Codex runs produce no MOSAIC log invocation events (`Development/Designs/MosaicLogFormat.md` §4.6).
+
 ---
 
 ## 7. Dead Ends
@@ -1013,6 +1027,7 @@ No open design items remain. All items from the initial draft have been resolved
 
 | Version | Date | Summary |
 |---------|------|---------|
+| 0.17 | 2026-11-14 | **Format-neutral agent files and Codex (§6, §6.7, §3.3).** The Runner reads every deployed agent file through the agent-format layer shared with Deploy (moved to `Tools/Common`); the CLI harness catalog carries each harness's format ID and extension. Codex is added as a Runner-only, Runner-loaded harness: the Runner supplies each agent's instructions, model, permissions and declared settings; `contact-user` works without approval prompts; trust and `contact-user` start warnings; existing failure kinds; no MOSAIC log invocation events. Native Codex orchestration is not supported. Implementation follow-up. |
 | 0.16 | 2026-11-11 | **Claude Code agents loaded by name (§6, §7.6).** Every Claude Code invocation uses `claude -p --agent <name>`; `--append-system-prompt-file`, the per-run copy `.claude/agents-runner-{run_id}/` (copy-and-invoke) and the synthesized environment block are removed. Path loading ignored the frontmatter, so agents ran on the user's default model with all built-in tools. Agent files are not frozen during a run on any harness. Run-start step 5 refuses an agent without a non-empty `model:` on every harness, and on Claude Code an agent whose `name:` differs from its identifier. |
 | 0.15 | 2026-11-09 | **Damaged artifact (implemented, Runner v1.12.0).** §4.4: strict reading reports damage instead of parsing around it, the store never writes after a damaged read, the Runner keeps a last-good copy as evidence outside the run folder, a run with damaged frontmatter recovers its recorded values from that copy (unresumable without one), and damage found anywhere leads to a routing consultation with `artifact_damage` in which the orchestrator repairs and then routes (`ScriptOrchestratorContract.md` §2.5, §7.6). §4.3: a damaged artifact on resume or Retry is repaired by that consultation instead of a computed resume point. |
 | 0.14 | 2026-11-08 | **Harness errors, activity header and user message documented as implemented.** §2.4, §3.3, §4.3, §5: an invocation that ends without a usable subagent response is recorded as `HARNESS_ERROR` (Runner-recorded only, not a Communication Protocol status) instead of a synthetic `BLOCKED`/`E501`; failure kinds and Summary wording, no `[error:CODE]` marker, never accepted (no `current_state` update, no HITL discharge), raw-text bypass then mechanical re-dispatch within its own budget of 3 per row and iteration (separate from the E501 budget, both read from the Execution Log), then a deviation (at once in Mode 1); old synthetic `BLOCKED`/`E501` rows still resume and count against the E501 budget; HITL repair, infrastructure and commit setup failures are recorded as `HARNESS_ERROR` (`CONFIG_ERROR` for an unresolved agent definition); the status is shown distinctly on every Runner surface. §2.9, §3.4: after `Ask the orchestrator to decide` an optional multi-line message step; the text travels verbatim as `user_message` on that one routing consultation and is not stored; shown on the consultation row and in the debug log. §3.4: the activity header shows model, `ctx <size>`, `running <tool>`/`quiet` indicator (highlighted from 5 minutes) and on end the elapsed time, `ended`, context size and cost; no token in/out. Contract 0.9. |

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/pathinput"
 	"mosaic-deploy/internal/transform"

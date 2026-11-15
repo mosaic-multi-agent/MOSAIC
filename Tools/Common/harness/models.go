@@ -20,8 +20,9 @@ type ModelCatalog struct {
 }
 
 // modelCatalogs is the single declaration of every builtin harness's model
-// data. CLI-backed harnesses come first, in the same stable order as
-// cliHarnesses; non-CLI entries (e.g. "vscode-ghcp") follow.
+// data. CLI-backed harnesses appear in the same relative order as
+// cliHarnesses; non-CLI entries (e.g. "vscode-ghcp") sit beside the harness
+// whose model set they mirror.
 //
 // Every CLI-backed harness must have an entry; the coverage test
 // TestModelCatalog_EveryIdentityCatalogEntryHasModelData enforces that at test
@@ -155,6 +156,16 @@ var modelCatalogs = []ModelCatalog{
 			"Grok 4.7",
 			"Grok 4.6",
 			"Grok 4.5",
+		},
+	},
+	{
+		HarnessID:  HarnessIDCodex,
+		FormatHint: "gpt-<version>",
+		IDs: []string{
+			"gpt-6-astra",
+			"gpt-5.6-sol",
+			"gpt-5.6-terra",
+			"gpt-5.6-luna",
 		},
 	},
 }

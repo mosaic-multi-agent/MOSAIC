@@ -11,9 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/app"
-	"mosaic-deploy/internal/domain"
 )
 
 const (
@@ -141,7 +140,7 @@ func twinRebuildToTwin(t *testing.T, f twinFormat, existing bool) (app.RebuildRe
 	if existing {
 		old := "---\n" + twinUserKey + ": " + twinUserValue + "\n---\nOLD-DESTINATION-INSTRUCTIONS\n"
 		raw, _, err := twinTranslator(t, side).Encode([]byte(old), agentformat.ArtifactContext{
-			AgentKey: "code-reviewer", Kind: domain.ArtifactAgent, Op: agentformat.OpCreate})
+			AgentKey: "code-reviewer", Kind: agentformat.ArtifactAgent, Op: agentformat.OpCreate})
 		if err != nil {
 			t.Fatalf("encode the existing destination: %v", err)
 		}

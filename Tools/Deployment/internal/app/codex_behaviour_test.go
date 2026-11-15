@@ -40,8 +40,8 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
-	_ "mosaic-deploy/internal/agentformat/all"
-	"mosaic-deploy/internal/agentformat"
+	_ "mosaic-common/agentformat/all"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/catalog/catalogpaths"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/builtin/codex"

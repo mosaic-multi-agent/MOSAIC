@@ -45,7 +45,7 @@ import (
 	"testing"
 	"time"
 
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/catalog"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/registry"

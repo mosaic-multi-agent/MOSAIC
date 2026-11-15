@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/goccy/go-yaml"
-	"mosaic-deploy/internal/agentformat/formatid"
+	"mosaic-common/agentformat/formatid"
 	"mosaic-deploy/internal/domain"
 )
 

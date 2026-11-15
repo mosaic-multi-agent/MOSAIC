@@ -2,10 +2,9 @@ package harness
 
 import (
 	"errors"
-	"os"
 	"strings"
 
-	"mosaic-common/docformat"
+	"mosaic-common/agentload"
 	"mosaic-common/mosaic"
 )
 
@@ -44,7 +43,7 @@ var ErrToolsEmpty = errors.New("harness: agent definition tools field has wrong 
 // string (e.g. "Read, Write, Edit, Bash"). This function splits on
 // commas and trims whitespace from each entry.
 func ExtractClaudeCodeTools(path string) ([]string, error) {
-	fv, err := readToolsField(path)
+	fv, err := readToolsField(path, HarnessIDClaudeCode)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +109,7 @@ func ExtractClaudeCodeTools(path string) ([]string, error) {
 // The deployed GHCP CLI tools field is a flow-style YAML list
 // (e.g. ['read', 'edit', 'search', 'execute', 'ask_user', 'agent']).
 func ExtractGHCPCLITools(path string) ([]string, error) {
-	fv, err := readToolsField(path)
+	fv, err := readToolsField(path, HarnessIDGHCPCLI)
 	if err != nil {
 		return nil, err
 	}
@@ -190,21 +189,22 @@ func translateGHCPTool(name string) (string, bool) {
 	}
 }
 
-// readToolsField reads the agent definition file at path, parses its
-// frontmatter, and returns the FieldValue for the "tools" key.
+// readToolsField loads the agent definition file at path through the shared
+// read-only loader, in the agent format of the catalog harness harnessID, and
+// returns the FieldValue for the "tools" key of its standard form.
+// A load failure is returned as the loader's *agentload.LoadError.
 // Returns ErrToolsMissing when the key is absent.
-func readToolsField(path string) (mosaic.FieldValue, error) {
-	data, err := os.ReadFile(path)
+func readToolsField(path, harnessID string) (mosaic.FieldValue, error) {
+	formatID := ""
+	if entry, ok := LookupCLIHarness(harnessID); ok {
+		formatID = entry.AgentFormatID
+	}
+	agent, err := agentload.Load(path, formatID)
 	if err != nil {
 		return mosaic.FieldValue{}, err
 	}
 
-	doc, err := docformat.Parse(data)
-	if err != nil {
-		return mosaic.FieldValue{}, err
-	}
-
-	fv, ok := doc.Frontmatter().Get("tools")
+	fv, ok := agent.Document.Frontmatter().Get("tools")
 	if !ok {
 		return mosaic.FieldValue{}, ErrToolsMissing
 	}

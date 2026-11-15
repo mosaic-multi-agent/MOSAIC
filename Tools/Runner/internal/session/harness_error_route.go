@@ -35,7 +35,9 @@ func classifyHarnessFailure(err error) domain.HarnessFailure {
 	case errors.Is(err, commonharness.ErrGHCPCLIStreamError),
 		errors.Is(err, commonharness.ErrGHCPCLIStreamIncomplete),
 		errors.Is(err, commonharness.ErrOpenCodeStreamError),
-		errors.Is(err, commonharness.ErrOpenCodeStreamIncomplete):
+		errors.Is(err, commonharness.ErrOpenCodeStreamIncomplete),
+		errors.Is(err, commonharness.ErrCodexStreamError),
+		errors.Is(err, commonharness.ErrCodexStreamIncomplete):
 		return domain.HarnessFailure{Kind: domain.HarnessFailureStreamError, Detail: text}
 	case errors.Is(err, commonharness.ErrEmptyResponse):
 		return domain.HarnessFailure{Kind: domain.HarnessFailureEmpty, Detail: text}

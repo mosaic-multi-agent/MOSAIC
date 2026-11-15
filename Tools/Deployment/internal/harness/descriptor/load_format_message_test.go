@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"mosaic-deploy/internal/agentformat/formatid"
+	"mosaic-common/agentformat/formatid"
 	"mosaic-deploy/internal/harness/descriptor"
 )
 

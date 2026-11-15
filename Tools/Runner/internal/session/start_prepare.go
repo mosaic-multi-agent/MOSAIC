@@ -86,7 +86,7 @@ func (s *sessionImpl) prepareRouting(ctx context.Context, config domain.RunConfi
 		}
 		return nil, s.resumeRecordedNoWorkflowRefusal(config.RunID), true, nil
 	}
-	region, err := orchfile.GetWorkflow(config.OrchestratorFilePath, string(config.WorkflowID))
+	region, err := orchfile.GetWorkflow(config.OrchestratorFilePath, agentFormat(config.HarnessID), string(config.WorkflowID))
 	if err != nil {
 		if !config.IsNewRun && isWorkflowNotFound(err, string(config.WorkflowID)) {
 			return nil, s.resumeWorkflowGoneRefusal(config.RunID, string(config.WorkflowID)), true, nil
@@ -103,7 +103,7 @@ func (s *sessionImpl) prepareRouting(ctx context.Context, config domain.RunConfi
 	}
 
 	// Step 2a: resolve the orchestrator agent reference.
-	orchRef, err := agentresolve.ResolveOrchestrator(config.OrchestratorFilePath)
+	orchRef, err := agentresolve.ResolveOrchestrator(config.OrchestratorFilePath, agentFormat(config.HarnessID))
 	if err != nil {
 		return nil, s.refusal(err.Error()), true, nil
 	}
@@ -214,7 +214,7 @@ func (s *sessionImpl) admitAndResolveAgents(ctx context.Context, rs *runStartCtx
 
 	// Step 5: resolve all agent identifiers.
 	identifiers := uniqueAgentIdentifiers(rs.table)
-	agents, err := agentresolve.ResolveAll(rs.orchDir, identifiers)
+	agents, err := agentresolve.ResolveAll(rs.orchDir, agentFormat(rs.config.HarnessID), identifiers)
 	if err != nil {
 		return s.refusal(err.Error()), true, nil
 	}

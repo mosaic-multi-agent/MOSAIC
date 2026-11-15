@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/agentkey"
 	"mosaic-deploy/internal/app"
 	"mosaic-deploy/internal/domain"

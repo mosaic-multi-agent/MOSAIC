@@ -27,7 +27,7 @@ package descriptor_test
 import (
 	"testing"
 
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentformat"
 )
 
 // ---------------------------------------------------------------------------

@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"testing"
 
+	"mosaic-run/internal/agentfile"
 	"mosaic-run/internal/orchfile"
 )
 
 func TestGetWorkflow_KnownID_ReturnsRegion(t *testing.T) {
-	region, err := orchfile.GetWorkflow(orchfileFixture("bare-single.md"), "bare-workflow")
+	region, err := orchfile.GetWorkflow(orchfileFixture("bare-single.md"), agentfile.Format{}, "bare-workflow")
 
 	if err != nil {
 		t.Fatalf("GetWorkflow returned unexpected error: %v", err)
@@ -20,7 +21,7 @@ func TestGetWorkflow_KnownID_ReturnsRegion(t *testing.T) {
 }
 
 func TestGetWorkflow_KnownID_RegionVersion_IsCorrect(t *testing.T) {
-	region, err := orchfile.GetWorkflow(orchfileFixture("bare-single.md"), "bare-workflow")
+	region, err := orchfile.GetWorkflow(orchfileFixture("bare-single.md"), agentfile.Format{}, "bare-workflow")
 	if err != nil {
 		t.Fatalf("GetWorkflow: %v", err)
 	}
@@ -31,7 +32,7 @@ func TestGetWorkflow_KnownID_RegionVersion_IsCorrect(t *testing.T) {
 }
 
 func TestGetWorkflow_KnownID_Content_IsNonEmpty(t *testing.T) {
-	region, err := orchfile.GetWorkflow(orchfileFixture("bare-single.md"), "bare-workflow")
+	region, err := orchfile.GetWorkflow(orchfileFixture("bare-single.md"), agentfile.Format{}, "bare-workflow")
 	if err != nil {
 		t.Fatalf("GetWorkflow: %v", err)
 	}
@@ -44,7 +45,7 @@ func TestGetWorkflow_KnownID_Content_IsNonEmpty(t *testing.T) {
 func TestGetWorkflow_AbsentID_ReturnsRefusalError(t *testing.T) {
 	// Requesting a workflow ID that does not appear in the file must return
 	// a *domain.RefusalError.
-	_, err := orchfile.GetWorkflow(orchfileFixture("bare-single.md"), "does-not-exist")
+	_, err := orchfile.GetWorkflow(orchfileFixture("bare-single.md"), agentfile.Format{}, "does-not-exist")
 
 	if err == nil {
 		t.Fatal("GetWorkflow must return an error for an absent identifier")
@@ -55,7 +56,7 @@ func TestGetWorkflow_AbsentID_ReturnsRefusalError(t *testing.T) {
 func TestGetWorkflow_AbsentID_RefusalError_ComponentIsOrchfile(t *testing.T) {
 	// The RefusalError from GetWorkflow must name "orchfile" as the component
 	// so callers can attribute the error to this package.
-	_, err := orchfile.GetWorkflow(orchfileFixture("bare-single.md"), "does-not-exist")
+	_, err := orchfile.GetWorkflow(orchfileFixture("bare-single.md"), agentfile.Format{}, "does-not-exist")
 
 	re := asRefusalError(t, err)
 	if re.Component != "orchfile" {
@@ -65,7 +66,7 @@ func TestGetWorkflow_AbsentID_RefusalError_ComponentIsOrchfile(t *testing.T) {
 
 func TestGetWorkflow_TwoWorkflowFile_SelectsCorrectOne(t *testing.T) {
 	// GetWorkflow must return only the requested region, not the first one.
-	region, err := orchfile.GetWorkflow(orchfileFixture("bare-two-workflows.md"), "workflow-beta")
+	region, err := orchfile.GetWorkflow(orchfileFixture("bare-two-workflows.md"), agentfile.Format{}, "workflow-beta")
 	if err != nil {
 		t.Fatalf("GetWorkflow: %v", err)
 	}
@@ -83,7 +84,7 @@ func TestGetWorkflow_DeployManaged_SelectSecondByID_ContentContainsRoutingTable(
 	// The routing table rows declared inside the greenfield-tdd workflow region must appear
 	// in Content. This is the second-workflow counterpart of
 	// TestGetWorkflow_DeployManaged_SelectFirstByID_ContentContainsRoutingTable.
-	region, err := orchfile.GetWorkflow(orchfileFixture("deploy-managed.md"), "greenfield-tdd")
+	region, err := orchfile.GetWorkflow(orchfileFixture("deploy-managed.md"), agentfile.Format{}, "greenfield-tdd")
 	if err != nil {
 		t.Fatalf("GetWorkflow: %v", err)
 	}

@@ -4,7 +4,7 @@ display_name: "Codex"
 agent_format_id: "codex-toml"
 tool_info_recoverable: false
 experimental:
-  reason: "Agents deploy to .codex/agents/*.toml, and update and transform work. There is no orchestration: Codex native multi-agent dispatch is not usable for MOSAIC, and mosaic-run has no Codex adapter."
+  reason: "Codex agents run through mosaic-run only. Native orchestration in Codex is unsupported, and no MOSAIC log is produced."
 transform_version: "1.0.0"
 injections_version: "1.0.0"
 models:
@@ -70,5 +70,7 @@ frontmatter:
     - "description"
     - "model"
     - "sandbox_mode"
+    - "web_search"
+    - "sandbox_workspace_write"
 hooks:
   supported: false

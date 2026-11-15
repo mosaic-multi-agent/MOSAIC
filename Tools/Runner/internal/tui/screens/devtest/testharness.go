@@ -35,7 +35,7 @@ func NewTestHarnessScreen(width, height int, styles screens.Styles) *TestHarness
 	for i, s := range sels {
 		items[i] = widgets.ListItem{
 			ID:    s.ID,
-			Label: s.Label,
+			Label: s.DisplayLabel(),
 		}
 	}
 	msStyles := widgets.MultiSelectStyles{

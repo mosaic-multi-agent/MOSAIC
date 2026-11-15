@@ -1,0 +1,5 @@
+[projects.'{{WORKDIR}}']
+trust_level = "untrusted"
+
+[mcp_servers.some-other-server]
+command = "other-server"

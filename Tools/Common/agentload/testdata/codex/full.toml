@@ -1,0 +1,18 @@
+name = "reviewer"
+description = "Reviews code"
+model = "gpt-5"
+sandbox_mode = "workspace-write"
+web_search = "live"
+developer_instructions = """
+You review code.
+"""
+pi = 3.14
+tags = ["alpha", "beta"]
+# keep this at three
+retries = 3
+
+[sandbox_workspace_write]
+network_access = true
+
+[mcp_servers.docs]
+command = "docs-server"

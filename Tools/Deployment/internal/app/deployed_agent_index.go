@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"mosaic-deploy/internal/agentfields"
+	"mosaic-common/agentfields"
 	"mosaic-deploy/internal/domain"
 )
 

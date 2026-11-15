@@ -30,7 +30,7 @@ func (s *sessionImpl) dispatchInfraAgent(
 	}
 	req := buildInfraRequest(agent, matched, instanceID, state.RunID, config.RunFolder, state.CommitBranch, completedStep, boundaries)
 
-	agentRef, resolveErr := agentresolve.ResolveOne(orchDir, agent.Name)
+	agentRef, resolveErr := agentresolve.ResolveOne(orchDir, agentFormat(config.HarnessID), agent.Name)
 	var response domain.ProtocolResponse
 	if resolveErr != nil {
 		// Cannot locate the agent definition file: a configuration error, not

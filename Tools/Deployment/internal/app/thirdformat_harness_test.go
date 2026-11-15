@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"testing"
 
-	"mosaic-deploy/internal/agentformat/testjson"
+	"mosaic-common/agentformat/testjson"
 	"mosaic-deploy/internal/app"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"

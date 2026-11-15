@@ -1,0 +1,3 @@
+this is = = not valid toml [
+[projects.'{{WORKDIR}}'
+trust_level = "trusted

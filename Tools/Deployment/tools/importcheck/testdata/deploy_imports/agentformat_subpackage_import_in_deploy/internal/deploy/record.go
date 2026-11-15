@@ -6,5 +6,5 @@ package deploy
 // real module.
 
 import (
-	_ "mosaic-deploy/internal/agentformat/codextoml"
+	_ "mosaic-common/agentformat/codextoml"
 )

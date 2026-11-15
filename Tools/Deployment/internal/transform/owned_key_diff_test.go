@@ -39,8 +39,8 @@ package transform_test
 import (
 	"testing"
 
-	"mosaic-deploy/internal/agentfields"
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentfields"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/transform"
 )

@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"mosaic-common/agentfields"
 	"mosaic-common/docformat"
 	"mosaic-common/mosaic"
-	"mosaic-deploy/internal/agentfields"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
 	"mosaic-deploy/internal/plan"

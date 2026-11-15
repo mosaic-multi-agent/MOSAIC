@@ -29,7 +29,7 @@ func (m *rootModel) startOrSummarise() tea.Cmd {
 	}
 	var agents []domain.DeclaredInfraAgent
 	if path := m.selections.orchestratorFile; path != "" {
-		agents, _ = orchfile.EnumerateInfrastructureAgents(path)
+		agents, _ = orchfile.EnumerateInfrastructureAgents(path, m.selectedAgentFormat())
 	}
 	lines := resumecheck.NewSummary(state, agents).Lines()
 	m.summaryScreen = runconfig.NewSummaryScreen(lines, m.width, m.height, stylesFromTheme(m.theme))

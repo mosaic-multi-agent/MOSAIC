@@ -37,7 +37,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	_ "mosaic-deploy/internal/agentformat/all"
+	_ "mosaic-common/agentformat/all"
 	"mosaic-deploy/internal/app"
 	"mosaic-deploy/internal/app/interactiontest"
 	"mosaic-deploy/internal/deploy"

@@ -15,8 +15,8 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
-	"mosaic-deploy/internal/agentformat"
-	_ "mosaic-deploy/internal/agentformat/all"
+	"mosaic-common/agentformat"
+	_ "mosaic-common/agentformat/all"
 	"mosaic-deploy/internal/app"
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
@@ -262,7 +262,7 @@ func owCanonicalRecord(t *testing.T, h owHarness, raw []byte) *domain.OwnedConte
 	if err != nil {
 		t.Fatalf("LookupString(%q): %v", h.formatID, err)
 	}
-	canonical, _, err := tr.Decode(raw, agentformat.ArtifactContext{Kind: domain.ArtifactAgent})
+	canonical, _, err := tr.Decode(raw, agentformat.ArtifactContext{Kind: agentformat.ArtifactAgent})
 	if err != nil {
 		t.Fatalf("decode written %s agent: %v", h.name, err)
 	}

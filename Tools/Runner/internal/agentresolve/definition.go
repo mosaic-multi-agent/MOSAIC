@@ -3,12 +3,12 @@ package agentresolve
 import (
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
-	"mosaic-common/docformat"
+	"mosaic-common/agentload"
 	"mosaic-common/mosaic"
 
+	"mosaic-run/internal/agentfile"
 	"mosaic-run/internal/domain"
 )
 
@@ -20,20 +20,17 @@ var ErrDefinitionModelMissing = errors.New("agentresolve: agent definition decla
 // empty, non-scalar, or differs from the agent identifier.
 var ErrDefinitionNameMismatch = errors.New("agentresolve: agent definition name differs from its identifier")
 
-// CheckDefinition reads ref.DefinitionPath and checks its frontmatter.
-// requireNameMatch adds the name check (Claude Code). A missing model is
-// reported before a name mismatch. Every failure is a *domain.RefusalError
-// naming the agent and its definition file.
-func CheckDefinition(ref domain.AgentReference, requireNameMatch bool) error {
-	data, err := os.ReadFile(ref.DefinitionPath)
+// CheckDefinition loads ref.DefinitionPath through the shared agent loader and
+// checks the frontmatter of its standard form. requireNameMatch adds the name
+// check (Claude Code). A missing model is reported before a name mismatch.
+// Every failure is a *domain.RefusalError naming the agent and its definition
+// file; a file that cannot be loaded carries the *agentload.LoadError as cause.
+func CheckDefinition(ref domain.AgentReference, f agentfile.Format, requireNameMatch bool) error {
+	agent, err := agentload.Load(ref.DefinitionPath, f.FormatID)
 	if err != nil {
-		return definitionRefusal(ref, fmt.Sprintf("cannot read file: %v", err), err)
+		return definitionRefusal(ref, "cannot load agent file: "+err.Error(), err)
 	}
-	doc, err := docformat.Parse(data)
-	if err != nil {
-		return definitionRefusal(ref, fmt.Sprintf("cannot parse frontmatter: %v", err), err)
-	}
-	fm := doc.Frontmatter()
+	fm := agent.Document.Frontmatter()
 
 	if scalarField(fm, "model") == "" {
 		return definitionRefusal(ref, "frontmatter declares no model", ErrDefinitionModelMissing)

@@ -15,7 +15,7 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
-	_ "mosaic-deploy/internal/agentformat/all"
+	_ "mosaic-common/agentformat/all"
 	"mosaic-deploy/internal/app"
 	"mosaic-deploy/internal/app/interactiontest"
 	"mosaic-deploy/internal/domain"

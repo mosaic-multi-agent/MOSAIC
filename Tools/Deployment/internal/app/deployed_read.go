@@ -95,7 +95,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/transform"
 )
@@ -176,7 +176,7 @@ func decodeDeployedBytes(raw []byte, kind domain.ArtifactKind, src *domain.Harne
 	}
 
 	canonical, report, err := t.Decode(raw, agentformat.ArtifactContext{
-		Kind: kind,
+		Kind: agentformat.ArtifactKind(kind),
 	})
 	if err != nil {
 		return DeployedRead{Raw: raw, Present: len(raw) > 0, DecodeErr: err}

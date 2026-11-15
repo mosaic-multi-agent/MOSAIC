@@ -1,0 +1,4 @@
+model = "gpt-5"
+
+[mcp_servers.contact-user]
+command = "contact-user-server"

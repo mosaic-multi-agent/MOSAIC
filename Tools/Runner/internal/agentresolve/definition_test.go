@@ -73,7 +73,7 @@ func TestCheckDefinition_Accepts(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ref := writeDefinition(t, checkedAgentID, tc.content)
 
-			if err := agentresolve.CheckDefinition(ref, tc.requireName); err != nil {
+			if err := agentresolve.CheckDefinition(ref, legacyMarkdown, tc.requireName); err != nil {
 				t.Errorf("want nil for a valid definition, got %v", err)
 			}
 		})
@@ -97,7 +97,7 @@ func TestCheckDefinition_RefusesMissingModel(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				ref := writeDefinition(t, checkedAgentID, tc.content)
 
-				err := agentresolve.CheckDefinition(ref, requireName)
+				err := agentresolve.CheckDefinition(ref, legacyMarkdown, requireName)
 
 				if !errors.Is(err, agentresolve.ErrDefinitionModelMissing) {
 					t.Fatalf("want ErrDefinitionModelMissing (name check %v), got %v", requireName, err)
@@ -123,7 +123,7 @@ func TestCheckDefinition_NameCheckRefusesMismatch(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ref := writeDefinition(t, checkedAgentID, tc.content)
 
-			err := agentresolve.CheckDefinition(ref, true)
+			err := agentresolve.CheckDefinition(ref, legacyMarkdown, true)
 
 			if !errors.Is(err, agentresolve.ErrDefinitionNameMismatch) {
 				t.Fatalf("want ErrDefinitionNameMismatch, got %v", err)
@@ -139,7 +139,7 @@ func TestCheckDefinition_NameCheckRefusesMismatch(t *testing.T) {
 func TestCheckDefinition_ModelFailureWinsOverNameFailure(t *testing.T) {
 	ref := writeDefinition(t, checkedAgentID, frontmatterOf("name: other-agent"))
 
-	err := agentresolve.CheckDefinition(ref, true)
+	err := agentresolve.CheckDefinition(ref, legacyMarkdown, true)
 
 	if !errors.Is(err, agentresolve.ErrDefinitionModelMissing) {
 		t.Errorf("want ErrDefinitionModelMissing when both model and name fail, got %v", err)
@@ -152,7 +152,7 @@ func TestCheckDefinition_UnreadableFile_RefusesWithTheReadError(t *testing.T) {
 		DefinitionPath: filepath.Join(t.TempDir(), "gone", checkedAgentID+".md"),
 	}
 
-	err := agentresolve.CheckDefinition(ref, false)
+	err := agentresolve.CheckDefinition(ref, legacyMarkdown, false)
 
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("want the read error reachable through the refusal, got %v", err)
@@ -166,7 +166,7 @@ func TestCheckDefinition_UnreadableFile_RefusesWithTheReadError(t *testing.T) {
 func TestCheckDefinition_UnparseableFrontmatter_RefusesWithTheParseError(t *testing.T) {
 	ref := writeDefinition(t, checkedAgentID, "---\nname: "+checkedAgentID+"\nmodel: [unclosed\n---\nbody\n")
 
-	err := agentresolve.CheckDefinition(ref, true)
+	err := agentresolve.CheckDefinition(ref, legacyMarkdown, true)
 
 	if err == nil {
 		t.Fatal("want a refusal for unparseable frontmatter, got nil")

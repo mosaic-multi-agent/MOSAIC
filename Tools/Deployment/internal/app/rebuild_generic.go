@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"errors"
 
+	"mosaic-common/agentfields"
 	"mosaic-common/docformat"
-	"mosaic-deploy/internal/agentfields"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
 )

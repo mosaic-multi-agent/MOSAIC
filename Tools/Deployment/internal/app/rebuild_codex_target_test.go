@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"mosaic-common/docformat"
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/app"
 	"mosaic-deploy/internal/domain"
 )
@@ -55,7 +55,7 @@ func decodeCodexOutput(t *testing.T, out []byte) []byte {
 	if err != nil {
 		t.Fatalf("lookup codex-toml: %v", err)
 	}
-	canonical, _, err := tr.Decode(out, agentformat.ArtifactContext{Kind: domain.ArtifactAgent})
+	canonical, _, err := tr.Decode(out, agentformat.ArtifactContext{Kind: agentformat.ArtifactAgent})
 	if err != nil {
 		t.Fatalf("decode written codex file: %v\n%s", err, out)
 	}

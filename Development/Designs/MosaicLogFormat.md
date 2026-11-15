@@ -2,7 +2,7 @@
 
 > **Status:** Draft for review
 > **Created:** 2026-07-27
-> **Last Updated:** 2026-11-12
+> **Last Updated:** 2026-11-14
 > **Scope:** The canonical log event schema, the on-disk artifact layout, run identity, and the merge utility's contract. 
 
 ---
@@ -389,6 +389,7 @@ An adapter is in Runner mode only when `MOSAIC_ROLE` is set. Without it the adap
   - Subagent role: no synthetic closing `tool_call_end` for a dispatching `task` call, and no orchestrator transcript refresh on invocation start/end.
   - Orchestrator role: no `run_start`/`run_end`; `session_start` omits any run id extracted from history (`MOSAIC_RUN_ID` is authoritative); no durable closed-session marker (exactly-once is per process).
   - `04_session.raw`/`04_session.meta.json` (and the session-scoped orchestrator transcript) exist only when the SDK returns messages during the session; each refresh writes the raw file and then the sidecar (the commit marker) synchronously once the SDK returns, so the final refresh is lost only if that SDK call has not returned when the process exits (not observed on OpenCode 1.18.18). `02_output.md` is best-effort.
+- Codex (Runner-only harness, no hook adapter): the Runner writes `run_start` and `run_end` as for every harness; nothing else is written, so a Codex run has no invocation folders, turns, tool events, usage records or transcript exports. Native Codex orchestration is not supported, so there is no native mode either.
 
 **OpenCode safety net.** After an OpenCode subagent process has exited, the Runner appends an `invocation_end` (`agent_instance_id`, `status_code` and `response` from the protocol response it received) when the invocation folder exists without one. It is re-evaluated, and dropped together with its call in the Runner's adapter construction, once live Runner runs on OpenCode show it never fires, that is, every invocation folder already holds the plugin's own `invocation_end`.
 

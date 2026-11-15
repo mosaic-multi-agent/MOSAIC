@@ -51,7 +51,7 @@ import (
 	"mosaic-agent-test/internal/tui"
 )
 
-const ToolVersion = "1.2.2"
+const ToolVersion = "1.2.3"
 
 func main() {
 	args := os.Args[1:]
@@ -275,7 +275,7 @@ func resolveConfiguredPathWithProvenance(
 // requires, and anything else is an infrastructure fault this binary itself
 // could not act on.
 func wiringFailureExitCode(err error) int {
-	if errors.Is(err, ErrUnknownHarness) {
+	if errors.Is(err, ErrUnknownHarness) || errors.Is(err, ErrUnsupportedHarness) {
 		return cli.ExitUsage
 	}
 	return cli.ExitFailure

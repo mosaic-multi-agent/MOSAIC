@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/app"
 	"mosaic-deploy/internal/domain"
 )
@@ -194,7 +194,7 @@ func twinRebuildFromTwin(t *testing.T, f twinFormat, edit func([]byte) []byte) a
 		canonical = edit(canonical)
 	}
 	raw, _, err := twinTranslator(t, side).Encode(canonical, agentformat.ArtifactContext{
-		AgentKey: "code-reviewer", Kind: domain.ArtifactAgent, Op: agentformat.OpCreate})
+		AgentKey: "code-reviewer", Kind: agentformat.ArtifactAgent, Op: agentformat.OpCreate})
 	if err != nil {
 		t.Fatalf("encode the source in the %s twin format: %v", side.name(), err)
 	}
@@ -317,7 +317,7 @@ func twinAssertRebuildParity(t *testing.T, test, md app.RebuildResult, testCanon
 func twinDecodeOutput(t *testing.T, f twinFormat, out []byte) []byte {
 	t.Helper()
 	side := twinSide{Format: f, Module: newTestTwinHarness(t, f)}
-	canonical, _, err := twinTranslator(t, side).Decode(out, agentformat.ArtifactContext{Kind: domain.ArtifactAgent})
+	canonical, _, err := twinTranslator(t, side).Decode(out, agentformat.ArtifactContext{Kind: agentformat.ArtifactAgent})
 	if err != nil {
 		t.Fatalf("decode the rebuilt %s twin file: %v\n%s", side.name(), err, out)
 	}

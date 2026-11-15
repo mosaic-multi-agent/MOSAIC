@@ -17,8 +17,8 @@ package main
 import (
 	"testing"
 
-	"mosaic-deploy/internal/agentformat"
-	"mosaic-deploy/internal/agentformat/formatid"
+	"mosaic-common/agentformat"
+	"mosaic-common/agentformat/formatid"
 	"mosaic-deploy/internal/harness/registry"
 )
 

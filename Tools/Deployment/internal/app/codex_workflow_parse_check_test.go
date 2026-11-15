@@ -10,7 +10,7 @@ import (
 	"context"
 	"testing"
 
-	_ "mosaic-deploy/internal/agentformat/all"
+	_ "mosaic-common/agentformat/all"
 	"mosaic-deploy/internal/app"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"

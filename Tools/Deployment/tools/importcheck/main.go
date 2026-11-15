@@ -27,10 +27,10 @@
 //     what makes byte-exact golden testing possible.
 //
 //  3. Translator-layer purity and direction: the translator layer
-//     (internal/agentformat and its sub-packages) must be a pure function with
+//     (mosaic-common/agentformat and its sub-packages) must be a pure function with
 //     no I/O, clock, or randomness, and must never import a harness package, the
 //     application layer, transform, the frontends, or any infrastructure package.
-//     internal/agentfields is explicitly permitted: it is the repository's
+//     mosaic-common/agentfields is explicitly permitted: it is the repository's
 //     authority for MOSAIC-owned and stamp key vocabulary, and its source file
 //     declares no imports at all, making it a leaf vocabulary package.
 //
@@ -65,6 +65,23 @@ import (
 // module start with this prefix.
 const modulePrefix = "mosaic-deploy/"
 
+// commonPrefix is the import path prefix of the shared mosaic-common module.
+const commonPrefix = "mosaic-common/"
+
+// agentFormatPrefix is the import path of the shared agent-format layer; every
+// package below it is part of the layer Deploy's deploy package must not see.
+const agentFormatPrefix = commonPrefix + "agentformat"
+
+// translatorPermittedCommon lists the mosaic-common packages (and everything below
+// them) the translator layer may import: the field vocabulary, the document model,
+// the MOSAIC value model and the layer's own packages.
+var translatorPermittedCommon = []string{
+	commonPrefix + "agentfields",
+	commonPrefix + "docformat",
+	commonPrefix + "mosaic",
+	agentFormatPrefix,
+}
+
 // builtinParentPrefix is the import path prefix for built-in harness packages.
 // Only packages under this prefix may import sibling packages here.
 const builtinParentPrefix = modulePrefix + "internal/harness/builtin/"
@@ -87,6 +104,22 @@ type rule struct {
 	// unless it also starts with one of these exception prefixes. This enforces "this package
 	// may only import the listed sub-paths from this module."
 	forbidModuleImportsExcept []string
+	// inCommon marks a rule whose dir is relative to the mosaic-common module root
+	// instead of the module root being checked (the translator layer lives there).
+	inCommon bool
+	// forbidCommonImportsExcept, when non-nil, bans any import starting with
+	// commonPrefix unless it equals or lies below one of these package paths.
+	forbidCommonImportsExcept []string
+	// forbidAllCommonImports, when true, bans any import that starts with commonPrefix.
+	forbidAllCommonImports bool
+}
+
+// location returns the rule's directory as shown in violation messages.
+func (r rule) location() string {
+	if r.inCommon {
+		return "Common/" + r.dir
+	}
+	return r.dir
 }
 
 // callBoundaryRule describes a call-level constraint for a single package directory.
@@ -125,21 +158,22 @@ var translatorForbidExact = []string{
 	"bufio",   // typically used for I/O buffering
 }
 
-// translatorForbidModulePrefix is the set of module-internal package prefixes that
-// the translator layer must never import. Importing any of these would invert the
-// dependency direction: the translator is below all of them in the architecture.
-var translatorForbidModulePrefix = []string{
-	modulePrefix + "internal/harness",
-	modulePrefix + "internal/app",
-	modulePrefix + "internal/transform",
-	modulePrefix + "internal/cli",
-	modulePrefix + "internal/tui",
-	modulePrefix + "internal/deploy",
-	modulePrefix + "internal/catalog",
-	modulePrefix + "internal/manifest",
-	modulePrefix + "internal/plan",
-	modulePrefix + "internal/config",
-	modulePrefix + "internal/logging",
+// translatorRule builds the purity and direction rule for one translator-layer
+// directory (relative to the mosaic-common module root). The layer is a pure
+// function: no I/O, clock, or randomness; it imports nothing from this module and,
+// from mosaic-common, only translatorPermittedCommon.
+func translatorRule(dir string) rule {
+	return rule{
+		dir: dir,
+		desc: "the translator layer (" + dir + ") must be a pure function: no I/O, clock, or randomness; " +
+			"and must depend only downward -- it must never import anything from mosaic-deploy. Permitted " +
+			"mosaic-common dependencies: agentfields, docformat, mosaic and the agentformat packages",
+		inCommon:                  true,
+		forbidPrefix:              translatorForbidPrefix,
+		forbidExact:               translatorForbidExact,
+		forbidAllModuleImports:    true,
+		forbidCommonImportsExcept: translatorPermittedCommon,
+	}
 }
 
 // rules is the authoritative list of import-boundary constraints.
@@ -147,7 +181,7 @@ var translatorForbidModulePrefix = []string{
 //
 //	tui, cli → app → core packages → domain → (nothing in this module)
 //	transform → domain, docformat (no I/O)
-//	agentformat → domain, agentfields, docformat, mosaic (no I/O, no upward deps)
+//	agentformat (in mosaic-common) → agentfields, docformat, mosaic (no I/O, nothing from this module)
 //
 // Adding a violation here means the architecture has drifted; fix the code,
 // not this list.
@@ -173,8 +207,8 @@ var rules = []rule{
 	},
 	{
 		dir:          "internal/deploy",
-		desc:         "deploy is format-blind: it must not import any agent-format package (internal/agentformat or its sub-packages, including formatid)",
-		forbidPrefix: []string{modulePrefix + "internal/agentformat"},
+		desc:         "deploy is format-blind: it must not import any agent-format package (mosaic-common/agentformat or its sub-packages, including formatid) or the agent loader",
+		forbidPrefix: []string{agentFormatPrefix, commonPrefix + "agentload"},
 	},
 	{
 		dir:  "internal/app/stackconfig",
@@ -280,50 +314,28 @@ var rules = []rule{
 	// not cover sub-packages). The translator layer is a pure function with no I/O,
 	// clock, or randomness, and must depend only downward in the architecture.
 	//
-	// internal/agentfields is on the permitted list deliberately: it is the repository's
+	// mosaic-common/agentfields is on the permitted list deliberately: it is the repository's
 	// authority for MOSAIC-owned and stamp key vocabulary. Forbidding it would force the
 	// translator into a duplicated key list. Its source file declares no imports of its
-	// own, making it a leaf vocabulary package equivalent to internal/domain.
+	// own, making it a leaf vocabulary package.
+	translatorRule("agentformat"),
+	translatorRule("agentformat/codextoml"),
+	translatorRule("agentformat/testjson"),
 	{
-		dir: "internal/agentformat",
-		desc: "the translator layer (agentformat) must be a pure function: no I/O, clock, or randomness; " +
-			"and must depend only downward — it must never import harness, app, transform, cli, tui, or " +
-			"infrastructure packages. Permitted module dependencies: internal/domain, internal/agentfields, " +
-			"internal/agentformat siblings, mosaic-common/docformat, mosaic-common/mosaic",
-		forbidPrefix: append(translatorForbidPrefix, translatorForbidModulePrefix...),
-		forbidExact:  translatorForbidExact,
-	},
-	{
-		dir: "internal/agentformat/codextoml",
-		desc: "the translator layer (agentformat/codextoml) must be a pure function: no I/O, clock, or randomness; " +
-			"and must depend only downward — it must never import harness, app, transform, cli, tui, or " +
-			"infrastructure packages. Permitted module dependencies: internal/domain, internal/agentfields, " +
-			"internal/agentformat, mosaic-common/docformat, mosaic-common/mosaic",
-		forbidPrefix: append(translatorForbidPrefix, translatorForbidModulePrefix...),
-		forbidExact:  translatorForbidExact,
-	},
-	{
-		dir: "internal/agentformat/testjson",
-		desc: "the translator layer (agentformat/testjson) must be a pure function: no I/O, clock, or randomness; " +
-			"and must depend only downward — it must never import harness, app, transform, cli, tui, or " +
-			"infrastructure packages. Permitted module dependencies: internal/domain, internal/agentfields, " +
-			"internal/agentformat, mosaic-common/docformat, mosaic-common/mosaic",
-		forbidPrefix: append(translatorForbidPrefix, translatorForbidModulePrefix...),
-		forbidExact:  translatorForbidExact,
-	},
-	{
-		dir:                    "internal/agentformat/formatid",
-		desc:                   "formatid is a leaf vocabulary package and must not import any package from this module",
+		dir:                    "agentformat/formatid",
+		desc:                   "formatid is a leaf vocabulary package and must not import any package from mosaic-deploy or mosaic-common",
+		inCommon:               true,
 		forbidAllModuleImports: true,
+		forbidAllCommonImports: true,
 	},
 	{
-		dir: "internal/agentformat/all",
-		desc: "the agentformat/all wiring package must only import translator sub-packages from this module; " +
-			"importing any other module-internal package would widen the wiring package's scope beyond its " +
+		dir: "agentformat/all",
+		desc: "the agentformat/all wiring package must only import translator sub-packages of the agent-format layer; " +
+			"importing any other package would widen the wiring package's scope beyond its " +
 			"single responsibility of registering translator implementations",
-		forbidModuleImportsExcept: []string{
-			modulePrefix + "internal/agentformat/",
-		},
+		inCommon:                  true,
+		forbidAllModuleImports:    true,
+		forbidCommonImportsExcept: []string{agentFormatPrefix + "/"},
 	},
 }
 
@@ -396,9 +408,19 @@ func main() {
 // runChecks applies all rules and also checks harness-name isolation across
 // the whole source tree.
 func runChecks(moduleRoot string) (violations []string, errs []string) {
+	return runChecksIn(moduleRoot, filepath.Join(moduleRoot, "..", "Common"))
+}
+
+// runChecksIn is runChecks with an explicit root for the mosaic-common module, where
+// the rules marked inCommon are applied.
+func runChecksIn(moduleRoot, commonRoot string) (violations []string, errs []string) {
 	// Apply per-package import rules.
 	for _, r := range rules {
-		vs, es := checkRule(moduleRoot, r)
+		root := moduleRoot
+		if r.inCommon {
+			root = commonRoot
+		}
+		vs, es := checkRule(root, r)
 		violations = append(violations, vs...)
 		errs = append(errs, es...)
 	}
@@ -470,13 +492,37 @@ func checkRule(moduleRoot string, r rule) (violations []string, errs []string) {
 	return violations, errs
 }
 
+// underAny reports whether imp equals or lies below one of the package paths.
+// A path with a trailing slash matches only packages strictly below it.
+func underAny(imp string, paths []string) bool {
+	for _, p := range paths {
+		if strings.HasSuffix(p, "/") {
+			if strings.HasPrefix(imp, p) {
+				return true
+			}
+			continue
+		}
+		if imp == p || strings.HasPrefix(imp, p+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 // checkImport returns a violation message if imp violates the rule, or "" if it is allowed.
 func checkImport(imp string, r rule, fileName string) string {
-	location := r.dir + "/" + fileName
+	location := r.location() + "/" + fileName
 
 	// Module-wide ban: this package must not import any package within this module.
 	if r.forbidAllModuleImports && strings.HasPrefix(imp, modulePrefix) {
 		return fmt.Sprintf("%s: imports %q — %s", location, imp, r.desc)
+	}
+
+	// mosaic-common bans: no mosaic-common import at all, or only the listed ones.
+	if strings.HasPrefix(imp, commonPrefix) {
+		if r.forbidAllCommonImports || (len(r.forbidCommonImportsExcept) > 0 && !underAny(imp, r.forbidCommonImportsExcept)) {
+			return fmt.Sprintf("%s: imports %q — %s", location, imp, r.desc)
+		}
 	}
 
 	// Module-wide ban with exceptions: this package may only import the listed

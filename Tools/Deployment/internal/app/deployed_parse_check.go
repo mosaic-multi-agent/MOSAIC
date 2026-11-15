@@ -3,7 +3,7 @@ package app
 import (
 	"path/filepath"
 
-	"mosaic-deploy/internal/agentfields"
+	"mosaic-common/agentfields"
 	"mosaic-deploy/internal/domain"
 )
 

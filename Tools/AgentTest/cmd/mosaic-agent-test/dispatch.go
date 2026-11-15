@@ -211,6 +211,9 @@ func newAdapter(id string, opts adapterOptions) (domain.HarnessAdapter, error) {
 	case commonharness.HarnessIDOpenCode:
 		return opencode.New(opts.OpenCode), nil
 	default:
+		if isUnsupportedCatalogHarness(id) {
+			return nil, unsupportedHarnessError(id)
+		}
 		return nil, fmt.Errorf("%w: %q", ErrUnknownHarness, id)
 	}
 }
@@ -228,6 +231,9 @@ func decoderFor(id string) (launch.Decoder, error) {
 	case commonharness.HarnessIDOpenCode:
 		return opencode.DecodeEnvelope, nil
 	default:
+		if isUnsupportedCatalogHarness(id) {
+			return nil, unsupportedHarnessError(id)
+		}
 		return nil, fmt.Errorf("%w: %q", ErrUnknownHarness, id)
 	}
 }
@@ -982,6 +988,9 @@ func cliOptions(d Deps, stdout, stderr io.Writer) cli.Options {
 		// set newAdapter/decoderFor switch on, so the CLI's flag validation
 		// cannot drift from what the composition root can actually wire.
 		Harnesses: supportedHarnesses(),
+
+		// Known catalog harnesses this tool refuses; never offered.
+		UnsupportedHarnesses: unsupportedHarnesses(),
 
 		// Filtered to the same supported set as Harnesses, so the frontend
 		// cannot accept a model identifier for a harness the binary cannot wire.

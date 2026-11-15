@@ -9,6 +9,7 @@ const (
 	HarnessIDClaudeCode = "claude-code"
 	HarnessIDOpenCode   = "opencode"
 	HarnessIDGHCPCLI    = "ghcp-cli"
+	HarnessIDCodex      = "codex"
 )
 
 // LoadingMechanism describes how a CLI harness locates agent definition files.
@@ -24,10 +25,14 @@ const (
 	// agents directory. Runner uses the backup-and-transform strategy, which
 	// does nothing for a harness with no transformation rules.
 	LoadingMechanismName LoadingMechanism = 2
+
+	// LoadingMechanismRunnerLoaded means the Runner loads the agent file
+	// itself on every invocation; no snapshot is taken for the harness.
+	LoadingMechanismRunnerLoaded LoadingMechanism = 3
 )
 
 // String returns a human-readable label for the loading mechanism.
-// Returns "unset" or "name" for defined constants, or "unknown(<N>)" for
+// Returns "unset", "name" or "runner-loaded" for defined constants, or "unknown(<N>)" for
 // unrecognized values.
 func (m LoadingMechanism) String() string {
 	switch m {
@@ -35,6 +40,8 @@ func (m LoadingMechanism) String() string {
 		return "unset"
 	case LoadingMechanismName:
 		return "name"
+	case LoadingMechanismRunnerLoaded:
+		return "runner-loaded"
 	default:
 		return fmt.Sprintf("unknown(%d)", int(m))
 	}
@@ -64,6 +71,16 @@ type CLIHarness struct {
 	// This field has no counterpart in the Deployment tool's harness YAML
 	// descriptors; it is not drift-guarded.
 	LoadingMechanism LoadingMechanism
+
+	// AgentFormatID is the formatid value of the harness's agent files
+	// ("markdown", "codex-toml"). Drift-guarded against Deploy's descriptor
+	// agent_format_id (absent means "markdown").
+	AgentFormatID string
+
+	// AgentExtension is the agent file extension including the leading dot
+	// (".md", ".agent.md", ".toml"). Drift-guarded against Deploy's descriptor
+	// extensions.agent.
+	AgentExtension string
 }
 
 // cliHarnesses is the catalog's single declaration of every CLI-backed
@@ -94,9 +111,10 @@ type CLIHarness struct {
 // are not drift-guarded; they reflect the harness's own agent-loading
 // convention.
 var cliHarnesses = []CLIHarness{
-	{ID: HarnessIDClaudeCode, Label: "Claude Code CLI", AgentsDir: ".claude/agents", LoadingMechanism: LoadingMechanismName},
-	{ID: HarnessIDOpenCode, Label: "OpenCode CLI", AgentsDir: ".opencode/agents", LoadingMechanism: LoadingMechanismName},
-	{ID: HarnessIDGHCPCLI, Label: "GitHub Copilot CLI", AgentsDir: ".github/agents", LoadingMechanism: LoadingMechanismName},
+	{ID: HarnessIDClaudeCode, Label: "Claude Code CLI", AgentsDir: ".claude/agents", LoadingMechanism: LoadingMechanismName, AgentFormatID: "markdown", AgentExtension: ".md"},
+	{ID: HarnessIDOpenCode, Label: "OpenCode CLI", AgentsDir: ".opencode/agents", LoadingMechanism: LoadingMechanismName, AgentFormatID: "markdown", AgentExtension: ".md"},
+	{ID: HarnessIDGHCPCLI, Label: "GitHub Copilot CLI", AgentsDir: ".github/agents", LoadingMechanism: LoadingMechanismName, AgentFormatID: "markdown", AgentExtension: ".agent.md"},
+	{ID: HarnessIDCodex, Label: "Codex CLI", AgentsDir: ".codex/agents", LoadingMechanism: LoadingMechanismRunnerLoaded, AgentFormatID: "codex-toml", AgentExtension: ".toml"},
 }
 
 // CLIHarnesses returns every CLI-backed harness this module can spawn

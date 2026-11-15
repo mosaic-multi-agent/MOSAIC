@@ -5,7 +5,7 @@ package deploy
 // import. The fixture is never compiled against the real module.
 
 import (
-	"mosaic-deploy/internal/agentformat/formatid"
+	"mosaic-common/agentformat/formatid"
 )
 
 var _ = formatid.All

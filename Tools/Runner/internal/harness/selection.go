@@ -53,6 +53,17 @@ type Selection struct {
 	// a tool-local test double. A selection UI offers only CLI-backed
 	// entries; the flag accepts both.
 	CLIBacked bool
+
+	// ExperimentalReason is the Runner's experimental reason for this harness;
+	// "" when the harness is not marked experimental.
+	ExperimentalReason string
+}
+
+// cliSelection builds the selection for a catalog CLI harness, carrying the
+// Runner's experimental reason when the harness is marked.
+func cliSelection(entry commonharness.CLIHarness) Selection {
+	reason, _ := ExperimentalReason(entry.ID)
+	return Selection{ID: entry.ID, Label: entry.Label, CLIBacked: true, ExperimentalReason: reason}
 }
 
 // Selections returns every value Runner's --harness flag accepts: the
@@ -63,7 +74,7 @@ func Selections() []Selection {
 	sels := make([]Selection, 0, len(catalog)+1)
 	sels = append(sels, Selection{ID: FakeHarnessID, Label: "Fake (test double)", CLIBacked: false})
 	for _, entry := range catalog {
-		sels = append(sels, Selection{ID: entry.ID, Label: entry.Label, CLIBacked: true})
+		sels = append(sels, cliSelection(entry))
 	}
 	return sels
 }
@@ -85,7 +96,7 @@ func CLISelections() []Selection {
 	catalog := enabledCLIHarnesses()
 	sels := make([]Selection, 0, len(catalog))
 	for _, entry := range catalog {
-		sels = append(sels, Selection{ID: entry.ID, Label: entry.Label, CLIBacked: true})
+		sels = append(sels, cliSelection(entry))
 	}
 	return sels
 }

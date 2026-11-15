@@ -1,8 +1,8 @@
 package transform
 
 import (
+	"mosaic-common/agentformat"
 	"mosaic-common/docformat"
-	"mosaic-deploy/internal/agentformat"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -103,7 +103,7 @@ func Apply(req Request) (Result, error) {
 		}
 		ctx := agentformat.ArtifactContext{
 			AgentKey:      req.Key,
-			Kind:          req.Kind,
+			Kind:          agentformat.ArtifactKind(req.Kind),
 			PriorDeployed: req.DeployedRaw,
 			Op:            req.Op,
 		}

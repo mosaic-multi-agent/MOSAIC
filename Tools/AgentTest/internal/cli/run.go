@@ -311,8 +311,8 @@ func resolveInput(inv parsedInvocation, o Options) (preflight.Input, error) {
 		in.Overrides.Repetitions = &n
 	}
 
-	if len(o.Harnesses) > 0 && !harnessRecognised(in.HarnessID, o.Harnesses) {
-		return in, usageError{fmt.Sprintf("unrecognised --harness value %q", in.HarnessID)}
+	if err := harnessSelectionError(in.HarnessID, o); err != nil {
+		return in, err
 	}
 
 	if v, ok := inv.flags["subject-model"]; ok {

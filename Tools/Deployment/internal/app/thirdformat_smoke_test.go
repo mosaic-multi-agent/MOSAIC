@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/app"
 	"mosaic-deploy/internal/domain"
 )
@@ -53,7 +53,7 @@ func TestTwinHarness_DeployAgents_WritesOneDecodableAgent(t *testing.T) {
 				t.Fatalf("twin format does not resolve: %v", err)
 			}
 			written := gamRead(t, ws, rel)
-			if _, _, err := tr.Decode(written, agentformat.ArtifactContext{Kind: domain.ArtifactAgent}); err != nil {
+			if _, _, err := tr.Decode(written, agentformat.ArtifactContext{Kind: agentformat.ArtifactAgent}); err != nil {
 				t.Errorf("written agent %s does not decode through the twin's translator: %v", rel, err)
 			}
 			if !twinHasAgentEntry(gamManifest(t, ws), owRunner, rel) {

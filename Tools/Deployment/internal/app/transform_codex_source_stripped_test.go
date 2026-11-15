@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/app"
 )
 

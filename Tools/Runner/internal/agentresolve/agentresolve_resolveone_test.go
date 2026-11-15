@@ -46,7 +46,7 @@ import (
 func TestResolveOne_EmptyID_ReturnsRefusalError(t *testing.T) {
 	dir := t.TempDir()
 
-	_, err := agentresolve.ResolveOne(dir, "")
+	_, err := agentresolve.ResolveOne(dir, legacyMarkdown, "")
 
 	if err == nil {
 		t.Fatal("want RefusalError for empty id, got nil")
@@ -59,7 +59,7 @@ func TestResolveOne_EmptyID_ReturnsRefusalError(t *testing.T) {
 func TestResolveOne_EmptyID_ComponentIsAgentresolve(t *testing.T) {
 	dir := t.TempDir()
 
-	_, err := agentresolve.ResolveOne(dir, "")
+	_, err := agentresolve.ResolveOne(dir, legacyMarkdown, "")
 
 	re := asRefusalError(t, err)
 	if re.Component != "agentresolve" {
@@ -75,7 +75,7 @@ func TestResolveOne_NoMatch_ReturnsRefusalError(t *testing.T) {
 	dir := t.TempDir()
 	// Directory is empty; no file will match.
 
-	_, err := agentresolve.ResolveOne(dir, "nonexistent-agent")
+	_, err := agentresolve.ResolveOne(dir, legacyMarkdown, "nonexistent-agent")
 
 	if err == nil {
 		t.Fatal("want RefusalError when no file matches the identifier, got nil")
@@ -88,7 +88,7 @@ func TestResolveOne_NoMatch_ReturnsRefusalError(t *testing.T) {
 func TestResolveOne_NoMatch_ComponentIsAgentresolve(t *testing.T) {
 	dir := t.TempDir()
 
-	_, err := agentresolve.ResolveOne(dir, "nonexistent-agent")
+	_, err := agentresolve.ResolveOne(dir, legacyMarkdown, "nonexistent-agent")
 
 	re := asRefusalError(t, err)
 	if re.Component != "agentresolve" {
@@ -106,7 +106,7 @@ func TestResolveOne_SingleMdFile_ReturnsReference(t *testing.T) {
 		t.Fatalf("write my-agent.md: %v", err)
 	}
 
-	ref, err := agentresolve.ResolveOne(dir, "my-agent")
+	ref, err := agentresolve.ResolveOne(dir, legacyMarkdown, "my-agent")
 
 	if err != nil {
 		t.Fatalf("ResolveOne: unexpected error: %v", err)
@@ -124,7 +124,7 @@ func TestResolveOne_SingleMdFile_DefinitionPathEndsWithFilename(t *testing.T) {
 		t.Fatalf("write my-agent.md: %v", err)
 	}
 
-	ref, err := agentresolve.ResolveOne(dir, "my-agent")
+	ref, err := agentresolve.ResolveOne(dir, legacyMarkdown, "my-agent")
 
 	if err != nil {
 		t.Fatalf("ResolveOne: %v", err)
@@ -145,7 +145,7 @@ func TestResolveOne_SingleAgentMdFile_ReturnsReference(t *testing.T) {
 		t.Fatalf("write my-agent.agent.md: %v", err)
 	}
 
-	ref, err := agentresolve.ResolveOne(dir, "my-agent")
+	ref, err := agentresolve.ResolveOne(dir, legacyMarkdown, "my-agent")
 
 	if err != nil {
 		t.Fatalf("ResolveOne: unexpected error: %v", err)
@@ -164,7 +164,7 @@ func TestResolveOne_SingleAgentMdFile_DefinitionPathEndsWithAgentMd(t *testing.T
 		t.Fatalf("write my-agent.agent.md: %v", err)
 	}
 
-	ref, err := agentresolve.ResolveOne(dir, "my-agent")
+	ref, err := agentresolve.ResolveOne(dir, legacyMarkdown, "my-agent")
 
 	if err != nil {
 		t.Fatalf("ResolveOne: %v", err)
@@ -188,7 +188,7 @@ func TestResolveOne_BothMdAndAgentMd_ReturnsRefusalError(t *testing.T) {
 		t.Fatalf("write my-agent.agent.md: %v", err)
 	}
 
-	_, err := agentresolve.ResolveOne(dir, "my-agent")
+	_, err := agentresolve.ResolveOne(dir, legacyMarkdown, "my-agent")
 
 	if err == nil {
 		t.Fatal("want RefusalError when both .md and .agent.md match the same identifier, got nil")
@@ -207,7 +207,7 @@ func TestResolveOne_BothMdAndAgentMd_ComponentIsAgentresolve(t *testing.T) {
 		t.Fatalf("write my-agent.agent.md: %v", err)
 	}
 
-	_, err := agentresolve.ResolveOne(dir, "my-agent")
+	_, err := agentresolve.ResolveOne(dir, legacyMarkdown, "my-agent")
 
 	re := asRefusalError(t, err)
 	if re.Component != "agentresolve" {
@@ -222,7 +222,7 @@ func TestResolveOne_BothMdAndAgentMd_ComponentIsAgentresolve(t *testing.T) {
 func TestResolveOne_NonexistentDir_ReturnsRefusalError(t *testing.T) {
 	nonExistentDir := filepath.Join(t.TempDir(), "does-not-exist")
 
-	_, err := agentresolve.ResolveOne(nonExistentDir, "some-agent")
+	_, err := agentresolve.ResolveOne(nonExistentDir, legacyMarkdown, "some-agent")
 
 	if err == nil {
 		t.Fatal("want RefusalError for non-existent directory, got nil")
@@ -235,7 +235,7 @@ func TestResolveOne_NonexistentDir_ReturnsRefusalError(t *testing.T) {
 func TestResolveOne_NonexistentDir_ComponentIsAgentresolve(t *testing.T) {
 	nonExistentDir := filepath.Join(t.TempDir(), "does-not-exist")
 
-	_, err := agentresolve.ResolveOne(nonExistentDir, "some-agent")
+	_, err := agentresolve.ResolveOne(nonExistentDir, legacyMarkdown, "some-agent")
 
 	re := asRefusalError(t, err)
 	if re.Component != "agentresolve" {

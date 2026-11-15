@@ -1,0 +1,3 @@
+# Project-level .codex/config.toml
+[mcp_servers.contact-user]
+command = "contact-user-server"

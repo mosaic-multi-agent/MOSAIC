@@ -1,0 +1,8 @@
+[projects.'{{PARENT}}']
+trust_level = "trusted"
+
+[projects.'{{WORKDIR}}']
+trust_level = "untrusted"
+
+[mcp_servers.contact-user]
+command = "contact-user-server"

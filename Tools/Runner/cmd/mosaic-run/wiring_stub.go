@@ -233,6 +233,8 @@ func buildInteractiveWiring(in interactiveWiringInput) interactiveWiring {
 				deps := newDeps(sessionRunFolder, isNewRun, orchFile, cfg)
 				sess := withGHCPTrustPreflight(session.New(deps),
 					sessionRunFolder, cfg.Harness, in.ProgramRef, true, in.Debug)
+				sess = withCodexSetupPreflight(sess,
+					sessionRunFolder, cfg.Harness, in.ProgramRef, true, in.Debug)
 				return newRunLifecycleSession(sess,
 					newRunLogConfig(sessionRunFolder, cfg.Harness, in.Debug, in.Clock))
 			},

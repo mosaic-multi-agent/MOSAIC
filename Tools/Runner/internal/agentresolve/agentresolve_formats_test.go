@@ -19,7 +19,7 @@ func TestResolveAll_AgentMdFile_ResolvesToBaseStem(t *testing.T) {
 		t.Fatalf("write foo.agent.md: %v", err)
 	}
 
-	result, err := agentresolve.ResolveAll(dir, []string{"foo"})
+	result, err := agentresolve.ResolveAll(dir, legacyMarkdown, []string{"foo"})
 
 	if err != nil {
 		t.Fatalf("ResolveAll: unexpected error: %v", err)
@@ -41,7 +41,7 @@ func TestResolveAll_AgentMdFile_DefinitionPathEndsWithAgentMd(t *testing.T) {
 		t.Fatalf("write foo.agent.md: %v", err)
 	}
 
-	result, err := agentresolve.ResolveAll(dir, []string{"foo"})
+	result, err := agentresolve.ResolveAll(dir, legacyMarkdown, []string{"foo"})
 
 	if err != nil {
 		t.Fatalf("ResolveAll: %v", err)
@@ -66,7 +66,7 @@ func TestResolveAll_CrossFormatDuplicate_RequestedIdentifier_ReturnsRefusalError
 		t.Fatalf("write foo.agent.md: %v", err)
 	}
 
-	_, err := agentresolve.ResolveAll(dir, []string{"foo"})
+	_, err := agentresolve.ResolveAll(dir, legacyMarkdown, []string{"foo"})
 
 	if err == nil {
 		t.Fatal("want RefusalError for cross-format duplicate (foo.md + foo.agent.md), got nil")
@@ -85,7 +85,7 @@ func TestResolveAll_CrossFormatDuplicate_RequestedIdentifier_ComponentIsAgentres
 		t.Fatalf("write foo.agent.md: %v", err)
 	}
 
-	_, err := agentresolve.ResolveAll(dir, []string{"foo"})
+	_, err := agentresolve.ResolveAll(dir, legacyMarkdown, []string{"foo"})
 
 	re := asRefusalError(t, err)
 	if re.Component != "agentresolve" {
@@ -110,7 +110,7 @@ func TestResolveAll_CrossFormatDuplicate_UnrequestedIdentifier_ReturnsRefusalErr
 	}
 
 	// Request only "bar" -- "foo" (which has the conflict) is not in the requested set.
-	_, err := agentresolve.ResolveAll(dir, []string{"bar"})
+	_, err := agentresolve.ResolveAll(dir, legacyMarkdown, []string{"bar"})
 
 	if err == nil {
 		t.Fatal("want RefusalError for cross-format duplicate even when conflicting identifier is not requested, got nil")
@@ -132,7 +132,7 @@ func TestResolveAll_MixedFormats_ResolvesBothCorrectly(t *testing.T) {
 		t.Fatalf("write baz.agent.md: %v", err)
 	}
 
-	result, err := agentresolve.ResolveAll(dir, []string{"bar", "baz"})
+	result, err := agentresolve.ResolveAll(dir, legacyMarkdown, []string{"bar", "baz"})
 
 	if err != nil {
 		t.Fatalf("ResolveAll: unexpected error: %v", err)
@@ -165,7 +165,7 @@ func TestResolveAll_CaseInsensitiveAgentMdSuffix_Resolves(t *testing.T) {
 		t.Fatalf("write foo.AGENT.MD: %v", err)
 	}
 
-	result, err := agentresolve.ResolveAll(dir, []string{"foo"})
+	result, err := agentresolve.ResolveAll(dir, legacyMarkdown, []string{"foo"})
 
 	if err != nil {
 		t.Fatalf("ResolveAll: unexpected error: %v", err)
@@ -187,7 +187,7 @@ func TestResolveAll_EmptyStemAgentMd_IsIgnored(t *testing.T) {
 	}
 
 	// Requesting ".agent" should fail: the file has an empty stem and is ignored.
-	_, err := agentresolve.ResolveAll(dir, []string{".agent"})
+	_, err := agentresolve.ResolveAll(dir, legacyMarkdown, []string{".agent"})
 
 	if err == nil {
 		t.Fatal("want RefusalError because .agent.md (empty stem) must be ignored and produce no resolution entry")
@@ -210,7 +210,7 @@ func TestResolveAll_EmptyIdentifiers_CrossFormatDuplicate_ReturnsRefusalError(t 
 		t.Fatalf("write foo.agent.md: %v", err)
 	}
 
-	_, err := agentresolve.ResolveAll(dir, []string{})
+	_, err := agentresolve.ResolveAll(dir, legacyMarkdown, []string{})
 
 	if err == nil {
 		t.Fatal("want RefusalError for cross-format duplicate even with empty identifiers, got nil")
@@ -224,7 +224,7 @@ func TestResolveAll_EmptyIdentifiers_CrossFormatDuplicate_ReturnsRefusalError(t 
 func TestResolveAll_EmptyIdentifiers_NonexistentDir_ReturnsRefusalError(t *testing.T) {
 	nonExistentDir := filepath.Join(t.TempDir(), "does-not-exist")
 
-	_, err := agentresolve.ResolveAll(nonExistentDir, []string{})
+	_, err := agentresolve.ResolveAll(nonExistentDir, legacyMarkdown, []string{})
 
 	if err == nil {
 		t.Fatal("want RefusalError for non-existent directory even with empty identifiers, got nil")

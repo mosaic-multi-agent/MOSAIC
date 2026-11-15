@@ -35,7 +35,7 @@ func NewHarnessSelectScreen(width, height int, styles screens.Styles) *HarnessSe
 	for i, s := range sels {
 		items[i] = widgets.ListItem{
 			ID:    s.ID,
-			Label: s.Label,
+			Label: s.DisplayLabel(),
 		}
 	}
 	listStyles := widgets.ListStyles{
@@ -125,7 +125,7 @@ func NewHarnessSelectScreenDevMode(width, height int, styles screens.Styles) *Ha
 	for _, s := range sels {
 		items = append(items, widgets.ListItem{
 			ID:    s.ID,
-			Label: s.Label,
+			Label: s.DisplayLabel(),
 		})
 	}
 	listStyles := widgets.ListStyles{

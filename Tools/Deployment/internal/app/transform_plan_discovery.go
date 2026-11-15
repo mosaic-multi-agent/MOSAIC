@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"mosaic-common/agentfields"
 	"mosaic-common/docformat"
-	"mosaic-deploy/internal/agentfields"
 	"mosaic-deploy/internal/domain"
 )
 

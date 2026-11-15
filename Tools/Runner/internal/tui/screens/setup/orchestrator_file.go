@@ -34,7 +34,7 @@ func NewOrchestratorFileScreen(width, height int, styles screens.Styles) *Orches
 	}
 	input := widgets.NewTextInput(
 		"Orchestrator agent file path:",
-		"/path/to/orchestrator.md",
+		"/path/to/orchestrator",
 		width,
 		inputStyles,
 	)
@@ -81,7 +81,7 @@ func (s *OrchestratorFileScreen) View() string {
 	title := s.styles.Title.Width(s.width).Render(titleText)
 	subtitle := s.styles.Subtitle.Width(s.width).Render("Enter the path to the orchestrator agent file.")
 	border := s.styles.Border.Width(s.width).Render(strings.Repeat("─", s.width))
-	guidance := s.styles.Muted.Width(s.width).Render("The file must be an existing .md agent file.\n")
+	guidance := s.styles.Muted.Width(s.width).Render("The file must be an existing orchestrator agent file.\n")
 	inputView := s.input.View()
 	help := s.styles.Help.Width(s.width).Render("enter confirm  esc back  ctrl+c quit")
 	return strings.Join([]string{title, subtitle, border, guidance, inputView, border, help}, "\n")

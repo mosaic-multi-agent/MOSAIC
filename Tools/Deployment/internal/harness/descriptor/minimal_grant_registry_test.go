@@ -404,8 +404,8 @@ func TestRenderMinimalToolGrant_OpenCode(t *testing.T) {
 	}
 }
 
-// TestRenderMinimalToolGrant_Codex asserts that the Codex module emits exactly one
-// field, which is sandbox_mode, and that no field carries a key that any registered
+// TestRenderMinimalToolGrant_Codex asserts that the Codex module emits sandbox_mode
+// followed by web_search, and that no field carries a key that any registered
 // harness declares as its tools key.
 //
 // Codex declares no tools key; capability is expressed via sandbox_mode. The entry
@@ -429,16 +429,20 @@ func TestRenderMinimalToolGrant_Codex(t *testing.T) {
 		t.Error("codex: ToolsKeyDeclared=true; want false (codex declares no tools key)")
 	}
 
-	// The result must carry exactly one field: sandbox_mode.
-	if len(grant.Fields) != 1 {
-		t.Errorf("codex: len(Fields)=%d; want 1 (exactly sandbox_mode); "+
-			"a literal empty-Fields result would be wrong: codex.Tools() always emits sandbox_mode",
-			len(grant.Fields))
+	// The minimal grant carries sandbox_mode first, then web_search (disabled for a
+	// placeholder request); no network table without web_fetch.
+	if len(grant.Fields) != 2 {
+		t.Errorf("codex: len(Fields)=%d; want 2 (sandbox_mode, web_search)", len(grant.Fields))
 	}
 
 	if len(grant.Fields) >= 1 {
 		if grant.Fields[0].Key != "sandbox_mode" {
 			t.Errorf("codex: Fields[0].Key=%q; want %q", grant.Fields[0].Key, "sandbox_mode")
+		}
+	}
+	if len(grant.Fields) >= 2 {
+		if grant.Fields[1].Key != "web_search" {
+			t.Errorf("codex: Fields[1].Key=%q; want %q", grant.Fields[1].Key, "web_search")
 		}
 	}
 

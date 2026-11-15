@@ -25,11 +25,11 @@ package app
 import (
 	"testing"
 
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/transform"
 
-	_ "mosaic-deploy/internal/agentformat/all"
+	_ "mosaic-common/agentformat/all"
 )
 
 // ---------------------------------------------------------------------------

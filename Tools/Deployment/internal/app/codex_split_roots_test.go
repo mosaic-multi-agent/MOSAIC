@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"mosaic-deploy/internal/domain"
-	_ "mosaic-deploy/internal/agentformat/all"
+	_ "mosaic-common/agentformat/all"
 )
 
 // codexSplitRootsDesc returns a HarnessDescriptor for the Codex harness with split roots:

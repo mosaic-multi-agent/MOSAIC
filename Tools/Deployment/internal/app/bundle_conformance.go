@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"mosaic-common/agentfields"
 	"mosaic-common/docformat"
-	"mosaic-deploy/internal/agentfields"
 	"mosaic-deploy/internal/catalog"
 	"mosaic-deploy/internal/domain"
 )

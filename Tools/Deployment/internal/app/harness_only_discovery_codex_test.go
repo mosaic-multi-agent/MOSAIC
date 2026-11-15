@@ -7,7 +7,7 @@ package app
 // package app_test), giving it direct access to unexported symbols -- the same convention
 // established throughout the harness-only suite.
 //
-// This file imports _ "mosaic-deploy/internal/agentformat/all" so that the Codex TOML
+// This file imports _ "mosaic-common/agentformat/all" so that the Codex TOML
 // translator is registered for the scan-level tests that route through the decode funnel
 // with a Codex HarnessDescriptor. Tests in this file must NOT blank-import
 // internal/agentformat/codextoml directly -- that bypasses the wiring-package breakage
@@ -61,7 +61,7 @@ import (
 
 	"mosaic-deploy/internal/agentkey"
 
-	_ "mosaic-deploy/internal/agentformat/all"
+	_ "mosaic-common/agentformat/all"
 	"mosaic-deploy/internal/domain"
 )
 

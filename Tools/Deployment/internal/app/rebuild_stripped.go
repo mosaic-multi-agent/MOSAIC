@@ -7,8 +7,8 @@ package app
 import (
 	"sort"
 
+	"mosaic-common/agentformat"
 	"mosaic-common/docformat"
-	"mosaic-deploy/internal/agentformat"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
 )

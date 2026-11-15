@@ -90,7 +90,7 @@ type ProtocolResponse struct {
 // path to the deployed definition file the harness adapter reads.
 type AgentReference struct {
 	Identifier     string // agent identifier from the routing table
-	DefinitionPath string // absolute path to the .md file in the orchestrator file's directory
+	DefinitionPath string // absolute path to the agent definition file in the orchestrator file's directory
 }
 
 // DispatchStep is everything the session needs to execute one invocation.

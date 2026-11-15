@@ -17,9 +17,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"mosaic-deploy/internal/agentformat"
-	"mosaic-deploy/internal/config"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/agentkey"
+	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/transform"
 )

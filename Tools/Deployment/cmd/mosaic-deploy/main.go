@@ -49,10 +49,10 @@ import (
 	// LookupString call at runtime. This is the non-test owner of translator registration;
 	// the T2.8a test in main_test.go guards that both this import and the Codex harness
 	// import above are present.
-	_ "mosaic-deploy/internal/agentformat/all"
+	_ "mosaic-common/agentformat/all"
 )
 
-const ToolVersion = "1.8.0"
+const ToolVersion = "1.9.0"
 
 // wantsTUI reports whether mosaic-deploy should launch the interactive TUI: no subcommand
 // was given, and both stdin and stdout are attached to a real terminal (not a pipe/redirect).

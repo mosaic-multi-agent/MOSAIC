@@ -6,8 +6,8 @@ package transform
 // not affected.
 
 import (
+	"mosaic-common/agentfields"
 	"mosaic-common/docformat"
-	"mosaic-deploy/internal/agentfields"
 )
 
 // RenameSkillVersionField reads the source bytes, renames the skill version frontmatter

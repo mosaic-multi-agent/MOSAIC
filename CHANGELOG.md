@@ -17,6 +17,28 @@
 
 ## Tools
 
+### Runner v1.13.0
+#### Changes
+- **Codex is a Runner harness (experimental).** Select `codex` in the CLI (`--harness codex`), the TUI and test mode (`mosaic-run test`). Workflows run on a Codex-deployed workspace through `mosaic-run` only; native orchestration inside Codex is not supported. Each dispatch is one `codex exec` call with the agent's own instructions, model, sandbox and every other setting from its deployed `.codex/agents/<id>.toml`. The Runner never modifies your agent files or Codex configuration. Requires Codex CLI 0.169 or newer
+- Every Codex failure, including sandbox setup failures, ends the invocation as a `HARNESS_ERROR` and never hangs. Timeout and force stop also end helper processes Codex started
+- `contact-user` works during Codex runs without approval prompts
+- At every start and resume on Codex, the Runner checks your Codex configuration (read-only): a workspace Codex does not trust, or no enabled `contact-user` server, is a warning in the CLI and a "proceed?" question in the TUI
+- The live activity panel shows Codex tool calls and messages. Codex reports no model, context size or cost, so the header omits them
+- Codex runs write only `run_start` and `run_end` to the MOSAIC log; there are no invocation events yet
+- The Runner reads agent files in any format Deploy supports, through the same agent-format layer Deploy uses. Agent resolution, orchestrator discovery, the run-start definition check, tool extraction and the workflow and infrastructure-agent reads of the orchestrator script no longer assume Markdown. A new agent file format needs no Runner change
+- An agent file a run uses (orchestrator, routing-table agents, admitted infrastructure agents) that cannot be read refuses the run at start, naming the agent, the file and the reason
+- The Runner can mark a harness experimental with a reason, independently of Deploy. An experimental harness stays selectable: the TUI harness pickers mark it "Experimental" with the reason, and the CLI prints the reason once as a warning at start and resume. Codex is experimental
+
+### Deploy v1.9.0
+#### Changes
+- Codex agents get the capabilities their generic tools ask for. `web_search` gives web search `live`, otherwise it is `disabled`. `web_fetch` gives network access to agents with the `workspace-write` sandbox; a read-only agent gets none and the plan reports the withheld `web_fetch`. `terminal` alone grants no network access
+- The Codex experimental notice now says Codex runs through `mosaic-run` only, native orchestration is unsupported, and no MOSAIC log is produced
+- The agent-format layer and agent field vocabulary moved to `Tools/Common`, shared with the Runner. Deploy output is unchanged for every other harness
+
+### AgentTest v1.2.3
+#### Changes
+- `--harness codex` is refused with a clear "not supported by mosaic-agent-test" usage error instead of an unrecognised-harness error
+
 ### Deploy v1.8.0
 #### Changes
 - Codex is an experimental harness. Agents are deployed as standalone TOML files under `.codex/agents/`, with skills in the shared `.agents/skills` root. Keys you add to a Codex agent file survive an update. Update and transform work. No MOSAIC orchestration runs on Codex yet: its native multi-agent dispatch is not usable for MOSAIC and `mosaic-run` has no Codex adapter. Minimum Codex version is 0.169.0

@@ -142,6 +142,9 @@ func (m *module) Tools(req domain.ToolRequest) (domain.ToolResult, error) {
 		Key:   "sandbox_mode",
 		Value: domain.ScalarValue(mode, domain.QuotePlain),
 	})
+	capFields, gaps := capabilityFields(req, mode)
+	result.Fields = append(result.Fields, capFields...)
+	result.Gaps = append(result.Gaps, gaps...)
 	return result, nil
 }
 

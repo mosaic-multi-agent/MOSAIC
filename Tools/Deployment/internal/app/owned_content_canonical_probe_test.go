@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"mosaic-deploy/internal/agentformat"
-	_ "mosaic-deploy/internal/agentformat/all"
+	"mosaic-common/agentformat"
+	_ "mosaic-common/agentformat/all"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/transform"
 )
@@ -75,7 +75,7 @@ func canonicalOf(t *testing.T, formatID string, raw []byte) []byte {
 	if err != nil {
 		t.Fatalf("LookupString(%q): %v", formatID, err)
 	}
-	canonical, _, err := tr.Decode(raw, agentformat.ArtifactContext{Kind: domain.ArtifactAgent})
+	canonical, _, err := tr.Decode(raw, agentformat.ArtifactContext{Kind: agentformat.ArtifactAgent})
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}

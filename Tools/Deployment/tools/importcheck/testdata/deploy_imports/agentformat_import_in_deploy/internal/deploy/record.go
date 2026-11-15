@@ -5,7 +5,7 @@ package deploy
 // compiled against the real module.
 
 import (
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentformat"
 )
 
 var _ = agentformat.LookupString

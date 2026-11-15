@@ -2,7 +2,7 @@
 
 This guide explains how to build a custom harness module for MOSAIC. A harness defines how MOSAIC transforms generic agent definitions into harness-specific deployable files. Three provision tiers exist: **built-in** (compiled into MOSAIC), **descriptor-only** (declared in a YAML file with no code), and **external** (a standalone executable).
 
-Most harnesses produce Markdown agent files, which is the default. A harness can also produce non-Markdown files by declaring a format ID in its descriptor's `agent_format_id` field. The only non-Markdown format available today is `codex-toml` (used by the Codex built-in, which is experimental). A non-Markdown harness must supply a translator pair registered under its format ID; see [Non-Markdown harnesses](#non-markdown-harnesses) below for the additional steps.
+Most harnesses produce Markdown agent files, which is the default. A harness can also produce non-Markdown files by declaring a format ID in its descriptor's `agent_format_id` field. The only non-Markdown format available today is `codex-toml` (used by the Codex built-in, which is experimental; the format layer lives in `Tools/Common`). A non-Markdown harness must supply a translator pair registered under its format ID; see [Non-Markdown harnesses](#non-markdown-harnesses) below for the additional steps.
 
 Read this guide to decide which tier fits your harness, then follow the step-by-step instructions for your chosen approach.
 
@@ -99,7 +99,7 @@ experimental:
   reason: "Agents deploy, but no orchestration runs on this harness yet."
 ```
 
-`reason` is required and must not be blank; a bare `experimental:`, a missing or blank reason, or any other key makes the descriptor invalid. Leaving the key out means the harness is not experimental. The declaration works the same in every tier (built-in, descriptor-only and external module). MOSAIC still offers the harness, but marks it "Experimental" in the TUI pickers, shows the reason as a warning at plan review, prints it once from every writing CLI command, and adds it to the `--output json` result as `experimentalHarnesses`. Read-only `render` is unaffected. See the [descriptor schema](descriptor-schema.md#experimental-harnesses) for details. The built-in Codex harness is declared this way.
+`reason` is required and must not be blank; a bare `experimental:`, a missing or blank reason, or any other key makes the descriptor invalid. Leaving the key out means the harness is not experimental. The declaration works the same in every tier (built-in, descriptor-only and external module). MOSAIC still offers the harness, but marks it "Experimental" in the TUI pickers, shows the reason as a warning at plan review, prints it once from every writing CLI command, and adds it to the `--output json` result as `experimentalHarnesses`. Read-only `render` is unaffected. See the [descriptor schema](descriptor-schema.md#experimental-harnesses) for details. The built-in Codex harness is declared this way; its reason says Codex runs through `mosaic-run` only, native orchestration is unsupported and no MOSAIC log is produced.
 
 ### Register with MOSAIC
 
@@ -368,6 +368,18 @@ The only value other than the default empty string (`markdown`) that the tool re
 is `codex-toml`. A future format requires a new constant in the `formatid` package and a new
 translator pair (see below). An unrecognised value is a fatal parse error at startup.
 
+The agent-format layer (`agentformat`, its `formatid`, `codextoml` and `all` sub-packages, and
+`agentfields`) lives in `Tools/Common`, not in Deploy. Deploy reads and writes agent files through
+it, and the Runner reads deployed agent files through the same layer (read-only, via `agentload`).
+A new format therefore needs no Runner code.
+
+Also add the harness to the shared CLI harness catalog in `Tools/Common/harness` (if the Runner
+should be able to run it), giving the entry the same format ID (`AgentFormatID`, `markdown` or
+your format ID) and agent file extension (`AgentExtension`, including the leading dot) as the
+descriptor's `agent_format_id` and `extensions.agent`. Tests under
+`Tools/Deployment/internal/harness/builtin/<harness>/` compare the catalog's agents directory,
+format ID, extension and (for Codex) model IDs with the descriptor, so a drift fails the build.
+
 ### 2 — Supply a translator pair
 
 A translator pair is a Go value that implements the `agentformat.Translator` interface: two
@@ -381,7 +393,9 @@ func init() {
 }
 ```
 
-The `agentformat/all` wiring package must blank-import your translator sub-package so that
+The translator goes in a sub-package of `Tools/Common/agentformat`. If it can report every native
+setting of its files with values, it may also implement the optional `agentformat.SettingsReader`
+interface; the loader detects it, so no loader change is needed. The `agentformat/all` wiring package must blank-import your translator sub-package so that
 registration happens before any `LookupString` call at runtime. Add the import there; do not
 import your translator package directly from any other package that uses it — that would bypass
 the wiring check.
@@ -396,7 +410,11 @@ not call them directly from the translator package.
 ### 4 — Render tool grants through the harness module
 
 A non-Markdown harness typically cannot use the shared mapper's output directly. The Codex
-harness illustrates this: instead of a `tools` key, it always emits `sandbox_mode = "read-only"`.
+harness illustrates this: instead of a `tools` key, it emits `sandbox_mode` (`read-only` or `workspace-write`), `web_search`
+(`live` with the generic `web_search` tool, otherwise `disabled`) and, for a write-capable agent
+with `web_fetch`, a `[sandbox_workspace_write]` table granting network access. A read-only agent
+with `web_fetch` cannot be given network access; the module returns a `tool-capability-withheld`
+gap through `ToolResult.Gaps` and the plan reports it. `terminal` alone grants no network access.
 The `sandbox_mode` fallback is applied by the translator's `Encode` method, not by the shared
 mapper. When your harness uses a custom tool representation, implement it in the harness module's
 `Tools()` method and let the translator consume it; do not rely on the shared `descriptor.MapTools`

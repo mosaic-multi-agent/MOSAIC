@@ -35,7 +35,8 @@ This guide is for **project authors** who want to get MOSAIC running in their AI
 The `codex` harness is experimental. The picker marks it "Experimental", plan review shows a warning, and every writing command prints the same warning once.
 
 - **What works:** agents deploy as standalone TOML files in `.codex/agents/*.toml`, with skills in the shared `.agents/skills` root. Update and Transform work too.
-- **What does not run:** no MOSAIC orchestration path runs on Codex yet. Codex's native multi-agent dispatch is not usable for MOSAIC, and `mosaic-run` has no Codex adapter, so you cannot run a workflow on Codex.
+- **How workflows run:** through `mosaic-run` only (see the [Runner Guide](RunnerGuide.md#codex)). Codex's native multi-agent dispatch is not usable for MOSAIC, so native orchestration inside Codex is not supported. Codex runs produce no MOSAIC log, and `mosaic-agent-test` does not support Codex.
+- **Capabilities:** a `web_search` tool becomes web search `live` (otherwise `disabled`). `web_fetch` becomes network access for write-capable agents; a read-only agent cannot get it and the plan reports the withheld `web_fetch`. `terminal` alone grants no network access.
 - **Minimum Codex version:** 0.169.0.
 
 Only the Codex harness is experimental. The agent-format layer behind it is stable.

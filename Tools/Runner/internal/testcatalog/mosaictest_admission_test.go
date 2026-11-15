@@ -14,6 +14,7 @@ import (
 
 	"mosaic-run/internal/compat"
 	"mosaic-run/internal/domain"
+	"mosaic-run/internal/agentfile"
 	"mosaic-run/internal/orchfile"
 	"mosaic-run/internal/testcatalog"
 	"mosaic-run/internal/workflow"
@@ -35,7 +36,7 @@ func TestMosaicTestWorkflows_ParseStrictAndAdmitInEveryDeclaredMode(t *testing.T
 		entry := entry
 		t.Run(entry.WorkflowID+"/"+entry.Mode, func(t *testing.T) {
 			path := filepath.Join(mosaicTestCatalogRoot, "Workflows", "MosaicTest", entry.WorkflowID+".md")
-			region, err := orchfile.GetWorkflow(path, entry.WorkflowID)
+			region, err := orchfile.GetWorkflow(path, agentfile.Format{}, entry.WorkflowID)
 			if err != nil {
 				t.Fatalf("read workflow region: %v", err)
 			}

@@ -1,0 +1,5 @@
+[projects.'{{WORKDIR}}']
+note = "no trust_level here"
+
+[mcp_servers.contact-user]
+command = "contact-user-server"

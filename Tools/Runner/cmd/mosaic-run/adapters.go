@@ -10,6 +10,7 @@ import (
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/harness"
 	"mosaic-run/internal/harness/claudecode"
+	"mosaic-run/internal/harness/codex"
 	"mosaic-run/internal/harness/ghcpcli"
 	"mosaic-run/internal/harness/opencode"
 	"mosaic-run/internal/harness/roleenv"
@@ -44,7 +45,7 @@ func newLoggedArtifactStore(path string, logger domain.DebugLogger) domain.Artif
 
 // buildAdapter constructs the HarnessAdapter specified by harnessStr.
 //
-// When harnessStr is "claude-code", "opencode", or "ghcp-cli", the
+// When harnessStr is "claude-code", "opencode", "ghcp-cli", or "codex", the
 // corresponding CLI adapter is created with execPathStr as the executable
 // path and timeouts as the invocation limits (non-HITL and HITL dispatches).
 // Zero or negative values are treated as the defaults (30 minutes / 4 hours). execPathStr is the executable path
@@ -97,6 +98,12 @@ func buildAdapter(runFolder, harnessStr, execPathStr, ghcpMode string, timeouts 
 			mode = commonharness.GHCPCLIModeBlanket
 		}
 		return ghcpcli.NewGHCPCLIAdapterWithMode(exe, timeouts.NonHITL, logger, mode, runOpts...).WithHITLTimeout(timeouts.HITL).WithActivityObserver(activity)
+	case commonharness.HarnessIDCodex:
+		exe := execPathStr
+		if exe == "" {
+			exe = "codex"
+		}
+		return codex.NewCodexAdapterWithLogger(exe, timeouts.NonHITL, logger, runOpts...).WithHITLTimeout(timeouts.HITL).WithActivityObserver(activity)
 	default: // "fake" or unknown
 		return harness.NewMockAdapter()
 	}

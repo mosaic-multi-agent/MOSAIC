@@ -1,0 +1,23 @@
+# mosaic_id: orchestrator-script
+# mosaic_role: orchestrator
+# mosaic_version: 1.0.0
+# mosaic_transform_version: 1.0.0
+# mosaic_injections_version: 1.0.0
+
+name = "orchestrator-script"
+description = "Orchestrator script for the linear workflow"
+model = "gpt-5.6-sol"
+sandbox_mode = "read-only"
+web_search = "disabled"
+developer_instructions = """
+# Orchestrator Script
+
+<Workflow type="core" name="linear" version="1.0">
+## Linear Workflow
+
+| Phase | Subagent | HITL | On Success | On Findings | Input | Output |
+|-------|----------|:----:|------------|-------------|-------|--------|
+| PLANNING | agent-a | FALSE | agent-b | - | - | plan.md |
+| PLANNING | agent-b | FALSE | COMPLETE | - | plan.md | result.md |
+</Workflow>
+"""

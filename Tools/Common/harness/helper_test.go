@@ -160,9 +160,15 @@ func runHelperProcess() {
 		// select{} would emit on stderr.
 		time.Sleep(24 * time.Hour)
 
-	case "tree-agent", "tree-intermediate", "tree-grandchild", "tree-exit-leaves":
+	case "tree-agent", "tree-intermediate", "tree-grandchild", "tree-exit-leaves",
+		"tree-exit-holds", "tree-exit1-holds":
 		// Process-tree modes live in processkill_helper_test.go.
 		runTreeHelper(os.Getenv("GO_HELPER_CMD"))
+
+	case "codex-success", "codex-exit1", "codex-turn-failed-exit1", "codex-turn-failed-exit0",
+		"codex-incomplete", "codex-empty", "codex-exit-holds-stdout":
+		// Codex modes live in helper_codex_test.go.
+		runCodexHelper(os.Getenv("GO_HELPER_CMD"))
 
 	default:
 		// Streaming modes live in helper_stream_test.go; it exits 2 for an

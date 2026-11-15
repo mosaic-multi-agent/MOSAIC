@@ -1,6 +1,6 @@
 # Proposal: a format-neutral internal agent document model
 
-Status: **idea, not scheduled.** Written 2026-09-19 while designing the Codex built-in harness
+Status: **declined 2026-11-14.** The Catalog is and will stay Markdown, so the MOSAIC Markdown document stays the standard form in every tool (now shared by Deploy and the Runner); only non-Markdown deploy targets need a translator. Originally: idea, not scheduled. Written 2026-09-19 while designing the Codex built-in harness
 (run 20260919T074609Z-e6f7). Deliberately NOT adopted for that work; recorded so the reasoning is
 not lost and so a later iteration can pick it up without re-deriving it.
 

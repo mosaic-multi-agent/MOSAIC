@@ -3,9 +3,9 @@ package transform
 import (
 	"strings"
 
+	"mosaic-common/agentfields"
+	"mosaic-common/agentformat"
 	"mosaic-common/docformat"
-	"mosaic-deploy/internal/agentfields"
-	"mosaic-deploy/internal/agentformat"
 	"mosaic-deploy/internal/domain"
 )
 

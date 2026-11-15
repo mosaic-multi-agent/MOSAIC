@@ -68,17 +68,18 @@ func TestResolveHarnessBinaries_SingleHarness_ResolvesToAbsolutePath(t *testing.
 	}
 }
 
-func TestResolveHarnessBinaries_AllThreeHarnesses_AllResolve(t *testing.T) {
+func TestResolveHarnessBinaries_AllCLIHarnesses_AllResolve(t *testing.T) {
 	// Arrange: each harness gets its own absolute path.
 	paths := map[string]string{
 		"claude":   "/usr/local/bin/claude",
 		"opencode": "/usr/local/bin/opencode",
 		"copilot":  "/usr/local/bin/copilot",
+		"codex":    "/usr/local/bin/codex",
 	}
 	lookPath := perBinaryLookPath(paths)
 
 	// Act
-	harnesses := []string{"claude-code", "opencode", "ghcp-cli"}
+	harnesses := []string{"claude-code", "opencode", "ghcp-cli", "codex"}
 	result, err := resolve.ResolveHarnessBinaries(harnesses, lookPath)
 
 	// Assert

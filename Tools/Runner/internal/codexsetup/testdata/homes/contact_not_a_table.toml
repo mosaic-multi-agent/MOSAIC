@@ -1,0 +1,5 @@
+[projects.'{{WORKDIR}}']
+trust_level = "trusted"
+
+[mcp_servers]
+contact-user = "not-a-server-table"

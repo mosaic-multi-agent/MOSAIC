@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"t1"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"first turn answer"}}
+{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}
+{"type":"turn.started"}
+{"type":"turn.failed","error":{"message":"second turn blew up"}}

@@ -23,6 +23,7 @@ import (
 
 	"mosaic-run/internal/compat"
 	"mosaic-run/internal/domain"
+	"mosaic-run/internal/agentfile"
 	"mosaic-run/internal/orchfile"
 	"mosaic-run/internal/planstages"
 	"mosaic-run/internal/workflow"
@@ -79,7 +80,7 @@ func TestMosaicTestRoutingFixtures_RepliesAreAcceptedAndFitTheirWorkflow(t *test
 func admitMosaicTestWorkflow(t *testing.T, id string) domain.AdmittedWorkflow {
 	t.Helper()
 	path := filepath.Join(mosaicTestWorkflowsRoot, id+".md")
-	region, err := orchfile.GetWorkflow(path, id)
+	region, err := orchfile.GetWorkflow(path, agentfile.Format{}, id)
 	if err != nil {
 		t.Fatalf("read workflow region of %s: %v", id, err)
 	}

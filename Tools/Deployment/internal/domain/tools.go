@@ -160,6 +160,10 @@ type ToolRequest struct {
 type ToolResult struct {
 	Fields      []FrontmatterField // ready to place into frontmatter, in emission order
 	Resolutions []ToolResolution   // one per entry in ToolRequest.Generic, same order
+	// Gaps are notices the harness module raises about this agent's tool
+	// request. Plan building appends them to the plan's gaps (the same place
+	// GapUnmappedTool is raised); nothing else re-emits them.
+	Gaps []Gap
 }
 
 // ReverseToolResolution is the per-harness-tool audit record produced when promoting a

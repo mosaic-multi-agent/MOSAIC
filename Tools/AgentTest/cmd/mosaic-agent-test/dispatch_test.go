@@ -16,6 +16,7 @@ import (
 	"io"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 
 	commonharness "mosaic-common/harness"
@@ -109,13 +110,11 @@ func TestSupportedHarnesses_IsSubsetOfSharedCatalog(t *testing.T) {
 	}
 }
 
-// TestUnsupportedCatalogIdentities_YieldErrUnknownHarness verifies that any
-// catalog identity this tool has not yet wired is actively rejected by both
-// newAdapter and decoderFor, rather than resolving to something unexpected.
-// This test is a no-op while the supported set equals the full catalog; it
-// becomes meaningful once a new catalog entry exists that this tool does not
-// yet support.
-func TestUnsupportedCatalogIdentities_YieldErrUnknownHarness(t *testing.T) {
+// TestUnsupportedCatalogIdentities_YieldErrUnsupportedHarness verifies that any
+// catalog identity this tool has not wired is actively rejected by both
+// newAdapter and decoderFor with the not-supported outcome (distinct from the
+// unknown-id outcome), naming the harness.
+func TestUnsupportedCatalogIdentities_YieldErrUnsupportedHarness(t *testing.T) {
 	supported := supportedHarnesses()
 	supportedIDs := make(map[string]bool, len(supported))
 	for _, e := range supported {
@@ -129,9 +128,17 @@ func TestUnsupportedCatalogIdentities_YieldErrUnknownHarness(t *testing.T) {
 		t.Run(entry.ID, func(t *testing.T) {
 			adapter, err := newAdapter(entry.ID, adapterOptions{})
 			if err == nil {
-				t.Errorf("newAdapter(%q, ...) succeeded for an unsupported catalog identity; want ErrUnknownHarness", entry.ID)
-			} else if !errors.Is(err, ErrUnknownHarness) {
-				t.Errorf("newAdapter(%q, ...) error = %v, want it to wrap ErrUnknownHarness", entry.ID, err)
+				t.Errorf("newAdapter(%q, ...) succeeded for an unsupported catalog identity; want ErrUnsupportedHarness", entry.ID)
+			} else {
+				if !errors.Is(err, ErrUnsupportedHarness) {
+					t.Errorf("newAdapter(%q, ...) error = %v, want it to wrap ErrUnsupportedHarness", entry.ID, err)
+				}
+				if errors.Is(err, ErrUnknownHarness) {
+					t.Errorf("newAdapter(%q, ...) error = %v, must not be the unknown-harness outcome", entry.ID, err)
+				}
+				if !strings.Contains(err.Error(), entry.ID) {
+					t.Errorf("newAdapter(%q, ...) error = %q, want it to name the harness", entry.ID, err.Error())
+				}
 			}
 			if adapter != nil {
 				t.Errorf("newAdapter(%q, ...) returned a non-nil adapter for an unsupported identity", entry.ID)
@@ -139,9 +146,17 @@ func TestUnsupportedCatalogIdentities_YieldErrUnknownHarness(t *testing.T) {
 
 			dec, err := decoderFor(entry.ID)
 			if err == nil {
-				t.Errorf("decoderFor(%q) succeeded for an unsupported catalog identity; want ErrUnknownHarness", entry.ID)
-			} else if !errors.Is(err, ErrUnknownHarness) {
-				t.Errorf("decoderFor(%q) error = %v, want it to wrap ErrUnknownHarness", entry.ID, err)
+				t.Errorf("decoderFor(%q) succeeded for an unsupported catalog identity; want ErrUnsupportedHarness", entry.ID)
+			} else {
+				if !errors.Is(err, ErrUnsupportedHarness) {
+					t.Errorf("decoderFor(%q) error = %v, want it to wrap ErrUnsupportedHarness", entry.ID, err)
+				}
+				if errors.Is(err, ErrUnknownHarness) {
+					t.Errorf("decoderFor(%q) error = %v, must not be the unknown-harness outcome", entry.ID, err)
+				}
+				if !strings.Contains(err.Error(), entry.ID) {
+					t.Errorf("decoderFor(%q) error = %q, want it to name the harness", entry.ID, err.Error())
+				}
 			}
 			if dec != nil {
 				t.Errorf("decoderFor(%q) returned a non-nil decoder for an unsupported identity", entry.ID)

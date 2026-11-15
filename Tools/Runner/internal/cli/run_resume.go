@@ -9,6 +9,7 @@ import (
 
 	"mosaic-run/internal/artifact"
 	"mosaic-run/internal/domain"
+	"mosaic-run/internal/agentfile"
 	"mosaic-run/internal/orchfile"
 	"mosaic-run/internal/resumecheck"
 )
@@ -48,7 +49,7 @@ func runResumePreflight(runID, runFolder, harnessFlag string, infraFilter []stri
 		return pre, ExitSuccess, true
 	}
 
-	deployment, err := readDeployment(orchPath, infraFilter)
+	deployment, err := readDeployment(orchPath, harnessFlag, infraFilter)
 	if err != nil {
 		return pre, ExitSuccess, true
 	}
@@ -72,12 +73,13 @@ func reportEarlyRefusal(err error, errOut io.Writer) int {
 
 // readDeployment enumerates what the orchestrator file declares. A non-nil
 // infraFilter keeps only the named infrastructure agents, as the session does.
-func readDeployment(orchPath string, infraFilter []string) (resumecheck.Deployment, error) {
-	workflows, err := orchfile.EnumerateWorkflows(orchPath)
+func readDeployment(orchPath, harnessID string, infraFilter []string) (resumecheck.Deployment, error) {
+	format, _ := agentfile.For(harnessID)
+	workflows, err := orchfile.EnumerateWorkflows(orchPath, format)
 	if err != nil {
 		return resumecheck.Deployment{}, err
 	}
-	agents, err := orchfile.EnumerateInfrastructureAgents(orchPath)
+	agents, err := orchfile.EnumerateInfrastructureAgents(orchPath, format)
 	if err != nil {
 		return resumecheck.Deployment{}, err
 	}

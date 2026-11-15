@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"mosaic-deploy/internal/agentfields"
+	"mosaic-common/agentfields"
 )
 
 // goldenCurrentDeployAgents returns name -> bytes of the non-orchestrator golden agent

@@ -42,7 +42,7 @@ func TestWriter_RunStart_OmitsEmptyCwd(t *testing.T) {
 }
 
 func TestWriter_RunStart_CarriesSelectedHarness(t *testing.T) {
-	for _, h := range []string{"claude-code", "opencode", "ghcp-cli"} {
+	for _, h := range []string{"claude-code", "opencode", "ghcp-cli", "codex"} {
 		t.Run(h, func(t *testing.T) {
 			w, root := newTestWriter(t, h)
 

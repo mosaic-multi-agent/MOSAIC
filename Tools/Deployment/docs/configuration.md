@@ -544,7 +544,7 @@ Built-in harness IDs, for use as `tool_destinations` keys:
 | `opencode` | OpenCode | permission (allow/deny map) |
 | `ghcp-cli` | GHCP CLI / VS Code GHCP Copilot | list |
 | `vscode-ghcp` | VS Code GHCP Local | list |
-| `codex` | Codex (experimental) | no tools key; tool grants expressed via sandbox_mode |
+| `codex` | Codex (experimental) | no tools key; tool grants expressed via sandbox_mode, web_search and network access |
 
 A descriptor-only or external harness uses the `id:` declared in its
 `harness.yaml`.

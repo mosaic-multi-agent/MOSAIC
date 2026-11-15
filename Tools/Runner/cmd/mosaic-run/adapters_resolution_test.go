@@ -189,6 +189,7 @@ func TestBuildAdapter_AllRealHarnesses_OverrideWinsOverDefault(t *testing.T) {
 		{commonharness.HarnessIDClaudeCode},
 		{commonharness.HarnessIDOpenCode},
 		{commonharness.HarnessIDGHCPCLI},
+		{commonharness.HarnessIDCodex},
 	}
 	for _, tc := range cases {
 		tc := tc

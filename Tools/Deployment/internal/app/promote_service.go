@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/agentkey"
 	"mosaic-deploy/internal/catalog"
 	"mosaic-deploy/internal/domain"

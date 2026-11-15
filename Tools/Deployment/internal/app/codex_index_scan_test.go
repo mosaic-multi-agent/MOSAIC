@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"mosaic-deploy/internal/domain"
-	_ "mosaic-deploy/internal/agentformat/all"
+	_ "mosaic-common/agentformat/all"
 )
 
 // ---------------------------------------------------------------------------

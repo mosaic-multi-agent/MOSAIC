@@ -24,7 +24,7 @@ func (s *ConfigScreen) View() string {
 	case configStepHarness:
 		body.WriteString(s.styles.Body.Width(s.width).Render("Harness adapter:") + "\n")
 		for i, sel := range harness.CLISelections() {
-			body.WriteString(s.renderOption(i, sel.Label))
+			body.WriteString(s.renderOption(i, sel.DisplayLabel()))
 		}
 	case configStepHarnessTimeout:
 		body.WriteString(s.timeoutInput.View())

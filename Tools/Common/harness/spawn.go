@@ -17,6 +17,11 @@ import (
 // configuration specifies one, matching the prior Runner behaviour.
 const defaultTimeout = 30 * time.Minute
 
+// RunOutputGrace is how long Run keeps reading stdout/stderr after the started
+// process exited while a descendant still holds them open. Same value for every
+// harness; not configurable per call.
+const RunOutputGrace = 2 * time.Second
+
 // WithTimeout sets the per-invocation timeout on a Spawner constructed by
 // NewClaudeCode.
 func WithTimeout(d time.Duration) Option {
@@ -231,6 +236,9 @@ func Run(ctx context.Context, cmd Command, args []string, o RunOptions) (Respons
 	}
 	execCmd.Stdout = teeStdout(&stdout, obs)
 	execCmd.Stderr = &stderr
+	// A descendant that inherited stdout/stderr can keep them open after the
+	// started process exited; Wait stops waiting for the output after this delay.
+	execCmd.WaitDelay = RunOutputGrace
 
 	group := newKillGroup(execCmd)
 	if err := execCmd.Start(); err != nil {
@@ -270,7 +278,14 @@ func Run(ctx context.Context, cmd Command, args []string, o RunOptions) (Respons
 	case waitErr = <-waitCh:
 	}
 
-	group.release()
+	if errors.Is(waitErr, exec.ErrWaitDelay) {
+		// The process exited with success but a descendant still held its
+		// output past the grace: end the remaining tree and report the exit.
+		group.kill(execCmd.Process)
+		waitErr = nil
+	} else {
+		group.release()
+	}
 	duration := time.Since(start)
 	if obs != nil {
 		obs.finish(observerDrainGrace)

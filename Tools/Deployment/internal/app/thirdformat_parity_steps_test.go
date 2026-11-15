@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/app"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
@@ -106,7 +106,7 @@ func twinTranslator(t *testing.T, side twinSide) agentformat.Translator {
 func readTwinAgent(t *testing.T, side twinSide, key string) []byte {
 	t.Helper()
 	raw := gamRead(t, side.Workspace, twinAgentRel(t, side, key))
-	canonical, _, err := twinTranslator(t, side).Decode(raw, agentformat.ArtifactContext{Kind: domain.ArtifactAgent})
+	canonical, _, err := twinTranslator(t, side).Decode(raw, agentformat.ArtifactContext{Kind: agentformat.ArtifactAgent})
 	if err != nil {
 		t.Fatalf("decode deployed %s on the %s twin: %v", key, side.name(), err)
 	}
@@ -121,7 +121,7 @@ func editTwinAgent(t *testing.T, side twinSide, key string, edit func(canonical 
 	prior := gamRead(t, side.Workspace, rel)
 	canonical := readTwinAgent(t, side, key)
 	out, _, err := twinTranslator(t, side).Encode(edit(canonical), agentformat.ArtifactContext{
-		AgentKey: key, Kind: domain.ArtifactAgent, Op: agentformat.OpUpdate, PriorDeployed: prior})
+		AgentKey: key, Kind: agentformat.ArtifactAgent, Op: agentformat.OpUpdate, PriorDeployed: prior})
 	if err != nil {
 		t.Fatalf("encode edited %s on the %s twin: %v", key, side.name(), err)
 	}
@@ -132,7 +132,7 @@ func editTwinAgent(t *testing.T, side twinSide, key string, edit func(canonical 
 func writeTwinAgent(t *testing.T, side twinSide, key string, canonical []byte) {
 	t.Helper()
 	out, _, err := twinTranslator(t, side).Encode(canonical, agentformat.ArtifactContext{
-		AgentKey: key, Kind: domain.ArtifactAgent, Op: agentformat.OpCreate})
+		AgentKey: key, Kind: agentformat.ArtifactAgent, Op: agentformat.OpCreate})
 	if err != nil {
 		t.Fatalf("encode new %s on the %s twin: %v", key, side.name(), err)
 	}

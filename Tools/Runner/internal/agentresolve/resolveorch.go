@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"mosaic-run/internal/agentfile"
 	"mosaic-run/internal/domain"
 )
 
@@ -23,7 +24,7 @@ import (
 //
 // This function never contributes to the dispatchable agent map: it is a
 // separate call with a separate return value, and ResolveAll is unchanged.
-func ResolveOrchestrator(path string) (domain.AgentReference, error) {
+func ResolveOrchestrator(path string, f agentfile.Format) (domain.AgentReference, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return domain.AgentReference{}, &domain.RefusalError{
@@ -41,7 +42,7 @@ func ResolveOrchestrator(path string) (domain.AgentReference, error) {
 	}
 
 	base := filepath.Base(path)
-	stem := agentStem(base)
+	stem := f.Stem(base)
 	if stem == "" {
 		return domain.AgentReference{}, &domain.RefusalError{
 			Component: "agentresolve",

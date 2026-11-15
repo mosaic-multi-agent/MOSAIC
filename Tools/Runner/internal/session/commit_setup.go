@@ -66,12 +66,12 @@ func extractCheckpointRef(statusMessage string) string {
 // resolveCommitSetupAgent resolves the commit-class infrastructure agent that
 // performs commit setup. It runs before the artifact is created so a missing
 // or unresolvable agent is an ordinary refusal that leaves nothing behind.
-func resolveCommitSetupAgent(declared []domain.DeclaredInfraAgent, orchDir string) (domain.AgentReference, string) {
+func resolveCommitSetupAgent(declared []domain.DeclaredInfraAgent, orchDir, harnessID string) (domain.AgentReference, string) {
 	commitAgent := firstCommitClassAgent(declared)
 	if commitAgent == nil {
 		return domain.AgentReference{}, "commits enabled but no commit-class agent found"
 	}
-	agentRef, err := agentresolve.ResolveOne(orchDir, commitAgent.Name)
+	agentRef, err := agentresolve.ResolveOne(orchDir, agentFormat(harnessID), commitAgent.Name)
 	if err != nil {
 		return domain.AgentReference{}, "commit setup: cannot resolve agent definition: " + err.Error()
 	}

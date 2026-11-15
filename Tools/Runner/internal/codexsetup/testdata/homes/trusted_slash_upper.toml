@@ -1,0 +1,2 @@
+[projects.'{{WORKDIR_SLASH_UPPER}}']
+trust_level = "trusted"

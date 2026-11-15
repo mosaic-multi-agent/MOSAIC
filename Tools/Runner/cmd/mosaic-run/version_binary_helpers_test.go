@@ -24,6 +24,7 @@ var (
 
 // TestMain removes the shared binary directory after the package's tests ran.
 func TestMain(m *testing.M) {
+	maybeRunFakeCodex()
 	code := m.Run()
 	if runBinaryDir != "" {
 		_ = os.RemoveAll(runBinaryDir)

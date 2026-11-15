@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/domain"
 )
 

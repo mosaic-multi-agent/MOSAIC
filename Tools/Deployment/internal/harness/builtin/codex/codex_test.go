@@ -68,7 +68,7 @@ import (
 	"strings"
 	"testing"
 
-	_ "mosaic-deploy/internal/agentformat/all"
+	_ "mosaic-common/agentformat/all"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/builtin/codex"
 	"mosaic-deploy/internal/harness/contracttest"
@@ -727,17 +727,15 @@ func TestToolResolution_NoToolsField_ForAnyCase(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Tools: %v", err)
 			}
-			// The only field emitted must be sandbox_mode; no tools-key field.
+			// Only the module's own capability fields may be emitted; no tools-key field.
 			for _, f := range result.Fields {
-				if f.Key != "sandbox_mode" && (strings.HasPrefix(f.Key, "tools") || f.Key == "permission") {
-					t.Errorf("unexpected tools-related field %q in result; "+
+				switch f.Key {
+				case "sandbox_mode", "web_search", "sandbox_workspace_write":
+				default:
+					t.Errorf("unexpected field %q in result; "+
 						"Codex declares no tools_key so no tools field must appear in Fields",
 						f.Key)
 				}
-			}
-			if len(result.Fields) != 1 {
-				t.Errorf("Fields count = %d, want 1 (only sandbox_mode); fields: %v",
-					len(result.Fields), result.Fields)
 			}
 			if _, ok := sandboxModeFromResult(result); !ok {
 				t.Error("sandbox_mode not present in the single field")

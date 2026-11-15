@@ -22,7 +22,7 @@ package app
 // Package note: these tests are in package app (not app_test) because refreshHarnessOnly
 // is unexported.
 //
-// Translator note: _ "mosaic-deploy/internal/agentformat/all" is imported to register the
+// Translator note: _ "mosaic-common/agentformat/all" is imported to register the
 // Codex TOML translator, matching the pattern in codex_index_scan_test.go and codex_probe_test.go.
 
 import (
@@ -31,8 +31,8 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
-	"mosaic-deploy/internal/agentformat"
-	_ "mosaic-deploy/internal/agentformat/all"
+	"mosaic-common/agentformat"
+	_ "mosaic-common/agentformat/all"
 	"mosaic-deploy/internal/domain"
 )
 

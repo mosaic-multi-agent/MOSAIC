@@ -16,7 +16,7 @@ import (
 
 	yaml "github.com/goccy/go-yaml"
 
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -137,7 +137,7 @@ func twinDeployedAgents(t *testing.T, ws string, mod domain.HarnessModule) map[s
 		if err != nil {
 			t.Fatalf("read %s: %v", f.Name(), err)
 		}
-		canonical, _, err := tr.Decode(raw, agentformat.ArtifactContext{Kind: domain.ArtifactAgent})
+		canonical, _, err := tr.Decode(raw, agentformat.ArtifactContext{Kind: agentformat.ArtifactAgent})
 		if err != nil {
 			continue
 		}

@@ -10,8 +10,8 @@ package descriptor
 import (
 	"sort"
 
-	"mosaic-deploy/internal/agentfields"
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentfields"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/domain"
 )
 

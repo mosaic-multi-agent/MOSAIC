@@ -105,7 +105,7 @@ The following harnesses are compiled into the `mosaic-deploy` binary:
 | `opencode` | OpenCode | Permission-shape tool mapping; reference external module available |
 | `ghcp-cli` | GHCP CLI / VS Code GHCP Copilot | List-shape tool mapping |
 | `vscode-ghcp` | VS Code GHCP Local | List-shape tool mapping |
-| `codex` | Codex (experimental) | Agent files are TOML (not Markdown); skills resolved from shared `.agents/skills` root; tool grants rendered through the harness module (sandbox_mode) rather than the shared mapper |
+| `codex` | Codex (experimental) | Agent files are TOML (not Markdown); skills resolved from shared `.agents/skills` root; tool grants rendered through the harness module (sandbox_mode, web_search, network access) rather than the shared mapper; the agent-format layer is shared from `Tools/Common` |
 
 Third-party harnesses use the descriptor-only or external module tier. See the
 [Harness Contributor Guide](harness-contributor-guide.md).

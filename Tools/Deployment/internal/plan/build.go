@@ -116,6 +116,7 @@ func (p *planner) Build(ctx context.Context, in Input) (domain.Plan, error) {
 					}
 				}
 				gaps = append(gaps, unknownHarnessToolGaps(desc, agent.Key, toolResult)...)
+				gaps = append(gaps, toolResult.Gaps...)
 			}
 		}
 	}

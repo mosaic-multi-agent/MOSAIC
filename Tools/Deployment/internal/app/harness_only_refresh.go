@@ -22,8 +22,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"mosaic-common/agentformat"
 	"mosaic-common/docformat"
-	"mosaic-deploy/internal/agentformat"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/transform"
 )
@@ -420,4 +420,3 @@ func insertAt(src []byte, pos int, insert []byte) []byte {
 	result = append(result, src[pos:]...)
 	return result
 }
-

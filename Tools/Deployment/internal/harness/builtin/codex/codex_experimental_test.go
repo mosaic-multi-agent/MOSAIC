@@ -1,7 +1,7 @@
 package codex_test
 
-// Tests that the built-in Codex descriptor declares the harness experimental with a brief
-// reason covering what works and what does not, and that the declaration reaches the ref the
+// Tests that the built-in Codex descriptor declares the harness experimental with a
+// non-empty reason, and that the declaration reaches the ref the
 // module reports and the ref the registry lists.
 
 import (
@@ -33,29 +33,6 @@ func TestCodexDescriptor_DeclaresExperimental(t *testing.T) {
 	// Assert
 	if strings.TrimSpace(reason) != reason {
 		t.Errorf("reason = %q, want no leading or trailing whitespace", reason)
-	}
-}
-
-func TestCodexDescriptor_ReasonStatesWhatWorks(t *testing.T) {
-	// Arrange / Act
-	reason := codexReason(t)
-
-	// Assert: the deploy target of agents is named.
-	if !strings.Contains(reason, ".codex/agents") {
-		t.Errorf("reason %q does not name the .codex/agents deploy target", reason)
-	}
-}
-
-func TestCodexDescriptor_ReasonStatesWhatDoesNotWork(t *testing.T) {
-	// Arrange / Act
-	reason := codexReason(t)
-
-	// Assert: the missing mosaic-run support (no orchestration) is named.
-	if !strings.Contains(reason, "mosaic-run") {
-		t.Errorf("reason %q does not name the missing mosaic-run support", reason)
-	}
-	if !strings.Contains(strings.ToLower(reason), "orchestrat") {
-		t.Errorf("reason %q does not state that orchestration is unavailable", reason)
 	}
 }
 

@@ -12,9 +12,8 @@ import (
 	"reflect"
 	"testing"
 
-	"mosaic-deploy/internal/agentformat"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/app"
-	"mosaic-deploy/internal/domain"
 )
 
 // twinPromoteKey is the agent key of the promoted fixture.
@@ -44,7 +43,7 @@ func twinPromoteStep(roots twinPromoteRoots, dryRun bool) twinFlowStep {
 	return func(t *testing.T, side twinSide) (twinFlowResult, error) {
 		t.Helper()
 		raw, _, err := twinTranslator(t, side).Encode(rbFixture(t, hOpen+"-full.md"), agentformat.ArtifactContext{
-			AgentKey: twinPromoteKey, Kind: domain.ArtifactAgent, Op: agentformat.OpCreate})
+			AgentKey: twinPromoteKey, Kind: agentformat.ArtifactAgent, Op: agentformat.OpCreate})
 		if err != nil {
 			t.Fatalf("encode the promote source in the %s twin format: %v", side.name(), err)
 		}
