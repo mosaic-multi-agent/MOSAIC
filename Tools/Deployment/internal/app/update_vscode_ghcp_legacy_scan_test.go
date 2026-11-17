@@ -9,15 +9,11 @@ import (
 	"testing"
 
 	"mosaic-deploy/internal/domain"
-	"mosaic-deploy/internal/harness/descriptor"
 )
 
 func vscodeGhcpAgentsDir(t *testing.T) string {
 	t.Helper()
-	d, err := descriptor.Load(filepath.Join("..", "harness", "builtin", "vscodeghcp", "vscode-ghcp.yaml"))
-	if err != nil {
-		t.Fatalf("load vscode-ghcp descriptor: %v", err)
-	}
+	d := parseBuiltinDescriptor(t, "vscode-ghcp")
 	if d.Paths.Agents.Project == "" {
 		t.Fatal("vscode-ghcp declares no project agents directory")
 	}

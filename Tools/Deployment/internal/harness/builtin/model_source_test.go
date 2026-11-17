@@ -4,9 +4,9 @@ package builtin_test
 // CLI-backed harnesses and vscode-ghcp), when discovered through the registry with the
 // ModelCatalog hook, offers the shared catalog's model ids and format hint.
 //
-// vscode-ghcp no longer declares a models: block in its descriptor, so with a hook miss it
-// offers no models at all. The test also verifies that a descriptor-only harness unknown to
-// the shared catalog keeps its own descriptor-sourced model catalog.
+// Every builtin descriptor declares a models: block, so with a hook miss a builtin keeps its
+// descriptor-declared models. The test also verifies that a descriptor-only harness unknown
+// to the shared catalog keeps its own descriptor-sourced model catalog.
 //
 // The ModelCatalog hook is the seam that lets the registry overlay the shared catalog's data
 // onto a module's Descriptor().Models without any package importing builtin harness data
@@ -309,10 +309,10 @@ func TestModelSource_VsCodeGHCP_OffersSharedCatalogFormatHint(t *testing.T) {
 	}
 }
 
-// TestModelSource_VsCodeGHCP_HookMissOffersNoDescriptorFallback verifies that when the hook
-// returns a miss (empty IDs) for vscode-ghcp, the module offers no models: its embedded
-// descriptor no longer declares a models: block, so there is no fallback list to keep.
-func TestModelSource_VsCodeGHCP_HookMissOffersNoDescriptorFallback(t *testing.T) {
+// TestModelSource_VsCodeGHCP_HookMissKeepsDescriptorModels verifies that when the hook
+// returns a miss (empty IDs) for vscode-ghcp, the module keeps the model ids and format
+// hint declared in its embedded descriptor.
+func TestModelSource_VsCodeGHCP_HookMissKeepsDescriptorModels(t *testing.T) {
 	reg, err := registry.Discover(registry.Options{
 		MosaicRoot: deploymentTestdata(t, "frozen-catalog"),
 		ModelCatalog: func(harnessID string, declared domain.ModelCatalog) domain.ModelCatalog {
@@ -329,14 +329,13 @@ func TestModelSource_VsCodeGHCP_HookMissOffersNoDescriptorFallback(t *testing.T)
 	}
 
 	got := m.Descriptor().Models
-	if len(got.IDs) != 0 {
-		t.Errorf("vscode-ghcp: Descriptor().Models.IDs = %v after a hook miss; want empty; "+
-			"model data comes from the shared catalog only, the descriptor must not declare a models: block",
-			got.IDs)
+	if len(got.IDs) == 0 {
+		t.Errorf("vscode-ghcp: Descriptor().Models.IDs is empty after a hook miss; " +
+			"the descriptor declares the model ids and a miss must keep them")
 	}
-	if got.FormatHint != "" {
-		t.Errorf("vscode-ghcp: Descriptor().Models.FormatHint = %q after a hook miss; want empty",
-			got.FormatHint)
+	if got.FormatHint == "" {
+		t.Errorf("vscode-ghcp: Descriptor().Models.FormatHint is empty after a hook miss; " +
+			"the descriptor declares the format hint and a miss must keep it")
 	}
 }
 
@@ -345,9 +344,8 @@ func TestModelSource_VsCodeGHCP_HookMissOffersNoDescriptorFallback(t *testing.T)
 // ---------------------------------------------------------------------------
 
 // TestModelSource_Codex_KeepsDescriptorSourcedIDs verifies that the codex module, when
-// discovered with a ModelCatalog hook that returns empty IDs for "codex" (because it is
-// not in the shared CLI-only catalog), keeps its own YAML-sourced model catalog unchanged.
-// Codex is not CLI-backed and its models are sourced from the embedded descriptor.
+// discovered with a ModelCatalog hook that returns empty IDs for "codex" (a hook miss),
+// keeps its own descriptor-sourced model catalog unchanged.
 //
 // This test uses the frozen catalog root (testdata/frozen-catalog) rather than the live
 // repo root, because the live Catalog does not yet carry Catalog/HarnessInjections/Codex/
@@ -380,7 +378,7 @@ func TestModelSource_Codex_KeepsDescriptorSourcedIDs(t *testing.T) {
 	if anyOfIn(got, sharedOnlyIDs) {
 		t.Errorf("codex: Descriptor().Models.IDs = %v; "+
 			"none of the shared-catalog hook IDs must appear; "+
-			"codex must source its models from its own descriptor, not the CLI-only shared catalog",
+			"codex must source its models from its own descriptor on a hook miss",
 			got)
 	}
 }

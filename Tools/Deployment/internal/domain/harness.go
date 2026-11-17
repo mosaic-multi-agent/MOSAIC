@@ -64,6 +64,16 @@ type HarnessDescriptor struct {
 	// harness is experimental, holding the trimmed user-facing reason; empty when the
 	// descriptor declares nothing.
 	ExperimentalReason string
+
+	// CLI carries the descriptor's optional cli section; nil when the descriptor declares none.
+	// No deploy behaviour reads it.
+	CLI *CLIFacts
+}
+
+// CLIFacts holds the CLI-only facts of a harness descriptor's cli section.
+type CLIFacts struct {
+	Label            string // non-blank CLI label, e.g. "Claude Code CLI"
+	LoadingMechanism string // "name" or "runner-loaded"
 }
 
 // ModelCatalog lists the models a harness exposes to the user during model selection.

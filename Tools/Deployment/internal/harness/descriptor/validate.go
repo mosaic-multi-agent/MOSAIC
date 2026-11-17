@@ -190,6 +190,8 @@ func Validate(d *domain.HarnessDescriptor) []ValidationError {
 	// Validate custom_tool_destination entries (mirrors R3–R9, omits R10).
 	errs = append(errs, validateCustomToolDestinations(d.Tools.CustomToolDestinations, "tools.custom_tool_destination")...)
 
+	errs = append(errs, validateCLIFacts(d.CLI)...)
+
 	return errs
 }
 

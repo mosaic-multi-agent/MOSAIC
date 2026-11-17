@@ -5,25 +5,39 @@ package descriptor_test
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
+	"mosaic-common/harness/builtindesc"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
 )
 
-// loadBuiltinYAML loads a built-in harness descriptor from its YAML file.
+// builtinSource returns the raw YAML of a built-in descriptor from the shared Common
+// package; a missing descriptor fails the test.
+func builtinSource(t *testing.T, id string) []byte {
+	t.Helper()
+	src, ok := builtindesc.Raw(id)
+	if !ok || len(src) == 0 {
+		t.Fatalf("builtin descriptor %s missing from Common", id)
+	}
+	return src
+}
+
+// loadBuiltinYAML parses a built-in harness descriptor; relPath is the YAML file name.
 func loadBuiltinYAML(t *testing.T, relPath string) *domain.HarnessDescriptor {
 	t.Helper()
-	d, err := descriptor.Load("../builtin/" + relPath)
+	id := strings.TrimSuffix(relPath, ".yaml")
+	d, err := descriptor.Parse(builtinSource(t, id), "builtin:"+id)
 	if err != nil {
-		t.Fatalf("load %s: %v", relPath, err)
+		t.Fatalf("parse %s: %v", relPath, err)
 	}
 	return d
 }
 
 func TestReverseMapToolCandidates_AmbiguousNameListsAllGenericsInDeclarationOrder(t *testing.T) {
-	cli := loadBuiltinYAML(t, "ghcpcli/ghcp-cli.yaml")
-	vs := loadBuiltinYAML(t, "vscodeghcp/vscode-ghcp.yaml")
+	cli := loadBuiltinYAML(t, "ghcp-cli.yaml")
+	vs := loadBuiltinYAML(t, "vscode-ghcp.yaml")
 
 	cases := []struct {
 		name string
@@ -47,7 +61,7 @@ func TestReverseMapToolCandidates_AmbiguousNameListsAllGenericsInDeclarationOrde
 }
 
 func TestReverseMapToolCandidates_TaskAndTaskStopBothReverseToSubagent(t *testing.T) {
-	cc := loadBuiltinYAML(t, "claudecode/claude-code.yaml")
+	cc := loadBuiltinYAML(t, "claude-code.yaml")
 	for _, name := range []string{"Task", "TaskStop"} {
 		got := descriptor.ReverseMapToolCandidates(cc, name)
 		if !reflect.DeepEqual(got, []string{"subagent"}) {
@@ -57,7 +71,7 @@ func TestReverseMapToolCandidates_TaskAndTaskStopBothReverseToSubagent(t *testin
 }
 
 func TestReverseMapToolCandidates_UnmappedNameGivesEmptyNonNilSlice(t *testing.T) {
-	vs := loadBuiltinYAML(t, "vscodeghcp/vscode-ghcp.yaml")
+	vs := loadBuiltinYAML(t, "vscode-ghcp.yaml")
 	for _, name := range []string{"edit/createDirectory", "not-a-tool", ""} {
 		got := descriptor.ReverseMapToolCandidates(vs, name)
 		if got == nil || len(got) != 0 {
@@ -67,11 +81,11 @@ func TestReverseMapToolCandidates_UnmappedNameGivesEmptyNonNilSlice(t *testing.T
 }
 
 func TestReverseMapToolCandidates_GenericWithEmptyDestinationsIsNotACandidate(t *testing.T) {
-	cc := loadBuiltinYAML(t, "claudecode/claude-code.yaml")
+	cc := loadBuiltinYAML(t, "claude-code.yaml")
 	if got := descriptor.ReverseMapToolCandidates(cc, "skill"); len(got) != 0 {
 		t.Errorf("claude-code has no destination name for skill; want no candidates, got %v", got)
 	}
-	cli := loadBuiltinYAML(t, "ghcpcli/ghcp-cli.yaml")
+	cli := loadBuiltinYAML(t, "ghcp-cli.yaml")
 	if got := descriptor.ReverseMapToolCandidates(cli, "skill"); !reflect.DeepEqual(got, []string{"skill"}) {
 		t.Errorf("ghcp-cli skill: want [skill], got %v", got)
 	}
@@ -100,7 +114,7 @@ func TestReverseMapToolCandidates_NameInTwoDestinationsOfOneMappingListedOnce(t 
 }
 
 func TestReverseMapToolCandidates_FirstElementEqualsReverseMapTool(t *testing.T) {
-	cli := loadBuiltinYAML(t, "ghcpcli/ghcp-cli.yaml")
+	cli := loadBuiltinYAML(t, "ghcp-cli.yaml")
 	for _, name := range []string{"edit", "search", "read", "execute"} {
 		first, ok := descriptor.ReverseMapTool(cli, name)
 		if !ok {

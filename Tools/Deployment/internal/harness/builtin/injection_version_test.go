@@ -18,13 +18,9 @@ import (
 	"mosaic-deploy/internal/harness/registry"
 )
 
-// builtinYAMLPaths maps each built-in harness name to its embedded descriptor file.
-var builtinYAMLPaths = map[string]string{
-	"claude-code": filepath.Join("claudecode", "claude-code.yaml"),
-	"ghcp-cli":    filepath.Join("ghcpcli", "ghcp-cli.yaml"),
-	"opencode":    filepath.Join("opencode", "opencode.yaml"),
-	"vscode-ghcp": filepath.Join("vscodeghcp", "vscode-ghcp.yaml"),
-}
+// builtinYAMLIDs lists the built-in harness descriptors checked here; their YAML comes from
+// the shared Common package.
+var builtinYAMLIDs = []string{"claude-code", "ghcp-cli", "opencode", "vscode-ghcp"}
 
 func contentFile(dir, name string) string { return filepath.Join(dir, name) }
 
@@ -123,17 +119,14 @@ func TestBuiltinConstruction_ContentFileWithoutVersion_FailsNamingTheFile(t *tes
 
 func TestBuiltinYAML_DoesNotDeclareInjectionsVersion_KeepsLegacyDropEntry(t *testing.T) {
 	topLevel := regexp.MustCompile(`(?m)^injections_version\s*:`)
-	for name, path := range builtinYAMLPaths {
+	for _, name := range builtinYAMLIDs {
 		t.Run(name, func(t *testing.T) {
-			src, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("read %s: %v", path, err)
-			}
+			src := builtinSource(t, name)
 			if topLevel.Match(src) {
-				t.Errorf("%s still declares injections_version", path)
+				t.Errorf("%s still declares injections_version", name)
 			}
 			if !strings.Contains(string(src), `"mosaic_injections_version"`) {
-				t.Errorf("%s lost its mosaic_injections_version drop entry", path)
+				t.Errorf("%s lost its mosaic_injections_version drop entry", name)
 			}
 		})
 	}

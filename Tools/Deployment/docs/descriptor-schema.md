@@ -286,6 +286,7 @@ hooks:
 | `injections_version` | string | Removed. A descriptor that still declares it loads, and the value is ignored. Injection versions come from the frontmatter `version` of `HarnessInjections.md` (the subagent and shared-region version) and of `HarnessInjectionsOrchestrator.md` (the orchestrator-region version). A present injection file without a `version` fails loading. |
 | `agent_format_id` | string | Identifies the file format used for deployed agent files. Empty or absent means `markdown` (the default). The only other recognised value today is `codex-toml`, which causes the deployment tool to write TOML files through the Codex translator rather than Markdown files. An unrecognised value is a fatal parse error. |
 | `experimental` | mapping | Optional. Marks the harness as experimental. Absent means not experimental. When present it must be a mapping whose only key is `reason`, a non-blank string. Rejected with a validation error: a bare or null `experimental:`, a scalar or list value, a mapping without `reason`, a non-string `reason`, a blank (empty or whitespace-only) `reason`, and any other key. See [Experimental harnesses](#experimental-harnesses). |
+| `cli` | mapping | Optional. CLI-only facts for the Runner and AgentTest. See [`cli`](#cli-optional). |
 | `tool_info_recoverable` | bool | When absent or `true` (the default), the tool's deployed format is considered to carry a recoverable tool list. Set to `false` to declare that it does not -- for example, Codex expresses tool grants via `sandbox_mode` rather than a `tools` field, so `promote` cannot reverse-map the grant and asks the user instead. Most harnesses omit this field (equivalent to `true`). |
 
 ---
@@ -314,6 +315,34 @@ The `reason` is trimmed. A blank reason is rejected at load time, so an experime
 |-------|------|-------------|
 | `ids` | list of strings | Model identifiers offered during model selection. Any string is accepted — provider prefixes, colons, uppercase, arbitrary formats. Nothing is validated against a known list. |
 | `format_hint` | string | Display-only format guidance for the user, e.g. `"provider/model-id"`. Never enforced. |
+
+The block is optional for descriptor-only and external harnesses. Every built-in descriptor
+declares it, because the Runner and AgentTest read the model ids and format hint from the
+built-in descriptors.
+
+---
+
+### `cli` (optional)
+
+```yaml
+cli:
+  label: "Claude Code CLI"
+  loading_mechanism: "name"
+```
+
+Facts that only matter to tools that run the harness as a CLI (Runner, AgentTest). Deploy parses
+the section and validates it but does not use it when deploying.
+
+| Key | Type | Allowed values | Description |
+|-----|------|----------------|-------------|
+| `label` | string | any non-blank string | Name shown for the CLI harness, e.g. `"Codex CLI"`. Required inside the section. |
+| `loading_mechanism` | string | `name`, `runner-loaded` | How the harness finds agent definitions. `name`: the harness resolves agents by name from the agents directory. `runner-loaded`: the Runner loads the agent file itself on every invocation. Required inside the section. |
+
+The section is optional. Its presence is what marks a harness as CLI-backed: a descriptor without
+`cli` (for example `vscode-ghcp`) is not offered for Runner or AgentTest runs, and every
+descriptor-only or external harness is in that case. When present, the section must be a mapping
+with both keys: a bare or null `cli:`, a blank `label`, a missing or other `loading_mechanism`, and
+any unknown key inside the section are rejected at load time.
 
 ---
 
@@ -532,7 +561,16 @@ code and are documented here so a descriptor author knows when to escalate:
 ### Exceptions established across the five built-in harnesses
 
 All five built-in harnesses (Claude Code, Codex (experimental), GHCP CLI, OpenCode, VS Code GHCP) were
-implemented using a module + embedded descriptor structure. The exceptions below are documented
+implemented using a module + embedded descriptor structure. Their descriptors live in one package,
+`Tools/Common/harness/builtindesc/` (`claude-code.yaml`, `codex.yaml`, `ghcp-cli.yaml`,
+`opencode.yaml`, `vscode-ghcp.yaml`), and are the single source of the shared harness facts:
+Deploy parses the embedded YAML, and Runner and AgentTest read the same descriptors through the
+`mosaic-common/harness` accessors.
+
+A descriptor-only or external harness (`MosaicDeploy/harnesses/<dir>/harness.yaml`) that reuses a
+built-in id overrides that harness for Deploy only. Runner and AgentTest read only the built-in
+descriptors, so an override that changes the agents directory, the agent file extension or the
+agent format is not seen by them. The exceptions below are documented
 so that future descriptor authors recognise when a built-in module is required.
 
 #### Exceptions common to all five harnesses
@@ -597,6 +635,7 @@ After implementing all five built-in harnesses, the stable split is:
 - Frontmatter model key, tools key, static `add` fields, `drop` list, and key order
 - Injection content (harness-level injection text)
 - Model catalog and format hint
+- CLI-only facts (`cli` section: label, loading mechanism; its presence marks a harness CLI-backed)
 
 **Requires module code (imperative, by exception):**
 - Tool output format: any serialization that is not a plain KindList — comma-separated scalar,

@@ -881,15 +881,14 @@ func TestFrontmatter_KeyOrder_ContainsModelAndSandboxMode(t *testing.T) {
 
 // TestFrontmatter_NoDefaultTierModels verifies that the Codex descriptor offers models
 // without defaulting any tier to a specific model (c, FR-17a). Tier-to-model defaults
-// are a user configuration concern; the FormatHint is empty because Codex model IDs are
-// self-descriptive and need no format inference hint.
+// are a user configuration concern; the descriptor only declares the identifier shape hint.
 func TestFrontmatter_NoDefaultTierModels(t *testing.T) {
 	d := codex.DescriptorForTesting(t)
-	if d.Models.FormatHint != "" {
-		t.Errorf("Models.FormatHint = %q, want empty; "+
-			"Codex model IDs are self-descriptive; "+
+	if d.Models.FormatHint != "gpt-<version>" {
+		t.Errorf("Models.FormatHint = %q, want %q; "+
+			"the descriptor declares the identifier shape hint only; "+
 			"tier-to-model defaults are a user configuration concern, not a descriptor concern",
-			d.Models.FormatHint)
+			d.Models.FormatHint, "gpt-<version>")
 	}
 }
 

@@ -68,7 +68,7 @@ func TestUnknownToolNames_PartialGlobOfSingleToolIsUnknown(t *testing.T) {
 }
 
 func TestUnknownToolNames_BuiltInGhcpTargetsKnowTheirOwnToolNames(t *testing.T) {
-	for _, rel := range []string{"ghcpcli/ghcp-cli.yaml", "vscodeghcp/vscode-ghcp.yaml"} {
+	for _, rel := range []string{"ghcp-cli.yaml", "vscode-ghcp.yaml"} {
 		d := loadBuiltinYAML(t, rel)
 		var names []string
 		for _, u := range d.Tools.Universe {
@@ -84,7 +84,7 @@ func TestUnknownToolNames_BuiltInGhcpTargetsKnowTheirOwnToolNames(t *testing.T) 
 }
 
 func TestUnknownToolNames_BuiltInNonGhcpHarnessesNeverReport(t *testing.T) {
-	for _, rel := range []string{"claudecode/claude-code.yaml", "opencode/opencode.yaml"} {
+	for _, rel := range []string{"claude-code.yaml", "opencode.yaml"} {
 		d := loadBuiltinYAML(t, rel)
 		if got := descriptor.UnknownToolNames(d, []string{"definitely-not-a-tool"}); got != nil {
 			t.Errorf("%s ignores nothing it must report; want nil, got %v", rel, got)

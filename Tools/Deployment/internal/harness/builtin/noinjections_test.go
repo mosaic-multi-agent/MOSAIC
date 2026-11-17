@@ -31,27 +31,11 @@ func repoRoot(t *testing.T) string {
 // descriptors (claude-code.yaml, opencode.yaml, ghcp-cli.yaml, vscode-ghcp.yaml, codex.yaml)
 // contain an injections: key. This confirms the YAML field has been removed from all built-in sources.
 func TestNoInjections_EmbeddedDescriptors(t *testing.T) {
-	root := repoRoot(t)
-	descriptors := []struct {
-		harness string
-		path    string
-	}{
-		{"claude-code", filepath.Join(root, "Tools", "Deployment", "internal", "harness", "builtin", "claudecode", "claude-code.yaml")},
-		{"opencode", filepath.Join(root, "Tools", "Deployment", "internal", "harness", "builtin", "opencode", "opencode.yaml")},
-		{"ghcp-cli", filepath.Join(root, "Tools", "Deployment", "internal", "harness", "builtin", "ghcpcli", "ghcp-cli.yaml")},
-		{"vscode-ghcp", filepath.Join(root, "Tools", "Deployment", "internal", "harness", "builtin", "vscodeghcp", "vscode-ghcp.yaml")},
-		{"codex", filepath.Join(root, "Tools", "Deployment", "internal", "harness", "builtin", "codex", "codex.yaml")},
-	}
-
-	for _, d := range descriptors {
-		d := d
-		t.Run(d.harness, func(t *testing.T) {
-			data, err := os.ReadFile(d.path)
-			if err != nil {
-				t.Fatalf("read %s: %v", d.path, err)
-			}
-			if containsInjectionsKey(data) {
-				t.Errorf("embedded descriptor %q contains an injections: key; it must be removed (injection content is sourced from HarnessInjections.md)", d.path)
+	for _, id := range []string{"claude-code", "opencode", "ghcp-cli", "vscode-ghcp", "codex"} {
+		id := id
+		t.Run(id, func(t *testing.T) {
+			if containsInjectionsKey(builtinSource(t, id)) {
+				t.Errorf("builtin descriptor %q contains an injections: key; it must be removed (injection content is sourced from HarnessInjections.md)", id)
 			}
 		})
 	}

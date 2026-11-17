@@ -17,7 +17,6 @@ package descriptor_test
 //     and validate without error (regression guard).
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -478,36 +477,23 @@ func TestParse_CustomToolDestination_NamesKeyEmpty_ParseFails(t *testing.T) {
 
 // --- T1.4: Regression — existing descriptors load and validate without error ---
 
-// builtinDescriptors lists the five embedded harness descriptor YAML files relative to
-// the descriptor package directory (Tools/Deployment/internal/harness/descriptor/).
-var builtinDescriptors = []struct {
-	harness string
-	relPath string
-}{
-	{"claude-code", filepath.Join("..", "builtin", "claudecode", "claude-code.yaml")},
-	{"opencode", filepath.Join("..", "builtin", "opencode", "opencode.yaml")},
-	{"ghcp-cli", filepath.Join("..", "builtin", "ghcpcli", "ghcp-cli.yaml")},
-	{"vscode-ghcp", filepath.Join("..", "builtin", "vscodeghcp", "vscode-ghcp.yaml")},
-	{"codex", filepath.Join("..", "builtin", "codex", "codex.yaml")},
-}
+// builtinDescriptorIDs lists the five builtin harness descriptors served by the shared
+// Common package.
+var builtinDescriptorIDs = []string{"claude-code", "opencode", "ghcp-cli", "vscode-ghcp", "codex"}
 
 // TestLoad_ExistingBuiltinDescriptors_StillLoadWithoutError is a regression guard
 // asserting that adding the custom_tool_destination field to the wire type does not
 // break loading of any of the five built-in harness descriptors.
 func TestLoad_ExistingBuiltinDescriptors_StillLoadWithoutError(t *testing.T) {
-	for _, tc := range builtinDescriptors {
-		tc := tc
-		t.Run(tc.harness, func(t *testing.T) {
-			src, err := os.ReadFile(tc.relPath)
+	for _, id := range builtinDescriptorIDs {
+		id := id
+		t.Run(id, func(t *testing.T) {
+			d, err := descriptor.Parse(builtinSource(t, id), "builtin:"+id)
 			if err != nil {
-				t.Fatalf("read %s descriptor at %s: %v", tc.harness, tc.relPath, err)
-			}
-			d, err := descriptor.Parse(src, tc.relPath)
-			if err != nil {
-				t.Fatalf("Parse %s descriptor: unexpected error: %v", tc.harness, err)
+				t.Fatalf("Parse %s descriptor: unexpected error: %v", id, err)
 			}
 			if d == nil {
-				t.Fatalf("Parse %s descriptor: returned nil without error", tc.harness)
+				t.Fatalf("Parse %s descriptor: returned nil without error", id)
 			}
 		})
 	}

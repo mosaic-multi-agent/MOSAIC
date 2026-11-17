@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"mosaic-common/harness/builtindesc"
 	"mosaic-deploy/internal/catalog"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
@@ -18,10 +19,10 @@ import (
 )
 
 const (
-	tpClaude = "claudecode/claude-code.yaml"
-	tpOpen   = "opencode/opencode.yaml"
-	tpCLI    = "ghcpcli/ghcp-cli.yaml"
-	tpVSCode = "vscodeghcp/vscode-ghcp.yaml"
+	tpClaude = "claude-code.yaml"
+	tpOpen   = "opencode.yaml"
+	tpCLI    = "ghcp-cli.yaml"
+	tpVSCode = "vscode-ghcp.yaml"
 
 	tpHookKey = "mosaic-logger"
 )
@@ -55,11 +56,23 @@ func (m *tpModule) HookPlan(domain.HookPlanRequest) (domain.HookPlan, error) {
 // file "logger.sh" in the descriptor's hooks folder.
 func tpHarness(t *testing.T, rel string) *tpModule {
 	t.Helper()
-	d, err := descriptor.Load("../harness/builtin/" + rel)
-	if err != nil {
-		t.Fatalf("load %s: %v", rel, err)
-	}
+	d := parseBuiltinDescriptor(t, strings.TrimSuffix(rel, ".yaml"))
 	return &tpModule{desc: d, hookPlan: tpHookPlan(d.Paths.Hooks.Project, "logger.sh")}
+}
+
+// parseBuiltinDescriptor parses a built-in descriptor taken from the shared Common package;
+// a missing descriptor fails the test.
+func parseBuiltinDescriptor(t *testing.T, id string) *domain.HarnessDescriptor {
+	t.Helper()
+	src, ok := builtindesc.Raw(id)
+	if !ok || len(src) == 0 {
+		t.Fatalf("builtin descriptor %s missing from Common", id)
+	}
+	d, err := descriptor.Parse(src, "builtin:"+id)
+	if err != nil {
+		t.Fatalf("parse %s: %v", id, err)
+	}
+	return d
 }
 
 // tpHookPlan returns a supported hook plan with the given target files in dir.

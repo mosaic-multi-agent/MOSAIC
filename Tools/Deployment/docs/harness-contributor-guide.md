@@ -373,12 +373,32 @@ The agent-format layer (`agentformat`, its `formatid`, `codextoml` and `all` sub
 it, and the Runner reads deployed agent files through the same layer (read-only, via `agentload`).
 A new format therefore needs no Runner code.
 
-Also add the harness to the shared CLI harness catalog in `Tools/Common/harness` (if the Runner
-should be able to run it), giving the entry the same format ID (`AgentFormatID`, `markdown` or
-your format ID) and agent file extension (`AgentExtension`, including the leading dot) as the
-descriptor's `agent_format_id` and `extensions.agent`. Tests under
-`Tools/Deployment/internal/harness/builtin/<harness>/` compare the catalog's agents directory,
-format ID, extension and (for Codex) model IDs with the descriptor, so a drift fails the build.
+The format ID, agent file extension, agents directory and model IDs of a built-in harness are
+declared once, in its descriptor under `Tools/Common/harness/builtindesc/`. There is no second
+copy to keep in step: Deploy parses the embedded YAML, and the Runner and AgentTest read the same
+descriptors through the `mosaic-common/harness` accessors.
+
+#### Adding a built-in harness that uses an existing agent format
+
+1. Add one descriptor, `<id>.yaml`, to `Tools/Common/harness/builtindesc/` and list it in that
+   package (the `go:embed` line and the builtin id list). Declare `models` (`ids`, `format_hint`)
+   for every built-in. For a harness the Runner and AgentTest can run, also declare the optional
+   `cli` section (see [descriptor-schema.md](descriptor-schema.md#cli-optional)).
+2. Add the harness's injection files (`HarnessInjections.md`, and `HarnessInjectionsOrchestrator.md`
+   where the harness has an orchestrator) under the catalog's `HarnessInjections/` directory.
+3. Write the adapter code each tool needs: the Deploy module (`Tools/Deployment/internal/harness/builtin/<id>/`),
+   and, for a harness with a `cli` section, the Runner and AgentTest adapters (spawn and decode).
+
+A coverage test fails the build if a tool that offers CLI harnesses has no adapter for a harness
+whose descriptor declares a `cli` section.
+
+#### Overriding a built-in harness from a descriptor on disk
+
+Runner and AgentTest read only the built-in descriptors. A descriptor-only or external harness
+(`MosaicDeploy/harnesses/<dir>/harness.yaml`) that reuses a built-in id overrides that harness for
+Deploy alone. If the override changes the agents directory, the agent file extension or the
+agent format, Runner and AgentTest do not see the change and keep using the built-in values.
+Change those facts in the built-in descriptor instead.
 
 ### 2 — Supply a translator pair
 

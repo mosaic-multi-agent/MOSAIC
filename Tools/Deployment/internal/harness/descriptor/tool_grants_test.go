@@ -14,11 +14,7 @@ import (
 
 func loadBuiltin(t *testing.T, rel string) *domain.HarnessDescriptor {
 	t.Helper()
-	d, err := descriptor.Load("../builtin/" + rel)
-	if err != nil {
-		t.Fatalf("load %s: %v", rel, err)
-	}
-	return d
+	return loadBuiltinYAML(t, rel)
 }
 
 func permissionValue(pairs ...[2]string) domain.FieldValue {
@@ -30,7 +26,7 @@ func permissionValue(pairs ...[2]string) domain.FieldValue {
 }
 
 func TestExtractToolGrants_PermissionShapeReturnsAllowAndDenyInDocumentOrder(t *testing.T) {
-	d := loadBuiltin(t, "opencode/opencode.yaml")
+	d := loadBuiltin(t, "opencode.yaml")
 	value := permissionValue(
 		[2]string{"read", "allow"}, [2]string{"bash", "deny"}, [2]string{"srv_*", "allow"}, [2]string{"other_tool", "deny"},
 	)
@@ -49,7 +45,7 @@ func TestExtractToolGrants_PermissionShapeReturnsAllowAndDenyInDocumentOrder(t *
 }
 
 func TestExtractToolGrants_FirstOccurrenceOfANameWins(t *testing.T) {
-	d := loadBuiltin(t, "opencode/opencode.yaml")
+	d := loadBuiltin(t, "opencode.yaml")
 	value := permissionValue([2]string{"srv_*", "deny"}, [2]string{"srv_*", "allow"})
 
 	got := descriptor.ExtractToolGrants(d, value)
@@ -61,7 +57,7 @@ func TestExtractToolGrants_FirstOccurrenceOfANameWins(t *testing.T) {
 }
 
 func TestExtractToolGrants_ListShapeReturnsEveryItemAsAllow(t *testing.T) {
-	d := loadBuiltin(t, "ghcpcli/ghcp-cli.yaml")
+	d := loadBuiltin(t, "ghcp-cli.yaml")
 	value := domain.ListValue([]domain.FieldValue{
 		domain.ScalarValue("read", domain.QuotePlain),
 		domain.ScalarValue("srv/*", domain.QuotePlain),
@@ -80,7 +76,7 @@ func TestExtractToolGrants_ListShapeReturnsEveryItemAsAllow(t *testing.T) {
 }
 
 func TestExtractToolGrants_ZeroValueYieldsNoGrants(t *testing.T) {
-	d := loadBuiltin(t, "opencode/opencode.yaml")
+	d := loadBuiltin(t, "opencode.yaml")
 
 	if got := descriptor.ExtractToolGrants(d, domain.FieldValue{}); len(got) != 0 {
 		t.Errorf("grants: want none, got %+v", got)

@@ -10,37 +10,27 @@ package descriptor_test
 // agent-format layer must not depend on them.
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"mosaic-common/agentformat"
+	"mosaic-common/harness/builtindesc"
 	"mosaic-deploy/internal/harness/descriptor"
 )
 
 // TestCarriageKeyCollision_NotInDescriptorFields verifies the rule above for
 // every builtin descriptor.
 func TestCarriageKeyCollision_NotInDescriptorFields(t *testing.T) {
-	builtinDir, err := filepath.Abs(filepath.Join("..", "builtin"))
-	if err != nil {
-		t.Fatalf("resolve builtin directory: %v", err)
+	ids := builtindesc.IDs()
+	if len(ids) == 0 {
+		t.Fatal("no builtin descriptors found in Common; cannot check for collisions")
 	}
 
-	yamlFiles, err := findBuiltinDescriptorYAMLs(builtinDir)
-	if err != nil {
-		t.Fatalf("find builtin descriptor YAMLs in %s: %v", builtinDir, err)
-	}
-	if len(yamlFiles) == 0 {
-		t.Fatalf("no builtin descriptor YAML files found under %s; cannot check for collisions", builtinDir)
-	}
-
-	for _, yamlPath := range yamlFiles {
-		yamlPath := yamlPath
-		t.Run(strings.TrimPrefix(yamlPath, builtinDir+string(filepath.Separator)), func(t *testing.T) {
-			src, readErr := os.ReadFile(yamlPath)
-			if readErr != nil {
-				t.Fatalf("read %s: %v", yamlPath, readErr)
+	for _, id := range ids {
+		yamlPath := "builtin:" + id
+		t.Run(id, func(t *testing.T) {
+			src, ok := builtindesc.Raw(id)
+			if !ok || len(src) == 0 {
+				t.Fatalf("builtin descriptor %s missing from Common", id)
 			}
 			d, parseErr := descriptor.Parse(src, yamlPath)
 			if parseErr != nil {
@@ -66,31 +56,4 @@ func TestCarriageKeyCollision_NotInDescriptorFields(t *testing.T) {
 			}
 		})
 	}
-}
-
-// findBuiltinDescriptorYAMLs returns all YAML files found in the immediate
-// subdirectories of the builtin harness directory (one subdirectory per
-// harness, each holding one descriptor YAML file).
-func findBuiltinDescriptorYAMLs(builtinDir string) ([]string, error) {
-	var results []string
-	entries, err := os.ReadDir(builtinDir)
-	if err != nil {
-		return nil, err
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		subdir := filepath.Join(builtinDir, entry.Name())
-		subEntries, readErr := os.ReadDir(subdir)
-		if readErr != nil {
-			return nil, readErr
-		}
-		for _, sub := range subEntries {
-			if !sub.IsDir() && strings.HasSuffix(sub.Name(), ".yaml") {
-				results = append(results, filepath.Join(subdir, sub.Name()))
-			}
-		}
-	}
-	return results, nil
 }

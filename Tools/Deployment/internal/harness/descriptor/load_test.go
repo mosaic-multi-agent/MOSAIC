@@ -774,27 +774,18 @@ func TestLoad_UnknownAgentFormatID_RejectedAtParseTime(t *testing.T) {
 // harness descriptors still load without error after the schema is extended with the
 // new optional fields (f). Their zero-value defaults must not break existing descriptors.
 //
-// NOTE: This test references descriptor file paths relative to the descriptor package
-// directory. It is a regression guard that the schema change is backward-compatible.
+// NOTE: The descriptors come from the shared Common package. It is a regression guard
+// that the schema change is backward-compatible.
 func TestLoad_ExistingDescriptors_ParseIdentically(t *testing.T) {
-	existing := []struct {
-		harness string
-		relPath string
-	}{
-		{"claude-code", filepath.Join("..", "builtin", "claudecode", "claude-code.yaml")},
-		{"opencode", filepath.Join("..", "builtin", "opencode", "opencode.yaml")},
-		{"ghcp-cli", filepath.Join("..", "builtin", "ghcpcli", "ghcp-cli.yaml")},
-		{"vscode-ghcp", filepath.Join("..", "builtin", "vscodeghcp", "vscode-ghcp.yaml")},
-	}
-	for _, tc := range existing {
-		tc := tc
-		t.Run(tc.harness, func(t *testing.T) {
-			d, err := descriptor.Load(tc.relPath)
+	for _, harness := range []string{"claude-code", "opencode", "ghcp-cli", "vscode-ghcp"} {
+		harness := harness
+		t.Run(harness, func(t *testing.T) {
+			d, err := descriptor.Parse(builtinSource(t, harness), "builtin:"+harness)
 			if err != nil {
-				t.Fatalf("Load(%s): unexpected error after schema extension: %v", tc.harness, err)
+				t.Fatalf("Parse(%s): unexpected error after schema extension: %v", harness, err)
 			}
 			if d.ID == "" {
-				t.Errorf("Load(%s): ID is empty; descriptor must be fully populated", tc.harness)
+				t.Errorf("Parse(%s): ID is empty; descriptor must be fully populated", harness)
 			}
 		})
 	}

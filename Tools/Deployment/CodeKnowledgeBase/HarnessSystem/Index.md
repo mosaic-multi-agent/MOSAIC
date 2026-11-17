@@ -16,8 +16,8 @@ a `domain.HarnessModule`.
 Three tiers can provide a `HarnessModule`, in ascending precedence:
 
 1. **Built-in** — Go code compiled into the binary, one sub-package per
-   harness, each embedding its own `harness.yaml` descriptor and registering
-   itself via `init()`.
+   harness, each using its descriptor from `Tools/Common/harness/builtindesc`
+   and registering itself via `init()`.
 2. **Descriptor-only** — a `harness.yaml` dropped on disk under
    `<MosaicRoot>/MosaicDeploy/harnesses/<folder>/` with no code at all. Every
    method is driven purely by shared, descriptor-interpreting algorithms.
@@ -38,7 +38,7 @@ contract" checks.
 |-----------|---------|
 | **descriptor** | Owns the YAML wire format for `harness.yaml` (`Load`/`Parse`/`Validate`), maps it onto the tag-free `domain.HarnessDescriptor`, and exports the three shared algorithms every tier ultimately delegates to: `MapTools`, `ApplyFrontmatterSpec`, `ResolveTargetPath`. |
 | **registry** | `Discover` walks built-in factories plus on-disk harness folders, applies tier precedence, and returns a `Registry` whose `List`/`Resolve` are the only way any other package obtains a `HarnessModule`. Also holds `runtimeModule`, the descriptor-driven implementation used for the descriptor-only tier. External-tier harnesses are constructed via `external.New` instead. |
-| **builtin** | Parent namespace for five harness sub-packages (`claudecode`, `codex`, `ghcpcli`, `opencode`, `vscodeghcp`). Each embeds its own descriptor YAML and adds the minimal module code needed for behaviour the descriptor schema cannot express. |
+| **builtin** | Parent namespace for five harness sub-packages (`claudecode`, `codex`, `ghcpcli`, `opencode`, `vscodeghcp`). Each takes its descriptor YAML from `Tools/Common/harness/builtindesc` (the single source also read by Runner and AgentTest) and adds the minimal module code needed for behaviour the descriptor schema cannot express. |
 | **external** | Client-side implementation of the JSON-over-stdio protocol: `external.New` spawns a subprocess, performs a version handshake, and forwards every `HarnessModule` method as one JSON request/response line. Defines the full error taxonomy for subprocess failure modes. |
 | **contracttest** | `contracttest.Run(t, module, fixtures)` drives universal invariants unconditionally, plus optional per-method sub-suites (`ToolCases`, `FrontmatterCases`, `InjectionCases`, `TargetPathCases`, `HookPlanCases`) when fixtures are supplied. |
 

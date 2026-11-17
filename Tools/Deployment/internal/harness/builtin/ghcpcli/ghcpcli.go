@@ -34,10 +34,10 @@
 package ghcpcli
 
 import (
-	_ "embed"
 	"fmt"
 	"path"
 
+	"mosaic-common/harness/builtindesc"
 	"mosaic-deploy/internal/catalog/catalogpaths"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
@@ -45,8 +45,8 @@ import (
 	"mosaic-deploy/internal/harness/registry"
 )
 
-//go:embed ghcp-cli.yaml
-var embeddedDescriptor []byte
+// Descriptor bytes come from the shared Common package, not a local copy.
+var embeddedDescriptor, _ = builtindesc.Raw("ghcp-cli")
 
 func init() {
 	registry.Register("ghcp-cli", func(opts registry.BuiltinOptions) (domain.HarnessModule, error) {

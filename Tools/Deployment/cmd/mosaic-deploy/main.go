@@ -164,11 +164,11 @@ func main() {
 	// hook wires config-declared tool-destination mappings into each harness module's
 	// descriptor at construction time, so that destination fields are emitted on every
 	// deploy and update without any further module-level knowledge of config stores.
-	// The ModelCatalog hook overlays the shared catalog's model data onto every
-	// harness the catalog knows, builtin VS Code GHCP included, so
-	// Descriptor().Models reflects the single source of truth for model IDs and
-	// format hints; any harness the shared catalog does not know keeps
-	// its own descriptor-sourced catalog unchanged.
+	// The ModelCatalog hook overlays the shared catalog's descriptor-derived model
+	// data onto every harness the catalog knows. It is a no-op for an unmodified
+	// builtin id, whose own descriptor already declares the same data, and matters
+	// for a Deploy-side override of a builtin id; a harness the shared catalog does
+	// not know keeps its own descriptor-sourced catalog unchanged.
 	reg, err := registry.DiscoverForStack(registry.Options{
 		MosaicRoot:    mosaicRoot,
 		AllowExternal: allowExternal || toolCfg.AllowExternalModules,
