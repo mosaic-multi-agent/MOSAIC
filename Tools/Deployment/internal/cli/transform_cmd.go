@@ -106,7 +106,7 @@ anything, and --yes to confirm the plan without prompting.`,
 		"Default target model for source models not covered by --model-map; absent means "+
 			"those agents' model field is left empty")
 	cmd.Flags().StringArrayVar(&mcpSplits, "mcp-split", nil,
-		"Answer how an ambiguous OpenCode MCP tool name splits into server and tool as "+
+		"Answer how an ambiguous OpenCode or OpenCode V2 MCP tool name splits into server and tool as "+
 			"sourceName=server, for example azure-devops_get_pull_request=azure-devops; repeat "+
 			"once per name. A name left unanswered is reported as unmapped and not written.")
 	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "Overwrite an existing destination file")

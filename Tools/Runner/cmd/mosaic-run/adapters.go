@@ -13,6 +13,7 @@ import (
 	"mosaic-run/internal/harness/codex"
 	"mosaic-run/internal/harness/ghcpcli"
 	"mosaic-run/internal/harness/opencode"
+	"mosaic-run/internal/harness/opencodev2"
 	"mosaic-run/internal/harness/roleenv"
 )
 
@@ -87,7 +88,7 @@ func buildAdapter(runFolder, harnessStr, execPathStr, ghcpMode string, timeouts 
 		if exe == "" {
 			exe = "opencode"
 		}
-		return withOpenCodeSafetyNet(opencode.NewOpenCodeAdapterWithLogger(exe, timeouts.NonHITL, logger, runOpts...).WithHITLTimeout(timeouts.HITL).WithActivityObserver(activity), runFolder, logger)
+		return withOpenCodeSafetyNet(opencode.NewOpenCodeAdapterWithLogger(exe, timeouts.NonHITL, logger, runOpts...).WithHITLTimeout(timeouts.HITL).WithActivityObserver(activity), commonharness.HarnessIDOpenCode, runFolder, logger)
 	case commonharness.HarnessIDGHCPCLI:
 		exe := execPathStr
 		if exe == "" {
@@ -104,6 +105,12 @@ func buildAdapter(runFolder, harnessStr, execPathStr, ghcpMode string, timeouts 
 			exe = "codex"
 		}
 		return codex.NewCodexAdapterWithLogger(exe, timeouts.NonHITL, logger, runOpts...).WithHITLTimeout(timeouts.HITL).WithActivityObserver(activity)
+	case commonharness.HarnessIDOpenCodeV2:
+		exe := execPathStr
+		if exe == "" {
+			exe = "opencode"
+		}
+		return withOpenCodeSafetyNet(opencodev2.NewOpenCodeV2AdapterWithLogger(exe, timeouts.NonHITL, logger, runOpts...).WithHITLTimeout(timeouts.HITL).WithNoOutputTimeout(timeouts.NoOutput).WithActivityObserver(activity), commonharness.HarnessIDOpenCodeV2, runFolder, logger)
 	default: // "fake" or unknown
 		return harness.NewMockAdapter()
 	}

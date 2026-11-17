@@ -11,7 +11,7 @@ import (
 	"mosaic-common/harness/builtindesc"
 )
 
-var wantIDs = []string{"claude-code", "opencode", "ghcp-cli", "vscode-ghcp", "codex"}
+var wantIDs = []string{"claude-code", "opencode", "ghcp-cli", "vscode-ghcp", "codex", "opencode-v2"}
 
 func TestIDs_ListsEveryBuiltinInBuiltinOrder(t *testing.T) {
 	got := builtindesc.IDs()

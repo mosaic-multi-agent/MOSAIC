@@ -38,6 +38,7 @@ func TestCatalogEntries_ExistingHarnessFormatData(t *testing.T) {
 		harness.HarnessIDOpenCode:   {string(formatid.Markdown), ".md"},
 		harness.HarnessIDGHCPCLI:    {string(formatid.Markdown), ".agent.md"},
 		harness.HarnessIDCodex:      {string(formatid.CodexTOML), ".toml"},
+		harness.HarnessIDOpenCodeV2: {string(formatid.Markdown), ".md"},
 	}
 	for id, w := range want {
 		e, ok := harness.LookupCLIHarness(id)

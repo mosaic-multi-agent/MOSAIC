@@ -11,6 +11,10 @@ func builtinTools() map[Harness][]string {
 			"WebSearch", "AskUserQuestion", "SubagentHandback", "ExitPlanMode",
 			"Skill", "SlashCommand", "ToolSearch",
 		},
+		HarnessOpenCodeV2: {
+			"shell", "read", "write", "edit", "patch", "glob", "grep", "webfetch",
+			"websearch", "question", "skill", "subagent", "execute", "todowrite",
+		},
 		HarnessOpenCode: {
 			"bash", "read", "write", "edit", "patch", "apply_patch", "glob", "grep",
 			"list", "todowrite", "todoread", "webfetch", "task", "question", "skill",

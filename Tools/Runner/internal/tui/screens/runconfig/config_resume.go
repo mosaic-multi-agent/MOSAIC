@@ -31,12 +31,12 @@ func (s *ConfigScreen) stepAfterVersionDrift() configStep {
 
 // stepBeforeResumeSettings returns the step a resume shows before its
 // commit-branch and runner-settings questions: the version-drift question when
-// it applies, else the HITL timeout.
+// it applies, else the last timeout question.
 func (s *ConfigScreen) stepBeforeResumeSettings() configStep {
 	if s.showsVersionDrift() {
 		return configStepVersionDrift
 	}
-	return configStepHITLTimeout
+	return s.lastTimeoutStep()
 }
 
 // entryCursor returns the cursor a step starts with when the wizard moves

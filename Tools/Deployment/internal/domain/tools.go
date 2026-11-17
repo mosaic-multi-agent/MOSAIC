@@ -54,6 +54,7 @@ type ToolShape string
 const (
 	ShapeList       ToolShape = "list"       // flat list value
 	ShapePermission ToolShape = "permission" // nested allow/deny mapping
+	ShapeRules      ToolShape = "rules"      // ordered list of {action, resource, effect} rules
 )
 
 // Disposition is the default permission assigned to a tool that an agent does not explicitly use.
@@ -105,6 +106,8 @@ type ToolSpec struct {
 	// PlaceholderExpansion names the tools the orchestrator's {tool-permissions} placeholder
 	// resolves to. Empty means "the whole Universe".
 	PlaceholderExpansion []string
+	// Rules holds the descriptor's fixed rules. Rules shape only; zero otherwise.
+	Rules RuleFrame
 }
 
 // HarnessTool is one entry in the harness's full tool universe.
@@ -112,6 +115,8 @@ type HarnessTool struct {
 	Name         string      // harness-side name, possibly hierarchical: "read/readFile"
 	Unused       Disposition // permission shape: disposition when the agent does not use it
 	ByConvention bool        // emitted for every agent regardless of generic tools
+	// Action is the permission action that governs the tool. Rules shape only; "" means Name.
+	Action string
 }
 
 // ToolMapping declares how one generic tool name maps to harness-specific output.

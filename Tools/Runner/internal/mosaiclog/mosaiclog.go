@@ -40,6 +40,7 @@ var harnessIDs = map[string]bool{
 	commonharness.HarnessIDOpenCode:   true,
 	commonharness.HarnessIDGHCPCLI:    true,
 	commonharness.HarnessIDCodex:      true,
+	commonharness.HarnessIDOpenCodeV2: true,
 }
 
 // Writer appends Runner-owned events under {workspaceRoot}/OrchestrationLogs/.
@@ -76,7 +77,7 @@ type wallClock struct{}
 func (wallClock) Now() time.Time { return time.Now().UTC() }
 
 // NewWriter binds a writer to a workspace root and a harness id. A harness id
-// outside claude-code / opencode / ghcp-cli / codex makes every write a no-op.
+// outside claude-code / opencode / ghcp-cli / codex / opencode-v2 makes every write a no-op.
 func NewWriter(workspaceRoot, harness string, opts ...Option) *Writer {
 	w := &Writer{root: workspaceRoot, harness: harness, clock: wallClock{}, debug: domain.NopDebugLogger{}}
 	for _, o := range opts {

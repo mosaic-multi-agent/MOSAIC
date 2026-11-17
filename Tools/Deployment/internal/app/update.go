@@ -100,7 +100,7 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 		return domain.RunSummary{}, err
 	}
 
-	if err := s.checkGhcpTarget(harnessID, workspace); err != nil {
+	if err := s.checkTargetPairs(harnessID, workspace); err != nil {
 		return domain.RunSummary{}, err
 	}
 

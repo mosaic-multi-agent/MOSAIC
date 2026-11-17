@@ -79,7 +79,7 @@ func TestResolveHarnessBinaries_AllCLIHarnesses_AllResolve(t *testing.T) {
 	lookPath := perBinaryLookPath(paths)
 
 	// Act
-	harnesses := []string{"claude-code", "opencode", "ghcp-cli", "codex"}
+	harnesses := []string{"claude-code", "opencode", "ghcp-cli", "codex", "opencode-v2"}
 	result, err := resolve.ResolveHarnessBinaries(harnesses, lookPath)
 
 	// Assert

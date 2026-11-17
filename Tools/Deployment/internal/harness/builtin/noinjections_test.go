@@ -31,7 +31,7 @@ func repoRoot(t *testing.T) string {
 // descriptors (claude-code.yaml, opencode.yaml, ghcp-cli.yaml, vscode-ghcp.yaml, codex.yaml)
 // contain an injections: key. This confirms the YAML field has been removed from all built-in sources.
 func TestNoInjections_EmbeddedDescriptors(t *testing.T) {
-	for _, id := range []string{"claude-code", "opencode", "ghcp-cli", "vscode-ghcp", "codex"} {
+	for _, id := range []string{"claude-code", "opencode", "ghcp-cli", "vscode-ghcp", "codex", "opencode-v2"} {
 		id := id
 		t.Run(id, func(t *testing.T) {
 			if containsInjectionsKey(builtinSource(t, id)) {

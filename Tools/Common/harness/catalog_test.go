@@ -39,6 +39,7 @@ func TestCLIHarnesses_AllDeclaredConstantsAppearAsEntries(t *testing.T) {
 		harness.HarnessIDOpenCode,
 		harness.HarnessIDGHCPCLI,
 		harness.HarnessIDCodex,
+		harness.HarnessIDOpenCodeV2,
 	}
 	for _, id := range knownIDs {
 		if _, ok := harness.LookupCLIHarness(id); !ok {

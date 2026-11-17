@@ -10,16 +10,20 @@ import (
 	"mosaic-deploy/internal/domain"
 )
 
-// openCodeHarnessID is the descriptor id of the harness whose configuration declares MCP servers.
-const openCodeHarnessID = "opencode"
-
 // openCodeDeclaredServers returns the servers OpenCode's configuration declares when the source
-// harness is OpenCode; any other source has none.
+// harness is OpenCode (V1 reads mcp.<name>, V2 reads mcp.servers.<name>); any other source has
+// none.
 func (r *transformRun) openCodeDeclaredServers() []string {
-	if r.src == nil || r.src.Descriptor().ID != openCodeHarnessID {
+	if r.src == nil {
 		return nil
 	}
-	return readOpenCodeDeclaredServers(r.workspace)
+	switch r.src.Descriptor().ID {
+	case openCodeHarnessID:
+		return readOpenCodeDeclaredServers(r.workspace)
+	case openCodeV2HarnessID:
+		return readOpenCodeV2DeclaredServers(r.workspace)
+	}
+	return nil
 }
 
 // resolveMCPSplits asks QMCPNameSplit once per distinct ambiguous name over the agents that will

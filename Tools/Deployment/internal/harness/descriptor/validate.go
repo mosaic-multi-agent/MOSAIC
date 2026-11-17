@@ -192,6 +192,8 @@ func Validate(d *domain.HarnessDescriptor) []ValidationError {
 
 	errs = append(errs, validateCLIFacts(d.CLI)...)
 
+	errs = append(errs, validateRulesShape(d)...)
+
 	return errs
 }
 

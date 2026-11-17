@@ -57,7 +57,7 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 		return domain.RunSummary{}, err
 	}
 
-	if err := s.checkGhcpTarget(harnessID, workspace); err != nil {
+	if err := s.checkTargetPairs(harnessID, workspace); err != nil {
 		return domain.RunSummary{}, err
 	}
 

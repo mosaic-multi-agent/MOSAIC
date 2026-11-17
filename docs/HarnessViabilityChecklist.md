@@ -6,6 +6,8 @@ Pre-implementation gate for adding a new agentic harness to MOSAIC. **Complete t
 
 **Origin:** This checklist exists because the Codex CLI harness was fully implemented (3 days) before discovering that its subagent dispatch mechanism couldn't reference custom agents by name -- a blocker that a 30-minute spike would have surfaced. The Codex harness is therefore experimental: its agents deploy, and workflows run on it through `mosaic-run` only (the Runner loads the agents itself). Native orchestration in Codex is unsupported, Codex runs produce no MOSAIC log, and `mosaic-agent-test` does not support Codex.
 
+The OpenCode V2 rows come from a spike (2026-11, `opencode` 2.3.0) run before its implementation. OpenCode V2 is experimental: everything is supported, but the harness is not yet tested in real use.
+
 ---
 
 ## Tier 1: Orchestration Blockers
@@ -33,6 +35,7 @@ These three capabilities are required for MOSAIC's orchestration loop to functio
 |---------|--------|-----------|---------------|-------|
 | Claude Code | Yes | `--append-system-prompt` | 2026-07 | Foundation harness |
 | Codex CLI | **No** | `model_instructions_file` replaces, not appends | 2026-09 | `AGENTS.md` is additive but low-priority. `--append-system-prompt` requested in GH #11117, closed without implementation |
+| OpenCode V2 | Replaces, works | The agent file body replaces the base prompt | 2026-11 | Experimental. Not spiked as an append test; a real orchestrator run (`brownfield-research-only`) ran cleanly with its agent file as the prompt |
 
 ---
 
@@ -59,6 +62,7 @@ These three capabilities are required for MOSAIC's orchestration loop to functio
 |---------|--------|-----------|---------------|-------|
 | Claude Code | Yes | `Agent` tool with `subagent_type` parameter | 2026-07 | Agent key matches `.claude/agents/*.md` filename |
 | Codex CLI | **No** | `spawn_agent` exists but accepts only `agent_type` + overrides, no name reference | 2026-09 | GH #15250, #26363, #26868. Custom TOML files parse but runtime ignores them on spawn |
+| OpenCode V2 | Yes | `subagent` tool `{agent, description, prompt}` with the agent id | 2026-11 | Returns at once with a session id; the child's final text arrives later as a synthetic wake-up message that wakes the parent. `hidden: true` agents are dispatchable by id |
 
 ---
 
@@ -77,6 +81,7 @@ These three capabilities are required for MOSAIC's orchestration loop to functio
 |---------|--------|-----------|---------------|-------|
 | Claude Code | Yes | Agent definitions in `.claude/agents/*.md` with `model` in frontmatter | 2026-07 | Model specified per-agent |
 | Codex CLI | **No** | TOML files define model/sandbox_mode but spawned agents inherit parent values | 2026-09 | GH #26868 confirms systemic bug |
+| OpenCode V2 | Yes | Agent files in `.opencode/agents/*.md` with `model` and `permissions` | 2026-11 | Permission denies are enforced. Deploy must emit V2-native ordered rules; V1-format permissions end up denying every write tool |
 
 ---
 
@@ -94,6 +99,7 @@ MOSAIC subagents return JSON with status codes. The orchestrator must parse `sta
 |---------|--------|-------|
 | Claude Code | Yes | Full agent output returned in tool result |
 | Codex CLI | Unreliable | Handoff failures in recent versions (v0.118.0+); recommended to stay on v0.117.0 |
+| OpenCode V2 | Yes | Child final text arrives intact (protocol JSON) in one wake-up per child; a parent that waits may call the tool again with the child id, which is on the watch list |
 
 ### 2.2 User Interaction from Subagents (HITL)
 
@@ -105,6 +111,7 @@ MOSAIC's HITL gates require subagents to present output and get user sign-off be
 |---------|--------|-------|
 | Claude Code | Yes | MCP tools (`mcp__contact-user__*`) available to subagents |
 | Codex CLI | Unknown | No documented mechanism for subagent-to-user interaction |
+| OpenCode V2 | Yes, in the TUI | A subagent's `question` appears in the **parent** session. Headless runs auto-cancel `question`, so headless HITL needs a user-supplied MCP ask server |
 
 ### 2.3 Concurrent Subagent Dispatch
 
@@ -116,6 +123,7 @@ Some MOSAIC workflows (kb-generation) dispatch parallel stages.
 |---------|--------|-------|
 | Claude Code | Yes | Harness-managed, practical limit ~5-8 |
 | Codex CLI | Limited | Ceiling of 6 threads (`max_concurrent_threads_per_session`) |
+| OpenCode V2 | Yes | Parallel dispatch works; the shared background service is fragile under parallel load in native mode (upstream #64274). Four parallel `--standalone` runs worked |
 
 ### 2.4 Skills Loading
 
@@ -125,6 +133,7 @@ Some MOSAIC workflows (kb-generation) dispatch parallel stages.
 |---------|--------|-------|
 | Claude Code | Auto-loaded | `.claude/skills/` contents injected into context |
 | Codex CLI | Manual read | Agent must explicitly read from `.agents/skills/` |
+| OpenCode V2 | Tool-based | Skills in `.opencode/skills`, loaded through the `skill` tool |
 
 ---
 
@@ -140,6 +149,7 @@ What format does the harness expect for agent definitions?
 |---------|--------|----------|-------|
 | Claude Code | Markdown with YAML frontmatter | `.claude/agents/*.md` | |
 | Codex CLI | TOML | `.codex/agents/*.toml` | |
+| OpenCode V2 | Markdown with YAML frontmatter | `.opencode/agents/*.md` | Ordered `permissions` rules; `mode` is always emitted |
 
 ### 3.2 Project Instructions File
 
@@ -149,6 +159,7 @@ What is the harness's equivalent of CLAUDE.md / AGENTS.md?
 |---------|------|-------|
 | Claude Code | `CLAUDE.md` | Loaded automatically, additive |
 | Codex CLI | `AGENTS.md` / `AGENTS.override.md` | Chain from global to cwd, closer files win |
+| OpenCode V2 | `AGENTS.md` | Same as OpenCode V1; MOSAIC deploys no instructions file |
 
 ### 3.3 Permissions Model
 
@@ -158,6 +169,7 @@ How does the harness express tool/file access?
 |---------|-------|-------|
 | Claude Code | Per-agent tool allowlist | Tools listed in agent definition |
 | Codex CLI | `sandbox_mode` field | `read-only`, `workspace-write`, `danger-full-access` |
+| OpenCode V2 | Ordered `permissions` rules | Deny everything first, then allow what the agent declares; `external_directory` asks. File write or edit allows `write`, `edit` and `patch` together |
 
 ---
 

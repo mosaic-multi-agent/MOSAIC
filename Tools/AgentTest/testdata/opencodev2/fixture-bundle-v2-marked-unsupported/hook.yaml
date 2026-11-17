@@ -1,0 +1,14 @@
+schema_version: "1"
+id: fixture-logger-v2-marked-unsupported
+version: 0.1.0
+description: Fixture bundle whose opencode-v2 variant is present but marked unsupported.
+
+variants:
+  opencode:
+    supported: true
+    files:
+      - source: plugin.ts
+        target: mosaic-logger.ts
+    registration: []
+  opencode-v2:
+    supported: false

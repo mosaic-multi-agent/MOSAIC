@@ -24,6 +24,7 @@ import (
 	_ "mosaic-deploy/internal/harness/builtin/codex"
 	_ "mosaic-deploy/internal/harness/builtin/ghcpcli"
 	_ "mosaic-deploy/internal/harness/builtin/opencode"
+	_ "mosaic-deploy/internal/harness/builtin/opencodev2"
 	_ "mosaic-deploy/internal/harness/builtin/vscodeghcp"
 
 	"mosaic-deploy/internal/domain"
@@ -49,6 +50,10 @@ var testSharedModelCatalog = map[string]domain.ModelCatalog{
 	"opencode": {
 		IDs:        []string{"shared-opencode-provider/shared-model"},
 		FormatHint: "shared-provider/model-id",
+	},
+	"opencode-v2": {
+		IDs:        []string{"shared-opencodev2-provider/shared-model"},
+		FormatHint: "shared-v2-provider/model-id",
 	},
 	"ghcp-cli": {
 		IDs:        []string{"shared-ghcp-model-a", "shared-ghcp-model-b"},
@@ -371,7 +376,7 @@ func TestModelSource_Codex_KeepsDescriptorSourcedIDs(t *testing.T) {
 	// appear in codex's list, the fallback rule is broken.
 	sharedOnlyIDs := []string{
 		"shared-claude-model-1", "shared-claude-model-2",
-		"shared-opencode-provider/shared-model",
+		"shared-opencode-provider/shared-model", "shared-opencodev2-provider/shared-model",
 		"shared-ghcp-model-a", "shared-ghcp-model-b",
 		"Shared VsCode Model One", "Shared VsCode Model Two",
 	}

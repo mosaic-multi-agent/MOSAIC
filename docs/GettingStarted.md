@@ -10,7 +10,7 @@ This guide walks you through the **golden path**: one minimal deployment, one ze
 
 You need an AI coding tool already installed, configured, and working with model access:
 
-- **Claude Code**, **OpenCode**, **GitHub Copilot in VS Code**, **GitHub Copilot CLI**, or **Codex** (experimental: workflows run on it through `mosaic-run` only, see the [Runner Guide](RunnerGuide.md#codex))
+- **Claude Code**, **OpenCode**, **GitHub Copilot in VS Code**, **GitHub Copilot CLI**, **Codex** (experimental: workflows run on it through `mosaic-run` only, see the [Runner Guide](RunnerGuide.md#codex)), or **OpenCode V2** (experimental: everything is supported, but it is not yet tested in real use; read the [OpenCode V2 warnings](#opencode-v2-warnings) first)
 
 MOSAIC deploys agents *into* these tools — it doesn't replace them. If you can already have a working conversation with your AI coding tool, you're ready.
 
@@ -48,7 +48,7 @@ Open it in your AI coding tool and ask it anything:
 
 It's a lightweight agent — designed for a small, cheap model — that reads the docs for you and points you to the right resources. You can use it alongside this guide or instead of it.
 
-> **Model configuration:** The pre-indexed `mosaic-helper` ships with a default model ID that works out of the box on some harnesses (e.g. Claude Code). On others (e.g. OpenCode), you may need to edit the model ID in the agent file to match a model available in your setup. The same applies to all deployed agents — `mosaic-deploy` lets you assign models during deployment, but if the defaults don't match your environment, update them.
+> **Model configuration:** The pre-indexed `mosaic-helper` ships with a default model ID that works out of the box on some harnesses (e.g. Claude Code). On others (e.g. OpenCode, OpenCode V2), you may need to edit the model ID in the agent file to match a model available in your setup. The same applies to all deployed agents — `mosaic-deploy` lets you assign models during deployment, but if the defaults don't match your environment, update them.
 
 ---
 
@@ -64,7 +64,7 @@ On Linux: `./mosaic-deploy`
 
 The interactive TUI walks you through:
 
-1. **Pick a harness** — which AI coding tool you use (Claude Code, OpenCode, "GHCP CLI / VS Code GHCP Copilot", "VS Code GHCP Local" or Codex, which is marked Experimental and runs workflows through `mosaic-run` only). For GitHub Copilot, pick "GHCP CLI / VS Code GHCP Copilot" for the terminal CLI and for VS Code's default chat harness; pick "VS Code GHCP Local" only if your VS Code chat uses the Local harness, which is being retired. To check, look below the chat prompt input: the `Set session target` control on the left switches between Local and Copilot. A workspace holds one of the two GHCP targets at a time. See the [Deployment Guide](DeploymentGuide.md#choosing-a-ghcp-target).
+1. **Pick a harness** — which AI coding tool you use (Claude Code, OpenCode, "GHCP CLI / VS Code GHCP Copilot", "VS Code GHCP Local", Codex, which is marked Experimental and runs workflows through `mosaic-run` only, or "OpenCode V2", also marked Experimental; V1 and V2 are separate targets, see [OpenCode V1 vs V2](DeploymentGuide.md#opencode-v1-vs-v2-opencode-v2-is-experimental)). For GitHub Copilot, pick "GHCP CLI / VS Code GHCP Copilot" for the terminal CLI and for VS Code's default chat harness; pick "VS Code GHCP Local" only if your VS Code chat uses the Local harness, which is being retired. To check, look below the chat prompt input: the `Set session target` control on the left switches between Local and Copilot. A workspace holds one of the two GHCP targets at a time. See the [Deployment Guide](DeploymentGuide.md#choosing-a-ghcp-target).
 2. **Pick workflows** — select **only `kb-generation`** for now (you'll add more later)
 3. **Skip utility agents** — you don't need them for your first run
 4. **Assign models** — the TUI asks you to map each model tier (HIGH, MEDIUM-HIGH, etc.) to a specific model ID available in your setup. If you have one strong model and one cheaper model, use the strong one for the upper tiers and the cheaper one for the lower tiers. If you only have one model available, use it for everything — you can always redeploy with different assignments later.
@@ -176,10 +176,27 @@ What each harness needs:
 |---------|-------|
 | Claude Code | Python 3 |
 | OpenCode | Nothing extra |
+| OpenCode V2 (experimental) | The `opencode` command on the PATH, for transcripts in native mode. See the [logger README](../Catalog/Hooks/mosaic-logger/README.md) and its [known limitations](../Catalog/Hooks/mosaic-logger/opencode-v2/LIMITATIONS.md) |
 | GHCP CLI / VS Code GHCP Copilot | Python 3. The GHCP CLI runs hooks only in a [trusted folder](../Catalog/Hooks/mosaic-logger/ghcp-cli/README.md); elsewhere it logs nothing and shows no warning |
 | VS Code GHCP Local | Python 3 and [one environment variable](LogAnalyzerGuide.md#token-usage-on-vs-code-ghcp-local) for token usage |
 
 The [LogAnalyzer Guide](LogAnalyzerGuide.md) explains the views, the pricing and how to share runs without their content.
+
+---
+
+## OpenCode V2 Warnings
+
+OpenCode V2 is an **experimental** harness (`opencode-v2`): everything is supported, but the harness is not yet tested in real use. Expect rough edges, and read this before you install it.
+
+| Topic | What to know |
+|-------|--------------|
+| Install | Install OpenCode V2 through **npm**. Windows package managers are not supported. |
+| One OpenCode version per machine | OpenCode V1 and V2 do not coexist safely by default. Keeping both needs an isolated npm prefix **and** a separate `XDG_DATA_HOME`. Without both, V2 migrates V1's session database in place, and that migration can fail (upstream issue #63913). |
+| Questions from subagents | In the TUI, a subagent's `question` appears in the **parent** session, not in the subagent's view. Answer it there. |
+| Parallel load | In native mode, the shared OpenCode service can become fragile when many agents run in parallel (upstream issue #64274). `mosaic-run` starts every invocation with its own private server, which is why it is the more robust way to run long workflows. |
+| Workspace target | A workspace holds one OpenCode target, V1 or V2, at a time. Move between them with `mosaic-deploy transform`. |
+| Selecting the orchestrator | Deploy writes no `opencode.json`. In the V2 TUI you select the orchestrator agent yourself. |
+| Human-in-the-loop in `mosaic-run` | Needs an ask-the-user MCP server you supply, plus a tool mapping; see the [Deployment Guide](DeploymentGuide.md#opencode-v1-vs-v2-opencode-v2-is-experimental). |
 
 ---
 

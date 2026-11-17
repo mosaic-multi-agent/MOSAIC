@@ -137,12 +137,12 @@ func (s *ConfigScreen) prevStepAndCursor() (configStep, int) {
 	case configStepVersionDrift:
 		// The timeout steps handle Esc through their text inputs' Back(), but
 		// if we reach here via Esc on version-drift, go to the HITL timeout.
-		return configStepHITLTimeout, 0
+		return s.lastTimeoutStep(), 0
 	case configStepCheckpoints:
 		if s.showsVersionDrift() {
 			return configStepVersionDrift, 0
 		}
-		return configStepHITLTimeout, 0
+		return s.lastTimeoutStep(), 0
 	case configStepCommits:
 		return configStepCheckpoints, 0
 	case configStepCommitBranch:

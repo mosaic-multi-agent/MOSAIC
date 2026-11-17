@@ -20,7 +20,7 @@ import (
 
 // builtinYAMLIDs lists the built-in harness descriptors checked here; their YAML comes from
 // the shared Common package.
-var builtinYAMLIDs = []string{"claude-code", "ghcp-cli", "opencode", "vscode-ghcp"}
+var builtinYAMLIDs = []string{"claude-code", "ghcp-cli", "opencode", "opencode-v2", "vscode-ghcp"}
 
 func contentFile(dir, name string) string { return filepath.Join(dir, name) }
 

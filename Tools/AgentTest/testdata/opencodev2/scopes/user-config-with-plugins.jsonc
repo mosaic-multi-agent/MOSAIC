@@ -1,0 +1,6 @@
+// user config with comments and a trailing comma
+{
+  "theme": "default",
+  /* a registered plugin */
+  "plugins": ["some-user-plugin",],
+}

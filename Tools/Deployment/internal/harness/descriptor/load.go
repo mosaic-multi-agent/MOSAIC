@@ -48,6 +48,7 @@ type wireToolSpec struct {
 	ReportUnknownNames        bool         `yaml:"report_unknown_tool_names"`
 	CustomToolDestinations []wireCustomToolDestination `yaml:"custom_tool_destination"`
 	PlaceholderExpansion   []string                    `yaml:"placeholder_expansion"`
+	Rules                  wireRuleFrame               `yaml:"rules"`
 }
 
 // wireCustomToolDestination is the wire form of one harness-level default custom-tool
@@ -66,6 +67,7 @@ type wireHarnessTool struct {
 	Name         string `yaml:"name"`
 	Unused       string `yaml:"unused"`
 	ByConvention bool   `yaml:"by_convention"`
+	Action       string `yaml:"action"`
 }
 
 type wireToolMapping struct {
@@ -260,6 +262,7 @@ func mapWireToolSpec(w *wireToolSpec) domain.ToolSpec {
 			Name:         t.Name,
 			Unused:       domain.Disposition(t.Unused),
 			ByConvention: t.ByConvention,
+			Action:       t.Action,
 		}
 	}
 
@@ -308,6 +311,7 @@ func mapWireToolSpec(w *wireToolSpec) domain.ToolSpec {
 		ReportUnknownNames:     w.ReportUnknownNames,
 		CustomToolDestinations: customDests,
 		PlaceholderExpansion:   w.PlaceholderExpansion,
+		Rules:                  mapWireRuleFrame(w.Rules),
 	}
 }
 

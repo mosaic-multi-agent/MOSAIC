@@ -111,6 +111,8 @@ tier_models:
 
 Unknown keys in the selections file are silently ignored (forward-compatible).
 
+For `opencode` and `opencode-v2`, deploy refuses a workspace that already holds the other OpenCode target and points to `transform` (see "One OpenCode target per workspace" under `transform`).
+
 For `ghcp-cli` and `vscode-ghcp`, deploy refuses a workspace that already holds the other GHCP target and points to `transform`; both write agents as `X.agent.md` and migrate agents recorded as `X.md` (see "One GHCP target per workspace" and "GHCP agent file names" under `transform`).
 
 Re-running `deploy` on an existing workspace rewrites stale agents and keeps their project and custom regions and tool choices. A model the run supplies replaces the deployed one; otherwise the deployed model is kept. The selected workflows replace the deployed set. With no infrastructure selection, existing declarations are kept.
@@ -231,6 +233,14 @@ For every pair except the GHCP pair below, source files and source manifest entr
 - The run is atomic on failure: if a write fails, the workspace is left as it was.
 
 A workspace that holds both GHCP targets is refused by Transform and by every deploy flow (see below); clean it up by hand first.
+
+### OpenCode pair
+
+`opencode` and `opencode-v2` (experimental) write the same paths under `.opencode/` (`agents`, `skills`, `plugins`), and a workspace holds one of them at a time. Transform between the two (either direction) replaces the source deployment in place, like the GHCP pair: a recorded agent is overwritten with the target content, a recorded skill folder is carried over, and every source-variant plugin file the target does not write is removed (backed up under `.mosaic/backups/` first). Only files the source harness's manifest entries record are touched. `--dry-run` and the confirmation plan list the removals and replacements. A workspace that holds both OpenCode targets is refused by Transform and by every deploy flow.
+
+### One OpenCode target per workspace
+
+The manifest entries, never the paths, decide whether a workspace holds `opencode` or `opencode-v2`. `deploy`, `update` and the other deploy flows for one of them refuse to run in a workspace that holds the other, change nothing before anything is asked or written, and print the Transform command to use: `mosaic-deploy transform --harness <held> --target-harness <requested> --workspace <path>`. A workspace that holds both must have the files of one removed by hand from `.opencode/`. Deploy writes no `opencode.json` for `opencode-v2`.
 
 ### One GHCP target per workspace
 
@@ -450,7 +460,7 @@ result=$(mosaic-deploy deploy --harness claude-code --workspace /path --auto-con
 echo "$result" | jq '.Outcome'
 ```
 
-When an experimental harness is involved (for example Codex, whose reason says it runs through `mosaic-run` only, has no native orchestration and no MOSAIC log), the result also carries `experimentalHarnesses`: an array of `{harnessId, displayName, reason}` entries, absent otherwise. The same field is in the `transform` document, and a transform with an experimental source or target lists it. In human output the same reason is printed once as a `warning:` line.
+When an experimental harness is involved (for example Codex, whose reason says it runs through `mosaic-run` only, has no native orchestration and no MOSAIC log, or `opencode-v2`, whose reason says everything is supported but the harness is not yet tested), the result also carries `experimentalHarnesses`: an array of `{harnessId, displayName, reason}` entries, absent otherwise. The same field is in the `transform` document, and a transform with an experimental source or target lists it. In human output the same reason is printed once as a `warning:` line.
 
 The JSON object always contains at least `Mode`, `Outcome`, and `WorkspacePath`. A JSON document is written even when `Outcome` is `"failed"`, so consumers can inspect the failure reason programmatically.
 

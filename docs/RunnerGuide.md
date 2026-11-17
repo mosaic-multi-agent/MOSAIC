@@ -13,7 +13,7 @@ This guide is for **project authors** who want to run multi-agent workflows with
 | **What it does** | Executes a MOSAIC workflow end-to-end: reads the workflow table, dispatches subagents, writes `Orchestration.md`, handles deviations |
 | **Two ways to run** | Interactive TUI (no subcommand) or scriptable CLI (`mosaic-run run`) |
 | **Three execution modes** | **Orchestrated** (orchestrator decides everything), **Auto** (engine routes happy path), **Auto-review** (engine also routes review loops) |
-| **Supported harnesses** | `claude-code`, `opencode`, `ghcp-cli`, and `codex` (experimental, see [Codex](#codex)) |
+| **Supported harnesses** | `claude-code`, `opencode`, `ghcp-cli`, `codex` (experimental, see [Codex](#codex)) and `opencode-v2` (experimental, see [OpenCode V2](#opencode-v2)) |
 | **State file** | `Orchestration-{run_id}/Orchestration.md` — atomic writes, crash-safe, resumable |
 
 > **Known issue — GHCP CLI:** Runner runs on `ghcp-cli` are currently unreliable. With recent GHCP CLI versions (observed on 1.0.91), GHCP CLI sometimes ignores the requested `--agent` and runs its default agent instead, which shows up as protocol or parsing errors in the run. The failures are intermittent and the cause is not yet confirmed. In limited testing GHCP CLI 1.0.87 did not show the problem, so pinning it may help, but this is not verified. For reliable runs, use `claude-code` or `opencode`.
@@ -83,10 +83,11 @@ All three modes are dramatically cheaper than running the orchestrator agent man
 |------|----------|---------|-------------|
 | `--workflow` | New run | — | Workflow identifier (must exist in the orchestrator file); not needed with `--run` |
 | `--task` | New run | — | Task description for the run; not needed with `--run` |
-| `--harness` | Yes | `fake` | Harness adapter (`claude-code`, `opencode`, `ghcp-cli`, `codex`); Codex is experimental, see [Codex](#codex) |
+| `--harness` | Yes | `fake` | Harness adapter (`claude-code`, `opencode`, `ghcp-cli`, `codex`, `opencode-v2`); Codex and OpenCode V2 are experimental, see [Codex](#codex) and [OpenCode V2](#opencode-v2) |
 | `--mode` | New run | — | Execution mode (`orchestrated`, `auto`, `auto-review`); on a resume only for a run that records no Runner settings |
 | `--timeout` | No | `30m` | Per-invocation timeout for dispatches without human-in-the-loop |
 | `--hitl-timeout` | No | `4h` | Per-invocation timeout for dispatches sent with `human_in_the_loop: true`, where a person may take long to answer |
+| `--no-output-timeout` | No | `10m` | No-output watchdog for `opencode-v2` invocations without human-in-the-loop; `0` disables it. See [OpenCode V2](#opencode-v2) |
 | `--pre-consult` | No | `true` | One-shot environment consultation at run start (auto/auto-review only); use `--pre-consult=false` to disable |
 | `--manual-resolution` | No | `false` | When a consultation fails, let the user choose the next dispatch in an interactive dialogue; needs the TUI (see [Manual routing](#manual-routing)) |
 | `--review-loop-limit` | New run | — | Maximum review loop iterations: a positive integer, or `none` for no limit. Required for a new run and fixed once the run exists |
@@ -108,6 +109,7 @@ There is no `--orchestrator-file` flag. The Runner derives the orchestrator path
 | `opencode` | `.opencode/agents/orchestrator-script.md` |
 | `ghcp-cli` | `.github/agents/orchestrator-script.md` |
 | `codex` | `.codex/agents/orchestrator-script.toml` |
+| `opencode-v2` | `.opencode/agents/orchestrator-script.md` |
 
 For the Markdown harnesses, `orchestrator-script.agent.md` is accepted in place of `orchestrator-script.md`, and a folder holding both is refused. If the file does not exist, the Runner exits immediately with a message indicating the workspace is not properly deployed for the selected harness. Run the Deploy tool to populate the agents directory before using the Runner.
 
@@ -118,6 +120,8 @@ Every harness loads agents by name from its deployed agents directory. Some harn
 **Claude Code -- no snapshot:** The Runner runs the deployed agents in `.claude/agents/` directly, by name, and nothing is copied. An `agents-runner-{run_id}/` directory left by an older Runner version is safe to delete.
 
 **Codex -- no snapshot:** The Runner reads the deployed `.codex/agents/*.toml` files itself and passes each agent's settings to Codex on every invocation. Nothing is copied or transformed.
+
+**OpenCode V2 -- no snapshot, no backup-and-transform:** The Runner runs the deployed agents in `.opencode/agents/` in place, by id, with the agent file used as it is. No agent file is copied, rewritten or restored, and no `RUNNER-RECOVERY.txt` marker is involved. OpenCode V2 can run `mode: subagent` agents, including hidden ones, directly by id. Leaving the files untouched also avoids rewriting agent files while a shared OpenCode service may be watching them.
 
 **Backup-and-transform (OpenCode, GHCP CLI):** These harnesses always resolve agents by name from their canonical directory and cannot be redirected to a copy. Instead, the Runner copies originals to a shared backup directory (e.g., `.opencode/.agents-backup/`), transforms the originals in-place, and restores from backup on completion. Multiple concurrent runs share the same backup directory and coordinate via per-run lock files inside it.
 
@@ -174,7 +178,7 @@ If the orchestrator keeps requesting a dispatch that the Runner's loop guard blo
 
 ### Live activity and force stop
 
-The progress screen shows what the running invocation is doing (tool calls and messages). Its header line shows the agent with harness and model, the elapsed time, `ctx <size>` (the context size of the latest model call), and either `running <tool> <duration>` while a tool call is under way or `quiet <duration>` since the last event; the indicator is highlighted once it passes 5 minutes, so a stalled invocation stands out. When the invocation ends the header shows the elapsed time, `ended`, the last context size and the cost in USD (Claude Code and OpenCode; GHCP and Codex report no cost; Codex shows no model or context size either). Token totals are not shown. Press `l` to hide or show this panel. It reads `no live output available` until the invocation reports its first event. Claude Code runs in stream-json mode so that it reports activity too.
+The progress screen shows what the running invocation is doing (tool calls and messages). Its header line shows the agent with harness and model, the elapsed time, `ctx <size>` (the context size of the latest model call), and either `running <tool> <duration>` while a tool call is under way or `quiet <duration>` since the last event; the indicator is highlighted once it passes 5 minutes, so a stalled invocation stands out. When the invocation ends the header shows the elapsed time, `ended`, the last context size and the cost in USD (Claude Code and OpenCode; GHCP, Codex and `opencode-v2` show no cost: for `opencode-v2` the cost of a run comes from LogAnalyzer, see the [LogAnalyzer Guide](LogAnalyzerGuide.md); Codex shows no model or context size either). `opencode-v2` shows the context size. Token totals are not shown. Press `l` to hide or show this panel. It reads `no live output available` until the invocation reports its first event. Claude Code runs in stream-json mode so that it reports activity too.
 
 Press `x` to force-stop the running invocation. A separate confirmation (`y` or `n`) comes first. Only the running invocation is killed, with everything it started; the Runner itself keeps running. The attempt is logged as not accepted (`Force-stopped by the user; attempt not accepted`), and you choose whether to stop the run (resumable) or to open the manual routing dialogue. The same whole-tree kill is used when an invocation times out.
 
@@ -252,11 +256,24 @@ Deploy turns an agent's generic tools into Codex settings, and the Runner applie
 
 ---
 
+## OpenCode V2
+
+OpenCode V2 (`--harness opencode-v2`) is an [experimental harness](#experimental-harnesses): everything is supported, but it is not yet tested in real use. Deploy the workspace for the `opencode-v2` harness first (see the [Deployment Guide](DeploymentGuide.md#opencode-v1-vs-v2-opencode-v2-is-experimental)), and read the [OpenCode V2 warnings](GettingStarted.md#opencode-v2-warnings) before installing it.
+
+- **Agent loading.** Every dispatch is one standalone `run` of the agent by id, in the workspace root, with the deployed file in `.opencode/agents/` used in place. There is no backup-and-transform (see [Agent Snapshot Directories](#agent-snapshot-directories)). The Runner passes no model: the agent file's own `model:` applies. Timeout and force stop end the whole process tree, which ends the session with it.
+- **Orchestrator.** Auto-discovery finds `.opencode/agents/orchestrator-script.md`.
+- **No-output watchdog.** V2 runs have been seen to hang silently. An invocation that writes nothing to its output stream for the watchdog time is treated as hung and ended like a timeout; the failure is recorded as a `no-output-timeout` harness error with the silent time. The default is 10 minutes, well above V2's legitimate silences (a long shell command, or the wait for background subagents). Configure it with `--no-output-timeout <duration>` (for example `20m`; `0` disables it); in the TUI the run configuration asks for it when `opencode-v2` is selected. It never applies to dispatches with human-in-the-loop, because an ask-the-user call is silent, and the normal `--timeout` and `--hitl-timeout` still apply.
+- **Live activity.** The progress screen shows tool calls, messages and the context size. It shows no money cost for `opencode-v2`; the cost of a run comes from LogAnalyzer.
+- **MOSAIC log.** The Runner writes the run start and run end events, and an invocation end for an invocation the logger plugin left without one. The mosaic-logger `opencode-v2` plugin writes the rest; see its [README](../Catalog/Hooks/mosaic-logger/README.md) and [`LIMITATIONS.md`](../Catalog/Hooks/mosaic-logger/opencode-v2/LIMITATIONS.md).
+- **Human-in-the-loop in headless runs.** V2's `question` tool is auto-cancelled in headless runs ("make reasonable assumptions"), so it never reaches you. Headless human-in-the-loop on `opencode-v2` needs an ask-the-user MCP server that you supply and configure in OpenCode. Deploy denies every tool an agent does not declare, so you must also add a custom tool mapping in the Deploy configuration, so that agents declare the ask tool and it is allowed; without it the tool is denied. The steps are in the [Deployment Guide](DeploymentGuide.md#opencode-v1-vs-v2-opencode-v2-is-experimental).
+
+---
+
 ## Experimental Harnesses
 
 A harness is experimental when its support is not yet proven in real runs. The Runner keeps its own marking, separate from Deploy's: a harness can be experimental in one tool and not in the other. An experimental harness stays fully selectable. The TUI harness pickers show it with the word "Experimental" and the reason, and the CLI prints one warning with the harness name and reason at every start and resume. The warning never stops a run.
 
-Experimental harnesses today: **Codex**.
+Experimental harnesses today: **Codex** and **OpenCode V2**. For OpenCode V2 the reason shown is "Everything is supported, but the harness is not yet tested."
 
 ---
 

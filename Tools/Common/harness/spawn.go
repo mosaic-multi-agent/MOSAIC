@@ -234,7 +234,9 @@ func Run(ctx context.Context, cmd Command, args []string, o RunOptions) (Respons
 	if o.OnStdoutLine != nil {
 		obs = startLineObserver(o.OnStdoutLine)
 	}
-	execCmd.Stdout = teeStdout(&stdout, obs)
+	watch := startOutputWatch(o.NoOutputTimeout)
+	defer watch.stop()
+	execCmd.Stdout = teeWatch(teeStdout(&stdout, obs), watch)
 	execCmd.Stderr = &stderr
 	// A descendant that inherited stdout/stderr can keep them open after the
 	// started process exited; Wait stops waiting for the output after this delay.
@@ -275,6 +277,14 @@ func Run(ctx context.Context, cmd Command, args []string, o RunOptions) (Respons
 		}
 		logEvent(o.Sink, "spawn.timeout", "invocation exceeded configured timeout", nil)
 		return Response{}, ErrTimeout
+	case <-watch.firedCh():
+		group.kill(execCmd.Process)
+		<-waitCh
+		if obs != nil {
+			obs.stop()
+		}
+		logEvent(o.Sink, "spawn.no_output", watch.message(), []Field{{Key: "after", Value: watch.after.String()}})
+		return Response{}, watch.err()
 	case waitErr = <-waitCh:
 	}
 

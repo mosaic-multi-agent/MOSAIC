@@ -41,6 +41,7 @@ import (
 	"mosaic-deploy/internal/harness/builtin/codex"
 	"mosaic-deploy/internal/harness/builtin/ghcpcli"
 	"mosaic-deploy/internal/harness/builtin/opencode"
+	"mosaic-deploy/internal/harness/builtin/opencodev2"
 	"mosaic-deploy/internal/harness/builtin/vscodeghcp"
 )
 
@@ -161,6 +162,7 @@ func TestHarnessDirNames_MatchCurrentDirectoryNames(t *testing.T) {
 		{"HarnessDirNameOpenCode", catalogpaths.HarnessDirNameOpenCode, "OpenCode"},
 		{"HarnessDirNameVSCodeGHCP", catalogpaths.HarnessDirNameVSCodeGHCP, "VS Code GHCP"},
 		{"HarnessDirNameCodex", catalogpaths.HarnessDirNameCodex, "Codex"},
+		{"HarnessDirNameOpenCodeV2", catalogpaths.HarnessDirNameOpenCodeV2, "OpenCode V2"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -187,6 +189,7 @@ func TestHarnessContentDirs_MatchCurrentRepoContentDirValues(t *testing.T) {
 		{"HarnessContentDirOpenCode", catalogpaths.HarnessContentDirOpenCode, "Catalog/HarnessInjections/OpenCode"},
 		{"HarnessContentDirVSCodeGHCP", catalogpaths.HarnessContentDirVSCodeGHCP, "Catalog/HarnessInjections/VS Code GHCP"},
 		{"HarnessContentDirCodex", catalogpaths.HarnessContentDirCodex, "Catalog/HarnessInjections/Codex"},
+		{"HarnessContentDirOpenCodeV2", catalogpaths.HarnessContentDirOpenCodeV2, "Catalog/HarnessInjections/OpenCode V2"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -207,6 +210,7 @@ func TestHarnessContentDirs_PairwiseDistinctAndNonEmpty(t *testing.T) {
 		{"HarnessContentDirOpenCode", catalogpaths.HarnessContentDirOpenCode},
 		{"HarnessContentDirVSCodeGHCP", catalogpaths.HarnessContentDirVSCodeGHCP},
 		{"HarnessContentDirCodex", catalogpaths.HarnessContentDirCodex},
+		{"HarnessContentDirOpenCodeV2", catalogpaths.HarnessContentDirOpenCodeV2},
 	}
 	seen := make(map[string]string, len(dirs))
 	for _, d := range dirs {
@@ -234,6 +238,7 @@ func TestHarnessContentDirs_DerivedFromMosaicRelHarnessInjectionsDir(t *testing.
 		{"OpenCode", catalogpaths.HarnessDirNameOpenCode, catalogpaths.HarnessContentDirOpenCode},
 		{"VSCodeGHCP", catalogpaths.HarnessDirNameVSCodeGHCP, catalogpaths.HarnessContentDirVSCodeGHCP},
 		{"Codex", catalogpaths.HarnessDirNameCodex, catalogpaths.HarnessContentDirCodex},
+		{"OpenCodeV2", catalogpaths.HarnessDirNameOpenCodeV2, catalogpaths.HarnessContentDirOpenCodeV2},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -284,6 +289,11 @@ func TestHarnessRepoContentDirs_MatchCatalogPathsConstants(t *testing.T) {
 			name:        "codex",
 			harnessPath: codex.RepoContentDir,
 			catalogPath: catalogpaths.HarnessContentDirCodex,
+		},
+		{
+			name:        "opencodev2",
+			harnessPath: opencodev2.RepoContentDir,
+			catalogPath: catalogpaths.HarnessContentDirOpenCodeV2,
 		},
 	}
 	for _, tc := range tests {

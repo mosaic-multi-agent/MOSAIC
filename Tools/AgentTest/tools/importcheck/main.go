@@ -107,6 +107,7 @@ var adapterPackages = map[string]bool{
 	"internal/harness/fake":       true,
 	"internal/harness/claudecode": true,
 	"internal/harness/opencode":   true,
+	"internal/harness/opencodev2": true,
 	"internal/harness/defmodel":   true, // definition model-field reader shared by the real adapters
 	"internal/launch":             true,
 	"internal/orchstate":          true,
@@ -149,9 +150,10 @@ var frontendPackages = map[string]bool{
 var adapterImportExceptions = map[string]map[string]bool{
 	"internal/harness/claudecode": {"internal/harness/defmodel": true},
 	"internal/harness/opencode":   {"internal/harness/defmodel": true},
+	"internal/harness/opencodev2": {"internal/harness/defmodel": true},
 	"internal/preflight": {
-		"internal/authoring":  true,
-		"internal/fixtures":   true,
+		"internal/authoring":   true,
+		"internal/fixtures":    true,
 		"internal/agentdeploy": true, // preflight uses agentdeploy for dry-run declaration validation
 	},
 	"internal/sideeffects": {
@@ -197,6 +199,7 @@ var frontendImportExceptions = map[string]map[string]bool{
 var concreteHarnessPackages = map[string]bool{
 	"internal/harness/claudecode": true,
 	"internal/harness/opencode":   true,
+	"internal/harness/opencodev2": true,
 	"internal/harness/fake":       true,
 }
 

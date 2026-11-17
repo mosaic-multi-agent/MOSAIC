@@ -1,0 +1,19 @@
+schema_version: "1"
+id: no-v2-bundle
+version: 1.0.0
+description: Fixture bundle that has an opencode variant and a claude-code variant but no opencode-v2 variant.
+placeholder: false
+
+variants:
+  opencode:
+    supported: true
+    files:
+      - source: v1-only.ts
+        target: v1-only.ts
+    registration: []
+  claude-code:
+    supported: true
+    files:
+      - source: cc.py
+        target: cc.py
+    registration: []

@@ -20,7 +20,7 @@ This guide is for **project authors** who want to get MOSAIC running in their AI
 
 **Two ways to run:** Launch without a subcommand for the interactive TUI, or pass a subcommand for scriptable CLI mode.
 
-**Built-in harnesses:** `claude-code` (Claude Code), `opencode` (OpenCode), `ghcp-cli` ("GHCP CLI / VS Code GHCP Copilot"), `vscode-ghcp` ("VS Code GHCP Local"), `codex` (experimental, see [Codex (experimental)](#codex-experimental)).
+**Built-in harnesses:** `claude-code` (Claude Code), `opencode` (OpenCode), `ghcp-cli` ("GHCP CLI / VS Code GHCP Copilot"), `vscode-ghcp` ("VS Code GHCP Local"), `codex` (experimental, see [Codex (experimental)](#codex-experimental)), `opencode-v2` (OpenCode V2, experimental, see [OpenCode V1 vs V2](#opencode-v1-vs-v2-opencode-v2-is-experimental)).
 
 ### Choosing a GHCP target
 
@@ -39,7 +39,31 @@ The `codex` harness is experimental. The picker marks it "Experimental", plan re
 - **Capabilities:** a `web_search` tool becomes web search `live` (otherwise `disabled`). `web_fetch` becomes network access for write-capable agents; a read-only agent cannot get it and the plan reports the withheld `web_fetch`. `terminal` alone grants no network access.
 - **Minimum Codex version:** 0.169.0.
 
-Only the Codex harness is experimental. The agent-format layer behind it is stable.
+Codex and OpenCode V2 are the experimental harnesses. The agent-format layer behind them is stable.
+
+### OpenCode V1 vs V2 (`opencode-v2` is experimental)
+
+OpenCode V1 (`opencode`) and OpenCode V2 (`opencode-v2`) are two separate deploy targets. The `opencode-v2` harness is experimental: everything is supported, but the harness is not yet tested in real use. The picker marks it "Experimental", plan review shows a warning, and every writing command prints the same warning once.
+
+- **One OpenCode target per workspace.** Both targets write to the same places under `.opencode/` (`agents`, `skills`, `plugins`), so a workspace holds one of them at a time. The manifest entries, not the paths, decide which one it is. Deploy and the other deploy flows refuse to add the other target before anything is asked or written, and the refusal names the Transform command to use. A workspace that holds both must be cleaned up by hand (remove the files of one target from `.opencode/` and run again).
+- **Transform works both ways.** `mosaic-deploy transform --harness opencode --target-harness opencode-v2 --workspace <path>` moves a V1 workspace to V2, and the same command with the two ids swapped moves it back. As with the GHCP targets, the target replaces the source in place: a recorded agent is overwritten, skills are carried over, and source plugin files the target does not write are removed (every replaced or removed file is backed up under `.mosaic/backups/` first). Only files the source's manifest entries record are touched; everything else is left alone. See [Transform between the GHCP targets](#transform-between-the-ghcp-targets) for how removals and replacements show in the plan.
+- **No `opencode.json`.** Deploy does not write or change any OpenCode configuration file for V2. Agents are `.opencode/agents/*.md` files with `mode: primary` or `mode: subagent`. To start a workflow in the V2 TUI, you select the orchestrator agent yourself.
+- **Permissions are deny by default.** The agent's `permissions` frontmatter is an ordered rule list that starts by denying everything, then allows exactly the tools the agent declares. Declaring file write or file edit grants all three V2 file-writing tools, `write`, `edit` and `patch`, because V2 treats them as one edit action and the model picks the tool (GPT models use `patch`). Access outside the workspace is not denied but asks. A tool an agent does not declare is denied.
+- **Hooks.** The mosaic-logger bundle deploys its `opencode-v2` variant to `.opencode/plugins`. See the [logger README](../Catalog/Hooks/mosaic-logger/README.md) and the variant's [`LIMITATIONS.md`](../Catalog/Hooks/mosaic-logger/opencode-v2/LIMITATIONS.md) for what it logs and what it cannot.
+- **Human-in-the-loop for headless runs needs your own MCP server.** V2's `question` tool is auto-cancelled in headless (`mosaic-run`) runs, so it is no way to reach you there. Headless HITL on `opencode-v2` needs an ask-the-user MCP server that you supply and configure in OpenCode. Because Deploy denies every tool an agent does not declare, you also add a custom tool mapping so that agents declare the ask tool and it is allowed. Without the mapping the tool is denied. In `MosaicDeploy/config/tool-config.yaml` (or `user-config.yaml`), for an MCP server named `contact-user`:
+
+  ```yaml
+  tool_destinations:
+    opencode-v2:
+      - generic: ask_user
+        destinations:
+          - to: main
+            names: ["contact-user_*"]
+  ```
+
+  Then list `ask_user` in the tools of the agents that may ask, and redeploy or update. See [Configuration](#configuration) and `Tools/Deployment/docs/configuration.md` for the mapping syntax. In native mode (the V2 TUI) the built-in `question` tool works for the orchestrator and subagents.
+
+Before you install OpenCode V2, read the warnings in [Getting Started](GettingStarted.md#opencode-v2-warnings): one OpenCode version per machine, installation through npm, and where a subagent's question appears.
 
 ### GHCP agent file names
 
@@ -129,7 +153,7 @@ When the tool cannot confirm a file as its own, because it cannot be parsed or h
 
 Before every action the manifest is reconciled with the disk: an entry whose file is gone is dropped, and a hook bundle with some files missing is completed by the next update. The plan review and the dry run list the dropped entries.
 
-A manifest from an earlier Deploy version is converted on its first read. Entries under `.claude/` and `.opencode/` are attributed to Claude Code and OpenCode by their path; other entries (including `.github/`) take the old `harness_id` when that harness deploys to the path; entries that cannot be attributed are dropped and reported, and their files count as unrecorded, so the first run may ask the conflict question once for them.
+A manifest from an earlier Deploy version is converted on its first read. Entries under `.claude/` and `.opencode/` are attributed to Claude Code and OpenCode (V1) by their path (OpenCode V2 did not exist then; from schema 2 on, the entry's harness decides between `opencode` and `opencode-v2`, never the path); other entries (including `.github/`) take the old `harness_id` when that harness deploys to the path; entries that cannot be attributed are dropped and reported, and their files count as unrecorded, so the first run may ask the conflict question once for them.
 
 ---
 
@@ -276,7 +300,16 @@ Moves the whole deployment of a workspace (agents, skills and hook bundles) from
   --overwrite
 ```
 
-Agents are read from the source harness's agents folder and written to the target's. Agent bodies, stamps, protocol and bundle regions, workflow tables, infrastructure declarations, and project and custom regions and skills are kept unchanged from the source and never upgraded. Tool names, frontmatter shape, role-dependent fields and the regions the harness fills in come from the target. Hooks are deployed from the target's catalog variant for the bundles present in the source, so injections and hooks may be newer than the source. Existing destinations are skipped unless `--overwrite` is given. Except between the two GHCP targets, source files and source manifest entries are never changed; the target deployment is recorded in the manifest, and `update` is the explicit way to upgrade it. Esc at a question cancels the run with nothing written. A model that cannot be resolved is left out of the agent (no `model` key) and named in the summary and the TODO file. Agents written into `vscode-ghcp` are named `X.agent.md`, like those of `ghcp-cli`.
+Agents are read from the source harness's agents folder and written to the target's. Agent bodies, stamps, protocol and bundle regions, workflow tables, infrastructure declarations, and project and custom regions and skills are kept unchanged from the source and never upgraded. Tool names, frontmatter shape, role-dependent fields and the regions the harness fills in come from the target. Hooks are deployed from the target's catalog variant for the bundles present in the source, so injections and hooks may be newer than the source. Existing destinations are skipped unless `--overwrite` is given. Except between the two GHCP targets, source files and source manifest entries are never changed; the target deployment is recorded in the manifest, and `update` is the explicit way to upgrade it. Esc at a question cancels the run with nothing written. A model that cannot be resolved is left out of the agent (no `model` key) and named in the summary and the TODO file. Agents written into `vscode-ghcp` are named `X.agent.md`, like those of `ghcp-cli`. Between `opencode` and `opencode-v2` the target replaces the source in place; see [OpenCode V1 vs V2](#opencode-v1-vs-v2-opencode-v2-is-experimental).
+
+```sh
+# Move an OpenCode V1 workspace to OpenCode V2 (experimental); swap the ids to go back
+./mosaic-deploy transform \
+  --harness opencode \
+  --target-harness opencode-v2 \
+  --workspace /path/to/my-project \
+  --dry-run
+```
 
 ### Transform between the GHCP targets
 
@@ -613,7 +646,10 @@ Work through this checklist before using the workspace. Filling project regions 
 | Problem | Fix |
 |---------|-----|
 | "not a MOSAIC repository" | Run from inside the MOSAIC repo, or pass `--mosaic-root /path/to/MOSAIC` |
-| "harness not found" | Check the ID (`claude-code`, `opencode`, `ghcp-cli`, `vscode-ghcp`, `codex` (experimental)). For custom descriptors, pass the full file path. |
+| "harness not found" | Check the ID (`claude-code`, `opencode`, `ghcp-cli`, `vscode-ghcp`, `codex` (experimental), `opencode-v2` (experimental)). For custom descriptors, pass the full file path. |
+| "workspace already holds the OpenCode target ..." | A workspace holds one OpenCode target (`opencode` or `opencode-v2`). Nothing was changed. Use the Transform command the message prints to move the workspace to the other target. See [OpenCode V1 vs V2](#opencode-v1-vs-v2-opencode-v2-is-experimental). |
+| "workspace ... holds both OpenCode targets" | Remove the agent, skill and plugin files of one target from `.opencode/` by hand, then run again. |
+| An `opencode-v2` agent cannot use my ask-the-user MCP tool | V2 denies every tool an agent does not declare. Add a `tool_destinations` mapping for `opencode-v2` and declare it in the agent's tools; see [OpenCode V1 vs V2](#opencode-v1-vs-v2-opencode-v2-is-experimental). |
 | "external harness modules require explicit opt-in" | Set `allow_external_modules: true` in `tool-config.yaml`, or pass `--allow-external` |
 | Config file not picked up | The tool looks in `MosaicDeploy/config/` under the MOSAIC root. Verify `--mosaic-root` if you moved the binary. |
 | "catalog stack has no layers" | You gave `--include-default-catalog=false` without `--catalog-folder`. Add a layer or drop the flag. |

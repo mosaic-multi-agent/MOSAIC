@@ -46,6 +46,9 @@ import (
 func MapTools(d *domain.HarnessDescriptor, req domain.ToolRequest) (domain.ToolResult, error) {
 	// Placeholder case: expand the descriptor's PlaceholderExpansion into a list field.
 	if req.Placeholder != "" {
+		if d.Tools.Shape == domain.ShapeRules {
+			return expandRulesPlaceholder(d), nil
+		}
 		return expandPlaceholder(d), nil
 	}
 
@@ -184,6 +187,9 @@ func buildToolFields(d *domain.HarnessDescriptor, resolutions []domain.ToolResol
 	}
 	if d.Tools.Shape == domain.ShapePermission {
 		return buildPermissionToolFields(d, resolutions)
+	}
+	if d.Tools.Shape == domain.ShapeRules {
+		return buildRuleToolFields(d, resolutions)
 	}
 	return buildListToolFields(d, resolutions)
 }
@@ -532,6 +538,9 @@ func ExtractToolEntries(d *domain.HarnessDescriptor, toolsValue domain.FieldValu
 	// An empty ToolsKey means the harness declares no tools field; nothing to extract.
 	if d.Frontmatter.ToolsKey == "" {
 		return nil
+	}
+	if d.Tools.Shape == domain.ShapeRules {
+		return extractRuleEntries(d, toolsValue)
 	}
 
 	// Build a lookup set of by-convention tool names. Their presence in a deployed file

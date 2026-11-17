@@ -374,6 +374,7 @@ var harnessBuiltinPackages = []string{
 	modulePrefix + "internal/harness/builtin/codex",
 	modulePrefix + "internal/harness/builtin/ghcpcli",
 	modulePrefix + "internal/harness/builtin/opencode",
+	modulePrefix + "internal/harness/builtin/opencodev2",
 	modulePrefix + "internal/harness/builtin/vscodeghcp",
 }
 

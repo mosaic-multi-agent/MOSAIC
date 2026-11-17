@@ -250,3 +250,20 @@ func (e *executor) revertedResult(
 		Replacements:   m.replacements,
 	}
 }
+
+// pruneEmptyDirs removes the subfolders a run's removals left empty, so a removed file does not
+// leave an empty folder behind. It climbs from each removed file and stops at the first folder
+// that still holds anything. The top two levels of a path (such as .opencode/plugins) are
+// harness folders and always stay.
+func (m *moveRun) pruneEmptyDirs() {
+	for _, rec := range m.removals {
+		if rec.Taken != domain.RemovalRemoved {
+			continue
+		}
+		for dir := path.Dir(normRel(rec.Removal.Path)); strings.Count(dir, "/") >= 2; dir = path.Dir(dir) {
+			if os.Remove(m.absPath(dir)) != nil {
+				break
+			}
+		}
+	}
+}

@@ -41,7 +41,7 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 		workspace = ws
 	}
 
-	if err := s.checkGhcpTarget(harnessID, workspace); err != nil {
+	if err := s.checkTargetPairs(harnessID, workspace); err != nil {
 		return domain.RunSummary{}, err
 	}
 

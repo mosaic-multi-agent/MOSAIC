@@ -156,7 +156,7 @@ The Tools view, the Session screen and the JSON report (`report`, additive `cont
 - It is **measured on single-tool calls only**: an API call that requested exactly one tool, followed by the actor's next main call with no compaction and no user turn in between. A call that requested several tools cannot say which tool added what, so it is not a sample.
 - It is **the tokens the tool's result adds to the context**, read as the difference between the two calls' contexts. It is **not a cost split of the run**: output of the model and everything else that changes the context between the two calls is part of the difference, and the sum over tools does not equal the run's cost or context.
 - **Samples** are the calls that were measured. **Negative growth** counts samples where the context shrank (for example after a compaction) and **not measurable** counts calls whose growth could not be determined; both are left out of the average, minimum and maximum, and shown as counts so you can judge how many calls the figures rest on. With no sample the figures are empty.
-- The tools each call requested are logged on all four harnesses. **VS Code GHCP Local needs OpenTelemetry content capture** for it; without it the requested tools are `not provided` and no growth is measured. See [Token Usage on VS Code GHCP Local](#token-usage-on-vs-code-ghcp-local).
+- The tools each call requested are logged on every harness. **VS Code GHCP Local needs OpenTelemetry content capture** for it; without it the requested tools are `not provided` and no growth is measured. See [Token Usage on VS Code GHCP Local](#token-usage-on-vs-code-ghcp-local).
 
 ### Timeline
 
@@ -296,7 +296,7 @@ All keys are optional; a missing key keeps the default. The template in the file
 | `detected_compaction.drop_percent` | Context fall (1 to 99 percent) between two calls that counts as a detected compaction. Default 30 |
 | `default_cache_write_tier` | Per harness, the cache-write tier that prices cache writes without a tier split. Default `5m` |
 
-Harness keys are the names as logged: `claude-code`, `ghcp-cli`, `opencode`, `vscode-ghcp`. Tool names are exact or patterns where `*` matches any run of characters; quote patterns.
+Harness keys are the names as logged: `claude-code`, `ghcp-cli`, `opencode`, `opencode-v2` (experimental), `vscode-ghcp`. Tool names are exact or patterns where `*` matches any run of characters; quote patterns.
 
 ```yaml
 user_interaction_tools:

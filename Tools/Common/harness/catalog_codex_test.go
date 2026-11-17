@@ -46,10 +46,13 @@ func TestCLIHarnesses_CodexIsRunnerLoaded(t *testing.T) {
 	}
 }
 
-func TestCLIHarnesses_CodexIsTheLastCatalogEntry(t *testing.T) {
+func TestCLIHarnesses_CodexIsDeclaredRightBeforeTheLastEntry(t *testing.T) {
 	entries := harness.CLIHarnesses()
-	if got := entries[len(entries)-1].ID; got != harness.HarnessIDCodex {
-		t.Errorf("last catalog entry = %q, want %q (declared after the existing harnesses)", got, harness.HarnessIDCodex)
+	if len(entries) < 2 {
+		t.Fatalf("catalog has %d entries, want at least 2", len(entries))
+	}
+	if got := entries[len(entries)-2].ID; got != harness.HarnessIDCodex {
+		t.Errorf("second to last catalog entry = %q, want %q (declared after the original harnesses)", got, harness.HarnessIDCodex)
 	}
 }
 

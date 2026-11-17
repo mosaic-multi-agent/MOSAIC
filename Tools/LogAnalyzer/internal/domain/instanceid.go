@@ -39,11 +39,11 @@ func isIdentifierByte(b byte) bool {
 }
 
 // IsSubagentLaunchTool reports whether a tool_call_start tool name launches a
-// subagent: agent, task, runsubagent or execution_subagent, compared
+// subagent: agent, task, runsubagent, execution_subagent or subagent, compared
 // case-insensitively (ASCII).
 func IsSubagentLaunchTool(name string) bool {
 	switch strings.ToLower(name) {
-	case "agent", "task", "runsubagent", "execution_subagent":
+	case "agent", "task", "runsubagent", "execution_subagent", "subagent":
 		return true
 	}
 	return false

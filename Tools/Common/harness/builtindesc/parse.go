@@ -26,6 +26,9 @@ type wireDescriptor struct {
 		IDs        []string `yaml:"ids"`
 		FormatHint string   `yaml:"format_hint"`
 	} `yaml:"models"`
+	Experimental *struct {
+		Reason string `yaml:"reason"`
+	} `yaml:"experimental"`
 	CLI struct {
 		Label            string `yaml:"label"`
 		LoadingMechanism string `yaml:"loading_mechanism"`
@@ -101,6 +104,10 @@ func Parse(src []byte, origin string) (Descriptor, error) {
 		HooksDir:       hooks,
 		AgentExtension: w.Extensions.Agent,
 		AgentFormatID:  format,
+	}
+
+	if w.Experimental != nil {
+		d.ExperimentalReason = w.Experimental.Reason
 	}
 
 	if w.Models != nil {

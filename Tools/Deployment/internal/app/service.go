@@ -330,6 +330,8 @@ type service struct {
 	deps Deps
 	// ghcpHeld, when set by the test-only constructor, replaces GHCP target detection.
 	ghcpHeld *ghcpTargets
+	// openCodeHeld, when set by the test-only constructor, replaces OpenCode target detection.
+	openCodeHeld *openCodeTargets
 }
 
 // ListHarnesses returns every harness the registry knows about, including gated ones.

@@ -81,6 +81,10 @@ func readTranscript(run domain.RunRef, owner domain.StreamKind, hint domain.Agen
 	switch format {
 	case domain.TranscriptClaudeCodeJSONL:
 		f.AssistantIDs, f.FirstPrompt, f.HasFirstPrompt = readClaudeJSONL(file, wantPrompt)
+	case domain.TranscriptOpenCodeV2Export:
+		if wantPrompt {
+			f.FirstPrompt, f.HasFirstPrompt = readOpenCodeV2FirstPrompt(file)
+		}
 	case domain.TranscriptOpenCodeMessages:
 		if wantPrompt {
 			f.FirstPrompt, f.HasFirstPrompt = readOpenCodeFirstPrompt(file)
@@ -102,7 +106,7 @@ func readFormat(path string) (domain.TranscriptFormat, bool) {
 		return "", false
 	}
 	switch f := domain.TranscriptFormat(meta.NativeFormat); f {
-	case domain.TranscriptClaudeCodeJSONL, domain.TranscriptOpenCodeMessages:
+	case domain.TranscriptClaudeCodeJSONL, domain.TranscriptOpenCodeMessages, domain.TranscriptOpenCodeV2Export:
 		return f, true
 	}
 	return "", false

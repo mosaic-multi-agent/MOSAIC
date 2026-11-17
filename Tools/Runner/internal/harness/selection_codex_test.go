@@ -61,11 +61,12 @@ func TestSelections_CodexCarriesItsExperimentalReason(t *testing.T) {
 	}
 }
 
-func TestExperimentalReason_OnlyCodexIsMarkedInProduction(t *testing.T) {
+func TestExperimentalReason_OnlyCodexAndOpenCodeV2AreMarkedInProduction(t *testing.T) {
 	for _, e := range commonharness.CLIHarnesses() {
 		_, marked := harness.ExperimentalReason(e.ID)
-		if marked != (e.ID == commonharness.HarnessIDCodex) {
-			t.Errorf("ExperimentalReason(%q) marked = %v, want %v", e.ID, marked, e.ID == commonharness.HarnessIDCodex)
+		want := e.ID == commonharness.HarnessIDCodex || e.ID == commonharness.HarnessIDOpenCodeV2
+		if marked != want {
+			t.Errorf("ExperimentalReason(%q) marked = %v, want %v", e.ID, marked, want)
 		}
 	}
 }

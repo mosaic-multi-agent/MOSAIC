@@ -69,6 +69,9 @@ type ExecRequest struct {
 	// DryRun disables all filesystem writes when true; the result still reports what would
 	// have happened.
 	DryRun bool
+	// PruneEmptyDirs opts this run into removing the subfolders its removals left empty. Off by
+	// default: other runs leave an emptied folder in place.
+	PruneEmptyDirs bool
 	// Atomic opts this run into all-or-nothing execution. When false (the default and the
 	// behaviour of every pre-existing caller), a mid-plan failure is non-fatal: files already
 	// written stay on disk, ExecResult.Partial carries the first error, and the manifest is
@@ -497,6 +500,10 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 				Message: fmt.Sprintf("failed to write TODO file: %s", todoErr),
 			})
 		}
+	}
+
+	if req.PruneEmptyDirs && !req.DryRun && fallback == domain.FallbackNone && partialErr == nil {
+		moves.pruneEmptyDirs()
 	}
 
 	outcome := computeOutcome(actions, partialErr, fallback)

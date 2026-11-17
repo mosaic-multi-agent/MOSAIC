@@ -1,24 +1,27 @@
 schema_version: "1"
 id: mosaic-logger
-version: 1.11.3
+version: 1.12.0
 # description is user-facing: the Deploy tool shows it in the hook picker.
 # Keep it short and actionable; maintainer detail belongs in the comments below.
 description: >-
   Records MOSAIC orchestration sessions (prompts, tool calls, subagent runs,
   transcripts) to OrchestrationLogs/ for review and debugging. Works with
-  Claude Code, GitHub Copilot CLI, VS Code Copilot Chat and OpenCode. Needs
-  Python 3 (not for OpenCode). Copilot CLI runs hooks only in trusted folders
-  (trustedFolders in ~/.copilot/config.json); it needs no other setup. For the
-  VS Code GHCP Local target only, set COPILOT_OTEL_FILE_EXPORTER_PATH to the
-  Copilot OTel export file so token usage is added to the logs.
+  Claude Code, GitHub Copilot CLI, VS Code Copilot Chat, OpenCode and OpenCode
+  V2. Needs Python 3 (not for OpenCode or OpenCode V2). OpenCode V2 transcripts
+  need the opencode command on the PATH. Copilot CLI runs hooks only in trusted
+  folders (trustedFolders in ~/.copilot/config.json); it needs no other setup.
+  For the VS Code GHCP Local target only, set COPILOT_OTEL_FILE_EXPORTER_PATH to
+  the Copilot OTel export file so token usage is added to the logs.
 
 # Maintainer notes (formerly in description):
 # - Events captured: Claude Code 12, GHCP CLI 14, VS Code Chat Extension 8,
 #   OpenCode 5 hooks (event, tool.execute.before, tool.execute.after,
-#   permission.ask, experimental.session.compacting). Output: JSONL event
-#   streams, per-invocation markdown artifacts, and byte-identical transcript
-#   exports under OrchestrationLogs/.
-# - Runner mode (Claude Code, GHCP CLI, OpenCode adapters): the Runner sets
+#   permission.ask, experimental.session.compacting), OpenCode V2 4 hooks (tool
+#   execute.before/execute.after, permission evaluate, session compaction) plus
+#   the event subscription. Output: JSONL event streams, per-invocation
+#   markdown artifacts, and byte-identical transcript exports under
+#   OrchestrationLogs/.
+# - Runner mode (Claude Code, GHCP CLI, OpenCode and OpenCode V2 adapters): the Runner sets
 #   MOSAIC_ROLE (orchestrator or subagent), MOSAIC_RUN_ID and
 #   MOSAIC_AGENT_INSTANCE_ID in the harness environment, and the adapter logs
 #   the session under the Runner's run and agent identity. Without MOSAIC_ROLE
@@ -33,6 +36,10 @@ description: >-
 #   process exit, so the plugin writes invocation_end before its first await and
 #   exports the transcript during the session; the Runner appends an
 #   invocation_end after the process exits if none exists.
+# - OpenCode V2: a V2 plugin ({id, setup} default export). Only top-level files
+#   in .opencode/plugins/ load, so helpers live in lib/. Runner-mode records are
+#   written synchronously. Transcripts are exported in native mode only, through
+#   `opencode session export <id> --standalone`.
 # - Existing deployments keep the previous registration and file set until
 #   redeployed.
 #
@@ -42,8 +49,8 @@ description: >-
 # existing file). The wording assumes that; revisit it if a step ever becomes
 # performable: false.
 
-# placeholder is absent: all four variants — claude-code, vscode-ghcp, ghcp-cli, and
-# opencode — carry real, deployable adapters. The schema has no per-variant placeholder
+# placeholder is absent: all five variants — claude-code, vscode-ghcp, ghcp-cli,
+# opencode, and opencode-v2 — carry real, deployable adapters. The schema has no per-variant placeholder
 # flag, so the whole-bundle key is omitted rather than mislabelling any deployable
 # adapter as unauthored.
 
@@ -347,6 +354,63 @@ variants:
         target: lib/schema_versions.ts
       - source: lib/manifest_version.ts
         target: lib/manifest_version.ts
+    registration: []
+
+  opencode-v2:
+    supported: true
+    files:
+      - source: plugin.ts
+        target: mosaic-logger.ts
+      - source: lib/artifacts.ts
+        target: lib/artifacts.ts
+      - source: lib/core.ts
+        target: lib/core.ts
+      - source: lib/event_router.ts
+        target: lib/event_router.ts
+      - source: lib/hooks.ts
+        target: lib/hooks.ts
+      - source: lib/host.ts
+        target: lib/host.ts
+      - source: lib/identity.ts
+        target: lib/identity.ts
+      - source: lib/invocations.ts
+        target: lib/invocations.ts
+      - source: lib/locked_append.ts
+        target: lib/locked_append.ts
+      - source: lib/manifest_version.ts
+        target: lib/manifest_version.ts
+      - source: lib/ownership.ts
+        target: lib/ownership.ts
+      - source: lib/permission_records.ts
+        target: lib/permission_records.ts
+      - source: lib/record_events.ts
+        target: lib/record_events.ts
+      - source: lib/root_lifecycle.ts
+        target: lib/root_lifecycle.ts
+      - source: lib/runner_mode.ts
+        target: lib/runner_mode.ts
+      - source: lib/safe.ts
+        target: lib/safe.ts
+      - source: lib/schema_versions.ts
+        target: lib/schema_versions.ts
+      - source: lib/state.ts
+        target: lib/state.ts
+      - source: lib/step_records.ts
+        target: lib/step_records.ts
+      - source: lib/targets.ts
+        target: lib/targets.ts
+      - source: lib/tool_records.ts
+        target: lib/tool_records.ts
+      - source: lib/transcript.ts
+        target: lib/transcript.ts
+      - source: lib/transcript_process.ts
+        target: lib/transcript_process.ts
+      - source: lib/transcript_queue.ts
+        target: lib/transcript_queue.ts
+      - source: lib/transcript_write.ts
+        target: lib/transcript_write.ts
+      - source: lib/usage.ts
+        target: lib/usage.ts
     registration: []
 
   vscode-ghcp:

@@ -19,6 +19,7 @@ func TestCLIHarnesses_ExposeSkillsAndHooksDirectories(t *testing.T) {
 		{id: harness.HarnessIDOpenCode, skillsDir: ".opencode/skills", hooksDir: ".opencode/plugins"},
 		{id: harness.HarnessIDGHCPCLI, skillsDir: ".github/skills", hooksDir: ".github/hooks"},
 		{id: harness.HarnessIDCodex, skillsDir: ".agents/skills", hooksDir: ""},
+		{id: harness.HarnessIDOpenCodeV2, skillsDir: ".opencode/skills", hooksDir: ".opencode/plugins"},
 	}
 
 	for _, tc := range cases {

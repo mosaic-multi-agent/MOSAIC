@@ -37,10 +37,11 @@ func ConvertDeployedTools(in DeployedToolsInput) ConvertedTools {
 	}
 
 	for _, grant := range in.Tools {
-		if conv.seen[grant.Name] {
+		seenKey := grant.Name + "/" + string(grant.Disposition)
+		if conv.seen[seenKey] {
 			continue
 		}
-		conv.seen[grant.Name] = true
+		conv.seen[seenKey] = true
 		if grant.Disposition == domain.Allow && covered[grant.Name] {
 			conv.out.Conversions = append(conv.out.Conversions, ToolConversion{Source: grant.Name, Rule: ToolRulePlaceholder})
 			continue

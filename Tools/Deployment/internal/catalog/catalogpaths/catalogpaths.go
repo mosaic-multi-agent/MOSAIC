@@ -82,6 +82,7 @@ const (
 	HarnessDirNameOpenCode   = "OpenCode"
 	HarnessDirNameVSCodeGHCP = "VS Code GHCP"
 	HarnessDirNameCodex      = "Codex"
+	HarnessDirNameOpenCodeV2 = "OpenCode V2"
 )
 
 // HarnessContentDir* are the MOSAIC-root-relative content directories for the five
@@ -93,6 +94,7 @@ const (
 	HarnessContentDirOpenCode   = MosaicRelHarnessInjectionsDir + "/" + HarnessDirNameOpenCode
 	HarnessContentDirVSCodeGHCP = MosaicRelHarnessInjectionsDir + "/" + HarnessDirNameVSCodeGHCP
 	HarnessContentDirCodex      = MosaicRelHarnessInjectionsDir + "/" + HarnessDirNameCodex
+	HarnessContentDirOpenCodeV2 = MosaicRelHarnessInjectionsDir + "/" + HarnessDirNameOpenCodeV2
 )
 
 // ---------------------------------------------------------------------------

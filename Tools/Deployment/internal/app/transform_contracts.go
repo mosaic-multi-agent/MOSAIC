@@ -119,7 +119,7 @@ type TransformHarnessResult struct {
 	Transformed int `json:"transformed"`
 	Skipped     int `json:"skipped"`
 	Failed      int `json:"failed"`
-	// Removals lists the files a GHCP-pair run removes, or would remove. Absent otherwise.
+	// Removals lists the files a GHCP or OpenCode pair run removes, or would remove. Absent otherwise.
 	Removals []TransformFileChange `json:"removals,omitempty"`
 	// Replacements lists existing files a GHCP-pair run overwrites, or would overwrite, after
 	// backing them up. Absent otherwise.
@@ -140,7 +140,7 @@ type TransformDroppedEntry struct {
 	Reason  string              `json:"reason"`
 }
 
-// TransformFileChange is one file a GHCP-pair transform removes or replaces.
+// TransformFileChange is one file a GHCP or OpenCode pair transform removes or replaces.
 type TransformFileChange struct {
 	Kind   domain.ArtifactKind `json:"kind"` // agent | hook
 	Key    string              `json:"key,omitempty"`

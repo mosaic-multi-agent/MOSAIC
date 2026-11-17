@@ -42,6 +42,7 @@ import (
 	_ "mosaic-deploy/internal/harness/builtin/codex"
 	_ "mosaic-deploy/internal/harness/builtin/ghcpcli"
 	_ "mosaic-deploy/internal/harness/builtin/opencode"
+	_ "mosaic-deploy/internal/harness/builtin/opencodev2"
 	_ "mosaic-deploy/internal/harness/builtin/vscodeghcp"
 
 	// Import the translator wiring package so that all format translators (CodexTOML
@@ -52,7 +53,7 @@ import (
 	_ "mosaic-common/agentformat/all"
 )
 
-const ToolVersion = "1.9.0"
+const ToolVersion = "1.10.0"
 
 // wantsTUI reports whether mosaic-deploy should launch the interactive TUI: no subcommand
 // was given, and both stdin and stdout are attached to a real terminal (not a pipe/redirect).

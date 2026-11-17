@@ -32,6 +32,7 @@ var harnessDefaultBinary = map[string]string{
 	"opencode":    "opencode",
 	"ghcp-cli":    "copilot",
 	"codex":       "codex",
+	"opencode-v2": "opencode",
 }
 
 // ResolveHarnessBinaries resolves each harness ID in harnesses to a

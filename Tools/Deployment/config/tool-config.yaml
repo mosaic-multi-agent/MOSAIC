@@ -94,7 +94,7 @@ log_retention_runs: 0
 # both directions read this same table.
 #
 # STRUCTURE: harness-id -> ordered list of mappings.
-# Built-in harness ids: claude-code, opencode, ghcp-cli, vscode-ghcp, codex
+# Built-in harness ids: claude-code, opencode, ghcp-cli, vscode-ghcp, codex, opencode-v2
 # (a descriptor-only or external harness uses the `id:` in its harness.yaml).
 #
 # The syntax is intentionally IDENTICAL to the `tools.mappings:` block of a

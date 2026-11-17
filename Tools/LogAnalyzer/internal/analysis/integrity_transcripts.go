@@ -129,7 +129,7 @@ func collectStreamUsage(streams []Stream) map[streamKey]*streamUsage {
 // InstancePromptMismatchFindings reports agents whose own first prompt names (in
 // the structured agent_instance_id form) a different instance id than their
 // folder: one instance_prompt_mismatch warning per invocation, in input order,
-// with the folder id as actor. Only claude-code and opencode agent transcripts
+// with the folder id as actor. Only claude-code, opencode and opencode-v2 agent transcripts
 // with a first prompt are compared; a prompt without an id is skipped.
 func InstancePromptMismatchFindings(facts []domain.TranscriptFacts) []domain.Finding {
 	var findings []domain.Finding
@@ -137,7 +137,8 @@ func InstancePromptMismatchFindings(facts []domain.TranscriptFacts) []domain.Fin
 		if f.Owner != domain.StreamAgentInstance || !f.HasFirstPrompt {
 			continue
 		}
-		if f.Format != domain.TranscriptClaudeCodeJSONL && f.Format != domain.TranscriptOpenCodeMessages {
+		if f.Format != domain.TranscriptClaudeCodeJSONL && f.Format != domain.TranscriptOpenCodeMessages &&
+			f.Format != domain.TranscriptOpenCodeV2Export {
 			continue
 		}
 		id, ok := domain.ExtractInstanceID(f.FirstPrompt)

@@ -1,0 +1,24 @@
+/**
+ * schema_versions.ts - per-event log schema version stamps.
+ *
+ * Every event carries the default version unless the event name has an entry
+ * in EVENT_SCHEMA_VERSIONS. Same table as the OpenCode V1 variant plus the
+ * spawn_call_id field of invocation_start.
+ */
+
+export const DEFAULT_SCHEMA_VERSION: string = "1.3.0";
+
+/** Events whose shape follows a newer log format version than the default. */
+export const EVENT_SCHEMA_VERSIONS: Readonly<Record<string, string>> = {
+  invocation_start: "1.4.0",
+  compaction: "1.5.0",
+  tool_call_end: "1.6.0",
+  usage_record: "1.7.0",
+};
+
+/** Schema version stamped on the named event. */
+export function schemaVersionFor(event: string): string {
+  return Object.prototype.hasOwnProperty.call(EVENT_SCHEMA_VERSIONS, event)
+    ? EVENT_SCHEMA_VERSIONS[event]
+    : DEFAULT_SCHEMA_VERSION;
+}

@@ -23,15 +23,15 @@ func TestInvocationTimeouts_Normalized(t *testing.T) {
 		want domain.InvocationTimeouts
 	}{
 		{"zero value gets both defaults", domain.InvocationTimeouts{},
-			domain.InvocationTimeouts{NonHITL: domain.DefaultTimeout, HITL: domain.DefaultHITLTimeout}},
+			domain.InvocationTimeouts{NonHITL: domain.DefaultTimeout, HITL: domain.DefaultHITLTimeout, NoOutput: domain.DefaultNoOutputTimeout}},
 		{"negative values get defaults", domain.InvocationTimeouts{NonHITL: -time.Second, HITL: -time.Hour},
-			domain.InvocationTimeouts{NonHITL: domain.DefaultTimeout, HITL: domain.DefaultHITLTimeout}},
+			domain.InvocationTimeouts{NonHITL: domain.DefaultTimeout, HITL: domain.DefaultHITLTimeout, NoOutput: domain.DefaultNoOutputTimeout}},
 		{"only HITL unset", domain.InvocationTimeouts{NonHITL: time.Minute},
-			domain.InvocationTimeouts{NonHITL: time.Minute, HITL: domain.DefaultHITLTimeout}},
+			domain.InvocationTimeouts{NonHITL: time.Minute, HITL: domain.DefaultHITLTimeout, NoOutput: domain.DefaultNoOutputTimeout}},
 		{"only non-HITL unset", domain.InvocationTimeouts{HITL: 2 * time.Hour},
-			domain.InvocationTimeouts{NonHITL: domain.DefaultTimeout, HITL: 2 * time.Hour}},
+			domain.InvocationTimeouts{NonHITL: domain.DefaultTimeout, HITL: 2 * time.Hour, NoOutput: domain.DefaultNoOutputTimeout}},
 		{"explicit values kept", domain.InvocationTimeouts{NonHITL: time.Minute, HITL: time.Hour},
-			domain.InvocationTimeouts{NonHITL: time.Minute, HITL: time.Hour}},
+			domain.InvocationTimeouts{NonHITL: time.Minute, HITL: time.Hour, NoOutput: domain.DefaultNoOutputTimeout}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

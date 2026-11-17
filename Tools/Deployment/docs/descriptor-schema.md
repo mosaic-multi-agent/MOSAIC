@@ -71,6 +71,9 @@ models:
 # shape: how tools are written in the deployed frontmatter.
 #   "list"       — a flat YAML sequence (e.g. Claude Code agents).
 #   "permission" — a nested allow/deny mapping (e.g. OpenCode agents).
+#   "rules"      — an ordered list of {action, resource, effect} permission rules,
+#                  last matching rule wins (e.g. OpenCode V2 agents). Needs
+#                  frontmatter.tools_key and optional tools.rules (see below).
 #
 # universe: the complete set of tool names this harness understands.
 #   Declared order is the canonical output order; the tool never reorders
@@ -354,6 +357,7 @@ any unknown key inside the section are rejected at load time.
 |-------|---------|
 | `list` | Tools are written as a flat YAML sequence. |
 | `permission` | Tools are written as a nested allow/deny mapping. |
+| `rules` | Tools are written as an ordered list of `{action, resource, effect}` permission rules under `frontmatter.tools_key`; the last matching rule wins (OpenCode V2). Requires `tools_key`. The fixed rules go in `tools.rules.leading` and `tools.rules.trailing` (each entry has `action`, `resource`, `effect`); between them the module writes one whole-tool `allow` rule per permission action the agent uses. A universe entry may declare `action` (the permission action it falls under); several tools can share one action, so allowing any of them allows the action. `OpenCode V2` leads with `{*, *, deny}` (deny by default) and trails with `{external_directory, *, ask}`. `tools.rules` and `action` are valid only for this shape. |
 
 #### `tools.universe`
 
@@ -558,12 +562,12 @@ code and are documented here so a descriptor author knows when to escalate:
 - **Custom placeholder expansion logic:** `PlaceholderExpansion` names fixed tool subsets;
   conditional expansion (e.g. "expand differently for orchestrators") requires a module.
 
-### Exceptions established across the five built-in harnesses
+### Exceptions established across the six built-in harnesses
 
-All five built-in harnesses (Claude Code, Codex (experimental), GHCP CLI, OpenCode, VS Code GHCP) were
+All six built-in harnesses (Claude Code, Codex (experimental), GHCP CLI, OpenCode, OpenCode V2 (experimental), VS Code GHCP) were
 implemented using a module + embedded descriptor structure. Their descriptors live in one package,
 `Tools/Common/harness/builtindesc/` (`claude-code.yaml`, `codex.yaml`, `ghcp-cli.yaml`,
-`opencode.yaml`, `vscode-ghcp.yaml`), and are the single source of the shared harness facts:
+`opencode.yaml`, `opencode-v2.yaml`, `vscode-ghcp.yaml`), and are the single source of the shared harness facts:
 Deploy parses the embedded YAML, and Runner and AgentTest read the same descriptors through the
 `mosaic-common/harness` accessors.
 
@@ -573,7 +577,7 @@ descriptors, so an override that changes the agents directory, the agent file ex
 agent format is not seen by them. The exceptions below are documented
 so that future descriptor authors recognise when a built-in module is required.
 
-#### Exceptions common to all five harnesses
+#### Exceptions common to all six harnesses
 
 - **Tool output format serialization:** `tools.shape = "list"` produces a standard KindList
   value, but each harness serializes tools differently. Claude Code emits a comma-separated
@@ -617,6 +621,8 @@ so that future descriptor authors recognise when a built-in module is required.
   `{tool-permissions}` placeholder into a flat list, but OpenCode needs a full allow/deny
   permission block. Module code overrides the placeholder path to produce the correct shape.
 
+- **OpenCode V2 (experimental) — rules shape and role-dependent `mode`:** the descriptor declares `tools.shape: rules`, so the tool list is a rule list under `permissions` (deny everything first, one allow rule per declared permission action, then `external_directory` asks). Several tools share one action (`write`, `edit` and `patch` all fall under `edit`), so declaring file write or file edit allows all three. `mode` comes from the descriptor (`value_by_role`: `subagent` for subagents, `primary` otherwise). Deploy writes no `opencode.json`.
+
 - **VS Code GHCP — `search/listDirectory` universe ordering and `subagent` mapping:**
   `search/listDirectory` is emitted by convention (`by_convention: true`). Its position in the
   universe (after `agent`, before `execute/runInTerminal`) ensures the rendered tool list matches
@@ -647,7 +653,7 @@ After implementing all five built-in harnesses, the stable split is:
 **Conclusion:** A purely descriptor-driven harness (no module code beyond the adapter) is
 achievable when the tool output is a standard KindList (block-style YAML sequence), skills are
 deployed to a flat directory (no key subdirectory), frontmatter `add` fields are static, and
-the `{tool-permissions}` placeholder expands to a flat list. None of the five current built-ins
+the `{tool-permissions}` placeholder expands to a flat list. None of the six current built-ins
 satisfies all four conditions simultaneously. The skill key subdirectory and the tool output
 format serialization are the two most common reasons a harness needs module code. A future
 descriptor schema version could address both by adding a `skill.key_subdir: true` flag and a

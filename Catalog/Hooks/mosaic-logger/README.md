@@ -2,7 +2,8 @@
 
 A hook adapter bundle that captures hook events and writes structured logs under
 `OrchestrationLogs/` in your project root. Implemented for `claude-code` (12 events),
-`ghcp-cli` (14 events), `vscode-ghcp` (8 events), and `opencode` (4 hooks).
+`ghcp-cli` (14 events), `vscode-ghcp` (8 events), `opencode` (4 hooks), and
+`opencode-v2` (4 hooks plus the event subscription).
 
 ## Supported variants
 
@@ -10,6 +11,7 @@ A hook adapter bundle that captures hook events and writes structured logs under
 |---|---|
 | `claude-code` | Implemented — Python adapter deployed to `.claude/hooks/` |
 | `opencode` | Implemented — TypeScript plugin deployed to `.opencode/plugins/` |
+| `opencode-v2` | Implemented, experimental — TypeScript V2 plugin deployed to `.opencode/plugins/` |
 | `vscode-ghcp` | Implemented — Python adapter deployed to `.github/hooks/` |
 | `ghcp-cli` | Implemented — Python adapter deployed to `.github/hooks/` |
 
@@ -19,18 +21,19 @@ Hooks tell the adapter what happened; a second source tells it what each call us
 Hook payloads alone are not enough, because they carry no per-call token usage on most
 harnesses.
 
-| Data | `claude-code` | `opencode` | `ghcp-cli` | `vscode-ghcp` |
-|---|---|---|---|---|
-| Sessions, subagents, tool start and end, prompts | Hooks | Plugin events | Hooks | Hooks |
-| Tool input and output | Hooks | Plugin hooks | Hooks | Hooks |
-| Tokens and model per call | Transcript | `message.updated` events | Transcript | OTel file |
-| Tools each call requested | Transcript | Message parts | Transcript | OTel file, with content capture |
-| Compactions | Hooks | Plugin hook | Transcript | OTel file |
-| Failed tool calls | Hooks | Plugin hooks | Hooks | Hooks, completed from the OTel file |
-| Full `.raw` session copy | Transcript file | SDK `session.messages()` | Transcript file | Transcript file |
+| Data | `claude-code` | `opencode` | `opencode-v2` | `ghcp-cli` | `vscode-ghcp` |
+|---|---|---|---|---|---|
+| Sessions, subagents, tool start and end, prompts | Hooks | Plugin events | Plugin hooks and events | Hooks | Hooks |
+| Tool input and output | Hooks | Plugin hooks | Plugin hooks | Hooks | Hooks |
+| Tokens and model per call | Transcript | `message.updated` events | `session.step.*` events | Transcript | OTel file |
+| Tools each call requested | Transcript | Message parts | `session.tool.input.started` events | Transcript | OTel file, with content capture |
+| Compactions | Hooks | Plugin hook | `session.compaction.ended` events | Transcript | OTel file |
+| Failed tool calls | Hooks | Plugin hooks | Plugin hooks and `session.tool.failed` | Hooks | Hooks, completed from the OTel file |
+| Full `.raw` session copy | Transcript file | SDK `session.messages()` | `opencode session export`, native mode only | Transcript file | Transcript file |
 
 - **`opencode`** parses no transcript file for usage: the plugin runs inside the OpenCode
   process and receives tokens and model in its live events.
+- **`opencode-v2`** parses no transcript for usage and never records cost.
 - **Fragility:** the Claude Code and GHCP CLI transcript formats are not public contracts.
   `ghcp-cli` writes a `transcript_format_changed` diagnostic when a transcript has
   assistant turns but no usage; `claude-code` has no such check.
@@ -73,7 +76,7 @@ recorded in the orchestrator stream.
 
 ## Runner mode
 
-The `claude-code`, `ghcp-cli` and `opencode` adapters also log sessions started by
+The `claude-code`, `ghcp-cli`, `opencode` and `opencode-v2` adapters also log sessions started by
 the MOSAIC Runner (`Tools/Runner`). The Runner sets `MOSAIC_ROLE` (`orchestrator` or
 `subagent`), `MOSAIC_RUN_ID` and, for the subagent role, `MOSAIC_AGENT_INSTANCE_ID`
 in the harness process environment. Without `MOSAIC_ROLE` the adapter is a native
@@ -112,6 +115,14 @@ See `ghcp-cli/README.md`.
 
 `opencode run` does not await the plugin's `session.idle` handler at exit. See
 `opencode/LIMITATIONS.md`.
+
+### OpenCode V2: synchronous writes, no transcripts
+
+The `opencode-v2` plugin writes every Runner-mode record synchronously, because the
+private server of `opencode run --standalone` exits together with the `run` client and
+pending asynchronous work would be lost. No transcript is written in Runner mode. In
+native mode transcripts come from `opencode session export <id> --standalone`, which
+needs the `opencode` command on the PATH. See `opencode-v2/LIMITATIONS.md`.
 
 ## Copilot token usage (`ghcp-cli` and `vscode-ghcp`)
 
@@ -221,8 +232,8 @@ already exists. Make the one-line tweak before pasting.
 ## Why `placeholder` is absent
 
 The schema's `placeholder` flag is a single bundle-level boolean with no per-variant
-form. All four variants — `claude-code`, `vscode-ghcp`, `ghcp-cli`, and `opencode` —
-are fully authored and deployable; marking the bundle as a placeholder would be
+form. All five variants — `claude-code`, `vscode-ghcp`, `ghcp-cli`, `opencode`, and
+`opencode-v2` — are fully authored and deployable; marking the bundle as a placeholder would be
 inaccurate. The schema provides no per-variant mechanism to distinguish authoring
 states, so the whole-bundle key is omitted.
 

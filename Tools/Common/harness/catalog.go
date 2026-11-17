@@ -10,6 +10,7 @@ const (
 	HarnessIDOpenCode   = "opencode"
 	HarnessIDGHCPCLI    = "ghcp-cli"
 	HarnessIDCodex      = "codex"
+	HarnessIDOpenCodeV2 = "opencode-v2"
 )
 
 // LoadingMechanism describes how a CLI harness locates agent definition files.
@@ -86,6 +87,10 @@ type CLIHarness struct {
 	// HooksDir is the project-relative hooks or plugins directory
 	// (paths.hooks.project). Empty means the harness does not support hooks.
 	HooksDir string
+
+	// ExperimentalReason is the descriptor's experimental.reason; "" when the
+	// descriptor marks no experimental status.
+	ExperimentalReason string
 }
 
 // cliHarnesses and modelCatalogs are derived once, at package init, from the

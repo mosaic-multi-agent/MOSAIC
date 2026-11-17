@@ -28,14 +28,15 @@ func loadCatalogs() ([]CLIHarness, []ModelCatalog) {
 			continue
 		}
 		clis = append(clis, CLIHarness{
-			ID:               d.ID,
-			Label:            d.CLI.Label,
-			AgentsDir:        d.AgentsDir,
-			LoadingMechanism: loadingMechanismOf(d.CLI.LoadingMechanism),
-			AgentFormatID:    d.AgentFormatID,
-			AgentExtension:   d.AgentExtension,
-			SkillsDir:        d.SkillsDir,
-			HooksDir:         d.HooksDir,
+			ID:                 d.ID,
+			Label:              d.CLI.Label,
+			AgentsDir:          d.AgentsDir,
+			LoadingMechanism:   loadingMechanismOf(d.CLI.LoadingMechanism),
+			AgentFormatID:      d.AgentFormatID,
+			AgentExtension:     d.AgentExtension,
+			SkillsDir:          d.SkillsDir,
+			HooksDir:           d.HooksDir,
+			ExperimentalReason: d.ExperimentalReason,
 		})
 	}
 	return clis, models

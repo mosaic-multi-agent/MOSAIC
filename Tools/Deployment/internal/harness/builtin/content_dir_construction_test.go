@@ -16,6 +16,7 @@ import (
 	"mosaic-deploy/internal/harness/builtin/claudecode"
 	"mosaic-deploy/internal/harness/builtin/ghcpcli"
 	"mosaic-deploy/internal/harness/builtin/opencode"
+	"mosaic-deploy/internal/harness/builtin/opencodev2"
 	"mosaic-deploy/internal/harness/builtin/vscodeghcp"
 	"mosaic-deploy/internal/harness/registry"
 )
@@ -37,6 +38,7 @@ func contentDirCases() []contentDirCase {
 		{"ghcp-cli", catalogpaths.HarnessDirNameGhcpCLI, ghcpcli.New, ghcpcli.RepoContentDir},
 		{"opencode", catalogpaths.HarnessDirNameOpenCode, opencode.New, opencode.RepoContentDir},
 		{"vscode-ghcp", catalogpaths.HarnessDirNameVSCodeGHCP, vscodeghcp.New, vscodeghcp.RepoContentDir},
+		{"opencode-v2", catalogpaths.HarnessDirNameOpenCodeV2, opencodev2.New, opencodev2.RepoContentDir},
 	}
 }
 

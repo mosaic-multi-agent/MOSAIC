@@ -68,7 +68,7 @@ func (r *transformRun) run(ctx context.Context) (TransformHarnessResult, error) 
 	if err := r.resolveWorkspace(ctx); err != nil {
 		return TransformHarnessResult{}, err
 	}
-	if err := r.refuseBothGhcpTargets(); err != nil {
+	if err := r.refuseBothTargets(); err != nil {
 		return TransformHarnessResult{}, err
 	}
 	r.reconcileManifest()

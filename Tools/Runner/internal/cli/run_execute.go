@@ -62,6 +62,10 @@ func executeRun(ctx context.Context, cmd *cobra.Command, store domain.ArtifactSt
 		return code
 	}
 
+	if code, ok := validateNoOutputTimeoutFlag(f.noOutputTimeout, errOut); !ok {
+		return code
+	}
+
 	resolvedRunID, resolvedRunFolder, resolvedIsNewRun, resolvedPosition, code, ok := resolveRunIdentity(identity, f, errOut)
 	if !ok {
 		return code

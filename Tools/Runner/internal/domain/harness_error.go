@@ -7,6 +7,7 @@ type HarnessFailureKind string
 
 const (
 	HarnessFailureTimeout             HarnessFailureKind = "timeout"
+	HarnessFailureNoOutput            HarnessFailureKind = "no-output-timeout"
 	HarnessFailureProcess             HarnessFailureKind = "process-failure"
 	HarnessFailureUnparseable         HarnessFailureKind = "unparseable-response"
 	HarnessFailureEmpty               HarnessFailureKind = "empty-response"

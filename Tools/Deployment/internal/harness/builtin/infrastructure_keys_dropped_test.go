@@ -18,6 +18,7 @@ import (
 	"mosaic-deploy/internal/harness/builtin/claudecode"
 	"mosaic-deploy/internal/harness/builtin/ghcpcli"
 	"mosaic-deploy/internal/harness/builtin/opencode"
+	"mosaic-deploy/internal/harness/builtin/opencodev2"
 	"mosaic-deploy/internal/harness/builtin/vscodeghcp"
 	"mosaic-deploy/internal/harness/registry"
 	"mosaic-deploy/internal/transform"
@@ -44,6 +45,7 @@ func allBuiltinHarnesses() []harnessCase {
 	return []harnessCase{
 		{"claude-code", domain.ModelSelection{ModelID: "claude-sonnet-4-6", Origin: domain.OriginHarnessList}, claudecode.New},
 		{"opencode", domain.ModelSelection{ModelID: "github-copilot/claude-sonnet-4-6", Origin: domain.OriginHarnessList}, opencode.New},
+		{"opencode-v2", domain.ModelSelection{ModelID: "github-copilot/claude-sonnet-4.6", Origin: domain.OriginHarnessList}, opencodev2.New},
 		{"ghcp-cli", domain.ModelSelection{ModelID: "claude-sonnet-4-6", Origin: domain.OriginHarnessList}, ghcpcli.New},
 		{"vscode-ghcp", domain.ModelSelection{ModelID: "Claude Sonnet 4.6", Origin: domain.OriginHarnessList}, vscodeghcp.New},
 	}

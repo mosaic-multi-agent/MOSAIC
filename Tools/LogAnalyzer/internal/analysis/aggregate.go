@@ -274,7 +274,8 @@ func (a *Aggregator) handleInvocationEnd(rs *runState, ref domain.StreamRef, ev 
 	actor := domain.AgentInstance(id)
 
 	// Quality findings do not halt aggregation; the invocation is still recorded.
-	if !end.HasUsage {
+	// opencode-v2 usage comes from usage_record events, not invocation_end.
+	if !end.HasUsage && ev.Harness != domain.HarnessOpenCodeV2 {
 		a.findings = append(a.findings, domain.Finding{
 			Kind:     domain.FindingMissingTokenUsage,
 			Severity: domain.SeverityWarning,

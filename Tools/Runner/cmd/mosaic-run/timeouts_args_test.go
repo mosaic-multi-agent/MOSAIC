@@ -52,8 +52,12 @@ func TestTimeoutsFromArgs(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := timeoutsFromArgs(tc.args)
 
-			if got != tc.want {
-				t.Fatalf("timeoutsFromArgs(%v) = %+v, want %+v", tc.args, got, tc.want)
+			want := tc.want
+			if want.NoOutput == 0 {
+				want.NoOutput = domain.DefaultNoOutputTimeout // no --no-output-timeout given
+			}
+			if got != want {
+				t.Fatalf("timeoutsFromArgs(%v) = %+v, want %+v", tc.args, got, want)
 			}
 		})
 	}

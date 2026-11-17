@@ -649,7 +649,7 @@ an executable and a `harness.yaml` descriptor. See [docs/harness-contributor-gui
 
 ## Harness modules
 
-Five built-in harnesses are compiled into the binary:
+Six built-in harnesses are compiled into the binary:
 
 | ID | Display name |
 |----|--------------|
@@ -658,6 +658,7 @@ Five built-in harnesses are compiled into the binary:
 | `ghcp-cli` | GHCP CLI / VS Code GHCP Copilot |
 | `vscode-ghcp` | VS Code GHCP Local |
 | `codex` | Codex (experimental) | Experimental: runs through `mosaic-run` only, no native orchestration, no MOSAIC log. Two departures from the Markdown norm: agent files are TOML (not Markdown), and skills are resolved from a shared `.agents/skills` root rather than a harness-local skills directory. |
+| `opencode-v2` | OpenCode V2 (experimental) | Experimental: everything is supported, but the harness is not yet tested. Shares `.opencode/` with `opencode`, so a workspace holds one OpenCode target at a time; Transform moves between the two. Rules-shape permissions (deny by default) |
 Use `ghcp-cli` for the terminal and for VS Code's default chat harness, and `vscode-ghcp` only for VS Code's Local harness. A workspace holds one GHCP target at a time. See [Choosing a GHCP target](../../docs/DeploymentGuide.md#choosing-a-ghcp-target).
 
 To add a harness without writing Go code, create a `harness.yaml` descriptor in a

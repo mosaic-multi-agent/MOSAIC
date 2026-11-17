@@ -1,0 +1,19 @@
+schema_version: "1"
+id: fixture-logger-v2-registration
+version: 0.1.0
+description: Fixture bundle whose opencode-v2 variant declares a registration step, which Provision must refuse.
+
+variants:
+  opencode-v2:
+    supported: true
+    files:
+      - source: plugin.ts
+        target: mosaic-logger.ts
+    registration:
+      - id: settings-fragment
+        target_path: opencode.json
+        performable: true
+        instruction: >-
+          This variant should never declare a registration step; plugins are
+          loaded by directory presence.
+        fragment: "{}"

@@ -35,6 +35,9 @@ func MergeToolsField(d *domain.HarnessDescriptor, generated, deployed domain.Fie
 	if !deployedPresent {
 		return ToolsFieldMerge{Value: generated}
 	}
+	if d.Tools.Shape == domain.ShapeRules {
+		return mergeRulesToolsField(d, generated, deployed)
+	}
 	permission := d.Tools.Shape == domain.ShapePermission
 	universe := make(map[string]bool, len(d.Tools.Universe))
 	for _, t := range d.Tools.Universe {

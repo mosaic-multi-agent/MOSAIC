@@ -1,0 +1,1 @@
+{"info":{"id":"ses_f301child2","parentID":"ses_f301root","agent":"planner"},"messages":[{"id":"m1","type":"user","text":"You are a subagent spawned by another session.\nagent_instance_id: coder#8\nPlan the follow-up."},{"id":"m2","type":"assistant","agent":"planner","content":[]}]}

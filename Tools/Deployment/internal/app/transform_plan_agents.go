@@ -36,6 +36,10 @@ func (s *service) planAgents(in transformPlanInput, plan *TransformPlan) error {
 	if inputIsGhcpPair(in) {
 		return s.planPairAgents(in, relDir, files, plan)
 	}
+	if inputIsOpenCodePair(in) {
+		s.planOpenCodeAgents(in, relDir, files, plan)
+		return nil
+	}
 
 	keeper := duplicateKeyKeepers(files, srcDesc.Extensions[domain.ArtifactAgent])
 	sameFolder := sameSlashPath(relDir, tgtDesc.Paths.Agents.Project)

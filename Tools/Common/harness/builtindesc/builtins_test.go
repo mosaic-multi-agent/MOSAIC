@@ -32,6 +32,7 @@ func TestBuiltins_CLIBackedHarnessesCarryLabelMechanismAndModels(t *testing.T) {
 		"opencode":    {Label: "OpenCode CLI", LoadingMechanism: builtindesc.LoadingMechanismName},
 		"ghcp-cli":    {Label: "GitHub Copilot CLI", LoadingMechanism: builtindesc.LoadingMechanismName},
 		"codex":       {Label: "Codex CLI", LoadingMechanism: builtindesc.LoadingMechanismRunnerLoaded},
+		"opencode-v2": {Label: "OpenCode V2 CLI", LoadingMechanism: builtindesc.LoadingMechanismName},
 	}
 
 	got, err := builtindesc.Builtins()
@@ -80,6 +81,7 @@ func TestBuiltins_ExposeDirectoriesFormatAndExtension(t *testing.T) {
 		"opencode":    {".opencode/agents", ".opencode/skills", ".opencode/plugins", ".md", "markdown"},
 		"ghcp-cli":    {".github/agents", ".github/skills", ".github/hooks", ".agent.md", "markdown"},
 		"codex":       {".codex/agents", ".agents/skills", "", ".toml", "codex-toml"},
+		"opencode-v2": {".opencode/agents", ".opencode/skills", ".opencode/plugins", ".md", "markdown"},
 	}
 
 	got, err := builtindesc.Builtins()

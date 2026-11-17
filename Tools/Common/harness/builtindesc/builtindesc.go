@@ -6,13 +6,13 @@ import (
 	"slices"
 )
 
-//go:embed claude-code.yaml opencode.yaml ghcp-cli.yaml vscode-ghcp.yaml codex.yaml
+//go:embed claude-code.yaml opencode.yaml ghcp-cli.yaml vscode-ghcp.yaml codex.yaml opencode-v2.yaml
 var files embed.FS
 
-var ids = []string{"claude-code", "opencode", "ghcp-cli", "vscode-ghcp", "codex"}
+var ids = []string{"claude-code", "opencode", "ghcp-cli", "vscode-ghcp", "codex", "opencode-v2"}
 
 // IDs returns every builtin harness id, in builtin order:
-// "claude-code", "opencode", "ghcp-cli", "vscode-ghcp", "codex".
+// "claude-code", "opencode", "ghcp-cli", "vscode-ghcp", "codex", "opencode-v2".
 // The slice is fresh on every call.
 func IDs() []string {
 	return slices.Clone(ids)

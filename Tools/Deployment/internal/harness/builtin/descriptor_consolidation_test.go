@@ -125,6 +125,7 @@ func TestDescriptorConsolidation_BuiltinHarnesses_DeclareModelsBlock(t *testing.
 		{harness: "ghcp-cli", file: "ghcp-cli.yaml"},
 		{harness: "vscode-ghcp", file: "vscode-ghcp.yaml"},
 		{harness: "codex", file: "codex.yaml"},
+		{harness: "opencode-v2", file: "opencode-v2.yaml"},
 	}
 
 	for _, tc := range cases {

@@ -180,7 +180,7 @@ func TestHarnessFlag_UsageErrorMessageListsEveryAcceptedValue(t *testing.T) {
 	args := append(baseHarnessArgs(), "--harness", "still-not-a-harness")
 	_, _, errOut := runCLI(t, args, sess)
 
-	for _, want := range []string{"fake", "claude-code", "opencode", "ghcp-cli", "codex"} {
+	for _, want := range []string{"fake", "claude-code", "opencode", "ghcp-cli", "codex", "opencode-v2"} {
 		if !strings.Contains(errOut, want) {
 			t.Errorf("usage-error message %q does not mention accepted value %q", errOut, want)
 		}
@@ -194,7 +194,7 @@ func TestHarnessFlag_HelpUsageListsEveryAcceptedValue(t *testing.T) {
 	sess := &scriptedSession{}
 	_, _, errOut := runCLI(t, []string{"run", "--help"}, sess)
 
-	for _, want := range []string{"fake", "claude-code", "opencode", "ghcp-cli", "codex"} {
+	for _, want := range []string{"fake", "claude-code", "opencode", "ghcp-cli", "codex", "opencode-v2"} {
 		if !strings.Contains(errOut, want) {
 			t.Errorf("--help usage text %q does not mention accepted value %q", errOut, want)
 		}

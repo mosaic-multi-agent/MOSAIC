@@ -8,6 +8,7 @@ type TranscriptFormat string
 const (
 	TranscriptClaudeCodeJSONL  TranscriptFormat = "claude-code-transcript-jsonl"
 	TranscriptOpenCodeMessages TranscriptFormat = "opencode-sdk-session-messages-json"
+	TranscriptOpenCodeV2Export TranscriptFormat = "opencode-v2-session-export-json"
 )
 
 // TranscriptFacts are the facts the transcript integrity checks need from one

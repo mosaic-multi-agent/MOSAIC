@@ -10,7 +10,7 @@ import (
 // builtinModuleDirs are the Deploy builtin harness module directories. The
 // descriptors live once in the shared Common package, so none of these
 // directories may carry a descriptor YAML of its own.
-var builtinModuleDirs = []string{"claudecode", "opencode", "ghcpcli", "vscodeghcp", "codex"}
+var builtinModuleDirs = []string{"claudecode", "opencode", "ghcpcli", "vscodeghcp", "codex", "opencodev2"}
 
 func TestBuiltinModuleDirs_HoldNoDescriptorYAML(t *testing.T) {
 	for _, dir := range builtinModuleDirs {

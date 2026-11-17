@@ -107,7 +107,7 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 		workspace = ws
 	}
 
-	if err := s.checkGhcpTarget(harnessID, workspace); err != nil {
+	if err := s.checkTargetPairs(harnessID, workspace); err != nil {
 		return domain.RunSummary{}, err
 	}
 

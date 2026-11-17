@@ -8,7 +8,6 @@ Informal, hand-maintained list of what's next for this project. Order within eac
 
 ## Next (Near Future)
 
-- Add Codex harness.
 - Update External modules at Deploy tool, its functionality is very likely lagging behind current Deploy tool capabilities.
 - Update Runner to support parallelization in workflows.
 
@@ -19,7 +18,6 @@ Informal, hand-maintained list of what's next for this project. Order within eac
 - Look into orchestrator/subagents instructions, try to reduce number of tokens somehow.
 - Attempt to filter out potential secrets from MOSAIC logs.
 - Record the harness version consistently across all logs (Runner debug log, MOSAIC log in native and Runner mode) for every harness. Today only the GHCP CLI adapter records it (`ghcp_version` in the Runner debug log, because the CLI self-updates). How each harness exposes its version differs and may not be trivial.
-- One harness descriptor read by every tool (Deploy, Runner, AgentTest) instead of Go copies kept in sync with Deploy's YAML descriptors by drift tests.
 
 ## Someday (Dreams)
 

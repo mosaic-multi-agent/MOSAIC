@@ -1,0 +1,16 @@
+schema_version: "1"
+id: fixture-logger-v2
+version: 0.1.0
+description: Minimal fixture bundle for opencode-v2 adapter provisioning tests.
+
+variants:
+  opencode-v2:
+    supported: true
+    files:
+      - source: plugin.ts
+        target: mosaic-logger.ts
+      - source: host.ts
+        target: lib/host.ts
+      - source: ../shared.ts
+        target: lib/shared.ts
+    registration: []

@@ -62,9 +62,10 @@ func (r *transformRun) execute(ctx context.Context) (deploy.ExecResult, error) {
 			Harness: r.tgt.Ref().DisplayName, WorkspacePath: r.workspace, DeploymentRoot: r.workspace,
 			GeneratedAt: r.s.now(), Mode: domain.ModeTransformHarness,
 		},
-		Atomic:        true,
-		RetireHarness: r.retiredHarness(),
-		ToolVersion:   r.s.deps.ToolVersion,
+		Atomic:         true,
+		PruneEmptyDirs: isOpenCodePair(r.srcID, r.tgtID),
+		RetireHarness:  r.retiredHarness(),
+		ToolVersion:    r.s.deps.ToolVersion,
 	})
 	if err != nil {
 		return res, err

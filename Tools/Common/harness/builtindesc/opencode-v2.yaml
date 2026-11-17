@@ -1,0 +1,211 @@
+schema_version: "1"
+id: "opencode-v2"
+display_name: "OpenCode V2"
+experimental:
+  reason: "Everything is supported, but the harness is not yet tested."
+transform_version: "1.0.0"
+
+cli:
+  label: "OpenCode V2 CLI"
+  loading_mechanism: "name"
+models:
+  ids:
+    - "github-copilot/claude-opus-5.5"
+    - "github-copilot/claude-sonnet-5.5"
+    - "github-copilot/claude-haiku-5.5"
+    - "github-copilot/claude-fable-5-1"
+    - "github-copilot/claude-fable-5"
+    - "github-copilot/claude-sonnet-5"
+    - "github-copilot/claude-opus-5"
+    - "github-copilot/claude-opus-4.8"
+    - "github-copilot/claude-sonnet-4.6"
+    - "github-copilot/claude-haiku-4.5"
+    - "openai/gpt-6.1-sol"
+    - "openai/gpt-6-sol"
+    - "openai/gpt-6-astra"
+    - "openai/gpt-6-luna"
+    - "openai/gpt-5.6-luna"
+    - "openai/gpt-5.6-terra"
+    - "openai/gpt-5.6-sol"
+    - "anthropic/claude-opus-5-5"
+    - "anthropic/claude-sonnet-5-5"
+    - "anthropic/claude-fable-5"
+    - "anthropic/claude-sonnet-5"
+    - "anthropic/claude-opus-5"
+    - "anthropic/claude-opus-4-8"
+    - "anthropic/claude-opus-4-7"
+    - "anthropic/claude-opus-4-6"
+    - "anthropic/claude-sonnet-4-6"
+    - "anthropic/claude-sonnet-4-5"
+    - "anthropic/claude-haiku-4-5"
+  format_hint: "provider/model-id[#variant]"
+tools:
+  shape: rules
+  rules:
+    leading:
+      - {action: "*", resource: "*", effect: deny}
+    trailing:
+      - {action: external_directory, resource: "*", effect: ask}
+  mcp:
+    server_form: "{server}_*"
+    tool_form: "{server}_{tool}"
+    extra_server_read_forms:
+      - "{server}*"
+    normalize_server_name: true
+  universe:
+    - name: "read"
+      unused: deny
+      by_convention: false
+    - name: "write"
+      action: "edit"
+      unused: deny
+      by_convention: false
+    - name: "edit"
+      unused: deny
+      by_convention: false
+    - name: "patch"
+      action: "edit"
+      unused: deny
+      by_convention: false
+    - name: "glob"
+      unused: deny
+      by_convention: false
+    - name: "grep"
+      unused: deny
+      by_convention: false
+    - name: "shell"
+      unused: deny
+      by_convention: false
+    - name: "webfetch"
+      unused: deny
+      by_convention: false
+    - name: "websearch"
+      unused: deny
+      by_convention: false
+    - name: "question"
+      unused: deny
+      by_convention: false
+    - name: "skill"
+      unused: deny
+      by_convention: false
+    - name: "subagent"
+      unused: deny
+      by_convention: false
+    - name: "execute"
+      unused: deny
+      by_convention: false
+  mappings:
+    - generic: "file_read"
+      destinations:
+        - to: main
+          names:
+            - "read"
+    - generic: "file_write"
+      destinations:
+        - to: main
+          names:
+            - "write"
+            - "patch"
+    - generic: "file_edit"
+      destinations:
+        - to: main
+          names:
+            - "edit"
+            - "patch"
+    - generic: "file_search"
+      destinations:
+        - to: main
+          names:
+            - "glob"
+    - generic: "content_search"
+      destinations:
+        - to: main
+          names:
+            - "grep"
+    - generic: "terminal"
+      destinations:
+        - to: main
+          names:
+            - "shell"
+    - generic: "user_interaction"
+      destinations:
+        - to: main
+          names:
+            - "question"
+    - generic: "subagent"
+      destinations:
+        - to: main
+          names:
+            - "subagent"
+    - generic: "skill"
+      destinations:
+        - to: main
+          names:
+            - "skill"
+    - generic: "web_fetch"
+      destinations:
+        - to: main
+          names:
+            - "webfetch"
+    - generic: "web_search"
+      destinations:
+        - to: main
+          names:
+            - "websearch"
+  placeholder_expansion:
+    - "read"
+    - "write"
+    - "edit"
+    - "glob"
+    - "grep"
+    - "shell"
+    - "question"
+    - "subagent"
+
+paths:
+  agents:
+    supported: true
+    project: ".opencode/agents"
+  skills:
+    supported: true
+    project: ".opencode/skills"
+  hooks:
+    supported: true
+    project: ".opencode/plugins"
+
+extensions:
+  agent: ".md"
+
+frontmatter:
+  model_key: "model"
+  tools_key: "permissions"
+  drop:
+    - "name"
+    - "recommended_tier"
+    - "tier_rationale"
+    - "required_skills"
+    - "tools"
+    - "infrastructure"
+    - "triggers"
+    - "on_failure"
+    - "permission"
+  add:
+    - key: "mode"
+      value_by_role:
+        subagent: subagent
+        orchestrator: primary
+        utility: primary
+        standalone: primary
+  key_order:
+    - "mosaic_id"
+    - "version"
+    - "mosaic_transform_version"
+    - "mosaic_injections_version"
+    - "description"
+    - "mode"
+    - "model"
+    - "permissions"
+
+hooks:
+  supported: true
+  variant_key: "opencode-v2"

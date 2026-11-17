@@ -18,6 +18,8 @@ type Descriptor struct {
 	AgentFormatID  string  // resolved: "markdown" when agent_format_id absent
 	Models         *Models // nil when no models block
 	CLI            *CLI    // nil when not CLI-backed
+
+	ExperimentalReason string // experimental.reason, verbatim; "" when absent
 }
 
 // Models is the descriptor's model data.

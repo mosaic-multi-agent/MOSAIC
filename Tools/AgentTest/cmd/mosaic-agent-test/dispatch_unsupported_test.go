@@ -60,6 +60,20 @@ func TestUnsupportedHarnesses_ContainsCodex_SupportedDoesNot(t *testing.T) {
 	}
 }
 
+func TestUnsupportedHarnesses_DoesNotContainOpenCodeV2(t *testing.T) {
+	for _, e := range unsupportedHarnesses() {
+		if e.ID == commonharness.HarnessIDOpenCodeV2 {
+			t.Error("unsupportedHarnesses() still names opencode-v2; it is supported")
+		}
+	}
+	if _, err := newAdapter(commonharness.HarnessIDOpenCodeV2, adapterOptions{}); errors.Is(err, ErrUnsupportedHarness) {
+		t.Errorf("newAdapter(opencode-v2) error = %v, want it not to be the not-supported refusal", err)
+	}
+	if _, err := decoderFor(commonharness.HarnessIDOpenCodeV2); errors.Is(err, ErrUnsupportedHarness) {
+		t.Errorf("decoderFor(opencode-v2) error = %v, want it not to be the not-supported refusal", err)
+	}
+}
+
 func TestNewAdapter_Codex_IsUnsupportedNotUnknown_NamesCodex(t *testing.T) {
 	adapter, err := newAdapter(commonharness.HarnessIDCodex, adapterOptions{})
 

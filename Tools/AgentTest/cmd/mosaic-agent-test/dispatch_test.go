@@ -22,6 +22,7 @@ import (
 	commonharness "mosaic-common/harness"
 
 	"mosaic-agent-test/internal/harness/opencode"
+	"mosaic-agent-test/internal/harness/opencodev2"
 )
 
 func TestNewAdapter_OpenCode_ResolvesToOpenCodeAdapter(t *testing.T) {
@@ -50,6 +51,90 @@ func TestDecoderFor_OpenCode_MatchesOpenCodePackagesDecoder(t *testing.T) {
 	wantName := runtime.FuncForPC(reflect.ValueOf(opencode.DecodeEnvelope).Pointer()).Name()
 	if gotName != wantName {
 		t.Errorf("decoderFor(%q) = %s, want the adapter's own opencode.DecodeEnvelope (%s)", opencode.HarnessID, gotName, wantName)
+	}
+}
+
+func TestNewAdapter_OpenCodeV2_ResolvesToOpenCodeV2Adapter(t *testing.T) {
+	adapter, err := newAdapter(opencodev2.HarnessID, adapterOptions{})
+	if err != nil {
+		t.Fatalf("newAdapter(%q, ...) returned an error: %v", opencodev2.HarnessID, err)
+	}
+	if adapter == nil {
+		t.Fatal("newAdapter returned a nil adapter with a nil error")
+	}
+	if got := adapter.ID(); got != opencodev2.HarnessID {
+		t.Errorf("adapter.ID() = %q, want %q", got, opencodev2.HarnessID)
+	}
+	if _, isV2 := adapter.(*opencodev2.Adapter); !isV2 {
+		t.Errorf("newAdapter(%q) returned %T, want *opencodev2.Adapter", opencodev2.HarnessID, adapter)
+	}
+}
+
+func TestDecoderFor_OpenCodeV2_MatchesOpenCodeV2PackagesDecoder(t *testing.T) {
+	dec, err := decoderFor(opencodev2.HarnessID)
+	if err != nil {
+		t.Fatalf("decoderFor(%q) returned an error: %v", opencodev2.HarnessID, err)
+	}
+	if dec == nil {
+		t.Fatal("decoderFor returned a nil decoder with a nil error")
+	}
+
+	gotName := runtime.FuncForPC(reflect.ValueOf(dec).Pointer()).Name()
+	wantName := runtime.FuncForPC(reflect.ValueOf(opencodev2.DecodeEnvelope).Pointer()).Name()
+	if gotName != wantName {
+		t.Errorf("decoderFor(%q) = %s, want the adapter's own opencodev2.DecodeEnvelope (%s)", opencodev2.HarnessID, gotName, wantName)
+	}
+}
+
+// TestSupportedHarnesses_OfferOpenCodeV2InCatalogOrderWithItsLabel verifies
+// opencode-v2 is a supported harness: listed after opencode, with the catalog
+// label the frontends show.
+func TestSupportedHarnesses_OfferOpenCodeV2InCatalogOrderWithItsLabel(t *testing.T) {
+	var ids []string
+	var label string
+	for _, e := range supportedHarnesses() {
+		ids = append(ids, e.ID)
+		if e.ID == opencodev2.HarnessID {
+			label = e.Label
+		}
+	}
+
+	want := []string{commonharness.HarnessIDClaudeCode, commonharness.HarnessIDOpenCode, commonharness.HarnessIDOpenCodeV2}
+	if !reflect.DeepEqual(ids, want) {
+		t.Errorf("supportedHarnesses() ids = %v, want %v", ids, want)
+	}
+	if label != "OpenCode V2 CLI" {
+		t.Errorf("opencode-v2 label = %q, want %q", label, "OpenCode V2 CLI")
+	}
+	if !isSupportedHarness(commonharness.HarnessIDOpenCodeV2) {
+		t.Error("isSupportedHarness(opencode-v2) = false, want true")
+	}
+}
+
+func TestSupportedModelCatalogs_IncludeOpenCodeV2(t *testing.T) {
+	for _, cat := range supportedModelCatalogs() {
+		if cat.HarnessID == commonharness.HarnessIDOpenCodeV2 {
+			return
+		}
+	}
+	t.Error("supportedModelCatalogs() has no catalog for opencode-v2")
+}
+
+func TestFrontendHarnessLists_OfferOpenCodeV2(t *testing.T) {
+	cli := cliOptions(Deps{}, io.Discard, io.Discard)
+	tui, err := tuiOptions(Deps{WorkspaceRoot: "placeholder", HarnessFactory: fakeHarnessFactory{}, HarnessID: "claude-code"}, nil)
+	if err != nil {
+		t.Fatalf("tuiOptions: %v", err)
+	}
+
+	for name, offered := range map[string][]commonharness.CLIHarness{"CLI": cli.Harnesses, "TUI": tui.Harnesses} {
+		found := false
+		for _, h := range offered {
+			found = found || h.ID == commonharness.HarnessIDOpenCodeV2
+		}
+		if !found {
+			t.Errorf("%s harness list does not offer opencode-v2: %v", name, offered)
+		}
 	}
 }
 

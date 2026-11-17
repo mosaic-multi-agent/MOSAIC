@@ -230,7 +230,7 @@ Always set `"list"` explicitly: `"block"` for block-style YAML (one item per lin
 
 ## Tools Method: Shape Variants
 
-The `tools` method can use two shapes:
+The `tools` method can use three shapes:
 
 **List shape** (most harnesses): emit a list field with harness tool names.
 ```json
@@ -252,6 +252,8 @@ The `tools` method can use two shapes:
   "resolutions": [{"generic": "file_read", "outcome": "mapped", "harness_tools": ["read_file"]}]
 }
 ```
+
+**Rules shape** (OpenCode V2, experimental): emit one field under the descriptor's tools key whose value is an ordered list of `{action, resource, effect}` rules. The last matching rule wins, so the usual frame is a leading deny-everything rule, one whole-tool allow rule per permission action the agent uses, then trailing fixed rules (for example `external_directory` asks). Tools that share a permission action (for OpenCode V2, `write`, `edit` and `patch` all fall under `edit`) share one allow rule. The shared descriptor mapper builds this from `tools.rules` and the universe `action` fields; see the shape table in [descriptor-schema.md](descriptor-schema.md).
 
 The `resolutions` array must always have one entry per entry in `request.generic`, in the same order.
 

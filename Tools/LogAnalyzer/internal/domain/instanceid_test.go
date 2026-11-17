@@ -126,7 +126,7 @@ func TestIsSubagentLaunchTool_KnownLaunchTools_AnyAsciiCase(t *testing.T) {
 
 func TestIsSubagentLaunchTool_OtherTools_False(t *testing.T) {
 	for _, name := range []string{
-		"", "Read", "Bash", "Edit", "agents", "subagent", "TaskCreate", "task_create",
+		"", "Read", "Bash", "Edit", "agents", "TaskCreate", "task_create",
 		"run_subagent", "Agent ", " agent", "execution", "ToolSearch",
 	} {
 		if domain.IsSubagentLaunchTool(name) {

@@ -5,7 +5,7 @@ last_updated: "2026-10-08"
 # Harness Package
 
 > Part of: mosaic-run
-> Responsibility: Implements the `domain.HarnessAdapter` port for all three supported harnesses (Claude Code, GHCP CLI, OpenCode) plus a `MockAdapter` for test use, and provides protocol serialization helpers.
+> Responsibility: Implements the `domain.HarnessAdapter` port for the supported harnesses (Claude Code, GHCP CLI, OpenCode, Codex, and the experimental OpenCode V2) plus a `MockAdapter` for test use, and provides protocol serialization helpers.
 
 ## Overview
 
@@ -128,6 +128,10 @@ Additional sentinels:
 - A missing `tools` field causes a pre-spawn rejection (`ErrToolsMissing`) for Claude Code and for GHCP CLI in Partial Allowlist mode, but is a no-op for GHCP CLI in Blanket mode and entirely irrelevant for OpenCode. An empty `tools` field (empty scalar, zero-item list) is accepted for both Claude Code and GHCP CLI Partial Allowlist: the adapter sets `ToolsDerived=true` and the invocation proceeds in strict dontAsk/no-ask-user mode with no tool entries.
 - `SpawnRequest.ToolsDerived` disambiguates an empty `DerivedTools` slice: `true` means derivation ran and produced no gated tools (valid); `false` (zero value) means derivation was not performed (backward-compatible guard applies). AgentTest never sets `ToolsDerived` and is unaffected by this signal. Note: OI-7 (Claude Code dontAsk with empty --allowedTools actually denies all tools) is an unverified assumption at implementation time. If Claude Code treats an empty allowlist differently (e.g., grants all tools), the symptom would be unexpected tool access rather than a crash. Surface this during manual testing if agent behavior seems inconsistent with the intent.
 - Context cancellation always returns `ctx.Err()` to the caller, regardless of which harness-level error was originally produced, preserving Runner's existing cancellation semantics.
+
+## OpenCode V2 (experimental)
+
+`opencodev2.OpenCodeV2Adapter` (`harness/opencodev2`) runs every dispatch as one standalone `run` of the agent by id, in the workspace root, with the deployed agent file used in place: no backup-and-transform and no model argument (the file's `model:` applies). Spawn and stream decoding come from `mosaic-common/harness` (`spawn_opencodev2.go`, `envelope_opencodev2.go`); the live activity decoder is `harness/activity/decoder_opencodev2.go` (tool calls, messages and context size, never money cost). The adapter carries a third timeout, the no-output watchdog (`--no-output-timeout`, default 10m via `domain.DefaultNoOutputTimeout`, `0` disables, never applied to HITL dispatches); its expiry wraps `ErrNoOutput` and `ErrTimeout` and is classified before a plain timeout as the `no-output-timeout` harness failure. The Runner marks the harness experimental through the descriptor's experimental reason, and its MOSAIC log writer accepts the `opencode-v2` harness id.
 
 ## OpenCode kill verification
 

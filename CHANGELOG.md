@@ -2,6 +2,13 @@
 
 ## Hooks
 
+### mosaic-logger v1.12.0
+#### Changes
+- **OpenCode V2 (`opencode-v2`, experimental) is a mosaic-logger harness.** The bundle has a new `opencode-v2` variant, a TypeScript plugin deployed to `.opencode/plugins/`, with the logging of the OpenCode variant: sessions, subagent invocations, tool calls, permission evaluations, artifacts written, usage, compactions, Runner-mode invocation ownership and transcripts
+- The plugin never records cost: V2 reports none that can be trusted. LogAnalyzer prices usage itself
+- Under the Runner every record is written synchronously, because the private server of a standalone run exits together with the run. Native mode needs the `opencode` command on the PATH to export transcripts
+- Features V2 gives no signal for, such as re-binding a resumed root session to its run, are listed in the variant's `LIMITATIONS.md`
+
 ### mosaic-logger v1.11.3
 #### Bugfixes
 - In Claude Code, every dispatched agent is now logged under its own instance id, even when it starts before the dispatch hook has finished
@@ -16,6 +23,35 @@
 - Logs that were already written are not repaired
 
 ## Tools
+
+### Runner v1.14.0
+#### Changes
+- **OpenCode V2 is a Runner harness (experimental).** Select `opencode-v2` in the CLI (`--harness opencode-v2`), the TUI and test mode (`mosaic-run test`). The orchestrator is found at `.opencode/agents/orchestrator-script.md`
+- Every dispatch is one standalone `run` of the agent by id, in the workspace root, with the deployed agent file used in place. There is no backup-and-transform of agent files, and the agent file's own `model:` applies
+- New no-output watchdog for `opencode-v2` invocations without human-in-the-loop: an invocation that writes nothing to its output stream for the watchdog time ends like a timeout and is recorded as a `no-output-timeout` harness error. The default is 10 minutes; set it with `--no-output-timeout` (`0` disables) or in the TUI run configuration
+- The live activity panel shows `opencode-v2` tool calls, messages and context size, and no money cost; the cost comes from LogAnalyzer
+- Headless human-in-the-loop on `opencode-v2` needs an ask-the-user MCP server that you supply, because V2 auto-cancels its `question` tool in headless runs
+- `opencode-v2` runs write `run_start` and `run_end` to the MOSAIC log, and an `invocation_end` for an invocation the logger plugin left without one
+- Experimental, with the reason "Everything is supported, but the harness is not yet tested."
+
+### Deploy v1.10.0
+#### Changes
+- **OpenCode V2 is a Deploy harness (experimental).** `opencode-v2` deploys agents to `.opencode/agents`, skills to `.opencode/skills` and the mosaic-logger `opencode-v2` plugin to `.opencode/plugins`. Update, Deploy agents, Deploy hooks, Update workflows and Transform work for it
+- Agents carry V2 `permissions` rules: deny by default, then one allow per declared tool, and access outside the workspace asks. Declaring file write or file edit allows `write`, `edit` and `patch` together. Every agent gets an explicit `mode`
+- Deploy writes no `opencode.json` for `opencode-v2`; you select the orchestrator in the V2 TUI
+- **A workspace holds one OpenCode target, `opencode` or `opencode-v2`.** Both write to `.opencode/`, so the manifest entries decide. A run that would add the other target is refused before anything is asked or written, and the message names the Transform command. A workspace that holds both is refused until you remove one by hand
+- Transform moves a workspace between `opencode` and `opencode-v2` in both directions, replacing the source in place: recorded agents are overwritten, skills are kept, source plugin files the target does not write are removed, and replaced files are backed up under `.mosaic/backups/`
+- A tool mapping for `opencode-v2` in `tool_destinations` lets agents declare an MCP ask tool, which V2 otherwise denies
+- The descriptor schema has a new tool shape, `rules`, an ordered permission rule list with fixed leading and trailing rules and a permission action per tool
+
+### AgentTest v1.3.0
+#### Changes
+- **`mosaic-agent-test` supports `--harness opencode-v2` (experimental).** It drives OpenCode V2 headlessly through the same spawn path as the Runner and intercepts collaborator invocations with a generated plugin. The existing OpenCode suites run on it
+
+### LogAnalyzer v1.4.0
+#### Changes
+- **`opencode-v2` is a LogAnalyzer harness (experimental).** Identity, built-in tools, settings template and harness keys, integrity checks, usage, cost and context size work for `opencode-v2` logs. Usage is read from the plugin's usage records
+- LogAnalyzer reads the V2 `session export` transcripts (`{info, messages}`) and follows child sessions through the dispatching `subagent` call
 
 ### Runner v1.13.0
 #### Changes

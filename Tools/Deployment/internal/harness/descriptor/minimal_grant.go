@@ -140,6 +140,24 @@ func RenderMinimalToolGrant(m domain.HarnessModule, agentKey string) (MinimalGra
 	return grant, nil
 }
 
+// listGrantsSomething reports whether a list value grants anything: a list of scalars grants
+// when it has an item; a list of rule mappings grants only when a rule has the effect allow,
+// because a list of deny and ask rules grants nothing.
+func listGrantsSomething(v domain.FieldValue) bool {
+	for _, item := range v.Items {
+		if item.Kind != domain.KindMapping {
+			return true
+		}
+		for _, pair := range item.Pairs {
+			if pair.Key == "effect" && pair.Value.Kind == domain.KindScalar &&
+				pair.Value.Scalar == string(domain.EffectAllow) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // isEmptyInTargetSyntax reports whether a field value is empty in the syntax the
 // target harness actually emits. The check routes through the emitted Kind rather
 // than the descriptor's declared shape, because Claude Code declares shape: list
@@ -161,7 +179,7 @@ func isEmptyInTargetSyntax(v domain.FieldValue) bool {
 	case domain.KindScalar:
 		return strings.TrimSpace(v.Scalar) == ""
 	case domain.KindList:
-		return len(v.Items) == 0
+		return !listGrantsSomething(v)
 	case domain.KindMapping:
 		allowStr := string(domain.Allow)
 		for _, pair := range v.Pairs {

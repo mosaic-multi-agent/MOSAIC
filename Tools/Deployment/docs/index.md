@@ -106,6 +106,7 @@ The following harnesses are compiled into the `mosaic-deploy` binary:
 | `ghcp-cli` | GHCP CLI / VS Code GHCP Copilot | List-shape tool mapping |
 | `vscode-ghcp` | VS Code GHCP Local | List-shape tool mapping |
 | `codex` | Codex (experimental) | Agent files are TOML (not Markdown); skills resolved from shared `.agents/skills` root; tool grants rendered through the harness module (sandbox_mode, web_search, network access) rather than the shared mapper; the agent-format layer is shared from `Tools/Common` |
+| `opencode-v2` | OpenCode V2 (experimental) | Rules-shape tool mapping (ordered permission rules, deny by default); one OpenCode target per workspace, either `opencode` or `opencode-v2`; Transform moves between them; Deploy writes no `opencode.json` |
 
 Third-party harnesses use the descriptor-only or external module tier. See the
 [Harness Contributor Guide](harness-contributor-guide.md).

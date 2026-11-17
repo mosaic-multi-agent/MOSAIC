@@ -1,0 +1,12 @@
+schema_version: "1"
+id: fixture-logger-no-v2
+version: 0.1.0
+description: Fixture bundle with only an opencode variant.
+
+variants:
+  opencode:
+    supported: true
+    files:
+      - source: plugin.ts
+        target: mosaic-logger.ts
+    registration: []
