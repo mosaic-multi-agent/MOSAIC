@@ -1,0 +1,794 @@
+{
+  "_meta": {
+    "harness": "Codex",
+    "harnessVersion": "v0.170.0",
+    "context": "Subagent session",
+    "captured": "2026-11-18",
+    "source": "SystemPrompt-clean.md in this folder",
+    "note": "Built-in tools only. MCP tools excluded."
+  },
+  "tools": [
+    {
+      "name": "apply_patch",
+      "description": "The `apply_patch` tool can be used to edit files. This is a FREEFORM tool, so do not wrap the patch in JSON.\n\nexec tool declaration:\n```ts\ndeclare const tools: { apply_patch(input: string): Promise<unknown>; };\n```",
+      "parameters": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "clock__curr_time",
+      "description": "Return the current time in UTC.\n\nTools for reading and waiting on time.\n\nexec tool declaration:\n```ts\ndeclare const tools: { clock__curr_time(args: {}): Promise<{\n  // Current UTC time formatted as YYYY-MM-DD HH:MM:SS UTC.\n  current_time: string;\n}>; };\n```",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "clock.sleep",
+      "description": "Pause execution for a specified duration. The sleep ends early when new input arrives for the active turn. Returns the elapsed wall-clock time.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "duration_ms": {
+            "type": "number",
+            "description": "How long to sleep in milliseconds. Must be between 1 and 43200000."
+          }
+        },
+        "required": [
+          "duration_ms"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "collaboration.followup_task",
+      "description": "Send a follow-up task to an existing non-root target agent and trigger a turn if it is idle. If the target is already running, deliver the task promptly at message boundaries while sampling, or after the pending tool call completes.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Message text to send to the target agent.",
+            "encrypted": true
+          },
+          "target": {
+            "type": "string",
+            "description": "Agent id or canonical task name to send a follow-up task to (from spawn_agent)."
+          }
+        },
+        "required": [
+          "target",
+          "message"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "collaboration.interrupt_agent",
+      "description": "Interrupt an agent's current turn, if any, and return its previous status. The agent remains available for messages and follow-up tasks.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "description": "Agent id or canonical task name to interrupt (from spawn_agent)."
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "collaboration.list_agents",
+      "description": "List live agents in the current root thread tree. Optionally filter by task-path prefix.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path_prefix": {
+            "type": "string",
+            "description": "Task-path prefix filter without a trailing slash. Omit to list all live agents."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "collaboration.send_message",
+      "description": "Send a message to an existing agent. The message will be delivered promptly. Does not trigger a new turn.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Message text to queue on the target agent.",
+            "encrypted": true
+          },
+          "target": {
+            "type": "string",
+            "description": "Relative or canonical task name to message (from spawn_agent)."
+          }
+        },
+        "required": [
+          "target",
+          "message"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "collaboration.spawn_agent",
+      "description": "\n        Available model overrides (optional; inherited parent model is preferred):\n- `gpt-6.2-sol`: Fast, go-to model for coding and everyday work. Reasoning efforts: low (default), medium, high, xhigh, max, ultra. Service tiers: priority.\n- `gpt-6.2-astra`: Our most capable model for complex coding and professional work. Reasoning efforts: low (default), medium, high, xhigh, max, ultra. Service tiers: priority.\n- `gpt-6.1-terra`: Efficient model that excels at visual understanding and computer use. Reasoning efforts: low (default), medium, high, xhigh, max, ultra. Service tiers: priority.\n- `gpt-6.1-sol`: Previous generation model for coding and everyday work. Reasoning efforts: low (default), medium, high, xhigh, max, ultra. Service tiers: priority.\n- `gpt-6-astra`: Previous generation model for complex coding and professional work. Reasoning efforts: low (default), medium, high, xhigh, max, ultra. Service tiers: priority.\n        Spawns an agent to work on the specified task. If your current task is `/root/task1` and you spawn_agent with task_name \"task_3\" the agent will have canonical task name `/root/task1/task_3`.\nYou are then able to refer to this agent as `task_3` or `/root/task1/task_3` interchangeably. However an agent `/root/task2/task_3` would only be able to communicate with this agent via its canonical name `/root/task1/task_3`.\nThe spawned agent will have the same tools as you and the ability to spawn its own subagents.\n\nIt will be able to send you and other running agents messages, and its final answer will be provided to you when it finishes.\nThe new agent's canonical task name will be provided to it along with the message.\n\nNote that passing `fork_turns=\"none\"` will not pass any surrounding context to the spawned subagent, which may cause the agent to lack the context it needs to complete its task, whereas `fork_turns=\"all\"` will provide the subagent with all surrounding context.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "agent_type": {
+            "type": "string",
+            "description": "Agent type override for the new agent. Omit unless explicitly asked. The selected role applies regardless of how much parent history is inherited.\nAvailable roles:\nsystem-prompt-capturer: {\nCaptures and maintains harness-injected system prompts, built-in tool definitions, and tool output format documentation following the SystemPromptCaptureGuide\n- This role's model is set to `gpt-6-sol` and cannot be changed.\n}\ndefault: {\nDefault agent.\n}\nexplorer: {\nUse `explorer` for specific codebase questions.\nExplorers are fast and authoritative.\nThey must be used to ask specific, well-scoped questions on the codebase.\nRules:\n- In order to avoid redundant work, you should avoid exploring the same problem that explorers have already covered. Typically, you should trust the explorer results without additional verification. You are still allowed to inspect the code yourself to gain the needed context!\n- You are encouraged to spawn up multiple explorers in parallel when you have multiple distinct questions to ask about the codebase that can be answered independently. This allows you to get more information faster without waiting for one question to finish before asking the next. While waiting for the explorer results, you can continue working on other local tasks that do not depend on those results. This parallelism is a key advantage of delegation, so use it whenever you have multiple questions to ask.\n- Reuse existing explorers for related questions.\n}\nworker: {\nUse for execution and production work.\nTypical tasks:\n- Implement part of a feature\n- Fix tests or bugs\n- Split large refactors into independent chunks\nRules:\n- Explicitly assign **ownership** of the task (files / responsibility). When the subtask involves code changes, you should clearly specify which files or modules the worker is responsible for. This helps avoid merge conflicts and ensures accountability. For example, you can say \"Worker 1 is responsible for updating the authentication module, while Worker 2 will handle the database layer.\" By defining clear ownership, you can delegate more effectively and reduce coordination overhead.\n- Always tell workers they are **not alone in the codebase**, and they should not revert the edits made by others, and they should adjust their implementation to accommodate the changes made by others. This is important because there may be multiple workers making changes in parallel, and they need to be aware of each other's work to avoid conflicts and ensure a cohesive final product.\n}"
+          },
+          "fork_turns": {
+            "type": "string",
+            "description": "Parent history to inherit. Defaults to `all`; use `none` to start without parent history. Only `all` and `none` are supported."
+          },
+          "message": {
+            "type": "string",
+            "description": "Initial plain-text task for the new agent.",
+            "encrypted": true
+          },
+          "model": {
+            "type": "string",
+            "description": "Model override for the new agent. Omit unless an explicit override is needed."
+          },
+          "reasoning_effort": {
+            "type": "string",
+            "description": "Reasoning effort override for the new agent. Omit to inherit the parent effort."
+          },
+          "task_name": {
+            "type": "string",
+            "description": "Task name for the new agent. Use lowercase letters, digits, and underscores."
+          }
+        },
+        "required": [
+          "task_name",
+          "message"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "collaboration.wait_agent",
+      "description": "Wait for a mailbox update from any live agent, including queued messages and final-status notifications. The wait also ends early when new user input is steered into the active turn. Does not return the content; returns either a summary of which agents have updates (if any), an interruption summary for steered input, or a timeout summary if no activity arrives before the deadline.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "timeout_ms": {
+            "type": "number",
+            "description": "Timeout in milliseconds. Defaults to 30000, min 10000, max 3600000."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "create_goal",
+      "description": "Create a goal only when explicitly requested by the user or system/developer instructions; do not infer goals from ordinary tasks.\nSet token_budget only when an explicit token budget is requested. Fails if an unfinished goal exists; use update_goal only for status.\n\nexec tool declaration:\n```ts\ndeclare const tools: { create_goal(args: {\n  // Required. The concrete objective to start pursuing. This starts a new active goal when no goal exists or replaces the current goal when it is complete.\n  objective: string;\n  // Positive token budget for the new goal. Omit unless explicitly requested.\n  token_budget?: number;\n}): Promise<unknown>; };\n```",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "objective": {
+            "type": "string"
+          },
+          "token_budget": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "objective"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "exec_command",
+      "description": "Runs a command in a PTY, returning output or a session ID for ongoing interaction.\n\nWindows safety rules:\n- Do not compose destructive filesystem commands across shells. Do not enumerate paths in PowerShell and then pass them to `cmd /c`, batch builtins, or another shell for deletion or moving. Use one shell end-to-end, prefer native PowerShell cmdlets such as `Remove-Item` / `Move-Item` with `-LiteralPath`, and avoid string-built shell commands for file operations.\n- Before any recursive delete or move on Windows, verify the resolved absolute target paths stay within the intended workspace or explicitly named target directory. Never issue a recursive delete or move against a computed path if the final target has not been checked.\n- When using `Start-Process` to launch a background helper or service, pass `-WindowStyle Hidden` unless the user explicitly asked for a visible interactive window. Use visible windows only for interactive tools the user needs to see or control.\n\nexec tool declaration:\n```ts\ndeclare const tools: { exec_command(args: {\n  // Shell command to execute.\n  cmd: string;\n  // User-facing approval question for `require_escalated`; omit otherwise.\n  justification?: string;\n  // True runs the shell with -l/-i semantics; false disables them. Defaults to true.\n  login?: boolean;\n  // Output token budget. Defaults to 10000 tokens; larger requests may be capped by policy.\n  max_output_tokens?: number;\n  // Reusable approval prefix for `cmd`, only with `sandbox_permissions: \"require_escalated\"`; for example [\"git\", \"pull\"].\n  prefix_rule?: Array<string>;\n  // Per-command sandbox override. Defaults to `use_default`; use `require_escalated` for unsandboxed execution.\n  sandbox_permissions?: \"use_default\" | \"require_escalated\";\n  // Shell binary to launch. Defaults to the user's default shell.\n  shell?: string;\n  // True allocates a PTY for the command; false or omitted uses plain pipes.\n  tty?: boolean;\n  // Working directory for the command. Defaults to the turn cwd.\n  workdir?: string;\n  // Maximum time to wait before returning a session ID for a still-running command. Commands that finish sooner return immediately. For ordinary commands, omit this parameter to use the 10000 ms default. Effective range on Windows is 10000-30000 ms.\n  yield_time_ms?: number;\n}): Promise<{\n  // Chunk identifier included when the response reports one.\n  chunk_id?: string;\n  // Process exit code when the command finished during this call.\n  exit_code?: number;\n  // Approximate token count before output truncation.\n  original_token_count?: number;\n  // Command output text, possibly truncated.\n  output: string;\n  // Session identifier to pass to write_stdin when the process is still running.\n  session_id?: number;\n  // Elapsed wall time spent waiting for output in seconds.\n  wall_time_seconds: number;\n}>; };\n```",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "cmd": {
+            "type": "string"
+          },
+          "justification": {
+            "type": "string"
+          },
+          "login": {
+            "type": "boolean"
+          },
+          "max_output_tokens": {
+            "type": "number"
+          },
+          "prefix_rule": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sandbox_permissions": {
+            "enum": [
+              "use_default",
+              "require_escalated"
+            ]
+          },
+          "shell": {
+            "type": "string"
+          },
+          "tty": {
+            "type": "boolean"
+          },
+          "workdir": {
+            "type": "string"
+          },
+          "yield_time_ms": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "cmd"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "functions.exec",
+      "description": "Run JavaScript code to orchestrate/compose tool calls\n- Evaluates the provided JavaScript code in a fresh V8 isolate as an async module.\n- All nested tools are available on the global `tools` object, for example `await tools.exec_command(...)`. Tool names are exposed as normalized JavaScript identifiers, for example `await tools.mcp__ologs__get_profile(...)`.\n- Nested tool methods take either a string or an object as their input argument.\n- Nested tools return either an object or a string, based on the description.\n- Runs raw JavaScript -- no Node, no file system, no network access, no console.\n- Accepts raw JavaScript source text, not JSON, quoted strings, or markdown code fences.\n- You may optionally start the tool input with a first-line pragma like `// @exec: {\"yield_time_ms\": 10000, \"max_output_tokens\": 1000}`.\n- `yield_time_ms` asks `exec` to yield early if the script is still running. Defaults to 30000 ms.\n- `max_output_tokens` sets the token budget for direct `exec` results. Defaults to 10000 tokens.\n- When the JS code is fully evaluated, the isolate's lifetime ends and unawaited promises are silently discarded.\n\n- Global helpers:\n- `exit()`: Immediately ends the current script successfully (like an early return from the top level).\n- `text(value: string | number | boolean | undefined | null)`: Appends a text item. Non-string values are stringified with `JSON.stringify(...)` when possible.\n- `image(imageUrlOrItem: string | { image_url: string } | ImageContent)`: Appends an image item. `image_url` should be a base64-encoded `data:` URL. To forward an MCP tool image, pass an individual `ImageContent` block from `result.content`, for example `image(result.content[0])`.\n- `audio(audioUrlOrItem: string | { audio_url: string } | AudioContent)`: Appends an audio item. `audio_url` should be a base64-encoded `data:` URL. To forward an MCP tool audio block, pass an individual `AudioContent` block from `result.content`, for example `audio(result.content[0])`.\n- `generatedImage(result: { image_url: string; output_hint?: string })`: Appends an image-generation result and its optional output hint. HTTP(S) URLs are not supported.\n- `store(key: string, value: any)`: stores a serializable value under a string key for later `exec` calls in the same session.\n- `load(key: string)`: returns the stored value for a string key, or `undefined` if it is missing.\n- `notify(value: string | number | boolean | undefined | null)`: immediately injects an extra `custom_tool_call_output` for the current `exec` call. Values are stringified like `text(...)`.\n- `setTimeout(callback: () => void, delayMs?: number)`: schedules a callback to run later and returns a timeout id. Pending timeouts do not keep `exec` alive by themselves; await an explicit promise if you need to wait for one.\n- `clearTimeout(timeoutId?: number)`: cancels a timeout created by `setTimeout`.\n- `ALL_TOOLS`: metadata for the enabled nested tools as `{ name, description }` entries.\n- `yield_control()`: yields the accumulated output to the model immediately while the script keeps running.\n\nSome deferred nested tools may be omitted from this description. They are still available on the global `tools` object and listed in `ALL_TOOLS`.\nTo find one, filter `ALL_TOOLS` by `name` and `description`.\n\nTool availability can change between calls.\n\nShared MCP Types:\n```ts\ntype Role = \"user\" | \"assistant\";\ntype MetaObject = Record<string, unknown>;\ntype Annotations = {\n  audience?: Role[];\n  priority?: number;\n  lastModified?: string;\n};\ntype Icon = {\n  src: string;\n  mimeType?: string;\n  sizes?: string[];\n  theme?: \"light\" | \"dark\";\n};\ntype TextResourceContents = {\n  uri: string;\n  mimeType?: string;\n  _meta?: MetaObject;\n  text: string;\n};\ntype BlobResourceContents = {\n  uri: string;\n  mimeType?: string;\n  _meta?: MetaObject;\n  blob: string;\n};\ntype TextContent = {\n  type: \"text\";\n  text: string;\n  annotations?: Annotations;\n  _meta?: MetaObject;\n};\ntype ImageContent = {\n  type: \"image\";\n  data: string;\n  mimeType: string;\n  annotations?: Annotations;\n  _meta?: MetaObject;\n};\ntype AudioContent = {\n  type: \"audio\";\n  data: string;\n  mimeType: string;\n  annotations?: Annotations;\n  _meta?: MetaObject;\n};\ntype ResourceLink = {\n  icons?: Icon[];\n  name: string;\n  title?: string;\n  uri: string;\n  description?: string;\n  mimeType?: string;\n  annotations?: Annotations;\n  size?: number;\n  _meta?: MetaObject;\n  type: \"resource_link\";\n};\ntype EmbeddedResource = {\n  type: \"resource\";\n  resource: TextResourceContents | BlobResourceContents;\n  annotations?: Annotations;\n  _meta?: MetaObject;\n};\ntype ContentBlock =\n  | TextContent\n  | ImageContent\n  | AudioContent\n  | ResourceLink\n  | EmbeddedResource;\ntype CallToolResult<TStructured = { [key: string]: unknown }> = {\n  _meta?: MetaObject;\n  content: ContentBlock[];\n  isError?: boolean;\n  structuredContent?: TStructured;\n  [key: string]: unknown;\n};\n```\n\n### `apply_patch`\nThe `apply_patch` tool can be used to edit files. This is a FREEFORM tool, so do not wrap the patch in JSON.\n\nexec tool declaration:\n```ts\ndeclare const tools: { apply_patch(input: string): Promise<unknown>; };\n```\n\n### `create_goal`\nCreate a goal only when explicitly requested by the user or system/developer instructions; do not infer goals from ordinary tasks.\nSet token_budget only when an explicit token budget is requested. Fails if an unfinished goal exists; use update_goal only for status.\n\nexec tool declaration:\n```ts\ndeclare const tools: { create_goal(args: {\n  // Required. The concrete objective to start pursuing. This starts a new active goal when no goal exists or replaces the current goal when it is complete.\n  objective: string;\n  // Positive token budget for the new goal. Omit unless explicitly requested.\n  token_budget?: number;\n}): Promise<unknown>; };\n```\n\n### `exec_command`\nRuns a command in a PTY, returning output or a session ID for ongoing interaction.\n\nWindows safety rules:\n- Do not compose destructive filesystem commands across shells. Do not enumerate paths in PowerShell and then pass them to `cmd /c`, batch builtins, or another shell for deletion or moving. Use one shell end-to-end, prefer native PowerShell cmdlets such as `Remove-Item` / `Move-Item` with `-LiteralPath`, and avoid string-built shell commands for file operations.\n- Before any recursive delete or move on Windows, verify the resolved absolute target paths stay within the intended workspace or explicitly named target directory. Never issue a recursive delete or move against a computed path if the final target has not been checked.\n- When using `Start-Process` to launch a background helper or service, pass `-WindowStyle Hidden` unless the user explicitly asked for a visible interactive window. Use visible windows only for interactive tools the user needs to see or control.\n\nexec tool declaration:\n```ts\ndeclare const tools: { exec_command(args: {\n  // Shell command to execute.\n  cmd: string;\n  // User-facing approval question for `require_escalated`; omit otherwise.\n  justification?: string;\n  // True runs the shell with -l/-i semantics; false disables them. Defaults to true.\n  login?: boolean;\n  // Output token budget. Defaults to 10000 tokens; larger requests may be capped by policy.\n  max_output_tokens?: number;\n  // Reusable approval prefix for `cmd`, only with `sandbox_permissions: \"require_escalated\"`; for example [\"git\", \"pull\"].\n  prefix_rule?: Array<string>;\n  // Per-command sandbox override. Defaults to `use_default`; use `require_escalated` for unsandboxed execution.\n  sandbox_permissions?: \"use_default\" | \"require_escalated\";\n  // Shell binary to launch. Defaults to the user's default shell.\n  shell?: string;\n  // True allocates a PTY for the command; false or omitted uses plain pipes.\n  tty?: boolean;\n  // Working directory for the command. Defaults to the turn cwd.\n  workdir?: string;\n  // Maximum time to wait before returning a session ID for a still-running command. Commands that finish sooner return immediately. For ordinary commands, omit this parameter to use the 10000 ms default. Effective range on Windows is 10000-30000 ms.\n  yield_time_ms?: number;\n}): Promise<{\n  // Chunk identifier included when the response reports one.\n  chunk_id?: string;\n  // Process exit code when the command finished during this call.\n  exit_code?: number;\n  // Approximate token count before output truncation.\n  original_token_count?: number;\n  // Command output text, possibly truncated.\n  output: string;\n  // Session identifier to pass to write_stdin when the process is still running.\n  session_id?: number;\n  // Elapsed wall time spent waiting for output in seconds.\n  wall_time_seconds: number;\n}>; };\n```\n\n### `get_goal`\nGet the current goal for this thread, including status, budgets, token and elapsed-time usage, and remaining token budget.\n\nexec tool declaration:\n```ts\ndeclare const tools: { get_goal(args: {}): Promise<unknown>; };\n```\n\n### `list_mcp_resource_templates`\nLists resource templates provided by MCP servers. Parameterized resource templates allow servers to share data that takes parameters and provides context to language models, such as files, database schemas, or application-specific information. Prefer resource templates over web search when possible.\n\nexec tool declaration:\n```ts\ndeclare const tools: { list_mcp_resource_templates(args: {\n  // Opaque cursor from a previous list_mcp_resource_templates call; omit for the first page.\n  cursor?: string;\n  // MCP server name. Omit to list resource templates from every configured server.\n  server?: string;\n}): Promise<unknown>; };\n```\n\n### `list_mcp_resources`\nLists resources provided by MCP servers. Resources allow servers to share data that provides context to language models, such as files, database schemas, or application-specific information. Prefer resources over web search when possible.\n\nexec tool declaration:\n```ts\ndeclare const tools: { list_mcp_resources(args: {\n  // Opaque cursor from a previous list_mcp_resources call; omit for the first page.\n  cursor?: string;\n  // MCP server name. Omit to list resources from every configured server.\n  server?: string;\n}): Promise<unknown>; };\n```\n\n### `read_mcp_resource`\nRead a specific resource from an MCP server given the server name and resource URI.\n\nexec tool declaration:\n```ts\ndeclare const tools: { read_mcp_resource(args: {\n  // MCP server name exactly as configured. Must match the 'server' field returned by list_mcp_resources.\n  server: string;\n  // Resource URI to read. Must be one of the URIs returned by list_mcp_resources.\n  uri: string;\n}): Promise<unknown>; };\n```\n\n### `request_plugin_install`\n# Suggest a recommended plugin installation\n\nUse this tool only when all of the following are true:\n- The user explicitly asks to use a specific plugin that is not already available in the current context or active `tools` list.\n- Tool search has already been exhausted and did not find or make the requested tool callable.\n- The plugin is listed in `<recommended_plugins>`.\n\nDo not use it for adjacent capabilities, broad recommendations, or plugins that merely seem useful. Briefly explain why the plugin can help with the current request in `suggest_reason`.\n\nIMPORTANT: DO NOT call this tool in parallel with other tools.\n\nexec tool declaration:\n```ts\ndeclare const tools: { request_plugin_install(args: {\n  // The parenthesized plugin ID from the `<recommended_plugins>` list.\n  plugin_id: string;\n  // Concise one-line user-facing reason why this plugin can help with the current request.\n  suggest_reason: string;\n}): Promise<unknown>; };\n```\n\n### `update_goal`\nUpdate the existing goal.\nSet status to `paused` only at the user's explicit request to pause this goal, never on your own initiative. Ask if unclear; a later resume revokes that request. Report the returned status and stop goal work. Budget limits take precedence over pausing.\nSet status to `complete` only when the objective has actually been achieved and no required work remains.\nSet status to `blocked` only when the same blocking condition has repeated for at least three consecutive goal turns, counting the original/user-triggered turn and any automatic continuations, and the agent cannot make meaningful progress without user input or an external-state change.\nIf the user resumes a goal that was previously marked `blocked`, treat the resumed run as a fresh blocked audit. If the same blocking condition then repeats for at least three consecutive resumed goal turns, set status to `blocked` again.\nOnce the blocked threshold is satisfied, do not keep reporting that you are still blocked while leaving the goal active; set status to `blocked`.\nDo not use `blocked` merely because the work is hard, slow, uncertain, incomplete, or would benefit from clarification.\nDo not mark a goal complete merely because its budget is nearly exhausted or because you are stopping work.\nYou cannot use this tool to resume, budget-limit, or usage-limit a goal; those status changes are controlled by the user or system.\nWhen marking a budgeted goal achieved with status `complete`, report the final token usage from the tool result to the user.\n\nexec tool declaration:\n```ts\ndeclare const tools: { update_goal(args: {\n  // Required. `paused` requires an explicit user request. Set to `complete` only when the objective is achieved and no required work remains. Set to `blocked` only after the same blocking condition has recurred for at least three consecutive goal turns and the agent is at an impasse. After a previously blocked goal is resumed, the resumed run starts a fresh blocked audit.\n  status: \"complete\" | \"blocked\" | \"paused\";\n}): Promise<unknown>; };\n```\n\n### `view_image`\nView a local image file from the filesystem when visual inspection is needed. Use this for images already available on disk.\n\nexec tool declaration:\n```ts\ndeclare const tools: { view_image(args: {\n  // Local filesystem path to an image file.\n  path: string;\n}): Promise<{\n  // Data URL for the loaded image.\n  image_url: string;\n}>; };\n```\n\n### `write_stdin`\nWrites characters to an existing unified exec session and returns recent output.\n\nexec tool declaration:\n```ts\ndeclare const tools: { write_stdin(args: {\n  // Bytes to write to stdin. Defaults to empty, which polls without writing.\n  chars?: string;\n  // Output token budget. Defaults to 10000 tokens; larger requests may be capped by policy.\n  max_output_tokens?: number;\n  // Identifier of the running unified exec session.\n  session_id: number;\n  // Wait before yielding output. Non-empty writes default to 250 ms and cap at 30000 ms; empty polls wait 5000-300000 ms by default.\n  yield_time_ms?: number;\n}): Promise<{\n  // Chunk identifier included when the response reports one.\n  chunk_id?: string;\n  // Process exit code when the command finished during this call.\n  exit_code?: number;\n  // Approximate token count before output truncation.\n  original_token_count?: number;\n  // Command output text, possibly truncated.\n  output: string;\n  // Session identifier to pass to write_stdin when the process is still running.\n  session_id?: number;\n  // Elapsed wall time spent waiting for output in seconds.\n  wall_time_seconds: number;\n}>; };\n```\n\n## clock\nTools for reading and waiting on time.\n\n### `clock__curr_time`\nReturn the current time in UTC.\n\nexec tool declaration:\n```ts\ndeclare const tools: { clock__curr_time(args: {}): Promise<{\n  // Current UTC time formatted as YYYY-MM-DD HH:MM:SS UTC.\n  current_time: string;\n}>; };\n```\n\n## image_gen\nTools in the image_gen namespace.\n\n### `image_gen__imagegen`\nThe `image_gen.imagegen` tool enables image generation from descriptions and editing of existing images based on specific instructions. Use it when:\r\n\r\n- The user requests an image based on a scene description, such as a diagram, portrait, comic, meme, or any other visual.\r\n- The user wants to modify an attached or previously generated image with specific changes, including adding or removing elements, altering colors, improving quality/resolution, or transforming the style (e.g., cartoon, oil painting).\r\n\r\nGuidelines:\r\n- imagegen needs a few minutes to finish. In code-mode, use the first-line @exec directive to give the initial call 120 seconds and the same yield for any waits that follow. Once it finishes, return the image with generatedImage(result).\r\n- Avoid printing the full result or its base64 image data with `text()` or `notify()`; print only small metadata when needed.\r\n- Set `transparent_background` to true when the request calls for a transparent background, including background removal or a cutout; set it to false otherwise. For edits, preserve existing transparency unless the user asks to change it.\r\n- Omit both `referenced_image_paths` and `num_last_images_to_include` when generating a brand new image.\r\n- For edits, use `referenced_image_paths` when every target image has a local file path.\r\n- If you have not seen a local image yet, use `view_image` to inspect it before editing.\r\n- Use `num_last_images_to_include` only when at least one target image has no local file path.\r\n- Set `num_last_images_to_include` to the smallest number of recent conversation images that includes every target image, up to 5.\r\n- Never provide both `referenced_image_paths` and `num_last_images_to_include`.\r\n- If neither mechanism can include every target image, ask the user to attach the missing images again.\r\n- Directly generate the image without reconfirmation or clarification unless required images must be attached again.\r\n- Always use this tool for image editing unless the user explicitly requests otherwise. Do not use the `python` tool for image editing unless specifically instructed.\r\n\n\nexec tool declaration:\n```ts\ndeclare const tools: { image_gen__imagegen(args: {\n  num_last_images_to_include?: number | null;\n  prompt: string;\n  referenced_image_paths?: Array<string> | null;\n  // Whether the output should have a transparent background. Defaults to false.\n  transparent_background?: boolean;\n}): Promise<{ image_url: string; output_hint?: string; }>; };\n```\n\n## web\nTools in the web namespace.\n\n### `web__run`\nTool for accessing the internet.\r\n\r\n\r\n---\r\n\r\n## Examples of different commands available in this tool\r\n\r\nExamples of different commands available in this tool:\r\n* `search_query`: {\"search_query\": [{\"q\": \"What is the capital of France?\"}, {\"q\": \"What is the capital of belgium?\"}]}. Searches the internet for a given query (and optionally with a domain or recency filter)\r\n* `image_query`: {\"image_query\":[{\"q\": \"waterfalls\"}]}.\r\n* `open`: {\"open\": [{\"ref_id\": \"turn0search0\"}, {\"ref_id\": \"https://www.openai.com\", \"lineno\": 120}]}\r\n* `click`: {\"click\": [{\"ref_id\": \"turn0fetch3\", \"id\": 17}]}\r\n* `find`: {\"find\": [{\"ref_id\": \"turn0fetch3\", \"pattern\": \"Annie Case\"}]}\r\n* `screenshot`: {\"screenshot\": [{\"ref_id\": \"turn1view0\", \"pageno\": 0}, {\"ref_id\": \"turn1view0\", \"pageno\": 3}]}\r\n* `finance`: {\"finance\":[{\"ticker\":\"AMD\",\"type\":\"equity\",\"market\":\"USA\"}]}, {\"finance\":[{\"ticker\":\"BTC\",\"type\":\"crypto\",\"market\":\"\"}]}\r\n* `weather`: {\"weather\":[{\"location\":\"San Francisco, CA\"}]}\r\n* `sports`: {\"sports\":[{\"fn\":\"standings\",\"league\":\"nfl\"}, {\"fn\":\"schedule\",\"league\":\"nba\",\"team\":\"GSW\",\"date_from\":\"2025-02-24\"}]}\r\n* `time`: {\"time\":[{\"utc_offset\":\"+03:00\"}]}\r\n\r\n---\r\n\r\n## Usage hints\r\nTo use this tool efficiently:\r\n* Use multiple commands and queries in one call to get more results faster; e.g. {\"search_query\": [{\"q\": \"bitcoin news\"}], \"finance\":[{\"ticker\":\"BTC\",\"type\":\"crypto\",\"market\":\"\"}], \"find\": [{\"ref_id\": \"turn0search0\", \"pattern\": \"Annie Case\"}, {\"ref_id\": \"turn0search1\", \"pattern\": \"John Smith\"}]}\r\n* Use \"response_length\" to control the number of results returned by this tool, omit it if you intend to pass \"short\" in\r\n* Only write required parameters; do not write empty lists or nulls where they could be omitted.\r\n* `search_query` must have length at most 4 in each call. If it has length > 3, response_length must be medium or long\r\n* If you find yourself in a situation where you accidentally call the `web.run` tool, it's best just to send an empty query: {\"search_query\": [{\"q\": \"\"}]}.\r\n\r\n---\r\n\r\n## Decision boundary\r\n\r\nIf the user makes an explicit request to search the internet, find latest information, look up, etc (or to not do so), you must obey their request.\r\nWhen you make an assumption, always consider whether it is temporally stable; i.e. whether there's even a small (>10%) chance it has changed. If it is unstable, you must verify with browsing the internet for verification.\r\n\r\n<situations_where_you_must_browse_the_internet>\r\nBelow is a list of scenarios where browsing the internet MUST be used. PAY CLOSE ATTENTION: you MUST browse the internet in these cases. If you're unsure or on the fence, you MUST bias towards browsing the internet.\r\n- The information could have changed recently: for example news; prices; laws; schedules; product specs; sports scores; economic indicators; political/public/company figures (e.g. the question relates to 'the president of country A' or 'the CEO of company B', which might change over time); rules; regulations; standards; software libraries that could be updated; exchange rates; recommendations (i.e., recommendations about various topics or things might be informed by what currently exists / is popular / is safe / is unsafe / is in the zeitgeist / etc.); and many many many more categories -- again, if you're on the fence, you MUST browse the internet!\r\n  - For news queries, prioritize more recent events, ensuring you compare publish dates and the date that the event happened.\r\n- The user is seeking recommendations that could lead them to spend substantial time or money -- researching products, restaurants, travel plans, etc.\r\n- The user wants (or would benefit from) direct quotes, links, or precise source attribution.\r\n- A specific page, paper, dataset, PDF, or site is referenced and you haven't been given its contents.\r\n- You're unsure about a fact, the topic is niche or emerging, or you suspect there's at least a 10% chance you will incorrectly recall it\r\n- High-stakes accuracy matters (medical, legal, financial guidance). For these you generally should search by default because this information is highly temporally unstable\r\n- The user explicitly says to search, browse, verify, or look it up.\r\n</situations_where_you_must_browse_the_internet>\r\n\r\n---\r\n\r\n## Citations\r\n\r\nResults from `web.run` include internal reference IDs such as `turn2search5`. Use\r\nthose reference IDs only in calls to `web.run`; do not expose them in the final\r\nresponse.\r\n\r\nCite sources in the final response using Markdown links:\r\n\r\n- Cite a single source as `[descriptive source title](https://example.com/page)`.\r\n- Cite multiple sources with separate Markdown links, for example\r\n  `[first source](https://example.com/one), [second source](https://example.com/two)`.\r\n- Link directly to the page that supports the claim. Do not link to search result\r\n  pages or use bare URLs.\r\n\r\nFormatting of citations:\r\n\r\n- Place each citation as near as possible to the claim it supports, normally at\r\n  the end of the sentence or paragraph and after punctuation.\r\n- Do not place citations inside code fences.\r\n- Do not put citations on a line by themselves or collect all citations at the\r\n  end of the response.\r\n\r\nIf you browse the internet, cite statements supported by web sources. Each cited\r\nsource must directly support the associated claim. Prefer primary and\r\nauthoritative sources, and use sources from different domains when the response\r\nbenefits from multiple perspectives.\r\n\r\n---\r\n\r\n## Special cases\r\nIf these conflict with any other instructions, these should take precedence.\r\n\r\n<special_cases>\r\n- When the user asks for information about how to use OpenAI products, (ChatGPT, the OpenAI API, etc.), you should check the code in local env and only browse as fallback, when you browse restrict your sources to official OpenAI websites using the domains filter, unless otherwise requested.\r\n- When using search to answer technical questions, you must only rely on primary sources (research papers, official documentation, etc.)\r\n- Clearly indicate when you are making an inference from sources.\r\n</special_cases>\r\n\r\n---\r\n\r\n## Word limits\r\nResponses may not excessively quote or draw on a specific source. There are several limits here:\r\n- **Limit on verbatim quotes:**\r\n  - You may not quote more than 25 words verbatim from any single non-lyrical source, unless the source is reddit.\r\n  - For song lyrics, verbatim quotes must be limited to at most 10 words.\r\n  - Long quotes from reddit are allowed, as long as you indicate that those are direct quotes via a markdown blockquote starting with \">\", copy verbatim, and link the source.\r\n- **Word limits:**\r\n  - Each webpage source in the sources has a word limit label formatted like \"[wordlim N]\", in which N is the maximum number of words in the whole response that are attributed to that source. If omitted, the word limit is 200 words.\r\n  - Non-contiguous words derived from a given source must be counted to the word limit.\r\n  - The summarization limit N is a maximum for each source.\r\n  - When using multiple sources, their summarization limits add together. However, each article used must be relevant to the response.\r\n- **Copyright compliance:**\r\n  - You must avoid providing full articles, long verbatim passages, or extensive direct quotes due to copyright concerns.\r\n  - If the user asked for a verbatim quote, the response should provide a short compliant excerpt and then answer with paraphrases and summaries.\r\n  - Again, this limit does not apply to reddit content, as long as it's appropriately indicated that those are direct quotes and you link to the source.\r\n\n\nexec tool declaration:\n```ts\ndeclare const tools: { web__run(args: {\n  // Open links from previously opened pages.\n  click?: Array<{\n  // Numbered link id to open.\n  id: number;\n  // Reference id containing the numbered link.\n  ref_id: string;\n}>;\n  // Look up prices for the given stock symbols.\n  finance?: Array<{\n  // ISO 3166-1 alpha-3 country code, \"OTC\", or \"\" for cryptocurrency.\n  market?: string;\n  // Ticker symbol to look up.\n  ticker: string;\n  // Asset type to look up.\n  type: \"equity\" | \"fund\" | \"crypto\" | \"index\";\n}>;\n  // Find text patterns in pages.\n  find?: Array<{\n  // Text pattern to find.\n  pattern: string;\n  // Reference id or URL to search within.\n  ref_id: string;\n}>;\n  // Query the image search engine for a given list of queries.\n  image_query?: Array<{\n  // Whether to filter by a specific list of domains.\n  domains?: Array<string>;\n  // Search query.\n  q: string;\n  // Whether to filter by recency, as a number of recent days.\n  recency?: number;\n}>;\n  // Open pages by reference id or URL.\n  open?: Array<{\n  // Line number to position the page at.\n  lineno?: number;\n  // Reference id or URL to open.\n  ref_id: string;\n}>;\n  // Set the length of the response to be returned.\n  response_length?: \"short\" | \"medium\" | \"long\";\n  // Take screenshots of PDF pages.\n  screenshot?: Array<{\n  // Zero-indexed PDF page number.\n  pageno: number;\n  // Reference id or URL to screenshot.\n  ref_id: string;\n}>;\n  // Query the internet search engine for a given list of queries.\n  search_query?: Array<{\n  // Whether to filter by a specific list of domains.\n  domains?: Array<string>;\n  // Search query.\n  q: string;\n  // Whether to filter by recency, as a number of recent days.\n  recency?: number;\n}>;\n  // Look up sports schedules and standings.\n  sports?: Array<{\n  // Start date in YYYY-MM-DD format.\n  date_from?: string;\n  // End date in YYYY-MM-DD format.\n  date_to?: string;\n  // Sports function to call.\n  fn: \"schedule\" | \"standings\";\n  // League to look up.\n  league: \"nba\" | \"wnba\" | \"nfl\" | \"nhl\" | \"mlb\" | \"epl\" | \"ncaamb\" | \"ncaawb\" | \"ipl\";\n  // Locale for the lookup.\n  locale?: string;\n  // Number of games to return.\n  num_games?: number;\n  // Opponent to use with `team` when narrowing the lookup.\n  opponent?: string;\n  // Team to look up, using the common 3 or 4 letter alias used in broadcasts.\n  team?: string;\n  // Tool name for sports requests.\n  tool?: \"sports\";\n}>;\n  // Get time for the given UTC offsets.\n  time?: Array<{\n  // UTC offset formatted like \"+03:00\".\n  utc_offset: string;\n}>;\n  // Look up weather forecasts.\n  weather?: Array<{\n  // Number of days to return. Defaults to 7.\n  duration?: number;\n  // Location in \"Country, Area, City\" format.\n  location: string;\n  // Start date in YYYY-MM-DD format. Defaults to today.\n  start?: string;\n}>;\n}): Promise<unknown>; };\n```",
+      "parameters": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "functions.request_user_input",
+      "description": "Request user input for one to three short questions and wait for the response. This tool is only available in Plan mode.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "questions": {
+            "type": "array",
+            "description": "Questions to show the user. Prefer 1 and do not exceed 3",
+            "items": {
+              "type": "object",
+              "properties": {
+                "header": {
+                  "type": "string",
+                  "description": "Short header label shown in the UI (12 or fewer chars)."
+                },
+                "id": {
+                  "type": "string",
+                  "description": "Stable identifier for mapping answers (snake_case)."
+                },
+                "options": {
+                  "type": "array",
+                  "description": "Provide 2-3 mutually exclusive choices. Put the recommended option first and suffix its label with \"(Recommended)\". Do not include an \"Other\" option in this list; the client will add a free-form \"Other\" option automatically.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "description": {
+                        "type": "string",
+                        "description": "One short sentence explaining impact/tradeoff if selected."
+                      },
+                      "label": {
+                        "type": "string",
+                        "description": "User-facing label (1-5 words)."
+                      }
+                    },
+                    "required": [
+                      "label",
+                      "description"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "question": {
+                  "type": "string",
+                  "description": "Single-sentence prompt shown to the user."
+                }
+              },
+              "required": [
+                "id",
+                "header",
+                "question",
+                "options"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "questions"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "functions.wait",
+      "description": "Waits on a yielded `exec` cell and returns new output or completion.\n- Use `wait` only after `exec` returns `Script running with cell ID ...`.\n- `cell_id` identifies the running `exec` cell to resume.\n- `yield_time_ms` controls how long to wait for more output before yielding again. Defaults to 10000 ms.\n- `max_tokens` limits how much new output this wait call returns. Defaults to 10000 tokens.\n- `terminate: true` stops the running cell; false or omitted waits for output.\n- `wait` returns only the new output since the last yield, or the final completion or termination result for that cell.\n- If the cell is still running, `wait` may yield again with the same `cell_id`.\n- If the cell has already finished, `wait` returns the completed result and closes the cell.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "cell_id": {
+            "type": "string",
+            "description": "Identifier of the running exec cell."
+          },
+          "max_tokens": {
+            "type": "number",
+            "description": "Output token budget for this wait call. Defaults to 10000 tokens."
+          },
+          "terminate": {
+            "type": "boolean",
+            "description": "True stops the running exec cell; false or omitted waits for output."
+          },
+          "yield_time_ms": {
+            "type": "number",
+            "description": "Wait before yielding more output. Defaults to 10000 ms."
+          }
+        },
+        "required": [
+          "cell_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_goal",
+      "description": "Get the current goal for this thread, including status, budgets, token and elapsed-time usage, and remaining token budget.\n\nexec tool declaration:\n```ts\ndeclare const tools: { get_goal(args: {}): Promise<unknown>; };\n```",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "image_gen__imagegen",
+      "description": "### `image_gen__imagegen`\nThe `image_gen.imagegen` tool enables image generation from descriptions and editing of existing images based on specific instructions. Use it when:\r\n\r\n- The user requests an image based on a scene description, such as a diagram, portrait, comic, meme, or any other visual.\r\n- The user wants to modify an attached or previously generated image with specific changes, including adding or removing elements, altering colors, improving quality/resolution, or transforming the style (e.g., cartoon, oil painting).\r\n\r\nGuidelines:\r\n- imagegen needs a few minutes to finish. In code-mode, use the first-line @exec directive to give the initial call 120 seconds and the same yield for any waits that follow. Once it finishes, return the image with generatedImage(result).\r\n- Avoid printing the full result or its base64 image data with `text()` or `notify()`; print only small metadata when needed.\r\n- Set `transparent_background` to true when the request calls for a transparent background, including background removal or a cutout; set it to false otherwise. For edits, preserve existing transparency unless the user asks to change it.\r\n- Omit both `referenced_image_paths` and `num_last_images_to_include` when generating a brand new image.\r\n- For edits, use `referenced_image_paths` when every target image has a local file path.\r\n- If you have not seen a local image yet, use `view_image` to inspect it before editing.\r\n- Use `num_last_images_to_include` only when at least one target image has no local file path.\r\n- Set `num_last_images_to_include` to the smallest number of recent conversation images that includes every target image, up to 5.\r\n- Never provide both `referenced_image_paths` and `num_last_images_to_include`.\r\n- If neither mechanism can include every target image, ask the user to attach the missing images again.\r\n- Directly generate the image without reconfirmation or clarification unless required images must be attached again.\r\n- Always use this tool for image editing unless the user explicitly requests otherwise. Do not use the `python` tool for image editing unless specifically instructed.\r\n\n\nexec tool declaration:\n```ts\ndeclare const tools: { image_gen__imagegen(args: {\n  num_last_images_to_include?: number | null;\n  prompt: string;\n  referenced_image_paths?: Array<string> | null;\n  // Whether the output should have a transparent background. Defaults to false.\n  transparent_background?: boolean;\n}): Promise<{ image_url: string; output_hint?: string; }>; };\n```\n\n## web\nTools in the web namespace.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "num_last_images_to_include": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "referenced_image_paths": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transparent_background": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_mcp_resource_templates",
+      "description": "Lists resource templates provided by MCP servers. Parameterized resource templates allow servers to share data that takes parameters and provides context to language models, such as files, database schemas, or application-specific information. Prefer resource templates over web search when possible.\n\nexec tool declaration:\n```ts\ndeclare const tools: { list_mcp_resource_templates(args: {\n  // Opaque cursor from a previous list_mcp_resource_templates call; omit for the first page.\n  cursor?: string;\n  // MCP server name. Omit to list resource templates from every configured server.\n  server?: string;\n}): Promise<unknown>; };\n```",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "server": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_mcp_resources",
+      "description": "Lists resources provided by MCP servers. Resources allow servers to share data that provides context to language models, such as files, database schemas, or application-specific information. Prefer resources over web search when possible.\n\nexec tool declaration:\n```ts\ndeclare const tools: { list_mcp_resources(args: {\n  // Opaque cursor from a previous list_mcp_resources call; omit for the first page.\n  cursor?: string;\n  // MCP server name. Omit to list resources from every configured server.\n  server?: string;\n}): Promise<unknown>; };\n```",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "server": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "read_mcp_resource",
+      "description": "Read a specific resource from an MCP server given the server name and resource URI.\n\nexec tool declaration:\n```ts\ndeclare const tools: { read_mcp_resource(args: {\n  // MCP server name exactly as configured. Must match the 'server' field returned by list_mcp_resources.\n  server: string;\n  // Resource URI to read. Must be one of the URIs returned by list_mcp_resources.\n  uri: string;\n}): Promise<unknown>; };\n```",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "server": {
+            "type": "string"
+          },
+          "uri": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "server",
+          "uri"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "request_plugin_install",
+      "description": "# Suggest a recommended plugin installation\n\nUse this tool only when all of the following are true:\n- The user explicitly asks to use a specific plugin that is not already available in the current context or active `tools` list.\n- Tool search has already been exhausted and did not find or make the requested tool callable.\n- The plugin is listed in `<recommended_plugins>`.\n\nDo not use it for adjacent capabilities, broad recommendations, or plugins that merely seem useful. Briefly explain why the plugin can help with the current request in `suggest_reason`.\n\nIMPORTANT: DO NOT call this tool in parallel with other tools.\n\nexec tool declaration:\n```ts\ndeclare const tools: { request_plugin_install(args: {\n  // The parenthesized plugin ID from the `<recommended_plugins>` list.\n  plugin_id: string;\n  // Concise one-line user-facing reason why this plugin can help with the current request.\n  suggest_reason: string;\n}): Promise<unknown>; };\n```",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "plugin_id": {
+            "type": "string"
+          },
+          "suggest_reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "plugin_id",
+          "suggest_reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "update_goal",
+      "description": "Update the existing goal.\nSet status to `paused` only at the user's explicit request to pause this goal, never on your own initiative. Ask if unclear; a later resume revokes that request. Report the returned status and stop goal work. Budget limits take precedence over pausing.\nSet status to `complete` only when the objective has actually been achieved and no required work remains.\nSet status to `blocked` only when the same blocking condition has repeated for at least three consecutive goal turns, counting the original/user-triggered turn and any automatic continuations, and the agent cannot make meaningful progress without user input or an external-state change.\nIf the user resumes a goal that was previously marked `blocked`, treat the resumed run as a fresh blocked audit. If the same blocking condition then repeats for at least three consecutive resumed goal turns, set status to `blocked` again.\nOnce the blocked threshold is satisfied, do not keep reporting that you are still blocked while leaving the goal active; set status to `blocked`.\nDo not use `blocked` merely because the work is hard, slow, uncertain, incomplete, or would benefit from clarification.\nDo not mark a goal complete merely because its budget is nearly exhausted or because you are stopping work.\nYou cannot use this tool to resume, budget-limit, or usage-limit a goal; those status changes are controlled by the user or system.\nWhen marking a budgeted goal achieved with status `complete`, report the final token usage from the tool result to the user.\n\nexec tool declaration:\n```ts\ndeclare const tools: { update_goal(args: {\n  // Required. `paused` requires an explicit user request. Set to `complete` only when the objective is achieved and no required work remains. Set to `blocked` only after the same blocking condition has recurred for at least three consecutive goal turns and the agent is at an impasse. After a previously blocked goal is resumed, the resumed run starts a fresh blocked audit.\n  status: \"complete\" | \"blocked\" | \"paused\";\n}): Promise<unknown>; };\n```",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "enum": [
+              "complete",
+              "blocked",
+              "paused"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "view_image",
+      "description": "View a local image file from the filesystem when visual inspection is needed. Use this for images already available on disk.\n\nexec tool declaration:\n```ts\ndeclare const tools: { view_image(args: {\n  // Local filesystem path to an image file.\n  path: string;\n}): Promise<{\n  // Data URL for the loaded image.\n  image_url: string;\n}>; };\n```",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "web__run",
+      "description": "### `web__run`\nTool for accessing the internet.\r\n\r\n\r\n---\r\n\r\n## Examples of different commands available in this tool\r\n\r\nExamples of different commands available in this tool:\r\n* `search_query`: {\"search_query\": [{\"q\": \"What is the capital of France?\"}, {\"q\": \"What is the capital of belgium?\"}]}. Searches the internet for a given query (and optionally with a domain or recency filter)\r\n* `image_query`: {\"image_query\":[{\"q\": \"waterfalls\"}]}.\r\n* `open`: {\"open\": [{\"ref_id\": \"turn0search0\"}, {\"ref_id\": \"https://www.openai.com\", \"lineno\": 120}]}\r\n* `click`: {\"click\": [{\"ref_id\": \"turn0fetch3\", \"id\": 17}]}\r\n* `find`: {\"find\": [{\"ref_id\": \"turn0fetch3\", \"pattern\": \"Annie Case\"}]}\r\n* `screenshot`: {\"screenshot\": [{\"ref_id\": \"turn1view0\", \"pageno\": 0}, {\"ref_id\": \"turn1view0\", \"pageno\": 3}]}\r\n* `finance`: {\"finance\":[{\"ticker\":\"AMD\",\"type\":\"equity\",\"market\":\"USA\"}]}, {\"finance\":[{\"ticker\":\"BTC\",\"type\":\"crypto\",\"market\":\"\"}]}\r\n* `weather`: {\"weather\":[{\"location\":\"San Francisco, CA\"}]}\r\n* `sports`: {\"sports\":[{\"fn\":\"standings\",\"league\":\"nfl\"}, {\"fn\":\"schedule\",\"league\":\"nba\",\"team\":\"GSW\",\"date_from\":\"2025-02-24\"}]}\r\n* `time`: {\"time\":[{\"utc_offset\":\"+03:00\"}]}\r\n\r\n---\r\n\r\n## Usage hints\r\nTo use this tool efficiently:\r\n* Use multiple commands and queries in one call to get more results faster; e.g. {\"search_query\": [{\"q\": \"bitcoin news\"}], \"finance\":[{\"ticker\":\"BTC\",\"type\":\"crypto\",\"market\":\"\"}], \"find\": [{\"ref_id\": \"turn0search0\", \"pattern\": \"Annie Case\"}, {\"ref_id\": \"turn0search1\", \"pattern\": \"John Smith\"}]}\r\n* Use \"response_length\" to control the number of results returned by this tool, omit it if you intend to pass \"short\" in\r\n* Only write required parameters; do not write empty lists or nulls where they could be omitted.\r\n* `search_query` must have length at most 4 in each call. If it has length > 3, response_length must be medium or long\r\n* If you find yourself in a situation where you accidentally call the `web.run` tool, it's best just to send an empty query: {\"search_query\": [{\"q\": \"\"}]}.\r\n\r\n---\r\n\r\n## Decision boundary\r\n\r\nIf the user makes an explicit request to search the internet, find latest information, look up, etc (or to not do so), you must obey their request.\r\nWhen you make an assumption, always consider whether it is temporally stable; i.e. whether there's even a small (>10%) chance it has changed. If it is unstable, you must verify with browsing the internet for verification.\r\n\r\n<situations_where_you_must_browse_the_internet>\r\nBelow is a list of scenarios where browsing the internet MUST be used. PAY CLOSE ATTENTION: you MUST browse the internet in these cases. If you're unsure or on the fence, you MUST bias towards browsing the internet.\r\n- The information could have changed recently: for example news; prices; laws; schedules; product specs; sports scores; economic indicators; political/public/company figures (e.g. the question relates to 'the president of country A' or 'the CEO of company B', which might change over time); rules; regulations; standards; software libraries that could be updated; exchange rates; recommendations (i.e., recommendations about various topics or things might be informed by what currently exists / is popular / is safe / is unsafe / is in the zeitgeist / etc.); and many many many more categories -- again, if you're on the fence, you MUST browse the internet!\r\n  - For news queries, prioritize more recent events, ensuring you compare publish dates and the date that the event happened.\r\n- The user is seeking recommendations that could lead them to spend substantial time or money -- researching products, restaurants, travel plans, etc.\r\n- The user wants (or would benefit from) direct quotes, links, or precise source attribution.\r\n- A specific page, paper, dataset, PDF, or site is referenced and you haven't been given its contents.\r\n- You're unsure about a fact, the topic is niche or emerging, or you suspect there's at least a 10% chance you will incorrectly recall it\r\n- High-stakes accuracy matters (medical, legal, financial guidance). For these you generally should search by default because this information is highly temporally unstable\r\n- The user explicitly says to search, browse, verify, or look it up.\r\n</situations_where_you_must_browse_the_internet>\r\n\r\n---\r\n\r\n## Citations\r\n\r\nResults from `web.run` include internal reference IDs such as `turn2search5`. Use\r\nthose reference IDs only in calls to `web.run`; do not expose them in the final\r\nresponse.\r\n\r\nCite sources in the final response using Markdown links:\r\n\r\n- Cite a single source as `[descriptive source title](https://example.com/page)`.\r\n- Cite multiple sources with separate Markdown links, for example\r\n  `[first source](https://example.com/one), [second source](https://example.com/two)`.\r\n- Link directly to the page that supports the claim. Do not link to search result\r\n  pages or use bare URLs.\r\n\r\nFormatting of citations:\r\n\r\n- Place each citation as near as possible to the claim it supports, normally at\r\n  the end of the sentence or paragraph and after punctuation.\r\n- Do not place citations inside code fences.\r\n- Do not put citations on a line by themselves or collect all citations at the\r\n  end of the response.\r\n\r\nIf you browse the internet, cite statements supported by web sources. Each cited\r\nsource must directly support the associated claim. Prefer primary and\r\nauthoritative sources, and use sources from different domains when the response\r\nbenefits from multiple perspectives.\r\n\r\n---\r\n\r\n## Special cases\r\nIf these conflict with any other instructions, these should take precedence.\r\n\r\n<special_cases>\r\n- When the user asks for information about how to use OpenAI products, (ChatGPT, the OpenAI API, etc.), you should check the code in local env and only browse as fallback, when you browse restrict your sources to official OpenAI websites using the domains filter, unless otherwise requested.\r\n- When using search to answer technical questions, you must only rely on primary sources (research papers, official documentation, etc.)\r\n- Clearly indicate when you are making an inference from sources.\r\n</special_cases>\r\n\r\n---\r\n\r\n## Word limits\r\nResponses may not excessively quote or draw on a specific source. There are several limits here:\r\n- **Limit on verbatim quotes:**\r\n  - You may not quote more than 25 words verbatim from any single non-lyrical source, unless the source is reddit.\r\n  - For song lyrics, verbatim quotes must be limited to at most 10 words.\r\n  - Long quotes from reddit are allowed, as long as you indicate that those are direct quotes via a markdown blockquote starting with \">\", copy verbatim, and link the source.\r\n- **Word limits:**\r\n  - Each webpage source in the sources has a word limit label formatted like \"[wordlim N]\", in which N is the maximum number of words in the whole response that are attributed to that source. If omitted, the word limit is 200 words.\r\n  - Non-contiguous words derived from a given source must be counted to the word limit.\r\n  - The summarization limit N is a maximum for each source.\r\n  - When using multiple sources, their summarization limits add together. However, each article used must be relevant to the response.\r\n- **Copyright compliance:**\r\n  - You must avoid providing full articles, long verbatim passages, or extensive direct quotes due to copyright concerns.\r\n  - If the user asked for a verbatim quote, the response should provide a short compliant excerpt and then answer with paraphrases and summaries.\r\n  - Again, this limit does not apply to reddit content, as long as it's appropriately indicated that those are direct quotes and you link to the source.\r\n\n\nexec tool declaration:\n```ts\ndeclare const tools: { web__run(args: {\n  // Open links from previously opened pages.\n  click?: Array<{\n  // Numbered link id to open.\n  id: number;\n  // Reference id containing the numbered link.\n  ref_id: string;\n}>;\n  // Look up prices for the given stock symbols.\n  finance?: Array<{\n  // ISO 3166-1 alpha-3 country code, \"OTC\", or \"\" for cryptocurrency.\n  market?: string;\n  // Ticker symbol to look up.\n  ticker: string;\n  // Asset type to look up.\n  type: \"equity\" | \"fund\" | \"crypto\" | \"index\";\n}>;\n  // Find text patterns in pages.\n  find?: Array<{\n  // Text pattern to find.\n  pattern: string;\n  // Reference id or URL to search within.\n  ref_id: string;\n}>;\n  // Query the image search engine for a given list of queries.\n  image_query?: Array<{\n  // Whether to filter by a specific list of domains.\n  domains?: Array<string>;\n  // Search query.\n  q: string;\n  // Whether to filter by recency, as a number of recent days.\n  recency?: number;\n}>;\n  // Open pages by reference id or URL.\n  open?: Array<{\n  // Line number to position the page at.\n  lineno?: number;\n  // Reference id or URL to open.\n  ref_id: string;\n}>;\n  // Set the length of the response to be returned.\n  response_length?: \"short\" | \"medium\" | \"long\";\n  // Take screenshots of PDF pages.\n  screenshot?: Array<{\n  // Zero-indexed PDF page number.\n  pageno: number;\n  // Reference id or URL to screenshot.\n  ref_id: string;\n}>;\n  // Query the internet search engine for a given list of queries.\n  search_query?: Array<{\n  // Whether to filter by a specific list of domains.\n  domains?: Array<string>;\n  // Search query.\n  q: string;\n  // Whether to filter by recency, as a number of recent days.\n  recency?: number;\n}>;\n  // Look up sports schedules and standings.\n  sports?: Array<{\n  // Start date in YYYY-MM-DD format.\n  date_from?: string;\n  // End date in YYYY-MM-DD format.\n  date_to?: string;\n  // Sports function to call.\n  fn: \"schedule\" | \"standings\";\n  // League to look up.\n  league: \"nba\" | \"wnba\" | \"nfl\" | \"nhl\" | \"mlb\" | \"epl\" | \"ncaamb\" | \"ncaawb\" | \"ipl\";\n  // Locale for the lookup.\n  locale?: string;\n  // Number of games to return.\n  num_games?: number;\n  // Opponent to use with `team` when narrowing the lookup.\n  opponent?: string;\n  // Team to look up, using the common 3 or 4 letter alias used in broadcasts.\n  team?: string;\n  // Tool name for sports requests.\n  tool?: \"sports\";\n}>;\n  // Get time for the given UTC offsets.\n  time?: Array<{\n  // UTC offset formatted like \"+03:00\".\n  utc_offset: string;\n}>;\n  // Look up weather forecasts.\n  weather?: Array<{\n  // Number of days to return. Defaults to 7.\n  duration?: number;\n  // Location in \"Country, Area, City\" format.\n  location: string;\n  // Start date in YYYY-MM-DD format. Defaults to today.\n  start?: string;\n}>;\n}): Promise<unknown>; };\n```",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "click": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "number"
+                },
+                "ref_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "ref_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "finance": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "market": {
+                  "type": "string"
+                },
+                "ticker": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "equity",
+                    "fund",
+                    "crypto",
+                    "index"
+                  ]
+                }
+              },
+              "required": [
+                "ticker",
+                "type"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "find": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string"
+                },
+                "ref_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "pattern",
+                "ref_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "image_query": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "domains": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "q": {
+                  "type": "string"
+                },
+                "recency": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "q"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "open": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "lineno": {
+                  "type": "number"
+                },
+                "ref_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "ref_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "response_length": {
+            "type": "string",
+            "enum": [
+              "short",
+              "medium",
+              "long"
+            ]
+          },
+          "screenshot": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pageno": {
+                  "type": "number"
+                },
+                "ref_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "pageno",
+                "ref_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "search_query": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "domains": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "q": {
+                  "type": "string"
+                },
+                "recency": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "q"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "sports": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date_from": {
+                  "type": "string"
+                },
+                "date_to": {
+                  "type": "string"
+                },
+                "fn": {
+                  "type": "string",
+                  "enum": [
+                    "schedule",
+                    "standings"
+                  ]
+                },
+                "league": {
+                  "type": "string",
+                  "enum": [
+                    "nba",
+                    "wnba",
+                    "nfl",
+                    "nhl",
+                    "mlb",
+                    "epl",
+                    "ncaamb",
+                    "ncaawb",
+                    "ipl"
+                  ]
+                },
+                "locale": {
+                  "type": "string"
+                },
+                "num_games": {
+                  "type": "number"
+                },
+                "opponent": {
+                  "type": "string"
+                },
+                "team": {
+                  "type": "string"
+                },
+                "tool": {
+                  "type": "string",
+                  "enum": [
+                    "sports"
+                  ]
+                }
+              },
+              "required": [
+                "fn",
+                "league"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "time": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "utc_offset": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "utc_offset"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "weather": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "duration": {
+                  "type": "number"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "location"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "write_stdin",
+      "description": "Writes characters to an existing unified exec session and returns recent output.\n\nexec tool declaration:\n```ts\ndeclare const tools: { write_stdin(args: {\n  // Bytes to write to stdin. Defaults to empty, which polls without writing.\n  chars?: string;\n  // Output token budget. Defaults to 10000 tokens; larger requests may be capped by policy.\n  max_output_tokens?: number;\n  // Identifier of the running unified exec session.\n  session_id: number;\n  // Wait before yielding output. Non-empty writes default to 250 ms and cap at 30000 ms; empty polls wait 5000-300000 ms by default.\n  yield_time_ms?: number;\n}): Promise<{\n  // Chunk identifier included when the response reports one.\n  chunk_id?: string;\n  // Process exit code when the command finished during this call.\n  exit_code?: number;\n  // Approximate token count before output truncation.\n  original_token_count?: number;\n  // Command output text, possibly truncated.\n  output: string;\n  // Session identifier to pass to write_stdin when the process is still running.\n  session_id?: number;\n  // Elapsed wall time spent waiting for output in seconds.\n  wall_time_seconds: number;\n}>; };\n```",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "chars": {
+            "type": "string"
+          },
+          "max_output_tokens": {
+            "type": "number"
+          },
+          "session_id": {
+            "type": "number"
+          },
+          "yield_time_ms": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

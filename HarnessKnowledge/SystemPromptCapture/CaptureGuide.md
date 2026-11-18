@@ -49,6 +49,8 @@ Verbatim reproduction of the entire harness system prompt.
 - No commentary, analysis, or observations mixed into the verbatim section.
 - No paraphrasing or summarizing.
 - Everything between BEGIN/END markers is verbatim harness content.
+- The only source is the capturing agent's own context. Session logs, transcripts, harness config files and deployed agent files are never read to fill or verify content.
+- Content the agent can see but cannot reproduce is replaced in place with `[NOT REPRODUCIBLE FROM CONTEXT: {what is missing}]` and reported to the user. The marker carries over unchanged into the clean file.
 
 ### 2. SystemPrompt-clean.md
 
@@ -212,6 +214,7 @@ You are being spawned to capture your own system prompt. Your task:
 2. Use bracket notation for all XML-like tags: replace < with [ and > with ] to avoid escaping issues. For example, <function_calls> becomes [antml:function_calls].
 3. Include the full JSON schemas for every tool definition — do not summarize or paraphrase.
 4. Do NOT include any commentary, analysis, or explanation — only the raw prompt content.
+   Reproduce from your own context only. Do NOT read session logs, transcripts, harness config files or deployed agent files. If you cannot reproduce a part, put [NOT REPRODUCIBLE FROM CONTEXT: {what is missing}] in its place and report it.
 5. Write the output to: HarnessKnowledge/SystemPromptCapture/{Harness}/{HarnessVersion}/{Tier}/SystemPrompt-raw.md
 
 Use this exact header format:

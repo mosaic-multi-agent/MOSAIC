@@ -1,0 +1,80 @@
+{
+  "_meta": {
+    "harness": "OpenCode V2",
+    "harnessVersion": "v2.3.2",
+    "context": "Subagent session",
+    "captured": "2026-11-18",
+    "note": "verbatim fields contain exact captured output except where explicitly marked NOT REPRODUCIBLE. commentary fields contain human interpretation."
+  },
+  "wrapperFormat": {
+    "verbatim": "",
+    "commentary": "Ordinary success outputs appear as plain text, without XML result tags. Tool errors appear as JSON objects with error and content fields."
+  },
+  "tools": {
+    "functions.read": {
+      "cases": {
+        "partial": {
+          "call": "functions.read({\"path\":\"HarnessKnowledge/SystemPromptCapture/TestArtifacts/varied-content-test.txt\",\"offset\":3,\"limit\":3})",
+          "verbatim": "Read file HarnessKnowledge/SystemPromptCapture/TestArtifacts/varied-content-test.txt, lines 3-5\n3: Line 3:     Four-space indentation here.\n4: Line 4:\tTab-indented content here.\n5: Line 5: Special characters: [chevrons] & ampersand | pipe \\ backslash\n[Output truncated. Continue reading with offset: 6]",
+          "commentary": "Text is prefixed by line numbers; partial reads include a continuation hint."
+        },
+        "directory": {
+          "call": "functions.read({\"path\":\"HarnessKnowledge/SystemPromptCapture/TestArtifacts\"})",
+          "verbatim": "Read directory HarnessKnowledge/SystemPromptCapture/TestArtifacts, entries 1-2\nlarge-file-3000-lines.txt\nvaried-content-test.txt",
+          "commentary": "Directory entries appear one per line."
+        },
+        "error": {
+          "call": "functions.read({\"path\":\"HarnessKnowledge/SystemPromptCapture/TestArtifacts/does-not-exist.txt\"})",
+          "verbatim": "{\"error\":{\"type\":\"tool.execution\",\"message\":\"File not found: HarnessKnowledge/SystemPromptCapture/TestArtifacts/does-not-exist.txt\"},\"content\":[]}",
+          "commentary": "Missing file returns a structured execution error."
+        },
+        "full": {
+          "call": "functions.read({\"path\":\"HarnessKnowledge/SystemPromptCapture/TestArtifacts/varied-content-test.txt\"})",
+          "verbatim": "Read file HarnessKnowledge/SystemPromptCapture/TestArtifacts/varied-content-test.txt, lines 1-20\n1: Line 1: Greetings, Universe! 🚀\n2: Line 2: This file has \"double quotes\" and 'single quotes' for validation.\n3: Line 3:     Four-space indentation here.\n4: Line 4:\tTab-indented content here.\n5: Line 5: Special characters: [chevrons] & ampersand | pipe \\ backslash\n6: Line 6: Unicode: resume, naive, 中文测试, Кириллица, עברית\n7: Line 7: Blank line follows:\n8: \n9: Line 9: Resumed after blank line.\n10: Line 10: Path-like content: /opt/tools/bin/run --mode=capture\n11: Line 11: Code-like content: const calc = (x) => { return x > 0 && x < 100; }\n12: Line 12: Regex-like content: ^begin.*center[a-z]+finish$\n13: Line 13: XML-like content: [node role=\"test\"]nested value[/node]\n14: Line 14: JSON-like content: {\"name\": \"probe\", \"count\": 77, \"items\": [4, 5, 6]}\n15: --- EDIT TARGET START ---\n16: Line 16: Swap this line with different content.\n17: --- EDIT TARGET END ---\n18: Line 18: This line must stay intact after edit tests.\n19: Line 19: Grep target: DISTINCT_MATCH_TOKEN_ABC\n20: Line 20: Final line with trailing newline.",
+          "commentary": "Full short file includes a header and numbered lines; XML-like tags are recorded with bracket notation."
+        },
+        "large": {
+          "call": "functions.read({\"path\":\"HarnessKnowledge/SystemPromptCapture/TestArtifacts/large-file-3000-lines.txt\"})",
+          "verbatim": "[NOT REPRODUCIBLE FROM CONTEXT: 1422 line output exceeds practical verbatim transcription size; the visible output begins \"Read file HarnessKnowledge/SystemPromptCapture/TestArtifacts/large-file-3000-lines.txt, lines 1-1422\" and ends \"[Output truncated. Continue reading with offset: 1423]\"]",
+          "commentary": "Tool result was truncated at 1422 lines, below the declared default maximum of 2000 lines."
+        }
+      }
+    },
+    "functions.glob": {
+      "cases": {
+        "matches": {"call": "functions.glob({\"pattern\":\"*.txt\",\"path\":\"HarnessKnowledge/SystemPromptCapture/TestArtifacts\"})", "verbatim": "C:\\AI\\MOSAIC\\MOSAIC\\HarnessKnowledge\\SystemPromptCapture\\TestArtifacts\\varied-content-test.txt\nC:\\AI\\MOSAIC\\MOSAIC\\HarnessKnowledge\\SystemPromptCapture\\TestArtifacts\\large-file-3000-lines.txt", "commentary": "Absolute file paths, one per line."},
+        "none": {"call": "functions.glob({\"pattern\":\"missing-*.xyz\",\"path\":\"HarnessKnowledge/SystemPromptCapture/TestArtifacts\"})", "verbatim": "No files found", "commentary": "No-match status."}
+      }
+    },
+    "functions.grep": {
+      "cases": {
+        "matches": {"call": "functions.grep({\"pattern\":\"EDIT TARGET\",\"path\":\"HarnessKnowledge/SystemPromptCapture/TestArtifacts\"})", "verbatim": "Found 2 matches\nC:\\AI\\MOSAIC\\MOSAIC\\HarnessKnowledge\\SystemPromptCapture\\TestArtifacts\\varied-content-test.txt:\n  Line 15: --- EDIT TARGET START ---\n\n  Line 17: --- EDIT TARGET END ---", "commentary": "Grouped by file, with line labels and blank lines between matches."},
+        "none": {"call": "functions.grep({\"pattern\":\"unfindable-xyz-9132\",\"path\":\"HarnessKnowledge/SystemPromptCapture/TestArtifacts\"})", "verbatim": "No matches found", "commentary": "No-match status."},
+        "include": {"call": "functions.grep({\"pattern\":\"EDIT TARGET\",\"path\":\"HarnessKnowledge/SystemPromptCapture/TestArtifacts\",\"include\":\"*.txt\"})", "verbatim": "Found 2 matches\nC:\\AI\\MOSAIC\\MOSAIC\\HarnessKnowledge\\SystemPromptCapture\\TestArtifacts\\varied-content-test.txt:\n  Line 15: --- EDIT TARGET START ---\n\n  Line 17: --- EDIT TARGET END ---", "commentary": "Glob include filter does not alter match formatting."}
+      }
+    },
+    "functions.patch": {
+      "cases": {
+        "edit": {"call": "functions.patch(update temporary artifact copy, replacing line 16)", "verbatim": "Success. Updated the following files:\nM HarnessKnowledge/SystemPromptCapture/TestArtifacts/capture-edit-temp.txt", "commentary": "Success reports modified file with M status."},
+        "missing_old_text": {"call": "functions.patch(update temporary artifact copy with absent old line)", "verbatim": "{\"error\":{\"type\":\"tool.execution\",\"message\":\"patch verification failed: Failed to find expected lines in HarnessKnowledge/SystemPromptCapture/TestArtifacts/capture-edit-temp.txt:\\nLine 16: No such string in this file.\"},\"content\":[]}", "commentary": "Verification failure is returned as structured execution error."},
+        "write": {"call": "functions.patch(add temporary file)", "verbatim": "Success. Updated the following files:\nA HarnessKnowledge/SystemPromptCapture/TestArtifacts/capture-write-temp.txt", "commentary": "Added file reports A status."}
+      }
+    },
+    "functions.shell": {
+      "cases": {
+        "success": {"call": "functions.shell({\"command\":\"Write-Output 'capture success'\"})", "verbatim": "capture success\r\n", "commentary": "Standard output returned as text."},
+        "nonzero_exit": {"call": "functions.shell({\"command\":\"exit 7\"})", "verbatim": "(no output)Exit code: 7", "commentary": "Exit status appended to empty output."},
+        "long_output": {"call": "functions.shell({\"command\":\"1..5000 | ForEach-Object { 'long-output-row-' + $_ }\"})", "verbatim": "[NOT REPRODUCIBLE FROM CONTEXT: 2000 displayed lines of shell output cannot be transcribed verbatim; output starts \"long-output-row-3001\", ends \"long-output-row-5000\" and appends \"[showing lines 3001-5000 of 5000; full output saved to C:\\Users\\tgurt\\.local\\share\\opencode\\shell\\b27e9ef462535a30ae764504d83aa0d9670e945f\\sh_1f039768a001u0E500G5vT5TVo.out]\"]", "commentary": "Large outputs display only trailing 2000 lines and report the saved full-output path."}
+      }
+    },
+    "functions.question": {
+      "cases": {
+        "answer": {"call": "functions.question({\"questions\":[{\"question\":\"Capture test: choose an option so I can record this tool's output format.\",\"header\":\"Capture test\",\"options\":[{\"label\":\"Option A (Recommended)\",\"description\":\"Select the first test option.\"},{\"label\":\"Option B\",\"description\":\"Select the second test option.\"}]}]})", "verbatim": "User has answered your questions: \"Capture test: choose an option so I can record this tool's output format.\"=\"Option A (Recommended)\". You can now continue with the user's answers in mind.", "commentary": "Answer returned in a narrative sentence."}
+      }
+    },
+    "functions.subagent": {"cases": {}, "commentary": "Not captured: subagent tier; spawn testing reserved for primary tier."},
+    "functions.opencode_worktree_remove": {"cases": {}, "commentary": "Not captured: no disposable worktree; destructive test inappropriate."},
+    "functions.skill": {"cases": {}, "commentary": "Not captured: no task-relevant skill ID available."},
+    "multi_tool_use.parallel": {"cases": {}, "commentary": "Wrapper exercised; underlying tool outputs delivered independently."}
+  }
+}

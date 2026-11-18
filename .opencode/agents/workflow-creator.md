@@ -2,23 +2,32 @@
 description: Collaboratively creates and modifies orchestration workflow definitions with the user, deciding where agent boundaries fall, specifying missing subagents, and ensuring routing consistency and compliance with the workflow definition schema
 mode: primary
 model: openai/gpt-6-sol
-permission:
-  read: allow
-  write: allow
-  edit: allow
-  glob: allow
-  grep: allow
-  list: allow
-  bash: deny
-  patch: deny
-  webfetch: deny
-  question: allow
-  lsp: deny
-  task: allow
-  todowrite: deny
-  todoread: deny
-  skill: deny
-mosaic_harness_version: 3.0.0
+permissions:
+  - action: "*"
+    resource: "*"
+    effect: deny
+  - action: read
+    resource: "*"
+    effect: allow
+  - action: edit
+    resource: "*"
+    effect: allow
+  - action: glob
+    resource: "*"
+    effect: allow
+  - action: grep
+    resource: "*"
+    effect: allow
+  - action: question
+    resource: "*"
+    effect: allow
+  - action: subagent
+    resource: "*"
+    effect: allow
+  - action: external_directory
+    resource: "*"
+    effect: ask
+mosaic_harness_version: 1.0.0
 mosaic_role: utility
 mosaic_version: 2.1.0
 ---
