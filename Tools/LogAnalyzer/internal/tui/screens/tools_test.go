@@ -124,16 +124,21 @@ func TestTools_ShowsNoTokenOrMoneyAttribution(t *testing.T) {
 	body := strings.Join(overlayLines(view), "\n")
 	assertNotContains(t, body, "$", screens.UnpricedMarker, "(partial)", screens.AssumedTierLabel(nil))
 	assertNotContains(t, strings.ToLower(body), "cost")
-	// The context growth group label and note speak of tokens; the rows attribute none.
+	// The tool result growth group label and note speak of tokens; the rows attribute none.
 	assertNotContains(t, strings.ToLower(withoutGrowthText(body)), "token")
 }
 
-// withoutGrowthText drops the lines of the context growth group label and the
-// content-capture note, the only places the Tools view legitimately names tokens.
+// withoutGrowthText drops the lines of the tool result growth group label and the
+// note under the tables (which starts at "growth is measured"), the only places
+// the Tools view legitimately names tokens.
 func withoutGrowthText(body string) string {
 	var kept []string
 	for _, l := range strings.Split(body, "\n") {
-		if !strings.Contains(strings.ToLower(l), "context growth") {
+		low := strings.ToLower(l)
+		if strings.Contains(low, "growth is measured") {
+			break
+		}
+		if !strings.Contains(low, "tool result growth") {
 			kept = append(kept, l)
 		}
 	}

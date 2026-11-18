@@ -9,17 +9,17 @@ import (
 	"mosaic-log-analyzer/internal/domain"
 )
 
-func TestCacheHitRatio_IsCacheReadOverTotalContextPerScope(t *testing.T) {
+func TestCacheHitRatio_IsCappedReadsOverPreviousContextPerScope(t *testing.T) {
 	run := ccPriceRun(t,
-		[]domain.InvocationUsage{ctxCall("o1", 1, 100, 100, 0, 0)},
-		ccDispatch("coder#1", "coder", ctxCall("c1", 1, 100, 700, 200, 50)),
-		ccDispatch("coder#2", "coder", ctxCall("c2", 1, 300, 100, 0, 0)),
+		[]domain.InvocationUsage{ctxCall("o1", 1, 100, 0, 0, 0), ctxCall("o2", 2, 100, 100, 0, 0)},
+		ccDispatch("coder#1", "coder", ctxCall("c1", 1, 100, 700, 200, 50), ctxCall("c2", 2, 300, 500, 300, 0)),
+		ccDispatch("coder#2", "coder", ctxCall("d1", 1, 300, 100, 0, 0), ctxCall("d2", 2, 100, 300, 100, 0)),
 	)
 
-	// Output tokens are not part of the context: 100+700+200 = 1000.
-	rwRatioIs(t, "dispatch", rwDispatchOf(t, run, "coder#1").Cache.HitRatio, 700, 1000)
+	// Output tokens are not part of the context: c1's context is 100+700+200 = 1000.
+	rwRatioIs(t, "dispatch", rwDispatchOf(t, run, "coder#1").Cache.HitRatio, 500, 1000)
 	rwRatioIs(t, "agent type", rwTypeGroup(t, run, "coder").Cache.HitRatio, 800, 1400)
-	rwRatioIs(t, "run", run.Cache.HitRatio, 900, 1600)
+	rwRatioIs(t, "run", run.Cache.HitRatio, 900, 1500)
 }
 
 func TestCacheHitRatio_DispatchWithoutTokensIsUndefinedNotZero(t *testing.T) {

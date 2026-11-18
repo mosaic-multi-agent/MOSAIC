@@ -74,7 +74,7 @@ func vwRun() domain.RunReport {
 				{Model: "m-a", Priced: true, Requests: 3, Totals: vwTotals(500, true)},
 				{Model: "", Priced: false, Requests: 1, Totals: vwTotals(0, false)},
 			},
-			CacheHitRatio: domain.Ratio{Numerator: 40, Denominator: 0},
+			CacheHitRatio: domain.Ratio{Numerator: 40, Denominator: 50},
 		},
 		ByAgentType: []domain.AgentTypeGroup{
 			{
@@ -169,7 +169,7 @@ func TestEncodeReport_Overview_SharesRatiosAndModels(t *testing.T) {
 
 	vwAssertRatio(t, "overview", ov, "orchestrator_share", 200, 500)
 	vwAssertRatio(t, "overview", ov, "subagent_share", 300, 500)
-	vwAssertRatio(t, "overview", ov, "cache_hit_ratio", 40, 0)
+	vwAssertRatio(t, "overview", ov, "cache_hit_ratio", 40, 50)
 	for _, key := range []string{"totals", "orchestrator", "subagents", "by_model"} {
 		if _, ok := ov[key]; !ok {
 			t.Errorf("overview has no %q key; keys = %v", key, sortedKeys(ov))

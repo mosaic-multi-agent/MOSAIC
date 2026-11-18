@@ -1,6 +1,9 @@
 package screens
 
-import "mosaic-common/tui/kit/chrome"
+import (
+	tuicommon "mosaic-common/tui"
+	"mosaic-common/tui/kit/chrome"
+)
 
 // Column descriptions of the overview, the timeline and the page screens.
 
@@ -19,6 +22,7 @@ func overviewLegend() []chrome.HelpGroup {
 			{"cost", "What the tokens of the category cost."},
 			{"share", "The category's share of the run's total cost."},
 		}),
+		{Title: "Cache figures", Entries: []tuicommon.HelpEntry{{Key: "Cache hit ratio", Desc: cacheHitDesc}}},
 		legendGroup("models", []columnDoc{
 			{"model", "The model that served the API calls of the row."},
 			{"API calls", "How many API calls the model answered."},

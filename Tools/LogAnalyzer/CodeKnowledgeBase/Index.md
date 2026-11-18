@@ -45,5 +45,9 @@ No areas currently warrant deeper-tier documentation beyond this overview — se
 
 ## Further Reading
 
-- [ReworkAndCache.md](ReworkAndCache.md) - likely-rework rule, outcome split, cache figures (net benefit, unread writes) and run comparison semantics.
-- [SchemaAndCompactions.md](SchemaAndCompactions.md) - major-version schema rule, compaction pairing rules (phased and legacy), digest round trip, and the 1.4.0/1.5.0 field inventory.
+- [ReworkAndCache.md](ReworkAndCache.md) - likely-rework rule, outcome split, cache figures (the cache hit definition, net benefit, per-session unread writes) and run comparison semantics.
+- [SchemaAndCompactions.md](SchemaAndCompactions.md) - major-version schema rule, compaction pairing rules (phased and legacy), session-aware compaction detection, per-session first write, tool growth scope, digest round trip, and the 1.4.0/1.5.0 field inventory.
+
+## Default Source
+
+With no `--path` the digest-aware resolver (`app/digestsource.go`) probes `OrchestrationLogs/` under the working directory and also lists `*.digest.json` files lying directly in the working directory. A usable logs folder keeps its kind and gains the digests beside it and those in the working directory (a file seen twice is passed once). Without a usable logs folder, working-directory digests alone become a digest-directory source and open without a prompt; the source prompt appears only when neither exists. `export` without a path uses the same default. On a duplicate run the logs win, then the most recently written digest.

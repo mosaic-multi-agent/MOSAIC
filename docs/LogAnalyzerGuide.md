@@ -10,7 +10,7 @@ This guide is for **users of the log analyzer**. The tool reads the logs MOSAIC'
 
 | Concept | Summary |
 |---------|---------|
-| **Start it** | Run `mosaic-log-analyzer` in your project folder for the interactive TUI |
+| **Start it** | Run `mosaic-log-analyzer` in your project folder for the interactive TUI. It loads `OrchestrationLogs/` and the `*.digest.json` files in that folder |
 | **Share a run without its content** | `mosaic-log-analyzer export --out run.digest.json`, or `e` in the TUI; see [Sharing Runs](#sharing-runs-without-content) |
 | **Two config levels** | Global (your user config folder, all projects) and project (`MosaicLogAnalyzer/config/` under the folder you start the tool from) |
 | **Two config files per level** | `pricing.yaml` (model prices) and `analysis.yaml` (analysis settings) |
@@ -23,7 +23,7 @@ This guide is for **users of the log analyzer**. The tool reads the logs MOSAIC'
 
 ## Starting the Tool
 
-Without a subcommand the TUI opens the `OrchestrationLogs/` folder under the current directory, and asks for a source when there is none. To open something else, use `--path` or press `s` on the runs list. A source can be:
+Without a path the tool loads two things from the current directory: the `OrchestrationLogs/` folder and every `*.digest.json` file lying directly in the directory, and merges their runs (see [Sharing Runs](#sharing-runs-without-content)). With digests but no `OrchestrationLogs/` folder, they open without a prompt. The source prompt appears only when neither exists. `export` without a path reads the same default sources. To open something else, use `--path` or press `s` on the runs list. A source can be:
 
 - an `OrchestrationLogs/` folder,
 - a single run folder,
@@ -144,7 +144,7 @@ Press `enter` on a row of Dispatches, of a By type drill-down, or of Context to 
 
 - the **head**: who the actor is, its model, status and totals, and a **cost split** of what its calls cost,
 - the **findings** about the actor, as measured facts,
-- the **per-call table**: for each API call its time, model, kind (main or compaction), context, tokens, cost, the **requested tools**, and the **context growth** after the call, with notes for the first write, compactions and rewrites,
+- the **per-call table**: for each API call its time, model, kind (main or compaction), context, tokens, cost, the **requested tools**, and the **result growth** after the call (the tool result only, see below), with notes for the first write, compactions and rewrites,
 - the **actor's tools**: the tools it used with their figures and growth.
 
 The requested tools show `not provided` when the log does not record them (see below).
@@ -153,10 +153,16 @@ The requested tools show `not provided` when the log does not record them (see b
 
 The Tools view, the Session screen and the JSON report (`report`, additive `context_growth` object per tool with `samples`, `average_tokens`, `min_tokens`, `max_tokens`, `negative`, `not_measurable`) show how much the context grew after a tool was called. What it means:
 
-- It is **measured on single-tool calls only**: an API call that requested exactly one tool, followed by the actor's next main call with no compaction and no user turn in between. A call that requested several tools cannot say which tool added what, so it is not a sample.
-- It is **the tokens the tool's result adds to the context**, read as the difference between the two calls' contexts. It is **not a cost split of the run**: output of the model and everything else that changes the context between the two calls is part of the difference, and the sum over tools does not equal the run's cost or context.
+- It is **measured on single-tool calls only**: an API call that requested exactly one tool, followed by the actor's next main call **in the same session** with no compaction and no user turn in between. A call that requested several tools cannot say which tool added what, so it is not a sample.
+- It is **the tokens the tool's result adds to the context**, read as the difference between the two calls' contexts. It covers the **tool result only**: the tool input is counted in the calling call's output tokens, not in the growth. The columns are titled "result growth". It is **not a cost split of the run**: output of the model and everything else that changes the context between the two calls is part of the difference, and the sum over tools does not equal the run's cost or context.
 - **Samples** are the calls that were measured. **Negative growth** counts samples where the context shrank (for example after a compaction) and **not measurable** counts calls whose growth could not be determined; both are left out of the average, minimum and maximum, and shown as counts so you can judge how many calls the figures rest on. With no sample the figures are empty.
 - The tools each call requested are logged on every harness. **VS Code GHCP Local needs OpenTelemetry content capture** for it; without it the requested tools are `not provided` and no growth is measured. See [Token Usage on VS Code GHCP Local](#token-usage-on-vs-code-ghcp-local).
+
+### Cache hit
+
+The "cache hit" figure (Overview "Cache hit ratio", and the `cache hit` column of Dispatches and By type) says **how much of what could have been read from the cache actually was**. For each qualifying main call it divides the call's cache reads by the context of the previous call, and the reads are capped at that context; the figure sums this over the scope. The previous call's context is what a perfect cache would have served, so a figure of **100 %** means perfect caching.
+
+These calls are **excluded**: the first call of a session, a call right after a compaction, a call whose model differs from the previous call's, and calls with no usable previous context. A cache that expired during a pause is **not** excluded: that call reads little and counts as a miss.
 
 ### Timeline
 
@@ -173,7 +179,8 @@ Compaction markers (logged and detected) are in the legend as well. Idle stretch
 
 The Context view shows how large each agent's context was over the run, with a compaction column group (logged, harness, detected only, unapplied, cost). Figures:
 
-- **Peak context**, **Final context** and **First write context** (marked `*`, a heuristic) per actor.
+- **Peak context**, **Final context** and **First write context** (marked `*`, a heuristic) per actor. The first write is taken **per session**: an actor with several sessions shows one figure per session, separated by a slash. The orchestrator has none.
+- The cache figures' **unread cache writes** (writes after which nothing was read) count the last call of **every session** of an actor.
 - Only **main calls** (the agent's own conversation steps) are used for context figures. Compaction calls and harness helper calls still count for usage and cost, but not for context size.
 - Every context size falls into a band, always named as text next to the figure:
 
@@ -195,7 +202,7 @@ A compaction replaces a long context with a shorter one. The Context view and th
 | **harness (OTel)** | No hook event, but the context drops and OTel compaction calls (API requests that summarise the context) sit around the drop. This is how compactions on VS Code GHCP Local are recognised |
 | **detected only** | A context drop with no logged compaction and no compaction calls |
 
-A drop counts as detected when the context falls by at least `detected_compaction.drop_percent` (default 30) between two consecutive calls; see [Settings](#analysis-settings-analysisyaml).
+A drop counts as detected when the context falls by at least `detected_compaction.drop_percent` (default 30) between two consecutive calls of the **same session**; a context that is smaller in a new session is no compaction, and the first call of a session is never a detection. See [Settings](#analysis-settings-analysisyaml).
 
 Each harness compaction line shows the context before and after, the number of compaction calls it took and their cost. Two more lines can follow:
 
@@ -235,7 +242,7 @@ Leave out `--run` to export every run; in the TUI, press `e` or `E`. The file na
 - **What stays in a digest:** token counts, model and provider names, timestamps, agent types, status codes, tool names (including MCP server names), and run, session and call ids. Check these are fine to share.
 - **Costs use the reader's prices.** A digest holds tokens, not money, so the same run can show a different cost with a different `pricing.yaml`.
 - **Findings** keep their kind but lose their detail text.
-- **Digests beside logs are merged.** A digest in a logs folder adds its runs to the list. If a run exists twice, the logs win, then the most recently written digest; a finding reports the discarded copy.
+- **Digests beside logs are merged.** A digest in a logs folder, or in the working directory on a default start, adds its runs to the list. If a run exists twice, the logs win, then the most recently written digest; a finding reports the discarded copy.
 
 ---
 

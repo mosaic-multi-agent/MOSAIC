@@ -234,13 +234,13 @@ func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable, setti
 		}
 	}
 	markRework(dispatches)
-	attachDispatchCache(dispatches, table, settings)
+	attachDispatchCache(dispatches, rr.Context, table, settings)
 	groups := groupByType(dispatches)
 	rr.Overview = buildOverview(run, rr, dispatches, table, settings)
-	rr.ByAgentType = buildAgentTypeGroups(groups, table, settings)
+	rr.ByAgentType = buildAgentTypeGroups(groups, rr.Context, table, settings)
 	rr.Rework = buildReworkFigures(dispatches)
-	rr.Cache = buildRunCache(run, rr.Totals, table, settings)
-	rr.OrchestratorCache = buildOrchestratorCache(run, orchReport.Totals, table, settings)
+	rr.Cache = buildRunCache(run, rr.Context, rr.Totals, table, settings)
+	rr.OrchestratorCache = buildOrchestratorCache(run, rr.Context, orchReport.Totals, table, settings)
 	rr.ByStatus = buildStatusBreakdown(dispatches, groups)
 	rr.Tools = buildToolsBreakdown(run, groups, rr.Context)
 	rr.Timeline = buildTimeline(run)

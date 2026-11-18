@@ -29,7 +29,9 @@ func contextFigureLines(st Styles, width int, a domain.ActorContext) []string {
 	}
 	figure("Peak context:", a.Peak)
 	figure("Final context:", a.Final)
-	figure("First write context*:", a.FirstWrite)
+	for _, name := range firstWriteNames(a) {
+		figure(name.label, name.figure)
+	}
 	for _, l := range compactionLines(st.Currency, a) {
 		head = append(head, clip(st.Body, width, l))
 	}
@@ -42,6 +44,27 @@ func contextFigureLines(st Styles, width int, a domain.ActorContext) []string {
 		}
 	}
 	return head
+}
+
+// namedFigure is a figure with the label of its line.
+type namedFigure struct {
+	label  string
+	figure domain.ContextFigure
+}
+
+// firstWriteNames are the first-write lines: one unnumbered line for a single
+// figure of the first session or of an actor without per-session figures, else
+// one line per session that has a figure.
+func firstWriteNames(a domain.ActorContext) []namedFigure {
+	const label = "First write context*"
+	if len(a.FirstWrites) == 0 || (len(a.FirstWrites) == 1 && a.FirstWrites[0].Session == 1) {
+		return []namedFigure{{label + ":", a.FirstWrite}}
+	}
+	out := make([]namedFigure, len(a.FirstWrites))
+	for i, fw := range a.FirstWrites {
+		out[i] = namedFigure{fmt.Sprintf("%s (session %d):", label, fw.Session), fw.Figure}
+	}
+	return out
 }
 
 // contextCurve is the curve of the actor's call contexts with a guide per band

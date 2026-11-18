@@ -19,7 +19,8 @@ type Interaction = interaction.Interaction
 // Implementations: logscan.Scanner (production), in-memory fake (tests).
 type LogSource interface {
 	// Default probes for OrchestrationLogs/ beneath workDir. An absent folder
-	// yields Source{Kind: SourceNotFound}.
+	// yields Source{Kind: SourceNotFound}. Digests lying directly in workDir
+	// are discovered separately through DigestStore.
 	Default(workDir string) Source
 
 	// Classify decides whether path is a logs root, a single run folder, or

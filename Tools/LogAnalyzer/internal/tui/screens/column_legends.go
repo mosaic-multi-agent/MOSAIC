@@ -42,6 +42,11 @@ func withLegend(groups []chrome.HelpGroup, legend ...chrome.HelpGroup) []chrome.
 	return append(groups, legend...)
 }
 
+// cacheHitDesc defines the cache hit figure: how much of what could have been read
+// from the cache actually was.
+const cacheHitDesc = "Cache reads over the previous call's context, if that call is in the same session with no compaction or model change; " +
+	"reads capped at it, an expiry is a miss, perfect caching is 100%."
+
 // dispatchDocs describe the columns of a table of dispatches.
 func dispatchDocs() []columnDoc {
 	return []columnDoc{
@@ -52,7 +57,7 @@ func dispatchDocs() []columnDoc {
 		{"tokens", "Billable tokens of the instance: input, cache read, cache write and output."},
 		{"duration", "Wall-clock time from the start to the end of the instance."},
 		{"peak context", "The largest context any API call of the instance sent."},
-		{"cache hit", "The share of the instance's input served from the prompt cache."},
+		{"cache hit", cacheHitDesc},
 		{"rewrites", "API calls that wrote their context again instead of reading it from the cache."},
 		{"cache write", "Tokens the instance wrote to the prompt cache."},
 		{"write cost", "What the instance's cache writes cost."},
@@ -76,7 +81,7 @@ func typeDocs() []columnDoc {
 		{"flags", "Findings about instances of the type, such as missing usage."},
 		{"average peak context", "The mean of the largest context each instance of the type sent."},
 		{"maximum peak context", "The largest context any instance of the type sent."},
-		{"cache hit", "The share of the type's input served from the prompt cache."},
+		{"cache hit", cacheHitDesc},
 		{"rewrites", "API calls of the type that wrote their context again instead of reading the cache."},
 		{"cache write", "Tokens instances of the type wrote to the prompt cache."},
 		{"write cost", "What the type's cache writes cost."},
@@ -113,14 +118,17 @@ func toolDocs() []columnDoc {
 	}
 }
 
+// growthScope states what the growth figures cover and where the tool input is counted.
+const growthScope = "The figure covers the tool result only; the tool input is counted in the calling call's output tokens."
+
 // growthDocs describe the context growth columns of the tools table.
 func growthDocs() []columnDoc {
 	return []columnDoc{
-		{"average growth", "The mean tokens a call of the tool added to the next call's context."},
-		{"minimum growth", "The smallest number of tokens a call of the tool added to the context."},
-		{"maximum growth", "The largest number of tokens a call of the tool added to the context."},
-		{"growth samples", "The calls that requested exactly one tool, the only ones growth is measured on."},
-		{"negative growth", "Samples where the context shrank, for example after a compaction; left out of the figures."},
+		{"average result growth", "The mean tokens the result of a call of the tool added to the next call's context. " + growthScope},
+		{"minimum result growth", "The smallest number of tokens a tool result added to the context."},
+		{"maximum result growth", "The largest number of tokens a tool result added to the context."},
+		{"result growth samples", "The calls that requested exactly one tool, the only ones growth is measured on."},
+		{"negative result growth", "Samples where the context shrank, for example after a compaction; left out of the figures."},
 		{"not measurable", "Calls whose growth could not be measured; left out of the figures."},
 	}
 }
@@ -135,7 +143,7 @@ func contextDocs() []columnDoc {
 		{"rewrites", "API calls that wrote their context again instead of reading it from the cache."},
 		{"API calls", "How many API calls the actor made."},
 		{"first context", "The context of the actor's first call."},
-		{"context at first write", "A heuristic: the context at the first write-class tool call; not computed for the orchestrator."},
+		{"context at first write", "A heuristic: the context at the first write-class tool call, taken per session (several figures are separated by a slash); not computed for the orchestrator."},
 		{"peak context", "The largest context any call of the actor sent."},
 		{"final context", "The context at the end of the actor's run: " + domain.FinalContextDefinition + "."},
 		{"logged", "Compactions the harness recorded in its own log."},
@@ -143,7 +151,7 @@ func contextDocs() []columnDoc {
 		{"detected only", "Compactions inferred from a drop in context between calls, with no log record."},
 		{"unapplied", "Compaction calls whose result the harness never applied to the context."},
 		{"cost", "What the actor's compaction calls cost."},
-		{"context", "The actor's context call by call, colored by band, with a marker at the first write."},
+		{"context", "The actor's context call by call, colored by band, with a marker at the earliest first write."},
 	}
 }
 
@@ -160,7 +168,7 @@ func callDocs() []columnDoc {
 		{"output", "Output tokens the call produced."},
 		{"cost", "What the call cost in the display currency."},
 		{"requested tools", "The tools the call asked the harness to run, or not provided when the log does not record them."},
-		{"context growth", "How much the context grew after a call that requested exactly one tool, up to the next call."},
+		{"result growth", "How much the context grew after a call that requested exactly one tool, up to the next call. " + growthScope},
 		{"mark", "Notes on the call: the first write, compactions around it and rewrites."},
 	}
 }
@@ -184,5 +192,5 @@ func statusLegend() []chrome.HelpGroup { return []chrome.HelpGroup{legendGroup("
 
 // toolsLegend is the legend of the tools table and its context growth columns.
 func toolsLegend() []chrome.HelpGroup {
-	return []chrome.HelpGroup{legendGroup("tools", toolDocs()), legendGroup("context growth", growthDocs())}
+	return []chrome.HelpGroup{legendGroup("tools", toolDocs()), legendGroup("tool result growth", growthDocs())}
 }

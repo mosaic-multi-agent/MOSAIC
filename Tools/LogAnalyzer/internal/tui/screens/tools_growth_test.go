@@ -19,7 +19,7 @@ func TestToolsGrowth_HeaderNamesTheGrowthColumnsUnderTheirGroup(t *testing.T) {
 	view := growthView(t, growthRun(), tableW)
 
 	titles := growthTitles(view)
-	for _, want := range []string{"average growth", "minimum growth", "maximum growth", "growth samples", "negative growth", "not measurable"} {
+	for _, want := range []string{"average result growth", "minimum result growth", "maximum result growth", "result growth samples", "negative result growth", "not measurable"} {
 		if !hasTitle(titles, want) {
 			t.Errorf("the header has no column titled %q; its columns are %q", want, titles)
 		}
@@ -31,14 +31,14 @@ func TestToolsGrowth_RunLevelRowShowsAverageMinimumMaximumAndSampleCountEachInIt
 	view := growthView(t, growthRun(), tableW)
 
 	assertGrowthCells(t, view, "Read",
-		"average growth", "1,234", "minimum growth", "777", "maximum growth", "2,468", "growth samples", "13")
+		"average result growth", "1,234", "minimum result growth", "777", "maximum result growth", "2,468", "result growth samples", "13")
 }
 
 func TestToolsGrowth_OrchestratorLevelRowShowsItsOwnGrowthInItsColumns(t *testing.T) {
 	view := growthView(t, growthRun(), tableW)
 
 	assertGrowthCells(t, view, "Grep",
-		"average growth", "4,321", "minimum growth", "321", "maximum growth", "9,876", "growth samples", "17")
+		"average result growth", "4,321", "minimum result growth", "321", "maximum result growth", "9,876", "result growth samples", "17")
 	assertNoFields(t, rowFor(t, view, "Grep"), "1,234", "5,555")
 }
 
@@ -46,39 +46,39 @@ func TestToolsGrowth_AgentTypeLevelRowShowsItsOwnGrowthInItsColumns(t *testing.T
 	view := growthView(t, growthRun(), tableW)
 
 	assertGrowthCells(t, view, "Edit",
-		"average growth", "5,555", "minimum growth", "505", "maximum growth", "6,666", "growth samples", "19")
+		"average result growth", "5,555", "minimum result growth", "505", "maximum result growth", "6,666", "result growth samples", "19")
 	assertNoFields(t, rowFor(t, view, "Edit"), "1,234", "4,321")
 }
 
 func TestToolsGrowth_LeftOutCountsAreShownInTheirColumnsOnTheRowOfEveryLevel(t *testing.T) {
 	view := growthView(t, growthRun(), tableW)
 
-	assertGrowthCells(t, view, "Read", "negative growth", "5", "not measurable", "7")
-	assertGrowthCells(t, view, "Grep", "negative growth", "6", "not measurable", "8")
-	assertGrowthCells(t, view, "Edit", "negative growth", "14", "not measurable", "11")
+	assertGrowthCells(t, view, "Read", "negative result growth", "5", "not measurable", "7")
+	assertGrowthCells(t, view, "Grep", "negative result growth", "6", "not measurable", "8")
+	assertGrowthCells(t, view, "Edit", "negative result growth", "14", "not measurable", "11")
 }
 
 func TestToolsGrowth_ToolWithoutSamplesShowsNotProvidedAZeroSampleCountAndZeroLeftOut(t *testing.T) {
 	view := growthView(t, growthRun(), tableW)
 
 	assertGrowthCells(t, view, "Write",
-		"average growth", notProvided, "minimum growth", screens.AbsentMarker, "maximum growth", screens.AbsentMarker,
-		"growth samples", "0", "negative growth", "0", "not measurable", "0")
+		"average result growth", notProvided, "minimum result growth", screens.AbsentMarker, "maximum result growth", screens.AbsentMarker,
+		"result growth samples", "0", "negative result growth", "0", "not measurable", "0")
 }
 
 func TestToolsGrowth_ToolWithOnlyLeftOutCallsShowsNotProvidedAndItsCounts(t *testing.T) {
 	view := growthView(t, growthRun(), tableW)
 
 	assertGrowthCells(t, view, "Bash",
-		"average growth", notProvided, "minimum growth", screens.AbsentMarker, "maximum growth", screens.AbsentMarker,
-		"growth samples", "0", "negative growth", "23", "not measurable", "29")
+		"average result growth", notProvided, "minimum result growth", screens.AbsentMarker, "maximum result growth", screens.AbsentMarker,
+		"result growth samples", "0", "negative result growth", "23", "not measurable", "29")
 }
 
 func TestToolsGrowth_ToolWithSamplesOfZeroGrowthShowsZeroNotNotProvided(t *testing.T) {
 	view := growthView(t, growthRun(), tableW)
 
 	assertGrowthCells(t, view, "Glob",
-		"average growth", "0", "minimum growth", "0", "maximum growth", "0", "growth samples", "3")
+		"average result growth", "0", "minimum result growth", "0", "maximum result growth", "0", "result growth samples", "3")
 }
 
 func TestToolsGrowth_OlderLogShowsNotProvidedForEveryToolAtEveryLevel(t *testing.T) {
@@ -95,7 +95,7 @@ func TestToolsGrowth_NoteExplainsVSCodeNeedsOTelContentCapture(t *testing.T) {
 		t.Run(fmt.Sprint(w), func(t *testing.T) {
 			view := growthView(t, growthRun(), w)
 
-			assertContains(t, flatText(view), "Context growth is measured only on calls that requested exactly one tool", contentCaptureNote)
+			assertContains(t, flatText(view), "Tool result growth is measured only on calls that requested exactly one tool", contentCaptureNote)
 			assertFitsWidth(t, view, w)
 		})
 	}
@@ -119,12 +119,12 @@ func TestToolsGrowth_SampleCountAndLeftOutCountsSurviveEveryWidth(t *testing.T) 
 			view := growthView(t, growthRun(), w)
 
 			titles := growthTitles(view)
-			for _, want := range []string{"growth samples", "negative growth", "not measurable"} {
+			for _, want := range []string{"result growth samples", "negative result growth", "not measurable"} {
 				if !hasTitle(titles, want) {
 					t.Errorf("width %d dropped the column %q; its columns are %q", w, want, titles)
 				}
 			}
-			assertGrowthCells(t, view, "Read", "growth samples", "13", "negative growth", "5", "not measurable", "7")
+			assertGrowthCells(t, view, "Read", "result growth samples", "13", "negative result growth", "5", "not measurable", "7")
 			assertFitsWidth(t, view, w)
 		})
 	}

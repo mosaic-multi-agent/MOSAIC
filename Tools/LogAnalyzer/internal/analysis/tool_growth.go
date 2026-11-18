@@ -8,11 +8,12 @@ import (
 
 // applyToolGrowth sets the context growth of every singular call of an actor.
 // A call is singular when it is a main call that requested exactly one tool
-// once and the actor's next timed main call follows with no compaction (logged,
+// once and the actor's next timed main call follows in the same session with no compaction (logged,
 // detected, or a compaction call) and no user turn of the actor in between.
 // Singular is decided from recorded figures; timestamps only order the calls.
 func applyToolGrowth(a *domain.ActorContext, turns []domain.Turn) {
 	userTurns := userTurnTimes(turns, a.Actor)
+	sessions := callSessions(a.Calls)
 	for i := range a.Calls {
 		c := &a.Calls[i]
 		tool, ok := c.RequestedTools.Single()
@@ -20,7 +21,7 @@ func applyToolGrowth(a *domain.ActorContext, turns []domain.Turn) {
 			continue
 		}
 		j := nextTimedMain(a.Calls, i)
-		if j < 0 || compactionBetween(*a, i, j) || turnBetween(userTurns, c.At, a.Calls[j].At) {
+		if j < 0 || sessions[j] != sessions[i] || compactionBetween(*a, i, j) || turnBetween(userTurns, c.At, a.Calls[j].At) {
 			continue
 		}
 		c.Growth = measureGrowth(tool, *c, a.Calls[j])

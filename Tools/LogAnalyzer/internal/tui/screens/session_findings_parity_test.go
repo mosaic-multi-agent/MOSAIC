@@ -183,7 +183,7 @@ func TestSessionFindingsParity_OlderLogWithoutRequestedToolsOpensAndMarksTheTool
 	}
 	coder := findingsParityView(t, live, findingsActors[1])
 	assertContains(t, coder, "costliest call #")
-	sessToolCells(t, coder, "Read", "calls", "1", "average growth", notProvided, "growth samples", "0")
+	sessToolCells(t, coder, "Read", "calls", "1", "average result growth", notProvided, "result growth samples", "0")
 }
 
 // findingsParityView is the styling-free Session screen of an actor on a terminal

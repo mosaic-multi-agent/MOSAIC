@@ -16,15 +16,14 @@ import (
 
 func ratioReport(t *testing.T, reasoning domain.TokenCount) domain.RunReport {
 	t.Helper()
-	usage := domain.TokenUsage{
-		Input:     domain.Tokens(1000),
-		CacheRead: domain.Tokens(3000),
-		Output:    domain.Tokens(200),
-		Reasoning: reasoning,
-	}
+	first := chFullUsage(1000, 0, 3000, 200)
+	first.Reasoning = reasoning
+	second := chFullUsage(1000, 3000, 0, 200)
+	second.Reasoning = reasoning
 	in := oneAgentStream(testRunRef, "coder#1",
 		rmInvStart("coder#1", "coder", rmAt(1)),
-		usageRecordEvent("coder#1", "r1", "model-a", usage),
+		chTimedUsageEvent("coder#1", "r1", 10, first),
+		chTimedUsageEvent("coder#1", "r2", 20, second),
 	)
 	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 	return requireRunReport(t, report, testRunID)

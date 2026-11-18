@@ -48,6 +48,15 @@
 #### Changes
 - **`mosaic-agent-test` supports `--harness opencode-v2` (experimental).** It drives OpenCode V2 headlessly through the same spawn path as the Runner and intercepts collaborator invocations with a generated plugin. The existing OpenCode suites run on it
 
+### LogAnalyzer v1.5.0
+#### Changes
+- **The default start also loads the `*.digest.json` files in the working directory.** They are merged with `OrchestrationLogs/` (logs win, then the most recently written digest). With digests but no `OrchestrationLogs/` they open without a prompt; the source prompt appears only when neither exists. `export` without a path uses the same default sources
+- **The "cache hit" figure has a new definition and keeps its name and JSON keys.** It is now how much of what could have been read from the cache actually was: cache reads (capped at the previous call's context) over the previous call's context. The first call of a session and calls after a compaction or a model change are excluded; a cache expiry after a pause counts as a miss. Perfect caching reads 100 %. It was cache reads over the whole context, so figures differ from earlier versions
+- **Tool context growth covers the tool result only.** The tool input is counted in the calling call's output tokens. The growth columns are titled "result growth"
+
+#### Bugfixes
+- **Per-actor figures respect session boundaries.** A smaller context in a new session is no longer a detected compaction, tool growth is measured only within a session, unread cache writes count the last call of every session, and the first-write context is computed per session
+
 ### LogAnalyzer v1.4.0
 #### Changes
 - **`opencode-v2` is a LogAnalyzer harness (experimental).** Identity, built-in tools, settings template and harness keys, integrity checks, usage, cost and context size work for `opencode-v2` logs. Usage is read from the plugin's usage records

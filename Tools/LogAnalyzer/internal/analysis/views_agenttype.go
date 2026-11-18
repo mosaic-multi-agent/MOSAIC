@@ -186,7 +186,7 @@ func groupByType(dispatches []domain.Dispatch) []typeGroup {
 }
 
 // buildAgentTypeGroups builds the by-agent-type view.
-func buildAgentTypeGroups(groups []typeGroup, table domain.PricingTable, settings domain.AnalysisSettings) []domain.AgentTypeGroup {
+func buildAgentTypeGroups(groups []typeGroup, rc domain.RunContext, table domain.PricingTable, settings domain.AnalysisSettings) []domain.AgentTypeGroup {
 	out := make([]domain.AgentTypeGroup, len(groups))
 	for i, g := range groups {
 		out[i] = domain.AgentTypeGroup{
@@ -195,7 +195,7 @@ func buildAgentTypeGroups(groups []typeGroup, table domain.PricingTable, setting
 			PerInvocation: moneyStats(g.dispatches),
 			Dispatches:    g.dispatches,
 			PeakContext:   peakContextStats(g.dispatches),
-			Cache:         buildGroupCache(g, table, settings),
+			Cache:         buildGroupCache(g, rc, table, settings),
 			Rework:        buildReworkFigures(g.dispatches),
 		}
 	}

@@ -2,7 +2,6 @@ package analysis
 
 import (
 	"sort"
-	"time"
 
 	"mosaic-log-analyzer/internal/domain"
 )
@@ -138,35 +137,6 @@ func actorHarness(usage []domain.InvocationUsage, runHarness domain.Harness) dom
 		}
 	}
 	return runHarness
-}
-
-// applyFirstWrite sets the heuristic context at the actor's first write-class
-// tool call: that of the last call starting at or before the write.
-func applyFirstWrite(out *domain.ActorContext, tools []domain.ToolCall, harness domain.Harness, settings domain.AnalysisSettings) {
-	var start time.Time
-	for _, t := range tools {
-		if t.StartedAt.IsZero() || !settings.IsWriteTool(harness, t.ToolName) {
-			continue
-		}
-		if start.IsZero() || t.StartedAt.Before(start) {
-			start = t.StartedAt
-		}
-	}
-	out.FirstWriteAt = start
-	if start.IsZero() {
-		return
-	}
-	source := -1
-	for i, c := range out.Calls {
-		if c.Kind == domain.CallMain && !c.At.IsZero() && !c.At.After(start) && c.Context.IsPresent() {
-			source = i
-		}
-	}
-	if source < 0 {
-		return
-	}
-	out.Calls[source].FirstWrite = true
-	out.FirstWrite = callFigure(out.Calls[source])
 }
 
 // loggedMarks places the actor's logged compactions among its calls.

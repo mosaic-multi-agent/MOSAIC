@@ -17,9 +17,13 @@ const outcomeContinue = Outcome(255)
 type sourceResolver struct {
 	// classify turns a path into a source plus the digest files found there.
 	classify func(path string) (domain.Source, []string)
-	// digestsAt lists the digest files beside an already-usable source (the
-	// default location). Nil when digests are not considered.
-	digestsAt func(src domain.Source) []string
+	// defaultSource completes the default start: given the OrchestrationLogs/
+	// probe result and the working directory it returns the source to open and
+	// the digest files to merge. A usable probe keeps its kind and gains the
+	// digests beside it and in the working directory; an unusable probe becomes
+	// a digest directory source when the working directory holds digests. Nil
+	// when digests are not considered.
+	defaultSource func(probe domain.Source, workDir string) (domain.Source, []string)
 }
 
 // logsOnlyResolver resolves sources from the log structure alone.
@@ -58,13 +62,15 @@ func (s *Service) resolveWith(ctx context.Context, req Request, r sourceResolver
 		}
 	}
 
-	// No explicit path: probe the default location beneath the working directory.
+	// No explicit path: probe OrchestrationLogs/ beneath the working directory;
+	// the digest-aware resolver also considers *.digest.json files lying
+	// directly in the working directory.
 	src := s.deps.Source.Default(s.deps.WorkDir)
+	var files []string
+	if r.defaultSource != nil {
+		src, files = r.defaultSource(src, s.deps.WorkDir)
+	}
 	if src.IsUsable() {
-		var files []string
-		if r.digestsAt != nil {
-			files = r.digestsAt(src)
-		}
 		return src, files, outcomeContinue, nil
 	}
 

@@ -75,6 +75,16 @@ type ContextFigure struct {
 	Band    ContextBand // meaningful only when Tokens is present
 }
 
+// SessionFirstWrite is the heuristic context at the first write-class tool call
+// of one session of an actor.
+type SessionFirstWrite struct {
+	Session   int           // 1-based session ordinal among the actor's sessions
+	SessionID string        // the effective session id; "" when the actor's calls carry none
+	At        time.Time     // start of the session's first write-class tool call
+	Call      int           // index into ActorContext.Calls of the call the figure is taken from
+	Figure    ContextFigure // always present
+}
+
 // ContextCall is one per-call record of an actor.
 type ContextCall struct {
 	At         time.Time
@@ -86,7 +96,7 @@ type ContextCall struct {
 	Context    TokenCount // Usage.TotalContext(); absent when all three categories are absent
 	Partial    bool       // any of Input, CacheRead, CacheCreation absent
 	Cost       MoneyValue // this call's priced total
-	FirstWrite bool       // the call whose context is ActorContext.FirstWrite
+	FirstWrite bool       // the call a SessionFirstWrite figure of the actor is taken from
 
 	Kind      CallKind
 	Label     string
@@ -138,12 +148,13 @@ type CompactionCallFigures struct {
 // ActorContext holds one actor's context figures and per-call rows.
 type ActorContext struct {
 	Actor        ActorRef
-	Calls        []ContextCall // per-call records in time order
-	First        ContextFigure // first call with a present Context
-	Peak         ContextFigure // largest Context (earliest on ties)
-	Final        ContextFigure // last call with a present Context; output tokens never added
-	FirstWrite   ContextFigure // heuristic; always absent for the orchestrator
-	FirstWriteAt time.Time     // start of the first write-class tool call; zero when none
+	Calls        []ContextCall       // per-call records in time order
+	First        ContextFigure       // first call with a present Context
+	Peak         ContextFigure       // largest Context (earliest on ties)
+	Final        ContextFigure       // last call with a present Context; output tokens never added
+	FirstWrite   ContextFigure       // heuristic; FirstWrites[0].Figure, absent when FirstWrites is empty; always absent for the orchestrator
+	FirstWriteAt time.Time           // start of the actor's earliest write-class tool call (any session); zero when none
+	FirstWrites  []SessionFirstWrite // heuristic; one per session with a figure, in session order; nil for the orchestrator
 	Compactions  []CompactionMark
 
 	CompactionCalls CompactionCallFigures
