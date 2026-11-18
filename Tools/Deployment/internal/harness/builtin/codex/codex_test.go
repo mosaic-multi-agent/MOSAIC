@@ -892,28 +892,6 @@ func TestFrontmatter_NoDefaultTierModels(t *testing.T) {
 	}
 }
 
-// TestFrontmatter_ExactFourModelIDs verifies that the Codex descriptor's model list
-// is exactly the four Codex model IDs, no more and no fewer (d, AC5.7a). This test
-// pins the literal values; every other surface merely passes them through, so this
-// is the one place where the exact strings are the behavior under test.
-func TestFrontmatter_ExactFourModelIDs(t *testing.T) {
-	d := codex.DescriptorForTesting(t)
-
-	wantIDs := []string{"gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}
-	if len(d.Models.IDs) != len(wantIDs) {
-		t.Fatalf("Models.IDs: got %d entries (%v), want exactly %d (%v); "+
-			"the Codex descriptor must declare exactly these four model IDs",
-			len(d.Models.IDs), d.Models.IDs, len(wantIDs), wantIDs)
-	}
-	for i, want := range wantIDs {
-		if d.Models.IDs[i] != want {
-			t.Errorf("Models.IDs[%d] = %q, want %q; "+
-				"pin the model IDs by value -- a typo or silently dropped entry fails here",
-				i, d.Models.IDs[i], want)
-		}
-	}
-}
-
 // ---------------------------------------------------------------------------
 // T5.4 -- Target paths
 // ---------------------------------------------------------------------------

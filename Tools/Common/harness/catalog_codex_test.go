@@ -66,19 +66,15 @@ func TestLoadingMechanism_RunnerLoadedStringAndDistinct(t *testing.T) {
 	}
 }
 
-func TestLookupModelCatalog_CodexModelIDsInOrder(t *testing.T) {
+// Model catalogs are refreshed as vendors ship and retire models, so no test
+// pins an exact model list; tests only check the catalog's shape.
+func TestLookupModelCatalog_CodexCatalogDeclared(t *testing.T) {
 	cat, ok := harness.LookupModelCatalog(harness.HarnessIDCodex)
 	if !ok {
 		t.Fatalf("LookupModelCatalog(%q): not found", harness.HarnessIDCodex)
 	}
-	want := []string{"gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}
-	if len(cat.IDs) != len(want) {
-		t.Fatalf("IDs = %v, want %v", cat.IDs, want)
-	}
-	for i := range want {
-		if cat.IDs[i] != want[i] {
-			t.Errorf("IDs[%d] = %q, want %q", i, cat.IDs[i], want[i])
-		}
+	if len(cat.IDs) == 0 {
+		t.Errorf("want a non-empty model catalog for %q", harness.HarnessIDCodex)
 	}
 	if cat.FormatHint == "" {
 		t.Errorf("want a non-empty FormatHint for %q", harness.HarnessIDCodex)
@@ -86,10 +82,15 @@ func TestLookupModelCatalog_CodexModelIDsInOrder(t *testing.T) {
 }
 
 func TestIsModelID_CodexModelAcceptedForCodexOnly(t *testing.T) {
-	if !harness.IsModelID(harness.HarnessIDCodex, "gpt-5.6-sol") {
-		t.Errorf("IsModelID(codex, gpt-5.6-sol) = false, want true")
+	cat, ok := harness.LookupModelCatalog(harness.HarnessIDCodex)
+	if !ok || len(cat.IDs) == 0 {
+		t.Fatalf("LookupModelCatalog(%q): no model ids", harness.HarnessIDCodex)
 	}
-	if harness.IsModelID(harness.HarnessIDClaudeCode, "gpt-5.6-luna") {
-		t.Errorf("IsModelID(claude-code, gpt-5.6-luna) = true, want false")
+	id := cat.IDs[0]
+	if !harness.IsModelID(harness.HarnessIDCodex, id) {
+		t.Errorf("IsModelID(codex, %q) = false, want true", id)
+	}
+	if harness.IsModelID(harness.HarnessIDClaudeCode, id) {
+		t.Errorf("IsModelID(claude-code, %q) = true, want false", id)
 	}
 }

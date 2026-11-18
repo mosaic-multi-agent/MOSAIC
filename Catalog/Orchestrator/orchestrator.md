@@ -5,7 +5,7 @@ description: Central coordinator that manages multi-agent workflow execution, ro
 role: orchestrator
 model: {model-identifier}
 tools: {tool-permissions}
-recommended_tier: HIGH
+recommended_tier: ORCHESTRATOR
 tier_rationale: multi-phase coordination, routing decisions, state management
 required_skills: []
 ---
