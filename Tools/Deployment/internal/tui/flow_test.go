@@ -8,7 +8,7 @@ package tui
 //
 //	harness screen → (Enter) → mode screen → (Enter for deploy-new, Down+Enter for update) →
 //	workspace screen → (Enter with pre-filled path) → screenRunning →
-//	(service completes) → screenDone with SummaryScreen → ('q' or Enter) → tea.Quit
+//	(service completes) → screenDone with SummaryScreen → (any key) → first screen
 //
 // A pre-filled workspace path is used so the workspace screen does not require character-by-
 // character keyboard input in tests — the workspace path must be a real writable directory and
@@ -49,6 +49,14 @@ type stubFlowService struct {
 
 	promoteErr      error
 	transformErr    error
+
+	// Batch promote: the result and error PromoteBatch returns, the last request it received
+	// and how often Promote (single file) and PromoteBatch were called.
+	promoteBatch      app.PromoteBatchResult
+	promoteBatchErr   error
+	promoteBatchReq   *app.PromoteBatchRequest
+	promoteBatchCalls int
+	promoteCalls      int
 }
 
 func (s *stubFlowService) ListHarnesses() []domain.HarnessRef { return s.harnesses }
@@ -61,7 +69,14 @@ func (s *stubFlowService) Update(_ context.Context, _ app.UpdateRequest) (domain
 func (s *stubFlowService) UpdateWorkflows(_ context.Context, _ app.WorkflowUpdateRequest) (domain.RunSummary, error) {
 	return s.workflows, s.workflowsErr
 }
+func (s *stubFlowService) PromoteBatch(_ context.Context, req app.PromoteBatchRequest) (app.PromoteBatchResult, error) {
+	s.promoteBatchCalls++
+	s.promoteBatchReq = &req
+	return s.promoteBatch, s.promoteBatchErr
+}
+
 func (s *stubFlowService) Promote(_ context.Context, _ app.PromoteRequest) (app.PromoteResult, error) {
+	s.promoteCalls++
 	return s.promote, s.promoteErr
 }
 func (s *stubFlowService) TransformHarness(_ context.Context, _ app.TransformHarnessRequest) (app.TransformHarnessResult, error) {
@@ -204,11 +219,9 @@ func TestFullKeyboardFlow_DeployNew_FromLaunchToExit(t *testing.T) {
 		t.Fatal("summaryScreen is nil after deploy completion; want a SummaryScreen")
 	}
 
-	// Step 5: Summary screen — 'q' is the primary keyboard exit key.
-	_, quit := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
-	if quit == nil {
-		t.Error("cmd = nil after 'q' on summary screen; want tea.Quit command")
-	}
+	// Step 5: Summary screen — a key returns to the first screen.
+	_, next := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	assertBackAtFirstScreen(t, m, next)
 }
 
 // TestFullKeyboardFlow_DeployNew_SummaryAcceptsEnterToDismiss verifies that Enter is also
@@ -228,13 +241,11 @@ func TestFullKeyboardFlow_DeployNew_SummaryAcceptsEnterToDismiss(t *testing.T) {
 		t.Fatalf("precondition: screen = %v, want screenDone", m.screen)
 	}
 
-	// Act: Enter should dismiss the summary screen.
-	_, quit := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	// Act: Enter should dismiss the summary screen and return to the first screen.
+	_, next := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
 	// Assert
-	if quit == nil {
-		t.Error("cmd = nil after Enter on summary; want tea.Quit command")
-	}
+	assertBackAtFirstScreen(t, m, next)
 }
 
 // TestFullKeyboardFlow_DeployNew_SummaryViewIsNonEmpty verifies that the summary screen
@@ -307,11 +318,9 @@ func TestFullKeyboardFlow_Update_FromLaunchToExit(t *testing.T) {
 		t.Fatal("summaryScreen is nil after update completion; want a SummaryScreen")
 	}
 
-	// Step 5: Exit.
-	_, quit := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
-	if quit == nil {
-		t.Error("cmd = nil after 'q' on update summary; want tea.Quit command")
-	}
+	// Step 5: A key returns to the first screen.
+	_, next := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	assertBackAtFirstScreen(t, m, next)
 }
 
 // TestFullKeyboardFlow_Update_BackAndReselect verifies that back navigation during the
@@ -382,13 +391,11 @@ func TestFullKeyboardFlow_ServiceError_IsKeyboardDismissible(t *testing.T) {
 		t.Error("errMsg is empty after service error; want a non-empty error message")
 	}
 
-	// Act: 'q' must dismiss the error state.
-	_, quit := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	// Act: 'q' must dismiss the error state and return to the first screen.
+	_, next := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 
 	// Assert
-	if quit == nil {
-		t.Error("cmd = nil after 'q' on error screen; want tea.Quit command")
-	}
+	assertBackAtFirstScreen(t, m, next)
 }
 
 // ---------------------------------------------------------------------------

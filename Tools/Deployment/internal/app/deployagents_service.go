@@ -321,6 +321,8 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 		ToolMappingsVersion:    toolMappingsVersion,
 		ProtocolVersion:        protocol.Version,
 		BundleVersion:          bundle.Version,
+		CustomToolNames:        customTools,
+		SkippedTools:           skippedTools,
 	}
 	planInput.ScannedAgentKeys = orch.agentKeys()
 	planInput.InfrastructureDeclarations = orch.intent()

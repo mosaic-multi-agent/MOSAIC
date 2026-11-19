@@ -62,7 +62,9 @@ task install
 This compiles the binary for your current platform and writes it to the MOSAIC
 root directory. It also creates the `MosaicDeploy/` runtime tree and seeds it
 with default config files if they are not already present. Existing config
-files are left untouched.
+files are left untouched. The tool itself also creates a missing
+`user-config.yaml` or `tool-config.yaml` from the commented templates on
+startup, so a pre-built binary needs no manual seeding.
 
 After install, the MOSAIC root contains:
 
@@ -83,8 +85,9 @@ MOSAIC/
 ### Option 2 — Download a pre-built binary
 
 Download the binary for your platform from the release page and place it in
-the MOSAIC root directory. Then create the `MosaicDeploy/` tree manually or
-run `task install:config` from `Tools/Deployment/`.
+the MOSAIC root directory. The tool creates the `MosaicDeploy/` tree and any
+missing config file on its first run; `task install:config` from
+`Tools/Deployment/` does the same up front.
 
 ### Prerequisites
 
@@ -488,9 +491,11 @@ No catalog file is edited.
 
 ### Collision policy
 
-When a file already exists at the destination path, promote refuses to overwrite
-it unless `--overwrite` is given explicitly. There is no silent overwrite and no
-automatic renaming.
+The CLI refuses an existing key in the target layer, whatever category is
+chosen, unless `--overwrite` is given. With `--overwrite` the replaced agent
+keeps its numeric id and exactly one agent with that key remains. There is no
+silent overwrite and no automatic renaming. Tier, tier rationale and required
+skills are left out of the generated file when empty.
 
 ### Deploying after promote
 
@@ -530,8 +535,26 @@ not exist or that points to a directory is rejected with an inline error
 message, and the user stays on the path screen until a valid regular file path
 is entered. This validation happens before any service call is made. Once a
 valid file path is confirmed, the category question is presented interactively.
-Both the CLI and TUI paths call the same `Service.Promote` method, so their
-behaviour cannot diverge.
+
+**Batch promote (TUI only).** Promote also offers a batch flow: after the
+harness and the folder holding the agents and the catalog stack, a multi-select
+list shows the promotable agents, including those whose key already exists in
+the stack (hand-written agents that are not promotable are not listed). Asked
+once per batch: the target layer (stacks of two or more layers), a server name
+for each unmapped tool name, and the recommended tier per distinct source model
+(agents without a model are asked individually). Asked per agent: the category
+(mandatory), the tier rationale and required skills (Ctrl+K skips for this
+agent, Ctrl+X for the rest of the batch), and for an existing key replace or
+skip (default skip; the question names the layer holding the existing agent).
+Replacing keeps the numeric id and key, writes into the chosen layer under the
+chosen category, removes the old file in that layer when the category differs
+and leaves other layers untouched. Esc on any batch question aborts the batch;
+agents already promoted stay promoted. A failing agent does not stop the batch,
+and the summary lists every agent as promoted, skipped, failed or not
+processed. Source files are never changed. The CLI keeps single-file promote.
+
+Each promote calls the same `Service.Promote` method, so single-file and batch
+results are built the same way.
 
 ---
 
@@ -611,8 +634,8 @@ tool_destinations:
           names: ["mcp__user-feedback__ask_user_questions"]
 ```
 
-> **The tool rewrites this file** when it records a selection. All keys survive,
-> but YAML comments you add do not. Keep notes elsewhere.
+> **The tool rewrites this file** when it records a selection. All keys,
+> comments and two-space indentation survive the save.
 
 For the full key-by-key reference — including `tool_destinations` syntax,
 precedence, validation rules, and worked examples — see

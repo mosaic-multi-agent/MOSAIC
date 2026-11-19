@@ -84,9 +84,9 @@ func (s *stackFlowSvc) DeployHooks(ctx context.Context, r app.DeployHooksRequest
 	return s.stubFlowService.DeployHooks(ctx, r)
 }
 
-func (s *stackFlowSvc) Promote(ctx context.Context, r app.PromoteRequest) (app.PromoteResult, error) {
+func (s *stackFlowSvc) PromoteBatch(ctx context.Context, r app.PromoteBatchRequest) (app.PromoteBatchResult, error) {
 	s.log.add(s.id + ":promote")
-	return s.stubFlowService.Promote(ctx, r)
+	return s.stubFlowService.PromoteBatch(ctx, r)
 }
 
 func (s *stackFlowSvc) TransformHarness(ctx context.Context, r app.TransformHarnessRequest) (app.TransformHarnessResult, error) {
@@ -153,13 +153,13 @@ func withPreselectedHarness() flowOption {
 	return func(o *Options) { o.InitialRequest.HarnessID = flowTestHarness.ID }
 }
 
-// entryPath returns a path the path screen accepts for mode: a file for promote, otherwise a
-// directory.
+// entryPath returns a path the path screen accepts for mode: a directory (for promote, an
+// agents folder).
 func entryPath(t *testing.T, mode domain.RunMode) string {
 	t.Helper()
 	dir := t.TempDir()
 	if mode == domain.ModePromoteToGeneric {
-		return createAgentFile(t, dir)
+		return createAgentsFolder(t, dir)
 	}
 	return dir
 }

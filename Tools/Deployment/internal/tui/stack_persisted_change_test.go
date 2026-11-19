@@ -4,7 +4,8 @@ package tui
 // the stack screen: the run uses the change, a write run persists it (replacing the old stack, so
 // the next update starts from it), a declined plan leaves the old stack, promote and transform
 // never persist (the persistence rule itself lives in the double; see persistingSvc), and going back to the path screen restarts the stack screen only when the
-// confirmed path changed.
+// confirmed path changed. Promote starts from the launch stack whatever agents folder is
+// confirmed; that is covered in stack_promote_agents_folder_test.go.
 
 import (
 	"strings"
@@ -99,8 +100,8 @@ func TestPersistedChange_Promote_UsedByTheRunButNotPersisted(t *testing.T) {
 	store := newPersistStore()
 	persisted, added := t.TempDir(), t.TempDir()
 	ws := newWorkspaceDir(t, store, storedOf(false, persisted))
-	file := createAgentFile(t, subDir(t, ws, "nested"))
-	f := newPersistedFlow(t, domain.ModePromoteToGeneric, store, file, persistFlowOpts{})
+	folder := subDir(t, ws, "agents")
+	f := newPersistedFlow(t, domain.ModePromoteToGeneric, store, folder, persistFlowOpts{})
 	f.toStack(t)
 	f.addLayerOnStack(added)
 
@@ -108,8 +109,8 @@ func TestPersistedChange_Promote_UsedByTheRunButNotPersisted(t *testing.T) {
 	runStarted(cmd)
 
 	call := requireOneReload(t, f)
-	if !sameDescription(call.d, stackconfig.Description{UserLayers: []string{persisted, added}}) {
-		t.Errorf("the run is rebuilt from %+v, want the changed stack", call.d)
+	if len(call.d.UserLayers) != 1 || call.d.UserLayers[0] != added {
+		t.Errorf("the run is rebuilt from %+v, want the stack as changed on the screen (only the added layer)", call.d)
 	}
 	if call.origin != stackconfig.OriginStackInput {
 		t.Errorf("origin = %q, want %q", call.origin, stackconfig.OriginStackInput)
@@ -117,9 +118,6 @@ func TestPersistedChange_Promote_UsedByTheRunButNotPersisted(t *testing.T) {
 	if got, _ := store.get(ws); len(got.Layers) != 1 || got.Layers[0].Path != persisted {
 		t.Errorf("promote changed the persisted stack: %+v", got.Layers)
 	}
-	next := newPersistedFlow(t, domain.ModePromoteToGeneric, store, file, persistFlowOpts{})
-	next.toStack(t)
-	requireNotInView(t, next, added)
 }
 
 func TestPersistedChange_Transform_UsedByTheRunButNotPersisted(t *testing.T) {
@@ -222,27 +220,19 @@ func TestPersistedChange_PrefilledPathIsNotTheLookupKey(t *testing.T) {
 	requireNotInView(t, f, persistedPre)
 }
 
-func TestPersistedChange_PromoteAndTransform_BackAndOtherWorkspace_RestartsFromTheNewStack(t *testing.T) {
-	for _, mode := range []domain.RunMode{domain.ModePromoteToGeneric, domain.ModeTransformHarness} {
-		t.Run(string(mode), func(t *testing.T) {
-			store := newPersistStore()
-			persistedA, persistedB, added := t.TempDir(), t.TempDir(), t.TempDir()
-			wsA := newWorkspaceDir(t, store, storedOf(false, persistedA))
-			wsB := newWorkspaceDir(t, store, storedOf(false, persistedB))
-			pathA, pathB := wsA, wsB
-			if mode == domain.ModePromoteToGeneric {
-				pathA, pathB = createAgentFile(t, wsA), createAgentFile(t, wsB)
-			}
-			f := newPersistedFlow(t, mode, store, pathA, persistFlowOpts{})
-			f.toStack(t)
-			f.addLayerOnStack(added)
+func TestPersistedChange_Transform_BackAndOtherWorkspace_RestartsFromTheNewStack(t *testing.T) {
+	store := newPersistStore()
+	persistedA, persistedB, added := t.TempDir(), t.TempDir(), t.TempDir()
+	wsA := newWorkspaceDir(t, store, storedOf(false, persistedA))
+	wsB := newWorkspaceDir(t, store, storedOf(false, persistedB))
+	f := newPersistedFlow(t, domain.ModeTransformHarness, store, wsA, persistFlowOpts{})
+	f.toStack(t)
+	f.addLayerOnStack(added)
 
-			f.key(tea.KeyEsc)
-			f.m.wsScreen.SetPrefilledPath(pathB)
-			f.key(tea.KeyEnter)
+	f.key(tea.KeyEsc)
+	f.m.wsScreen.SetPrefilledPath(wsB)
+	f.key(tea.KeyEnter)
 
-			requireInView(t, f, persistedB)
-			requireNotInView(t, f, persistedA, added)
-		})
-	}
+	requireInView(t, f, persistedB)
+	requireNotInView(t, f, persistedA, added)
 }

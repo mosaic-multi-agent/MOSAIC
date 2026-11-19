@@ -185,6 +185,10 @@ type Service interface {
 	// Catalog/UtilityAgents/, so writing a well-formed file into the chosen directory
 	// with a unique numeric id IS the registration. No catalog file is edited.
 	//
+	// An agent with the same key already in the target layer, in any category, is refused
+	// unless req.Overwrite is set; a replacement keeps the replaced agent's numeric id and
+	// removes the old file when the chosen category differs.
+	//
 	// The harness-only source file is never modified or deleted. Deploying the promoted agent
 	// out to a harness is a separate, user-initiated step.
 	//
@@ -212,6 +216,12 @@ type Service interface {
 	// validation runs after source-path validation and before the source read, eligibility
 	// evaluation, and the category question.
 	Promote(ctx context.Context, req PromoteRequest) (PromoteResult, error)
+
+	// PromoteBatch promotes a user-selected subset of the promotable agents in one agents
+	// folder (TUI only). Pre-run failures return an error and a zero result; once the
+	// selection is answered it returns a populated result and a nil error. Types and the
+	// error sentinels are in promote_batch_types.go.
+	PromoteBatch(ctx context.Context, req PromoteBatchRequest) (PromoteBatchResult, error)
 }
 
 // PromoteCategoryUtility is the sentinel Category value selecting

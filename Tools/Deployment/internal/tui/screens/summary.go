@@ -19,7 +19,7 @@ import (
 	"mosaic-deploy/internal/domain"
 )
 
-// SummaryScreen renders the run outcome and exits when the user presses q or enter.
+// SummaryScreen renders the run outcome. The scroll keys scroll; any other key dismisses it.
 // It is not an overlay — it is the final screen state after screenDone is entered.
 type SummaryScreen struct {
 	summary      domain.RunSummary
@@ -222,7 +222,7 @@ func (s *SummaryScreen) Update(msg tea.Msg) bool {
 		if s.scrollOffset < maxOffset {
 			s.scrollOffset++
 		}
-	case "q", "enter", "esc":
+	default:
 		s.done = true
 		return true
 	}
@@ -263,7 +263,7 @@ func (s *SummaryScreen) View() string {
 		sb.WriteByte('\n')
 	}
 
-	sb.WriteString(s.styles.Help.Width(s.width).Render("↑/k up  ↓/j down  q/enter exit"))
+	sb.WriteString(s.styles.Help.Width(s.width).Render("↑/k up  ↓/j down  other keys: back to start  ctrl+c: quit"))
 	return sb.String()
 }
 

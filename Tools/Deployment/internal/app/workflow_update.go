@@ -275,6 +275,8 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 		ToolMappingsVersion: toolMappingsVersion,
 		ProtocolVersion:     protocol.Version,
 		BundleVersion:       bundle.Version,
+		CustomToolNames:     customTools,
+		SkippedTools:        skippedTools,
 
 		OrchestratorRegionUndeliverable: orchestratorRegionUndeliverable(s.deps.Catalog, module, append([]domain.Agent{script.agent}, set.Agents...)),
 	}

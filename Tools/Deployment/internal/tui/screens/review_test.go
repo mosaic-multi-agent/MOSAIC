@@ -337,7 +337,7 @@ func TestReviewScreen_Reset_ClearsDone(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestReviewScreen_UpdateWorkflowsMode_ShowsModeHeader verifies that the ReviewScreen renders
-// the correct mode name "Update workflows" in its header when given a plan whose mode
+// the correct mode name "Change workflows" in its header when given a plan whose mode
 // is ModeUpdateWorkflows. The header must not fall through to the plain "Update workspace" text.
 func TestReviewScreen_UpdateWorkflowsMode_ShowsModeHeader(t *testing.T) {
 	// Arrange: a plan whose mode is ModeUpdateWorkflows, with one item to give the screen
@@ -355,9 +355,9 @@ func TestReviewScreen_UpdateWorkflowsMode_ShowsModeHeader(t *testing.T) {
 	// Act
 	view := collapseWhitespace(s.View())
 
-	// Assert: the mode header must say "Update workflows", not the plain "Update workspace" label.
-	if !strings.Contains(view, "Update workflows") {
-		t.Errorf("review view for ModeUpdateWorkflows does not show 'Update workflows' in the mode header; "+
+	// Assert: the mode header must say "Change workflows", not the plain "Update workspace" label.
+	if !strings.Contains(view, "Change workflows") {
+		t.Errorf("review view for ModeUpdateWorkflows does not show 'Change workflows' in the mode header; "+
 			"the header must identify the operation clearly:\n%s", s.View())
 	}
 }
@@ -636,7 +636,7 @@ func TestReviewScreen_AllSurvivingModes_TableDriven(t *testing.T) {
 	}{
 		{domain.ModeDeployWorkspace, "Deploy workspace"},
 		{domain.ModeUpdateWorkspace, "Update workspace"},
-		{domain.ModeUpdateWorkflows, "Update workflows"},
+		{domain.ModeUpdateWorkflows, "Change workflows"},
 		{domain.ModeDeployAgents, "Deploy agents"},
 		{domain.ModeDeployHooks, "Deploy hooks"},
 		{domain.ModePromoteToGeneric, "Promote to generic"},
@@ -895,7 +895,7 @@ func TestReviewScreen_UnmappedMode_ShowsRawModeStringNotAKnownModeName(t *testin
 	knownModeNames := []string{
 		"Deploy workspace",
 		"Update workspace",
-		"Update workflows",
+		"Change workflows",
 		"Deploy agents",
 		"Deploy hooks",
 		"Promote to generic",

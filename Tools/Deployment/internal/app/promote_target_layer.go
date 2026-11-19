@@ -131,8 +131,8 @@ func promoteDestinationPath(catalogRoot, category, key string) string {
 }
 
 // askPromoteCategory asks the user to select a target category for the promoted agent, from
-// the categories of the target layer. It returns ErrPromoteCategoryRequired when the question
-// is cancelled, skipped, or unanswered. Placement is never guessed.
+// the categories of the target layer. It offers no skip and returns ErrPromoteCategoryRequired when
+// the question is cancelled or unanswered. Placement is never guessed.
 func (s *service) askPromoteCategory(ctx context.Context, srcPath, targetRoot string) (string, error) {
 	opts, err := buildPromoteCategoryOptions(targetRoot)
 	if err != nil {
@@ -141,10 +141,9 @@ func (s *service) askPromoteCategory(ctx context.Context, srcPath, targetRoot st
 
 	ans, err := s.deps.Interaction.SelectOne(ctx, domain.ChoiceQuestion{
 		Question: domain.Question{
-			ID:        domain.QPromoteCategory,
-			Subject:   srcPath,
-			Title:     "Select a target category for the promoted agent",
-			AllowSkip: true,
+			ID:      domain.QPromoteCategory,
+			Subject: srcPath,
+			Title:   "Select a target category for the promoted agent",
 		},
 		Options: opts,
 	})

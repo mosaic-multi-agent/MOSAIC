@@ -749,7 +749,16 @@ func TestWorkflowBrowser_Enter_ConfirmsEntireSelection(t *testing.T) {
 // TestWorkflowBrowser_DetailPane_ShowsNameIDDescriptionHint verifies that the detail pane
 // content contains all four fields (name, id, description, hint) for the focused workflow.
 func TestWorkflowBrowser_DetailPane_ShowsNameIDDescriptionHint(t *testing.T) {
-	s := newWFBrowser(wfAllCategories)
+	// The content block is only as tall as the list rows need (at least 3 lines), so the folder
+	// holds enough workflows for the four detail lines of the focused one to fit.
+	build := domain.WorkflowCategory{
+		Name: "Build",
+		Workflows: append(append([]domain.Workflow{}, wfBuild.Workflows...),
+			domain.Workflow{ID: "extra-one", Name: "Extra One", Description: "Extra.", Hint: "Extra hint"},
+			domain.Workflow{ID: "extra-two", Name: "Extra Two", Description: "Extra.", Hint: "Extra hint"},
+		),
+	}
+	s := screens.NewWorkflowBrowserScreen([]domain.WorkflowCategory{build}, 140, 24, plainStyles(), "")
 
 	// Enter Build folder and check detail pane for the first workflow.
 	enterFolder(s)

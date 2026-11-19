@@ -406,6 +406,8 @@ Layer targeting:
 | New agent, stack of two or more layers, flag absent | the TUI asks; the CLI fails and writes nothing |
 | New agent, one layer | that layer; the flag may be absent or that layer's id |
 
+`promote` on the CLI handles a single file; batch promote is TUI-only. Empty tier, tier rationale and required skills are left out of the generated agent. With `--overwrite` the replaced agent keeps its numeric id and exactly one agent with that key remains; without `--overwrite` an existing key in the target layer is refused whatever category is chosen.
+
 The category comes from the target layer's `Subagents/` folder. The new numeric agent id is one greater than the largest id across all agents of the stack. `--output json` adds `targetCatalogId` to the result (and the usual `stackInEffect` key). `DestinationPath` is relative to the MOSAIC root when the target layer lies inside it, otherwise absolute.
 
 ---

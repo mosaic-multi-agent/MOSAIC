@@ -88,7 +88,7 @@ states.
 
 The per-item bytes of a rewrite come from one rule, `deployedBytes.funnelReader`
 (`deployed_bytes.go`): captured migration bytes first, then the item's read path, decoded through
-the funnel. All four flows (Deploy, Deploy agents, Update, Update workflows) build their content
+the funnel. All four flows (Deploy, Deploy agents, Update, Change workflows) build their content
 callback from it, and `canonicalReader` wraps it for read-only consumers.
 
 **Read-site inventory and its guard.** The comment block "Read-site inventory" at the top of
@@ -201,7 +201,7 @@ version bump (an update item) failed with `ErrMissingPriorBytes`.
 
 Resolution: every flow now obtains the deployed bytes of a plan item through one rule,
 `deployedBytes.funnelReader` (`internal/app/deployed_bytes.go`). Deploy (`deploy.go`), Deploy
-agents (`deployagents_service.go`), Update (`update.go`) and Update workflows
+agents (`deployagents_service.go`), Update (`update.go`) and Change workflows
 (`workflow_update.go`) all build their content callback from it. For each plan item it reads the
 existing file through the funnel and derives the operation from the plan action. The encoder
 receives the canonical bytes plus the raw on-disk bytes, so user-owned keys in a Codex TOML file

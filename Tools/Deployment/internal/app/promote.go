@@ -26,20 +26,16 @@ package app
 //   (ModelKey, ToolsKey) and its FrontmatterPlan.Set key names, passed in by the
 //   service layer via PromoteInput.DropKeys (see promoteHarnessDropKeys).
 //
-// AD-12 override (promote direction, three fields only):
-//   recommended_tier, tier_rationale, and required_skills are always written in the
-//   promote (harness → generic) direction, even when their PromoteInput values are
-//   empty or nil. An empty PromoteInput value produces an empty form in the output:
-//   recommended_tier: "", tier_rationale: "", required_skills: []. This is a
-//   deliberate, scoped override of AD-12 — the general "omit when empty" rule — for
-//   exactly these three fields in the promote direction only. All other fields and the
-//   deploy (generic → harness) direction continue to follow AD-12.
+// Recovered generic-only fields: recommended_tier, tier_rationale and required_skills are
+// written only when supplied (AD-12: omit when empty); a source that already carries one keeps
+// it. A generic agent without a tier is valid; it gets its own model question at deploy time.
 
 import (
 	"errors"
 	"fmt"
 
 	"mosaic-common/agentfields"
+	"mosaic-common/docformat"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
 )
@@ -109,21 +105,16 @@ type PromoteInput struct {
 	WriteEmptyToolsList bool
 
 	// RecommendedTier is the generic-only field recovered from the user during promote.
-	// An empty string means the field was not supplied and is written as an empty scalar
-	// (recommended_tier: "") rather than omitted. This is a deliberate, scoped override of
-	// AD-12 for the promote direction and this field only: a promoted generic agent always
-	// carries the key, so the gap is visible to whoever completes it.
+	// An empty string means the field was not supplied and is left out of the output.
 	RecommendedTier string
 
 	// TierRationale is the generic-only field recovered from the user during promote.
-	// An empty string means the field was not supplied and is written as an empty scalar
-	// (tier_rationale: ""), not omitted. Scoped AD-12 override, as for RecommendedTier.
+	// An empty string means the field was not supplied and is left out of the output.
 	TierRationale string
 
 	// RequiredSkills is the generic-only field recovered from the user during promote,
 	// entered as a comma-separated list and split by the service layer. A nil or empty
-	// slice means the field was not supplied and is written as an empty flow list
-	// (required_skills: []), not omitted. Scoped AD-12 override, as for RecommendedTier.
+	// slice means the field was not supplied and is left out of the output.
 	RequiredSkills []string
 }
 
@@ -153,6 +144,9 @@ type promoteSourceFacts struct {
 	//
 	// Added in Stage 2 to support diverted-field recovery during promote.
 	DivertedTools []string
+	// Model is the scalar the file carries under the harness descriptor's model key; empty when
+	// the descriptor declares no model key or the file has no scalar under it.
+	Model string
 }
 
 // inspectPromoteSource reads the facts service.Promote needs from a deployed agent's
@@ -205,10 +199,18 @@ func inspectPromoteSource(src []byte, d *domain.HarnessDescriptor) (promoteSourc
 		}
 	}
 
+	model := ""
+	if k := d.Frontmatter.ModelKey; k != "" {
+		if v, ok := fm.Get(k); ok && v.Kind == domain.KindScalar {
+			model = v.Scalar
+		}
+	}
+
 	return promoteSourceFacts{
 		Keys:          keys,
 		HarnessTools:  harnessTools,
 		DivertedTools: divertedTools,
+		Model:         model,
 	}, nil
 }
 
@@ -343,33 +345,7 @@ func buildGenericAgent(in PromoteInput) ([]byte, error) {
 		}
 	}
 
-	// Apply recovered generic-only fields. For exactly these three fields in the promote
-	// direction, AD-12 is overridden: when the source does not already carry the key, an
-	// empty or nil PromoteInput value is written with an empty form (recommended_tier: "",
-	// tier_rationale: "", required_skills: []) rather than omitted. This makes the gap
-	// visible to whoever completes the promoted file.
-	//
-	// When the source already carries the key (value in the cloned frontmatter), its value
-	// is preserved — the service layer does not re-ask for a key the source already supplies,
-	// so PromoteInput will be empty for that field. Setting it to empty would destroy the
-	// carried value, which is the wrong outcome.
-	//
-	// In both paths the key is always present after this block. Absent keys are appended
-	// after the reorder step so they follow the carried keys in the fixed order tools,
-	// recommended_tier, tier_rationale, required_skills (AD-13).
-	if _, sourceHas := fm.Get("recommended_tier"); !sourceHas || in.RecommendedTier != "" {
-		fm.Set("recommended_tier", domain.ScalarValue(in.RecommendedTier, domain.QuoteDouble))
-	}
-	if _, sourceHas := fm.Get("tier_rationale"); !sourceHas || in.TierRationale != "" {
-		fm.Set("tier_rationale", domain.ScalarValue(in.TierRationale, domain.QuoteDouble))
-	}
-	if _, sourceHas := fm.Get("required_skills"); !sourceHas || len(in.RequiredSkills) > 0 {
-		skillItems := make([]domain.FieldValue, len(in.RequiredSkills))
-		for i, s := range in.RequiredSkills {
-			skillItems[i] = domain.ScalarValue(s, domain.QuotePlain)
-		}
-		fm.Set("required_skills", domain.ListValue(skillItems, domain.ListFlow))
-	}
+	applyRecoveredFields(fm, in)
 
 	// Reorder: generated keys first (in policy order), then every other surviving key in
 	// its original relative order. Reorder appends unlisted keys after the listed ones.
@@ -391,4 +367,24 @@ func buildGenericAgent(in PromoteInput) ([]byte, error) {
 	}
 
 	return out.Bytes(), nil
+}
+
+// applyRecoveredFields writes the generic-only fields the user supplied. A field is written
+// only when supplied; an unsupplied one is left out. When the source already carries the key,
+// its value is kept unless a value was supplied (the service does not re-ask for a key the
+// source has).
+func applyRecoveredFields(fm *docformat.Frontmatter, in PromoteInput) {
+	if in.RecommendedTier != "" {
+		fm.Set("recommended_tier", domain.ScalarValue(in.RecommendedTier, domain.QuoteDouble))
+	}
+	if in.TierRationale != "" {
+		fm.Set("tier_rationale", domain.ScalarValue(in.TierRationale, domain.QuoteDouble))
+	}
+	if len(in.RequiredSkills) > 0 {
+		skillItems := make([]domain.FieldValue, len(in.RequiredSkills))
+		for i, s := range in.RequiredSkills {
+			skillItems[i] = domain.ScalarValue(s, domain.QuotePlain)
+		}
+		fm.Set("required_skills", domain.ListValue(skillItems, domain.ListFlow))
+	}
 }

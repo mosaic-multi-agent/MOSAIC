@@ -52,7 +52,7 @@ package app
 //   - harness_only_discovery.go (scanHarnessOnlyAgents): readDeployedArtifact.
 //   - workspace_agent_scan.go: decodeDeployedBytes in the scan.
 //   - update_kept_workflows.go: readDeployedArtifact.
-//   - promote_service.go (Promote): readDeployedArtifact.
+//   - promote_phase_source.go: readDeployedArtifact.
 //   - transform_source_models.go (ReadSourceModel, IndexSourceModels): decodeDeployedBytes.
 //   - transform_plan_discovery.go: readDeployedArtifact.
 //   - transform_run_build.go: readDeployedArtifact on the destination, so the encoder

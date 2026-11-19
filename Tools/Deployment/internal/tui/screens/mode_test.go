@@ -260,7 +260,7 @@ func TestModeScreen_View_ShowsAllFiveSurvivingModeLabels(t *testing.T) {
 	wantLabels := []string{
 		"Deploy workspace",
 		"Update workspace",
-		"Update workflows",
+		"Change workflows",
 		"Promote to generic",
 		"Transform harness",
 	}

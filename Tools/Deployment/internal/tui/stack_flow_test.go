@@ -90,8 +90,8 @@ func TestStackFlow_PathScreenKind_FollowsTheMode(t *testing.T) {
 		{"update-workflows takes a directory", domain.ModeUpdateWorkflows, dir, true},
 		{"deploy-agents takes a directory", domain.ModeDeployAgents, dir, true},
 		{"deploy-hooks takes a directory", domain.ModeDeployHooks, dir, true},
-		{"promote takes a file", domain.ModePromoteToGeneric, file, true},
-		{"promote rejects a directory", domain.ModePromoteToGeneric, dir, false},
+		{"promote takes an agents folder", domain.ModePromoteToGeneric, dir, true},
+		{"promote rejects a file", domain.ModePromoteToGeneric, file, false},
 		{"transform rejects a file", domain.ModeTransformHarness, file, false},
 		{"transform takes a directory", domain.ModeTransformHarness, dir, true},
 	}

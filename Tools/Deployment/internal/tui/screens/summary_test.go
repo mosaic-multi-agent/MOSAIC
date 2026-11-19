@@ -327,7 +327,7 @@ func TestSummaryScreen_Scroll_DoesNotPanic(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestSummaryScreen_WorkflowsOnlyMode_ShowsModeLabel verifies that the SummaryScreen renders
-// the correct mode label "Update workflows only" when the RunSummary carries ModeUpdateWorkflows.
+// the correct mode label "Change workflows" when the RunSummary carries ModeUpdateWorkflows.
 // The summary must not fall through to the plain "Update" label used for ModeUpdateWorkspace runs.
 func TestSummaryScreen_WorkflowsOnlyMode_ShowsModeLabel(t *testing.T) {
 	// Arrange: a RunSummary for a workflows-only run.
@@ -347,10 +347,10 @@ func TestSummaryScreen_WorkflowsOnlyMode_ShowsModeLabel(t *testing.T) {
 	// Act
 	view := collapseWhitespace(s.View())
 
-	// Assert: the mode line must reflect "Update workflows", not the old "Update workflows only",
+	// Assert: the mode line must reflect "Change workflows", not the old "Update workflows only",
 	// "workflows only", or the generic "Update" or "Deploy new".
-	if !strings.Contains(view, "Update workflows") {
-		t.Errorf("summary view for ModeUpdateWorkflows does not show the correct mode label \"Update workflows\"; "+
+	if !strings.Contains(view, "Change workflows") {
+		t.Errorf("summary view for ModeUpdateWorkflows does not show the correct mode label \"Change workflows\"; "+
 			"Mode: must identify the operation with the current vocabulary:\n%s", s.View())
 	}
 }

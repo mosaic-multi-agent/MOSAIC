@@ -131,6 +131,14 @@ const (
 	// Non-interactive: the flow uses an explicit empty tools list and emits a warning
 	// Notice at NoticeWarning level.
 	QPromoteNonRecoverableTools QuestionID = "promote-nonrecoverable-tools"
+
+	// QPromoteAgents is the batch promote agent selection (SelectMany), asked once per
+	// PromoteBatch run. Option IDs are file base names in the agents folder.
+	QPromoteAgents QuestionID = "promote-agents"
+
+	// QPromoteExistingAgent asks, per agent of a batch promote whose key already exists, whether
+	// to replace the existing generic agent or skip this agent (SelectOne, default skip).
+	QPromoteExistingAgent QuestionID = "promote-existing-agent"
 )
 
 // PlanReviewer is the deployment-specific interface for plan review. The shared Interaction

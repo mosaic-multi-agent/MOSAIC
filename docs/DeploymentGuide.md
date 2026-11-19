@@ -12,13 +12,13 @@ This guide is for **project authors** who want to get MOSAIC running in their AI
 |-----------|-------------|---------|
 | **Deploy** | Create a new workspace from scratch | `mosaic-deploy deploy` |
 | **Update** | Bring an existing workspace to latest versions | `mosaic-deploy update` |
-| **Update workflows** | Replace the workflow set without touching agents or hooks | `mosaic-deploy workflows` |
+| **Change workflows** | Replace the workflow set; deploys missing agents and skills the new workflows need, leaves other deployed agents, skills and hooks unchanged | `mosaic-deploy workflows` |
 | **Deploy agents** | Deploy a chosen mix of agents without touching workflows or hooks | `mosaic-deploy agents` |
 | **Deploy hooks** | Deploy hook bundles alone | `mosaic-deploy hooks` |
 | **Transform** | Move a workspace's whole deployment to another harness | `mosaic-deploy transform` |
 | **Promote** | Turn a harness-only agent into a reusable generic source | `mosaic-deploy promote` |
 
-**Two ways to run:** Launch without a subcommand for the interactive TUI, or pass a subcommand for scriptable CLI mode.
+**Two ways to run:** Launch without a subcommand for the interactive TUI, or pass a subcommand for scriptable CLI mode. In the TUI, any key on a final screen returns to the first screen (scroll keys scroll a scrollable summary); Esc on the first screen exits, and Ctrl+C exits at once.
 
 **Built-in harnesses:** `claude-code` (Claude Code), `opencode` (OpenCode), `ghcp-cli` ("GHCP CLI / VS Code GHCP Copilot"), `vscode-ghcp` ("VS Code GHCP Local"), `codex` (experimental, see [Codex (experimental)](#codex-experimental)), `opencode-v2` (OpenCode V2, experimental, see [OpenCode V1 vs V2](#opencode-v1-vs-v2-opencode-v2-is-experimental)).
 
@@ -157,9 +157,9 @@ A manifest from an earlier Deploy version is converted on its first read. Entrie
 
 ---
 
-## Update Workflows — Replace the Workflow Set
+## Change Workflows — Replace the Workflow Set
 
-Rewrites the orchestrator files (`orchestrator.md`, and `orchestrator-script.md` when it is deployed) with a new set of workflows. No other agent, skill, or hook file is touched, even if stale. The selected workflow set **fully replaces** the currently deployed set — workflows you don't reselect are removed.
+In the TUI this mode is called **Change workflows**; the CLI command is `workflows`. It rewrites the orchestrator files (`orchestrator.md`, and `orchestrator-script.md` when it is deployed) with a new set of workflows. Other deployed agents, skills and hooks are left unchanged, even if stale. The selected workflow set **fully replaces** the currently deployed set — workflows you don't reselect are removed.
 
 Use this to add, remove, or swap workflows without disturbing the rest of the deployment. If the new workflows require agents that aren't deployed yet, those agents are deployed automatically in the same run.
 
@@ -169,7 +169,7 @@ Each rebuilt workflow routing table gains a first-column `Row` (1..N), added by 
 
 ```sh
 ./mosaic-deploy
-# → Select "Update workflows"
+# → Select "Change workflows"
 ```
 
 The TUI marks currently deployed workflows so you can see what you're keeping. Deployed custom workflows, which the catalog stack does not supply, are listed with the hint `not in catalog; deployed only`. Like deployed catalog workflows they start unchecked: confirming without ticking one removes it, and the run summary names it. Tick the custom workflows you want to keep.
@@ -302,6 +302,8 @@ Moves the whole deployment of a workspace (agents, skills and hook bundles) from
 
 Agents are read from the source harness's agents folder and written to the target's. Agent bodies, stamps, protocol and bundle regions, workflow tables, infrastructure declarations, and project and custom regions and skills are kept unchanged from the source and never upgraded. Tool names, frontmatter shape, role-dependent fields and the regions the harness fills in come from the target. Hooks are deployed from the target's catalog variant for the bundles present in the source, so injections and hooks may be newer than the source. Existing destinations are skipped unless `--overwrite` is given. Except between the two GHCP targets, source files and source manifest entries are never changed; the target deployment is recorded in the manifest, and `update` is the explicit way to upgrade it. Esc at a question cancels the run with nothing written. A model that cannot be resolved is left out of the agent (no `model` key) and named in the summary and the TODO file. Agents written into `vscode-ghcp` are named `X.agent.md`, like those of `ghcp-cli`. Between `opencode` and `opencode-v2` the target replaces the source in place; see [OpenCode V1 vs V2](#opencode-v1-vs-v2-opencode-v2-is-experimental).
 
+MCP tool names are converted from the source harness's naming to the target's; no tool mapping is needed for that. A name that can be split into server and tool in more than one way is settled by the servers declared in the OpenCode configuration when the source is OpenCode; otherwise Transform asks which server provides it, once per name for the whole run. A name left unanswered is not written and is reported.
+
 ```sh
 # Move an OpenCode V1 workspace to OpenCode V2 (experimental); swap the ids to go back
 ./mosaic-deploy transform \
@@ -342,7 +344,29 @@ Turns a harness-only agent (one with no generic source) into a reusable generic 
   --category Research
 ```
 
-The source file is never modified. The generated generic has empty `project` and `managed` regions, ready for the normal deploy pipeline.
+The source file is never modified. The generated generic has empty `project` and `managed` regions, ready for the normal deploy pipeline. Tier, tier rationale and required skills are optional and left out of the generic when empty; an agent without a tier gets its own model question at deploy time, and skills named in an agent's instructions are shipped only when declared in its required skills.
+
+### Batch promote (TUI)
+
+In the TUI, Promote asks for the harness and the folder that holds the agents and the catalog stack, then shows a multi-select list of the promotable agents. Agents whose key already exists in the stack are listed too; hand-written agents that are not promotable are not.
+
+Asked **once per batch**:
+
+- the target layer (stacks with two or more layers)
+- a server name for each unmapped tool name
+- the recommended tier, once per distinct source model (an agent without a model is asked individually)
+
+Asked **per agent**:
+
+- the category (mandatory, no skip)
+- the tier rationale and the required skills (skip for this agent or for the rest of the batch)
+- for an existing key, **replace or skip** (default skip); the question names the layer that holds the existing agent
+
+Replacing keeps the existing numeric id and key, writes the agent into the chosen layer under the chosen category, and removes the old file in that layer when the category differs. Other layers are untouched: the new agent shadows one of the same key in another layer.
+
+Keys: Ctrl+K skips the question for this agent, Ctrl+X skips it for the rest of the batch, Esc on any batch question aborts the batch. Agents already promoted stay promoted. A failing agent does not stop the batch; the summary lists every agent as promoted, skipped, failed or not processed. Source files are never changed.
+
+Batch promote is TUI-only. The CLI `promote` command promotes a single file with the same flags and questions as before. `--overwrite` replaces the existing agent, keeps its numeric id and leaves exactly one agent with that key; without `--overwrite`, an existing key in the target layer is refused whatever category is chosen.
 
 With a catalog stack of two or more layers, promote also needs to know which layer receives a **new** agent; see [Promote and layers](#promote-and-layers).
 
@@ -378,9 +402,63 @@ Only the four built-in harnesses resolve their injections through the stack. Des
 
 There is no longer a merge of the default catalog's skills and hooks into a custom catalog. Skills and hooks come only from the layers of the stack, so a custom catalog that relies on default skills or hooks needs the default layer in its stack.
 
+### Creating your own catalog
+
+A catalog is a plain folder. The deploy tool never searches for catalogs: a folder is used only after you add it to the stack, either with `a` on the TUI stack screen or with `--catalog-folder` (see below). Once a stack is saved with a workspace, later runs for that workspace reuse it.
+
+Minimal layout for a catalog that adds workflows and agents on top of the default catalog:
+
+```
+my-catalog/                        <- the folder you add to the stack
+  catalog-identity.yaml            <- required
+  Workflows/
+    MyTeam/                        <- category folder (any name)
+      my-workflow.md
+  Subagents/
+    MyTeam/                        <- category folder (any name)
+      my-agent.md
+```
+
+```yaml
+# catalog-identity.yaml
+id: my-team          # lowercase letters, digits, '.', '_', '-'; unique in the stack
+name: My Team Catalog
+version: "1.0"
+```
+
+Everything else is optional. Add only the folders you need, at the catalog's top level:
+
+| Folder or file | Holds |
+|----------------|-------|
+| `Workflows/<Category>/<id>.md` | Workflows (format: `Development/Designs/WorkflowFormat.md`) |
+| `Subagents/<Category>/<key>.md` | Subagents |
+| `UtilityAgents/<key>.md` | Utility agents |
+| `StandaloneAgents/` | Standalone agents |
+| `Skills/<key>/SKILL.md` | Skills, one folder each |
+| `Hooks/<bundle>/hook.yaml` | Hook bundles, one folder each |
+| `Orchestrator/orchestrator.md` + `orchestrator-script.md` | The orchestrator pair (always both files) |
+| `CommunicationProtocol.md`, `DeployedSections.md` | System files |
+| `HarnessInjections/<Harness>/` | Harness injections |
+
+Agent and skill files follow `Catalog/CatalogFilesFormat.md`. Copying a file from the default catalog and editing it is the quickest start.
+
+**With or without the default layer.** Keep the default layer in the stack and your catalog needs nothing beyond the items it adds or replaces. Leave it out and your catalogs must supply everything a deployment needs: the orchestrator pair, both system files, the injections of the harness you deploy to, and every agent, skill and hook your workflows use.
+
+**Common reasons an item is not picked up.** None of these produces an error or a warning:
+
+- The folder was never added to the stack, or a stack saved earlier with the workspace is being reused without it. Check the stack screen.
+- The folder you added is not the one that holds `catalog-identity.yaml` and the content folders. For example, you added a parent folder, or the content sits one level lower in a nested `Catalog/` folder. A catalog whose content is nested loads with no items.
+- A workflow file sits directly in `Workflows/` or two folder levels below it. Only `Workflows/<Category>/<file>.md` is loaded. The same one-level rule applies to `Subagents/<Category>/`.
+- The file name starts with `_` or does not end in `.md`. These files are ignored on purpose.
+- A higher layer supplies the same workflow id or agent key and shadows your item. The conflict report on the plan review screen shows this.
+
+`Workflows/Index.md` is optional and does not affect loading. To compare it with the workflow files, run `check-index`.
+
+A file in your catalog that cannot be read or parsed (for example an agent without frontmatter) stops the whole stack with a "layer failed to load" error that lists the offending files. See [Stack errors](#stack-errors).
+
 ### Setting up a stack in the TUI
 
-In the interactive TUI, a **stack screen** follows the path screen in every mode (deploy, update, update workflows, deploy agents, deploy hooks, transform, promote). It lists the layers highest first, with the default layer always shown as the bottom row.
+In the interactive TUI, a **stack screen** follows the path screen in every mode (deploy, update, change workflows, deploy agents, deploy hooks, transform, promote). It lists the layers highest first, with the default layer always shown as the bottom row.
 
 | Key | Action |
 |-----|--------|
@@ -537,7 +615,7 @@ The stack in effect never changes an exit code.
 
 `promote` writes a new generic agent into one layer:
 
-- An agent whose key already resolves in the stack is promoted into the layer that supplies it.
+- An agent whose key already resolves in the stack is promoted into the layer that supplies it. In a batch, the replace-or-skip question names that layer.
 - A **new** agent in a stack of two or more layers needs a target layer: pass `--target-catalog <catalog id>` on the CLI (without it the command fails and writes nothing), or choose a layer when the TUI asks. The default layer is a valid target.
 - With one layer there is nothing to choose.
 
@@ -563,7 +641,7 @@ Until now `--catalog-folder` replaced the default catalog's agents and workflows
 
 ## Configuration
 
-The tool keeps its files in a `MosaicDeploy/` directory next to the binary. A run creates `logs/` there. Config is optional: with no file, defaults apply, and `user-config.yaml` is written when the TUI saves your choices. External harnesses, if any, go in `harnesses/`. Two config files can live in `MosaicDeploy/config/`:
+The tool keeps its files in a `MosaicDeploy/` directory next to the binary. A run creates `logs/` there. Config is optional: a missing `user-config.yaml` or `tool-config.yaml` is created by the tool itself from the commented templates (`task install` seeds them too), and existing files are never overwritten. External harnesses, if any, go in `harnesses/`. Two config files can live in `MosaicDeploy/config/`:
 
 ### tool-config.yaml — Project-level (commit this)
 
@@ -598,7 +676,7 @@ custom_model_ids:
     - claude-sonnet-4-5-20250929
 ```
 
-> **Warning:** The tool rewrites this file on each run. YAML comments you add will not survive.
+> **Note:** The tool rewrites this file when it saves your choices. Comments and two-space indentation survive saves.
 
 ### Where the catalog stack is kept
 
@@ -682,6 +760,7 @@ Work through this checklist before using the workspace. Filling project regions 
 | See which catalogs a run used | Read the "Catalog stack" block, or `StackInEffect` / `stackInEffect` in `--output json` |
 | Check every layer's workflow index | `mosaic-deploy check-index` (add the stack flags) |
 | Promote a new agent into a chosen layer | `mosaic-deploy promote ... --target-catalog <catalog id>` |
+| Promote several harness-only agents at once | TUI only: run `mosaic-deploy`, choose Promote, tick the agents |
 | Use the interactive wizard | Just run `mosaic-deploy` with no subcommand |
 | Script deployments for CI | Use `--auto-confirm --output json` |
 | Control which utility agents are offered | Edit `utility_agent_allow_list` in `tool-config.yaml` |

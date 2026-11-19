@@ -26,6 +26,10 @@ const (
 	// harness-transform mode moves to another harness. Validation is that of
 	// PathKindDirectory (an existing, writable directory); the wording describes the move.
 	PathKindTransformWorkspace
+	// PathKindAgentsFolder accepts an existing, readable directory that holds harness agent
+	// files to promote. Write permission is not required; files are rejected. The wording
+	// names an agents folder (not a workspace) and states that its files are not changed.
+	PathKindAgentsFolder
 )
 
 // WorkspaceScreen prompts the user for a workspace directory path and validates it before
@@ -103,6 +107,10 @@ func (s *WorkspaceScreen) SetPathKind(kind PathKind) {
 		label = "Agent file path:"
 		placeholder = "/path/to/agent.md"
 		validateFn = validateFilePath
+	case PathKindAgentsFolder:
+		label = "Agents folder path:"
+		placeholder = "/path/to/agents"
+		validateFn = validateCatalogFolderPath
 	case PathKindTransformWorkspace:
 		label = "Workspace root path:"
 		placeholder = "/path/to/workspace"
@@ -240,6 +248,11 @@ func (s *WorkspaceScreen) View() string {
 		subtitle = "Enter the path to the harness-only agent file to promote."
 		guidanceText = "The path must be an existing, readable regular file.\n" +
 			"This is typically a .md file describing the agent.\n"
+	case PathKindAgentsFolder:
+		title = "Agents Folder"
+		subtitle = "Enter the agents folder that holds the harness-only agent files to promote."
+		guidanceText = "The path must be an existing, readable directory.\n" +
+			"The agent files in it are read and never changed.\n"
 	case PathKindTransformWorkspace:
 		title = "Workspace Path"
 		subtitle = "Enter the workspace root whose deployment is moved to another harness."

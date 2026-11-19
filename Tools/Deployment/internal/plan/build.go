@@ -103,9 +103,21 @@ func (p *planner) Build(ctx context.Context, in Input) (domain.Plan, error) {
 				AgentKey:    agent.Key,
 				Generic:     agent.Tools,
 				Placeholder: agent.ToolsPlaceholder,
+				CustomNames:  in.CustomToolNames,
+				SkippedTools: in.SkippedTools,
 			})
 			if toolErr == nil {
 				for _, res := range toolResult.Resolutions {
+					if res.Outcome == domain.ToolSkipped {
+						// The user declined to name the tool: report it in the transform's wording,
+						// since a tool_destinations entry was not what the user was asked for.
+						gaps = append(gaps, domain.Gap{
+							Kind:    domain.GapUnmappedTool,
+							Subject: res.Generic,
+							Owner:   agent.Key,
+							Detail:  "unmapped tool: " + res.Generic + " for agent " + agent.Key,
+						})
+					}
 					if res.Outcome == domain.ToolUnmapped {
 						gaps = append(gaps, domain.Gap{
 							Kind:    domain.GapUnmappedTool,

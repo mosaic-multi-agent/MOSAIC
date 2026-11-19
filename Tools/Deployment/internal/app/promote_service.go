@@ -1,25 +1,16 @@
 package app
 
-// promote_service.go contains the service-level Promote flow: the Service.Promote method,
-// the promoteHarnessDropKeys helper, the nextNumericID helper,
-// and the target-layer hook-ups (promote_target_layer.go). All I/O for the promote capability belongs here;
-// the pure generation core lives in promote.go (buildGenericAgent).
+// promote_service.go contains the Service.Promote method and the helpers that ask for tools
+// and generic-only fields. The per-phase steps live in promote_phase_*.go, the target layer
+// rules in promote_target_layer.go; the pure generation core is in promote.go (buildGenericAgent).
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 
-	"mosaic-common/agentformat"
-	"mosaic-deploy/internal/agentkey"
-	"mosaic-deploy/internal/catalog"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
-	"mosaic-deploy/internal/transform"
 )
 
 // promoteHarnessDropSet is the unified result of the harness drop-key derivation and
@@ -223,118 +214,6 @@ func (s *service) resolvePromoteTools(
 	return tools, verbatim
 }
 
-// knownGenericToolVocab is the accepted vocabulary for QPromoteNonRecoverableTools.
-// It covers the minimal read-only grant and the escalating tools so that operators
-// who know their agent's tool requirements can supply them. Names outside this set
-// are filtered out rather than accepted silently, so an unfamiliar name never reaches
-// the promoted file unvetted.
-var knownGenericToolVocab = map[string]bool{
-	"file_read":      true,
-	"file_search":    true,
-	"content_search": true,
-	"file_write":     true,
-	"file_edit":      true,
-	"terminal":       true,
-	"subagent":       true,
-	"bash":           true,
-}
-
-// knownGenericToolVocabSorted returns a sorted comma-separated list of the known
-// generic tool vocabulary for display in re-ask prompts.
-func knownGenericToolVocabSorted() string {
-	names := make([]string, 0, len(knownGenericToolVocab))
-	for name := range knownGenericToolVocab {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return strings.Join(names, ", ")
-}
-
-// parseGenericToolNames splits a comma-separated answer, normalises each entry
-// (trim surrounding whitespace and lower-case), filters to knownGenericToolVocab,
-// and returns the accepted deduplicated list. An empty or all-blank input returns
-// a nil slice.
-func parseGenericToolNames(text string) []string {
-	parts := strings.Split(text, ",")
-	var result []string
-	seen := make(map[string]bool)
-	for _, part := range parts {
-		name := strings.ToLower(strings.TrimSpace(part))
-		if name == "" {
-			continue
-		}
-		if knownGenericToolVocab[name] && !seen[name] {
-			seen[name] = true
-			result = append(result, name)
-		}
-	}
-	return result
-}
-
-// resolveNonRecoverablePromoteTools asks the user for a comma-separated list of
-// generic tool names when the source harness cannot recover tool information. It
-// normalises each entry (whitespace trim, lower-case) and filters against
-// knownGenericToolVocab, accepting only recognised names. When the user provides
-// a non-blank answer but every name is outside the vocabulary, the question is
-// re-asked with the vocabulary listed; this repeats up to maxNonRecoverableReasks
-// additional times before falling through to the empty-list warning path. A blank
-// answer, a non-interactive session, or an unanswered question all return an
-// explicit empty (non-nil) slice plus a NoticeWarning.
-//
-// maxNonRecoverableReasks limits re-ask iterations to keep the function
-// terminating in tests that script a permanently-bad answer.
-const maxNonRecoverableReasks = 3
-
-func (s *service) resolveNonRecoverablePromoteTools(ctx context.Context, subject string) []string {
-	title := "Source harness does not record tools. Enter comma-separated generic tool names (or leave blank for none):"
-
-	for attempt := 0; attempt <= maxNonRecoverableReasks; attempt++ {
-		q := domain.TextQuestion{
-			Question: domain.Question{
-				ID:        domain.QPromoteNonRecoverableTools,
-				Subject:   subject,
-				Title:     title,
-				AllowSkip: true,
-			},
-		}
-		ans, err := s.deps.Interaction.AskText(ctx, q)
-
-		if err != nil || ans.Status != domain.Answered {
-			// Non-interactive or unanswered: empty tools list with a warning.
-			s.deps.Interaction.Notify(ctx, domain.Notice{
-				Level:   domain.NoticeWarning,
-				Message: fmt.Sprintf("agent %q: source harness does not record tool information; tools list left empty", subject),
-			})
-			return []string{}
-		}
-
-		if strings.TrimSpace(ans.Text) == "" {
-			// Blank answer: explicit empty tools list.
-			return []string{}
-		}
-
-		// Normalise (trim + lower-case) and filter to known vocabulary.
-		result := parseGenericToolNames(ans.Text)
-		if len(result) > 0 {
-			return result
-		}
-
-		// All provided names were outside the known vocabulary. Re-ask with the
-		// vocabulary listed so the user knows which names are accepted.
-		title = fmt.Sprintf(
-			"Unknown tool name(s). Known generic tools: %s. Enter comma-separated names (or leave blank for none):",
-			knownGenericToolVocabSorted(),
-		)
-	}
-
-	// Re-ask limit reached: emit warning and return empty list.
-	s.deps.Interaction.Notify(ctx, domain.Notice{
-		Level:   domain.NoticeWarning,
-		Message: fmt.Sprintf("agent %q: no recognised tool names provided; tools list left empty", subject),
-	})
-	return []string{}
-}
-
 // resolvePromoteGenericFields asks for the generic-only frontmatter fields the harness drops
 // at deploy time and that cannot be derived from the deployed file: recommended_tier,
 // tier_rationale, and required_skills.
@@ -342,9 +221,8 @@ func (s *service) resolveNonRecoverablePromoteTools(ctx context.Context, subject
 // A field the source already carries is not asked about — a harness that does not drop it
 // carried it through, and re-asking would be noise. Each remaining field is asked at most
 // once per run. A field the user does not supply (skipped, cancelled, unresolvable, or
-// answered with empty text) is returned as its zero value, which the generation core writes
-// with its empty form (recommended_tier: "", tier_rationale: "", required_skills: []) rather
-// than omitting it — a deliberate, scoped override of AD-12 for the promote direction.
+// answered with empty text) is returned as its zero value, which the generation core leaves
+// out of the generic agent.
 func (s *service) resolvePromoteGenericFields(
 	ctx context.Context,
 	facts promoteSourceFacts,
@@ -370,7 +248,7 @@ func (s *service) resolvePromoteGenericFields(
 			if tier == "" {
 				tier = ans.Custom
 			}
-			if tier != "" {
+			if strings.TrimSpace(tier) != "" {
 				result.RecommendedTier = tier
 				result.Supplied = append(result.Supplied, "recommended_tier")
 			}
@@ -387,7 +265,7 @@ func (s *service) resolvePromoteGenericFields(
 				AllowSkip: true,
 			},
 		})
-		if err == nil && ans.Status == domain.Answered && ans.Text != "" {
+		if err == nil && ans.Status == domain.Answered && strings.TrimSpace(ans.Text) != "" {
 			result.TierRationale = ans.Text
 			result.Supplied = append(result.Supplied, "tier_rationale")
 		}
@@ -447,399 +325,62 @@ func (s *service) buildPromoteTierOptions() []domain.Option {
 	return opts
 }
 
-// nextNumericID returns the numeric agent id to assign to a newly promoted agent: one
-// greater than the largest numeric id currently declared by any agent in the catalog,
-// rendered in decimal. When the catalog declares no parseable numeric id, it returns "1".
-//
-// Non-numeric and empty id values are ignored rather than treated as errors. The result
-// is deterministic for a given catalog state, which is what makes the write assertable in
-// a test.
-func nextNumericID(c catalog.Catalog) string {
-	max := 0
-	all := make([]domain.Agent, 0)
-	all = append(all, c.Agents()...)
-	all = append(all, c.UtilityAgents()...)
-	orch := c.Orchestrator()
-	if orch.Key != "" {
-		all = append(all, orch)
-	}
-	for _, a := range all {
-		if a.NumericID == "" {
-			continue
-		}
-		n, err := strconv.Atoi(a.NumericID)
-		if err != nil {
-			continue
-		}
-		if n > max {
-			max = n
-		}
-	}
-	return strconv.Itoa(max + 1)
-}
-
 // Promote generates a generic agent source file from a single already boundary-tagged
 // harness-only agent file, so that a one-off harness-specific agent becomes reusable
 // across harnesses through the normal Deploy/Update flow.
 //
-// Collision policy: when a file already exists at the destination and req.Overwrite is
-// false, Promote returns ErrPromoteDestinationExists and writes nothing. With req.Overwrite
-// true it replaces the file. There is no silent overwrite and no automatic renaming.
+// Collision policy: an agent with the same key already in the target layer, under any
+// category, is refused with ErrPromoteDestinationExists and nothing is written, unless
+// req.Overwrite is true. A replacement keeps the replaced agent's numeric id, is written under
+// the chosen category, and removes the old file when that is a different one. There is no
+// silent overwrite and no automatic renaming.
 //
 // Registration is automatic: writing a well-formed file into the chosen generic agent
 // directory IS the registration — the catalog discovers agents by scanning those directories.
+//
+// The work is split into phases (source, destination, generation, write) in the
+// promote_phase_*.go files; this method sequences them for one file.
 func (s *service) Promote(ctx context.Context, req PromoteRequest) (PromoteResult, error) {
-	// Validate FilePath — there is no interactive fallback for a missing file path.
-	if req.FilePath == "" {
-		return PromoteResult{}, ErrPromoteFileRequired
+	src, err := s.loadPromoteSource(req.FilePath, req.HarnessID)
+	if err != nil {
+		return PromoteResult{}, err
 	}
+	defer src.module.Close() //nolint:errcheck // close error must not fail an otherwise complete run
 
-	// Stat the source path (following symlinks) before reading it. A missing or non-file
-	// path produces a domain error with the offending path in the message, so the user knows
-	// what to fix without seeing a localized OS error. Any other stat failure is wrapped with
-	// path information but left as an access error rather than a domain sentinel.
-	if info, statErr := os.Stat(req.FilePath); statErr != nil {
-		if os.IsNotExist(statErr) {
-			return PromoteResult{}, fmt.Errorf("promote source %s: %w", req.FilePath, ErrPromoteSourceNotFound)
-		}
-		return PromoteResult{}, fmt.Errorf("cannot access source file %s: %w", req.FilePath, statErr)
-	} else if info.IsDir() {
-		return PromoteResult{}, fmt.Errorf("promote source %s: %w", req.FilePath, ErrPromoteSourceNotFile)
-	}
-
-	// Validate and resolve the harness — runs after source-path validation, before reading.
-	// HarnessID has no interactive fallback; the caller must supply the harness it already knows.
-	if req.HarnessID == "" {
-		return PromoteResult{}, ErrPromoteHarnessRequired
-	}
-	module, resolveErr := s.deps.Registry.Resolve(req.HarnessID)
-	if resolveErr != nil {
-		return PromoteResult{}, fmt.Errorf("%w: %w", ErrPromoteHarnessUnresolvable, resolveErr)
-	}
-	defer module.Close() //nolint:errcheck // close error must not fail an otherwise complete run
-
-	// Read and decode the source file through the funnel. For Markdown harnesses this is an
-	// identity decode; for Codex TOML the file is translated to canonical Markdown form.
-	dr := readDeployedArtifact(req.FilePath, domain.ArtifactAgent, module.Descriptor())
-	if dr.ReadErr != nil {
-		return PromoteResult{}, fmt.Errorf("reading source file %s: %w", req.FilePath, dr.ReadErr)
-	}
-	if dr.DecodeErr != nil {
-		return PromoteResult{}, fmt.Errorf("decoding source file %s: %w", req.FilePath, dr.DecodeErr)
-	}
-	// dr.Present is guaranteed true here: the stat check above already filtered absent files.
-
-	// All subsequent processing uses canonical bytes so that harness-specific syntax
-	// (e.g. Codex TOML stamps) is read in the uniform Markdown frontmatter form.
-	src := dr.Canonical
-
-	// Merge the decode report from the source read (AC15.11). An absent or undecodable
-	// file is already rejected above; here the report is non-empty only on a successful
-	// decode that has informational entries (e.g. EntryMissingInstructions for a
-	// body-less source).
-	{
-		var decodeRpt transform.Report
-		mergeDecodeReport(&decodeRpt, dr.Report)
-		for _, g := range decodeRpt.Gaps {
-			s.deps.Todo.AddGap(g)
-		}
-	}
-
-	// Apply the shared two-signal eligibility rule. Reject with ErrPromoteNotTransformed
-	// when either signal is absent, so the caller learns which signal failed.
-	verdict := eligibleHarnessOnly(src)
-	if !verdict.Eligible {
-		return PromoteResult{}, fmt.Errorf("%w: %s: %s", ErrPromoteNotTransformed, req.FilePath, verdict.Reason)
-	}
-
-	// Derive the agent key from the source filename with the harness's declared extension;
-	// the shared derivation strips the extension and its ".agent.<suffix>"
-	// variant. Falls back to ".md" stripping when the descriptor declares no extension.
-	name := filepath.Base(req.FilePath)
-	agentExt := module.Descriptor().Extensions[domain.ArtifactAgent]
-	if agentExt == "" {
-		agentExt = ".md"
-	}
-	key := agentkey.FromFileNameExt(name, agentExt)
-
-	// Inspect the deployed source for harness-side facts (tool entries and key presence set)
-	// before asking any questions. This is a pure parse — no I/O, no questions.
-	facts, factsErr := inspectPromoteSource(src, module.Descriptor())
-	if factsErr != nil {
-		return PromoteResult{}, fmt.Errorf("%s: %w", req.FilePath, factsErr)
-	}
-
-	// Choose the catalog layer that receives the file before asking for a category, because the
-	// category options come from that layer's Subagents/ directory.
-	targetRoot, targetCatalogID, err := s.promoteTarget(ctx, req, key)
+	dest, err := s.resolvePromoteDestination(ctx, req, src.key, req.Category)
 	if err != nil {
 		return PromoteResult{}, err
 	}
 
-	// Resolve category: use the pre-answered value (pre-answer convention — a non-empty
-	// value suppresses the interactive question entirely) or ask through Interaction.
-	category := req.Category
-	if category == "" {
-		category, err = s.askPromoteCategory(ctx, req.FilePath, targetRoot)
-		if err != nil {
+	numericID := promoteNumericIDFor(dest, s.deps.Catalog)
+	gen, err := s.generatePromotedAgent(ctx, src, numericID)
+	if err != nil {
+		return PromoteResult{}, err
+	}
+
+	// A dry run validates and computes everything but writes no file; DestinationPath still
+	// reflects the path that would have been written.
+	if !req.DryRun {
+		if err := writePromotedAgent(dest, gen.content); err != nil {
 			return PromoteResult{}, err
 		}
 	}
 
-	// Containment guard: reject category values that contain ".." traversal segments or
-	// path separators. These must be rejected before any directory is created or path
-	// resolution occurs, so a crafted value cannot escape the catalogue root.
-	if strings.Contains(category, "..") || strings.ContainsAny(category, "/\\") {
-		return PromoteResult{}, fmt.Errorf("invalid category %q: category must be a single directory name without path traversal or separators", category)
-	}
-
-	// Compute the destination path before checking for collisions, inside the target layer.
-	destPath := promoteDestinationPath(targetRoot, category, key)
-
-	// Collision policy: refuse to overwrite an existing file without explicit consent.
-	// Promote never silently overwrites a generic agent; the caller must set Overwrite: true.
-	if !req.Overwrite {
-		if _, statErr := os.Stat(destPath); statErr == nil {
-			return PromoteResult{}, ErrPromoteDestinationExists
-		}
-	}
-
-	// Derive the artifact kind for the harness drop-key computation. All promoted agents
-	// use ArtifactAgent regardless of their role; the orchestrator-vs-subagent distinction
-	// reaches the harness's FrontmatterPlan through key (AD-15), not through kind.
-	kind := domain.ArtifactAgent
-
-	// Derive the harness-specific frontmatter drop-set and the field classifier from the
-	// resolved module's own contract. Both products share a single module.Frontmatter call
-	// so the two derivations are guaranteed to agree. A plan failure is fatal: proceeding
-	// without the full drop-set would leak the harness's own added fields into the generic
-	// file — the exact defect this flow was designed to fix.
-	harnessDropSet, dropErr := buildPromoteHarnessDropSet(module, kind, key)
-	if dropErr != nil {
-		return PromoteResult{}, fmt.Errorf("deriving harness frontmatter drop-set: %w", dropErr)
-	}
-	dropKeys := harnessDropSet.DropKeys
-	clf := harnessDropSet.Classifier
-
-	// Always add every diverted tool-destination field key to the drop set. These fields are
-	// harness artifacts whose content is recovered into the generic tools list; the key itself
-	// must never appear in the generic output (AC2.2, AC2.7).
-	for _, df := range descriptor.DivertedToolFields(module.Descriptor()) {
-		if !promoteProtectedGenericKeys[df.Key] {
-			dropKeys[df.Key] = true
-		}
-	}
-
-	// Parse the source frontmatter to classify each key and handle unknown fields (FR-3) and
-	// diverted fields (FR-2). We parse the source once here; buildGenericAgent parses it again,
-	// but promote is never a batch operation so this is acceptable.
-	var strippedFields []StrippedField
-	var divertedResolvedGenericNames []string // generic names recovered from diverted fields
-
-	srcDoc, srcParseErr := ParseGenericSource(src)
-	if srcParseErr == nil {
-		srcFm := srcDoc.Frontmatter()
-
-		// Unknown-field detection (FR-3): classify every source key; keys that are ClassUnknown
-		// are added to the drop set and reported as stripped.
-		//
-		// ClassHarness keys that are not already in the drop set are also dropped and reported.
-		// These are harness-specific keys (e.g. from KeyOrder) that the source harness recognises
-		// but that have no meaning in generic Markdown. They are not drop candidates (ModelKey,
-		// ToolsKey, and plan Set keys are already in dropKeys via buildPromoteHarnessDropSet), so
-		// they would otherwise be carried through to the generic output unchanged. Reporting them
-		// with StripReasonUnknownField informs the operator that the field did not travel the
-		// format-change boundary.
-		for _, k := range srcFm.Keys() {
-			class := clf.Classify(k)
-			if class == descriptor.ClassUnknown {
-				if !promoteProtectedGenericKeys[k] {
-					dropKeys[k] = true
-				}
-				val, _ := srcFm.Get(k)
-				rendered := descriptor.RenderFieldValues(val)
-				strippedFields = append(strippedFields, StrippedField{
-					Key:    k,
-					Values: rendered,
-					Reason: StripReasonUnknownField,
-				})
-			} else if class == descriptor.ClassHarness && !dropKeys[k] && !promoteProtectedGenericKeys[k] {
-				// Harness-specific key not yet in the drop set: drop and report it.
-				dropKeys[k] = true
-				val, _ := srcFm.Get(k)
-				rendered := descriptor.RenderFieldValues(val)
-				strippedFields = append(strippedFields, StrippedField{
-					Key:    k,
-					Values: rendered,
-					Reason: StripReasonUnknownField,
-				})
-			}
-		}
-
-		// Diverted-field recovery (FR-2, AC2.2, AC2.7): for each declared DestField destination,
-		// extract its entries from the source, reverse-map them, and either recover them into the
-		// generic tools list or report them as stripped — never prompt for diverted values.
-		seenDivertedGeneric := make(map[string]bool)
-		addDivertedGeneric := func(name string) {
-			if !seenDivertedGeneric[name] {
-				seenDivertedGeneric[name] = true
-				divertedResolvedGenericNames = append(divertedResolvedGenericNames, name)
-			}
-		}
-
-		for _, df := range descriptor.DivertedToolFields(module.Descriptor()) {
-			var fieldValue domain.FieldValue
-			if v, ok := srcFm.Get(df.Key); ok {
-				fieldValue = v
-			}
-			entries := descriptor.ExtractDivertedToolEntries(df, fieldValue)
-
-			var unmapped []string
-			for _, entry := range entries {
-				if genericName, ok := descriptor.ReverseMapTool(module.Descriptor(), entry); ok {
-					addDivertedGeneric(genericName)
-				} else {
-					unmapped = append(unmapped, entry)
-				}
-			}
-
-			// Report unmapped diverted values as stripped, per field (AC2.3, AC2.7).
-			// The field key is always dropped (handled above), regardless of how many values mapped.
-			if len(unmapped) > 0 {
-				strippedFields = append(strippedFields, StrippedField{
-					Key:    df.Key,
-					Values: unmapped,
-					Reason: StripReasonUnmappedDivertedValue,
-				})
-			}
-		}
-	}
-
-	// Reverse-map the harness tool entries to the authoritative generic tools list, or
-	// ask the user when the source harness cannot recover tool information.
-	//
-	// For non-recoverable sources (ToolInfoUnrecoverable=true), the reverse-mapping path
-	// is skipped entirely. Instead the user is asked for a comma-separated list of generic
-	// tool names. Names outside the known generic vocabulary are filtered out. A blank
-	// answer, a non-interactive session, or an unanswered question all yield an explicit
-	// empty tools list plus a warning notice.
-	var resolvedTools []string
-	var verbatimTools []string
-	if module.Descriptor().ToolInfoUnrecoverable {
-		resolvedTools = s.resolveNonRecoverablePromoteTools(ctx, req.FilePath)
-	} else {
-		resolvedTools, verbatimTools = s.resolvePromoteTools(ctx, module, facts.HarnessTools, req.FilePath)
-	}
-
-	// Append diverted-field recoveries to the generic tools list, deduplicating first-seen
-	// against entries already resolved from the main tools key.
-	seenMain := make(map[string]bool, len(resolvedTools))
-	for _, t := range resolvedTools {
-		seenMain[t] = true
-	}
-	for _, t := range divertedResolvedGenericNames {
-		if !seenMain[t] {
-			seenMain[t] = true
-			resolvedTools = append(resolvedTools, t)
-		}
-	}
-
-	// Recover the generic-only fields the harness dropped at deploy time.
-	recovered := s.resolvePromoteGenericFields(ctx, facts, req.FilePath)
-
-	// Assign a unique numeric id: one greater than the largest id in the loaded catalog.
-	// This is deterministic for a given catalog state and the test asserts no collision.
-	numericID := nextNumericID(s.deps.Catalog)
-
-	// Strip the carriage container from the canonical source at the format-change
-	// boundary. Any key held in the container cannot travel the format change; each is
-	// reported as a StrippedField with StripReasonCarriedKey so the operator knows which
-	// user-owned keys did not carry forward.
-	//
-	// StripCarriage is pure: it does not modify src, so the source artifact on disk is
-	// not affected. The stripped canonical bytes replace src for the generation call.
-	stripResult, stripErr := agentformat.StripCarriage(src)
-	if stripErr != nil {
-		return PromoteResult{}, fmt.Errorf("stripping carriage container from source: %w", stripErr)
-	}
-	for _, k := range stripResult.CarriedKeys {
-		strippedFields = append(strippedFields, StrippedField{
-			Key:    k,
-			Reason: StripReasonCarriedKey,
-		})
-	}
-	src = stripResult.Canonical
-
-	// For the non-recoverable path an empty resolved tools list must be written as
-	// tools: [] rather than omitting the key. An absent tools key is read as "inherit all"
-	// by some consumers, which is not the intended outcome when the operator explicitly
-	// answered blank or did not interact.
-	writeEmptyToolsList := module.Descriptor().ToolInfoUnrecoverable
-
-	// Generate the generic agent bytes from the harness-only source. The generation core
-	// is pure: src is not modified and no file is written here.
-	genericBytes, err := buildGenericAgent(PromoteInput{
-		Source:              src,
-		NumericID:           numericID,
-		Key:                 key,
-		Role:                verdict.Meta.Role,
-		Version:             verdict.Meta.Version,
-		DropKeys:            dropKeys,
-		Tools:               resolvedTools,
-		WriteEmptyToolsList: writeEmptyToolsList,
-		RecommendedTier:     recovered.RecommendedTier,
-		TierRationale:       recovered.TierRationale,
-		RequiredSkills:      recovered.RequiredSkills,
-	})
-	if err != nil {
-		return PromoteResult{}, fmt.Errorf("%s: %w", req.FilePath, err)
-	}
-
-	// Write the generated file to the destination, unless this is a dry run. A dry run
-	// validates and computes everything but writes no file. DestinationPath is always
-	// populated — for dry-run it reflects the path that would have been written.
-	if req.DryRun {
-		return PromoteResult{
-			SourcePath:      req.FilePath,
-			DestinationPath: destPath,
-			Key:             key,
-			NumericID:       numericID,
-			Category:        category,
-			DryRun:          true,
-			TargetCatalogID: targetCatalogID,
-			HarnessID:       req.HarnessID,
-			Tools:           resolvedTools,
-			VerbatimTools:   verbatimTools,
-			RecoveredFields: recovered.Supplied,
-			StrippedFields:  strippedFields,
-			DivertedTools:   facts.DivertedTools,
-
-			ExperimentalHarnesses: domain.ExperimentalHarnessesOf(module.Ref()),
-		}, nil
-	}
-
-	if mkErr := os.MkdirAll(filepath.Dir(destPath), 0o755); mkErr != nil {
-		return PromoteResult{}, fmt.Errorf("creating destination directory: %w", mkErr)
-	}
-	if writeErr := os.WriteFile(destPath, genericBytes, 0o644); writeErr != nil {
-		return PromoteResult{}, fmt.Errorf("writing promoted agent file: %w", writeErr)
-	}
-
 	return PromoteResult{
 		SourcePath:      req.FilePath,
-		DestinationPath: destPath,
-		Key:             key,
+		DestinationPath: dest.path,
+		Key:             src.key,
 		NumericID:       numericID,
-		Category:        category,
-		DryRun:          false,
-		TargetCatalogID: targetCatalogID,
+		Category:        dest.category,
+		DryRun:          req.DryRun,
+		TargetCatalogID: dest.targetCatalogID,
 		HarnessID:       req.HarnessID,
-		Tools:           resolvedTools,
-		VerbatimTools:   verbatimTools,
-		RecoveredFields: recovered.Supplied,
-		StrippedFields:  strippedFields,
-		DivertedTools:   facts.DivertedTools,
+		Tools:           gen.tools,
+		VerbatimTools:   gen.verbatimTools,
+		RecoveredFields: gen.recovered.Supplied,
+		StrippedFields:  gen.stripped,
+		DivertedTools:   src.facts.DivertedTools,
 
-		ExperimentalHarnesses: domain.ExperimentalHarnessesOf(module.Ref()),
+		ExperimentalHarnesses: domain.ExperimentalHarnessesOf(src.module.Ref()),
 	}, nil
 }

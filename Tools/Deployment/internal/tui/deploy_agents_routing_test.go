@@ -256,6 +256,11 @@ func (s *spyDispatchService) UpdateWorkflows(_ context.Context, _ app.WorkflowUp
 	return domain.RunSummary{Outcome: domain.OutcomeSuccess}, nil
 }
 
+// PromoteBatch satisfies app.Service; the batch is not exercised by these tests.
+func (s *spyDispatchService) PromoteBatch(_ context.Context, _ app.PromoteBatchRequest) (app.PromoteBatchResult, error) {
+	return app.PromoteBatchResult{}, nil
+}
+
 func (s *spyDispatchService) Promote(_ context.Context, _ app.PromoteRequest) (app.PromoteResult, error) {
 	return app.PromoteResult{}, nil
 }

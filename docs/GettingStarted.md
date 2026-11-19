@@ -111,11 +111,11 @@ You've seen the system work. Now make it work *well* for your specific codebase.
 
 ### Add a workflow and fill project injections
 
-Now add the `brownfield-tdd` workflow to your existing deployment. Run the deploy tool and choose **Update workflows** — this rewrites only the orchestrator with your new workflow set, without disturbing agents or injections you've already configured:
+Now add the `brownfield-tdd` workflow to your existing deployment. Run the deploy tool and choose **Change workflows** — this rewrites the orchestrator's workflow set and leaves the other agents, skills and hooks you've already deployed unchanged:
 
 ```sh
 .\mosaic-deploy.exe
-# → Select "Update workflows"
+# → Select "Change workflows"
 # → Select both kb-generation and brownfield-tdd
 ```
 

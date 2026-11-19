@@ -39,14 +39,15 @@ var modeItems = []widgets.ListItem{
 	},
 	{
 		ID:          string(domain.ModeUpdateWorkflows),
-		Label:       "Update workflows",
-		Description: "Replace the workflow set in an already-deployed orchestrator.",
-		Detail: "Only the orchestrator file is rewritten — no agent, skill, or hook\n" +
-			"artifact is touched, even if stale.\n\n" +
-			"The selected workflow set fully replaces the currently deployed set;\n" +
-			"workflows that are not reselected are removed from the orchestrator.\n\n" +
-			"Use this to add, remove, or swap workflows without disturbing the rest\n" +
-			"of the deployment.",
+		Label:       "Change workflows",
+		Description: "Change which workflows the deployed orchestrator carries.",
+		Detail: "The orchestrator is rewritten with the workflow set you select; it fully\n" +
+			"replaces the currently deployed set, so workflows that are not\n" +
+			"reselected are removed from the orchestrator.\n\n" +
+			"Agents and skills a selected workflow needs that are missing from\n" +
+			"the workspace are deployed too.\n\n" +
+			"No other agent, skill, or hook that is already deployed is changed\n" +
+			"or removed.",
 	},
 	{
 		ID:          string(domain.ModeDeployAgents),
@@ -77,13 +78,16 @@ var modeItems = []widgets.ListItem{
 	{
 		ID:          string(domain.ModePromoteToGeneric),
 		Label:       "Promote to generic",
-		Description: "Generate a generic agent source file from an already-transformed harness-only agent.",
-		Detail: "Reads a harness-only agent file (one with a harness_version or transform_version stamp and canonical\n" +
-			"boundary tags) and generates a generic source file under the catalog root.\n\n" +
-			"After promotion the new agent is immediately available to the Deploy/Update\n" +
-			"flow. The original harness-only source file is left untouched.\n\n" +
-			"Use this to turn a one-off harness-specific agent into a reusable generic\n" +
-			"agent that can be deployed to any harness.",
+		Description: "Generate generic agent source files from harness-only agents in a folder.",
+		Detail: "Asks for the folder that holds the harness-only agent files, then shows\n" +
+			"the promotable agents so you can select one or many.\n\n" +
+			"Each selected agent (one with a harness_version or transform_version stamp\n" +
+			"and canonical boundary tags) becomes a generic source file in the catalog\n" +
+			"layer you choose.\n\n" +
+			"After promotion the new agents are immediately available to the Deploy/Update\n" +
+			"flow. The original harness-only source files are left untouched.\n\n" +
+			"Use this to turn one-off harness-specific agents into reusable generic\n" +
+			"agents that can be deployed to any harness.",
 	},
 	{
 		ID:          string(domain.ModeTransformHarness),

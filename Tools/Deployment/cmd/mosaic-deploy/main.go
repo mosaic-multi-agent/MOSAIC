@@ -20,6 +20,7 @@ import (
 
 	"github.com/mattn/go-isatty"
 
+	defaultconfig "mosaic-deploy/config"
 	"mosaic-deploy/internal/app"
 	"mosaic-deploy/internal/app/stackconfig"
 	"mosaic-deploy/internal/catalog"
@@ -53,7 +54,7 @@ import (
 	_ "mosaic-common/agentformat/all"
 )
 
-const ToolVersion = "1.10.0"
+const ToolVersion = "1.11.0"
 
 // wantsTUI reports whether mosaic-deploy should launch the interactive TUI: no subcommand
 // was given, and both stdin and stdout are attached to a real terminal (not a pipe/redirect).
@@ -125,6 +126,12 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(cli.ExitFailure)
+	}
+
+	// Step 2c: Create any missing config file from the commented templates. A failure
+	// only warns: the stores fall back to defaults and the command proceeds unchanged.
+	if err := config.SeedConfigFiles(mosaicRoot, defaultconfig.Templates); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not create default config files: %v\n", err)
 	}
 
 	// Step 3: Load project-level tool configuration. Absent file yields documented

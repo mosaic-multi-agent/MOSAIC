@@ -185,7 +185,14 @@ type inlineSelectOne struct {
 }
 
 func newInlineSelectOne(q domain.ChoiceQuestion, styles Theme, width, height int) *inlineSelectOne {
-	return &inlineSelectOne{q: q, styles: styles, width: width, height: height}
+	s := &inlineSelectOne{q: q, styles: styles, width: width, height: height}
+	for i, o := range q.Options {
+		if q.DefaultOptionID != "" && o.ID == q.DefaultOptionID {
+			s.cursor = i
+			break
+		}
+	}
+	return s
 }
 
 // totalOptions returns the number of selectable entries: real options plus the

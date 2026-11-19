@@ -1,15 +1,19 @@
 # Roadmap
 
-_Last updated: 2026-11-14_
+_Last updated: 2026-11-19_
 
 Informal, hand-maintained list of what's next for this project. Order within each section does not indicate priority. Items can be moved between sections at any time.
 
 ## Now (ASAP)
 
+- Deploy tool: batch promote. Promote several harness-only agents in one run, asking for the category once and for each unmapped tool name once across all files. Tier, tier rationale and required skills are left empty for the user to fill in later.
+
 ## Next (Near Future)
 
 - Update External modules at Deploy tool, its functionality is very likely lagging behind current Deploy tool capabilities.
 - Update Runner to support parallelization in workflows.
+- Deploy tool: rebuild the manifest from the agents, skills and hooks already on disk (for a workspace that never had a manifest or lost it). Files that match an item of the catalog stack are recorded against that catalog, using the version from their stamp. Harness-only agents stay out of the manifest, as they do today.
+- Deploy tool: Update can put the wrong content into harness-only agents (agents with no generic source in the catalog stack). It finds them by two signals only (a MOSAIC version stamp in the frontmatter, valid MOSAIC section tags in the body), asks for a refresh scope (protocol only, or all managed regions), and refills those regions from the protocol and section bundle of the current stack. The agent's origin is never checked: an agent deployed from another catalog, with its own protocol or bundle, gets this stack's content silently. Decide how Update should treat a harness-only agent whose origin is unknown (skip it, warn, or require the origin to be known). Code: `Tools/Deployment/internal/app/harness_only_refresh.go`, `update_harness_only_plan.go`, `harness_only_discovery.go`.
 
 ## Later (Distant Future)
 

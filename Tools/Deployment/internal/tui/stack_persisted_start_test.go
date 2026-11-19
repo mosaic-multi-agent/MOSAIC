@@ -4,8 +4,8 @@ package tui
 // origin confirming it unchanged passes to the reload capability:
 //
 //   - the write modes start from the persisted stack of the confirmed path itself
-//   - promote starts from the nearest ancestor workspace of the confirmed file, transform from
-//     the confirmed directory or its nearest ancestor workspace
+//   - transform starts from the confirmed directory or its nearest ancestor workspace; promote
+//     never reads a persisted stack (stack_promote_agents_folder_test.go)
 //   - a stack given at launch wins; without a persisted stack the launch stack, or the default
 //     layer alone, is the start
 //
@@ -123,61 +123,6 @@ func TestPersistedStart_ChangedOnTheScreen_IsRebuiltAsStackInput(t *testing.T) {
 	}
 }
 
-func TestPersistedStart_Promote_StartsFromTheWorkspaceContainingTheFile(t *testing.T) {
-	store := newPersistStore()
-	persisted := t.TempDir()
-	ws := newWorkspaceDir(t, store, storedOf(false, persisted))
-	file := createAgentFile(t, subDir(t, ws, "nested"))
-	f := newPersistedFlow(t, domain.ModePromoteToGeneric, store, file, persistFlowOpts{})
-
-	f.toStack(t)
-	requireInView(t, f, persisted)
-	f.confirmStack(t)
-
-	call := requireOneReload(t, f)
-	if !sameDescription(call.d, stackconfig.Description{UserLayers: []string{persisted}}) {
-		t.Errorf("rebuilt from %+v, want the workspace's persisted stack", call.d)
-	}
-	if call.origin != stackconfig.OriginPersisted {
-		t.Errorf("origin = %q, want %q", call.origin, stackconfig.OriginPersisted)
-	}
-}
-
-func TestPersistedStart_Promote_FileWithoutWorkspace_StartsFromLaunchOrDefault(t *testing.T) {
-	user := t.TempDir()
-	cases := []struct {
-		name       string
-		launch     stackconfig.Description
-		given      bool
-		wantOrigin stackconfig.Origin
-	}{
-		{"default layer alone", stackconfig.Description{IncludeDefault: true}, false, stackconfig.OriginDefault},
-		{"launch stack", stackconfig.Description{UserLayers: []string{user}}, true, stackconfig.OriginStackInput},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			store := newPersistStore()
-			stray := t.TempDir()
-			newWorkspaceDir(t, store, storedOf(false, stray)) // a workspace elsewhere must not apply
-			file := createAgentFile(t, t.TempDir())
-			f := newPersistedFlow(t, domain.ModePromoteToGeneric, store, file, persistFlowOpts{},
-				withLaunch(tc.launch, tc.given))
-
-			f.toStack(t)
-			requireNotInView(t, f, stray)
-			f.confirmStack(t)
-
-			call := requireOneReload(t, f)
-			if !sameDescription(call.d, tc.launch) {
-				t.Errorf("rebuilt from %+v, want %+v", call.d, tc.launch)
-			}
-			if call.origin != tc.wantOrigin {
-				t.Errorf("origin = %q, want %q", call.origin, tc.wantOrigin)
-			}
-		})
-	}
-}
-
 func TestPersistedStart_Transform_StartsFromTheWorkspaceRoot(t *testing.T) {
 	store := newPersistStore()
 	persisted := t.TempDir()
@@ -263,7 +208,7 @@ func TestPersistedStart_LaunchStackInput_WinsInPromoteAndTransform(t *testing.T)
 			ws := newWorkspaceDir(t, store, storedOf(true, persisted))
 			path := ws
 			if mode == domain.ModePromoteToGeneric {
-				path = createAgentFile(t, ws)
+				path = createAgentsFolder(t, ws)
 			}
 			launchStack := stackconfig.Description{UserLayers: []string{launch}}
 			f := newPersistedFlow(t, mode, store, path, persistFlowOpts{}, withLaunch(launchStack, true))

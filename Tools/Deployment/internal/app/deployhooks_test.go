@@ -1055,6 +1055,11 @@ func (h *hooksPlannerSmokeCheck) RenderAgent(_ context.Context, _ app.RenderAgen
 func (h *hooksPlannerSmokeCheck) CheckWorkflowIndex(_ context.Context) (app.IndexCheckResult, error) {
 	return app.IndexCheckResult{}, nil
 }
+// PromoteBatch satisfies app.Service; the batch is not exercised by these tests.
+func (h *hooksPlannerSmokeCheck) PromoteBatch(_ context.Context, _ app.PromoteBatchRequest) (app.PromoteBatchResult, error) {
+	return app.PromoteBatchResult{}, nil
+}
+
 func (h *hooksPlannerSmokeCheck) Promote(_ context.Context, _ app.PromoteRequest) (app.PromoteResult, error) {
 	return app.PromoteResult{}, nil
 }

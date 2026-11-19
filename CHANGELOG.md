@@ -34,6 +34,20 @@
 - `opencode-v2` runs write `run_start` and `run_end` to the MOSAIC log, and an `invocation_end` for an invocation the logger plugin left without one
 - Experimental, with the reason "Everything is supported, but the harness is not yet tested."
 
+### Deploy v1.11.0
+#### Changes
+- **Batch promote in the TUI.** Promote asks for the harness and the folder holding the agents and the catalog stack, then lists the promotable agents for multi-select, including agents whose key already exists in the stack. The target layer, each unmapped tool name and the recommended tier per distinct source model are asked once per batch; the category, tier rationale and required skills are asked per agent, and an existing key gets a replace-or-skip question (default skip) that names the layer holding it. Esc aborts the batch and keeps agents already promoted; a failing agent does not stop the batch, and the summary lists every agent as promoted, skipped, failed or not processed. The CLI `promote` stays single-file
+- Replacing an existing agent keeps its numeric id and key, writes into the chosen layer under the chosen category, removes the old file in that layer when the category differs and leaves other layers untouched
+- The TUI mode "Update workflows" is now "Change workflows", which says what it does: it replaces the workflow set. The CLI command is still `workflows`
+- Any key on a final screen now returns to the first screen after any run, not only after some; Esc on the first screen exits and Ctrl+C exits at once
+- `user-config.yaml` and `tool-config.yaml` are created from the commented templates by the tool itself when missing, not only by `task install`. Existing files are never overwritten
+#### Bugfixes
+- Promote no longer writes empty tier, tier rationale or required skills into the generic agent
+- CLI `promote --overwrite` keeps the replaced agent's numeric id and leaves exactly one agent with that key; without `--overwrite`, an existing key in the target layer is refused whatever category is chosen
+- A tool you gave a server name during the run is no longer reported as unmapped
+- Long lists in the TUI no longer overflow the screen
+- Saving `user-config.yaml` keeps your comments and its two-space indentation
+
 ### Deploy v1.10.0
 #### Changes
 - **OpenCode V2 is a Deploy harness (experimental).** `opencode-v2` deploys agents to `.opencode/agents`, skills to `.opencode/skills` and the mosaic-logger `opencode-v2` plugin to `.opencode/plugins`. Update, Deploy agents, Deploy hooks, Update workflows and Transform work for it

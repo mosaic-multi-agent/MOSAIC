@@ -183,6 +183,11 @@ func (s *capturingTransformService) Update(ctx context.Context, req app.UpdateRe
 func (s *capturingTransformService) UpdateWorkflows(ctx context.Context, req app.WorkflowUpdateRequest) (domain.RunSummary, error) {
 	return s.inner.UpdateWorkflows(ctx, req)
 }
+// PromoteBatch satisfies app.Service; the batch is not exercised by these tests.
+func (s *capturingTransformService) PromoteBatch(_ context.Context, _ app.PromoteBatchRequest) (app.PromoteBatchResult, error) {
+	return app.PromoteBatchResult{}, nil
+}
+
 func (s *capturingTransformService) Promote(ctx context.Context, req app.PromoteRequest) (app.PromoteResult, error) {
 	return s.inner.Promote(ctx, req)
 }

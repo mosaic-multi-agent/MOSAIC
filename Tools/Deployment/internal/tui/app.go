@@ -137,14 +137,15 @@ type rootModel struct {
 	deployAgentOverlay    *screens.DeployAgentScreen         // QDeployAgents multi-select
 	hookOverlay           *screens.HookScreen                // QHooks multi-select
 	standaloneOverlay     *screens.StandaloneAgentScreen     // QStandaloneAgents multi-select
+	promoteAgentOverlay   *screens.PromoteAgentScreen        // QPromoteAgents multi-select
 
 	// Post-run summary screen (shown on screenDone after a successful or partial run).
 	summaryScreen *screens.SummaryScreen
 
-	// Post-promote summary screen (shown on screenDone after a successful promote run).
+	// Post-promote summary screen (shown on screenDone after a batch promote run).
 	// Exactly one of summaryScreen, promoteScreen, and transformScreen is non-nil in
 	// screenDone, decided by which completion message arrived. The others are nil.
-	promoteScreen *screens.PromoteSummaryScreen
+	promoteScreen *screens.PromoteBatchSummaryScreen
 
 	// Post-transform summary screen (shown on screenDone after a successful transform run).
 	transformScreen *screens.TransformSummaryScreen
@@ -159,6 +160,10 @@ type rootModel struct {
 	// errors.Is(err, app.ErrModelSelectionCancelled). When true, viewDone renders
 	// "Deployment cancelled." in RoleWarning rather than routing through the failure branch.
 	runCancelled bool
+
+	// presetHarness is the harness the session was launched with; the first screen of such a
+	// session is the mode screen and a restart keeps this harness.
+	presetHarness string
 }
 
 func newRootModel(ctx context.Context, svc app.Service, opts Options) *rootModel {
@@ -204,6 +209,7 @@ func newRootModel(ctx context.Context, svc app.Service, opts Options) *rootModel
 		wsScreen:            wsScreen,
 		stack:               newStackStep(svc, opts, w, h, style),
 		reloadCatalog:       opts.ReloadCatalog,
+		presetHarness:       preHarness,
 		selections: entrySelections{
 			harnessID: preHarness,
 		},
@@ -284,7 +290,7 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if doneMsg, ok := msg.(promoteDoneMsg); ok {
 		m.screen = screenDone
 		style := stylesFromTheme(m.theme)
-		m.promoteScreen = screens.NewPromoteSummaryScreen(doneMsg.result, m.width, m.height, style)
+		m.promoteScreen = screens.NewPromoteBatchSummaryScreen(doneMsg.result, m.width, m.height, style)
 		return m, nil
 	}
 	if doneMsg, ok := msg.(transformDoneMsg); ok {
@@ -333,33 +339,7 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// No navigation while running.
 		return m, nil
 	case screenDone:
-		if m.promoteScreen != nil {
-			done := m.promoteScreen.Update(msg)
-			if done {
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-		if m.transformScreen != nil {
-			done := m.transformScreen.Update(msg)
-			if done {
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-		if m.summaryScreen != nil {
-			done := m.summaryScreen.Update(msg)
-			if done {
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			switch keyMsg.String() {
-			case "q", "enter", "esc":
-				return m, tea.Quit
-			}
-		}
+		return m.updateDone(msg)
 	}
 	return m, nil
 }
@@ -403,6 +383,9 @@ func (m *rootModel) resizeQuestionOverlays(width, height int) {
 	if m.standaloneOverlay != nil {
 		m.standaloneOverlay.Resize(width, height)
 	}
+	if m.promoteAgentOverlay != nil {
+		m.promoteAgentOverlay.Resize(width, height)
+	}
 }
 
 func (m *rootModel) updateHarness(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -436,7 +419,7 @@ func (m *rootModel) updateMode(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// followed by a different mode selection always applies the correct kind.
 		switch m.selections.mode {
 		case domain.ModePromoteToGeneric:
-			m.wsScreen.SetPathKind(screens.PathKindFile)
+			m.wsScreen.SetPathKind(screens.PathKindAgentsFolder)
 		case domain.ModeTransformHarness:
 			m.wsScreen.SetPathKind(screens.PathKindTransformWorkspace)
 		default:
@@ -603,6 +586,10 @@ func (m *rootModel) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	if cmd, handled := m.updatePromoteAgentOverlay(msg); handled {
+		return m, cmd
+	}
+
 	// Generic SelectOne / SelectMany overlay (fallback for non-specialised question IDs).
 	if m.selectOverlay != nil {
 		done := m.selectOverlay.update(msg)
@@ -730,7 +717,7 @@ func (m *rootModel) handleQuestionMsg(qMsg questionMsg) (tea.Model, tea.Cmd) {
 		m.activeQuestion = &qMsg
 		// Route model-selection questions, and the MCP name split with the same skip shape, to the dedicated overlay.
 		switch qMsg.choiceQ.ID {
-		case domain.QTierModel, domain.QAgentModel, domain.QTransformTargetModel, domain.QMCPNameSplit:
+		case domain.QTierModel, domain.QAgentModel, domain.QTransformTargetModel, domain.QMCPNameSplit, domain.QPromoteRecommendedTier:
 			m.modelOverlay = screens.NewModelSelectScreen(qMsg.choiceQ, m.width, m.height, style)
 		case domain.QLocalModification:
 			m.conflictOverlay = screens.NewConflictScreen(qMsg.choiceQ, m.width, m.height, style)
@@ -757,6 +744,8 @@ func (m *rootModel) handleQuestionMsg(qMsg questionMsg) (tea.Model, tea.Cmd) {
 			m.deployAgentOverlay = screens.NewDeployAgentScreen(tree, m.width, m.height, style, "")
 		case domain.QStandaloneAgents:
 			m.standaloneOverlay = screens.NewStandaloneAgentScreen(optionsToAgentCategories(qMsg.choiceQ.Options), m.width, m.height, style, "")
+		case domain.QPromoteAgents:
+			m.openPromoteAgentList(qMsg, style)
 		case domain.QHooks:
 			bundles, supported := optionsToHookBundles(qMsg.choiceQ.Options)
 			m.hookOverlay = screens.NewHookScreen(bundles, supported, m.width, m.height, style, "")
@@ -830,17 +819,9 @@ func (m *rootModel) startService() tea.Cmd {
 			return runDoneMsg{summary: summary}
 
 		case domain.ModePromoteToGeneric:
-			// Category is left empty so the interactive QPromoteCategory question is asked.
-			// workspacePath carries the agent file path collected by the file-kind path screen.
-			// harnessID comes from the harness screen selection — no additional harness question is asked.
-			result, err := svc.Promote(ctx, app.PromoteRequest{
-				FilePath:  sel.workspacePath,
-				HarnessID: sel.harnessID,
-			})
-			if err != nil {
-				return runErrorMsg{err: err}
-			}
-			return promoteDoneMsg{result: result}
+			// The agents folder collected by the path screen and the harness of the harness screen
+			// are the whole request; every other choice is asked as a question of the batch.
+			return promoteBatchMsg(ctx, svc, sel)
 
 		case domain.ModeTransformHarness:
 			// TargetHarnessID is left empty so QTransformTargetHarness is asked interactively.
@@ -886,12 +867,6 @@ func (m *rootModel) startService() tea.Cmd {
 // runDoneMsg signals that the service call completed and carries the run summary.
 type runDoneMsg struct {
 	summary domain.RunSummary
-}
-
-// promoteDoneMsg signals that Service.Promote completed and carries the promote result.
-// It is the promote-mode counterpart of runDoneMsg, which remains RunSummary-only.
-type promoteDoneMsg struct {
-	result app.PromoteResult
 }
 
 // transformDoneMsg signals that Service.TransformHarness completed. The result is
@@ -956,6 +931,9 @@ func (m *rootModel) viewQuestion() string {
 	if m.standaloneOverlay != nil {
 		return m.standaloneOverlay.View()
 	}
+	if m.promoteAgentOverlay != nil {
+		return m.promoteAgentOverlay.View()
+	}
 	if m.selectOverlay != nil {
 		return m.selectOverlay.view()
 	}
@@ -989,15 +967,15 @@ func (m *rootModel) viewDone() string {
 	}
 	if m.runCancelled {
 		return m.theme.Style(RoleWarning).Width(m.width).Render("Deployment cancelled.") +
-			"\n" + m.theme.Style(RoleHelp).Width(m.width).Render("press q or enter to exit")
+			"\n" + m.theme.Style(RoleHelp).Width(m.width).Render(finalScreenHelp)
 	}
 	if m.errMsg != "" {
 		return m.theme.Style(RoleError).Width(m.width).Render(
 			"Deployment failed:\n"+m.errMsg,
-		) + "\n" + m.theme.Style(RoleHelp).Width(m.width).Render("press q or enter to exit")
+		) + "\n" + m.theme.Style(RoleHelp).Width(m.width).Render(finalScreenHelp)
 	}
 	return m.theme.Style(RoleSuccess).Width(m.width).Render("Deployment complete.") +
-		"\n" + m.theme.Style(RoleHelp).Width(m.width).Render("press q or enter to exit")
+		"\n" + m.theme.Style(RoleHelp).Width(m.width).Render(finalScreenHelp)
 }
 
 // renderPlanSummary produces a brief human-readable description of a deployment plan for the

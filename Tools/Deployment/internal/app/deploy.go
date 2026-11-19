@@ -265,6 +265,8 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 		ToolMappingsVersion: toolMappingsVersion,
 		ProtocolVersion:     protocol.Version,
 		BundleVersion:       bundle.Version,
+		CustomToolNames:     customTools,
+		SkippedTools:        skippedTools,
 
 		OrchestratorRegionUndeliverable: orchestratorRegionUndeliverable(s.deps.Catalog, module, probeSet.Agents),
 	}

@@ -1,8 +1,10 @@
 # Configuration Reference
 
 Complete reference for the two configuration files `mosaic-deploy` reads at
-startup. Both live in `MosaicDeploy/config/` at the MOSAIC root and are seeded
-from the templates in `Tools/Deployment/config/` by `task install`.
+startup. Both live in `MosaicDeploy/config/` at the MOSAIC root. A missing file
+is created by the tool itself from the commented templates in
+`Tools/Deployment/config/` (`task install` seeds them too); an existing file is
+never overwritten.
 
 - [The two files](#the-two-files)
 - [tool-config.yaml](#tool-configyaml)
@@ -47,16 +49,15 @@ Both files are optional:
   key takes its zero value, which for `utility_agent_allow_list` means *no*
   utility agents, not *all* of them. This is the one place where "absent file"
   and "present file with the key omitted" differ.
-- If `user-config.yaml` is absent, an empty config applies and the file is
-  created on the first selection you confirm.
+- If `user-config.yaml` is absent, the tool creates it from the commented
+  template; it is updated when you confirm a selection.
 
 An unrecognised key in either file is ignored. A malformed value is a fatal
 startup error.
 
-> **Comments are not preserved in `user-config.yaml`.** The tool rewrites the
-> whole file when it records a selection. All keys survive; your comments do
-> not. Keep notes elsewhere. `tool-config.yaml` is never rewritten, so comments
-> there are safe.
+> **Comments and indentation are preserved.** When the tool records a selection
+> in `user-config.yaml` it rewrites the file, keeping all keys, your comments and
+> the two-space indentation. `tool-config.yaml` is never rewritten.
 
 ---
 

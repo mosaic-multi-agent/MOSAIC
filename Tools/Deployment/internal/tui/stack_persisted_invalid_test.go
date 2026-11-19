@@ -21,16 +21,13 @@ const (
 
 var errGoneLayer = errors.New("persisted catalog layer " + goneLayer + " " + unresolvedText)
 
-// invalidModes are all modes that start from a persisted stack.
-var invalidModes = append(append([]domain.RunMode{}, writeModes...),
-	domain.ModePromoteToGeneric, domain.ModeTransformHarness)
+// invalidModes are all modes that start from a persisted stack (promote does not: its agents
+// folder never selects a stack).
+var invalidModes = append(append([]domain.RunMode{}, writeModes...), domain.ModeTransformHarness)
 
 // pathForMode returns a confirmable path inside ws for mode.
 func pathForMode(t *testing.T, mode domain.RunMode, ws string) string {
 	t.Helper()
-	if mode == domain.ModePromoteToGeneric {
-		return createAgentFile(t, subDir(t, ws, "nested"))
-	}
 	return ws
 }
 

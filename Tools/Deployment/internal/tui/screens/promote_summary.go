@@ -35,11 +35,8 @@ func NewPromoteSummaryScreen(result app.PromoteResult, width, height int, styles
 
 // Update handles key input and reports whether the user dismissed the screen.
 func (s *PromoteSummaryScreen) Update(msg tea.Msg) bool {
-	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		switch keyMsg.String() {
-		case "q", "enter", "esc":
-			s.done = true
-		}
+	if _, ok := msg.(tea.KeyMsg); ok {
+		s.done = true
 	}
 	return s.done
 }
@@ -75,7 +72,8 @@ func (s *PromoteSummaryScreen) View() string {
 			sb.WriteString("\nStripped field: " + sf.Key + " (" + string(sf.Reason) + ")")
 		}
 	}
-	return s.styles.Success.Width(s.width).Render(sb.String())
+	return s.styles.Success.Width(s.width).Render(sb.String()) + "\n" +
+		s.styles.Help.Width(s.width).Render("any key: back to start  ctrl+c: quit")
 }
 
 // Resize adjusts the screen to new terminal dimensions.

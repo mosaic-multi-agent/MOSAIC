@@ -22,7 +22,7 @@ func (s *TransformSummaryScreen) View() string {
 	lines = append(lines, transformChangeLines("remove", s.result.Removals)...)
 	lines = append(lines, transformChangeLines("replace", s.result.Replacements)...)
 	lines = append(lines, s.trailerLines()...)
-	lines = append(lines, transformLine{text: "press q or enter to exit", style: "help"})
+	lines = append(lines, transformLine{text: "any key: back to start  ctrl+c: quit", style: "help"})
 
 	var sb strings.Builder
 	for i, line := range lines {

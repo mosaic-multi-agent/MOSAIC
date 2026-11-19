@@ -247,7 +247,7 @@ func modeDisplayName(mode domain.RunMode) string {
 	case domain.ModeUpdateWorkspace:
 		return "Update workspace"
 	case domain.ModeUpdateWorkflows:
-		return "Update workflows"
+		return "Change workflows"
 	case domain.ModeDeployAgents:
 		return "Deploy agents"
 	case domain.ModeDeployHooks:

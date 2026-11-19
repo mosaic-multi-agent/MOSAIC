@@ -123,13 +123,13 @@ func (s *ModelSelectScreen) Update(msg tea.Msg) bool {
 	// Check skip / skip-all key bindings before delegating to the list.
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		switch keyMsg.String() {
-		case "s":
+		case "s", "ctrl+k":
 			if s.q.AllowSkip {
 				s.answer = domain.ChoiceAnswer{Status: domain.SkippedOne}
 				s.done = true
 				return true
 			}
-		case "S":
+		case "S", "ctrl+x":
 			if s.q.AllowSkipAll {
 				s.answer = domain.ChoiceAnswer{Status: domain.SkippedAll}
 				s.done = true
@@ -230,10 +230,10 @@ func (s *ModelSelectScreen) View() string {
 func (s *ModelSelectScreen) buildHelp() string {
 	parts := []string{"↑/k up", "↓/j down", "enter select"}
 	if s.q.AllowSkip {
-		parts = append(parts, "s skip")
+		parts = append(parts, "s/ctrl+k skip")
 	}
 	if s.q.AllowSkipAll {
-		parts = append(parts, "S skip all")
+		parts = append(parts, "S/ctrl+x skip all")
 	}
 	parts = append(parts, "esc cancel run")
 	return strings.Join(parts, "  ")

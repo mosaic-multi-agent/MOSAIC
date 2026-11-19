@@ -372,11 +372,11 @@ func TestModelSelectScreen_HelpText_ShowsAvailableActions(t *testing.T) {
 
 	view := collapseWhitespace(s.View())
 
-	if !strings.Contains(view, "s skip") {
-		t.Errorf("help text does not mention 's skip' when AllowSkip is true:\n%s", s.View())
+	if !strings.Contains(view, "s/ctrl+k skip") {
+		t.Errorf("help text does not mention 's/ctrl+k skip' when AllowSkip is true:\n%s", s.View())
 	}
-	if !strings.Contains(view, "S skip all") {
-		t.Errorf("help text does not mention 'S skip all' when AllowSkipAll is true:\n%s", s.View())
+	if !strings.Contains(view, "S/ctrl+x skip all") {
+		t.Errorf("help text does not mention 'S/ctrl+x skip all' when AllowSkipAll is true:\n%s", s.View())
 	}
 }
 

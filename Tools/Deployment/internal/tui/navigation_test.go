@@ -43,6 +43,11 @@ func (s *stubNavService) DeployNew(_ context.Context, _ app.DeployRequest) (doma
 func (s *stubNavService) Update(_ context.Context, _ app.UpdateRequest) (domain.RunSummary, error) {
 	return domain.RunSummary{}, nil
 }
+// PromoteBatch satisfies app.Service; the batch is not exercised by these tests.
+func (s *stubNavService) PromoteBatch(_ context.Context, _ app.PromoteBatchRequest) (app.PromoteBatchResult, error) {
+	return app.PromoteBatchResult{}, nil
+}
+
 func (s *stubNavService) Promote(_ context.Context, _ app.PromoteRequest) (app.PromoteResult, error) {
 	return app.PromoteResult{}, nil
 }

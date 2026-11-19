@@ -1,37 +1,16 @@
 package tui
 
-// promote_flow_test.go covers the TUI surface for the "promote" mode: mode screen entry,
-// keyboard flow from harness selection through promote summary dismissal, and screen-state
-// invariants for the promote completion path.
+// promote_flow_test.go covers the TUI entry of the promote mode, which is a batch promote:
+// the mode screen entry, the path step asking for an agents folder (a file is rejected, a
+// readable folder is accepted), the batch operation receiving the harness and the folder, the
+// running status, the batch summary after the run, and the error and cancel outcomes.
 //
-// Existing tests (Stage 9.6 — now GREEN):
-//
-//   These tests verify the promote mode keyboard flow that was wired when ModePromoteToGeneric was
-//   added to the mode screen (I9.5) and PromoteSummaryScreen was implemented (I9.6). They
-//   are GREEN after those deliveries.
-//
-//   The workspace screen pre-fill uses a real agent file (not the workspace directory),
-//   because Stage 3 (I3.1) makes the workspace screen require a regular file in promote
-//   mode. Tests that pre-filled with a directory would fail after I3.1, so they have been
-//   updated to pre-fill with a file created by createAgentFile.
-//
-// Stage 3 tests (T3.1, T3.3 — RED phase):
-//
-//   T3.1 — Path screen in file kind after selecting Promote:
-//     - Promote + file path  → advances to screenRunning (currently FAILS: file rejected by
-//       directory validator because I3.1 has not been delivered)
-//     - Promote + directory  → stays on screenWorkspace (currently FAILS: directory accepted
-//       by directory validator because I3.1 has not been delivered)
-//     - Promote path screen view uses file wording (currently FAILS: directory wording shown)
-//     - Back-nav from promote to deploy-new: directory is accepted (regression / AC3.6)
-//     - Back-nav from deploy-new to promote: directory is rejected (currently FAILS / AC3.6)
-//
-//   T3.3 — Promote-specific running status text:
-//     - statusMsg during a promote run is not deployment wording (currently FAILS: statusMsg
-//       is "Running deployment…" for all modes until I3.3 is delivered)
+// The questions of the batch are covered in promote_batch_routing_test.go, and the stack step
+// of promote in stack_promote_agents_folder_test.go.
 
 import (
-	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,12 +19,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"mosaic-deploy/internal/app"
-	"mosaic-deploy/internal/app/stackservicetest"
 	"mosaic-deploy/internal/domain"
 )
 
 // createAgentFile creates a regular file named "agent.md" in dir and returns its absolute
-// path. Used in promote flow tests to supply a valid file-kind path to the workspace screen.
+// path. It is the wrong kind of input for the agents folder step.
 func createAgentFile(t *testing.T, dir string) string {
 	t.Helper()
 	p := filepath.Join(dir, "agent.md")
@@ -55,682 +33,373 @@ func createAgentFile(t *testing.T, dir string) string {
 	return p
 }
 
-// newPromoteFlowSvc returns a stubFlowService pre-configured for promote-mode tests.
-// It returns a minimal PromoteResult on a successful Promote call.
+// createAgentsFolder creates a folder holding one agent file below parent and returns the
+// folder path.
+func createAgentsFolder(t *testing.T, parent string) string {
+	t.Helper()
+	dir := filepath.Join(parent, "agents")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("createAgentsFolder: %v", err)
+	}
+	createAgentFile(t, dir)
+	return dir
+}
+
+// newPromoteFlowSvc returns a stubFlowService pre-configured for promote-mode tests: the batch
+// returns a result for two agents, one promoted and one skipped.
 func newPromoteFlowSvc(workspace string) *stubFlowService {
 	svc := newFlowSvc(workspace)
-	svc.promote = app.PromoteResult{
-		SourcePath:      workspace + "/my-harness-agent.md",
-		DestinationPath: "/mosaicroot/Subagents/TestCategory/my-harness-agent.md",
-		Key:             "my-harness-agent",
-		NumericID:       "42",
-		Category:        "TestCategory",
+	svc.promoteBatch = app.PromoteBatchResult{
+		HarnessID:       flowTestHarness.ID,
+		AgentsDir:       workspace,
+		TargetCatalogID: "team",
+		TargetLayer:     "Team Layer (team)",
+		Agents: []app.PromoteBatchAgentResult{
+			{
+				SourcePath: filepath.Join(workspace, "alpha-agent.md"), Key: "alpha-agent", Status: app.PromoteBatchPromoted,
+				Result: app.PromoteResult{DestinationPath: "/team/Subagents/Dev/alpha-agent.md", NumericID: "42", Key: "alpha-agent"},
+			},
+			{
+				SourcePath: filepath.Join(workspace, "beta-agent.md"), Key: "beta-agent", Status: app.PromoteBatchSkipped,
+				Reason: "kept the existing agent in Team Layer (team)",
+			},
+		},
 	}
 	return svc
 }
 
-// ---------------------------------------------------------------------------
-// Mode screen: ModePromoteToGeneric item presence
-// ---------------------------------------------------------------------------
-
-// TestModeScreen_IncludesPromoteEntry verifies that the mode screen contains a ModePromoteToGeneric
-// entry as one of its items. After I9.5 adds ModePromoteToGeneric to modeItems, the total number of
-// items should be four.
-func TestModeScreen_IncludesPromoteEntry(t *testing.T) {
-	// Arrange
-	workspace := t.TempDir()
-	m := newFlowModel(newPromoteFlowSvc(workspace), workspace)
-
-	// Navigate to the mode screen.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
-	if m.screen != screenMode {
-		t.Fatalf("precondition: screen = %v, want screenMode", m.screen)
+// selectPromoteMode moves from the harness screen through the mode screen to the path screen of
+// the promote mode.
+func selectPromoteMode(t *testing.T, m *rootModel) {
+	t.Helper()
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness -> mode
+	for i := 0; i < 5; i++ {
+		_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown}) // -> promote-to-generic is the sixth entry
 	}
-
-	// Navigate Down past all existing entries; ModePromoteToGeneric is the 6th item.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown}) // → update-workspace (item 2)
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown}) // → update-workflows (item 3)
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown}) // → deploy-agents (item 4)
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown}) // → deploy-hooks (item 5)
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown}) // → promote-to-generic (item 6, only if it exists)
-
-	// Select whatever item the cursor is on now.
 	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-
-	// Assert: if ModePromoteToGeneric was in the list, the selection should be ModePromoteToGeneric.
-	if m.selections.mode != domain.ModePromoteToGeneric {
-		t.Errorf("selections.mode = %q after five Down presses + Enter; want ModePromoteToGeneric (%q); "+
-			"the mode screen must include a ModePromoteToGeneric entry as the sixth item",
-			m.selections.mode, domain.ModePromoteToGeneric)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Promote keyboard flow — harness → mode → workspace → running → done
-// ---------------------------------------------------------------------------
-
-// TestFullKeyboardFlow_Promote_FromLaunchToExit verifies the end-to-end promote flow:
-// harness selection → mode selection (ModePromoteToGeneric) → file-path entry →
-// screenRunning → screenDone with promoteScreen → 'q' exits.
-func TestFullKeyboardFlow_Promote_FromLaunchToExit(t *testing.T) {
-	// Arrange
-	workspace := t.TempDir()
-	agentFile := createAgentFile(t, workspace)
-	m := newFlowModel(newPromoteFlowSvc(workspace), agentFile)
-
-	if m.screen != screenHarness {
-		t.Fatalf("precondition: screen = %v, want screenHarness", m.screen)
-	}
-
-	// Step 1: Harness screen — Enter selects the single harness.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if m.screen != screenMode {
-		t.Fatalf("screen = %v after harness Enter; want screenMode", m.screen)
-	}
-
-	// Step 2: Mode screen — navigate to ModePromoteToGeneric (6th item: Down x5) and select it.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // cursor: deploy-workspace → update-workspace
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // cursor: update-workspace → update-workflows
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // cursor: update-workflows → deploy-agents
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // cursor: deploy-agents → deploy-hooks
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // cursor: deploy-hooks → promote-to-generic
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select promote-to-generic → workspace
-
-	if m.screen != screenWorkspace {
-		t.Fatalf("screen = %v after mode Down x5 + Enter; want screenWorkspace", m.screen)
-	}
 	if m.selections.mode != domain.ModePromoteToGeneric {
 		t.Fatalf("selections.mode = %q; want ModePromoteToGeneric", m.selections.mode)
 	}
+	if m.screen != screenWorkspace {
+		t.Fatalf("screen = %v after selecting promote; want the path screen", m.screen)
+	}
+}
 
-	// Step 3: Workspace screen — Enter confirms the pre-filled file path and starts the service.
+// runPromote confirms the pre-filled agents folder and delivers the result of the batch run to
+// the model.
+func runPromote(t *testing.T, m *rootModel) {
+	t.Helper()
+	selectPromoteMode(t, m)
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if m.screen != screenRunning {
-		t.Fatalf("screen = %v after workspace Enter; want screenRunning", m.screen)
+	if m.screen != screenRunning || cmd == nil {
+		t.Fatalf("screen = %v, cmd nil = %v after confirming the agents folder; want screenRunning and a command",
+			m.screen, cmd == nil)
 	}
-	if cmd == nil {
-		t.Fatal("cmd = nil after workspace/file-path confirmation; want a promote command")
-	}
-
-	// Step 4: Execute the promote command and deliver the promoteDoneMsg to the model.
 	_, _ = m.Update(runCmd(cmd))
-
-	// Assert: model transitioned to screenDone.
-	if m.screen != screenDone {
-		t.Fatalf("screen = %v after promote completion; want screenDone", m.screen)
-	}
-
-	// Assert: promoteScreen is set, summaryScreen is nil.
-	if m.promoteScreen == nil {
-		t.Fatal("promoteScreen is nil after promote completion; want a non-nil PromoteSummaryScreen")
-	}
-	if m.summaryScreen != nil {
-		t.Error("summaryScreen is non-nil after promote completion; the two fields must be mutually exclusive")
-	}
-
-	// Step 5: 'q' exits.
-	_, quit := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
-	if quit == nil {
-		t.Error("cmd = nil after 'q' on promote summary; want tea.Quit command")
-	}
-}
-
-// TestFullKeyboardFlow_Promote_EnterDismissesPromoteSummary verifies that Enter is also
-// accepted as an exit key on the promote summary screen.
-func TestFullKeyboardFlow_Promote_EnterDismissesPromoteSummary(t *testing.T) {
-	// Arrange
-	workspace := t.TempDir()
-	agentFile := createAgentFile(t, workspace)
-	m := newFlowModel(newPromoteFlowSvc(workspace), agentFile)
-
-	// Navigate to screenDone with promote flow.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workspace
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workflows
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-agents
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-hooks
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → promote-to-generic
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // → workspace
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // → running
-	_, _ = m.Update(runCmd(cmd))                        // → done
-
-	if m.screen != screenDone {
-		t.Fatalf("precondition: screen = %v, want screenDone", m.screen)
-	}
-	if m.promoteScreen == nil {
-		t.Fatal("precondition: promoteScreen is nil; cannot test Enter-dismiss")
-	}
-
-	// Act: Enter should dismiss the promote summary screen.
-	_, quit := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-
-	// Assert
-	if quit == nil {
-		t.Error("cmd = nil after Enter on promote summary; want tea.Quit command")
-	}
 }
 
 // ---------------------------------------------------------------------------
-// Screen-state invariants
+// Mode screen
 // ---------------------------------------------------------------------------
 
-// TestFullKeyboardFlow_Promote_ScreenMutuallyExclusive verifies that after a promote run,
-// promoteScreen is non-nil while summaryScreen remains nil. The two fields are documented
-// as mutually exclusive: only one is set per run.
-func TestFullKeyboardFlow_Promote_ScreenMutuallyExclusive(t *testing.T) {
-	// Arrange
-	workspace := t.TempDir()
-	agentFile := createAgentFile(t, workspace)
-	m := newFlowModel(newPromoteFlowSvc(workspace), agentFile)
-
-	// Navigate to screenDone via promote flow.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workspace
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workflows
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-agents
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-hooks
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → promote-to-generic
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // → workspace
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // → running
-	_, _ = m.Update(runCmd(cmd))                        // → done
-
-	// Assert
-	if m.promoteScreen == nil {
-		t.Error("promoteScreen is nil after promote run; must be non-nil")
-	}
-	if m.summaryScreen != nil {
-		t.Error("summaryScreen is non-nil after promote run; must be nil (promote and summary screens are mutually exclusive)")
-	}
-}
-
-// TestFullKeyboardFlow_Promote_ViewIsNonEmpty verifies that the promote summary screen
-// renders a non-empty string at screenDone.
-func TestFullKeyboardFlow_Promote_ViewIsNonEmpty(t *testing.T) {
-	// Arrange
-	workspace := t.TempDir()
-	agentFile := createAgentFile(t, workspace)
-	m := newFlowModel(newPromoteFlowSvc(workspace), agentFile)
-
-	// Navigate to screenDone via promote flow.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	_, _ = m.Update(runCmd(cmd))
-
-	if m.promoteScreen == nil {
-		t.Fatal("promoteScreen is nil; cannot test View()")
-	}
-
-	// Act
-	view := m.View()
-
-	// Assert
-	if view == "" {
-		t.Error("View() returned empty string on screenDone after promote run; want promote summary content")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Promote error path
-// ---------------------------------------------------------------------------
-
-// TestFullKeyboardFlow_Promote_ServiceError_IsKeyboardDismissible verifies that when
-// Service.Promote returns an error, the model transitions to screenDone without populating
-// promoteScreen, and the error state is keyboard-dismissible.
-func TestFullKeyboardFlow_Promote_ServiceError_IsKeyboardDismissible(t *testing.T) {
-	// Arrange
-	workspace := t.TempDir()
-	agentFile := createAgentFile(t, workspace)
-	svc := newPromoteFlowSvc(workspace)
-	svc.promoteErr = app.ErrPromoteNotTransformed
-	svc.promote = app.PromoteResult{} // empty on error
-
-	m := newFlowModel(svc, agentFile)
-
-	// Navigate to screenRunning with ModePromoteToGeneric.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workspace
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workflows
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-agents
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-hooks
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → promote-to-generic
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // → workspace
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // → running
-
-	// Execute the promote command — service returns an error.
-	_, _ = m.Update(runCmd(cmd))
-
-	// Assert: still reaches screenDone (error path).
-	if m.screen != screenDone {
-		t.Fatalf("screen = %v after promote error; want screenDone", m.screen)
-	}
-
-	// Assert: promoteScreen is nil on error path.
-	if m.promoteScreen != nil {
-		t.Error("promoteScreen is non-nil on promote error path; must be nil because no result was produced")
-	}
-
-	// Assert: error state is keyboard-dismissible with 'q'.
-	_, quit := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
-	if quit == nil {
-		t.Error("cmd = nil after 'q' on promote error; want tea.Quit command")
-	}
-}
-
-// TestFullKeyboardFlow_Promote_SelectionModeIsPromote verifies that after selecting
-// ModePromoteToGeneric on the mode screen, selections.mode is domain.ModePromoteToGeneric. This is the
-// minimal wiring check: the mode screen item ID must map correctly to domain.ModePromoteToGeneric.
-func TestFullKeyboardFlow_Promote_SelectionModeIsPromote(t *testing.T) {
-	// Arrange
+func TestModeScreen_IncludesPromoteEntry(t *testing.T) {
 	workspace := t.TempDir()
 	m := newFlowModel(newPromoteFlowSvc(workspace), workspace)
 
-	// Navigate to mode screen and select ModePromoteToGeneric (6th item).
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workspace
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workflows
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-agents
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-hooks
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → promote-to-generic
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // confirm
-
-	// Assert
-	if m.selections.mode != domain.ModePromoteToGeneric {
-		t.Errorf("selections.mode = %q; want domain.ModePromoteToGeneric (%q); "+
-			"the promote mode item must carry ID == string(domain.ModePromoteToGeneric)",
-			m.selections.mode, domain.ModePromoteToGeneric)
-	}
+	selectPromoteMode(t, m)
 }
 
 // ---------------------------------------------------------------------------
-// Stage 3 — T3.1: Path screen in file kind when Promote is selected
+// Path step: an agents folder
 // ---------------------------------------------------------------------------
 
-// TestPromoteMode_FileKind_AcceptsExistingFile verifies that after selecting Promote on the
-// mode screen and advancing to the path screen, entering the path to an existing regular file
-// accepts the input and transitions to screenRunning.
-//
-// This test is RED until I3.1 is delivered: without I3.1, the path screen stays in directory
-// kind for all modes, so a file path is rejected with "path is not a directory" and the model
-// stays on screenWorkspace instead of advancing.
-func TestPromoteMode_FileKind_AcceptsExistingFile(t *testing.T) {
-	// Arrange
-	workspace := t.TempDir()
-	agentFile := createAgentFile(t, workspace)
-	m := newFlowModel(newPromoteFlowSvc(workspace), agentFile)
-
-	// Navigate to promote workspace screen.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workspace
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workflows
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-agents
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-hooks
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → promote-to-generic
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select promote-to-generic → workspace
-
-	if m.screen != screenWorkspace {
-		t.Fatalf("precondition: screen = %v, want screenWorkspace", m.screen)
-	}
-
-	// Act: Enter on the file path.
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-
-	// Assert: file path accepted in promote (file kind) mode.
-	if m.screen != screenRunning {
-		t.Errorf("screen = %v after Enter on file path in promote mode; want screenRunning; "+
-			"the path screen must accept an existing regular file when in file kind (promote mode)", m.screen)
-	}
-	if cmd == nil {
-		t.Error("cmd = nil after file path accepted in promote mode; want a promote service command")
-	}
-}
-
-// TestPromoteMode_FileKind_RejectsDirectory verifies that after selecting Promote on the mode
-// screen and advancing to the path screen, entering a directory path keeps the user on the
-// path screen and does not transition to screenRunning.
-//
-// This test is RED until I3.1 is delivered: without I3.1, the path screen is in directory kind
-// for all modes, so the directory path is accepted and the model transitions to screenRunning
-// instead of staying on screenWorkspace.
-func TestPromoteMode_FileKind_RejectsDirectory(t *testing.T) {
-	// Arrange: pre-fill with a workspace directory (not a file).
+func TestPromoteMode_PathStep_AsksForAnAgentsFolder(t *testing.T) {
 	workspace := t.TempDir()
 	m := newFlowModel(newPromoteFlowSvc(workspace), workspace)
+	selectPromoteMode(t, m)
 
-	// Navigate to promote workspace screen.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workspace
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workflows
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-agents
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-hooks
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → promote-to-generic
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select promote-to-generic → workspace
+	lower := strings.ToLower(collapseSpaces(m.View()))
 
-	if m.screen != screenWorkspace {
-		t.Fatalf("precondition: screen = %v, want screenWorkspace", m.screen)
-	}
-
-	// Act: Enter on the directory path.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-
-	// Assert: directory rejected, model stays on screenWorkspace.
-	if m.screen != screenWorkspace {
-		t.Errorf("screen = %v after Enter on directory path in promote mode; want screenWorkspace; "+
-			"the path screen must reject a directory in file kind (promote mode) and keep the user on the path screen",
-			m.screen)
-	}
-}
-
-// TestPromoteMode_PathScreen_View_ContainsFileWording verifies that after selecting Promote
-// and advancing to the path screen, the rendered view uses file-oriented wording and does not
-// contain directory-oriented wording.
-//
-// This test is RED until I3.1 is delivered: without I3.1, the path screen stays in directory
-// kind for all modes, so the view shows "Workspace Path" and "directory" wording regardless of
-// which mode was selected.
-func TestPromoteMode_PathScreen_View_ContainsFileWording(t *testing.T) {
-	// Arrange
-	workspace := t.TempDir()
-	m := newFlowModel(newPromoteFlowSvc(workspace), workspace)
-
-	// Navigate to promote workspace screen.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workspace
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workflows
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-agents
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-hooks
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → promote-to-generic
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select promote-to-generic → workspace
-
-	if m.screen != screenWorkspace {
-		t.Fatalf("precondition: screen = %v, want screenWorkspace", m.screen)
-	}
-
-	// Act
-	lower := strings.ToLower(m.View())
-
-	// Assert: the path screen in promote mode must use file-oriented wording.
-	if strings.Contains(lower, "directory") {
-		t.Errorf("path screen view in promote mode contains 'directory' wording; want file-oriented wording only:\n%s",
-			m.View())
+	if !strings.Contains(lower, "agents folder") {
+		t.Errorf("path step does not ask for an agents folder:\n%s", m.View())
 	}
 	if strings.Contains(lower, "workspace") {
-		t.Errorf("path screen view in promote mode contains 'workspace' wording; want file-oriented wording only:\n%s",
-			m.View())
+		t.Errorf("path step uses workspace wording in promote mode:\n%s", m.View())
 	}
-	if !strings.Contains(lower, "file") {
-		t.Errorf("path screen view in promote mode does not contain 'file' wording; want file-oriented label:\n%s",
-			m.View())
+	if strings.Contains(lower, "agent file path") {
+		t.Errorf("path step still asks for a single agent file:\n%s", m.View())
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Stage 3 — T3.1 / AC3.6: Back-navigation re-applies the correct path kind
-// ---------------------------------------------------------------------------
+func TestPromoteMode_PathStep_AcceptsAReadableFolder(t *testing.T) {
+	folder := createAgentsFolder(t, t.TempDir())
+	m := newFlowModel(newPromoteFlowSvc(folder), folder)
+	selectPromoteMode(t, m)
 
-// TestBackNavigation_PromoteThenDeployNew_DirectoryAccepted verifies that after navigating
-// back from the promote path screen to the mode screen and re-selecting deploy-new, the path
-// screen switches back to directory kind and accepts a workspace directory.
-//
-// This test is GREEN (regression): with or without I3.1, deploy-new always accepts a directory.
-// It guards against a regression where the path kind from promote mode persists into the next
-// mode selection rather than being re-applied on each mode→path transition.
-func TestBackNavigation_PromoteThenDeployNew_DirectoryAccepted(t *testing.T) {
-	// Arrange: pre-fill with a real file for the promote leg, then switch to directory
-	// for the deploy-new leg.
-	workspace := t.TempDir()
-	agentFile := createAgentFile(t, workspace)
-	m := newFlowModel(newPromoteFlowSvc(workspace), agentFile)
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
-	// Navigate to promote workspace screen.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workspace
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workflows
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-agents
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-hooks
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → promote-to-generic
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select promote-to-generic → workspace (file kind)
-
-	// Esc back to mode screen without confirming the path.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // back to mode (cursor at promote-to-generic, index 5)
-
-	// Navigate to deploy-workspace (Up x5 from promote-to-generic) and select it.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})    // promote-to-generic → deploy-hooks
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})    // deploy-hooks → deploy-agents
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})    // deploy-agents → update-workflows
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})    // update-workflows → update-workspace
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})    // update-workspace → deploy-workspace
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select deploy-workspace → workspace
-
-	if m.screen != screenWorkspace {
-		t.Fatalf("precondition: screen = %v, want screenWorkspace after selecting deploy-new", m.screen)
+	if m.screen != screenRunning {
+		t.Errorf("screen = %v after confirming a folder; want screenRunning", m.screen)
 	}
+	if cmd == nil {
+		t.Error("cmd = nil after confirming a folder; want the batch promote command")
+	}
+}
 
-	// Change pre-fill to a workspace directory for the deploy-new leg.
-	// The path screen in deploy-new mode (directory kind) must accept it.
-	m.wsScreen.SetPrefilledPath(workspace)
+func TestPromoteMode_PathStep_RejectsAFile(t *testing.T) {
+	file := createAgentFile(t, t.TempDir())
+	m := newFlowModel(newPromoteFlowSvc(filepath.Dir(file)), file)
+	selectPromoteMode(t, m)
 
-	// Act: Enter on the workspace directory.
 	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
-	// Assert: directory accepted in deploy-new (directory kind) mode.
-	if m.screen != screenRunning {
-		t.Errorf("screen = %v after Enter on directory in deploy-new mode; want screenRunning; "+
-			"switching from promote to deploy-new must re-apply directory-kind validation so a workspace directory is accepted",
-			m.screen)
+	if m.screen != screenWorkspace {
+		t.Errorf("screen = %v after confirming a file; want the path step to stay", m.screen)
 	}
 }
 
-// TestBackNavigation_DeployNewToPromote_DirectoryRejected verifies that after navigating back
-// from the deploy-new path screen to the mode screen and re-selecting Promote, the path screen
-// switches to file kind and rejects a directory path.
-//
-// This test is RED until I3.1 is delivered: without I3.1, the path kind is never updated on
-// mode transitions, so the directory path is accepted in promote mode and the model transitions
-// to screenRunning instead of staying on screenWorkspace.
-func TestBackNavigation_DeployNewToPromote_DirectoryRejected(t *testing.T) {
-	// Arrange: pre-fill with a workspace directory (the deploy-new leg accepts it; promote rejects it).
+func TestBackNavigation_PromoteThenDeployNew_PathStepUsesWorkspaceWording(t *testing.T) {
 	workspace := t.TempDir()
 	m := newFlowModel(newPromoteFlowSvc(workspace), workspace)
-
-	// Navigate to deploy-new workspace screen and go back.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select deploy-new → workspace (cursor at 0)
-
-	if m.screen != screenWorkspace {
-		t.Fatalf("precondition: screen = %v, want screenWorkspace (deploy-new)", m.screen)
+	selectPromoteMode(t, m)
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // back to the mode screen, cursor on promote
+	for i := 0; i < 5; i++ {
+		_, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
 	}
 
-	// Back to mode screen without confirming the path.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // back to mode (cursor at deploy-new, index 0)
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // deploy-workspace
 
-	// Navigate to promote-to-generic (Down x5) and select it.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // deploy-workspace → update-workspace
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // update-workspace → update-workflows
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // update-workflows → deploy-agents
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // deploy-agents → deploy-hooks
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // deploy-hooks → promote-to-generic
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select promote-to-generic → workspace
+	lower := strings.ToLower(m.View())
+	if m.screen != screenWorkspace || !strings.Contains(lower, "workspace") || strings.Contains(lower, "agents folder") {
+		t.Errorf("path step after switching to deploy shows agents-folder wording:\n%s", m.View())
+	}
+}
 
-	if m.screen != screenWorkspace {
-		t.Fatalf("precondition: screen = %v, want screenWorkspace after re-selecting promote", m.screen)
+func TestBackNavigation_DeployNewThenPromote_PathStepAsksForAnAgentsFolder(t *testing.T) {
+	workspace := t.TempDir()
+	m := newFlowModel(newPromoteFlowSvc(workspace), workspace)
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness -> mode
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // deploy-workspace -> path
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})   // back to the mode screen
+	for i := 0; i < 5; i++ {
+		_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	}
 
-	// Act: Enter on the directory path.
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // promote
+
+	if m.screen != screenWorkspace || !strings.Contains(strings.ToLower(collapseSpaces(m.View())), "agents folder") {
+		t.Errorf("path step after switching to promote does not ask for an agents folder:\n%s", m.View())
+	}
+}
+
+// ---------------------------------------------------------------------------
+// The batch operation
+// ---------------------------------------------------------------------------
+
+func TestPromoteMode_Run_CallsPromoteBatchWithHarnessAndFolder(t *testing.T) {
+	folder := createAgentsFolder(t, t.TempDir())
+	svc := newPromoteFlowSvc(folder)
+	m := newFlowModel(svc, folder)
+
+	runPromote(t, m)
+
+	if svc.promoteBatchReq == nil {
+		t.Fatal("PromoteBatch was not called after the agents folder was confirmed")
+	}
+	if svc.promoteBatchReq.HarnessID != flowTestHarness.ID {
+		t.Errorf("PromoteBatchRequest.HarnessID = %q; want the harness selected on the harness screen %q",
+			svc.promoteBatchReq.HarnessID, flowTestHarness.ID)
+	}
+	if filepath.Clean(svc.promoteBatchReq.AgentsDir) != filepath.Clean(folder) {
+		t.Errorf("PromoteBatchRequest.AgentsDir = %q; want the confirmed folder %q", svc.promoteBatchReq.AgentsDir, folder)
+	}
+}
+
+func TestPromoteMode_Run_NeverCallsSinglePromote(t *testing.T) {
+	folder := createAgentsFolder(t, t.TempDir())
+	svc := newPromoteFlowSvc(folder)
+	m := newFlowModel(svc, folder)
+
+	runPromote(t, m)
+
+	if svc.promoteCalls != 0 {
+		t.Errorf("Promote (single file) was called %d time(s); the TUI promote is the batch operation", svc.promoteCalls)
+	}
+	if svc.promoteBatchCalls != 1 {
+		t.Errorf("PromoteBatch was called %d time(s); want exactly once", svc.promoteBatchCalls)
+	}
+}
+
+func TestPromoteMode_RunningStatus_IsPromoteSpecific(t *testing.T) {
+	folder := createAgentsFolder(t, t.TempDir())
+	m := newFlowModel(newPromoteFlowSvc(folder), folder)
+	selectPromoteMode(t, m)
+
 	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
-	// Assert: directory rejected in promote (file kind) mode after back-navigation.
-	if m.screen != screenWorkspace {
-		t.Errorf("screen = %v after Enter on directory in promote mode via back-navigation path; "+
-			"want screenWorkspace; re-entering promote mode must re-apply file-kind validation so a directory is rejected",
-			m.screen)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Stage 3 — T3.3: Promote-specific running status text
-// ---------------------------------------------------------------------------
-
-// TestPromoteMode_RunningStatus_IsPromoteSpecific verifies that when the model transitions to
-// screenRunning after a promote path confirmation, the in-flight status message is
-// promote-specific and does not use the deployment wording shown for other modes.
-//
-// This test is RED until I3.1 and I3.3 are both delivered:
-//   - Without I3.1: the file path is rejected (directory validator), the model stays on
-//     screenWorkspace and never reaches screenRunning; the screen assertion fires.
-//   - With I3.1 but without I3.3: the model reaches screenRunning but statusMsg is still
-//     "Running deployment…"; the statusMsg assertion fires.
-//   - With both delivered: the model reaches screenRunning with promote-specific statusMsg.
-func TestPromoteMode_RunningStatus_IsPromoteSpecific(t *testing.T) {
-	// Arrange
-	workspace := t.TempDir()
-	agentFile := createAgentFile(t, workspace)
-	m := newFlowModel(newPromoteFlowSvc(workspace), agentFile)
-
-	// Navigate to promote mode.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workspace
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workflows
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-agents
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-hooks
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → promote-to-generic
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select promote-to-generic → workspace
-
-	// Act: confirm the file path to start the service.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // → running
-
-	// Precondition: the model must be on screenRunning to check the status text.
 	if m.screen != screenRunning {
-		t.Fatalf("screen = %v after confirming file path in promote mode; want screenRunning; "+
-			"I3.1 (path-kind wiring) must be delivered for this test to reach the statusMsg assertion",
-			m.screen)
+		t.Fatalf("screen = %v after confirming the agents folder; want screenRunning", m.screen)
 	}
-
-	// Assert: statusMsg must not use deployment wording.
-	if m.statusMsg == "Running deployment…" {
-		t.Errorf("statusMsg = %q during promote run; want promote-specific text, not deployment wording; "+
-			"I3.3 must make the running status message mode-aware", m.statusMsg)
-	}
-	if m.statusMsg == "" {
-		t.Error("statusMsg is empty during promote run; want promote-specific text")
-	}
-	// The message should name the promote operation.
 	if !strings.Contains(strings.ToLower(m.statusMsg), "promot") {
-		t.Errorf("statusMsg = %q during promote run; want text containing 'promot' (e.g. 'Running promote…')",
-			m.statusMsg)
+		t.Errorf("statusMsg = %q during the promote run; want text naming the promote", m.statusMsg)
 	}
 }
 
 // ---------------------------------------------------------------------------
-// Harness identity threading — TUI promote branch (T1.1)
+// Outcome: batch summary, errors, cancel
 // ---------------------------------------------------------------------------
 
-// capturingPromoteService wraps a stubFlowService and records the last PromoteRequest
-// received by Promote. It is used to verify that the TUI wires the already-selected
-// harness id into the promote request without presenting any additional harness question.
-type capturingPromoteService struct {
-	stackservicetest.MockStackService
-	inner          *stubFlowService
-	lastPromoteReq *app.PromoteRequest
-}
+func TestPromoteMode_Done_ShowsTheBatchSummaryOfEverySelectedAgent(t *testing.T) {
+	folder := createAgentsFolder(t, t.TempDir())
+	m := newFlowModel(newPromoteFlowSvc(folder), folder)
 
-func (s *capturingPromoteService) ListHarnesses() []domain.HarnessRef {
-	return s.inner.ListHarnesses()
-}
-func (s *capturingPromoteService) DeployNew(ctx context.Context, req app.DeployRequest) (domain.RunSummary, error) {
-	return s.inner.DeployNew(ctx, req)
-}
-func (s *capturingPromoteService) Update(ctx context.Context, req app.UpdateRequest) (domain.RunSummary, error) {
-	return s.inner.Update(ctx, req)
-}
-func (s *capturingPromoteService) UpdateWorkflows(ctx context.Context, req app.WorkflowUpdateRequest) (domain.RunSummary, error) {
-	return s.inner.UpdateWorkflows(ctx, req)
-}
-func (s *capturingPromoteService) Promote(ctx context.Context, req app.PromoteRequest) (app.PromoteResult, error) {
-	s.lastPromoteReq = &req
-	return s.inner.Promote(ctx, req)
-}
-func (s *capturingPromoteService) TransformHarness(ctx context.Context, req app.TransformHarnessRequest) (app.TransformHarnessResult, error) {
-	return s.inner.TransformHarness(ctx, req)
-}
+	runPromote(t, m)
 
-func (s *capturingPromoteService) DeployAgents(ctx context.Context, req app.DeployAgentsRequest) (domain.RunSummary, error) {
-	return s.inner.DeployAgents(ctx, req)
-}
-
-func (s *capturingPromoteService) DeployHooks(ctx context.Context, req app.DeployHooksRequest) (domain.RunSummary, error) {
-	return s.inner.DeployHooks(ctx, req)
-}
-
-func (s *capturingPromoteService) RenderAgent(ctx context.Context, req app.RenderAgentRequest) (app.RenderAgentResult, error) {
-	return s.inner.RenderAgent(ctx, req)
-}
-
-func (s *capturingPromoteService) CheckWorkflowIndex(ctx context.Context) (app.IndexCheckResult, error) {
-	return s.inner.CheckWorkflowIndex(ctx)
-}
-
-// TestPromoteMode_SuppliesSelectedHarnessIDInRequest verifies that when the TUI executes a
-// promote run, the PromoteRequest carries the harness id that was selected on the harness
-// screen. The TUI must not present any additional harness question during the promote flow;
-// it supplies the already-collected selection directly (AC1.6).
-//
-// This test is RED until the ModePromoteToGeneric branch of startService sets HarnessID from
-// sel.harnessID. Currently startService omits HarnessID from the promote request, so
-// spy.lastPromoteReq.HarnessID is empty and the assertion fails.
-func TestPromoteMode_SuppliesSelectedHarnessIDInRequest(t *testing.T) {
-	// Arrange
-	workspace := t.TempDir()
-	agentFile := createAgentFile(t, workspace)
-
-	inner := newPromoteFlowSvc(workspace)
-	spy := &capturingPromoteService{inner: inner}
-	m := newFlowModel(spy, agentFile)
-
-	// Navigate to the harness screen and select the single harness (flowTestHarness).
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness screen → mode screen
-	if m.selections.harnessID != flowTestHarness.ID {
-		t.Fatalf("precondition: harnessID = %q after harness selection, want %q", m.selections.harnessID, flowTestHarness.ID)
+	if m.screen != screenDone {
+		t.Fatalf("screen = %v after the batch finished; want screenDone", m.screen)
 	}
-
-	// Navigate to ModePromoteToGeneric (6th item: Down x5) and select it.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // cursor: deploy-workspace → update-workspace
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // cursor: update-workspace → update-workflows
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // cursor: update-workflows → deploy-agents
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // cursor: deploy-agents → deploy-hooks
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // cursor: deploy-hooks → promote-to-generic
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select promote-to-generic → workspace screen
-
-	if m.selections.mode != domain.ModePromoteToGeneric {
-		t.Fatalf("precondition: mode = %q, want ModePromoteToGeneric", m.selections.mode)
-	}
-
-	// Confirm the file path to start the service.
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // → screenRunning + returns promote cmd
-
-	if m.screen != screenRunning {
-		t.Fatalf("precondition: screen = %v after file confirmation, want screenRunning; "+
-			"I3.1 (path-kind wiring) must be delivered for this test to reach the HarnessID assertion",
-			m.screen)
-	}
-
-	// Execute the promote command so the spy captures the request.
-	_, _ = m.Update(runCmd(cmd))
-
-	// Assert — Promote must have been called.
-	if spy.lastPromoteReq == nil {
-		t.Fatal("svc.Promote was not called; the TUI must call svc.Promote after confirming the file path in promote mode")
-	}
-
-	// Assert — the request must carry the harness selected on the harness screen.
-	if spy.lastPromoteReq.HarnessID != flowTestHarness.ID {
-		t.Errorf("PromoteRequest.HarnessID = %q, want %q; "+
-			"the TUI promote branch must supply the already-selected harness id without asking again",
-			spy.lastPromoteReq.HarnessID, flowTestHarness.ID)
+	view := collapseSpaces(m.View())
+	for _, want := range []string{"Promote complete", "alpha-agent", "beta-agent", "promoted", "skipped",
+		"kept the existing agent in Team Layer (team)", "1 promoted, 1 skipped, 0 failed, 0 not processed"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("batch summary does not contain %q:\n%s", want, m.View())
+		}
 	}
 }
+
+func TestPromoteMode_Done_AbortedBatchShowsAbortedTitleAndNotProcessedAgents(t *testing.T) {
+	folder := createAgentsFolder(t, t.TempDir())
+	svc := newPromoteFlowSvc(folder)
+	svc.promoteBatch.Aborted = true
+	svc.promoteBatch.Agents[1] = app.PromoteBatchAgentResult{
+		SourcePath: filepath.Join(folder, "beta-agent.md"), Key: "beta-agent", Status: app.PromoteBatchNotProcessed,
+	}
+	m := newFlowModel(svc, folder)
+
+	runPromote(t, m)
+
+	view := collapseSpaces(m.View())
+	for _, want := range []string{"Promote aborted", "beta-agent", "not processed"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("aborted batch summary does not contain %q:\n%s", want, m.View())
+		}
+	}
+}
+
+func TestPromoteMode_Done_OneAgentSelectionShowsThatAgentsResult(t *testing.T) {
+	folder := createAgentsFolder(t, t.TempDir())
+	svc := newPromoteFlowSvc(folder)
+	svc.promoteBatch.Agents = svc.promoteBatch.Agents[:1]
+	m := newFlowModel(svc, folder)
+
+	runPromote(t, m)
+
+	view := collapseSpaces(m.View())
+	for _, want := range []string{"Promote complete", "alpha-agent", "/team/Subagents/Dev/alpha-agent.md", "42",
+		"1 promoted, 0 skipped, 0 failed, 0 not processed"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("summary of a one-agent selection does not contain %q:\n%s", want, m.View())
+		}
+	}
+	if strings.Contains(view, "beta-agent") {
+		t.Errorf("summary shows an agent that was not selected:\n%s", m.View())
+	}
+}
+
+func TestPromoteMode_Done_AKeyReturnsToTheFirstScreenWithSelectionsCleared(t *testing.T) {
+	folder := createAgentsFolder(t, t.TempDir())
+	m := newFlowModel(newPromoteFlowSvc(folder), folder)
+	runPromote(t, m)
+
+	_, next := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+
+	assertBackAtFirstScreen(t, m, next)
+	if strings.Contains(m.View(), "alpha-agent") {
+		t.Errorf("first screen still shows the previous batch result:\n%s", m.View())
+	}
+}
+
+func TestPromoteMode_Done_ScrollKeyDoesNotLeaveALongSummary(t *testing.T) {
+	folder := createAgentsFolder(t, t.TempDir())
+	svc := newPromoteFlowSvc(folder)
+	svc.promoteBatch.Agents = nil
+	for i := 0; i < 40; i++ {
+		key := fmt.Sprintf("agent-%02d", i)
+		svc.promoteBatch.Agents = append(svc.promoteBatch.Agents, app.PromoteBatchAgentResult{
+			SourcePath: filepath.Join(folder, key+".md"), Key: key, Status: app.PromoteBatchSkipped, Reason: "kept",
+		})
+	}
+	m := newFlowModel(svc, folder)
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 14})
+	runPromote(t, m)
+
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+
+	if m.screen != screenDone {
+		t.Errorf("screen = %v after scroll keys on the batch summary; want screenDone", m.screen)
+	}
+	if n := strings.Count(m.View(), "\n") + 1; n > 14 {
+		t.Errorf("summary view has %d lines on a terminal 14 high", n)
+	}
+}
+
+func TestPromoteMode_Done_CtrlCQuits(t *testing.T) {
+	folder := createAgentsFolder(t, t.TempDir())
+	m := newFlowModel(newPromoteFlowSvc(folder), folder)
+	runPromote(t, m)
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+
+	if !isQuitCmd(cmd) {
+		t.Error("ctrl+c on the batch summary did not quit")
+	}
+}
+
+func TestPromoteMode_PreRunError_ShowsTheErrorView(t *testing.T) {
+	folder := createAgentsFolder(t, t.TempDir())
+	svc := newPromoteFlowSvc(folder)
+	svc.promoteBatchErr = fmt.Errorf("%w in %s", app.ErrPromoteNoPromotableAgents, folder)
+	m := newFlowModel(svc, folder)
+
+	runPromote(t, m)
+
+	if m.screen != screenDone || m.runCancelled {
+		t.Fatalf("screen = %v, runCancelled = %v; want the error view on screenDone", m.screen, m.runCancelled)
+	}
+	if !strings.Contains(m.View(), "no promotable agents found") {
+		t.Errorf("error view does not show the error:\n%s", m.View())
+	}
+	_, next := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	assertBackAtFirstScreen(t, m, next)
+}
+
+func TestPromoteMode_SelectionCancelled_ShowsTheCancelledView(t *testing.T) {
+	folder := createAgentsFolder(t, t.TempDir())
+	svc := newPromoteFlowSvc(folder)
+	svc.promoteBatchErr = fmt.Errorf("agent selection: %w", app.ErrSelectionCancelled)
+	m := newFlowModel(svc, folder)
+
+	runPromote(t, m)
+
+	if m.screen != screenDone || !m.runCancelled {
+		t.Errorf("screen = %v, runCancelled = %v; want the cancelled view on screenDone", m.screen, m.runCancelled)
+	}
+	if m.errMsg != "" {
+		t.Errorf("errMsg = %q; a cancelled selection must not be shown as a failure", m.errMsg)
+	}
+}
+
+func TestPromoteMode_OtherErrorsAreNotShownAsCancelled(t *testing.T) {
+	folder := createAgentsFolder(t, t.TempDir())
+	svc := newPromoteFlowSvc(folder)
+	svc.promoteBatchErr = errors.New("boom-from-the-batch")
+	m := newFlowModel(svc, folder)
+
+	runPromote(t, m)
+
+	if m.runCancelled || !strings.Contains(m.View(), "boom-from-the-batch") {
+		t.Errorf("runCancelled = %v; want the error view naming the error:\n%s", m.runCancelled, m.View())
+	}
+}
+
