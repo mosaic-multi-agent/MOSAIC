@@ -4,7 +4,7 @@ package harness_test
 //
 // Coverage:
 //   - lines reach the observer while the process is still running
-//   - the complete stdout is still returned and logged as spawn.stdout
+//   - the complete stdout is still returned and logged line by line
 //   - line framing: partial last line, CRLF, empty lines, very long lines
 //   - delivery: ordered, sequential, retained slices stay intact
 //   - a slow or panicking observer cannot stall the process or change the result
@@ -110,7 +110,7 @@ func TestRun_OnStdoutLine_DeliversLineBeforeProcessExits(t *testing.T) {
 	assertLines(t, c.lines(), []string{"first", "second"})
 }
 
-func TestRun_OnStdoutLine_FullStdoutStillReturnedAndLogged(t *testing.T) {
+func TestRun_OnStdoutLine_FullStdoutStillReturnedAndLoggedLineByLine(t *testing.T) {
 	setHelperEnv(t, "stream-three")
 	sink := &recordingSink{}
 	c := &lineCollector{}
@@ -123,12 +123,11 @@ func TestRun_OnStdoutLine_FullStdoutStillReturnedAndLogged(t *testing.T) {
 	if string(resp.Stdout) != "l1\nl2\nl3\n" {
 		t.Errorf("want full stdout in Response, got %q", resp.Stdout)
 	}
-	ev, ok := findEvent(sink.snapshot(), "spawn.stdout")
-	if !ok {
-		t.Fatalf("want a spawn.stdout event")
+	if _, ok := findEvent(sink.snapshot(), "spawn.stdout"); ok {
+		t.Errorf("want no whole-stdout spawn.stdout event")
 	}
-	if ev.Message != "l1\nl2\nl3\n" {
-		t.Errorf("want spawn.stdout to carry the full stdout, got %q", ev.Message)
+	if got := lineTexts(liveLines(t, sink.snapshot())); !reflect.DeepEqual(got, []string{"l1", "l2", "l3"}) {
+		t.Errorf("want the stdout logged line by line, got %q", got)
 	}
 	assertLines(t, c.lines(), []string{"l1", "l2", "l3"})
 }

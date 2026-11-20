@@ -24,6 +24,20 @@
 
 ## Tools
 
+### Runner v1.15.0
+#### Changes
+- **The Runner log shows subagent output live.** Each subagent stdout line is written to `RunnerLogs/<run_id>/<run_id>.log` as it arrives, attributed to its invocation, instead of one block after the invocation ends. The number of stdout bytes is logged at the end of each invocation
+- **A killed invocation leaves its output in the log.** After an invocation timeout, a no-output timeout, a force stop or a run cancellation (Ctrl+C in the TUI, best effort), the log holds the invocation's stdout, stderr and the reason it ended
+- **The progress-screen step list scrolls.** Up/Down, PgUp/PgDn and Home/End move through the steps. The list follows new rows at the bottom and stays where you scrolled to until you press End. Indicators show how many older and newer rows are hidden, the screen always fits the terminal, and the activity panel, banners, pending requests and help bar stay visible. The help bar lists the scroll keys
+#### Bugfixes
+- The progress-screen help bar now lists `x force-stop` while standing guidance is active, as it does without guidance
+
+### AgentTest v1.3.1
+#### Bugfixes
+- The `diag.log` shows the subject's stdout live, line by line, instead of one block after it exits
+- A killed subject leaves its stdout, stderr and the reason it ended in `diag.log`
+- `diag.log` entries show their fields, such as the stdout byte count
+
 ### Runner v1.14.0
 #### Changes
 - **OpenCode V2 is a Runner harness (experimental).** Select `opencode-v2` in the CLI (`--harness opencode-v2`), the TUI and test mode (`mosaic-run test`). The orchestrator is found at `.opencode/agents/orchestrator-script.md`

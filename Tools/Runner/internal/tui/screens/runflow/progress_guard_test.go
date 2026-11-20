@@ -14,11 +14,11 @@ import (
 
 const (
 	guardOffIndicator = "LOOP GUARD OFF for this session - same-agent dispatches are not limited (g to turn it back on)"
-	helpBarWithGuard  = "s graceful-stop  m manual-dispatch  h hitl-next  g loop-guard  a artifact-view  ctrl+c force-quit"
+	helpBarWithGuard  = "s graceful-stop  m manual-dispatch  h hitl-next  g loop-guard  a artifact-view  ctrl+c force-quit  l activity  x force-stop  up/down/pgup/pgdn scroll  home/end oldest/newest"
 )
 
 func newGuardScreen() *ProgressScreen {
-	return NewProgressScreen(140, 24, progressStyles())
+	return NewProgressScreen(200, 24, progressStyles())
 }
 
 func TestProgressScreen_GuardKey_RecordsOneEventWithTheGuardOnAtThePress(t *testing.T) {

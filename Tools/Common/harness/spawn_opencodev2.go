@@ -117,7 +117,7 @@ func (s *openCodeV2Spawner) Spawn(ctx context.Context, req SpawnRequest) (Respon
 		Env:          OpenCodeV2Env(req.WorkingDir, req.Env),
 		Stdin:        stdin,
 		Timeout:      timeout,
-		Sink:         s.cfg.sink,
+		Sink:         s.cfg.sinkFor(req),
 		OnStdoutLine: req.OnStdoutLine,
 
 		NoOutputTimeout: req.NoOutputTimeout,

@@ -23,8 +23,8 @@ const (
 	guidanceTaskLabel        = "Appended to task_description"
 	guidanceConstraintsLabel = "Appended to constraints"
 	guidanceSavedStatus      = "Guidance saved - applies from the next dispatch"
-	guidanceHelpBar          = "s graceful-stop  m manual-dispatch  h hitl-next  g loop-guard  e guidance  a artifact-view  ctrl+c force-quit"
-	guidanceHelpBarWithout   = "s graceful-stop  m manual-dispatch  h hitl-next  g loop-guard  a artifact-view  ctrl+c force-quit"
+	guidanceHelpBar          = "s graceful-stop  m manual-dispatch  h hitl-next  g loop-guard  e guidance  a artifact-view  ctrl+c force-quit  l activity  x force-stop  up/down/pgup/pgdn scroll  home/end oldest/newest"
+	guidanceHelpBarWithout   = "s graceful-stop  m manual-dispatch  h hitl-next  g loop-guard  a artifact-view  ctrl+c force-quit  l activity  x force-stop  up/down/pgup/pgdn scroll  home/end oldest/newest"
 )
 
 // guidanceStoreDouble is a domain.GuidanceStore that records saves.
@@ -86,7 +86,7 @@ func newGuidanceFixture(t *testing.T, initial domain.Guidance, active bool) *gui
 	})
 	m.progressScreen = newProgressScreen(m)
 	m.screen = screenProgress
-	m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	m.Update(tea.WindowSizeMsg{Width: 220, Height: 40})
 	m.progressScreen.AppendRow(runflow.ProgressRow{AgentInstance: "planner#1", Phase: "PLANNING", Status: "SUCCESS"})
 	return &guidanceFixture{m: m, holder: holder, store: store, log: rec}
 }

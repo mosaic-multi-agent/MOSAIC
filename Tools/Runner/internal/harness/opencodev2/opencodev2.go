@@ -156,6 +156,7 @@ func (a *OpenCodeV2Adapter) invoke(ctx context.Context, agent domain.AgentRefere
 	}
 	spawnReq := a.spawnRequest(agent, string(reqBytes), roleenv.SubagentEnv(runID, request.AgentInstanceID), a.invokeTimeout(request.HumanInTheLoop), a.invokeNoOutput(request.HumanInTheLoop), onLine)
 
+	spawnReq.Sink = cliexec.WithAgent(a.sink, request.AgentInstanceID)
 	resp, err := a.spawner.Spawn(ctx, spawnReq)
 	if err != nil {
 		if isUnusableReply(err) {
@@ -199,7 +200,7 @@ func (a *OpenCodeV2Adapter) invokeRaw(ctx context.Context, agent domain.AgentRef
 		Env:          commonharness.OpenCodeV2Env(spawnReq.WorkingDir, spawnReq.Env),
 		Stdin:        stdin,
 		Timeout:      spawnReq.Timeout,
-		Sink:         a.sink,
+		Sink:         cliexec.WithAgent(a.sink, agent.Identifier),
 		OnStdoutLine: onLine,
 
 		NoOutputTimeout: spawnReq.NoOutputTimeout,
@@ -209,7 +210,6 @@ func (a *OpenCodeV2Adapter) invokeRaw(ctx context.Context, agent domain.AgentRef
 		return nil, a.failure(ctx, err, agent.Identifier)
 	}
 
-	a.logger.Log(domain.EventHarnessStdout, text, domain.F("agent", agent.Identifier))
 	a.logger.Log(domain.EventHarnessInvokeOK, "raw invocation succeeded", domain.F("agent", agent.Identifier))
 	return []byte(text), nil
 }

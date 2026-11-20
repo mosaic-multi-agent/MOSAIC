@@ -69,6 +69,7 @@ type ProgressScreen struct {
 	guidanceView      bool
 	guidanceAvailable bool
 	activity          activityPanel
+	scroll            stepScroll
 	clock             func() time.Time // nil: time.Now
 	status            string
 	statusErr         bool
@@ -97,6 +98,7 @@ func (s *ProgressScreen) Init() tea.Cmd {
 
 // AppendRow adds a new step row. Call when a new step begins.
 func (s *ProgressScreen) AppendRow(row ProgressRow) {
+	s.settleScroll()
 	s.rows = append(s.rows, row)
 	s.runningIdx = len(s.rows) - 1
 }
@@ -116,6 +118,7 @@ func (s *ProgressScreen) SetHistory(rows []ProgressRow) {
 	s.rows = append([]ProgressRow(nil), rows...)
 	s.runningIdx = -1
 	s.consultation = nil
+	s.scroll = stepScroll{}
 }
 
 // Rows returns a copy of the rows in display order.
@@ -155,7 +158,7 @@ func (s *ProgressScreen) Update(msg tea.Msg) tea.Cmd {
 				s.gateEvents = append(s.gateEvents,
 					StopGateEvent{Kind: StopGateResolved, Key: key})
 			}
-		} else {
+		} else if !s.scrollStepList(msg.String()) {
 			switch key := msg.String(); key {
 			case "s", "S":
 				if !s.stopRequest {
@@ -198,70 +201,12 @@ func (s *ProgressScreen) View() string {
 	title := s.styles.Title.Width(s.width).Render(titleText)
 	border := s.styles.Border.Width(s.width).Render(strings.Repeat("─", s.width))
 
-	var statusLine string
-	if s.status != "" {
-		if s.statusErr {
-			statusLine = s.styles.Error.Width(s.width).Render(s.status)
-		} else {
-			statusLine = s.styles.Body.Width(s.width).Render(s.status)
-		}
-	} else {
-		statusLine = strings.Repeat(" ", s.width)
-	}
+	statusLine := s.statusLine()
 
-	// Rows section.
-	var rowsBuilder strings.Builder
-	contentH := s.height - 6
-	if contentH < 1 {
-		contentH = 1
-	}
-	if s.consultation != nil && contentH > 1 {
-		contentH--
-	}
-	contentH -= len(s.repairOutcomes)
 	extraParts := s.optionalParts()
-	contentH = s.rowBudgetWithPanel(contentH, extraParts)
-	if contentH < 1 {
-		contentH = 1
-	}
-	start := 0
-	if len(s.rows) > contentH {
-		start = len(s.rows) - contentH
-	}
-	for i := start; i < len(s.rows); i++ {
-		row := s.rows[i]
-		indicator := "  "
-		var line string
-		if row.Status == "running" || (s.runningIdx == i) {
-			indicator = "▶ "
-			label := fmt.Sprintf("%s  phase=%s", row.AgentInstance, row.Phase)
-			if row.Stage != "" {
-				label += fmt.Sprintf(" iteration=%s", row.Stage)
-			}
-			line = indicator + s.styles.Selected.Render(label)
-		} else if isFailedInfraRow(row) {
-			line = s.renderInfraFailureRow(row)
-		} else if row.Status == "SUCCESS" {
-			label := fmt.Sprintf("%s  %s", row.AgentInstance, row.Status)
-			line = indicator + s.styles.Success.Render(label)
-		} else if row.Status == "" {
-			label := fmt.Sprintf("%s  phase=%s", row.AgentInstance, row.Phase)
-			line = indicator + s.styles.Body.Render(label)
-		} else if isRunnerRecordedStatus(row.Status) {
-			label := fmt.Sprintf("%s  %s", row.AgentInstance, row.Status)
-			line = indicator + s.runnerRecordedStyle().Render(label)
-		} else if row.Status == "BLOCKED" || row.Status == "CAPABILITY_EXCEEDED" {
-			label := fmt.Sprintf("%s  %s", row.AgentInstance, row.Status)
-			line = indicator + s.styles.Error.Render(label)
-		} else {
-			label := fmt.Sprintf("%s  %s", row.AgentInstance, row.Status)
-			line = indicator + s.styles.Warning.Render(label)
-		}
-		if i > start {
-			rowsBuilder.WriteByte('\n')
-		}
-		rowsBuilder.WriteString(line)
-	}
+	rowsBlock := s.stepRowsBlock(s.stepLineBudget(extraParts))
+	var rowsBuilder strings.Builder
+	rowsBuilder.WriteString(rowsBlock)
 	if lines := s.repairOutcomeLines(); lines != "" {
 		if rowsBuilder.Len() > 0 {
 			rowsBuilder.WriteString("\n")
@@ -281,6 +226,18 @@ func (s *ProgressScreen) View() string {
 	parts = append(parts, extraParts...)
 	parts = append(parts, border, help)
 	return strings.Join(s.withActivityPanel(parts), "\n")
+}
+
+// statusLine renders the status slot; it wraps to several lines when the
+// message is wider than the screen.
+func (s *ProgressScreen) statusLine() string {
+	if s.status == "" {
+		return strings.Repeat(" ", s.width)
+	}
+	if s.statusErr {
+		return s.styles.Error.Width(s.width).Render(s.status)
+	}
+	return s.styles.Body.Width(s.width).Render(s.status)
 }
 
 // optionalParts renders the lines shown below the step rows only in some
@@ -410,4 +367,5 @@ func (s *ProgressScreen) ClearArtifactViewRequest() { s.artifactView = false }
 func (s *ProgressScreen) Resize(width, height int) {
 	s.width = width
 	s.height = height
+	s.settleScroll()
 }

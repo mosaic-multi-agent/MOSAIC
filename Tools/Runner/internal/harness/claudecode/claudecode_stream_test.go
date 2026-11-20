@@ -14,6 +14,7 @@ import (
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/harness/claudecode"
 	"mosaic-run/internal/harness/cliexec"
+	"mosaic-run/internal/testutil"
 )
 
 func invokeStream(t *testing.T, scenario string, logger domain.DebugLogger) (domain.ProtocolResponse, error) {
@@ -114,18 +115,17 @@ func TestClaudeCodeAdapter_Stream_Logging_NormalTranscript_NoRecoveredNoFailed(t
 	}
 }
 
-func TestClaudeCodeAdapter_Stream_Logging_RawStdoutIsFullTranscript(t *testing.T) {
-	logger := &recordingLogger{}
+func TestClaudeCodeAdapter_Stream_Logging_StdoutLinesCoverTheFullTranscript(t *testing.T) {
+	logger := &testutil.RecordingLogger{}
 	if _, err := invokeStream(t, "stream-envelope", logger); err != nil {
 		t.Fatalf("want no error, got %v", err)
 	}
-	msg, ok := logger.messageFor(domain.EventHarnessStdout)
-	if !ok {
-		t.Fatalf("want a %s event, got %v", domain.EventHarnessStdout, logger.allEvents())
+	lines := testutil.LiveLines(t, logger.Entries(), "test-agent#1")
+	all := strings.Join(lines, "\n")
+	if !strings.Contains(all, `"subtype":"init"`) || !strings.Contains(all, `"type":"result"`) {
+		t.Errorf("want the logged stdout lines to contain the whole transcript, got %q", all)
 	}
-	if !strings.Contains(msg, `"subtype":"init"`) || !strings.Contains(msg, `"type":"result"`) {
-		t.Errorf("want logged stdout to contain the whole transcript, got %q", msg)
-	}
+	testutil.AssertNoWholeStdoutEntry(t, logger.Entries())
 }
 
 func TestClaudeCodeAdapter_Stream_Logging_NoResultLine_LogsParseFailed(t *testing.T) {

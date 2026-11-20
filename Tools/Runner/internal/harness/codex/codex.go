@@ -145,6 +145,7 @@ func (a *CodexAdapter) invoke(ctx context.Context, agent domain.AgentReference, 
 		Env:          roleenv.SubagentEnv(runID, request.AgentInstanceID),
 		OutputFormat: "json",
 		OnStdoutLine: onLine,
+		Sink:         cliexec.WithAgent(a.sink, request.AgentInstanceID),
 	})
 	if err != nil {
 		if unparseableStream(err) {
@@ -218,7 +219,7 @@ func (a *CodexAdapter) invokeRaw(ctx context.Context, agent domain.AgentReferenc
 		Env:          spawnReq.Env,
 		Stdin:        stdin,
 		Timeout:      a.timeout,
-		Sink:         a.sink,
+		Sink:         cliexec.WithAgent(a.sink, agent.Identifier),
 		OnStdoutLine: onLine,
 	})
 	text, parseErr := commonharness.ParseCodexEnvelope(resp.Stdout)
@@ -234,7 +235,6 @@ func (a *CodexAdapter) invokeRaw(ctx context.Context, agent domain.AgentReferenc
 		return nil, parseErr
 	}
 
-	a.logger.Log(domain.EventHarnessStdout, text, domain.F("agent", agent.Identifier))
 	a.logger.Log(domain.EventHarnessInvokeOK, "raw invocation succeeded",
 		domain.F("agent", agent.Identifier),
 	)

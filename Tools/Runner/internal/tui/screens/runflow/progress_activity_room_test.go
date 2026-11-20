@@ -5,7 +5,7 @@ package runflow
 // grows on tall terminals, the rows keep showing their latest entries, and a
 // hidden panel gives the rows the full height back.
 //
-// Drawn at 120 columns so no help bar or item line wraps.
+// Drawn at 200 columns so no help bar or item line wraps.
 
 import (
 	"fmt"
@@ -24,7 +24,7 @@ func roomRowName(i int) string { return fmt.Sprintf("step-%02d#1", i) }
 // items received.
 func newRoomScreen(t *testing.T, height, itemCount int) *ProgressScreen {
 	t.Helper()
-	s := NewProgressScreen(120, height, progressStyles())
+	s := NewProgressScreen(200, height, progressStyles())
 	for i := 1; i < roomRowCount; i++ {
 		s.AppendRow(ProgressRow{AgentInstance: roomRowName(i), Phase: "EXECUTION", Status: "SUCCESS"})
 	}
@@ -114,8 +114,9 @@ func TestActivityRoom_HiddenPanel_RowsUseTheFullHeightAgain(t *testing.T) {
 	if hiddenRows <= shownRows {
 		t.Errorf("rows with panel hidden = %d, want more than %d with the panel shown", hiddenRows, shownRows)
 	}
-	if hiddenRows < 20-6 {
-		t.Errorf("rows with panel hidden = %d, want at least %d", hiddenRows, 20-6)
+	// 14 lines of row budget; the older-rows indicator takes one of them.
+	if hiddenRows < 20-6-1 {
+		t.Errorf("rows with panel hidden = %d, want at least %d", hiddenRows, 20-6-1)
 	}
 	if strings.Contains(view, "Activity:") {
 		t.Errorf("panel still rendered while hidden:\n%s", view)
@@ -208,6 +209,8 @@ func TestActivityRoom_SmallPanelOnTallScreen_RowsTakeAllLeftoverRoom(t *testing.
 	if got := viewLineCount(view); got != 40 {
 		t.Errorf("view has %d lines, want the full height 40 (panel needs 2, rows take the rest)", got)
 	}
+	// Following the bottom, the window shows the step rows plus one older-rows
+	// indicator line; the indicator is not a step row.
 	if got := countLinesWith(view, "step-"); got != 40-6-2 {
 		t.Errorf("step rows shown = %d, want %d", got, 40-6-2)
 	}

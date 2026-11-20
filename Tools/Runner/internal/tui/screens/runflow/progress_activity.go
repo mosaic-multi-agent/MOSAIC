@@ -132,7 +132,7 @@ const panelMinRoom = 3
 // the consultation line.
 func (s *ProgressScreen) chromeLines(optional []string) int {
 	help := s.styles.Help.Width(s.width).Render(s.helpBar())
-	c := 4 + strings.Count(help, "\n") + 1
+	c := 4 + strings.Count(help, "\n") + strings.Count(s.statusLine(), "\n") + 1
 	for _, p := range optional {
 		c += strings.Count(p, "\n") + 1
 	}
@@ -154,18 +154,24 @@ func (s *ProgressScreen) panelNaturalLines() int {
 	return 1 + len(s.activity.items)
 }
 
-// rowBudgetWithPanel is the step-row line budget when the panel is shown.
-// With room = H - C and R step rows, the panel gets
+// stepLineBudget is the line budget of the step rows, scroll indicators
+// included. With room = H - C and R step rows, a shown panel gets
 // min(N, max(max(2, room/3), room-R)) lines and the rows the remainder, at
 // least one. When the panel is hidden, no invocation has begun, or room is
-// below panelMinRoom, the budget stays contentH.
-func (s *ProgressScreen) rowBudgetWithPanel(contentH int, optional []string) int {
-	if s.activity.hidden || !s.activity.begun {
-		return contentH
-	}
+// below panelMinRoom, the rows get the whole room. The budget is at least one.
+func (s *ProgressScreen) stepLineBudget(optional []string) int {
 	room := s.height - s.chromeLines(optional)
-	if room < panelMinRoom {
-		return contentH
+	b := s.rowBudgetWithPanel(room)
+	if b < 1 {
+		b = 1
+	}
+	return b
+}
+
+// rowBudgetWithPanel splits room between the step rows and the panel.
+func (s *ProgressScreen) rowBudgetWithPanel(room int) int {
+	if s.activity.hidden || !s.activity.begun || room < panelMinRoom {
+		return room
 	}
 	r := len(s.rows)
 	panel := s.panelNaturalLines()

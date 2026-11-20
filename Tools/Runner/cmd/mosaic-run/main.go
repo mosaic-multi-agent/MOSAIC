@@ -27,7 +27,7 @@ import (
 	"github.com/mattn/go-isatty"
 )
 
-const ToolVersion = "1.14.0"
+const ToolVersion = "1.15.0"
 
 // stdioIsTerminal reports whether stdin and stdout are both real terminals.
 func stdioIsTerminal() bool {

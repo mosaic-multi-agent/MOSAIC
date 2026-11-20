@@ -371,7 +371,6 @@ const (
 	EventRunnerRunID                = "runner.run_id"
 	EventRunnerError                = "runner.error"
 	EventHarnessInvokeStart         = "harness.invoke.start"
-	EventHarnessStdout              = "harness.stdout"
 	EventHarnessStderr              = "harness.stderr"
 	EventHarnessInvokeOK            = "harness.invoke.ok"
 	EventHarnessInvokeError         = "harness.invoke.error"

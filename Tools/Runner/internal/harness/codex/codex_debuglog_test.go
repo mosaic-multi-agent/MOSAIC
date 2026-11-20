@@ -1,20 +1,29 @@
 package codex_test
 
 // Tests that a Codex invocation writes the same kinds of debug log events as
-// the OpenCode adapter: invoke start, stdout, stderr, parse failed, invoke
+// the OpenCode adapter: invoke start, live stdout lines, stderr, parse failed, invoke
 // error and invoke ok.
 
 import (
 	"context"
 	"testing"
+	"time"
 
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/harness/codex"
 )
 
+// retiredWholeStdoutEvent is the whole-stdout entry no adapter logs any more.
+const retiredWholeStdoutEvent = "harness.stdout"
+
 func loggedAdapter(t *testing.T, logger domain.DebugLogger) *codex.CodexAdapter {
 	t.Helper()
 	return codex.NewCodexAdapterWithLogger(helperExe(t), adapterTimeout, logger)
+}
+
+func loggedAdapterWithTimeout(t *testing.T, logger domain.DebugLogger, timeout time.Duration) *codex.CodexAdapter {
+	t.Helper()
+	return codex.NewCodexAdapterWithLogger(helperExe(t), timeout, logger)
 }
 
 func requireLogged(t *testing.T, lg *recordingLogger, events ...string) {
@@ -35,7 +44,7 @@ func requireNotLogged(t *testing.T, lg *recordingLogger, events ...string) {
 	}
 }
 
-func TestCodexAdapter_Invoke_Success_LogsStartStdoutAndOK(t *testing.T) {
+func TestCodexAdapter_Invoke_Success_LogsStartLinesAndOK(t *testing.T) {
 	setHelperEnv(t, "codex-success")
 	lg := &recordingLogger{}
 
@@ -43,11 +52,11 @@ func TestCodexAdapter_Invoke_Success_LogsStartStdoutAndOK(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	requireLogged(t, lg, domain.EventHarnessInvokeStart, domain.EventHarnessStdout, domain.EventHarnessInvokeOK)
-	requireNotLogged(t, lg, domain.EventHarnessInvokeError, domain.EventHarnessParseFailed)
+	requireLogged(t, lg, domain.EventHarnessInvokeStart, domain.EventHarnessStdoutLines, domain.EventHarnessInvokeOK)
+	requireNotLogged(t, lg, domain.EventHarnessInvokeError, domain.EventHarnessParseFailed, retiredWholeStdoutEvent)
 }
 
-func TestCodexAdapter_InvokeRaw_Success_LogsStartStdoutAndOK(t *testing.T) {
+func TestCodexAdapter_InvokeRaw_Success_LogsStartLinesAndOK(t *testing.T) {
 	setHelperEnv(t, "codex-raw-success")
 	lg := &recordingLogger{}
 
@@ -55,8 +64,8 @@ func TestCodexAdapter_InvokeRaw_Success_LogsStartStdoutAndOK(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	requireLogged(t, lg, domain.EventHarnessInvokeStart, domain.EventHarnessStdout, domain.EventHarnessInvokeOK)
-	requireNotLogged(t, lg, domain.EventHarnessInvokeError)
+	requireLogged(t, lg, domain.EventHarnessInvokeStart, domain.EventHarnessStdoutLines, domain.EventHarnessInvokeOK)
+	requireNotLogged(t, lg, domain.EventHarnessInvokeError, retiredWholeStdoutEvent)
 }
 
 func TestCodexAdapter_Invoke_NonZeroExit_LogsStderrAndInvokeError(t *testing.T) {

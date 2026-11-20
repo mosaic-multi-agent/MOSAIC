@@ -12,6 +12,7 @@ package harness_test
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -87,9 +88,12 @@ func TestSpawners_OnStdoutLine_DeliversLinesWhileProcessRuns(t *testing.T) {
 			if len(resp.Protocol) == 0 || !strings.Contains(string(resp.Protocol), "test-agent#1") {
 				t.Errorf("want the protocol extracted as usual, got %q", resp.Protocol)
 			}
-			ev, ok := findEvent(sink.snapshot(), "spawn.stdout")
-			if !ok || ev.Message != string(resp.Stdout) || !strings.HasPrefix(ev.Message, tc.firstLine) {
-				t.Errorf("want spawn.stdout to carry the full stdout, got %q (found=%v)", ev.Message, ok)
+			if _, ok := findEvent(sink.snapshot(), "spawn.stdout"); ok {
+				t.Errorf("want no whole-stdout spawn.stdout event")
+			}
+			logged := liveLines(t, sink.snapshot())
+			if len(logged) < 2 || logged[0].text != tc.firstLine {
+				t.Errorf("want the stdout logged line by line starting with %q, got %+v", tc.firstLine, logged)
 			}
 		})
 	}
@@ -109,9 +113,12 @@ func TestSpawners_WithoutOnStdoutLine_BehavesAsBefore(t *testing.T) {
 			if resp.ExitCode != 0 || !strings.Contains(string(resp.Protocol), "test-agent#1") {
 				t.Errorf("want a normal successful response, got %+v", resp)
 			}
-			ev, ok := findEvent(sink.snapshot(), "spawn.stdout")
-			if !ok || ev.Message != string(resp.Stdout) {
-				t.Errorf("want spawn.stdout to carry the full stdout, got %q (found=%v)", ev.Message, ok)
+			if _, ok := findEvent(sink.snapshot(), "spawn.stdout"); ok {
+				t.Errorf("want no whole-stdout spawn.stdout event")
+			}
+			end := lastEvent(t, sink.snapshot())
+			if end.Name != "spawn.end" || mustField(t, end, "stdout_bytes") != strconv.Itoa(len(resp.Stdout)) {
+				t.Errorf("want spawn.end carrying the stdout byte count %d, got %+v", len(resp.Stdout), end)
 			}
 			if _, ok := findEvent(sink.snapshot(), "spawn.stderr"); !ok {
 				t.Errorf("want a spawn.stderr event")

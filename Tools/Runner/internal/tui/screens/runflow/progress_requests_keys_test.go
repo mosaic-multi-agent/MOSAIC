@@ -25,7 +25,7 @@ var requestKeyCases = []struct {
 }
 
 func newRequestsScreen() *ProgressScreen {
-	return NewProgressScreen(120, 24, progressStyles())
+	return NewProgressScreen(200, 24, progressStyles())
 }
 
 func TestProgressScreen_RequestKey_RecordsOneEventNamingTheRequest(t *testing.T) {

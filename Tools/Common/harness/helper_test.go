@@ -180,6 +180,10 @@ func runHelperProcess() {
 		// No-output watchdog modes live in helper_noutput_test.go.
 		runNoOutputHelper(os.Getenv("GO_HELPER_CMD"))
 
+	case "ll-kill-partial", "ll-lines-then-hang":
+		// Live-logging modes live in helper_livelog_test.go.
+		runLiveLogHelper(os.Getenv("GO_HELPER_CMD"))
+
 	default:
 		// Streaming modes live in helper_stream_test.go; it exits 2 for an
 		// unknown mode.
