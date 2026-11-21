@@ -108,8 +108,7 @@ var modeItems = []widgets.ListItem{
 //
 // Navigation contract:
 //   - Enter -> Done() == true, SelectedMode() returns the chosen RunMode.
-//   - Esc   -> Back() == true (caller returns to the harness selection screen, preserving
-//              the previously selected harness so prior input is not lost).
+//   - Esc   -> Back() == true (the mode screen is the first entry screen; the caller exits).
 type ModeScreen struct {
 	list        *widgets.List
 	detail      *widgets.DetailPane
@@ -206,7 +205,7 @@ func (s *ModeScreen) View() string {
 		s.detail.View(),
 	)
 
-	help := s.styles.Help.Width(s.width).Render("↑/k up  ↓/j down  enter select  esc back  ctrl+c quit")
+	help := s.styles.Help.Width(s.width).Render("↑/k up  ↓/j down  enter select  esc quit  ctrl+c quit")
 
 	return strings.Join([]string{title, subtitle, border, content, border, help}, "\n")
 }
@@ -244,3 +243,9 @@ func (s *ModeScreen) Resize(width, height int) {
 
 // Reset clears the done and back flags.
 func (s *ModeScreen) Reset() { s.list.Reset() }
+
+// Highlight moves the cursor to mode and refreshes the detail pane.
+func (s *ModeScreen) Highlight(mode domain.RunMode) {
+	s.list.SetCursor(string(mode))
+	s.updateDetail()
+}

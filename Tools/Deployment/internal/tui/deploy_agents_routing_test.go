@@ -307,30 +307,8 @@ func TestStartServiceDispatch_DeployAgents_CallsDeployAgents(t *testing.T) {
 	spy := &spyDispatchService{harnesses: []domain.HarnessRef{dispatchHarness}}
 	m := newFlowModel(spy, workspace)
 
-	// Step 1: Select the single harness.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if m.screen != screenMode {
-		t.Fatalf("screen = %v after harness Enter; want screenMode", m.screen)
-	}
-
-	// Step 2: Navigate to position 3 (deploy-agents after implementation) and confirm.
-	// In RED phase, position 3 is ModePromoteToGeneric, causing a different flow.
-	m.Update(tea.KeyMsg{Type: tea.KeyDown}) // position 0 → 1
-	m.Update(tea.KeyMsg{Type: tea.KeyDown}) // position 1 → 2
-	m.Update(tea.KeyMsg{Type: tea.KeyDown}) // position 2 → 3
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-
-	if m.screen != screenWorkspace {
-		t.Fatalf("screen = %v after selecting position 3 in mode list; want screenWorkspace.\n"+
-			"This fails in RED because position 3 does not yet hold ModeDeployAgents.\n"+
-			"Add ModeDeployAgents at position 3 in modeItems and add its startService case.",
-			m.screen)
-	}
-	if m.selections.mode != domain.ModeDeployAgents {
-		t.Fatalf("selections.mode = %q; want ModeDeployAgents.\n"+
-			"Position 3 in the mode list must map to ModeDeployAgents.",
-			m.selections.mode)
-	}
+	// Step 1 and 2: Choose deploy-agents (position 3 in the mode list), then the single harness.
+	driveToPath(t, m, domain.ModeDeployAgents, "")
 
 	// Step 3: Confirm the workspace (pre-filled by newFlowModel).
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -361,27 +339,8 @@ func TestStartServiceDispatch_DeployHooks_CallsDeployHooks(t *testing.T) {
 	spy := &spyDispatchService{harnesses: []domain.HarnessRef{dispatchHarness}}
 	m := newFlowModel(spy, workspace)
 
-	// Step 1: Select harness.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if m.screen != screenMode {
-		t.Fatalf("screen = %v after harness Enter; want screenMode", m.screen)
-	}
-
-	// Step 2: Navigate to position 4 (deploy-hooks after implementation).
-	m.Update(tea.KeyMsg{Type: tea.KeyDown}) // 0 → 1
-	m.Update(tea.KeyMsg{Type: tea.KeyDown}) // 1 → 2
-	m.Update(tea.KeyMsg{Type: tea.KeyDown}) // 2 → 3
-	m.Update(tea.KeyMsg{Type: tea.KeyDown}) // 3 → 4
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-
-	if m.screen != screenWorkspace {
-		t.Fatalf("screen = %v after selecting position 4 in mode list; want screenWorkspace.\n"+
-			"Position 4 must hold ModeDeployHooks with a startService case routing to DeployHooks.",
-			m.screen)
-	}
-	if m.selections.mode != domain.ModeDeployHooks {
-		t.Fatalf("selections.mode = %q; want ModeDeployHooks", m.selections.mode)
-	}
+	// Step 1 and 2: Choose deploy-hooks (position 4 in the mode list), then the harness.
+	driveToPath(t, m, domain.ModeDeployHooks, "")
 
 	// Step 3: Confirm workspace.
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -414,15 +373,7 @@ func TestStartServiceDispatch_DeployAgents_DoesNotCallDeployNew(t *testing.T) {
 	spy := &spyDispatchService{harnesses: []domain.HarnessRef{dispatchHarness}}
 	m := newFlowModel(spy, workspace)
 
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})  // harness
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})           // → position 1
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})           // → position 2
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})           // → position 3
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})  // select mode
-
-	if m.screen != screenWorkspace || m.selections.mode != domain.ModeDeployAgents {
-		t.Skip("deploy-agents not yet at position 3; test will pass after implementation")
-	}
+	driveToPath(t, m, domain.ModeDeployAgents, "")
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // workspace
 	_, _ = m.Update(runCmd(cmd))

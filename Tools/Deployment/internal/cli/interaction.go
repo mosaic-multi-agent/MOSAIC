@@ -155,8 +155,8 @@ func (n *nonInteractive) Confirm(_ context.Context, q domain.Question) (domain.C
 	return domain.ConfirmAnswer{Status: domain.Answered, Confirm: v == "true"}, nil
 }
 
-// Notify writes a notice to the output writer. It never blocks: the write is a direct
-// synchronous call to the injected io.Writer (a bytes.Buffer in tests; stdout in production).
+// Notify writes a notice to the diagnostics writer. It never blocks: the write is a direct
+// synchronous call to the injected io.Writer (a bytes.Buffer in tests; stderr in production).
 func (n *nonInteractive) Notify(_ context.Context, notice domain.Notice) {
 	fmt.Fprintf(n.out, "[%s] %s: %s\n", notice.Level, notice.Title, notice.Message)
 }

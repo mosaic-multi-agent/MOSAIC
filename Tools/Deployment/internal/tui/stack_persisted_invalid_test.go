@@ -127,6 +127,41 @@ func TestPersistedStart_LaunchStackWins_UnresolvablePersistedLayerShowsNoError(t
 	requireOneReload(t, f)
 }
 
+// TestPersistedStart_CorruptOrFutureManifest_HarnessScreenOffersTheFullListAndStackScreenStillShowsTheError
+// verifies that a manifest that cannot be used (corrupt, or written by a newer schema) does not
+// narrow the harness screen, and that the stack screen reports it exactly as before.
+func TestPersistedStart_CorruptOrFutureManifest_HarnessScreenOffersTheFullListAndStackScreenStillShowsTheError(t *testing.T) {
+	cases := map[string]error{
+		"corrupt":       errors.New("READ-FAILURE-SENTINEL manifest is corrupt"),
+		"future schema": errors.New("READ-FAILURE-SENTINEL manifest schema is newer than this tool supports"),
+	}
+	for name, readErr := range cases {
+		for _, mode := range []domain.RunMode{domain.ModeUpdateWorkspace, domain.ModeUpdateWorkflows} {
+			t.Run(name+"/"+string(mode), func(t *testing.T) {
+				store := newPersistStore()
+				ws := newWorkspaceDir(t, store, storedOf(false, t.TempDir()))
+				f := newPersistedFlow(t, mode, store, ws, persistFlowOpts{readErr: readErr})
+				pickMode(t, f.m, mode)
+				requireScreen(t, f.m, screenWorkspace)
+
+				pressEnter(f.m) // confirm the path: the harness screen follows with the full list
+
+				requireScreen(t, f.m, screenHarness)
+				requireInView(t, f, flowTestHarness.DisplayName)
+				pickHarness(t, f.m, "")
+				if !f.onStack() {
+					t.Fatalf("the stack screen does not follow the harness screen:\n%s", f.m.View())
+				}
+				runStarted(f.confirmStack(t))
+				requireInView(t, f, "READ-FAILURE-SENTINEL")
+				if len(f.rec.calls) != 0 || len(f.log.entries) != 0 {
+					t.Errorf("a run was started with an unusable manifest: reloads %d, calls %v", len(f.rec.calls), f.log.entries)
+				}
+			})
+		}
+	}
+}
+
 func TestPersistedStart_UnreadablePersistedStack_ErrorIsShownWithoutRunning(t *testing.T) {
 	store := newPersistStore()
 	ws := newWorkspaceDir(t, store, storedOf(false, t.TempDir()))

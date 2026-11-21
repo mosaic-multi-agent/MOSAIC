@@ -37,16 +37,15 @@ func (m *rootModel) updateDone(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// restartFromFinalScreen returns to the first screen and clears everything the finished run
-// left behind. The first screen is the harness screen, or the mode screen when the session
-// was launched with a preset harness (which is kept).
+// restartFromFinalScreen returns to the mode screen and clears everything the finished run
+// left behind. The previous mode and harness stay highlighted on their screens; a preset
+// harness is kept.
 func (m *rootModel) restartFromFinalScreen() {
-	m.screen = screenHarness
-	m.selections = entrySelections{}
-	if m.presetHarness != "" {
-		m.screen = screenMode
-		m.selections.harnessID = m.presetHarness
+	m.screen = screenMode
+	if m.selections.mode != "" {
+		m.modeScreen.Highlight(m.selections.mode)
 	}
+	m.selections = entrySelections{harnessID: m.presetHarness}
 	m.errMsg = ""
 	m.statusMsg = ""
 	m.runCancelled = false

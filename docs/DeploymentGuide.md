@@ -18,7 +18,7 @@ This guide is for **project authors** who want to get MOSAIC running in their AI
 | **Transform** | Move a workspace's whole deployment to another harness | `mosaic-deploy transform` |
 | **Promote** | Turn a harness-only agent into a reusable generic source | `mosaic-deploy promote` |
 
-**Two ways to run:** Launch without a subcommand for the interactive TUI, or pass a subcommand for scriptable CLI mode. In the TUI, any key on a final screen returns to the first screen (scroll keys scroll a scrollable summary); Esc on the first screen exits, and Ctrl+C exits at once.
+**Two ways to run:** Launch without a subcommand for the interactive TUI, or pass a subcommand for scriptable CLI mode. In the TUI, any key on a final screen returns to the mode screen with the previous mode and harness highlighted (after a declined plan, with choices cleared; scroll keys scroll a scrollable summary); Esc on the mode screen exits, and Ctrl+C exits at once.
 
 **Built-in harnesses:** `claude-code` (Claude Code), `opencode` (OpenCode), `ghcp-cli` ("GHCP CLI / VS Code GHCP Copilot"), `vscode-ghcp` ("VS Code GHCP Local"), `codex` (experimental, see [Codex (experimental)](#codex-experimental)), `opencode-v2` (OpenCode V2, experimental, see [OpenCode V1 vs V2](#opencode-v1-vs-v2-opencode-v2-is-experimental)).
 
@@ -69,7 +69,7 @@ Before you install OpenCode V2, read the warnings in [Getting Started](GettingSt
 
 Both GHCP targets write agents as `.github/agents/X.agent.md`, with content specific to each target. A workspace deployed earlier with `X.md` agents is migrated by the next full deploy, deploy agents, Update or workflow update for its target, for the agents that run writes: each old file is backed up under `.mosaic/backups/` and replaced by `X.agent.md`, and an existing `X.agent.md` for the same agent is backed up and replaced too. A migrated agent keeps its project and custom regions, model, tool choices and declarations. A run that writes only some agents leaves the rest as `X.md`, and the next Update migrates them. Only agents recorded as `X.md` in the manifest are migrated. The rename never forces a write by itself, a file in conflict is kept as it is, and a transform to a GHCP target leaves no `X.md` entry in the manifest.
 
-**Catalog stacks:** every subcommand and the TUI can deploy from several catalogs layered on top of each other (`--catalog-folder`, `--include-default-catalog`). See [Catalog Stacks](#catalog-stacks).
+**Catalog stacks:** every subcommand and the TUI can deploy from several catalogs layered on top of each other (`--catalog-folder`, `--include-default-catalog` on the CLI; the stack screen in the TUI). See [Catalog Stacks](#catalog-stacks).
 
 ---
 
@@ -83,7 +83,7 @@ Creates a workspace from scratch: selects harness, workflows, utility agents, an
 ./mosaic-deploy
 ```
 
-The TUI walks you through every step.
+The TUI takes no flags. It starts at the mode screen and walks you through every step. Deploy workspace, Deploy agents, Deploy hooks and Promote ask the harness, then the path, then the stack. Update workspace, Change workflows and Transform harness ask the path first, then the harness, then the stack; the harness screen offers only the harnesses recorded in the manifest at that path (a single usable one is selected automatically, and a missing, empty, corrupt or newer-schema manifest shows the full list; unusable recorded harnesses are disabled with their reason). Transform asks the target harness right after the source harness. Esc on a later entry screen goes back one screen keeping your choices.
 
 **CLI:**
 
@@ -344,15 +344,16 @@ Turns a harness-only agent (one with no generic source) into a reusable generic 
   --category Research
 ```
 
-The source file is never modified. The generated generic has empty `project` and `managed` regions, ready for the normal deploy pipeline. Tier, tier rationale and required skills are optional and left out of the generic when empty; an agent without a tier gets its own model question at deploy time, and skills named in an agent's instructions are shipped only when declared in its required skills.
+The source file is never modified. Every project region of the source is present in the generic with its tags, at any depth including inside managed regions, and its content is kept byte-identical (the default) or emptied (`--empty-project-regions`). Custom regions are removed at any depth and reported by name (`removed custom region: <name>` lines in the human output, `removedCustomRegions` in JSON). Managed regions are emptied, apart from project regions nested in them. The result is ready for the normal deploy pipeline, which accepts a managed region holding a nested project region with content and uses that content as the deploy-once default; content already deployed wins on update. Tier, tier rationale and required skills are optional and left out of the generic when empty; an agent without a tier gets its own model question at deploy time, and skills named in an agent's instructions are shipped only when declared in its required skills.
 
 ### Batch promote (TUI)
 
-In the TUI, Promote asks for the harness and the folder that holds the agents and the catalog stack, then shows a multi-select list of the promotable agents. Agents whose key already exists in the stack are listed too; hand-written agents that are not promotable are not.
+In the TUI, Promote asks for the harness, then the folder that holds the agents, then the catalog stack, then shows a multi-select list of the promotable agents. Agents whose key already exists in the stack are listed too; hand-written agents that are not promotable are not.
 
 Asked **once per batch**:
 
 - the target layer (stacks with two or more layers)
+- whether to keep or empty project region content (Keep is pre-selected; asked only when a selected agent has project content, and the summary states the answer)
 - a server name for each unmapped tool name
 - the recommended tier, once per distinct source model (an agent without a model is asked individually)
 
@@ -366,7 +367,7 @@ Replacing keeps the existing numeric id and key, writes the agent into the chose
 
 Keys: Ctrl+K skips the question for this agent, Ctrl+X skips it for the rest of the batch, Esc on any batch question aborts the batch. Agents already promoted stay promoted. A failing agent does not stop the batch; the summary lists every agent as promoted, skipped, failed or not processed. Source files are never changed.
 
-Batch promote is TUI-only. The CLI `promote` command promotes a single file with the same flags and questions as before. `--overwrite` replaces the existing agent, keeps its numeric id and leaves exactly one agent with that key; without `--overwrite`, an existing key in the target layer is refused whatever category is chosen.
+Batch promote is TUI-only. The CLI `promote` command promotes a single file; it keeps project region content by default, `--empty-project-regions` empties it, and it never asks. `--overwrite` replaces the existing agent, keeps its numeric id and leaves exactly one agent with that key; without `--overwrite`, an existing key in the target layer is refused whatever category is chosen.
 
 With a catalog stack of two or more layers, promote also needs to know which layer receives a **new** agent; see [Promote and layers](#promote-and-layers).
 
@@ -458,7 +459,7 @@ A file in your catalog that cannot be read or parsed (for example an agent witho
 
 ### Setting up a stack in the TUI
 
-In the interactive TUI, a **stack screen** follows the path screen in every mode (deploy, update, change workflows, deploy agents, deploy hooks, transform, promote). It lists the layers highest first, with the default layer always shown as the bottom row.
+In the interactive TUI, a **stack screen** is the last entry screen in every mode (deploy, update, change workflows, deploy agents, deploy hooks, transform, promote), after the path and harness screens. It lists the layers highest first, with the default layer always shown as the bottom row.
 
 | Key | Action |
 |-----|--------|
@@ -467,15 +468,16 @@ In the interactive TUI, a **stack screen** follows the path screen in every mode
 | Shift+Up / Shift+Down | Move the user layer under the cursor up or down in precedence |
 | Space (on the default row) | Keep the default layer in the stack, or leave it out |
 | Enter | Confirm the stack |
-| Esc | Go back to the path screen |
+| Esc | Go back to the previous entry screen, keeping your choices |
 
 Enter is refused while the stack would have no layer at all. A problem with the confirmed stack (for example a layer without identity, a duplicate catalog id, or a harness whose injections no layer supplies) is shown on the screen, and you stay there to fix it.
 
 The screen starts from:
 
-1. the stack the TUI was launched with, if you passed `--catalog-folder` or `--include-default-catalog` (for example `mosaic-deploy --catalog-folder /my/catalog`), otherwise
-2. the stack persisted with the workspace you just entered (see [Persistence](#persistence-on-update-and-redeploy)): in deploy, update, workflows, agents and hooks modes when the path is itself a workspace; in promote mode the workspace that contains the file, and in transform mode the workspace you entered, otherwise
-3. the default layer alone.
+1. the stack persisted with the workspace you just entered (see [Persistence](#persistence-on-update-and-redeploy)): in deploy, update, workflows, agents and hooks modes when the path is itself a workspace; in promote mode the workspace that contains the file, and in transform mode the workspace you entered, otherwise
+2. the default layer alone.
+
+The TUI launch takes no flags, so add user layers with `a` on this screen.
 
 If the persisted stack can no longer be used (for example a layer folder moved), the screen shows the reason and you must change the stack before confirming.
 
@@ -483,7 +485,7 @@ If the persisted stack can no longer be used (for example a layer folder moved),
 
 ### Setting up a stack on the command line
 
-Two global flags, accepted by every subcommand and by the TUI launch:
+Two global flags, accepted by every subcommand (the TUI launch takes no flags):
 
 | Flag | Meaning |
 |------|---------|

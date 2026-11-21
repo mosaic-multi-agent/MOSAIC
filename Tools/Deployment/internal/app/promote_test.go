@@ -379,7 +379,7 @@ func TestBuildGenericAgent_EmptyNumericID_WrapsErrPromoteNumericIDRequired(t *te
 // Injection region stripping tests
 // ---------------------------------------------------------------------------
 
-// TestBuildGenericAgent_SingleInjectionRegion_IsStrippedToEmptyPair verifies that a
+// TestBuildGenericAgent_SingleInjectionRegion_IsStrippedToEmptyPair verifies that, with EmptyProjectRegions, a
 // single populated injection region in the source is replaced by an empty tag pair.
 func TestBuildGenericAgent_SingleInjectionRegion_IsStrippedToEmptyPair(t *testing.T) {
 	src := []byte("---\n" +
@@ -395,7 +395,7 @@ func TestBuildGenericAgent_SingleInjectionRegion_IsStrippedToEmptyPair(t *testin
 		"</IdentityExtension>\n" +
 		"</Identity>\n")
 
-	out, err := buildGenericAgent(standardPromoteInput(src))
+	out, err := buildGenericAgent(emptyProjectsPromoteInput(src))
 	if err != nil {
 		t.Fatalf("buildGenericAgent failed: %v", err)
 	}
@@ -416,7 +416,7 @@ func TestBuildGenericAgent_SingleInjectionRegion_IsStrippedToEmptyPair(t *testin
 func TestBuildGenericAgent_MultipleInjectionRegions_AllStrippedToEmptyPairs(t *testing.T) {
 	src := sourceWithPopulatedInjectionRegions()
 
-	out, err := buildGenericAgent(standardPromoteInput(src))
+	out, err := buildGenericAgent(emptyProjectsPromoteInput(src))
 	if err != nil {
 		t.Fatalf("buildGenericAgent failed: %v", err)
 	}
@@ -439,7 +439,7 @@ func TestBuildGenericAgent_MultipleInjectionRegions_AllStrippedToEmptyPairs(t *t
 func TestBuildGenericAgent_InjectionRegions_TagPairsArePresentInOutput(t *testing.T) {
 	src := sourceWithPopulatedInjectionRegions()
 
-	out, err := buildGenericAgent(standardPromoteInput(src))
+	out, err := buildGenericAgent(emptyProjectsPromoteInput(src))
 	if err != nil {
 		t.Fatalf("buildGenericAgent failed: %v", err)
 	}
@@ -468,11 +468,12 @@ func TestBuildGenericAgent_RealisticFixture_AllInjectionRegionsStripped(t *testi
 	src := realisticHarnessOnlyAgentBytes(t)
 
 	out, err := buildGenericAgent(PromoteInput{
-		Source:    src,
-		NumericID: "55",
-		Key:       "code-reviewer",
-		Role:      domain.RoleSubagent,
-		Version:   "1.0.0",
+		Source:              src,
+		NumericID:           "55",
+		Key:                 "code-reviewer",
+		Role:                domain.RoleSubagent,
+		Version:             "1.0.0",
+		EmptyProjectRegions: true,
 	})
 	if err != nil {
 		t.Fatalf("buildGenericAgent failed on realistic fixture: %v", err)

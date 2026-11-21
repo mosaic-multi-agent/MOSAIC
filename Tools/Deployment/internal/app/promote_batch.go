@@ -113,7 +113,7 @@ func (s *service) PromoteBatch(ctx context.Context, req PromoteBatchRequest) (Pr
 // without an outcome as not processed.
 func (r *promoteBatchRun) execute(harnessID string) {
 	r.settleDuplicatesAndLoad(harnessID)
-	if !r.chooseLayer() || !r.askUnmappedTools() || !r.askTiers() {
+	if !r.chooseLayer() || !r.askUnmappedTools() || !r.askTiers() || !r.askProjectRegions() {
 		return
 	}
 	r.nextID = r.firstNewID()

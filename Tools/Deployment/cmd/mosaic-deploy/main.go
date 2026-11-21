@@ -54,7 +54,7 @@ import (
 	_ "mosaic-common/agentformat/all"
 )
 
-const ToolVersion = "1.11.0"
+const ToolVersion = "1.12.0"
 
 // wantsTUI reports whether mosaic-deploy should launch the interactive TUI: no subcommand
 // was given, and both stdin and stdout are attached to a real terminal (not a pipe/redirect).
@@ -247,7 +247,9 @@ func main() {
 	}
 
 	preAnswers := buildPreAnswers(args)
-	deps.Interaction = cli.NewInteraction(preAnswers, todoCollector, os.Stdout)
+	// Notices and progress lines are diagnostics: they go to stderr in every output mode so
+	// stdout carries only the subcommand's result.
+	deps.Interaction = cli.NewInteraction(preAnswers, todoCollector, os.Stderr)
 
 	// Step 8: Dispatch to the CLI adapter with a fully-wired service. cli.Run
 	// handles all subcommand routing and output formatting; main.go is purely

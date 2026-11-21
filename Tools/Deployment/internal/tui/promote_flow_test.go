@@ -68,21 +68,11 @@ func newPromoteFlowSvc(workspace string) *stubFlowService {
 	return svc
 }
 
-// selectPromoteMode moves from the harness screen through the mode screen to the path screen of
+// selectPromoteMode moves from the mode screen through the harness screen to the path screen of
 // the promote mode.
 func selectPromoteMode(t *testing.T, m *rootModel) {
 	t.Helper()
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness -> mode
-	for i := 0; i < 5; i++ {
-		_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown}) // -> promote-to-generic is the sixth entry
-	}
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if m.selections.mode != domain.ModePromoteToGeneric {
-		t.Fatalf("selections.mode = %q; want ModePromoteToGeneric", m.selections.mode)
-	}
-	if m.screen != screenWorkspace {
-		t.Fatalf("screen = %v after selecting promote; want the path screen", m.screen)
-	}
+	driveToPath(t, m, domain.ModePromoteToGeneric, "")
 }
 
 // runPromote confirms the pre-filled agents folder and delivers the result of the batch run to
@@ -162,12 +152,10 @@ func TestBackNavigation_PromoteThenDeployNew_PathStepUsesWorkspaceWording(t *tes
 	workspace := t.TempDir()
 	m := newFlowModel(newPromoteFlowSvc(workspace), workspace)
 	selectPromoteMode(t, m)
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // back to the mode screen, cursor on promote
-	for i := 0; i < 5; i++ {
-		_, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
-	}
+	pressEsc(m) // back to the harness screen
+	pressEsc(m) // back to the mode screen, cursor on promote
 
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // deploy-workspace
+	driveToPath(t, m, domain.ModeDeployWorkspace, "")
 
 	lower := strings.ToLower(m.View())
 	if m.screen != screenWorkspace || !strings.Contains(lower, "workspace") || strings.Contains(lower, "agents folder") {
@@ -178,14 +166,11 @@ func TestBackNavigation_PromoteThenDeployNew_PathStepUsesWorkspaceWording(t *tes
 func TestBackNavigation_DeployNewThenPromote_PathStepAsksForAnAgentsFolder(t *testing.T) {
 	workspace := t.TempDir()
 	m := newFlowModel(newPromoteFlowSvc(workspace), workspace)
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness -> mode
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // deploy-workspace -> path
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})   // back to the mode screen
-	for i := 0; i < 5; i++ {
-		_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	}
+	driveToPath(t, m, domain.ModeDeployWorkspace, "")
+	pressEsc(m) // back to the harness screen
+	pressEsc(m) // back to the mode screen
 
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // promote
+	driveToPath(t, m, domain.ModePromoteToGeneric, "")
 
 	if m.screen != screenWorkspace || !strings.Contains(strings.ToLower(collapseSpaces(m.View())), "agents folder") {
 		t.Errorf("path step after switching to promote does not ask for an agents folder:\n%s", m.View())

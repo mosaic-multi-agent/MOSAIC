@@ -413,7 +413,10 @@ language.
 The tool preserves nested user-owned regions when regenerating the managed
 parent — it writes the new canonical text around them. This is the natural
 placement for project extensions of managed content (e.g. custom error
-handling inside `ErrorHandlingCommon`).
+handling inside `ErrorHandlingCommon`). A `project` region nested inside a
+`managed` region of a source file may carry deploy-once default content: deploy
+accepts it, writes it on first deployment, and on later updates the already
+deployed content wins. Custom regions never appear in source.
 
 ### Canonical document order
 

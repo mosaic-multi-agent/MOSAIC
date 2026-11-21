@@ -130,8 +130,8 @@ func TestRootModel_Review_AfterDeclineAndRestart_ShowsWarningAgain(t *testing.T)
 
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}}) // decline
 	m.Update(runErrorMsg{err: app.ErrPlanNotConfirmed})          // app reports the declined plan
-	if m.screen != screenHarness {
-		t.Fatalf("screen = %v after decline, want screenHarness (restart)", m.screen)
+	if m.screen != screenMode {
+		t.Fatalf("screen = %v after decline, want screenMode (restart)", m.screen)
 	}
 	m.screen = screenRunning // a second run reaches its review
 	m.Update(buildReviewMsg(experimentalFlowPlan(domain.ModeDeployWorkspace, experimentalFlowHarness)))

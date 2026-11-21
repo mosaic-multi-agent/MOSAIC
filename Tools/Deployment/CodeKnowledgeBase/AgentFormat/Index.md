@@ -226,7 +226,7 @@ Why Codex needs none: its descriptor sets `tool_info_recoverable: false` (tool-i
 unrecoverable), and declares no `tools_key` and no `tools.mcp`. Its MCP-related TOML content is
 carried opaque in the carriage container and never parsed into tool names, so a Codex source
 never reaches the MCP split path (`convertMCP`, `resolveSplit` in `deployed_tools_mcp.go`). Promote
-of a tool-info-unrecoverable source writes an empty tools list (`promote_service.go`).
+of a tool-info-unrecoverable source writes an empty tools list (`promote_service.go`). Promote keeps every project region with its tags at any depth (content kept or emptied by request), removes custom regions at any depth and reports their names, and empties managed regions apart from nested project regions.
 
 The question reopens if Codex later gains a `tools_key`, or becomes tool-info-recoverable.
 

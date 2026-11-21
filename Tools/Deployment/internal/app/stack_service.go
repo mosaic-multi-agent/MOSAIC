@@ -34,6 +34,13 @@ type StackService interface {
 	// screens. ok is false for a catalog that is not a stack and for an item the catalog does
 	// not contain. Both orchestrator agent keys answer with the layer that supplies the pair.
 	CatalogOf(item domain.CatalogItem) (domain.CatalogLayer, bool)
+	// RecordedHarnesses returns the distinct Harness values of the entries recorded in the
+	// manifest at <workspace>/.mosaic/manifest.yaml (domain.Manifest.HarnessIDs), sorted
+	// ascending. It reads the raw manifest as recorded: entries whose deployed files are
+	// missing still count. No ancestor directory is consulted. It returns nil for a missing,
+	// empty, corrupt or future-schema manifest, and for any load error. It never writes,
+	// repairs or upgrades the file.
+	RecordedHarnesses(workspace string) []string
 }
 
 func (s *service) ReadPersistedStack(workspace string) (stackconfig.Stored, bool, error) {

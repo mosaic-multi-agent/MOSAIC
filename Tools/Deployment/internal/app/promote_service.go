@@ -353,7 +353,7 @@ func (s *service) Promote(ctx context.Context, req PromoteRequest) (PromoteResul
 	}
 
 	numericID := promoteNumericIDFor(dest, s.deps.Catalog)
-	gen, err := s.generatePromotedAgent(ctx, src, numericID)
+	gen, err := s.generatePromotedAgent(ctx, src, numericID, req.EmptyProjectRegions)
 	if err != nil {
 		return PromoteResult{}, err
 	}
@@ -367,19 +367,20 @@ func (s *service) Promote(ctx context.Context, req PromoteRequest) (PromoteResul
 	}
 
 	return PromoteResult{
-		SourcePath:      req.FilePath,
-		DestinationPath: dest.path,
-		Key:             src.key,
-		NumericID:       numericID,
-		Category:        dest.category,
-		DryRun:          req.DryRun,
-		TargetCatalogID: dest.targetCatalogID,
-		HarnessID:       req.HarnessID,
-		Tools:           gen.tools,
-		VerbatimTools:   gen.verbatimTools,
-		RecoveredFields: gen.recovered.Supplied,
-		StrippedFields:  gen.stripped,
-		DivertedTools:   src.facts.DivertedTools,
+		SourcePath:           req.FilePath,
+		DestinationPath:      dest.path,
+		Key:                  src.key,
+		NumericID:            numericID,
+		Category:             dest.category,
+		DryRun:               req.DryRun,
+		TargetCatalogID:      dest.targetCatalogID,
+		HarnessID:            req.HarnessID,
+		Tools:                gen.tools,
+		VerbatimTools:        gen.verbatimTools,
+		RecoveredFields:      gen.recovered.Supplied,
+		StrippedFields:       gen.stripped,
+		RemovedCustomRegions: gen.removedCustom,
+		DivertedTools:        src.facts.DivertedTools,
 
 		ExperimentalHarnesses: domain.ExperimentalHarnessesOf(src.module.Ref()),
 	}, nil

@@ -244,4 +244,7 @@ func renderPromoteHuman(out io.Writer, result app.PromoteResult) {
 			fmt.Fprintf(out, "stripped field: %s (%s)\n", sf.Key, string(sf.Reason))
 		}
 	}
+	for _, name := range result.RemovedCustomRegions {
+		fmt.Fprintf(out, "removed custom region: %s\n", name)
+	}
 }

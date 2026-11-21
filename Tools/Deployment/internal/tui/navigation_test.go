@@ -8,10 +8,10 @@ package tui
 // no real terminal attached.
 //
 // Navigation contract exercised:
-//   harness → (enter) → mode → (enter) → workspace → (enter) → running
-//   esc from workspace → mode  (prior mode selection preserved)
-//   esc from mode      → harness (prior harness preserved)
-//   esc from harness   → quit (nothing to go back to)
+//   mode → (enter) → harness → (enter) → workspace → (enter) → running
+//   esc from workspace → harness (prior harness preserved)
+//   esc from harness   → mode (prior mode preserved)
+//   esc from mode      → quit (nothing to go back to)
 //   ctrl+c from any screen → context cancelled, quit command returned
 
 import (
@@ -109,20 +109,20 @@ func sendRune(m *rootModel, r rune) (tea.Model, tea.Cmd) {
 // Initial state
 // ---------------------------------------------------------------------------
 
-// TestNavigation_InitialScreen_IsHarness verifies that the root model starts on the harness
+// TestNavigation_InitialScreen_IsMode verifies that the root model starts on the mode
 // selection screen when no harness is pre-filled.
-func TestNavigation_InitialScreen_IsHarness(t *testing.T) {
+func TestNavigation_InitialScreen_IsMode(t *testing.T) {
 	// Arrange / Act
 	m := newNavModel()
 
 	// Assert
-	if m.screen != screenHarness {
-		t.Errorf("initial screen = %v, want screenHarness (%v)", m.screen, screenHarness)
+	if m.screen != screenMode {
+		t.Errorf("initial screen = %v, want screenMode (%v)", m.screen, screenMode)
 	}
 }
 
 // TestNavigation_PrefilledHarness_StartsOnModeScreen verifies that when a harness ID is
-// pre-filled in the InitialRequest, the TUI skips the harness screen and starts on mode.
+// pre-filled in the InitialRequest, the TUI starts on mode like any session.
 func TestNavigation_PrefilledHarness_StartsOnModeScreen(t *testing.T) {
 	// Arrange
 	svc := &stubNavService{harnesses: []domain.HarnessRef{navUsableHarness}}
@@ -146,21 +146,19 @@ func TestNavigation_PrefilledHarness_StartsOnModeScreen(t *testing.T) {
 // Forward transitions
 // ---------------------------------------------------------------------------
 
-// TestNavigation_HarnessEnter_TransitionsToMode verifies the first forward transition:
-// pressing Enter on a usable harness advances the root model to the mode selection screen.
-func TestNavigation_HarnessEnter_TransitionsToMode(t *testing.T) {
+// TestNavigation_ModeEnter_TransitionsToHarness verifies the first forward transition:
+// pressing Enter on a mode advances the root model to the harness selection screen.
+func TestNavigation_ModeEnter_TransitionsToHarness(t *testing.T) {
 	// Arrange
 	m := newNavModel()
-	if m.screen != screenHarness {
-		t.Fatal("precondition: must start on harness screen")
-	}
+	requireScreen(t, m, screenMode)
 
-	// Act — Enter on the harness list (first item is the usable harness)
+	// Act — Enter on the mode list (first mode is deploy-new)
 	sendKey(m, tea.KeyEnter)
 
 	// Assert
-	if m.screen != screenMode {
-		t.Errorf("screen = %v after harness Enter, want screenMode (%v)", m.screen, screenMode)
+	if m.screen != screenHarness {
+		t.Errorf("screen = %v after mode Enter, want screenHarness (%v)", m.screen, screenHarness)
 	}
 }
 
@@ -169,6 +167,7 @@ func TestNavigation_HarnessEnter_TransitionsToMode(t *testing.T) {
 func TestNavigation_HarnessEnter_RecordsSelectedHarnessID(t *testing.T) {
 	// Arrange
 	m := newNavModel()
+	sendKey(m, tea.KeyEnter) // mode -> harness
 
 	// Act
 	sendKey(m, tea.KeyEnter)
@@ -179,31 +178,28 @@ func TestNavigation_HarnessEnter_RecordsSelectedHarnessID(t *testing.T) {
 	}
 }
 
-// TestNavigation_ModeEnter_TransitionsToWorkspace verifies the second forward transition:
-// pressing Enter on a mode option advances the root model to the path screen.
-func TestNavigation_ModeEnter_TransitionsToWorkspace(t *testing.T) {
-	// Arrange - advance to mode screen first
+// TestNavigation_HarnessEnter_TransitionsToWorkspace verifies the second forward transition:
+// pressing Enter on a harness advances the root model to the path screen.
+func TestNavigation_HarnessEnter_TransitionsToWorkspace(t *testing.T) {
+	// Arrange - advance to the harness screen first
 	m := newNavModel()
-	sendKey(m, tea.KeyEnter) // harness -> mode
-	if m.screen != screenMode {
-		t.Fatal("precondition: must be on mode screen")
-	}
+	sendKey(m, tea.KeyEnter) // mode -> harness
+	requireScreen(t, m, screenHarness)
 
-	// Act - Enter on the mode list (first mode is deploy-new)
+	// Act
 	sendKey(m, tea.KeyEnter)
 
 	// Assert
 	if m.screen != screenWorkspace {
-		t.Errorf("screen = %v after mode Enter, want screenWorkspace (%v)", m.screen, screenWorkspace)
+		t.Errorf("screen = %v after harness Enter, want screenWorkspace (%v)", m.screen, screenWorkspace)
 	}
 }
 
 // TestNavigation_ModeEnter_RecordsSelectedMode verifies that the chosen run mode is captured
 // in the model's selections so the service call uses the correct mode.
 func TestNavigation_ModeEnter_RecordsSelectedMode(t *testing.T) {
-	// Arrange — advance to mode screen
+	// Arrange
 	m := newNavModel()
-	sendKey(m, tea.KeyEnter) // harness → mode
 
 	// Act — Enter on first mode (deploy-new)
 	sendKey(m, tea.KeyEnter)
@@ -218,88 +214,87 @@ func TestNavigation_ModeEnter_RecordsSelectedMode(t *testing.T) {
 // Back navigation — state preservation
 // ---------------------------------------------------------------------------
 
-// TestNavigation_HarnessEsc_Quits verifies that pressing Esc on the harness screen returns
+// TestNavigation_ModeEsc_Quits verifies that pressing Esc on the mode screen returns
 // a quit command. There is nothing to go back to from the first entry screen.
-func TestNavigation_HarnessEsc_Quits(t *testing.T) {
+func TestNavigation_ModeEsc_Quits(t *testing.T) {
 	// Arrange
 	m := newNavModel()
 
 	// Act
-	_, cmd := sendKey(m, tea.KeyEsc)
+	cmd := pressEsc(m)
 
-	// Assert — a non-nil command signals tea.Quit (quit is a func value, not comparable,
-	// but its presence indicates the model has issued a quit command).
-	if cmd == nil {
-		t.Error("cmd = nil after Esc from harness screen; want tea.Quit (non-nil command)")
+	// Assert
+	if !isQuitCmd(cmd) {
+		t.Error("cmd is not tea.Quit after Esc from the mode screen")
 	}
 }
 
-// TestNavigation_ModeEsc_TransitionsBackToHarness verifies that pressing Esc on the mode
-// screen returns the user to the harness selection screen.
-func TestNavigation_ModeEsc_TransitionsBackToHarness(t *testing.T) {
-	// Arrange — advance to mode screen
+// TestNavigation_HarnessEsc_TransitionsBackToMode verifies that pressing Esc on the harness
+// screen returns the user to the mode selection screen.
+func TestNavigation_HarnessEsc_TransitionsBackToMode(t *testing.T) {
+	// Arrange — advance to harness screen
 	m := newNavModel()
-	sendKey(m, tea.KeyEnter) // harness → mode
+	sendKey(m, tea.KeyEnter) // mode → harness
 
 	// Act
-	sendKey(m, tea.KeyEsc) // mode → harness
+	cmd := pressEsc(m) // harness → mode
+
+	// Assert
+	if isQuitCmd(cmd) {
+		t.Error("Esc on the harness screen quit the program; it must return to the mode screen")
+	}
+	if m.screen != screenMode {
+		t.Errorf("screen = %v after harness Esc, want screenMode (%v)", m.screen, screenMode)
+	}
+}
+
+// TestNavigation_HarnessEsc_PreservesModeSelection verifies that pressing Esc on the harness
+// screen does not lose the mode that was chosen on the previous screen. The user
+// should be able to go back and return without losing prior valid input.
+func TestNavigation_HarnessEsc_PreservesModeSelection(t *testing.T) {
+	// Arrange — select a non-default mode and advance to harness
+	m := newNavModel()
+	pickMode(t, m, domain.ModeDeployHooks)
+
+	// Act — go back from harness to mode
+	pressEsc(m)
+
+	// Assert
+	if m.selections.mode != domain.ModeDeployHooks {
+		t.Errorf("selections.mode = %q after harness Esc; want %q (prior selection must survive back navigation)", m.selections.mode, domain.ModeDeployHooks)
+	}
+}
+
+// TestNavigation_WorkspaceEsc_TransitionsBackToHarness verifies that pressing Esc on the
+// workspace screen returns the user to the harness selection screen.
+func TestNavigation_WorkspaceEsc_TransitionsBackToHarness(t *testing.T) {
+	// Arrange — advance to workspace screen
+	m := newNavModel()
+	driveToPath(t, m, domain.ModeDeployWorkspace, "")
+
+	// Act
+	pressEsc(m) // workspace → harness
 
 	// Assert
 	if m.screen != screenHarness {
-		t.Errorf("screen = %v after mode Esc, want screenHarness (%v)", m.screen, screenHarness)
+		t.Errorf("screen = %v after workspace Esc, want screenHarness (%v)", m.screen, screenHarness)
 	}
 }
 
-// TestNavigation_ModeEsc_PreservesHarnessSelection verifies that pressing Esc on the mode
-// screen does not lose the harness ID that was selected on the previous screen. The user
-// should be able to go back and return without losing prior valid input.
-func TestNavigation_ModeEsc_PreservesHarnessSelection(t *testing.T) {
-	// Arrange — select harness and advance to mode
-	m := newNavModel()
-	sendKey(m, tea.KeyEnter) // select harness, advance to mode
-	capturedHarness := m.selections.harnessID
-
-	// Act — go back from mode to harness
-	sendKey(m, tea.KeyEsc)
-
-	// Assert
-	if m.selections.harnessID != capturedHarness {
-		t.Errorf("selections.harnessID = %q after mode Esc; want %q (prior selection must survive back navigation)", m.selections.harnessID, capturedHarness)
-	}
-}
-
-// TestNavigation_WorkspaceEsc_TransitionsBackToMode verifies that pressing Esc on the
-// workspace screen returns the user to the mode selection screen.
-func TestNavigation_WorkspaceEsc_TransitionsBackToMode(t *testing.T) {
-	// Arrange — advance to workspace screen
-	m := newNavModel()
-	sendKey(m, tea.KeyEnter) // harness → mode
-	sendKey(m, tea.KeyEnter) // mode → workspace
-
-	// Act
-	sendKey(m, tea.KeyEsc) // workspace → mode
-
-	// Assert
-	if m.screen != screenMode {
-		t.Errorf("screen = %v after workspace Esc, want screenMode (%v)", m.screen, screenMode)
-	}
-}
-
-// TestNavigation_WorkspaceEsc_PreservesModeSelection verifies that pressing Esc on the
-// workspace screen does not lose the mode that was chosen on the mode screen.
-func TestNavigation_WorkspaceEsc_PreservesModeSelection(t *testing.T) {
+// TestNavigation_WorkspaceEsc_PreservesHarnessSelection verifies that pressing Esc on the
+// workspace screen does not lose the harness that was chosen on the harness screen.
+func TestNavigation_WorkspaceEsc_PreservesHarnessSelection(t *testing.T) {
 	// Arrange
 	m := newNavModel()
-	sendKey(m, tea.KeyEnter) // harness → mode
-	sendKey(m, tea.KeyEnter) // mode → workspace (first mode = deploy-new)
-	capturedMode := m.selections.mode
+	driveToPath(t, m, domain.ModeDeployWorkspace, "")
+	capturedHarness := m.selections.harnessID
 
 	// Act
-	sendKey(m, tea.KeyEsc) // workspace → mode
+	pressEsc(m) // workspace → harness
 
 	// Assert
-	if m.selections.mode != capturedMode {
-		t.Errorf("selections.mode = %q after workspace Esc; want %q (prior mode must survive back navigation)", m.selections.mode, capturedMode)
+	if capturedHarness == "" || m.selections.harnessID != capturedHarness {
+		t.Errorf("selections.harnessID = %q after workspace Esc; want %q (prior harness must survive back navigation)", m.selections.harnessID, capturedHarness)
 	}
 }
 
@@ -307,10 +302,10 @@ func TestNavigation_WorkspaceEsc_PreservesModeSelection(t *testing.T) {
 // ctrl+c — global cancel from any entry screen
 // ---------------------------------------------------------------------------
 
-// TestNavigation_CtrlC_FromHarness_CancelsContextAndQuits verifies that ctrl+c from the
-// harness screen cancels the model's context (which would cancel any running service call)
+// TestNavigation_CtrlC_FromFirstScreen_CancelsContextAndQuits verifies that ctrl+c from the
+// first (mode) screen cancels the model's context (which would cancel any running service call)
 // and returns a quit command.
-func TestNavigation_CtrlC_FromHarness_CancelsContextAndQuits(t *testing.T) {
+func TestNavigation_CtrlC_FromFirstScreen_CancelsContextAndQuits(t *testing.T) {
 	// Arrange
 	m := newNavModel()
 
@@ -326,22 +321,23 @@ func TestNavigation_CtrlC_FromHarness_CancelsContextAndQuits(t *testing.T) {
 	}
 }
 
-// TestNavigation_CtrlC_FromMode_CancelsContextAndQuits verifies that ctrl+c works from the
-// mode selection screen, not only from the harness screen.
-func TestNavigation_CtrlC_FromMode_CancelsContextAndQuits(t *testing.T) {
-	// Arrange — advance to mode screen
+// TestNavigation_CtrlC_FromHarness_CancelsContextAndQuits verifies that ctrl+c works from the
+// harness selection screen, not only from the first screen.
+func TestNavigation_CtrlC_FromHarness_CancelsContextAndQuits(t *testing.T) {
+	// Arrange — advance to harness screen
 	m := newNavModel()
-	sendKey(m, tea.KeyEnter) // harness → mode
+	sendKey(m, tea.KeyEnter) // mode → harness
+	requireScreen(t, m, screenHarness)
 
 	// Act
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 
 	// Assert
 	if m.ctx.Err() == nil {
-		t.Error("ctx.Err() = nil after ctrl+c from mode screen; context must be cancelled from any screen")
+		t.Error("ctx.Err() = nil after ctrl+c from harness screen; context must be cancelled from any screen")
 	}
 	if cmd == nil {
-		t.Error("cmd = nil after ctrl+c from mode screen; want tea.Quit")
+		t.Error("cmd = nil after ctrl+c from harness screen; want tea.Quit")
 	}
 }
 
@@ -350,8 +346,7 @@ func TestNavigation_CtrlC_FromMode_CancelsContextAndQuits(t *testing.T) {
 func TestNavigation_CtrlC_FromWorkspace_CancelsContextAndQuits(t *testing.T) {
 	// Arrange — advance to workspace screen
 	m := newNavModel()
-	sendKey(m, tea.KeyEnter) // harness → mode
-	sendKey(m, tea.KeyEnter) // mode → workspace
+	driveToPath(t, m, domain.ModeDeployWorkspace, "")
 
 	// Act
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
@@ -374,6 +369,8 @@ func TestNavigation_CtrlC_FromWorkspace_CancelsContextAndQuits(t *testing.T) {
 func TestNavigation_HarnessScreen_ViewContainsTitleText(t *testing.T) {
 	// Arrange
 	m := newNavModel()
+	sendKey(m, tea.KeyEnter) // mode → harness
+	requireScreen(t, m, screenHarness)
 
 	// Act
 	view := m.View()
@@ -388,12 +385,12 @@ func TestNavigation_HarnessScreen_ViewContainsTitleText(t *testing.T) {
 	}
 }
 
-// TestNavigation_ModeScreen_ViewContainsTitleText verifies that after transitioning to mode,
-// the view reflects the mode selection screen.
+// TestNavigation_ModeScreen_ViewContainsTitleText verifies that the first view
+// is the mode selection screen.
 func TestNavigation_ModeScreen_ViewContainsTitleText(t *testing.T) {
 	// Arrange
 	m := newNavModel()
-	sendKey(m, tea.KeyEnter) // harness → mode
+	requireScreen(t, m, screenMode)
 
 	// Act
 	view := m.View()
@@ -412,8 +409,7 @@ func TestNavigation_ModeScreen_ViewContainsTitleText(t *testing.T) {
 func TestNavigation_WorkspaceScreen_ViewContainsTitleText(t *testing.T) {
 	// Arrange
 	m := newNavModel()
-	sendKey(m, tea.KeyEnter) // harness → mode
-	sendKey(m, tea.KeyEnter) // mode → workspace
+	driveToPath(t, m, domain.ModeDeployWorkspace, "")
 
 	// Act
 	view := m.View()

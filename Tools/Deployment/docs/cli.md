@@ -26,7 +26,7 @@ These flags are accepted by all subcommands.
 
 ## Catalog stack flags
 
-The two stack flags are persistent: every subcommand (`deploy`, `update`, `workflows`, `agents`, `hooks`, `render`, `promote`, `transform`, `check-index`) accepts them, and so does the TUI launch. The stack is decided from the raw arguments before any subcommand runs.
+The two stack flags are persistent: every subcommand (`deploy`, `update`, `workflows`, `agents`, `hooks`, `render`, `promote`, `transform`, `check-index`) accepts them. The TUI launches only when `mosaic-deploy` is run with no arguments, so it takes no stack flags; it asks for the stack on its own stack screen. The stack is decided from the raw arguments before any subcommand runs.
 
 | Input | Stack |
 |-------|-------|
@@ -396,6 +396,9 @@ Turn a harness-only agent into a generic catalog source. Flags: `--file`, `--har
 | Flag | Type | Description |
 |------|------|-------------|
 | `--target-catalog <catalog id>` | string | Catalog id of the stack layer that receives a **new** agent. Required when promoting a new agent non-interactively into a stack of two or more layers |
+| `--empty-project-regions` | bool | Empty every project region in the generic. Without it the generic keeps the content of every project region byte-identical. The CLI never asks |
+
+Every project region of the source is present in the generic with its tags, at any depth including inside managed regions. Custom regions are removed at any depth and reported by name: the human output prints one `removed custom region: <name>` line each, and `--output json` carries them as `removedCustomRegions` (omitted when none were removed). Managed regions are emptied apart from project regions nested in them. The source file is never modified.
 
 Layer targeting:
 
@@ -456,6 +459,8 @@ Without the flag the gap goes to the TODO list as before.
 ## Machine-readable output (`--output json`)
 
 When `--output json` is set, `mosaic-deploy` writes a single JSON document to stdout containing the full `RunSummary`. The exit code is unchanged. With `deploy --strict-models` and an unresolved model, a failure document (see Exit codes) replaces the `RunSummary`. Scripting consumers should read from stdout and parse JSON; diagnostic messages go to stderr.
+
+Notices (warnings and info lines raised during a run) and progress lines are diagnostics: they are written to stderr in every output mode, with `--output json` and without it. Stdout carries only the result (the human summary, or the single JSON document), so a notice never precedes or follows the JSON document.
 
 ```sh
 result=$(mosaic-deploy deploy --harness claude-code --workspace /path --auto-confirm --output json)

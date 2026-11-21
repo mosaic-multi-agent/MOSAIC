@@ -16,11 +16,11 @@ import (
 // A second run
 // ---------------------------------------------------------------------------
 
-// runDeployToDone drives the full entry flow from the harness screen to the end of the
+// runDeployToDone drives the full entry flow from the mode screen to the end of the
 // service call and returns the model on its final screen.
 func runDeployToDone(t *testing.T, m *rootModel) {
 	t.Helper()
-	cmd := advanceToRunning(m)
+	cmd := advanceToRunning(t, m)
 	if m.screen != screenRunning || cmd == nil {
 		t.Fatalf("screen = %v, cmd nil = %v; want a running second run", m.screen, cmd == nil)
 	}

@@ -139,6 +139,12 @@ const (
 	// QPromoteExistingAgent asks, per agent of a batch promote whose key already exists, whether
 	// to replace the existing generic agent or skip this agent (SelectOne, default skip).
 	QPromoteExistingAgent QuestionID = "promote-existing-agent"
+
+	// QPromoteProjectRegions asks, once per batch promote, whether the content of the selected
+	// agents' project regions is kept in the generic sources or emptied (SelectOne, default keep).
+	// Asked only when at least one loaded selected agent has a project region with content.
+	// Option IDs: app.ProjectRegionsKeep, app.ProjectRegionsEmpty.
+	QPromoteProjectRegions QuestionID = "promote-project-regions"
 )
 
 // PlanReviewer is the deployment-specific interface for plan review. The shared Interaction

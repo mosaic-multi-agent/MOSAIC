@@ -22,11 +22,11 @@ import (
 func runTransformToDone(t *testing.T, svc *stubFlowService, workspace string) *rootModel {
 	t.Helper()
 	m := newFlowModel(svc, workspace)
-	navigateToTransformMode(m)
+	navigateToTransformMode(t, m)
 	if m.screen != screenWorkspace {
 		t.Fatalf("screen = %v, want screenWorkspace", m.screen)
 	}
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	cmd := confirmPath(t, m, "")
 	if m.screen != screenRunning {
 		t.Fatalf("screen = %v after confirming the workspace, want screenRunning", m.screen)
 	}
@@ -44,9 +44,9 @@ func TestTransformMode_PathScreen_RejectsRegularFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := newFlowModel(newTransformFlowSvc(workspace), file)
-	navigateToTransformMode(m)
+	navigateToTransformMode(t, m)
 
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	confirmPath(t, m, "")
 
 	if m.screen == screenRunning {
 		t.Error("the transform path screen accepted a regular file; it takes the workspace root")
@@ -56,7 +56,7 @@ func TestTransformMode_PathScreen_RejectsRegularFile(t *testing.T) {
 func TestTransformMode_PathScreen_DoesNotOfferFileOrFolderInput(t *testing.T) {
 	workspace := t.TempDir()
 	m := newFlowModel(newTransformFlowSvc(workspace), workspace)
-	navigateToTransformMode(m)
+	navigateToTransformMode(t, m)
 
 	view := strings.ToLower(m.View())
 
@@ -68,13 +68,13 @@ func TestTransformMode_PathScreen_DoesNotOfferFileOrFolderInput(t *testing.T) {
 	}
 }
 
-func TestTransformMode_ServiceCall_PassesWorkspaceRootAndAsksTargetHarness(t *testing.T) {
+func TestTransformMode_ServiceCall_PassesWorkspaceRootAndTheTargetChosenOnTheEntryScreen(t *testing.T) {
 	workspace := t.TempDir()
 	spy := &capturingTransformService{inner: newTransformFlowSvc(workspace)}
 	m := newFlowModel(spy, workspace)
-	navigateToTransformMode(m)
+	navigateToTransformMode(t, m)
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	cmd := confirmPath(t, m, "")
 	_, _ = m.Update(runCmd(cmd))
 
 	if spy.lastTransformReq == nil {
@@ -83,8 +83,9 @@ func TestTransformMode_ServiceCall_PassesWorkspaceRootAndAsksTargetHarness(t *te
 	if spy.lastTransformReq.Workspace != workspace {
 		t.Errorf("Workspace = %q, want %q", spy.lastTransformReq.Workspace, workspace)
 	}
-	if spy.lastTransformReq.TargetHarnessID != "" {
-		t.Errorf("TargetHarnessID = %q, want empty so the target harness is asked", spy.lastTransformReq.TargetHarnessID)
+	if spy.lastTransformReq.TargetHarnessID != flowTargetHarness.ID {
+		t.Errorf("TargetHarnessID = %q, want %q chosen on the target screen so the service does not ask it",
+			spy.lastTransformReq.TargetHarnessID, flowTargetHarness.ID)
 	}
 }
 

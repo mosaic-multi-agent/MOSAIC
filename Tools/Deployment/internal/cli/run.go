@@ -311,13 +311,14 @@ hand-added declarations are never touched.`,
 	// promote subcommand
 	// ------------------------------------------------------------------
 	var (
-		promoteFile      string
-		promoteHarness   string
-		promoteCategory  string
-		promoteOverwrite bool
-		promoteDryRun    bool
-		promoteOutput    string
-		promoteTarget    string
+		promoteFile         string
+		promoteHarness      string
+		promoteCategory     string
+		promoteOverwrite    bool
+		promoteDryRun       bool
+		promoteOutput       string
+		promoteTarget       string
+		promoteEmptyRegions bool
 	)
 
 	promoteCmd := &cobra.Command{
@@ -344,6 +345,8 @@ hand-added declarations are never touched.`,
 				DryRun:    promoteDryRun,
 
 				TargetCatalogID: promoteTarget,
+
+				EmptyProjectRegions: promoteEmptyRegions,
 			}
 
 			result, svcErr := svc.Promote(ctx, req)
@@ -360,6 +363,7 @@ hand-added declarations are never touched.`,
 	promoteCmd.Flags().BoolVar(&promoteDryRun, "dry-run", false, "Validate and compute without writing any file")
 	promoteCmd.Flags().StringVar(&promoteOutput, "output", "", "Output format (json)")
 	registerPromoteTargetFlag(promoteCmd, &promoteTarget)
+	registerPromoteEmptyRegionsFlag(promoteCmd, &promoteEmptyRegions)
 
 	transformCmd := newTransformCmd(ctx, svc, out, errOut, &exitCode)
 

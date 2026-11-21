@@ -48,6 +48,19 @@
 - `opencode-v2` runs write `run_start` and `run_end` to the MOSAIC log, and an `invocation_end` for an invocation the logger plugin left without one
 - Experimental, with the reason "Everything is supported, but the harness is not yet tested."
 
+### Deploy v1.12.0
+#### Changes
+- **The TUI starts at the mode screen.** Esc on it exits; Esc on a later entry screen goes back one screen and keeps your choices. Deploy workspace, Deploy agents, Deploy hooks and Promote ask mode, harness, path, stack. Update workspace, Change workflows and Transform harness ask mode, path, harness, stack
+- The harness screen says the harness's role in the chosen mode (deploy to, whose deployment is updated or changed, written for, transform from). In Update workspace, Change workflows and Transform harness it offers only the harnesses recorded in the manifest at the entered path; one usable recorded harness is selected automatically, a missing, empty, corrupt or newer-schema manifest shows the full list, and unusable recorded harnesses are disabled with their reason
+- Transform asks the target harness on its own screen right after the source harness, with the source disabled
+- After a run, any key returns to the mode screen with the previous mode and harness highlighted; after a declined plan, to the mode screen with your choices cleared
+- **Promote keeps project regions.** Every project region of the source is in the generic with its tags, at any depth including inside managed regions, with its content kept byte-identical by default. The TUI batch promote asks once per batch whether to keep or empty it (Keep pre-selected; asked only when a selected agent has project content); the CLI `promote` has a new `--empty-project-regions` flag and never asks
+- Promote removes custom regions at any depth and reports them by name per agent in the CLI output (human and JSON `removedCustomRegions`) and the TUI summaries
+- Deploy and render accept a source whose managed region contains a project region with content; that content is the deploy-once default, and already deployed content wins on update
+#### Bugfixes
+- Promote no longer empties project regions nested inside managed regions
+- Notices and progress lines of CLI runs go to stderr, so `--output json` stdout is exactly one JSON document (for example the Codex promote warning that tools are not recorded no longer precedes the JSON)
+
 ### Deploy v1.11.0
 #### Changes
 - **Batch promote in the TUI.** Promote asks for the harness and the folder holding the agents and the catalog stack, then lists the promotable agents for multi-select, including agents whose key already exists in the stack. The target layer, each unmapped tool name and the recommended tier per distinct source model are asked once per batch; the category, tier rationale and required skills are asked per agent, and an existing key gets a replace-or-skip question (default skip) that names the layer holding it. Esc aborts the batch and keeps agents already promoted; a failing agent does not stop the batch, and the summary lists every agent as promoted, skipped, failed or not processed. The CLI `promote` stays single-file

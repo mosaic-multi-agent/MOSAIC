@@ -60,18 +60,19 @@ func assertSessionCleared(t *testing.T, m *rootModel) {
 	}
 }
 
-// assertBackAtFirstScreen checks the model is on the harness screen with empty selections
-// and that the key which led here did not quit the program.
+// assertBackAtFirstScreen checks the model is on the mode screen with no path carried over
+// and that the key which led here did not quit the program. Which mode and harness are
+// pre-highlighted is checked by the restart highlight tests.
 func assertBackAtFirstScreen(t *testing.T, m *rootModel, cmd tea.Cmd) {
 	t.Helper()
 	if isQuitCmd(cmd) {
 		t.Error("the key on the final screen quit the program; it must return to the first screen")
 	}
-	if m.screen != screenHarness {
-		t.Errorf("screen = %v after a key on the final screen; want screenHarness", m.screen)
+	if m.screen != screenMode {
+		t.Errorf("screen = %v after a key on the final screen; want screenMode", m.screen)
 	}
-	if m.selections != (entrySelections{}) {
-		t.Errorf("selections = %+v after the return to the first screen; want all cleared", m.selections)
+	if m.selections.workspacePath != "" {
+		t.Errorf("selections.workspacePath = %q after the return to the first screen; want empty", m.selections.workspacePath)
 	}
 	assertSessionCleared(t, m)
 }
@@ -199,8 +200,8 @@ func TestFinalScreen_AfterReturn_FirstScreenShowsNoResultOfPreviousRun(t *testin
 					t.Errorf("first screen shows %q of the previous run:\n%s", stale, view)
 				}
 			}
-			if !strings.Contains(view, flowTestHarness.DisplayName) {
-				t.Errorf("first screen is not the harness selection:\n%s", view)
+			if m.screen != screenMode || !strings.Contains(view, "Select Mode") {
+				t.Errorf("first screen is not the mode selection:\n%s", view)
 			}
 		})
 	}
@@ -320,8 +321,7 @@ func TestFinalScreen_PresetHarness_ReturnsToModeScreenKeepingHarness(t *testing.
 	if m.screen != screenMode {
 		t.Fatalf("precondition: screen = %v, want screenMode for a preset harness", m.screen)
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // mode -> workspace
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	cmd := driveEntry(t, m, domain.ModeDeployWorkspace, "") // preset: the harness screen is skipped
 	m.Update(runCmd(cmd))
 	if m.screen != screenDone {
 		t.Fatalf("precondition: screen = %v after the run, want screenDone", m.screen)
@@ -335,8 +335,8 @@ func TestFinalScreen_PresetHarness_ReturnsToModeScreenKeepingHarness(t *testing.
 	if m.screen != screenMode {
 		t.Errorf("screen = %v after the return; want screenMode (first screen of a preset-harness session)", m.screen)
 	}
-	if m.selections != (entrySelections{harnessID: flowTestHarness.ID}) {
-		t.Errorf("selections = %+v; want only the preset harness kept", m.selections)
+	if m.selections.harnessID != flowTestHarness.ID || m.selections.workspacePath != "" {
+		t.Errorf("selections = %+v; want the preset harness kept and no path", m.selections)
 	}
 	assertSessionCleared(t, m)
 }
@@ -349,8 +349,7 @@ func TestFinalScreen_PresetHarness_ErrorAndCancelledEndingsReturnToModeScreen(t 
 				Theme:          DefaultTheme(),
 				InitialRequest: &app.DeployRequest{HarnessID: flowTestHarness.ID, WorkspacePath: ws},
 			})
-			m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // mode -> workspace
-			m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+			driveEntry(t, m, domain.ModeDeployWorkspace, "")
 			m.Update(runErrorMsg{err: err})
 			if m.screen != screenDone {
 				t.Fatalf("precondition: screen = %v, want screenDone", m.screen)
@@ -372,13 +371,11 @@ func TestFinalScreen_PresetHarness_SecondRunCanBeStarted(t *testing.T) {
 		Theme:          DefaultTheme(),
 		InitialRequest: &app.DeployRequest{HarnessID: flowTestHarness.ID, WorkspacePath: ws},
 	})
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	cmd := driveEntry(t, m, domain.ModeDeployWorkspace, "")
 	m.Update(runCmd(cmd))
 	m.Update(runeKey('x'))
 
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // mode -> workspace
-	_, second := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	second := driveEntry(t, m, domain.ModeDeployWorkspace, "")
 
 	if m.screen != screenRunning || second == nil {
 		t.Errorf("screen = %v, cmd nil = %v; want a second run started from the preset-harness session",

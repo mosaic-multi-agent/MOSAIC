@@ -117,10 +117,19 @@ From the MOSAIC root, with the binary installed:
 
 On Windows, use `.\mosaic-deploy.exe` instead of `./mosaic-deploy`.
 
-When you launch the TUI (no subcommand), a guided workflow walks you through
-harness selection, workspace path, agent and workflow selection, and model
-assignment. Selections made during a TUI run are persisted in `user-config.yaml`
-so repeated runs are faster.
+When you launch the TUI (no arguments; it takes no flags), a guided workflow
+starts at the mode screen and walks you through the harness, workspace path,
+catalog stack, agent and workflow selection, and model assignment. Deploy
+workspace, Deploy agents, Deploy hooks and Promote ask harness, then path, then
+stack. Update workspace, Change workflows and Transform harness ask the path
+first, then the harness, then the stack; the harness screen offers only the
+harnesses recorded in the manifest at that path (one usable recorded harness is
+selected automatically; with no usable manifest it shows the full list).
+Transform asks the target harness right after the source harness. Esc on a
+later entry screen goes back one screen keeping your choices; Esc on the mode
+screen exits. After a run any key returns to the mode screen with the previous
+mode and harness highlighted. Selections made during a TUI run are persisted in
+`user-config.yaml` so repeated runs are faster.
 
 ---
 
@@ -130,8 +139,9 @@ so repeated runs are faster.
 
 The deploy flow creates a new workspace. It:
 
-1. Asks you to select a harness (claude-code, opencode, ghcp-cli, etc.)
-2. Asks for a workspace path (must exist or be creatable)
+1. Asks you to select a harness (claude-code, opencode, ghcp-cli, etc.) after
+   you pick the mode
+2. Asks for a workspace path (must exist or be creatable), then the catalog stack
 3. Lets you select workflows to include in the orchestrator
 4. Lets you select utility agents
 5. Maps tier-level model preferences
@@ -400,7 +410,7 @@ file is written.
 
 ## Catalog stacks
 
-The tool reads its sources from a **catalog stack**: an ordered list of catalogs, highest layer first. By default the stack is the MOSAIC default catalog (`<mosaic-root>/Catalog`) alone. `--catalog-folder <dir>` (repeatable; first is highest) adds user layers; `--include-default-catalog` adds the default catalog as the bottom layer. A CLI run that names a user catalog leaves the default catalog out unless `--include-default-catalog` is given, and that flag alone means the default catalog alone. The TUI shows a stack screen after the path screen in every mode. The user-facing walkthrough (TUI keys, conflict report, provenance, persistence, reset to default-only, migration notice) is in [docs/DeploymentGuide.md](../../docs/DeploymentGuide.md#catalog-stacks); flags and output are in [docs/cli.md](docs/cli.md#catalog-stack-flags).
+The tool reads its sources from a **catalog stack**: an ordered list of catalogs, highest layer first. By default the stack is the MOSAIC default catalog (`<mosaic-root>/Catalog`) alone. `--catalog-folder <dir>` (repeatable; first is highest) adds user layers; `--include-default-catalog` adds the default catalog as the bottom layer. A CLI run that names a user catalog leaves the default catalog out unless `--include-default-catalog` is given, and that flag alone means the default catalog alone. The TUI shows a stack screen as the last entry screen in every mode, after the path and harness screens. The user-facing walkthrough (TUI keys, conflict report, provenance, persistence, reset to default-only, migration notice) is in [docs/DeploymentGuide.md](../../docs/DeploymentGuide.md#catalog-stacks); flags and output are in [docs/cli.md](docs/cli.md#catalog-stack-flags).
 
 Resolution rules:
 
@@ -437,14 +447,18 @@ is written.
 
 The generated generic file:
 
-- **Strips every `<Name type="project">` region to an empty tag pair.** No
-  harness-specific injection content is carried over. Generic source files use
-  empty injection placeholders, which `mosaic-deploy` fills with
-  project-specific content at deploy time.
-- **Strips every `<Name type="managed">` region to an empty tag pair.** This is
-  required: the deployment pipeline's `transform.Apply` rejects a source file
-  whose deployed regions already carry content, so a generated file with filled
-  regions would be unusable by the very pipeline it is generated for.
+- **Keeps every `<Name type="project">` region**, with its tags, at any depth
+  including inside managed regions. Its content is kept byte-identical by
+  default, or emptied when you choose to (`--empty-project-regions` on the CLI,
+  the keep-or-empty question in the TUI batch flow). Kept content becomes the
+  deploy-once default of that region.
+- **Removes every `<Name type="custom">` region**, at any depth, and reports
+  each removed region by name (CLI output, TUI summaries). Custom regions belong
+  to the one workspace and do not travel into a generic source.
+- **Strips every `<Name type="managed">` region to an empty tag pair**, apart
+  from project regions nested in it. Managed content is regenerated at deploy
+  time; a source whose managed region holds anything but nested project regions
+  is rejected by the pipeline.
 - **Carries over `<Name type="core">` tag structure and section body prose
   from the source as-is.**
 - **Writes frontmatter per a defined field policy:**
@@ -509,7 +523,7 @@ workspace is a separate, user-initiated step:
 ### CLI
 
 ```
-mosaic-deploy promote --file <path> [--category <category>] [--target-catalog <catalog id>] [--overwrite] [--dry-run] [--output json]
+mosaic-deploy promote --file <path> [--category <category>] [--target-catalog <catalog id>] [--empty-project-regions] [--overwrite] [--dry-run] [--output json]
 ```
 
 | Flag | Description |
@@ -517,9 +531,10 @@ mosaic-deploy promote --file <path> [--category <category>] [--target-catalog <c
 | `--file <path>` | Path to a single harness-only agent file to promote. Must be an existing regular file, not a directory. Required. |
 | `--category <name>` | Destination category. When absent, the tool asks interactively. |
 | `--target-catalog <catalog id>` | Catalog id of the stack layer that receives a new agent. Required when promoting a new agent non-interactively into a stack of two or more layers. |
+| `--empty-project-regions` | Empty every project region in the generic. Without it the content of every project region is kept. The CLI never asks. |
 | `--overwrite` | Replace an existing generic file at the destination path. |
 | `--dry-run` | Validate and compute everything; write no file. |
-| `--output json` | Emit the result as a single JSON document instead of human-readable text. |
+| `--output json` | Emit the result as a single JSON document instead of human-readable text. Removed custom regions appear as `removedCustomRegions`. |
 
 Exit codes: `0` on success (or dry-run validation pass), `1` on any service
 error (source path does not exist, source path is a directory rather than a
@@ -537,10 +552,12 @@ is entered. This validation happens before any service call is made. Once a
 valid file path is confirmed, the category question is presented interactively.
 
 **Batch promote (TUI only).** Promote also offers a batch flow: after the
-harness and the folder holding the agents and the catalog stack, a multi-select
+harness, the folder holding the agents and the catalog stack, a multi-select
 list shows the promotable agents, including those whose key already exists in
 the stack (hand-written agents that are not promotable are not listed). Asked
-once per batch: the target layer (stacks of two or more layers), a server name
+once per batch: the target layer (stacks of two or more layers), whether to keep
+or empty project region content (Keep pre-selected; asked only when a selected
+agent has project content, and the summary states the answer), a server name
 for each unmapped tool name, and the recommended tier per distinct source model
 (agents without a model are asked individually). Asked per agent: the category
 (mandatory), the tier rationale and required skills (Ctrl+K skips for this

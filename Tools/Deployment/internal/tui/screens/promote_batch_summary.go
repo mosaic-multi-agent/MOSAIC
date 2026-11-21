@@ -51,6 +51,12 @@ func buildBatchSummaryLines(r app.PromoteBatchResult) []summaryLine {
 		layer = "not chosen"
 	}
 	add("Target layer: "+layer, "body")
+	switch r.ProjectRegions {
+	case app.ProjectRegionsKeep:
+		add("Project region content: kept", "body")
+	case app.ProjectRegionsEmpty:
+		add("Project region content: emptied", "body")
+	}
 
 	counts := map[app.PromoteBatchStatus]int{}
 	for _, a := range r.Agents {
@@ -77,6 +83,9 @@ func appendBatchAgentLines(add func(text, style string), a app.PromoteBatchAgent
 		add(fmt.Sprintf("    destination: %s (id %s)", a.Result.DestinationPath, a.Result.NumericID), "body")
 		if a.ReplacedLayer != "" {
 			add("    replaced the agent in "+a.ReplacedLayer, "body")
+		}
+		for _, name := range a.Result.RemovedCustomRegions {
+			add("    removed custom region: "+name, "body")
 		}
 	case app.PromoteBatchSkipped:
 		add(fmt.Sprintf("%s (%s): skipped", a.Key, file), "warning")

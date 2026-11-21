@@ -30,6 +30,9 @@ type PromoteBatchResult struct {
 	// Aborted reports that a question was cancelled (or Interaction/ctx failed) after the
 	// selection; agents without a settled outcome at that point are NotProcessed.
 	Aborted bool
+	// ProjectRegions is the answer applied to every agent of the batch; empty when the
+	// question was not asked (no selected agent had project content) or the batch aborted at it.
+	ProjectRegions ProjectRegionChoice
 	// Agents holds one entry per selected option, in option (selection) order.
 	Agents []PromoteBatchAgentResult
 }
@@ -69,6 +72,15 @@ type PromoteBatchAgentResult struct {
 const (
 	PromoteExistingSkip    = "skip"
 	PromoteExistingReplace = "replace"
+)
+
+// ProjectRegionChoice is the batch answer to QPromoteProjectRegions. Its values are the
+// question's option IDs.
+type ProjectRegionChoice string
+
+const (
+	ProjectRegionsKeep  ProjectRegionChoice = "keep"
+	ProjectRegionsEmpty ProjectRegionChoice = "empty"
 )
 
 // ErrPromoteAgentsDirRequired reports a PromoteBatchRequest with an empty AgentsDir.

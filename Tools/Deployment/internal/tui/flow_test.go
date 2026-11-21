@@ -1,13 +1,14 @@
 package tui
 
 // flow_test.go verifies that both the deploy-new and update flows are completable by
-// keyboard alone, from the harness selection screen through to summary dismissal.
+// keyboard alone, from the mode selection screen through to summary dismissal.
 // Tests drive the rootModel through the model/update cycle with no real terminal attached.
 //
 // Navigation contract verified:
 //
-//	harness screen → (Enter) → mode screen → (Enter for deploy-new, Down+Enter for update) →
+//	mode screen → (Enter for deploy-new, Down+Enter for update) → harness screen → (Enter) →
 //	workspace screen → (Enter with pre-filled path) → screenRunning →
+//	(update and workflows-only ask the path first: mode → workspace → harness → screenRunning)
 //	(service completes) → screenDone with SummaryScreen → (any key) → first screen
 //
 // A pre-filled workspace path is used so the workspace screen does not require character-by-
@@ -17,7 +18,6 @@ package tui
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -57,6 +57,9 @@ type stubFlowService struct {
 	promoteBatchReq   *app.PromoteBatchRequest
 	promoteBatchCalls int
 	promoteCalls      int
+
+	// transformReq is the last request TransformHarness received.
+	transformReq *app.TransformHarnessRequest
 }
 
 func (s *stubFlowService) ListHarnesses() []domain.HarnessRef { return s.harnesses }
@@ -79,7 +82,8 @@ func (s *stubFlowService) Promote(_ context.Context, _ app.PromoteRequest) (app.
 	s.promoteCalls++
 	return s.promote, s.promoteErr
 }
-func (s *stubFlowService) TransformHarness(_ context.Context, _ app.TransformHarnessRequest) (app.TransformHarnessResult, error) {
+func (s *stubFlowService) TransformHarness(_ context.Context, req app.TransformHarnessRequest) (app.TransformHarnessResult, error) {
+	s.transformReq = &req
 	return s.transform, s.transformErr
 }
 
@@ -172,30 +176,30 @@ func runCmd(cmd tea.Cmd) tea.Msg {
 // ---------------------------------------------------------------------------
 
 // TestFullKeyboardFlow_DeployNew_FromLaunchToExit verifies that the complete deploy-new
-// flow — harness selection, mode selection, workspace confirmation, service run, and summary
+// flow — mode selection, harness selection, workspace confirmation, service run, and summary
 // dismissal — is achievable by keyboard input alone, with no mouse interaction.
 func TestFullKeyboardFlow_DeployNew_FromLaunchToExit(t *testing.T) {
 	// Arrange
 	workspace := t.TempDir()
 	m := newFlowModel(newFlowSvc(workspace), workspace)
 
-	if m.screen != screenHarness {
-		t.Fatalf("precondition: initial screen = %v, want screenHarness", m.screen)
-	}
-
-	// Step 1: Harness screen — Enter selects the first (and only) usable harness.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if m.screen != screenMode {
-		t.Fatalf("screen = %v after harness Enter; want screenMode", m.screen)
+		t.Fatalf("precondition: initial screen = %v, want screenMode", m.screen)
 	}
 
-	// Step 2: Mode screen — Enter selects deploy-new, which is the first listed mode.
+	// Step 1: Mode screen — Enter selects deploy-new, which is the first listed mode.
 	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if m.screen != screenWorkspace {
-		t.Fatalf("screen = %v after mode Enter; want screenWorkspace", m.screen)
+	if m.screen != screenHarness {
+		t.Fatalf("screen = %v after mode Enter; want screenHarness", m.screen)
 	}
 	if m.selections.mode != domain.ModeDeployWorkspace {
 		t.Fatalf("selections.mode = %q; want ModeDeployWorkspace", m.selections.mode)
+	}
+
+	// Step 2: Harness screen — Enter selects the first (and only) usable harness.
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.screen != screenWorkspace {
+		t.Fatalf("screen = %v after harness Enter; want screenWorkspace", m.screen)
 	}
 
 	// Step 3: Workspace screen — Enter confirms the pre-filled path and starts the service.
@@ -232,10 +236,8 @@ func TestFullKeyboardFlow_DeployNew_SummaryAcceptsEnterToDismiss(t *testing.T) {
 	m := newFlowModel(newFlowSvc(workspace), workspace)
 
 	// Navigate to screenDone by keyboard.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // mode (deploy-new)
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // workspace
-	_, _ = m.Update(runCmd(cmd))                        // run
+	cmd := driveEntry(t, m, domain.ModeDeployWorkspace, "")
+	_, _ = m.Update(runCmd(cmd)) // run
 
 	if m.screen != screenDone {
 		t.Fatalf("precondition: screen = %v, want screenDone", m.screen)
@@ -255,9 +257,7 @@ func TestFullKeyboardFlow_DeployNew_SummaryViewIsNonEmpty(t *testing.T) {
 	workspace := t.TempDir()
 	m := newFlowModel(newFlowSvc(workspace), workspace)
 
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // mode
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // workspace
+	cmd := driveEntry(t, m, domain.ModeDeployWorkspace, "")
 	_, _ = m.Update(runCmd(cmd))
 
 	if m.summaryScreen == nil {
@@ -285,27 +285,28 @@ func TestFullKeyboardFlow_Update_FromLaunchToExit(t *testing.T) {
 	workspace := t.TempDir()
 	m := newFlowModel(newFlowSvc(workspace), workspace)
 
-	// Step 1: Harness screen.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if m.screen != screenMode {
-		t.Fatalf("screen = %v after harness Enter; want screenMode", m.screen)
-	}
-
-	// Step 2: Mode screen — Down moves cursor from deploy-new to update; Enter confirms.
+	// Step 1: Mode screen — Down moves cursor from deploy-new to update; Enter confirms.
+	requireScreen(t, m, screenMode)
 	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // cursor: deploy-new → update
 	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select update → workspace
 
 	if m.screen != screenWorkspace {
-		t.Fatalf("screen = %v after Down+Enter on mode; want screenWorkspace", m.screen)
+		t.Fatalf("screen = %v after Down+Enter on mode; want screenWorkspace (update asks the path first)", m.screen)
 	}
 	if m.selections.mode != domain.ModeUpdateWorkspace {
 		t.Fatalf("selections.mode = %q after Down+Enter; want ModeUpdateWorkspace", m.selections.mode)
 	}
 
-	// Step 3: Workspace screen.
+	// Step 2: Workspace screen. The manifest records no harness, so the full list follows.
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.screen != screenHarness {
+		t.Fatalf("screen = %v after workspace Enter; want screenHarness", m.screen)
+	}
+
+	// Step 3: Harness screen.
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if m.screen != screenRunning {
-		t.Fatalf("screen = %v after workspace Enter; want screenRunning", m.screen)
+		t.Fatalf("screen = %v after harness Enter; want screenRunning", m.screen)
 	}
 
 	// Step 4: Run completion.
@@ -324,23 +325,21 @@ func TestFullKeyboardFlow_Update_FromLaunchToExit(t *testing.T) {
 }
 
 // TestFullKeyboardFlow_Update_BackAndReselect verifies that back navigation during the
-// update flow does not break the flow: the user can go back from workspace to mode, change
-// or re-confirm the mode selection, and proceed to a successful completion.
+// update flow does not break the flow: the user can go back from workspace to mode,
+// re-confirm the mode selection, and proceed to a successful completion.
 func TestFullKeyboardFlow_Update_BackAndReselect(t *testing.T) {
 	// Arrange
 	workspace := t.TempDir()
 	m := newFlowModel(newFlowSvc(workspace), workspace)
 
 	// Navigate to workspace with update selected.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // mode cursor → update
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // mode → workspace (update)
+	driveToPath(t, m, domain.ModeUpdateWorkspace, "")
 
 	if m.selections.mode != domain.ModeUpdateWorkspace {
 		t.Fatalf("precondition: mode = %q, want ModeUpdateWorkspace", m.selections.mode)
 	}
 
-	// Go back from workspace to mode screen.
+	// Go back from workspace to the mode screen (update asks the path before the harness).
 	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if m.screen != screenMode {
 		t.Fatalf("screen = %v after workspace Esc; want screenMode", m.screen)
@@ -349,8 +348,9 @@ func TestFullKeyboardFlow_Update_BackAndReselect(t *testing.T) {
 	// Re-select update and proceed. After back-navigation the cursor remains on the
 	// previously selected item (update = index 1); no Down press is needed.
 	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // mode → workspace (cursor already on update)
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // workspace → harness
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // workspace → running
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → running
 	_, _ = m.Update(runCmd(cmd))                        // run → done
 
 	// Assert: flow completed with the update mode.
@@ -377,9 +377,7 @@ func TestFullKeyboardFlow_ServiceError_IsKeyboardDismissible(t *testing.T) {
 	m := newFlowModel(svc, workspace)
 
 	// Navigate to screenRunning.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // mode (deploy-new)
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // workspace
+	cmd := driveEntry(t, m, domain.ModeDeployWorkspace, "")
 
 	// Deliver the error result (runErrorMsg, not runDoneMsg).
 	_, _ = m.Update(runCmd(cmd))
@@ -417,28 +415,29 @@ func TestFullKeyboardFlow_WorkflowsOnly_StartService_CallsUpdateWorkflows(t *tes
 	}
 	m := newFlowModel(svc, workspace)
 
-	// Step 1: Harness screen.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if m.screen != screenMode {
-		t.Fatalf("screen = %v after harness Enter; want screenMode", m.screen)
-	}
-
-	// Step 2: Mode screen — Down twice moves to the third item (workflows-only); Enter confirms.
+	// Step 1: Mode screen — Down twice moves to the third item (workflows-only); Enter confirms.
+	requireScreen(t, m, screenMode)
 	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // deploy-new → update
 	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // update → workflows-only
 	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select
 
 	if m.screen != screenWorkspace {
-		t.Fatalf("screen = %v after two Down+Enter on mode; want screenWorkspace", m.screen)
+		t.Fatalf("screen = %v after two Down+Enter on mode; want screenWorkspace (workflows asks the path first)", m.screen)
 	}
 	if m.selections.mode != domain.ModeUpdateWorkflows {
 		t.Fatalf("selections.mode = %q; want ModeUpdateWorkflows", m.selections.mode)
 	}
 
-	// Step 3: Workspace screen — Enter confirms.
+	// Step 2: Workspace screen — Enter confirms; the manifest records no harness, so the full list follows.
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.screen != screenHarness {
+		t.Fatalf("screen = %v after workspace Enter; want screenHarness", m.screen)
+	}
+
+	// Step 3: Harness screen.
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if m.screen != screenRunning {
-		t.Fatalf("screen = %v after workspace Enter; want screenRunning", m.screen)
+		t.Fatalf("screen = %v after harness Enter; want screenRunning", m.screen)
 	}
 
 	// Step 4: Execute the service command; the stub returns a successful RunSummary.
@@ -464,10 +463,7 @@ func TestModeScreen_HasThreeItems(t *testing.T) {
 	workspace := t.TempDir()
 	m := newFlowModel(newFlowSvc(workspace), workspace)
 
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // advance to mode screen
-	if m.screen != screenMode {
-		t.Fatalf("precondition: screen = %v, want screenMode", m.screen)
-	}
+	requireScreen(t, m, screenMode)
 
 	// Move the cursor through all three items (Down twice) and verify none of the presses
 	// immediately commits the selection (i.e., the list has a third item rather than
@@ -496,8 +492,8 @@ func TestFullKeyboardFlow_CtrlC_CancelsFromAnyEntryScreen(t *testing.T) {
 		name    string
 		advance func(*rootModel)
 	}{
-		{"harness", func(m *rootModel) {}},
-		{"mode", func(m *rootModel) {
+		{"mode", func(m *rootModel) {}},
+		{"harness", func(m *rootModel) {
 			m.Update(tea.KeyMsg{Type: tea.KeyEnter}) //nolint:errcheck
 		}},
 		{"workspace", func(m *rootModel) {
@@ -522,132 +518,5 @@ func TestFullKeyboardFlow_CtrlC_CancelsFromAnyEntryScreen(t *testing.T) {
 				t.Errorf("cmd = nil after ctrl+c on %s screen; want tea.Quit", tc.name)
 			}
 		})
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Stage 3 — T3.2: Regression tests — non-promote modes keep directory kind
-// ---------------------------------------------------------------------------
-
-// TestDeployMode_PathScreen_AcceptsWorkspaceDirectory verifies that entering an existing
-// writable workspace directory in deploy-new mode advances to screenRunning. This is a
-// regression test confirming that adding file-kind validation to promote mode does not
-// accidentally change the path kind for deploy-new.
-func TestDeployMode_PathScreen_AcceptsWorkspaceDirectory(t *testing.T) {
-	// Arrange
-	workspace := t.TempDir()
-	m := newFlowModel(newFlowSvc(workspace), workspace)
-
-	// Navigate to deploy-new workspace screen.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select deploy-new → workspace
-
-	if m.screen != screenWorkspace {
-		t.Fatalf("precondition: screen = %v, want screenWorkspace", m.screen)
-	}
-
-	// Act: Enter on the workspace directory.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-
-	// Assert: directory accepted.
-	if m.screen != screenRunning {
-		t.Errorf("screen = %v after Enter on directory in deploy-new mode; want screenRunning; "+
-			"deploy-new must keep directory-kind validation after the promote path-kind fix", m.screen)
-	}
-}
-
-// TestUpdateMode_PathScreen_AcceptsWorkspaceDirectory verifies that entering an existing
-// writable workspace directory in update mode advances to screenRunning. This is a regression
-// test ensuring the path-kind fix for promote mode does not affect update mode.
-func TestUpdateMode_PathScreen_AcceptsWorkspaceDirectory(t *testing.T) {
-	// Arrange
-	workspace := t.TempDir()
-	m := newFlowModel(newFlowSvc(workspace), workspace)
-
-	// Navigate to update workspace screen.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select update → workspace
-
-	if m.screen != screenWorkspace {
-		t.Fatalf("precondition: screen = %v, want screenWorkspace", m.screen)
-	}
-
-	// Act: Enter on the workspace directory.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-
-	// Assert: directory accepted.
-	if m.screen != screenRunning {
-		t.Errorf("screen = %v after Enter on directory in update mode; want screenRunning; "+
-			"update must keep directory-kind validation after the promote path-kind fix", m.screen)
-	}
-}
-
-// TestWorkflowsOnlyMode_PathScreen_AcceptsWorkspaceDirectory verifies that entering an
-// existing writable workspace directory in workflows-only mode advances to screenRunning. This
-// is a regression test ensuring the path-kind fix for promote mode does not affect
-// workflows-only mode.
-func TestWorkflowsOnlyMode_PathScreen_AcceptsWorkspaceDirectory(t *testing.T) {
-	// Arrange
-	workspace := t.TempDir()
-	svc := newFlowSvc(workspace)
-	svc.workflows = domain.RunSummary{
-		Mode:           domain.ModeUpdateWorkflows,
-		WorkspacePath:  workspace,
-		DeploymentRoot: workspace + "/.ai",
-		Outcome:        domain.OutcomeSuccess,
-	}
-	m := newFlowModel(svc, workspace)
-
-	// Navigate to workflows-only workspace screen.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → workflows-only
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select workflows-only → workspace
-
-	if m.screen != screenWorkspace {
-		t.Fatalf("precondition: screen = %v, want screenWorkspace", m.screen)
-	}
-
-	// Act: Enter on the workspace directory.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-
-	// Assert: directory accepted.
-	if m.screen != screenRunning {
-		t.Errorf("screen = %v after Enter on directory in workflows-only mode; want screenRunning; "+
-			"workflows-only must keep directory-kind validation after the promote path-kind fix", m.screen)
-	}
-}
-
-// ---------------------------------------------------------------------------
-
-// TestDeployMode_PathScreen_View_ContainsDirectoryWording verifies that the path screen in
-// deploy-new mode shows directory-oriented wording. This is a regression test guarding against
-// the path kind for deploy-new being accidentally changed to file kind, which would change the
-// wording even if the validator were somehow still accepting directories.
-func TestDeployMode_PathScreen_View_ContainsDirectoryWording(t *testing.T) {
-	// Arrange
-	workspace := t.TempDir()
-	m := newFlowModel(newFlowSvc(workspace), workspace)
-
-	// Navigate to deploy-new workspace screen.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select deploy-new → workspace
-
-	if m.screen != screenWorkspace {
-		t.Fatalf("precondition: screen = %v, want screenWorkspace", m.screen)
-	}
-
-	// Act
-	lower := strings.ToLower(m.View())
-
-	// Assert: directory-oriented wording must be present; file-only wording must be absent.
-	if !strings.Contains(lower, "directory") && !strings.Contains(lower, "workspace") {
-		t.Errorf("path screen view in deploy-new mode contains neither 'directory' nor 'workspace' wording; "+
-			"want directory-oriented wording:\n%s", m.View())
-	}
-	if strings.Contains(lower, "agent file") {
-		t.Errorf("path screen view in deploy-new mode contains 'agent file' wording; "+
-			"want directory-oriented wording only:\n%s", m.View())
 	}
 }

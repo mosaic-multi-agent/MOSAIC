@@ -134,13 +134,13 @@ func processRegions(doc *docformat.Document, req Request) (outcomes []RegionOutc
 			return nil, nil, nil, nil, classErr
 		}
 
-		// Reject any managed region that carries non-empty content in the source file.
-		// Source regions are empty by definition; content here is either a hand-edit about to
-		// be discarded or a deployed file mistakenly committed as source.
-		// Empty nested injection or custom markers are permitted — they are empty
-		// placeholders that the capture-regenerate-reemit sequence will populate from the
-		// deployed file.
-		if node.Kind() == docformat.NodeDeployed && !docformat.SourceDeployedRegionIsEmpty(node) {
+		// Reject any managed region that carries prose in the source file. Managed content is
+		// regenerated, so prose here is either a hand-edit about to be discarded or a deployed
+		// file mistakenly committed as source.
+		// Nested project regions are permitted whatever their content: the capture-regenerate-
+		// reemit sequence fills them from the deployed file, or from the source default when
+		// the deployed file lacks them.
+		if node.Kind() == docformat.NodeDeployed && !sourceManagedRegionIsEmpty(node) {
 			return nil, nil, nil, nil, fmt.Errorf("region %q: %w", name, ErrSourceDeployedRegionNotEmpty)
 		}
 
@@ -155,6 +155,7 @@ func processRegions(doc *docformat.Document, req Request) (outcomes []RegionOutc
 		var capture []nestedRegionRecord
 		if node.Kind() == docformat.NodeDeployed {
 			capture = captureNestedUserRegions(node, depDoc)
+			attachNestedSourceDefaults(node, capture)
 		}
 
 		switch class {
@@ -252,6 +253,7 @@ func processRegions(doc *docformat.Document, req Request) (outcomes []RegionOutc
 				reemittedNames[out.Name] = true
 			}
 			outcomes = append(outcomes, nestedOutcomes...)
+			gaps = append(gaps, nestedDefaultGaps(nestedOutcomes, req.Key)...)
 		}
 	}
 
@@ -827,12 +829,19 @@ func reemitNestedUserRegions(parent *docformat.Node, captured []nestedRegionReco
 
 	var outcomes []RegionOutcome
 	for _, rec := range captured {
-		// Resolve content from the deployed region map; absent name → empty region.
+		// Resolve content from the deployed region map; a name absent there takes the source
+		// default of a project region, or stays an empty region.
 		var content []byte
+		inDeployed := false
 		if deployedContent != nil {
 			if entry, ok := deployedContent[rec.Name]; ok {
 				content = ConvertLineEndings(entry.Content, eol)
+				inDeployed = true
 			}
+		}
+		defaulted := !inDeployed && rec.hasNestedDefault()
+		if defaulted {
+			content = ConvertLineEndings(rec.SourceContent, eol)
 		}
 
 		if _, err := parent.AppendRegion(rec.Kind, rec.Name, content); err != nil {
@@ -847,13 +856,12 @@ func reemitNestedUserRegions(parent *docformat.Node, captured []nestedRegionReco
 		case docformat.NodeCustom:
 			action = RegionCustomPreserved
 		case docformat.NodeInjection:
-			if deployedContent != nil {
-				if _, ok := deployedContent[rec.Name]; ok {
-					action = RegionPreserved
-				} else {
-					action = RegionAdded
-				}
-			} else {
+			switch {
+			case inDeployed:
+				action = RegionPreserved
+			case defaulted:
+				action = RegionDefaulted
+			default:
 				action = RegionAdded
 			}
 		}

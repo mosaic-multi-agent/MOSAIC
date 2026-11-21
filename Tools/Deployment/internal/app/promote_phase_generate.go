@@ -27,6 +27,8 @@ type promoteGenerated struct {
 	recovered promoteRecoveredFields
 	// stripped lists the source fields that did not travel to the generic file.
 	stripped []StrippedField
+	// removedCustom names the custom regions of the source removed from the generic file.
+	removedCustom []string
 }
 
 // promoteDrops is the frontmatter classification of a source.
@@ -35,13 +37,15 @@ type promoteDrops struct {
 	dropKeys map[string]bool
 	// stripped reports the dropped fields the operator should know about.
 	stripped []StrippedField
+	// removedCustom names the custom regions of the source removed from the generic file.
+	removedCustom []string
 	// divertedTools are generic tool names recovered from diverted tool-destination fields.
 	divertedTools []string
 }
 
 // generatePromotedAgent builds the generic agent for src under the given numeric id. It asks
 // the tool and generic-field questions through Interaction.
-func (s *service) generatePromotedAgent(ctx context.Context, src *promoteSource, numericID string) (promoteGenerated, error) {
+func (s *service) generatePromotedAgent(ctx context.Context, src *promoteSource, numericID string, emptyProjectRegions bool) (promoteGenerated, error) {
 	// A plan failure is fatal: proceeding without the full drop-set would leak the harness's
 	// own added fields into the generic file.
 	drops, err := classifyPromoteSource(src)
@@ -51,7 +55,7 @@ func (s *service) generatePromotedAgent(ctx context.Context, src *promoteSource,
 
 	tools, verbatim := s.resolvePromoteToolList(ctx, src, drops.divertedTools)
 	recovered := s.resolvePromoteGenericFields(ctx, src.facts, src.path)
-	return assemblePromotedAgent(src, numericID, drops, tools, verbatim, recovered)
+	return assemblePromotedAgent(src, numericID, drops, tools, verbatim, recovered, emptyProjectRegions)
 }
 
 // assemblePromotedAgent builds the generic agent bytes of src once every question has been
@@ -60,6 +64,7 @@ func (s *service) generatePromotedAgent(ctx context.Context, src *promoteSource,
 func assemblePromotedAgent(
 	src *promoteSource, numericID string, drops promoteDrops,
 	tools, verbatim []string, recovered promoteRecoveredFields,
+	emptyProjectRegions bool,
 ) (promoteGenerated, error) {
 	// Keys held in the carriage container cannot travel the format change; each is reported.
 	// StripCarriage is pure, so the source on disk is not affected.
@@ -86,6 +91,7 @@ func assemblePromotedAgent(
 		RecommendedTier:     recovered.RecommendedTier,
 		TierRationale:       recovered.TierRationale,
 		RequiredSkills:      recovered.RequiredSkills,
+		EmptyProjectRegions: emptyProjectRegions,
 	})
 	if err != nil {
 		return promoteGenerated{}, fmt.Errorf("%s: %w", src.path, err)
@@ -96,6 +102,7 @@ func assemblePromotedAgent(
 		verbatimTools: verbatim,
 		recovered:     recovered,
 		stripped:      stripped,
+		removedCustom: removedCustomOf(stripResult.Canonical),
 	}, nil
 }
 

@@ -34,6 +34,9 @@ func (MockStackService) ActiveStack() stackconfig.ActiveStack { return stackconf
 // CheckHarnessInjections accepts any harness.
 func (MockStackService) CheckHarnessInjections(harnessID string) error { return nil }
 
+// RecordedHarnesses reports no recorded harness.
+func (MockStackService) RecordedHarnesses(workspace string) []string { return nil }
+
 // CatalogOf reports every item as not found.
 func (MockStackService) CatalogOf(item domain.CatalogItem) (domain.CatalogLayer, bool) {
 	return domain.CatalogLayer{}, false

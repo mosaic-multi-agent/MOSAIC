@@ -1682,41 +1682,6 @@ This is prose content inside a source deployed region and must still be an error
 </Constraints>
 `
 
-// sourceWithNonEmptyNestedMarker is a source where a deployed region contains a nested
-// project-injection region marker that has non-whitespace content. This must also error, because
-// the nested marker itself carries content — SourceDeployedRegionIsEmpty returns false
-// for non-empty nested nodes.
-const sourceWithNonEmptyNestedMarker = `---
-id: 607
-version: 2.0.0
-name: source-nonempty-nested-test
-description: Agent for source non-empty-nested marker testing
-model: {model-identifier}
-tools: [file_read]
-recommended_tier: LOW
-tier_rationale: source check testing
-required_skills: []
----
-
-<Identity type="core">
-# SourceNonEmptyNested Agent
-
-You are the SourceNonEmptyNested agent.
-</Identity>
-
-<Constraints type="core">
-## Constraints
-
-Always be helpful.
-
-<HarnessConstraints type="managed">
-<NestedWithContent type="project">
-This injection has content in the source, making the parent non-empty.
-</NestedWithContent>
-</HarnessConstraints>
-</Constraints>
-`
-
 // TestSourceCheck_EmptyNestedMarkers_DoesNotError asserts that a source deployed region
 // containing only empty nested project-injection region markers is accepted by the transform.
 // This is the positive half of the source-guard relaxation: the old TrimSpace check
@@ -1767,33 +1732,6 @@ func TestSourceCheck_ProseInDeployed_StillErrors(t *testing.T) {
 	if !errors.Is(err, transform.ErrSourceDeployedRegionNotEmpty) {
 		t.Errorf("expected error wrapping ErrSourceDeployedRegionNotEmpty for prose in source " +
 			"deployed region; got: %v", err)
-	}
-}
-
-// TestSourceCheck_NonEmptyNestedMarker_StillErrors asserts that a source deployed region
-// containing a nested project-injection region marker with non-whitespace content still errors.
-// A nested user-owned marker with content makes the parent non-empty by the relaxed predicate,
-// so it must still be rejected.
-func TestSourceCheck_NonEmptyNestedMarker_StillErrors(t *testing.T) {
-	req := transform.Request{
-		Source:   []byte(sourceWithNonEmptyNestedMarker),
-		Deployed: nil,
-		Kind:     domain.ArtifactAgent,
-		Key:      "source-nonempty-nested-test",
-		Module:   newFixtureModule(t),
-		Model:    fixtureModel(),
-		Scope:    domain.ScopeProject,
-	}
-
-	_, err := transform.Apply(req)
-	if err == nil {
-		t.Fatal("Apply must return an error when a source deployed region contains a nested " +
-			"project-injection region with non-whitespace content; a non-empty nested marker makes the " +
-			"parent non-empty under the relaxed SourceDeployedRegionIsEmpty predicate")
-	}
-	if !errors.Is(err, transform.ErrSourceDeployedRegionNotEmpty) {
-		t.Errorf("expected error wrapping ErrSourceDeployedRegionNotEmpty for non-empty nested " +
-			"marker; got: %v", err)
 	}
 }
 

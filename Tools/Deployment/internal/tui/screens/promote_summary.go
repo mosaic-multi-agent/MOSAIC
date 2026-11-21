@@ -72,6 +72,9 @@ func (s *PromoteSummaryScreen) View() string {
 			sb.WriteString("\nStripped field: " + sf.Key + " (" + string(sf.Reason) + ")")
 		}
 	}
+	for _, name := range s.result.RemovedCustomRegions {
+		sb.WriteString("\nRemoved custom region: " + name)
+	}
 	return s.styles.Success.Width(s.width).Render(sb.String()) + "\n" +
 		s.styles.Help.Width(s.width).Render("any key: back to start  ctrl+c: quit")
 }

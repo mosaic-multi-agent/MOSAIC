@@ -224,7 +224,7 @@ func (r *promoteBatchRun) writeBatchAgent(
 	if err != nil {
 		return err
 	}
-	gen, err := assemblePromotedAgent(src, numericID, drops, tools, verbatim, recovered)
+	gen, err := assemblePromotedAgent(src, numericID, drops, tools, verbatim, recovered, r.result.ProjectRegions == ProjectRegionsEmpty)
 	if err != nil {
 		return err
 	}
@@ -249,6 +249,7 @@ func (r *promoteBatchRun) writeBatchAgent(
 		VerbatimTools:         gen.verbatimTools,
 		RecoveredFields:       gen.recovered.Supplied,
 		StrippedFields:        gen.stripped,
+		RemovedCustomRegions:  gen.removedCustom,
 		DivertedTools:         src.facts.DivertedTools,
 		ExperimentalHarnesses: domain.ExperimentalHarnessesOf(src.module.Ref()),
 	}

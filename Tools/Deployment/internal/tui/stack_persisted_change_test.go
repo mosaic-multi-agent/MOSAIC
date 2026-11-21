@@ -11,8 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-
 	"mosaic-deploy/internal/app/stackconfig"
 	"mosaic-deploy/internal/domain"
 )
@@ -148,8 +146,8 @@ func TestPersistedChange_BackAndSamePath_KeepsTheScreensState(t *testing.T) {
 	f.toStack(t)
 	f.addLayerOnStack(added)
 
-	f.key(tea.KeyEsc)
-	f.key(tea.KeyEnter)
+	f.backToPath(t)
+	f.confirmPath(t)
 
 	if !f.onStack() {
 		t.Fatalf("not on the stack screen:\n%s", f.m.View())
@@ -166,9 +164,9 @@ func TestPersistedChange_BackAndOtherPath_RestartsFromTheNewPathsStack(t *testin
 	f.toStack(t)
 	f.addLayerOnStack(added)
 
-	f.key(tea.KeyEsc)
+	f.backToPath(t)
 	f.m.wsScreen.SetPrefilledPath(wsB)
-	f.key(tea.KeyEnter)
+	f.confirmPath(t)
 
 	if !f.onStack() {
 		t.Fatalf("not on the stack screen:\n%s", f.m.View())
@@ -193,9 +191,9 @@ func TestPersistedChange_BackAndPathWithoutStack_RestartsFromLaunchOrDefault(t *
 	added := t.TempDir()
 	f.addLayerOnStack(added)
 
-	f.key(tea.KeyEsc)
+	f.backToPath(t)
 	f.m.wsScreen.SetPrefilledPath(wsB)
-	f.key(tea.KeyEnter)
+	f.confirmPath(t)
 
 	requireNotInView(t, f, persistedA, added)
 	if !strings.Contains(f.m.View(), "[x] kept") {
@@ -212,7 +210,7 @@ func TestPersistedChange_PrefilledPathIsNotTheLookupKey(t *testing.T) {
 	f.toPath(t)
 	f.m.wsScreen.SetPrefilledPath(confirmed)
 
-	f.key(tea.KeyEnter)
+	f.confirmPath(t)
 
 	if !f.onStack() {
 		t.Fatalf("not on the stack screen:\n%s", f.m.View())
@@ -229,9 +227,9 @@ func TestPersistedChange_Transform_BackAndOtherWorkspace_RestartsFromTheNewStack
 	f.toStack(t)
 	f.addLayerOnStack(added)
 
-	f.key(tea.KeyEsc)
+	f.backToPath(t)
 	f.m.wsScreen.SetPrefilledPath(wsB)
-	f.key(tea.KeyEnter)
+	f.confirmPath(t)
 
 	requireInView(t, f, persistedB)
 	requireNotInView(t, f, persistedA, added)

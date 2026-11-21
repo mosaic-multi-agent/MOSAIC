@@ -26,6 +26,7 @@ import (
 // at screenDone without panicking.
 func newTransformFlowSvc(workspace string) *stubFlowService {
 	svc := newFlowSvc(workspace)
+	svc.harnesses = []domain.HarnessRef{flowTestHarness, flowTargetHarness}
 	svc.transform = app.TransformHarnessResult{
 		SourceHarnessID: flowTestHarness.ID,
 		TargetHarnessID: "target-harness",
@@ -41,22 +42,11 @@ func newTransformFlowSvc(workspace string) *stubFlowService {
 	return svc
 }
 
-// navigateToTransformMode drives the model from the harness screen to the workspace
-// screen with ModeTransformHarness selected. It performs:
-//  1. Enter to confirm the single harness.
-//  2. Down x6 to move the mode cursor from deploy-workspace to transform-harness (7th item).
-//  3. Enter to confirm the mode.
-//
-// Returns the model at screenWorkspace (or whatever screen the model ends up on).
-func navigateToTransformMode(m *rootModel) {
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) //nolint:errcheck — harness → mode
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})  //nolint:errcheck — deploy-workspace → update-workspace
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})  //nolint:errcheck — update-workspace → update-workflows
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})  //nolint:errcheck — update-workflows → deploy-agents
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})  //nolint:errcheck — deploy-agents → deploy-hooks
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})  //nolint:errcheck — deploy-hooks → promote-to-generic
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})  //nolint:errcheck — promote-to-generic → transform-harness
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) //nolint:errcheck — select transform → workspace
+// navigateToTransformMode drives the model from the mode screen to the workspace
+// screen with ModeTransformHarness selected and the single harness chosen as the source.
+func navigateToTransformMode(t *testing.T, m *rootModel) {
+	t.Helper()
+	driveToPath(t, m, domain.ModeTransformHarness, "")
 }
 
 // ---------------------------------------------------------------------------
@@ -70,8 +60,6 @@ func TestModeScreen_IncludesTransformHarnessEntry(t *testing.T) {
 	// Arrange
 	workspace := t.TempDir()
 	m := newFlowModel(newTransformFlowSvc(workspace), workspace)
-
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
 
 	if m.screen != screenMode {
 		t.Fatalf("precondition: screen = %v, want screenMode", m.screen)
@@ -102,8 +90,6 @@ func TestModeScreen_HasSevenItems(t *testing.T) {
 	// Arrange
 	workspace := t.TempDir()
 	m := newFlowModel(newTransformFlowSvc(workspace), workspace)
-
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
 
 	if m.screen != screenMode {
 		t.Fatalf("precondition: screen = %v, want screenMode", m.screen)
@@ -136,14 +122,14 @@ func TestTransformMode_PathScreen_AcceptsExistingDirectory(t *testing.T) {
 	m := newFlowModel(newTransformFlowSvc(workspace), workspace)
 
 	// Navigate to transform workspace screen.
-	navigateToTransformMode(m)
+	navigateToTransformMode(t, m)
 
 	if m.screen != screenWorkspace {
 		t.Fatalf("precondition: screen = %v, want screenWorkspace", m.screen)
 	}
 
-	// Act: Enter on the directory path.
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	// Act: Enter on the directory path; the source harness screen follows it.
+	cmd := confirmPath(t, m, "")
 
 	// Assert: directory accepted → advances to screenRunning.
 	if m.screen != screenRunning {
@@ -224,28 +210,13 @@ func TestTransformMode_SuppliesSelectedHarnessIDInRequest(t *testing.T) {
 	spy := &capturingTransformService{inner: inner}
 	m := newFlowModel(spy, workspace)
 
-	// Step 1: Harness screen — select the single harness.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	// Step 1 and 2: choose ModeTransformHarness, confirm the workspace path, then the source harness.
+	driveToPath(t, m, domain.ModeTransformHarness, "")
+	cmd := confirmPath(t, m, "")
 	if m.selections.harnessID != flowTestHarness.ID {
 		t.Fatalf("precondition: harnessID = %q after harness selection, want %q",
 			m.selections.harnessID, flowTestHarness.ID)
 	}
-
-	// Step 2: Navigate to ModeTransformHarness (Down x6) and select it.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-
-	if m.selections.mode != domain.ModeTransformHarness {
-		t.Fatalf("precondition: mode = %q, want ModeTransformHarness; navigate mode screen first", m.selections.mode)
-	}
-
-	// Step 3: Confirm the workspace path.
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if m.screen != screenRunning {
 		t.Fatalf("precondition: screen = %v after workspace confirmation, want screenRunning", m.screen)
 	}
@@ -264,6 +235,12 @@ func TestTransformMode_SuppliesSelectedHarnessIDInRequest(t *testing.T) {
 			"the TUI transform branch must supply the already-selected harness id as SourceHarnessID without asking again",
 			spy.lastTransformReq.SourceHarnessID, flowTestHarness.ID)
 	}
+
+	// Assert: TargetHarnessID must match the harness chosen on the target screen.
+	if spy.lastTransformReq.TargetHarnessID != flowTargetHarness.ID {
+		t.Errorf("TargetHarnessID = %q, want %q; the TUI supplies the target chosen on its entry screen",
+			spy.lastTransformReq.TargetHarnessID, flowTargetHarness.ID)
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -279,10 +256,10 @@ func TestTransformMode_RunningStatus_IsTransformSpecific(t *testing.T) {
 	m := newFlowModel(newTransformFlowSvc(workspace), workspace)
 
 	// Navigate to transform mode workspace screen.
-	navigateToTransformMode(m)
+	navigateToTransformMode(t, m)
 
-	// Confirm the workspace path — transitions to screenRunning.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	// Confirm the workspace path and the source harness — transitions to screenRunning.
+	confirmPath(t, m, "")
 
 	if m.screen != screenRunning {
 		t.Fatalf("screen = %v after transform path confirmation; want screenRunning", m.screen)
@@ -306,50 +283,31 @@ func TestTransformMode_RunningStatus_IsTransformSpecific(t *testing.T) {
 // Target-harness selection step between mode and workspace
 // ---------------------------------------------------------------------------
 
-// TestTransformMode_AfterModeSelection_AdvancesToWorkspaceScreen verifies that selecting
-// ModeTransformHarness advances directly to screenWorkspace. The target-harness and
-// target-model selection steps are handled via the domain.Interaction port overlay during
-// service execution — they are not pre-workspace TUI screens.
-//
-// This is the contracted design: QTransformTargetHarness routes through the existing
-// selectOverlay path (verified by TestInteractionRouting_QTransformTargetHarness_ShowsSelectionOverlay
-// in interaction_routing_test.go) and QTransformTargetModel routes through modelOverlay
-// (verified by TestInteractionRouting_QTransformTargetModel_ShowsModelSelectScreen).
-// The TUI's updateMode handler sets PathKindDirectory and advances to screenWorkspace,
-// matching the pattern every other mode follows: mode selection → workspace.
-func TestTransformMode_AfterModeSelection_AdvancesToWorkspaceScreen(t *testing.T) {
+// TestTransformMode_AfterModeAndPath_AdvancesToTheSourceThenTheTargetHarnessScreen verifies that
+// selecting ModeTransformHarness advances to the path screen, confirming the path advances to the
+// source harness screen, and choosing the source advances to the target harness screen, after
+// which the run starts. The target model is still asked through the domain.Interaction port
+// overlay during service execution (QTransformTargetModel routes through modelOverlay, verified by
+// TestInteractionRouting_QTransformTargetModel_ShowsModelSelectScreen).
+func TestTransformMode_AfterModeAndPath_AdvancesToTheSourceThenTheTargetHarnessScreen(t *testing.T) {
 	// Arrange
 	workspace := t.TempDir()
 	m := newFlowModel(newTransformFlowSvc(workspace), workspace)
+	pickMode(t, m, domain.ModeTransformHarness)
+	requireScreen(t, m, screenWorkspace)
 
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
-	if m.screen != screenMode {
-		t.Fatalf("precondition: screen = %v, want screenMode", m.screen)
+	// Act: confirm the path, then the source harness.
+	pressEnter(m)
+	requireScreen(t, m, screenHarness)
+	pickHarness(t, m, "")
+
+	// Assert: the target harness is asked on its own entry screen before the run starts.
+	if !onTargetScreen(m) {
+		t.Fatalf("screen = %v after choosing the source harness; want the target harness screen:\n%s", m.screen, m.View())
 	}
-
-	// Navigate to ModeTransformHarness (Down x6) and confirm.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workspace
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → update-workflows
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-agents
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → deploy-hooks
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → promote-to-generic
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})  // → transform-harness
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // confirm mode
-
-	if m.selections.mode != domain.ModeTransformHarness {
-		t.Fatalf("precondition: selections.mode = %q; ModeTransformHarness item not present; "+
-			"TestModeScreen_IncludesTransformHarnessEntry covers this separately", m.selections.mode)
-	}
-
-	// Assert: mode selection advances directly to screenWorkspace. Target-harness and
-	// target-model selection are overlay interactions during service execution, not
-	// pre-workspace TUI screens.
-	if m.screen != screenWorkspace {
-		t.Errorf("screen = %v after selecting ModeTransformHarness; want screenWorkspace; "+
-			"the contracted design routes QTransformTargetHarness and QTransformTargetModel "+
-			"through the domain.Interaction port overlay, not through pre-workspace TUI screens; "+
-			"updateMode must advance to screenWorkspace immediately after mode confirmation",
-			m.screen)
+	pickTarget(t, m, "")
+	if m.screen != screenRunning {
+		t.Errorf("screen = %v after choosing the target harness; want screenRunning", m.screen)
 	}
 }
 
@@ -367,26 +325,20 @@ func TestDeployMode_AfterTransformSelection_StillAcceptsDirectory(t *testing.T) 
 	m := newFlowModel(newTransformFlowSvc(workspace), workspace)
 
 	// Navigate to transform workspace screen.
-	navigateToTransformMode(m)
+	navigateToTransformMode(t, m)
 
 	if m.screen != screenWorkspace {
 		t.Fatalf("precondition: screen = %v, want screenWorkspace (transform)", m.screen)
 	}
 
-	// Esc back to mode screen.
+	// Esc back to the mode screen (transform asks the path first).
 	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if m.screen != screenMode {
 		t.Fatalf("screen = %v after Esc from transform workspace; want screenMode", m.screen)
 	}
 
-	// Navigate to deploy-workspace (Up x6 from transform-harness index 6) and select it.
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp}) // transform-harness → promote-to-generic
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp}) // promote-to-generic → deploy-hooks
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp}) // deploy-hooks → deploy-agents
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp}) // deploy-agents → update-workflows
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp}) // update-workflows → update-workspace
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp}) // update-workspace → deploy-workspace
-	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	// Choose deploy-workspace and confirm the harness again.
+	driveToPath(t, m, domain.ModeDeployWorkspace, "")
 
 	if m.screen != screenWorkspace {
 		t.Fatalf("screen = %v after selecting deploy-new; want screenWorkspace", m.screen)

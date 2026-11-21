@@ -31,6 +31,7 @@ package app
 // it. A generic agent without a tier is valid; it gets its own model question at deploy time.
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 
@@ -116,6 +117,11 @@ type PromoteInput struct {
 	// entered as a comma-separated list and split by the service layer. A nil or empty
 	// slice means the field was not supplied and is left out of the output.
 	RequiredSkills []string
+
+	// EmptyProjectRegions empties every project region of the generic: each keeps only its
+	// nested project regions (themselves emptied), and one with none is an empty tag pair.
+	// False (the zero value) keeps each project region's content byte-identical to the source.
+	EmptyProjectRegions bool
 }
 
 // promoteProtectedGenericKeys names frontmatter keys a harness-derived drop-set may never
@@ -222,11 +228,14 @@ func inspectPromoteSource(src []byte, d *domain.HarnessDescriptor) (promoteSourc
 // ErrPromoteNotTransformed and no output.
 //
 // The generated file:
-//   - has every injection region stripped to an empty tag pair — no harness-
-//     specific injection content; the deploy pipeline fills injections per-harness;
-//   - has every managed region stripped to an empty tag pair — this matches
-//     real generic source files and satisfies the transform pipeline's constraint that
-//     deployed regions in a source must be empty (ErrSourceDeployedRegionNotEmpty);
+//   - keeps every project region, at any depth, byte-identical to the source (it becomes the
+//     region's deploy-once default), or empties it to an empty tag pair when
+//     PromoteInput.EmptyProjectRegions is set;
+//   - has every managed region emptied apart from the project regions inside it, which stay
+//     as its direct children — this matches real generic source files and satisfies the
+//     transform pipeline's constraint that a source's managed region holds no prose
+//     (ErrSourceDeployedRegionNotEmpty);
+//   - has every custom region removed, tags included, at any depth;
 //   - carries over the section tag structure and section body prose as-is;
 //   - carries frontmatter per the field policy documented at the top of promote.go.
 //
@@ -351,22 +360,32 @@ func buildGenericAgent(in PromoteInput) ([]byte, error) {
 	// its original relative order. Reorder appends unlisted keys after the listed ones.
 	fm.Reorder([]string{"id", "version", "name", "role"})
 
-	// Strip every injection region to an empty tag pair. The deploy pipeline injects
-	// harness-specific content at deploy time; no harness content belongs in the generic
-	// source. Clear removes only the items slice; the open and close tags are preserved.
-	for _, node := range out.Body().Injections() {
-		node.Clear()
+	// Apply the region rules to the body: project regions are kept or emptied, managed
+	// regions are emptied (transform.ErrSourceDeployedRegionNotEmpty rejects a source whose
+	// managed regions carry prose) and custom regions are removed. The frontmatter header
+	// is final here, so the body is the part after its lines.
+	all := out.Bytes()
+	header := leadingLines(all, out.BodyLineOffset())
+	walker := &regionWalker{empty: in.EmptyProjectRegions}
+	body, err := walker.rewriteBody(all[len(header):], out.Body().TopLevelNodes())
+	if err != nil {
+		return nil, fmt.Errorf("rewriting regions of the generic agent: %w", err)
 	}
 
-	// Strip every deployed region to an empty tag pair. Generic source files carry empty
-	// deployed placeholders; the deploy pipeline fills them with canonical content.
-	// transform.ErrSourceDeployedRegionNotEmpty rejects a source whose deployed regions
-	// carry content, so this step is required for the generated file to be usable.
-	for _, node := range out.Body().DeployedRegions() {
-		node.Clear()
-	}
+	return append(header[:len(header):len(header)], body...), nil
+}
 
-	return out.Bytes(), nil
+// leadingLines returns the first n lines of b, each with its terminator.
+func leadingLines(b []byte, n int) []byte {
+	end := 0
+	for i := 0; i < n && end < len(b); i++ {
+		next := bytes.IndexByte(b[end:], '\n')
+		if next < 0 {
+			return b
+		}
+		end += next + 1
+	}
+	return b[:end]
 }
 
 // applyRecoveredFields writes the generic-only fields the user supplied. A field is written

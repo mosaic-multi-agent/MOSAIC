@@ -16,13 +16,14 @@ import (
 
 // screenID identifies which screen the root model is currently showing.
 //
-// Entry order: harness -> mode -> path screen -> stack -> running. The stack screen is omitted
-// when no reload capability is configured.
+// Entry order: mode -> harness -> path screen -> stack -> running. The harness screen is skipped
+// when the session was launched with a preset harness; the stack screen is omitted when no
+// reload capability is configured.
 type screenID int
 
 const (
-	screenHarness       screenID = iota // harness selection (entry screen 1)
-	screenMode                          // run mode selection (entry screen 2)
+	screenMode          screenID = iota // run mode selection (entry screen 1)
+	screenHarness                       // harness selection (entry screen 2)
 	screenWorkspace                     // workspace, file or directory path entry (entry screen 3)
 	screenStack                         // catalogue stack (entry screen 4)
 	screenQuestion                      // inline question overlay from the Interaction port
@@ -58,8 +59,8 @@ type Options struct {
 	ToolVersion string
 }
 
-// Run owns the terminal for the lifetime of the call. It presents the three entry screens to
-// collect harness, mode, and workspace, then calls the app service. Questions arising during
+// Run owns the terminal for the lifetime of the call. It presents the entry screens to
+// collect mode, harness, and workspace, then calls the app service. Questions arising during
 // the service call are presented through the Interaction port. Returns when the user exits.
 func Run(ctx context.Context, svc app.Service, opts Options) error {
 	if opts.Theme.Styles == nil {
@@ -90,7 +91,8 @@ func Run(ctx context.Context, svc app.Service, opts Options) error {
 // entrySelections holds the data gathered from the entry screens.
 type entrySelections struct {
 	harnessID     string
-	mode          domain.RunMode
+	targetID      string // Transform target harness
+	mode         domain.RunMode
 	workspacePath string
 }
 
@@ -164,6 +166,22 @@ type rootModel struct {
 	// presetHarness is the harness the session was launched with; the first screen of such a
 	// session is the mode screen and a restart keeps this harness.
 	presetHarness string
+
+	// lastHarness is the harness chosen most recently on the harness screen; it is highlighted
+	// when the harness screen is shown again after a restart. A declined plan clears it.
+	lastHarness string
+
+	// harnessShown records whether the harness screen was shown on the current pass of a mode
+	// that asks the path first; it is false when the harness was chosen automatically or preset,
+	// which makes Esc on the stack screen return to the path screen.
+	harnessShown bool
+
+	// lastTarget is the Transform target chosen most recently; it is highlighted when the
+	// target screen is shown again after a restart.
+	lastTarget string
+
+	// targetShown is true while the harness screen shows the Transform target.
+	targetShown bool
 }
 
 func newRootModel(ctx context.Context, svc app.Service, opts Options) *rootModel {
@@ -186,14 +204,11 @@ func newRootModel(ctx context.Context, svc app.Service, opts Options) *rootModel
 		wsScreen.SetPrefilledPath(opts.InitialRequest.WorkspacePath)
 	}
 
-	startScreen := screenHarness
+	// The mode screen is always first; a preset harness only skips the harness screen later.
+	startScreen := screenMode
 	preHarness := ""
 	if opts.InitialRequest != nil {
 		preHarness = opts.InitialRequest.HarnessID
-	}
-	if preHarness != "" {
-		// A harness was pre-selected; skip to mode selection.
-		startScreen = screenMode
 	}
 
 	return &rootModel{
@@ -303,9 +318,12 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if errors.Is(errMsg.err, app.ErrPlanNotConfirmed) && m.selections.mode != domain.ModeTransformHarness {
 			// The user declined or cancelled the plan review; restart the selection flow
 			// in the same session rather than showing the done/error state.
-			m.screen = screenHarness
+			// Nothing is pre-highlighted and the choices are cleared; a preset harness is kept.
+			m.screen = screenMode
 			m.errMsg = ""
-			m.selections = entrySelections{}
+			m.selections = entrySelections{harnessID: m.presetHarness}
+			m.lastHarness = ""
+			m.modeScreen.Highlight(domain.ModeDeployWorkspace)
 			m.stack.key = "" // the next stack screen restarts from its path's stack
 			m.activeQuestion = nil
 			m.reviewOverlay = nil
@@ -386,65 +404,6 @@ func (m *rootModel) resizeQuestionOverlays(width, height int) {
 	if m.promoteAgentOverlay != nil {
 		m.promoteAgentOverlay.Resize(width, height)
 	}
-}
-
-func (m *rootModel) updateHarness(msg tea.Msg) (tea.Model, tea.Cmd) {
-	cmd := m.harnessScreen.Update(msg)
-	if m.harnessScreen.Back() {
-		// Back from the first screen exits the TUI (nothing to go back to).
-		m.harnessScreen.Reset()
-		return m, tea.Quit
-	}
-	if m.harnessScreen.Done() {
-		m.selections.harnessID = m.harnessScreen.SelectedID()
-		m.harnessScreen.Reset()
-		m.screen = screenMode
-		return m, nil
-	}
-	return m, cmd
-}
-
-func (m *rootModel) updateMode(msg tea.Msg) (tea.Model, tea.Cmd) {
-	cmd := m.modeScreen.Update(msg)
-	if m.modeScreen.Back() {
-		// Back from mode returns to harness selection, preserving the harness choice.
-		m.modeScreen.Reset()
-		m.screen = screenHarness
-		return m, nil
-	}
-	if m.modeScreen.Done() {
-		m.selections.mode = m.modeScreen.SelectedMode()
-		m.modeScreen.Reset()
-		// Set the path kind on every mode→path transition so that back-navigation
-		// followed by a different mode selection always applies the correct kind.
-		switch m.selections.mode {
-		case domain.ModePromoteToGeneric:
-			m.wsScreen.SetPathKind(screens.PathKindAgentsFolder)
-		case domain.ModeTransformHarness:
-			m.wsScreen.SetPathKind(screens.PathKindTransformWorkspace)
-		default:
-			m.wsScreen.SetPathKind(screens.PathKindDirectory)
-		}
-		m.screen = screenWorkspace
-		// Start the text input cursor blink.
-		return m, m.wsScreen.InputInit()
-	}
-	return m, cmd
-}
-
-func (m *rootModel) updateWorkspace(msg tea.Msg) (tea.Model, tea.Cmd) {
-	cmd := m.wsScreen.Update(msg)
-	if m.wsScreen.Back() {
-		m.wsScreen.Reset()
-		m.screen = screenMode
-		return m, nil
-	}
-	if m.wsScreen.Done() {
-		m.selections.workspacePath = m.wsScreen.WorkspacePath()
-		m.wsScreen.Reset()
-		return m.afterPath()
-	}
-	return m, cmd
 }
 
 func (m *rootModel) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -824,11 +783,12 @@ func (m *rootModel) startService() tea.Cmd {
 			return promoteBatchMsg(ctx, svc, sel)
 
 		case domain.ModeTransformHarness:
-			// TargetHarnessID is left empty so QTransformTargetHarness is asked interactively.
-			// SourceHarnessID comes from the harness screen selection.
+			// SourceHarnessID and TargetHarnessID come from the source and target harness
+			// screens, so the target question is not asked during the run.
 			// Workspace is the workspace root collected by the path screen.
 			result, err := svc.TransformHarness(ctx, app.TransformHarnessRequest{
 				SourceHarnessID: sel.harnessID,
+				TargetHarnessID: sel.targetID,
 				Workspace:       sel.workspacePath,
 			})
 			if err != nil {
