@@ -87,19 +87,6 @@ func findGoModuleRoot(t *testing.T) string {
 	}
 }
 
-// findRepoRoot returns the absolute path to the MOSAIC repository root by navigating
-// up from this package's directory with a fixed offset. The package is at
-// Tools/Deployment/conformance/, which is three levels below the repository root.
-func findRepoRoot(t *testing.T) string {
-	t.Helper()
-	rel := filepath.Join("..", "..", "..")
-	abs, err := filepath.Abs(rel)
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
-	return abs
-}
-
 // frozenCatalogRoot returns the absolute path to the frozen MOSAIC-root-shaped fixture tree.
 // It snapshots Catalog/CommunicationProtocol.md and Catalog/HarnessInjections/ as of the last
 // golden regeneration. Golden-file tests must use this root instead of the live repo root so
@@ -194,40 +181,6 @@ func goldenCases(t *testing.T) []goldenCase {
 	}
 }
 
-// liveCatalogCases returns the list of test cases pointing to live catalog agent sources.
-// These are used only by the smoke test (TestLiveCatalog_Smoke_TransformSucceeds), which
-// asserts transform success without byte-comparing against a golden file.
-func liveCatalogCases(t *testing.T, repoRoot string) []goldenCase {
-	t.Helper()
-	catalogRoot := filepath.Join(repoRoot, "Catalog")
-	return []goldenCase{
-		{
-			name:       "contracts-review",
-			sourcePath: filepath.Join(catalogRoot, "Subagents", "Validation", "contracts-review.md"),
-			key:        "contracts-review",
-			kind:       domain.ArtifactAgent,
-		},
-		{
-			name:       "test-runner",
-			sourcePath: filepath.Join(catalogRoot, "Subagents", "Execution", "test-runner.md"),
-			key:        "test-runner",
-			kind:       domain.ArtifactAgent,
-		},
-		{
-			name:       "planner-tdd-soft",
-			sourcePath: filepath.Join(catalogRoot, "Subagents", "Planning", "planner-tdd-soft.md"),
-			key:        "planner-tdd-soft",
-			kind:       domain.ArtifactAgent,
-		},
-		{
-			name:       "orchestrator",
-			sourcePath: filepath.Join(catalogRoot, "Orchestrator", "orchestrator.md"),
-			key:        "orchestrator",
-			kind:       domain.ArtifactAgent,
-		},
-	}
-}
-
 // goldenCase describes one agent source file and its expected transformed output.
 type goldenCase struct {
 	name       string
@@ -244,9 +197,8 @@ var testModel = domain.ModelSelection{
 	Origin:  domain.OriginHarnessList,
 }
 
-// loadTestProtocol loads the protocol content from the repository's canonical protocol
-// source document. The protocol is loaded once per test using the real repo root so that
-// the conformance output matches what a real deploy run would produce.
+// loadTestProtocol loads the protocol content from the protocol source document under the
+// given MOSAIC-root-shaped directory (the frozen catalog fixture in this package).
 func loadTestProtocol(t *testing.T, repoRoot string) domain.ProtocolContent {
 	t.Helper()
 	loader := catalog.FileProtocolLoader{}
@@ -872,7 +824,7 @@ func TestAllThreeTiers_AreExercisedByThisSuite(t *testing.T) {
 // discoverable by registry.Discover. The harness executable is copied from binPath into
 // the harness directory. A minimal harness.yaml is written so the registry can load a
 // valid HarnessDescriptor. The OpenCode harness content files (HarnessInjections.md and
-// HarnessInjectionsOrchestrator.md) are copied from the actual repository so that the
+// HarnessInjectionsOrchestrator.md) are copied from the frozen catalog so that the
 // OpenCode subprocess can initialise when external.New starts it with MOSAIC_ROOT=root.
 // The returned root is ready for registry.Discover as MosaicRoot.
 func createRegistryExternalHarness(t *testing.T, harnessID, displayName, binPath string) string {
@@ -1057,41 +1009,31 @@ func TestRegistryExternal_OpenCode_EndToEndTransformMatchesDirect(t *testing.T) 
 }
 
 // ---------------------------------------------------------------------------
-// Live-catalog smoke test
+// Fixture-agent smoke test
 // ---------------------------------------------------------------------------
 
-// TestLiveCatalog_Smoke_TransformSucceeds verifies that real catalog agents transform
-// successfully through the OpenCode built-in module. This test replaces the genuine signal
-// the former golden-file coupling provided — that real catalog content transforms without
-// error — while asserting only structural well-formedness rather than byte-identical output.
+// TestFixtureAgents_Smoke_TransformSucceeds verifies that the committed fixture agent
+// sources transform successfully through the OpenCode built-in module, asserting only
+// structural well-formedness rather than byte-identical output.
 //
-// Editing a live agent source (bumping a version, removing an empty project extension
-// region, updating prose) leaves this test passing. The golden file tests in
-// harness/builtin/ and TestConformance_BuiltinVsExternal_OutputsMatchOpenCodeGoldenFiles
-// remain passing because they now draw from frozen fixtures rather than from this live
-// catalog, so only this test is touched by catalog edits.
-//
-// Only the transformed agents are live: the module is built from the frozen fixture content.
-// The test is deliberately t.Skip-friendly on missing paths: CI environments that do not
-// mount the live catalog (e.g. a module-only checkout) skip gracefully rather than fail.
-func TestLiveCatalog_Smoke_TransformSucceeds(t *testing.T) {
-	repoRoot := findRepoRoot(t)
-
+// Agents come from testdata/agent-fixtures and the protocol from testdata/frozen-catalog,
+// so the test never depends on the live catalog. A missing fixture fails the test.
+func TestFixtureAgents_Smoke_TransformSucceeds(t *testing.T) {
 	mod, err := opencode.New(registry.BuiltinOptions{ContentDir: frozenContentDirs(t)})
 	if err != nil {
 		t.Fatalf("opencode.New: %v", err)
 	}
 	defer mod.Close() //nolint:errcheck
 
-	protocol := loadProtocolViaDefaultStack(t, repoRoot)
+	protocol := loadTestProtocol(t, frozenCatalogRoot(t))
 
-	smokeAgents := liveCatalogCases(t, repoRoot)
+	smokeAgents := fixtureAgentCases(t)
 	for _, tc := range smokeAgents {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			src, err := os.ReadFile(tc.sourcePath)
 			if err != nil {
-				t.Skipf("live catalog agent not found at %s — skipping smoke test for this agent: %v", tc.sourcePath, err)
+				t.Fatalf("read fixture agent %s: %v", tc.sourcePath, err)
 			}
 
 			role := domain.RoleWorker
@@ -1110,7 +1052,7 @@ func TestLiveCatalog_Smoke_TransformSucceeds(t *testing.T) {
 				Protocol: protocol,
 			})
 			if err != nil {
-				t.Fatalf("transform.Apply for live catalog agent %q: %v", tc.name, err)
+				t.Fatalf("transform.Apply for fixture agent %q: %v", tc.name, err)
 			}
 
 			// Assert transform success: non-empty output with YAML frontmatter present.

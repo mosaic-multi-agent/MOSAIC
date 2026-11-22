@@ -627,17 +627,20 @@ func TestCheckWorkflowIndex_Clean_FalseWhenOrphansExist(t *testing.T) {
 	}
 }
 
-// TestCheckWorkflowIndex_RealRepo_NoUnexpectedErrors verifies that CheckWorkflowIndex runs
-// against the real MOSAIC repository without returning an error. This is a basic smoke test
-// that the function can navigate the real filesystem layout.
-func TestCheckWorkflowIndex_RealRepo_NoUnexpectedErrors(t *testing.T) {
-	cat := loadRealCatalog(t)
+// TestCheckWorkflowIndex_FixtureRoot_CleanWithoutErrors verifies that CheckWorkflowIndex runs
+// against the committed fixture MOSAIC root without returning an error and reports a clean
+// index: every workflow file on disk is indexed and every index row has a file.
+func TestCheckWorkflowIndex_FixtureRoot_CleanWithoutErrors(t *testing.T) {
+	cat := loadFixtureRootCatalog(t)
 
 	// Act
-	_, err := catalog.CheckWorkflowIndex(cat.CatalogRoot())
+	report, err := catalog.CheckWorkflowIndex(cat.CatalogRoot())
 
 	// Assert
 	if err != nil {
-		t.Fatalf("CheckWorkflowIndex against real repo returned error: %v", err)
+		t.Fatalf("CheckWorkflowIndex against the fixture root returned error: %v", err)
+	}
+	if !report.Clean() {
+		t.Errorf("CheckWorkflowIndex against the fixture root is not clean: %+v", report)
 	}
 }

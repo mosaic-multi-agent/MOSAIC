@@ -18,7 +18,7 @@ func TestReferenceModule_CustomServerAnswerIsWrittenInOpenCodeServerForm(t *test
 
 	m, err := external.New(binPath, desc, external.Options{
 		Timeout:    10 * time.Second,
-		MosaicRoot: findRepoRoot(t),
+		MosaicRoot: frozenCatalogRoot(t),
 	})
 	if err != nil {
 		t.Fatalf("external.New with reference module binary: %v", err)

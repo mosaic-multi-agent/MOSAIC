@@ -733,20 +733,6 @@ func buildReferenceModule(t *testing.T) string {
 	return outBin
 }
 
-// findRepoRoot returns the absolute path to the MOSAIC repository root by navigating
-// up from this package's directory with a fixed offset. The package is at
-// Tools/Deployment/internal/harness/external/, which is five levels below the
-// repository root.
-func findRepoRoot(t *testing.T) string {
-	t.Helper()
-	rel := filepath.Join("..", "..", "..", "..", "..")
-	abs, err := filepath.Abs(rel)
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
-	return abs
-}
-
 // findModuleRoot walks up from the test source tree to find go.mod.
 func findModuleRoot(t *testing.T) string {
 	t.Helper()
@@ -1532,7 +1518,7 @@ func TestContractTest_ExternalAdapter_PassesSharedContractSuite(t *testing.T) {
 
 	m, err := external.New(binPath, desc, external.Options{
 		Timeout:    10 * time.Second,
-		MosaicRoot: findRepoRoot(t),
+		MosaicRoot: frozenCatalogRoot(t),
 	})
 	if err != nil {
 		t.Fatalf("external.New with reference module binary: %v", err)

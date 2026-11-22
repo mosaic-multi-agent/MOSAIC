@@ -590,26 +590,20 @@ Subagent content.
 	}
 }
 
-// TestProtocolLoader_RealProtocolDocument_CanBeLoaded verifies that the actual
-// Catalog/CommunicationProtocol.md in the MOSAIC repository is loadable.
-// This confirms that the implementation handles the real document's structure correctly
-// and that the source document has not drifted out of the loader's expected format.
-func TestProtocolLoader_RealProtocolDocument_CanBeLoaded(t *testing.T) {
-	root, err := catalog.ResolveRoot(repoRoot())
-	if err != nil {
-		t.Fatalf("ResolveRoot: %v — cannot locate MOSAIC repository root for integration test", err)
-	}
-
-	content, err := catalog.FileProtocolLoader{}.LoadProtocol(catalogRootOf(root))
+// TestProtocolLoader_FixtureProtocolDocument_CanBeLoaded verifies that the read-only
+// fixture testdata/frozen-catalog/Catalog/CommunicationProtocol.md is loadable and carries
+// a version and non-empty blocks.
+func TestProtocolLoader_FixtureProtocolDocument_CanBeLoaded(t *testing.T) {
+	content, err := catalog.FileProtocolLoader{}.LoadProtocol(frozenCatalogDir(t))
 
 	if err != nil {
-		t.Fatalf("LoadProtocol(real repository root): %v; "+
-			"the real CommunicationProtocol.md must be loadable by the production loader", err)
+		t.Fatalf("LoadProtocol(frozen catalog): %v; "+
+			"the fixture CommunicationProtocol.md must be loadable by the production loader", err)
 	}
 	if content.Version == "" {
-		t.Error("ProtocolContent.Version is empty for the real protocol document; expected a non-empty version string")
+		t.Error("ProtocolContent.Version is empty for the fixture protocol document; expected a non-empty version string")
 	}
 	if len(content.Blocks) == 0 {
-		t.Error("ProtocolContent.Blocks is empty for the real protocol document; expected both role blocks")
+		t.Error("ProtocolContent.Blocks is empty for the fixture protocol document; expected both role blocks")
 	}
 }

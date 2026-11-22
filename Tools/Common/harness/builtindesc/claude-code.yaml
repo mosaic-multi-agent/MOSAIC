@@ -120,7 +120,6 @@ tools:
     - "Grep"
     - "Task"
     - "TaskStop"
-    - "AskUserQuestion"
 
 paths:
   agents:

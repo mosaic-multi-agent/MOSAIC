@@ -1,10 +1,9 @@
 package conformance_test
 
-// migration_sweep_test.go verifies that the four-batch Generic agent migration (Stages 8-11)
-// produced a consistent result across the whole Agents/Generic/ tree, with no file left behind
-// and no batch having applied the naming rules differently from the others.
+// migration_sweep_test.go verifies that the committed agent source fixtures follow the
+// current region naming rules consistently, with no file left in a pre-migration shape.
 //
-// Invariants swept for every .md file under Agents/Generic/:
+// Invariants swept for every .md file in testdata/agent-fixtures/:
 //
 //   (1) No tool-managed name under type="project".
 //       Tool-managed names (all nine CanonicalDeployed names) are owned by the deployment
@@ -36,10 +35,8 @@ package conformance_test
 
 import (
 	"bytes"
-	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -88,86 +85,22 @@ var deprecatedInjectionNames = []string{
 }
 
 // ---------------------------------------------------------------------------
-// Corpus helper
-// ---------------------------------------------------------------------------
-
-// genericAgentPaths returns all .md file paths under the target catalog layout directories
-// (Catalog/Orchestrator/, Catalog/Subagents/, Catalog/UtilityAgents/), excluding README and
-// documentation files. The test is skipped if none of the target directories are found so
-// the suite remains runnable in isolated checkouts that contain only Tools/.
-func genericAgentPaths(t *testing.T) []string {
-	t.Helper()
-	repoRoot := findRepoRoot(t)
-	catalogRoot := filepath.Join(repoRoot, "Catalog")
-
-	// Target layout directories containing agent source files.
-	targetDirs := []string{
-		filepath.Join(catalogRoot, "Orchestrator"),
-		filepath.Join(catalogRoot, "Subagents"),
-		filepath.Join(catalogRoot, "UtilityAgents"),
-	}
-
-	isNotAgentFile := func(name string) bool {
-		return strings.EqualFold(name, "readme.md") ||
-			strings.EqualFold(name, "source-format.md") ||
-			strings.EqualFold(name, "sourcefilesformat.md") ||
-			strings.EqualFold(name, "deployedsections.md")
-	}
-
-	var paths []string
-	foundAny := false
-	for _, dir := range targetDirs {
-		if _, err := os.Stat(dir); err != nil {
-			continue // directory absent — skip silently
-		}
-		foundAny = true
-		err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if d.IsDir() {
-				return nil
-			}
-			if !strings.HasSuffix(p, ".md") {
-				return nil
-			}
-			if isNotAgentFile(filepath.Base(p)) {
-				return nil
-			}
-			paths = append(paths, p)
-			return nil
-		})
-		if err != nil {
-			t.Fatalf("walk %s: %v", dir, err)
-		}
-	}
-
-	if !foundAny {
-		t.Skipf("target catalog directories not found under %s", catalogRoot)
-	}
-	if len(paths) == 0 {
-		t.Skip("no .md files found under target catalog directories")
-	}
-	return paths
-}
-
-// ---------------------------------------------------------------------------
 // (1) No tool-managed name under type="project"
 // ---------------------------------------------------------------------------
 
 // TestMigrationSweep_NoToolManagedNameUnderInjection verifies that none of the tool-managed
-// region names appear as type="project" in any Agents/Generic/ file. Before migration,
+// region names appear as type="project" in any agent source fixture. Before migration,
 // HarnessConstraints, LanguagePatterns, and others were declared as project-type regions
-// in generic agents; they must now all be type="managed".
+// in agent sources; they must now all be type="managed".
 func TestMigrationSweep_NoToolManagedNameUnderInjection(t *testing.T) {
-	paths := genericAgentPaths(t)
+	paths := fixtureAgentSourcePaths(t)
 	for _, p := range paths {
 		data, err := os.ReadFile(p)
 		if err != nil {
 			t.Errorf("read %s: %v", p, err)
 			continue
 		}
-		rel := relPath(t, findRepoRoot(t), p)
+		rel := relPath(t, agentFixturesDir(t), p)
 		for _, name := range toolManagedNames {
 			forbidden := []byte("<" + name + " type=\"project\">")
 			if bytes.Contains(data, forbidden) {
@@ -184,18 +117,18 @@ func TestMigrationSweep_NoToolManagedNameUnderInjection(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestMigrationSweep_NoUserOwnedNameUnderDeployed verifies that none of the user-owned region
-// names appear as type="managed" in any Agents/Generic/ file. User-owned names are project
+// names appear as type="managed" in any agent source fixture. User-owned names are project
 // customisation points that must be declared as type="project" so the update path preserves
 // them byte-identically.
 func TestMigrationSweep_NoUserOwnedNameUnderDeployed(t *testing.T) {
-	paths := genericAgentPaths(t)
+	paths := fixtureAgentSourcePaths(t)
 	for _, p := range paths {
 		data, err := os.ReadFile(p)
 		if err != nil {
 			t.Errorf("read %s: %v", p, err)
 			continue
 		}
-		rel := relPath(t, findRepoRoot(t), p)
+		rel := relPath(t, agentFixturesDir(t), p)
 		for _, name := range userOwnedNames {
 			forbidden := []byte("<" + name + " type=\"managed\">")
 			if bytes.Contains(data, forbidden) {
@@ -209,16 +142,16 @@ func TestMigrationSweep_NoUserOwnedNameUnderDeployed(t *testing.T) {
 
 // TestMigrationSweep_NoDeprecatedNameUnderDeployed verifies that deprecated injection names
 // (those migrating out of files entirely) never appear as type="managed" in any
-// Agents/Generic/ file. These names have no tool generator and must not be tool-managed.
+// the agent source fixtures file. These names have no tool generator and must not be tool-managed.
 func TestMigrationSweep_NoDeprecatedNameUnderDeployed(t *testing.T) {
-	paths := genericAgentPaths(t)
+	paths := fixtureAgentSourcePaths(t)
 	for _, p := range paths {
 		data, err := os.ReadFile(p)
 		if err != nil {
 			t.Errorf("read %s: %v", p, err)
 			continue
 		}
-		rel := relPath(t, findRepoRoot(t), p)
+		rel := relPath(t, agentFixturesDir(t), p)
 		for _, name := range deprecatedInjectionNames {
 			forbidden := []byte("<" + name + " type=\"managed\">")
 			if bytes.Contains(data, forbidden) {
@@ -234,20 +167,20 @@ func TestMigrationSweep_NoDeprecatedNameUnderDeployed(t *testing.T) {
 // (3) No <ProtocolExtension type="project">
 // ---------------------------------------------------------------------------
 
-// TestMigrationSweep_NoProtocolExtension verifies that no Agents/Generic/ file declares
+// TestMigrationSweep_NoProtocolExtension verifies that no agent source fixture declares
 // <ProtocolExtension type="project">. ProtocolExtension is removed from the advisory
 // InjectionParent map in Stage 2; projects use <ProtocolExtension type="custom"> instead.
 // The assertion is retained as a safety net: no current agent file should declare this
 // injection.
 func TestMigrationSweep_NoProtocolExtension(t *testing.T) {
-	paths := genericAgentPaths(t)
+	paths := fixtureAgentSourcePaths(t)
 	for _, p := range paths {
 		data, err := os.ReadFile(p)
 		if err != nil {
 			t.Errorf("read %s: %v", p, err)
 			continue
 		}
-		rel := relPath(t, findRepoRoot(t), p)
+		rel := relPath(t, agentFixturesDir(t), p)
 		if bytes.Contains(data, []byte("<ProtocolExtension type=\"project\">")) {
 			t.Errorf("%s: <ProtocolExtension type=\"project\"> found; "+
 				"no agent file should declare this injection before explicit stage authorisation",
@@ -261,18 +194,18 @@ func TestMigrationSweep_NoProtocolExtension(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestMigrationSweep_NoLegacyProtocolSection verifies that the old <CommunicationProtocol type="core">
-// open tag does not appear in any Agents/Generic/ file. Before migration, agents hardcoded protocol
+// open tag does not appear in any agent source fixture. Before migration, agents hardcoded protocol
 // prose inside a named section; after migration the section is replaced by the empty
 // <CommunicationProtocol type="managed"> boundary.
 func TestMigrationSweep_NoLegacyProtocolSection(t *testing.T) {
-	paths := genericAgentPaths(t)
+	paths := fixtureAgentSourcePaths(t)
 	for _, p := range paths {
 		data, err := os.ReadFile(p)
 		if err != nil {
 			t.Errorf("read %s: %v", p, err)
 			continue
 		}
-		rel := relPath(t, findRepoRoot(t), p)
+		rel := relPath(t, agentFixturesDir(t), p)
 		if bytes.Contains(data, []byte("<CommunicationProtocol type=\"core\">")) {
 			t.Errorf("%s: legacy <CommunicationProtocol type=\"core\"> found; "+
 				"pre-migration protocol sections must be replaced by the empty "+
@@ -296,14 +229,14 @@ func TestMigrationSweep_ProtocolBoundaryIsEmptyInSources(t *testing.T) {
 	const openTag = "<CommunicationProtocol type=\"managed\">"
 	const closeTag = "</CommunicationProtocol>"
 
-	paths := genericAgentPaths(t)
+	paths := fixtureAgentSourcePaths(t)
 	for _, p := range paths {
 		data, err := os.ReadFile(p)
 		if err != nil {
 			t.Errorf("read %s: %v", p, err)
 			continue
 		}
-		rel := relPath(t, findRepoRoot(t), p)
+		rel := relPath(t, agentFixturesDir(t), p)
 
 		openIdx := bytes.Index(data, []byte(openTag))
 		if openIdx < 0 {

@@ -12,7 +12,7 @@ import (
 )
 
 var claudeExpansion = []string{
-	"Read", "Write", "Edit", "Bash", "Glob", "Grep", "Task", "TaskStop", "AskUserQuestion",
+	"Read", "Write", "Edit", "Bash", "Glob", "Grep", "Task", "TaskStop",
 }
 
 // concat returns a new slice holding the given slices in order.
@@ -97,7 +97,7 @@ func TestConvertDeployedTools_MainOrchestratorVSCodeExpansionNamesWithoutMapping
 }
 
 func TestConvertDeployedTools_MainOrchestratorWithTrimmedExpansionIsConvertedToolByTool(t *testing.T) {
-	trimmed := []string{"Read", "Write", "Edit", "Bash", "Glob", "Grep", "Task", "AskUserQuestion"} // no TaskStop
+	trimmed := []string{"Read", "Write", "Edit", "Bash", "Glob", "Grep", "Task"} // no TaskStop
 
 	got := convertTools(t, harnessClaude, harnessOpen, trimmed,
 		withRole(domain.RoleOrchestrator), withPlaceholderAgent())
@@ -107,7 +107,7 @@ func TestConvertDeployedTools_MainOrchestratorWithTrimmedExpansionIsConvertedToo
 	}
 	assertStrings(t, "Generic", []string{
 		"file_read", "file_write", "file_edit", "terminal", "file_search", "content_search",
-		"subagent", "user_interaction",
+		"subagent",
 	}, got.Generic)
 	assertRule(t, got, "Read", app.ToolRuleMapped)
 }
@@ -121,7 +121,7 @@ func TestConvertDeployedTools_FullExpansionWithoutPlaceholderAgentIsConvertedToo
 	}
 	assertStrings(t, "Generic", []string{
 		"file_read", "file_write", "file_edit", "terminal", "file_search", "content_search",
-		"subagent", "user_interaction",
+		"subagent",
 	}, got.Generic)
 }
 

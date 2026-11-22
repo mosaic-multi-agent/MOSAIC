@@ -16,15 +16,26 @@ func TestConvertDeployedTools_ClaudeCodeSourceMappedToGenerics(t *testing.T) {
 		[]string{"Read", "Edit", "Bash", "Glob", "Grep", "AskUserQuestion", "Task"})
 
 	assertStrings(t, "Generic", withSkill(
-		"file_read", "file_edit", "terminal", "file_search", "content_search", "user_interaction", "subagent",
+		"file_read", "file_edit", "terminal", "file_search", "content_search", "subagent",
 	), got.Generic)
 	assertStrings(t, "TargetTools", nil, got.TargetTools)
-	assertStrings(t, "Dropped", nil, droppedNames(got))
+	assertStrings(t, "Dropped", []string{"AskUserQuestion"}, droppedNames(got))
 	assertStrings(t, "Unmapped", nil, got.Unmapped)
 	assertRule(t, got, "Read", app.ToolRuleMapped)
 	if cv := findConversion(t, got, "Edit"); len(cv.Generic) != 1 || cv.Generic[0] != "file_edit" {
 		t.Errorf("Edit conversion generics: want [file_edit], got %v", cv.Generic)
 	}
+}
+
+func TestConvertDeployedTools_ClaudeCodeAskUserQuestionIsKeptForClaudeTargetOnly(t *testing.T) {
+	kept := convertTools(t, harnessClaude, harnessClaude, []string{"Read", "AskUserQuestion"})
+	assertRule(t, kept, "AskUserQuestion", app.ToolRuleKept)
+	assertStrings(t, "Dropped on Claude Code target", nil, droppedNames(kept))
+	assertStrings(t, "TargetTools on Claude Code target", []string{"AskUserQuestion"}, kept.TargetTools)
+
+	dropped := convertTools(t, harnessClaude, harnessOpen, []string{"Read", "AskUserQuestion"})
+	assertStrings(t, "Dropped on other target", []string{"AskUserQuestion"}, droppedNames(dropped))
+	assertStrings(t, "Generic on other target", withSkill("file_read"), dropped.Generic)
 }
 
 func TestConvertDeployedTools_OpenCodePermissionSourceMappedToGenerics(t *testing.T) {

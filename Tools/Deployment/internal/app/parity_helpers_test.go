@@ -53,6 +53,12 @@ func parityServiceWith(t *testing.T, opts ...func(*app.Deps)) app.Service {
 	if err != nil {
 		t.Fatalf("resolve parity catalog root: %v", err)
 	}
+	return parityServiceAt(t, root, opts...)
+}
+
+// parityServiceAt is parityServiceWith over the catalog rooted at root.
+func parityServiceAt(t *testing.T, root string, opts ...func(*app.Deps)) app.Service {
+	t.Helper()
 	cat, err := catalog.Load(t.TempDir(), root)
 	if err != nil {
 		t.Fatalf("load parity catalog: %v", err)
@@ -83,6 +89,12 @@ func parityServiceWith(t *testing.T, opts ...func(*app.Deps)) app.Service {
 // the workspace root.
 func parityDeploy(t *testing.T, harnessID string) string {
 	t.Helper()
+	return parityDeployUsing(t, parityService(t), harnessID)
+}
+
+// parityDeployUsing is parityDeploy through the given service.
+func parityDeployUsing(t *testing.T, svc app.Service, harnessID string) string {
+	t.Helper()
 	ws := t.TempDir()
 	models := map[string]string{}
 	for _, a := range parityAgents {
@@ -97,7 +109,7 @@ func parityDeploy(t *testing.T, harnessID string) string {
 		AgentModels:     models,
 		AutoConfirmPlan: true,
 	}
-	if _, err := parityService(t).DeployNew(context.Background(), req); err != nil {
+	if _, err := svc.DeployNew(context.Background(), req); err != nil {
 		t.Fatalf("deploy to %s: %v", harnessID, err)
 	}
 	return ws

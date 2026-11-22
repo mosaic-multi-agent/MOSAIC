@@ -3,8 +3,8 @@ package docformat_test
 // Tests for byte-exact round-trip fidelity (T3.3).
 //
 // Parse then Bytes must reproduce the original bytes exactly for every .md file in the
-// repository. This test walks the entire repository tree so no file with frontmatter can be
-// missed by a hand-curated sample list.
+// fixed corpus under testdata/roundtrip-corpus. The corpus is committed with the tests, so the
+// result does not depend on which files exist elsewhere in the working tree.
 //
 // Individual named subtests make failures easy to identify by file path.
 
@@ -19,26 +19,19 @@ import (
 	"mosaic-common/docformat"
 )
 
-// repoRoot returns the MOSAIC repository root relative to this package's working directory.
-// Tests run with the working directory set to the package directory (Common/docformat).
-func repoRoot() string {
-	return filepath.Join("..", "..", "..")
+// roundTripCorpusRoot returns the fixed corpus directory walked by the corpus round-trip
+// tests, relative to this package's working directory (Common/docformat).
+func roundTripCorpusRoot() string {
+	return filepath.Join("..", "testdata", "roundtrip-corpus")
 }
 
-func TestRoundTrip_AllRepositoryMarkdownFiles(t *testing.T) {
-	root := repoRoot()
+func TestRoundTrip_CorpusMarkdownFiles(t *testing.T) {
+	root := roundTripCorpusRoot()
 
 	var mdFiles []string
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
-		}
-		// Skip directories that will never contain MOSAIC-format files.
-		if d.IsDir() {
-			switch d.Name() {
-			case ".git", "node_modules", "vendor", "testdata":
-				return filepath.SkipDir
-			}
 		}
 		if !d.IsDir() && strings.EqualFold(filepath.Ext(path), ".md") {
 			// Skip intentionally malformed fixture files. These files are required to
@@ -52,10 +45,10 @@ func TestRoundTrip_AllRepositoryMarkdownFiles(t *testing.T) {
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("failed to walk repository at %s: %v", root, err)
+		t.Fatalf("failed to walk corpus at %s: %v", root, err)
 	}
 	if len(mdFiles) == 0 {
-		t.Fatalf("no .md files found under %s — check the relative path from the test package", root)
+		t.Fatalf("no .md files found under %s — check the corpus path relative to the test package", root)
 	}
 
 	// Track how many files have frontmatter to make sure we're actually exercising the parser.

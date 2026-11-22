@@ -12,7 +12,7 @@ package claudecode_test
 //
 // These tests simulate the effect of the registry ToolMappings hook (I4.1/I4.2) by
 // directly mutating the module descriptor's Mappings slice to add a DestField destination
-// alongside the existing DestMain destination for user_interaction. This is the only
+// alongside the existing DestMain destination for file_read. This is the only
 // permitted mutation of a module descriptor after construction (per the design contract),
 // matching exactly what Discover does when it installs the hook's return value.
 //
@@ -57,12 +57,12 @@ func TestClaudeCode_Tools_DestFieldNotConvertedToScalar(t *testing.T) {
 	}
 	desc := mod.Descriptor()
 
-	// Simulate the registry ToolMappings hook: overlay the user_interaction mapping with
+	// Simulate the registry ToolMappings hook: overlay the file_read mapping with
 	// an additional DestField destination routing user-feedback to mcp_servers.
 	// This replaces the mapping's destination set with the merged effective set.
 	overlaid := false
 	for i, m := range desc.Tools.Mappings {
-		if m.Generic == "user_interaction" {
+		if m.Generic == "file_read" {
 			desc.Tools.Mappings[i].Destinations = append(
 				desc.Tools.Mappings[i].Destinations,
 				domain.ToolDestination{
@@ -77,12 +77,12 @@ func TestClaudeCode_Tools_DestFieldNotConvertedToScalar(t *testing.T) {
 		}
 	}
 	if !overlaid {
-		t.Fatal("user_interaction mapping not found in claude-code descriptor; test setup failed")
+		t.Fatal("file_read mapping not found in claude-code descriptor; test setup failed")
 	}
 
 	result, err := mod.Tools(domain.ToolRequest{
 		AgentKey: "test-agent",
-		Generic:  []string{"user_interaction"},
+		Generic:  []string{"file_read"},
 	})
 	if err != nil {
 		t.Fatalf("mod.Tools: %v", err)
@@ -111,7 +111,7 @@ func TestClaudeCode_Tools_DestFieldNotConvertedToScalar(t *testing.T) {
 			toolsKey, toolsField.Value.Kind)
 	}
 	if toolsField.Value.Scalar == "" {
-		t.Error("main tools field scalar value is empty; AskUserQuestion must appear in the scalar")
+		t.Error("main tools field scalar value is empty; Read must appear in the scalar")
 	}
 
 	if mcpField == nil {
@@ -149,9 +149,9 @@ func TestClaudeCode_Tools_MainToolsFieldConvertedToScalarWithDestField(t *testin
 	}
 	desc := mod.Descriptor()
 
-	// Overlay user_interaction with a DestField destination.
+	// Overlay file_read with a DestField destination.
 	for i, m := range desc.Tools.Mappings {
-		if m.Generic == "user_interaction" {
+		if m.Generic == "file_read" {
 			desc.Tools.Mappings[i].Destinations = append(
 				desc.Tools.Mappings[i].Destinations,
 				domain.ToolDestination{
@@ -167,7 +167,7 @@ func TestClaudeCode_Tools_MainToolsFieldConvertedToScalarWithDestField(t *testin
 
 	result, err := mod.Tools(domain.ToolRequest{
 		AgentKey: "test-agent",
-		Generic:  []string{"user_interaction"},
+		Generic:  []string{"file_read"},
 	})
 	if err != nil {
 		t.Fatalf("mod.Tools: %v", err)

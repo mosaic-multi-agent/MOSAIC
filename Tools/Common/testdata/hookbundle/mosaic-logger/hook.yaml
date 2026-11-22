@@ -1,0 +1,87 @@
+schema_version: "1"
+id: mosaic-logger
+version: 1.0.0
+description: >-
+  Reduced copy of the mosaic-logger bundle manifest. It keeps the manifest shape
+  the hookbundle tests assert on: four supported variants, an empty opencode
+  registration, and a claude-code registration fragment with authored JSON.
+variants:
+  claude-code:
+    supported: true
+    files:
+      - source: mosaic_logger.py
+        target: mosaic_logger.py
+    registration:
+      - id: register-mosaic-logger
+        target_path: .claude/settings.json
+        performable: true
+        instruction: >-
+          Check that the "hooks" section of .claude/settings.json has every
+          entry below. Add any that are missing and keep your other settings.
+        fragment: |
+          {
+            "hooks": {
+              "SessionStart": [
+                {
+                  "hooks": [
+                    {
+                      "type": "command",
+                      "command": "python3",
+                      "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/mosaic_logger.py"],
+                      "async": true,
+                      "timeout": 30
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+
+  opencode:
+    supported: true
+    files:
+      - source: plugin.ts
+        target: mosaic-logger.ts
+    registration: []
+
+  vscode-ghcp:
+    supported: true
+    files:
+      - source: mosaic_logger.py
+        target: mosaic_logger.py
+    registration:
+      - id: register-mosaic-logger
+        target_path: .github/hooks/mosaic-logger.json
+        performable: true
+        instruction: >-
+          Replace the contents of .github/hooks/mosaic-logger.json with the JSON below.
+        fragment: |
+          {
+            "hooks": {
+              "SessionStart": [ { "type": "command", "command": "python3 mosaic_logger.py", "cwd": ".github/hooks" } ]
+            }
+          }
+
+  ghcp-cli:
+    supported: true
+    files:
+      - source: mosaic_logger.py
+        target: mosaic_logger.py
+    registration:
+      - id: register-mosaic-logger
+        target_path: .github/hooks/mosaic-logger.json
+        performable: true
+        instruction: >-
+          Replace the contents of .github/hooks/mosaic-logger.json with the JSON below.
+        fragment: |
+          {
+            "hooks": {
+              "sessionStart": [
+                {
+                  "type": "command",
+                  "bash": "python3 mosaic_logger.py sessionStart",
+                  "cwd": ".github/hooks"
+                }
+              ]
+            }
+          }

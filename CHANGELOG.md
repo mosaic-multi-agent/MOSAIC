@@ -57,6 +57,8 @@
 - **Promote keeps project regions.** Every project region of the source is in the generic with its tags, at any depth including inside managed regions, with its content kept byte-identical by default. The TUI batch promote asks once per batch whether to keep or empty it (Keep pre-selected; asked only when a selected agent has project content); the CLI `promote` has a new `--empty-project-regions` flag and never asks
 - Promote removes custom regions at any depth and reports them by name per agent in the CLI output (human and JSON `removedCustomRegions`) and the TUI summaries
 - Deploy and render accept a source whose managed region contains a project region with content; that content is the deploy-once default, and already deployed content wins on update
+- The Deploy tool and shared Common module test suites no longer read the live catalog or walk the whole repository; they run on their own fixtures, so catalog edits can no longer break or silently skip them
+- **Claude Code deployments no longer grant `AskUserQuestion`.** Subagents do not receive it for the generic user-interaction tool, which is now reported as unmapped for Claude Code. The main orchestrator's tools line no longer includes it. An `AskUserQuestion` you add by hand to a deployed Claude Code agent survives Claude Code rebuilds, and is dropped when the agent is promoted back to generic
 #### Bugfixes
 - Promote no longer empties project regions nested inside managed regions
 - Notices and progress lines of CLI runs go to stderr, so `--output json` stdout is exactly one JSON document (for example the Codex promote warning that tools are not recorded no longer precedes the JSON)

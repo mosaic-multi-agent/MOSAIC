@@ -26,8 +26,8 @@ package catalog_test
 //     - Every error names BundleSourceRelPath
 //     - No partial content is returned on error (zero-value BundleContent)
 //
-//   Real bundle document:
-//     - The real Catalog/DeployedSections.md can be loaded successfully.
+//   Fixture bundle document:
+//     - The committed fixture DeployedSections.md can be loaded successfully.
 
 import (
 	"bytes"
@@ -604,41 +604,30 @@ No matching section in the body.
 }
 
 // ---------------------------------------------------------------------------
-// T6.1 — Integration: real bundle document
+// T6.1 — Integration: fixture bundle document
 // ---------------------------------------------------------------------------
 
-// TestBundleLoader_RealBundleDocument_CanBeLoaded verifies that the actual
-// Catalog/DeployedSections.md in the MOSAIC repository is loadable. This confirms
-// that the real document has not drifted out of the loader's expected format.
-func TestBundleLoader_RealBundleDocument_CanBeLoaded(t *testing.T) {
-	root, err := catalog.ResolveRoot(repoRoot())
-	if err != nil {
-		t.Fatalf("ResolveRoot: %v — cannot locate MOSAIC repository root", err)
-	}
-
-	content, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
+// TestBundleLoader_FixtureBundleDocument_CanBeLoaded verifies that the committed fixture
+// bundle document (testdata/catalog/document-root) is loadable and carries a version.
+func TestBundleLoader_FixtureBundleDocument_CanBeLoaded(t *testing.T) {
+	content, err := catalog.FileBundleLoader{}.LoadBundle(documentFixtureCatalogDir(t))
 
 	if err != nil {
-		t.Fatalf("LoadBundle(real repository root): %v; "+
-			"the real DeployedSections.md must be loadable by the production loader", err)
+		t.Fatalf("LoadBundle(fixture catalog): %v; "+
+			"the fixture DeployedSections.md must be loadable by the production loader", err)
 	}
 	if content.Version == "" {
-		t.Error("BundleContent.Version is empty for the real bundle document; expected a non-empty version string")
+		t.Error("BundleContent.Version is empty for the fixture bundle document; expected a non-empty version string")
 	}
 	if len(content.Blocks) == 0 {
-		t.Error("BundleContent.Blocks is empty for the real bundle document; expected all four blocks")
+		t.Error("BundleContent.Blocks is empty for the fixture bundle document; expected all four blocks")
 	}
 }
 
-// TestBundleLoader_RealBundleDocument_CarriesAllFourBlocks verifies that the real bundle
+// TestBundleLoader_FixtureBundleDocument_CarriesAllFourBlocks verifies that the fixture bundle
 // document contains all four canonical target names.
-func TestBundleLoader_RealBundleDocument_CarriesAllFourBlocks(t *testing.T) {
-	root, err := catalog.ResolveRoot(repoRoot())
-	if err != nil {
-		t.Fatalf("ResolveRoot: %v", err)
-	}
-
-	content, err := catalog.FileBundleLoader{}.LoadBundle(catalogRootOf(root))
+func TestBundleLoader_FixtureBundleDocument_CarriesAllFourBlocks(t *testing.T) {
+	content, err := catalog.FileBundleLoader{}.LoadBundle(documentFixtureCatalogDir(t))
 	if err != nil {
 		t.Fatalf("LoadBundle: %v", err)
 	}
@@ -655,7 +644,7 @@ func TestBundleLoader_RealBundleDocument_CarriesAllFourBlocks(t *testing.T) {
 	}
 	for _, target := range wantTargets {
 		if !targetSet[target] {
-			t.Errorf("real bundle document is missing a block with Target %q; all four canonical blocks must be present",
+			t.Errorf("fixture bundle document is missing a block with Target %q; all four canonical blocks must be present",
 				target)
 		}
 	}

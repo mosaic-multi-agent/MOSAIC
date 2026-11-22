@@ -27,12 +27,12 @@ package catalog_test
 // no-normalisation property is proven without depending on which tier strings the live
 // repository happens to use today. TestTiers_AllAgentTiersDeclared_InTiersList and
 // TestTiers_Count_MatchesDistinctTierValuesInSource below independently cover the same
-// terrain against the real repository without naming tier strings, for defence in depth.
+// terrain against the fixture root without naming tier strings, for defence in depth.
 // TestTiers_HighTier_HasRationale and TestTiers_MediumTier_HasRationale similarly name
-// "HIGH" and "MEDIUM" against loadRealCatalog only to pick a representative entry to check
-// for non-empty Rationale; TestTiers_AllHaveRationale above already asserts the same
-// property over every tier, so these two are disclosed as redundant, low-risk content
-// coupling rather than rewritten (see review follow-up).
+// "HIGH" and "MEDIUM" against the fixture root only to pick a representative entry to check
+// for non-empty Rationale; the fixture declares both tiers, so neither test skips.
+// TestTiers_AllHaveRationale above already asserts the same property over every tier, so
+// these two are disclosed as redundant, low-risk content coupling rather than rewritten.
 
 import (
 	"path/filepath"
@@ -65,10 +65,10 @@ func writeAgentWithTier(t *testing.T, root, category, name, tier, rationale stri
 // Basic invariants
 // ---------------------------------------------------------------------------
 
-// TestTiers_NonEmpty verifies that Tiers() returns at least one tier. The repository
+// TestTiers_NonEmpty verifies that Tiers() returns at least one tier. The fixture
 // has agents that declare tier values so this must never be empty.
 func TestTiers_NonEmpty(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	tiers := cat.Tiers()
 	if len(tiers) == 0 {
 		t.Fatal("Tiers() returned an empty list; expected at least one tier from agent frontmatter")
@@ -78,7 +78,7 @@ func TestTiers_NonEmpty(t *testing.T) {
 // TestTiers_AllHaveNonEmptyTierString verifies that every TierInfo has a non-empty Tier
 // string. A zero-value Tier in the result is a data integrity error.
 func TestTiers_AllHaveNonEmptyTierString(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for i, ti := range cat.Tiers() {
 		if ti.Tier == "" {
 			t.Errorf("Tiers()[%d].Tier is empty; all entries must have non-empty tier strings", i)
@@ -89,7 +89,7 @@ func TestTiers_AllHaveNonEmptyTierString(t *testing.T) {
 // TestTiers_AllHaveRationale verifies that every TierInfo has non-empty Rationale text.
 // The rationale is displayed to the user during model selection to explain the tier choice.
 func TestTiers_AllHaveRationale(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, ti := range cat.Tiers() {
 		if ti.Rationale == "" {
 			t.Errorf("Tiers() entry for tier %q has empty Rationale; expected explanatory text", ti.Tier)
@@ -100,7 +100,7 @@ func TestTiers_AllHaveRationale(t *testing.T) {
 // TestTiers_AllHaveAgentKeys verifies that every TierInfo has at least one agent key.
 // A tier that no agent references should not appear in the result.
 func TestTiers_AllHaveAgentKeys(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, ti := range cat.Tiers() {
 		if len(ti.AgentKeys) == 0 {
 			t.Errorf("Tiers() entry for tier %q has no AgentKeys; every tier must have at least one declaring agent", ti.Tier)
@@ -111,7 +111,7 @@ func TestTiers_AllHaveAgentKeys(t *testing.T) {
 // TestTiers_NoDuplicateTierStrings verifies that no two TierInfo entries share the same
 // Tier string. Each distinct tier value must appear exactly once.
 func TestTiers_NoDuplicateTierStrings(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	seen := make(map[string]bool)
 	for _, ti := range cat.Tiers() {
 		if seen[string(ti.Tier)] {
@@ -192,7 +192,7 @@ func TestTiers_MixedCaseTier_NotCaseFolded(t *testing.T) {
 // TestTiers_HighTier_HasRationale verifies that the HIGH tier has rationale text
 // carried from at least one of the agents declaring it.
 func TestTiers_HighTier_HasRationale(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, ti := range cat.Tiers() {
 		if string(ti.Tier) == "HIGH" {
 			if ti.Rationale == "" {
@@ -201,12 +201,12 @@ func TestTiers_HighTier_HasRationale(t *testing.T) {
 			return
 		}
 	}
-	t.Skip("HIGH tier not found in Tiers() (unexpected; skipping rationale check)")
+	t.Fatal("HIGH tier not found in Tiers(); the fixture declares it, so the catalog dropped it")
 }
 
 // TestTiers_MediumTier_HasRationale verifies that the MEDIUM tier has rationale text.
 func TestTiers_MediumTier_HasRationale(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, ti := range cat.Tiers() {
 		if string(ti.Tier) == "MEDIUM" {
 			if ti.Rationale == "" {
@@ -215,7 +215,7 @@ func TestTiers_MediumTier_HasRationale(t *testing.T) {
 			return
 		}
 	}
-	t.Skip("MEDIUM tier not found in Tiers() (unexpected; skipping rationale check)")
+	t.Fatal("MEDIUM tier not found in Tiers(); the fixture declares it, so the catalog dropped it")
 }
 
 // ---------------------------------------------------------------------------
@@ -225,7 +225,7 @@ func TestTiers_MediumTier_HasRationale(t *testing.T) {
 // TestTiers_AgentKeys_AreSorted verifies that the AgentKeys list in each TierInfo is
 // sorted in ascending order. Sorted keys produce stable output.
 func TestTiers_AgentKeys_AreSorted(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, ti := range cat.Tiers() {
 		for i := 1; i < len(ti.AgentKeys); i++ {
 			if ti.AgentKeys[i] < ti.AgentKeys[i-1] {
@@ -239,7 +239,7 @@ func TestTiers_AgentKeys_AreSorted(t *testing.T) {
 // TestTiers_AgentKeys_AreKnownAgents verifies that every key in TierInfo.AgentKeys refers
 // to an agent present in the catalog. An unknown key is a data integrity error.
 func TestTiers_AgentKeys_AreKnownAgents(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, ti := range cat.Tiers() {
 		for _, key := range ti.AgentKeys {
 			if _, ok := cat.Agent(key); !ok {
@@ -252,10 +252,10 @@ func TestTiers_AgentKeys_AreKnownAgents(t *testing.T) {
 // TestTiers_OrchestratorDeclaredTier_Included verifies that the orchestrator's tier is
 // present in Tiers(). The orchestrator declares a recommended_tier and must be counted.
 func TestTiers_OrchestratorDeclaredTier_Included(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	orc := cat.Orchestrator()
 	if orc.RecommendedTier == "" {
-		t.Skip("Orchestrator has no RecommendedTier; skipping tier inclusion check")
+		t.Fatal("Orchestrator has no RecommendedTier; the fixture orchestrator declares one")
 	}
 
 	for _, ti := range cat.Tiers() {
@@ -270,7 +270,7 @@ func TestTiers_OrchestratorDeclaredTier_Included(t *testing.T) {
 // declares a recommended_tier, the tier string appears in Tiers(). This ensures the
 // catalog collects tiers from the complete agent set.
 func TestTiers_AllAgentTiersDeclared_InTiersList(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	tierMap := make(map[string]bool)
 	for _, ti := range cat.Tiers() {
 		tierMap[string(ti.Tier)] = true
@@ -291,7 +291,7 @@ func TestTiers_AllAgentTiersDeclared_InTiersList(t *testing.T) {
 // entries equals the count of distinct tier strings in source. The catalog must not
 // omit any tier and must not create entries for tiers no agent references.
 func TestTiers_Count_MatchesDistinctTierValuesInSource(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 
 	// Collect distinct tiers from agents directly.
 	distinctTiers := make(map[string]bool)
