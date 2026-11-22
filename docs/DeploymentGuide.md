@@ -73,6 +73,33 @@ Both GHCP targets write agents as `.github/agents/X.agent.md`, with content spec
 
 ---
 
+## Quick Reference
+
+| I want to... | Do this |
+|--------------|---------|
+| Deploy MOSAIC to a new project | `mosaic-deploy deploy --harness claude-code --workspace /path` |
+| Update agents to latest versions | `mosaic-deploy update --harness claude-code --workspace /path` |
+| Add or swap workflows in an existing workspace | `mosaic-deploy workflows --harness claude-code --workspace /path` |
+| Add specific agents (declarations added to an existing orchestrator) | `mosaic-deploy agents --harness claude-code --workspace /path` |
+| Add hook bundles only | `mosaic-deploy hooks --harness claude-code --workspace /path` |
+| Preview without writing files | Add `--dry-run` to any command |
+| Back up files the tool cannot confirm as its own before replacing them | `--conflict backup` |
+| Move a deployment to a different harness | `mosaic-deploy transform --harness X --target-harness Y --workspace /path` |
+| Turn a one-off agent into a reusable generic | `mosaic-deploy promote --file /path/to/agent.md --category Category` |
+| Deploy from my catalog on top of the default one | Add `--catalog-folder /my/catalog --include-default-catalog` |
+| Layer several catalogs | Repeat `--catalog-folder`; the first is the highest layer |
+| Return a workspace to the default catalog alone | `mosaic-deploy update --include-default-catalog --harness X --workspace /path` |
+| See which catalogs a run used | Read the "Catalog stack" block, or `StackInEffect` / `stackInEffect` in `--output json` |
+| Check every layer's workflow index | `mosaic-deploy check-index` (add the stack flags) |
+| Promote a new agent into a chosen layer | `mosaic-deploy promote ... --target-catalog <catalog id>` |
+| Promote several harness-only agents at once | TUI only: run `mosaic-deploy`, choose Promote, tick the agents |
+| Use the interactive wizard | Just run `mosaic-deploy` with no subcommand |
+| Script deployments for CI | Use `--auto-confirm --output json` |
+| Control which utility agents are offered | Edit `utility_agent_allow_list` in `tool-config.yaml` |
+| Check what happened in the last run | Read `MosaicDeploy/logs/latest.log` |
+
+---
+
 ## Deploy — New Workspace
 
 Creates a workspace from scratch: selects harness, workflows, utility agents, and model assignments, then writes all files.
@@ -740,30 +767,3 @@ Work through this checklist before using the workspace. Filling project regions 
 | "no catalog layer supplies ..." | No layer has `CommunicationProtocol.md`, `DeployedSections.md` or the harness's `HarnessInjections/<Harness>/`. A catalog used without the default layer must carry its own copies. |
 | "persisted catalog layer no longer resolves" | A layer stored with the workspace moved or changed id. Pass new stack flags (they replace the persisted stack), or `--include-default-catalog` alone to return to the default catalog. |
 | My custom catalog's agents are missing the default ones | A CLI run that names a user catalog leaves the default catalog out. Add `--include-default-catalog`. |
-
----
-
-## Quick Reference
-
-| I want to... | Do this |
-|--------------|---------|
-| Deploy MOSAIC to a new project | `mosaic-deploy deploy --harness claude-code --workspace /path` |
-| Update agents to latest versions | `mosaic-deploy update --harness claude-code --workspace /path` |
-| Add or swap workflows in an existing workspace | `mosaic-deploy workflows --harness claude-code --workspace /path` |
-| Add specific agents (declarations added to an existing orchestrator) | `mosaic-deploy agents --harness claude-code --workspace /path` |
-| Add hook bundles only | `mosaic-deploy hooks --harness claude-code --workspace /path` |
-| Preview without writing files | Add `--dry-run` to any command |
-| Back up files the tool cannot confirm as its own before replacing them | `--conflict backup` |
-| Move a deployment to a different harness | `mosaic-deploy transform --harness X --target-harness Y --workspace /path` |
-| Turn a one-off agent into a reusable generic | `mosaic-deploy promote --file /path/to/agent.md --category Category` |
-| Deploy from my catalog on top of the default one | Add `--catalog-folder /my/catalog --include-default-catalog` |
-| Layer several catalogs | Repeat `--catalog-folder`; the first is the highest layer |
-| Return a workspace to the default catalog alone | `mosaic-deploy update --include-default-catalog --harness X --workspace /path` |
-| See which catalogs a run used | Read the "Catalog stack" block, or `StackInEffect` / `stackInEffect` in `--output json` |
-| Check every layer's workflow index | `mosaic-deploy check-index` (add the stack flags) |
-| Promote a new agent into a chosen layer | `mosaic-deploy promote ... --target-catalog <catalog id>` |
-| Promote several harness-only agents at once | TUI only: run `mosaic-deploy`, choose Promote, tick the agents |
-| Use the interactive wizard | Just run `mosaic-deploy` with no subcommand |
-| Script deployments for CI | Use `--auto-confirm --output json` |
-| Control which utility agents are offered | Edit `utility_agent_allow_list` in `tool-config.yaml` |
-| Check what happened in the last run | Read `MosaicDeploy/logs/latest.log` |

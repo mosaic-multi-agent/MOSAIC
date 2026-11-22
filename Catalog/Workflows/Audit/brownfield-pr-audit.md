@@ -86,6 +86,50 @@ artifacts:
 
 ---
 
+## Flow
+
+Solid arrows: the happy path (`On Success`). Dotted arrows: where findings usually go (`On Findings`). `[HITL]`: a human stop. Every stage runs exactly one group, picked by its `Approach`; all stages run in parallel.
+
+```mermaid
+flowchart TD
+    subgraph RESEARCH
+        RET["pull-request-comment-interface(retrieve)"] --> PRA["pr-requirements-analyzer [HITL]"]
+        PRA --> CR["codebase-research"]
+    end
+    subgraph PLANNING
+        PA["planner-audit [HITL]<br/>AuditPlan.md: file stages + whole-PR Architecture and Contracts stages"]
+    end
+    subgraph FOCUSED["RESEARCH: focused passes"]
+        CRA["codebase-research(architecture)"] --> CRC["codebase-research(contracts)"]
+    end
+    subgraph STAGE["Stage block: one iteration per audit stage, Approach picks the group"]
+        subgraph TESTS["Tests group"]
+            TA["tests-audit"] --> TAP["audit-to-pull-request(tests)"]
+        end
+        subgraph IMPL["Implementation group"]
+            IA["implementation-audit"] --> IAP["audit-to-pull-request(impl)"]
+        end
+        subgraph ARCH["Architecture group"]
+            AA["architecture-audit"] --> AR["audit-review(architecture)"]
+            AR -. findings .-> AA
+            AR --> AAP["audit-to-pull-request(architecture)"]
+        end
+        subgraph CONTR["Contracts group"]
+            CA["contracts-audit"] --> CAR["audit-review(contracts)"]
+            CAR -. findings .-> CA
+            CAR --> CAP["audit-to-pull-request(contracts)"]
+        end
+    end
+    CR --> PA
+    PA --> CRA
+    CRC --> TA & IA & AA & CA
+    TAP & IAP & AAP & CAP --> MRG["audit-response-merger [HITL]<br/>cross-audit dedup"]
+    MRG --> POST["pull-request-comment-interface(post) [HITL]"]
+    POST --> DONE(["Audit comments posted on the PR"])
+```
+
+---
+
 ## Design Rationale
 
 Purpose is simple: let AI participate as a reviewer on a live pull request, posting real PR comments. Everything else in the workflow's complexity exists in service of that one integration point — pulling existing PR comments in, and posting audit findings back out as comments, without losing track of which finding came from which audit.

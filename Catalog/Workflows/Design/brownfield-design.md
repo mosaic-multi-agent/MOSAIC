@@ -43,6 +43,32 @@ artifacts:
 
 ---
 
+## Flow
+
+Solid arrows: the happy path (`On Success`). Dotted arrows: where findings usually go (`On Findings`). `[HITL]`: a human stop.
+
+```mermaid
+flowchart TD
+    subgraph RESEARCH
+        CR["codebase-research"] --> RF["requirements-refinement [HITL]"]
+        RF --> RV["requirements-review"]
+        RV -. findings .-> RF
+    end
+    subgraph PLANNING
+        PL["planner-tdd-soft [HITL]<br/>Plan.md + per-stage Plan / PlanProgress"] --> PR["plan-review"]
+        PR -. findings .-> PL
+    end
+    subgraph DESIGN
+        CD["contracts-designer [HITL]"] --> CRV["contracts-review"]
+        CRV -. findings .-> CD
+    end
+    RV --> PL
+    PR --> CD
+    CRV --> DONE(["Requirements, plan and contracts design; no implementation"])
+```
+
+---
+
 ## Design Rationale
 
 Structurally the RESEARCH → PLANNING → DESIGN head of `brownfield-tdd`, stopping before EXECUTION. It exists because "produce an architecture review, a design proposal, or a plan for a large feature, but stop before writing any code" is a legitimate, distinct request in its own right — a user asking for a design review does not want implementation to happen next. It is not a way to split a long run; native run continuation covers resuming.

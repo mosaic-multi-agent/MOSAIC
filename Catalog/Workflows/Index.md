@@ -54,9 +54,9 @@ Harness conformance fixtures for `mosaic-run` live under `Tools/Runner/TestCatal
 | ID | Category | Version | Name | Author | File |
 |----|----------|---------|------|--------|------|
 | greenfield-tdd | Build | 4.0 | Greenfield TDD Workflow | MOSAIC | `Build/greenfield-tdd.md` |
-| brownfield-tdd | Build | 4.0 | Brownfield TDD Workflow | MOSAIC | `Build/brownfield-tdd.md` |
-| brownfield-tdd-build-verified | Build | 3.0 | Brownfield TDD Build-Verified Workflow | MOSAIC | `Build/brownfield-tdd-build-verified.md` |
-| brownfield-pr-fix | Build | 1.1 | Brownfield PR Fix Workflow | MOSAIC | `Build/brownfield-pr-fix.md` |
+| brownfield-tdd | Build | 4.1 | Brownfield TDD Workflow | MOSAIC | `Build/brownfield-tdd.md` |
+| brownfield-tdd-build-verified | Build | 3.1 | Brownfield TDD Build-Verified Workflow | MOSAIC | `Build/brownfield-tdd-build-verified.md` |
+| brownfield-pr-fix | Build | 1.3 | Brownfield PR Fix Workflow | MOSAIC | `Build/brownfield-pr-fix.md` |
 
 ### Audit
 

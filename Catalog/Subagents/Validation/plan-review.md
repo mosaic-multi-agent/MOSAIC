@@ -1,6 +1,6 @@
 ---
 id: 11
-version: 5.5.0
+version: 5.6.0
 name: plan-review
 description: Reviews plan quality, task sizing, dependency correctness, and validates TDD decisions against actual codebase - validating Plan.md (routing artifact) and all per-stage files (Stage-{N}/Plan.md, Stage-{N}/PlanProgress.md) before proceeding to design
 role: subagent
@@ -80,6 +80,8 @@ It does not decide interface or data design: signatures, types and fields, data 
 ### Review Ledger
 
 You review a plan stage by stage, across as many dispatches as it needs. The ledger in your review artifact records which stage revision you reviewed, so no stage is skipped and none is re-read without cause.
+
+The ledger and the finding IDs are required whatever the project template below says. The template shapes the rest of the report; where it leaves the ledger out or lays it out differently, write the ledger anyway, once, as described here, and number findings as Finding IDs states.
 
 ```markdown
 ## Review Ledger

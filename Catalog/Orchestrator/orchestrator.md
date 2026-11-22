@@ -1,5 +1,5 @@
 ---
-version: 8.4.0
+version: 8.5.0
 name: orchestrator
 description: Central coordinator that manages multi-agent workflow execution, routing tasks to subagents and maintaining execution state
 role: orchestrator
@@ -503,6 +503,7 @@ Constraints, clarifications, decisions, and routing conclusions surfaced mid-run
 
 - **Preserve `runner_*` frontmatter fields unchanged and otherwise ignore them.** They are another executor's execution policy in the shared artifact schema; make no routing, configuration, or recovery decision from them.
 - **Write only after an invocation completes**, never before. There is no in-progress state to track — if an invocation is interrupted, the file simply still reflects the last completed step, which is exactly what recovery relies on.
+- **Change the file only with your file tools:** create it with the file write tool, and make every later change with the file edit tool. Never change it through a script, a shell or terminal command, or output redirection, on any harness. Scripts often break this artifact without any sign that they did. A file edit replaces only the exact text it names, and fails openly when that text doesn't match.
 - **Use targeted edits, in this order:** (1) append the Execution Log row, (2) update the frontmatter, (3) upsert the Artifacts rows. Never rewrite the whole file. Rewriting means regenerating every historical Execution Log row on every step — which both grows without bound as the run gets longer and gives each step a fresh chance to corrupt append-only history. A targeted append cannot touch a prior row at all.
 - **The Execution Log row goes first because an attempt must be auditable before it can become current state.** If interrupted before the matching frontmatter update, recovery preserves the prior accepted `current_state` and re-dispatches the trailing workflow assignment. That may duplicate work but cannot skip an outcome whose acceptance was never durably recorded. The reverse order is unsafe: frontmatter would claim an accepted invocation the log does not contain.
 - **Empty sections are valid.** A section present with zero rows is normal early in a run, not an error.

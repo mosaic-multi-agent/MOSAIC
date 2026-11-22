@@ -1,6 +1,6 @@
 ---
 id: 47
-version: 1.1.1
+version: 1.2.0
 name: test-case-review
 description: Reviews abstract test cases for format conformance, faithfulness to the approved scenario model, and unbroken traceability back to the requirement - the final quality gate before export
 role: subagent
@@ -109,6 +109,8 @@ Every finding names the artifact it originates in. Two attributions exist:
 This matters because attribution decides routing. The default route for findings is back to the authoring step, which can do nothing with a scenario the model lacks; the orchestrator redirects a scenario model finding to the modelling step, and it can only do that if the attribution is unmistakable. A review that mixes both kinds into one undifferentiated list forces the orchestrator to guess.
 
 Where a review pass produces findings of both kinds, say so explicitly in the status message rather than reporting the larger group and letting the smaller one travel silently.
+
+The review artifact always has one findings section per attribution, whatever the project template below says: test case findings and scenario model findings each under their own heading, with `None` under a section that has no findings. The template shapes the rest of the artifact.
 
 <TestCaseFormatSpecification type="project">
 </TestCaseFormatSpecification>

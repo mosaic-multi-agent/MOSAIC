@@ -50,6 +50,44 @@ artifacts:
 
 ---
 
+## Flow
+
+Solid arrows: the happy path (`On Success`). Dotted arrows: where findings usually go (`On Findings`). `[HITL]`: a human stop. Not drawn: a `NEEDS_CLARIFICATION` from any row goes to `document-research`, never to the user.
+
+```mermaid
+flowchart TD
+    subgraph RESEARCH
+        DR["document-research"] --> RV["requirements-review"]
+        RV -. findings .-> DR
+    end
+    subgraph DESIGN
+        SD["test-scenario-designer"] --> SR["test-scenario-review"]
+        SR -. findings .-> SD
+        SR --> PS["approval-presenter(scenarios) [HITL]"]
+        PS -. objection .-> SD
+    end
+    subgraph EXECUTION
+        TW["test-case-writer"]
+    end
+    subgraph REVIEW
+        TR["test-case-review"] --> PC["approval-presenter(cases) [HITL]"]
+    end
+    subgraph COMPLETION
+        EX["test-case-export [HITL]<br/>writes to the target system"]
+    end
+    RV --> SD
+    PS --> TW
+    TW -. scenario gap .-> SD
+    TW --> TR
+    TR -. findings .-> TW
+    PC -. objection .-> TW
+    PC --> EX
+    EX -. findings .-> TW
+    EX --> DONE(["Test cases exported"])
+```
+
+---
+
 ## Deployment Notes
 
 This workflow's agents are generic. Everything domain-specific — the retrieval stack, the scenario taxonomy, the test-case format, the target system's schema — arrives through injections at deploy time. Filling them is the deploying project's responsibility.

@@ -42,6 +42,30 @@ artifacts:
 
 ---
 
+## Flow
+
+Solid arrows: the happy path (`On Success`). `[HITL]`: a human stop. Every block runs its iterations one at a time. No fix targets: inaccuracies travel as flags and are fixed in the Correction block.
+
+```mermaid
+flowchart TD
+    BS["knowledge-base-generator(bootstrap) [HITL]<br/>scope + initial Generation schedule"]
+    subgraph GEN["Generation block: one iteration per KB document, tier by tier"]
+        G["knowledge-base-generator(generate)<br/>writes one document, appends deeper-tier iterations and flags"]
+    end
+    FS["knowledge-base-flag-sorter<br/>Corrections schedule, deepest tier first"]
+    subgraph COR["Correction block: one iteration per document to correct, bottom-up"]
+        C["knowledge-base-generator(correct)"]
+    end
+    IA["knowledge-base-index-assembler"]
+    BS --> G
+    G --> FS
+    FS --> C
+    C --> IA
+    IA --> DONE(["KB generated and indexed"])
+```
+
+---
+
 ## Design Rationale
 
 Excellent, recommended workflow — run this first on a codebase before starting any other workflow against it. The research-phase agents used across the Build/Audit/Design workflows actively look for an existing KB when they run, and their performance improves noticeably when one is present.

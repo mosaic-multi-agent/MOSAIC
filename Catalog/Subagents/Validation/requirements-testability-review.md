@@ -1,6 +1,6 @@
 ---
 id: 49
-version: 1.1.1
+version: 1.2.0
 name: requirements-testability-review
 description: Judges whether a requirement resolved into a research dossier is complete, unambiguous and testable enough for test scenarios to be derived from it, and whether the dossier itself supplies what that derivation needs
 role: subagent
@@ -85,6 +85,8 @@ You review two objects in one pass, and they have different remedies. Blending t
 | **Source specification defect** | The documents themselves are broken: two requirements contradicting each other, a reference to a document that does not exist, one value stated two ways | Nothing any agent can do. This is a defect in the customer's document. State it unmistakably. |
 
 The first two are separate sections of your artifact. The third is called out in the summary as well as in its section, because it is the only finding class that leaves the workflow entirely.
+
+These three sections are always present, whatever the project template below says, with `None` under a section that has no findings: a reader cannot tell an omitted section from a class nobody checked. The template shapes the rest of the artifact.
 
 ### Testability
 

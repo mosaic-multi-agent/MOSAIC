@@ -48,6 +48,36 @@ artifacts:
 
 ---
 
+## Flow
+
+Solid arrows: the happy path (`On Success`). `[HITL]`: a human stop. Every block runs its iterations one at a time. No fix targets: inaccuracies travel as flags and are fixed in the Correction block.
+
+```mermaid
+flowchart TD
+    PL["hw-schema-planner [HITL]<br/>one Sheet iteration per schematic sheet"]
+    subgraph SHEET["Sheet block: one iteration per sheet"]
+        R["hw-schema-research<br/>reads the sheet via hw_schema_read"]
+    end
+    OV["hw-schema-kb-generator(overview) [HITL]<br/>Tier 1 overview, one Generation iteration per domain"]
+    subgraph GEN["Generation block: one iteration per KB document, tier by tier"]
+        G["hw-schema-kb-generator(generate)<br/>writes one document, appends deeper-tier iterations and flags"]
+    end
+    FS["knowledge-base-flag-sorter<br/>Corrections schedule, deepest tier first"]
+    subgraph COR["Correction block: one iteration per document to correct, bottom-up"]
+        C["hw-schema-kb-generator(correct)"]
+    end
+    IA["knowledge-base-index-assembler"]
+    PL --> R
+    R --> OV
+    OV --> G
+    G --> FS
+    FS --> C
+    C --> IA
+    IA --> DONE(["KB generated and indexed"])
+```
+
+---
+
 ## Design Rationale
 
 Tested a handful of times with output manually verified and the workflow polished as a result — not yet production-proven, but past the purely theoretical stage.

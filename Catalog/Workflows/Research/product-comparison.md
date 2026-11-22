@@ -80,6 +80,33 @@ artifacts:
 
 ---
 
+## Flow
+
+Solid arrows: the happy path (`On Success`). Dotted arrows: where findings usually go (`On Findings`). `[HITL]`: a human stop. The planner writes the three block schedules; each block's iterations run in parallel, and each Research iteration runs the one dimension group its `Approach` picks.
+
+```mermaid
+flowchart TD
+    CP["comparison-planner [HITL]<br/>agrees products and dimensions, writes the three schedules"]
+    subgraph PRODUCT["Product block: one iteration per product"]
+        PRS["product-research<br/>product map, verdict-free"]
+    end
+    subgraph RESEARCH["Research block: one iteration per product x dimension"]
+        DIM["one dimension research agent per group, verdict-free:<br/>end-user-experience, maintainability, extensibility,<br/>design-quality, quality-mechanisms, human-oversight,<br/>cost, security, performance"]
+    end
+    subgraph TOPIC["Topic block: one iteration per dimension"]
+        TA["topic-analyst<br/>compares products within the dimension"]
+    end
+    CP --> PRS
+    PRS --> DIM
+    DIM --> TA
+    TA --> CA["comparison-analyst"]
+    CA --> CRV["comparison-review"]
+    CRV -. findings .-> CA
+    CRV --> DONE(["ComparisonAnalysis.md"])
+```
+
+---
+
 ## Design Rationale
 
 This workflow was designed for and successfully tested on comparing multi-agent orchestration frameworks — two complex software products analyzed across nine quality dimensions. The three-tier architecture (findings then per-topic comparison then synthesis) emerged from the insight that fair comparison requires strict separation between evidence gathering and evaluation. Tier 1 agents (`product-research` and the dimension research agents) are verdict-free — they document *what is* for a single product, with no quality judgments. Evaluation starts at tier 2 (`topic-analyst`).

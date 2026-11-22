@@ -1,5 +1,5 @@
 ---
-version: "3.0"
+version: "3.1"
 name: "Brownfield TDD Build-Verified Workflow"
 description: "New features or significant changes to an existing codebase requiring test-first development where compilation/build cannot be verified via standard terminal tools (e.g., PLC/SCL with proprietary toolchains, embedded systems, cross-compilation environments)."
 hint: "Field-verified (used for real PLC programming), not just theoretical. Use over standard brownfield-tdd whenever building and deployment require a non-trivial toolchain — offloading those mechanics onto a dedicated build-review agent keeps them out of the writer agents' context, while downstream reviewers execute tests."
@@ -36,7 +36,7 @@ artifacts:
   - Stage-{Stage}/implementation-review.md
 ---
 
-<Workflow type="core" name="brownfield-tdd-build-verified" version="3.0">
+<Workflow type="core" name="brownfield-tdd-build-verified" version="3.1">
 ## Brownfield TDD Build-Verified Workflow
 
 **Use when:** New features or significant changes to an **existing codebase** requiring test-first development where **compilation/build cannot be verified via standard terminal tools** (e.g., PLC/SCL with proprietary toolchains, embedded systems, cross-compilation environments).
@@ -44,7 +44,7 @@ artifacts:
 | Phase | Subagent | HITL | On Success | On Findings | Input | Output |
 |-------|----------|:----:|------------|-------------|-------|--------|
 | RESEARCH | codebase-research | FALSE | requirements-refinement | - | Requirements.md | Research.md |
-| RESEARCH | requirements-refinement | TRUE | requirements-review | - | Research.md, Requirements.md | Requirements.md |
+| RESEARCH | requirements-refinement | TRUE | requirements-review | codebase-research | Research.md, Requirements.md | Requirements.md |
 | RESEARCH | requirements-review | FALSE | planner-tdd-soft | requirements-refinement | Requirements.md, Research.md | requirements-review.md |
 | PLANNING | planner-tdd-soft | TRUE | plan-review | - | Research.md, Requirements.md | Plan.md, Stage-*/Plan.md, Stage-*/PlanProgress.md |
 | PLANNING | plan-review | FALSE | contracts-designer | planner-tdd-soft | Requirements.md, Plan.md, Stage-*/Plan.md, Stage-*/PlanProgress.md | plan-review.md |
@@ -85,6 +85,7 @@ flowchart TD
         CR["codebase-research"] --> RF["requirements-refinement [HITL]"]
         RF --> RV["requirements-review"]
         RV -. findings .-> RF
+        RF -. open questions .-> CR
     end
     subgraph PLANNING
         PL["planner-tdd-soft [HITL]<br/>Plan.md + per-stage Plan / PlanProgress"] --> PR["plan-review"]
@@ -125,7 +126,7 @@ The fix is a dedicated `build-review` agent that owns source import, build, and 
 
 **Two build-review rows.** `build-review` runs once in each group, told apart by the mode qualifiers `build-review(tests)` and `build-review(impl)`. Each has its own fix target (the writer of its group) and its own output artifact, so the test build and the implementation build stay in separate contexts and each reviewer reads only the build report for the code it reviews.
 
-**Fix targets.** Each reviewer and each build-review row sends findings to the writer in its own group. There is no post-block test run: target-platform test execution already happens inside every stage's reviewers. Deeper routing — a review tracing a defect to the plan or to the contracts — is the orchestrator's decision under its routing policy, not a declared route.
+**Fix targets.** Each reviewer and each build-review row sends findings to the writer in its own group. There is no post-block test run: target-platform test execution already happens inside every stage's reviewers. Deeper routing — a review tracing a defect to the plan or to the contracts — is the orchestrator's decision under its routing policy, not a declared route. `requirements-refinement` sends its open questions to `codebase-research`: its `COMPLETED_NEEDS_ACTION` only ever means the user asked for something research must answer, and research's next step leads back to refinement.
 
 Field-verified on real PLC/SCL programming work, not just a theoretical variant.
 
@@ -141,6 +142,7 @@ Field-verified on real PLC/SCL programming work, not just a theoretical variant.
 | 2.4 | 2026-09-29 | MOSAIC | Clarify toolchain responsibility: build-review imports, builds, and deploys but does not execute tests; downstream review agents execute tests and verify TDD RED/GREEN outcomes. |
 | 2.5 | 2026-10-05 | MOSAIC | Remove note making design phase optional, it decreased realibility for very little savings |
 | 3.0 | 2026-10-10 | MOSAIC | Migrated to WorkflowFormat 2.16: `[StageNumber]` → declared block `[Stage]` (`**Blocks:**` table), Phase cells in `PHASE.[Block].Group` order, `**Groups:**` table with `Block` column. The two `build-review` rows are now `build-review(tests)` and `build-review(impl)` (unique Subagent cells). Routing made scope-correct: `contracts-review` enters `[Stage]`; `tests-review-tdd` ends its group with `COMPLETE`. Prose removed from `On Findings`. **Use when:** trimmed to its first sentence; Notes removed — redundant with the tables, or moved to Design Rationale. |
+| 3.1 | 2026-11-22 | MOSAIC | `requirements-refinement` On Findings → `codebase-research` (was `-`): its open questions always need research, so they no longer cost a consultation. |
 
 ---
 

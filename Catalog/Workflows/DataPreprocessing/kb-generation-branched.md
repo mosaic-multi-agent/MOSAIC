@@ -50,6 +50,36 @@ artifacts:
 
 ---
 
+## Flow
+
+Solid arrows: the happy path (`On Success`). `[HITL]`: a human stop. Branches run in parallel; Generation iterations within a branch, and Correction iterations, run one at a time. No fix targets: inaccuracies travel as flags and are fixed in the Correction block.
+
+```mermaid
+flowchart TD
+    OV["knowledge-base-generator(overview) [HITL]<br/>Tier 1 overview + Branches schedule"]
+    subgraph BR["Branch block: one iteration per top-level branch"]
+        B["knowledge-base-generator(branch)<br/>branch top document + branch Generation schedule"]
+        subgraph GEN["Generation block, nested: one iteration per document in the branch"]
+            G["knowledge-base-generator(generate)<br/>appends deeper-tier iterations and flags to its branch"]
+        end
+        B --> G
+    end
+    DM["knowledge-base-duplicate-merger<br/>merges cross-branch duplicates"]
+    FS["knowledge-base-flag-sorter<br/>Corrections schedule, deepest tier first"]
+    subgraph COR["Correction block: one iteration per document to correct, bottom-up"]
+        C["knowledge-base-generator(correct)"]
+    end
+    IA["knowledge-base-index-assembler"]
+    OV --> B
+    G --> DM
+    DM --> FS
+    FS --> C
+    C --> IA
+    IA --> DONE(["KB generated and indexed"])
+```
+
+---
+
 ## Design Rationale
 
 **Experiment.** This workflow tests whether `kb-generation` can run in parallel without losing dynamic tier depth, its key strength. `kb-generation` is sequential-only because every generation iteration writes one shared schedule and one shared flags file, and some harnesses let parallel writers overwrite each other. Here the unit of parallel work is a top-level branch, and each branch owns its own schedule and flags artifacts, so parallel iterations never write the same file.
