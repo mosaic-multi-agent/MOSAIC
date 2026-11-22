@@ -100,9 +100,9 @@ func (p *planner) Build(ctx context.Context, in Input) (domain.Plan, error) {
 		// tool destination in the deployed file stands and no resolution action is needed.
 		if len(agent.Tools) > 0 && item.Action != domain.ActionUnchanged {
 			toolResult, toolErr := in.Module.Tools(domain.ToolRequest{
-				AgentKey:    agent.Key,
-				Generic:     agent.Tools,
-				Placeholder: agent.ToolsPlaceholder,
+				AgentKey:     agent.Key,
+				Generic:      agent.Tools,
+				Placeholder:  agent.ToolsPlaceholder,
 				CustomNames:  in.CustomToolNames,
 				SkippedTools: in.SkippedTools,
 			})

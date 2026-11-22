@@ -89,11 +89,11 @@ func RebuildDeployedAgent(in RebuildInput) (RebuildResult, error) {
 
 // mergeCustomTools combines the custom servers found in the source file with the user's
 // answers; an answer wins over a found server of the same generic name.
-func mergeCustomTools(found, answers map[string]string) map[string]string {
+func mergeCustomTools(found, answers domain.CustomToolAnswers) domain.CustomToolAnswers {
 	if len(found) == 0 && len(answers) == 0 {
 		return nil
 	}
-	merged := make(map[string]string, len(found)+len(answers))
+	merged := make(domain.CustomToolAnswers, len(found)+len(answers))
 	for k, v := range found {
 		merged[k] = v
 	}
@@ -105,7 +105,7 @@ func mergeCustomTools(found, answers map[string]string) map[string]string {
 
 // placeholderExtraTools resolves the generic tools a placeholder agent has beyond the target's
 // placeholder expansion to target tool names, so they can be appended to the tools field.
-func placeholderExtraTools(in RebuildInput, conv ConvertedTools, customTools map[string]string) []string {
+func placeholderExtraTools(in RebuildInput, conv ConvertedTools, customTools domain.CustomToolAnswers) []string {
 	if len(conv.Generic) == 0 {
 		return nil
 	}

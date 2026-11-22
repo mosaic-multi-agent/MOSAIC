@@ -123,7 +123,7 @@ A built-in module does not own a fixed MOSAIC-root path for its injection files.
 ### External module protocol (client side)
 `external.New(execPath, descriptor, opts)` spawns the executable over
 anonymous pipes, sends a `handshake` request carrying `ProtocolVersion`
-("1.0"), and requires the reply to echo the same version — any mismatch
+("2.0"), and requires the reply to echo the same version — any mismatch
 (`ErrProtocolMismatch`) makes the harness unusable at resolution time, not
 mid-transform. Every subsequent `HarnessModule` method becomes one
 `{protocol, id, method, params}` JSON line out and one

@@ -42,7 +42,7 @@ import (
 
 // ProtocolVersion is the version this host implementation speaks. A module must echo this
 // version in its handshake response; any other value causes resolution to fail.
-const ProtocolVersion = "1.0"
+const ProtocolVersion = "2.0"
 
 // Options configures the external module adapter.
 type Options struct {
@@ -138,11 +138,11 @@ type wireFrontmatterField struct {
 // ---------------------------------------------------------------------------
 
 type wireToolRequest struct {
-	AgentKey     string            `json:"agent_key"`
-	Generic      []string          `json:"generic,omitempty"`
-	Placeholder  string            `json:"placeholder,omitempty"`
-	CustomNames  map[string]string `json:"custom_names,omitempty"`
-	SkippedTools map[string]bool   `json:"skipped_tools,omitempty"`
+	AgentKey     string                    `json:"agent_key"`
+	Generic      []string                  `json:"generic,omitempty"`
+	Placeholder  string                    `json:"placeholder,omitempty"`
+	CustomTools  map[string][]wireMCPEntry `json:"custom_tools,omitempty"`
+	SkippedTools map[string]bool           `json:"skipped_tools,omitempty"`
 }
 
 type wireFrontmatterRequest struct {
@@ -827,7 +827,7 @@ func (a *adapter) Tools(req domain.ToolRequest) (domain.ToolResult, error) {
 		AgentKey:     req.AgentKey,
 		Generic:      req.Generic,
 		Placeholder:  req.Placeholder,
-		CustomNames:  req.CustomNames,
+		CustomTools:  toWireCustomTools(req.CustomNames),
 		SkippedTools: req.SkippedTools,
 	}
 

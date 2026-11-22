@@ -30,7 +30,7 @@ func (m *answerAwareToolsModule) Tools(req domain.ToolRequest) (domain.ToolResul
 		outcome := domain.ToolMapped
 		if m.unmapped[g] {
 			switch {
-			case req.CustomNames[g] != "":
+			case len(req.CustomNames[g]) > 0:
 				outcome = domain.ToolCustom
 			case req.SkippedTools[g]:
 				outcome = domain.ToolSkipped
@@ -160,7 +160,7 @@ func TestDeployNew_RealPlanner_PreAnsweredToolNotReportedUnmapped(t *testing.T) 
 		WorkspacePath:   r.workDir,
 		Scope:           domain.ScopeProject,
 		WorkflowIDs:     []string{"quick-fix"},
-		CustomTools:     map[string]string{"bash": "pre-answered-server"},
+		CustomTools:     domain.CustomToolAnswers{"bash": {{Server: "pre-answered-server"}}},
 		SkipAll:         map[domain.QuestionID]bool{domain.QTierModel: true, domain.QAgentModel: true},
 		AutoConfirmPlan: true,
 	})

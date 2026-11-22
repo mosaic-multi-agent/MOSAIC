@@ -22,8 +22,8 @@ var fullTitles = map[string][]string{
 		"final context", "logged", "harness", "detected only", "unapplied", "cost"},
 	"overview models":            {"model", "API calls", "cost", "tokens"},
 	"across runs, agent types":   {"type", "invocations", "runs", "total", "average per run", "invocations per run", "tokens per run"},
-	"runs list":                  {"compare", "run", "cost", "invocations", "duration", "markers"},
-	"runs list with marked runs": {"compare", "run", "cost", "invocations", "duration", "markers"},
+	"runs list":                  {"compare", "run", "started", "cost", "invocations", "duration", "markers"},
+	"runs list with marked runs": {"compare", "run", "started", "cost", "invocations", "duration", "markers"},
 	"compare":                    {"type", "invocations A", "invocations B", "tokens A", "tokens B", "cost A", "cost B"},
 	"pricing":                    {"model", "status", "source"},
 }

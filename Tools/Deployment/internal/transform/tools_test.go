@@ -803,7 +803,7 @@ func TestToolMapping_CustomTool_AppearsInOutputFrontmatter(t *testing.T) {
 		Module:      mod,
 		Model:       domain.ModelSelection{Origin: domain.OriginUnresolved},
 		Scope:       domain.ScopeProject,
-		CustomTools: map[string]string{"terminal": "my-server"},
+		CustomTools: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := transform.Apply(req)
@@ -851,7 +851,7 @@ func TestToolMapping_CustomTool_NoGapUnmappedToolInReport(t *testing.T) {
 		Module:      mod,
 		Model:       domain.ModelSelection{Origin: domain.OriginUnresolved},
 		Scope:       domain.ScopeProject,
-		CustomTools: map[string]string{"terminal": "my-server"},
+		CustomTools: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := transform.Apply(req)

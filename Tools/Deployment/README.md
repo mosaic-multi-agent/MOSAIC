@@ -129,7 +129,12 @@ Transform asks the target harness right after the source harness. Esc on a
 later entry screen goes back one screen keeping your choices; Esc on the mode
 screen exits. After a run any key returns to the mode screen with the previous
 mode and harness highlighted. Selections made during a TUI run are persisted in
-`user-config.yaml` so repeated runs are faster.
+`user-config.yaml` so repeated runs are faster. After you answer the custom tool
+question, Deploy offers to save the answer as a `tool_destinations` entry for the
+harness (the target harness in transform) in `user-config.yaml`; accepting stops
+later runs on that harness, also in the same session, from asking for that tool
+again. Declining saves nothing, and non-interactive CLI runs get no offer. See
+[configuration](docs/configuration.md#tool_destinations).
 
 ---
 

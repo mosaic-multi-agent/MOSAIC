@@ -29,6 +29,12 @@ type Rebuilder interface {
 	// RebuildForStack returns a registry whose built-in modules read their injection content
 	// from the layers res resolved.
 	RebuildForStack(res injections.Result) (Registry, error)
+
+	// Rebuild returns a registry built from the same options and stack as this one, with every
+	// module the ToolMappings hook applies to (built-in and descriptor tiers) constructed again,
+	// so the ToolMappings and ModelCatalog hooks run again. External-tier entries are carried
+	// over as RebuildForStack carries them.
+	Rebuild() (Registry, error)
 }
 
 // StackContentDirs returns a content-directory resolver backed by a stack's injections result.
@@ -86,6 +92,38 @@ func (r *registryImpl) RebuildForStack(res injections.Result) (Registry, error) 
 		refs = append(refs, entries[id].ref)
 	}
 	return &registryImpl{allowExternal: r.allowExternal, entries: entries, refs: refs, opts: &opts}, nil
+}
+
+// Rebuild implements Rebuilder.
+//
+// Discovery runs again with external modules not started, so the built-in and descriptor tiers are
+// constructed anew and the hooks see the current configuration. Entries of the external tier are
+// then taken over from this registry, keeping their running subprocesses.
+func (r *registryImpl) Rebuild() (Registry, error) {
+	if r.opts == nil {
+		return nil, fmt.Errorf("registry carries no discovery options")
+	}
+	opts := *r.opts
+	opts.AllowExternal = false
+	fresh, err := Discover(opts)
+	if err != nil {
+		return nil, err
+	}
+	rebuilt := fresh.(*registryImpl)
+	rebuilt.allowExternal = r.allowExternal
+	rebuilt.opts = r.opts
+	for id, old := range r.entries {
+		if old.ref.Tier != domain.TierExternal {
+			continue
+		}
+		if now, ok := rebuilt.entries[id]; ok && now.ref.Tier == domain.TierExternal {
+			rebuilt.entries[id] = old
+		}
+	}
+	for i, ref := range rebuilt.refs {
+		rebuilt.refs[i] = rebuilt.entries[ref.ID].ref
+	}
+	return rebuilt, nil
 }
 
 // constructBuiltin runs one built-in factory and applies the ToolMappings then the ModelCatalog

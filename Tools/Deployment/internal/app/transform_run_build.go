@@ -98,10 +98,11 @@ func (r *transformRun) setWriteOp(st *agentState, pa PlannedAgent) {
 // agents that will be written. An answer names the server for every agent; a skip leaves the
 // tool unmapped. A cancelled or failed question aborts the run.
 func (r *transformRun) resolveCustomTools(ctx context.Context) error {
-	r.customTools = map[string]string{}
+	r.customTools = domain.CustomToolAnswers{}
 	r.skippedTools = map[string]bool{}
 	var order []string
 	seen := map[string]bool{}
+	agentKeys := map[string]string{} // generic -> key of the first agent declaring it
 	for i := range r.agents {
 		if !isWrite(r.plan.Agents[i]) || !r.agents[i].active() {
 			continue
@@ -109,26 +110,20 @@ func (r *transformRun) resolveCustomTools(ctx context.Context) error {
 		for _, generic := range r.inspections[i].Converted.Unmapped {
 			if !seen[generic] {
 				seen[generic] = true
+				agentKeys[generic] = r.agents[i].input.AgentKey
 				order = append(order, generic)
 			}
 		}
 	}
+	offers := r.s.newSaveOffer(r.tgtID, r.tgt)
+	defer offers.finish(ctx)
 	skippedAll := r.req.SkipAll[domain.QCustomTool]
 	for _, generic := range order {
 		if skippedAll {
 			r.skippedTools[generic] = true
 			continue
 		}
-		ans, err := r.s.deps.Interaction.AskText(ctx, domain.TextQuestion{
-			Question: domain.Question{
-				ID: domain.QCustomTool, Subject: generic,
-				Title:        "Custom MCP server name for " + generic,
-				Prompt:       "Enter the bare MCP server name that provides this tool -- not a specific tool name within the server.",
-				Detail:       "Example: enter github, not github_get_me",
-				AllowSkip:    true,
-				AllowSkipAll: true,
-			},
-		})
+		ans, err := r.s.deps.Interaction.AskText(ctx, customToolQuestion(generic))
 		if err != nil || ans.Status == domain.Cancelled {
 			return ErrSelectionCancelled
 		}
@@ -136,8 +131,9 @@ func (r *transformRun) resolveCustomTools(ctx context.Context) error {
 		case ans.Status == domain.SkippedAll:
 			skippedAll = true
 			r.skippedTools[generic] = true
-		case ans.Status == domain.Answered && ans.Text != "":
-			r.customTools[generic] = ans.Text
+		case ans.Status == domain.Answered && len(customToolEntries(ans.Text)) > 0:
+			r.customTools[generic] = customToolEntries(ans.Text)
+			offers.offer(ctx, generic, agentKeys[generic], "", r.customTools[generic])
 		default:
 			r.skippedTools[generic] = true
 		}

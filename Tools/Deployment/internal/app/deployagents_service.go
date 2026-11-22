@@ -282,7 +282,7 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 	}
 	resolveMigratingModels(modelRes.models, append(migratingAgents, migratingInfra...), module, req.AgentModels, suppliedTiers)
 
-	customTools, skippedTools := s.resolveCustomTools(ctx, req.CustomTools, req.SkipAll, module, orch.withoutOrchestrators(probeSet.Agents))
+	customTools, skippedTools := s.resolveCustomTools(ctx, harnessID, req.CustomTools, req.SkipAll, module, orch.withoutOrchestrators(probeSet.Agents))
 
 	// A rewritten agent keeps its deployed model unless this run resolved one for it.
 	keepDeployedModels(modelRes.models,

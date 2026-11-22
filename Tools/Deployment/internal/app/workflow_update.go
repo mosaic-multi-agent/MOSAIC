@@ -223,7 +223,7 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	// agent is already deployed, neither resolveModels nor resolveCustomTools is called, so
 	// no model or tool question of any kind is asked.
 	var newAgentModelRes modelResolution
-	var customTools map[string]string
+	var customTools domain.CustomToolAnswers
 	var skippedTools map[string]bool
 	if len(newAgents) > 0 {
 		orderedNewAgents := s.orderedAgentsForModelResolution(workflowIDs, newAgents)
@@ -239,7 +239,7 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 		if err != nil {
 			return domain.RunSummary{}, err
 		}
-		customTools, skippedTools = s.resolveCustomTools(ctx, nil, req.SkipAll, module, newAgents)
+		customTools, skippedTools = s.resolveCustomTools(ctx, harnessID, nil, req.SkipAll, module, newAgents)
 	}
 
 	// Orchestrator model comes from the deployed file. Merge with newly resolved models

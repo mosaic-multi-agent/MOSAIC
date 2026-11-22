@@ -61,7 +61,8 @@ func (m tuModule) Tools(req domain.ToolRequest) (domain.ToolResult, error) {
 		resolutions[i] = domain.ToolResolution{Generic: g, Outcome: domain.ToolMapped}
 		if name, ok := tuMapping[g]; ok {
 			items = append(items, domain.ScalarValue(name, domain.QuotePlain))
-		} else if server := req.CustomNames[g]; server != "" {
+		} else if entries := req.CustomNames[g]; len(entries) > 0 {
+			server := entries[0].Server
 			resolutions[i].Outcome = domain.ToolCustom
 			items = append(items, domain.ScalarValue(server, domain.QuotePlain))
 		}
@@ -151,6 +152,7 @@ type tuRun struct {
 	rec       *injectionRecorder
 	summary   domain.RunSummary
 	plans     []domain.Plan
+	calls     []interactiontest.Call // every question the run asked
 	err       error
 }
 
@@ -257,5 +259,5 @@ func runToolsUpdateWith(t *testing.T, setup tuSetup, deployed string, mutate fun
 		mutate(&req)
 	}
 	summary, err := app.New(deps).DeployAgents(context.Background(), req)
-	return &tuRun{workspace: ws, rec: rec, summary: summary, plans: review.plans, err: err}
+	return &tuRun{workspace: ws, rec: rec, summary: summary, plans: review.plans, calls: review.Stub.Calls(), err: err}
 }

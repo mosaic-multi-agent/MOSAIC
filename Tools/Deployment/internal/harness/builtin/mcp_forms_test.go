@@ -75,7 +75,7 @@ func customServerNames(t *testing.T, d *domain.HarnessDescriptor, server string)
 	res, err := descriptor.MapTools(d, domain.ToolRequest{
 		AgentKey:    "mcp-user",
 		Generic:     []string{"user_feedback"},
-		CustomNames: map[string]string{"user_feedback": server},
+		CustomNames: domain.CustomToolAnswers{"user_feedback": {{Server: server}}},
 	})
 	if err != nil {
 		t.Fatalf("MapTools: %v", err)

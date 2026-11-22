@@ -24,6 +24,21 @@
 
 ## Tools
 
+### Runner v1.16.0
+#### Changes
+- **The seed input screen says when the seed is required.** When the workflow's first agent reads input artifacts, the screen is labelled "required" and names those inputs. Enter on a blank required seed shows a warning first and starts only when you press Enter again, so a run no longer starts silently without a required seed
+- **Esc cancels an in-run manual dispatch request.** Esc at the first step of a manual dialogue opened by the in-run manual dispatch request (`m`) cancels the request instead of abandoning the dialogue; the step says so, a progress notice is shown, and the run continues as it would have without it
+
+### LogAnalyzer v1.6.0
+#### Changes
+- **The runs list shows when each run started.** A new `started` column shows each run's start date and time in local time, also for digest runs. On narrow terminals the column is among the first dropped, and the run column now keeps the width of a full run ID
+
+### Deploy v1.13.0
+#### Changes
+- **The custom tool question takes a list.** On every harness with MCP forms it accepts a comma-separated list of `server` and `server/tool` entries, validates it, and writes each entry in the harness's own form
+- Deploy offers to save the answer to `tool_destinations` in `user-config.yaml`, so later runs do not ask again
+- The external module protocol version is now `2.0` (was `1.0`); external harness modules must echo `"2.0"` in the handshake and every response
+
 ### Runner v1.15.0
 #### Changes
 - **The Runner log shows subagent output live.** Each subagent stdout line is written to `RunnerLogs/<run_id>/<run_id>.log` as it arrives, attributed to its invocation, instead of one block after the invocation ends. The number of stdout bytes is logged at the end of each invocation

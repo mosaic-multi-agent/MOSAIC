@@ -30,7 +30,7 @@ func toolRequests() map[string]domain.ToolRequest {
 		"none":         {AgentKey: "a"},
 		"custom": {
 			AgentKey: "a", Generic: []string{"file_read", "ask_user"},
-			CustomNames: map[string]string{"ask_user": "hitl"},
+			CustomNames: domain.CustomToolAnswers{"ask_user": {{Server: "hitl"}}},
 		},
 		"placeholder": {AgentKey: "orchestrator", Placeholder: "{tool-permissions}"},
 	}

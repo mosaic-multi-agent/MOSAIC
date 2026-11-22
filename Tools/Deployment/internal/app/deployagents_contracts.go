@@ -36,7 +36,7 @@ type DeployAgentsRequest struct {
 	// AgentModels pre-answers per-agent model selection (QAgentModel) for each agent key.
 	AgentModels map[string]string
 	// CustomTools pre-answers custom tool mapping (QCustomTool) for each generic tool.
-	CustomTools map[string]string
+	CustomTools domain.CustomToolAnswers
 
 	// SkipAll pre-latches SkippedAll for specified QuestionIDs, bypassing the ask entirely.
 	SkipAll         map[domain.QuestionID]bool

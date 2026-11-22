@@ -306,6 +306,7 @@ func (m *rootModel) updateSetupWorkflow(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// known, and the selected workflow's version is only known here. A new
 		// run has no recorded version, so it is never asked.
 		m.prepareConfigScreen()
+		m.seedInputScreen.SetRequiredInputs(m.selectedWorkflowSeedInputs())
 
 		m.workflowScreen.Reset()
 		m.screen = screenSetupTask

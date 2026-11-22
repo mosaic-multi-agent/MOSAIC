@@ -1147,9 +1147,7 @@ func TestGhcpCli_CustomTool_RoutesToMainToolsNotMcpServers(t *testing.T) {
 	result, err := mod.Tools(domain.ToolRequest{
 		AgentKey: "test-agent",
 		Generic:  []string{"user_feedback"},
-		CustomNames: map[string]string{
-			"user_feedback": "human-in-the-loop",
-		},
+		CustomNames: domain.CustomToolAnswers{"user_feedback": {{Server: "human-in-the-loop"}}},
 	})
 	if err != nil {
 		t.Fatalf("mod.Tools: %v", err)

@@ -162,6 +162,23 @@ func (d *manualDialogue) takeReason() string {
 	return r
 }
 
+// manualCancelHint is shown on the row step of a dialogue opened by the in-run
+// manual dispatch request, where Esc cancels the request.
+const manualCancelHint = "Esc cancels the manual dispatch request; the run continues as it would have without it."
+
+// questionDetail is the detail of the question id: the pending reason, plus the
+// Esc hint on the row step of a cancellable dialogue.
+func (d *manualDialogue) questionDetail(id interaction.QuestionID) string {
+	detail := d.takeReason()
+	if id != domain.QuestionManualRow || !d.req.OfferCancelRequest {
+		return detail
+	}
+	if detail == "" {
+		return manualCancelHint
+	}
+	return detail + "\n" + manualCancelHint
+}
+
 // classify maps an answer status to "cancelled" or an ending error: only
 // Answered and Cancelled are usable answers.
 func (d *manualDialogue) classify(id interaction.QuestionID, status interaction.AnswerStatus) (cancelled bool, err error) {
@@ -179,7 +196,7 @@ func (d *manualDialogue) askOne(ctx context.Context, q interaction.ChoiceQuestio
 	if err = d.beginPrompt(); err != nil {
 		return ans, false, err
 	}
-	q.Title, q.Detail = manualTitle, d.takeReason()
+	q.Title, q.Detail = manualTitle, d.questionDetail(q.ID)
 	ans, callErr := d.in.SelectOne(ctx, q)
 	if callErr != nil {
 		return ans, false, d.unavailable(fmt.Sprintf("the %s question failed: %v", q.ID, callErr), callErr)

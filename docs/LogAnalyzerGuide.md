@@ -45,7 +45,7 @@ Every command takes `--path`.
 
 ### The runs list
 
-The first screen lists the runs of the source with their cost, invocations, duration and findings. `enter` opens a run. Its other keys:
+The first screen lists the runs of the source with their start, cost, invocations, duration and findings. `enter` opens a run. Its other keys:
 
 | Key | Action |
 |-----|--------|
@@ -56,6 +56,10 @@ The first screen lists the runs of the source with their cost, invocations, dura
 | `f` | Open the [findings overlay](#findings-overlay-and-export) |
 | `p` | Enter model prices |
 | `s` | Choose another log source |
+
+Each row shows the run's name, when it started (`started`), its cost, invocations, duration and markers. The start is shown as date and time to the minute in your local time zone, for example `2026-11-12 18:50`. It comes from the timestamp in the run ID or, for a run named otherwise, from the start of the run's timeline; a digest-opened run is shown the same way. When neither is known the column shows `—`. The head below shows its period in UTC, so near midnight a run's local start date can differ from the dates in the period.
+
+On a narrow terminal columns are dropped in this order: markers, duration, invocations, started. The run name and the cost always stay; the run column keeps the width of a full run ID.
 
 #### The head of the runs list
 

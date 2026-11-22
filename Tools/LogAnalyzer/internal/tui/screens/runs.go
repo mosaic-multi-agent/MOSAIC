@@ -56,6 +56,7 @@ func runsOverlayGroups() []chrome.HelpGroup {
 const (
 	rcMark = iota
 	rcRun
+	rcStart
 	rcCost
 	rcInvocations
 	rcDuration
@@ -63,15 +64,17 @@ const (
 )
 
 // runsColumns lists the columns with the priority at which each is dropped on a
-// narrow terminal: the run and its cost stay.
+// narrow terminal: the run and its cost stay. The run column keeps the width of a
+// full run ID (21 characters).
 func runsColumns() []table.Column {
 	return []table.Column{
 		rcMark:        {Title: "compare"},
-		rcRun:         {Title: "run", Flex: true, MinWidth: 16},
+		rcRun:         {Title: "run", Flex: true, MinWidth: 21},
 		rcCost:        {Title: "cost", Align: table.AlignRight},
-		rcInvocations: {Title: "invocations", Align: table.AlignRight, Priority: 1},
-		rcDuration:    {Title: "duration", Align: table.AlignRight, Priority: 2},
-		rcMarkers:     {Title: "markers", Priority: 3},
+		rcStart:       {Title: "started", Priority: 1},
+		rcInvocations: {Title: "invocations", Align: table.AlignRight, Priority: 2},
+		rcDuration:    {Title: "duration", Align: table.AlignRight, Priority: 3},
+		rcMarkers:     {Title: "markers", Priority: 4},
 	}
 }
 
@@ -213,7 +216,7 @@ func runsSortColumn(key SortKey) int {
 }
 
 // runCells builds the cells of one run row.
-func runCells(cur domain.CurrencyCode, r domain.RunReport, marker string) []table.Cell {
+func runCells(cur domain.CurrencyCode, loc *time.Location, r domain.RunReport, marker string) []table.Cell {
 	dur := durationCell(runDuration(r), r.Timeline.HasAxis)
 	var markers []string
 	if r.Provisional {
@@ -228,6 +231,7 @@ func runCells(cur domain.CurrencyCode, r domain.RunReport, marker string) []tabl
 	return []table.Cell{
 		rcMark:        markCell(marker),
 		rcRun:         {Text: r.Run.Label(), Role: tuicommon.RoleSubtitle},
+		rcStart:       startCell(r, loc),
 		rcCost:        moneyTotalCell(cur, r.Totals.Money),
 		rcInvocations: {Text: formatGrouped(int64(r.Overview.Subagents.Invocations))},
 		rcDuration:    dur,
@@ -259,7 +263,7 @@ func (s *RunsScreen) View(width, height int) string {
 		rows := make([][]table.Cell, n)
 		for i, idx := range sorted {
 			run := s.report.Runs[idx]
-			rows[i] = runCells(st.Currency, run, s.marks.markerOf(run.Run.ID))
+			rows[i] = runCells(st.Currency, st.Location, run, s.marks.markerOf(run.Run.ID))
 		}
 		budget := PageBodyHeight(height) - len(head) - len(tail) - 1
 		t := table.Table{Columns: runsColumns(), Rows: rows, Cursor: s.cursor,

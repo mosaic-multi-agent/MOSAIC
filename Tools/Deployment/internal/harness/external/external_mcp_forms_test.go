@@ -28,7 +28,7 @@ func TestReferenceModule_CustomServerAnswerIsWrittenInOpenCodeServerForm(t *test
 	result, err := m.Tools(domain.ToolRequest{
 		AgentKey:    "mcp-user",
 		Generic:     []string{"user_feedback"},
-		CustomNames: map[string]string{"user_feedback": "my server"},
+		CustomNames: domain.CustomToolAnswers{"user_feedback": {{Server: "my server"}}},
 	})
 	if err != nil {
 		t.Fatalf("Tools: %v", err)

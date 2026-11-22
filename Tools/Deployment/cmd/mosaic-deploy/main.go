@@ -27,15 +27,12 @@ import (
 	"mosaic-deploy/internal/cli"
 	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/deploy"
-	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/registry"
 	"mosaic-deploy/internal/logging"
 	"mosaic-deploy/internal/pathinput"
 	"mosaic-deploy/internal/plan"
 	"mosaic-deploy/internal/todo"
 	"mosaic-deploy/internal/tui"
-
-	commonharness "mosaic-common/harness"
 
 	// Import built-in harnesses so their init() functions run and register
 	// themselves with the package-level registry before Discover is called.
@@ -54,7 +51,7 @@ import (
 	_ "mosaic-common/agentformat/all"
 )
 
-const ToolVersion = "1.12.0"
+const ToolVersion = "1.13.0"
 
 // wantsTUI reports whether mosaic-deploy should launch the interactive TUI: no subcommand
 // was given, and both stdin and stdout are attached to a real terminal (not a pipe/redirect).
@@ -177,21 +174,12 @@ func main() {
 	// builtin id, whose own descriptor already declares the same data, and matters
 	// for a Deploy-side override of a builtin id; a harness the shared catalog does
 	// not know keeps its own descriptor-sourced catalog unchanged.
-	reg, err := registry.DiscoverForStack(registry.Options{
-		MosaicRoot:    mosaicRoot,
-		AllowExternal: allowExternal || toolCfg.AllowExternalModules,
-		GOOS:          runtime.GOOS,
-		ToolMappings: func(harnessID string, declared []domain.ToolMapping) []domain.ToolMapping {
-			return config.EffectiveToolMappings(harnessID, declared, toolCfg.ToolDestinations, userCfg.ToolDestinations)
-		},
-		ModelCatalog: func(harnessID string, declared domain.ModelCatalog) domain.ModelCatalog {
-			cat, ok := commonharness.LookupModelCatalog(harnessID)
-			if !ok {
-				return domain.ModelCatalog{} // miss → keep descriptor's own catalog
-			}
-			return domain.ModelCatalog{IDs: cat.IDs, FormatHint: cat.FormatHint}
-		},
-	}, cat.HarnessInjections())
+	// The ToolMappings hook re-reads both config files at every registry build, so a registry
+	// rebuilt after a saved custom tool answer applies it in the same process.
+	reg, err := registry.DiscoverForStack(registryOptions(
+		mosaicRoot, allowExternal || toolCfg.AllowExternalModules,
+		toolConfigStore, userConfigStore, toolCfg, userCfg,
+	), cat.HarnessInjections())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: discover harnesses: %v\n", err)
 		os.Exit(cli.ExitFailure)

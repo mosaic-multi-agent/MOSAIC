@@ -5,6 +5,7 @@ package app
 import (
 	"path/filepath"
 
+	"mosaic-deploy/internal/customtool"
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 )
@@ -37,7 +38,8 @@ func (r *transformRun) agentOutcome(i int) TransformFileOutcome {
 	return out
 }
 
-// customToolServers lists the servers kept as custom tools in a rebuilt agent, each once.
+// customToolServers lists the custom tool entries of a rebuilt agent, each once: converted MCP
+// servers, and the user's answers in the neutral syntax ("server" or "server/tool").
 func (r *transformRun) customToolServers(i int) []string {
 	var servers []string
 	for _, c := range r.agents[i].result.Conversions {
@@ -46,8 +48,8 @@ func (r *transformRun) customToolServers(i int) []string {
 		}
 	}
 	for _, generic := range r.inspections[i].Converted.Unmapped {
-		if server, ok := r.customTools[generic]; ok {
-			servers = append(servers, server)
+		for _, e := range r.customTools[generic] {
+			servers = append(servers, customtool.EntryText(e))
 		}
 	}
 	return uniqueStrings(servers)

@@ -359,6 +359,10 @@ func (c *inlineConfirm) view() string {
 		sb.WriteString(c.styles.Style(RoleBody).Width(c.width).Render(c.q.Prompt))
 		sb.WriteByte('\n')
 	}
+	if c.q.Detail != "" {
+		sb.WriteString(c.styles.Style(RoleBody).Width(c.width).Render(c.q.Detail))
+		sb.WriteByte('\n')
+	}
 
 	yes, no := "[ Yes ]", "[ No ]"
 	if c.cursor == 0 {

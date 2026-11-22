@@ -64,7 +64,7 @@ type Request struct {
 	Key          string              // artifact slug (agent key, skill key, …)
 	Module       domain.HarnessModule
 	Model        domain.ModelSelection
-	CustomTools  map[string]string   // generic tool name → user-supplied MCP server name
+	CustomTools  domain.CustomToolAnswers // generic tool name -> user-supplied MCP entries
 	SkippedTools map[string]bool
 	// DenyTools are target-harness names written as "<name>: deny" in a permission-shaped tools
 	// field after AppendTools; a deny always wins over an allow of the same name. Ignored for list

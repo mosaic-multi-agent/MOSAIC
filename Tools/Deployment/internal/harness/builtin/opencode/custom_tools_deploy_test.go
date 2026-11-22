@@ -24,7 +24,7 @@ You are a test agent.
 
 // applyCustomToolAgent deploys customToolAgentSource to OpenCode and returns the parsed
 // permission pairs of the output.
-func applyCustomToolAgent(t *testing.T, custom map[string]string) []domain.FieldPair {
+func applyCustomToolAgent(t *testing.T, custom domain.CustomToolAnswers) []domain.FieldPair {
 	t.Helper()
 	result, err := transform.Apply(transform.Request{
 		Source:      []byte(customToolAgentSource),
@@ -62,7 +62,7 @@ func permissionValue(pairs []domain.FieldPair, key string) (string, int) {
 }
 
 func TestDeploy_CustomToolServerIsWrittenAsAllowInPermission(t *testing.T) {
-	pairs := applyCustomToolAgent(t, map[string]string{"web_search": "my-server"})
+	pairs := applyCustomToolAgent(t, domain.CustomToolAnswers{"web_search": {{Server: "my-server"}}})
 
 	value, count := permissionValue(pairs, "my-server_*")
 	if count != 1 || value != "allow" {
@@ -72,7 +72,7 @@ func TestDeploy_CustomToolServerIsWrittenAsAllowInPermission(t *testing.T) {
 }
 
 func TestDeploy_CustomToolKeepsBuiltInPermissionPairsAndPutsServerLast(t *testing.T) {
-	withCustom := applyCustomToolAgent(t, map[string]string{"web_search": "my-server"})
+	withCustom := applyCustomToolAgent(t, domain.CustomToolAnswers{"web_search": {{Server: "my-server"}}})
 	without := applyCustomToolAgent(t, nil)
 
 	if len(withCustom) != len(without)+1 {

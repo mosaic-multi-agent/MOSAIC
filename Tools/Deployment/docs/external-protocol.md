@@ -26,12 +26,12 @@ Every message is a single UTF-8 JSON object terminated by a newline (`\n`). No p
 ### Request (MOSAIC → module)
 
 ```json
-{"protocol":"1.0","id":"42","method":"tools","params":{...}}
+{"protocol":"2.0","id":"42","method":"tools","params":{...}}
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `protocol` | string | Protocol version; always `"1.0"` |
+| `protocol` | string | Protocol version; always `"2.0"` |
 | `id` | string | Opaque request identifier; echo back unchanged in the response |
 | `method` | string | Method name; see [Methods](#methods) |
 | `params` | object | Method-specific parameters; see each method below |
@@ -40,17 +40,17 @@ Every message is a single UTF-8 JSON object terminated by a newline (`\n`). No p
 
 Success:
 ```json
-{"protocol":"1.0","id":"42","result":{...}}
+{"protocol":"2.0","id":"42","result":{...}}
 ```
 
 Error:
 ```json
-{"protocol":"1.0","id":"42","error":{"code":"unsupported_artifact","message":"kind 'workflow' not supported"}}
+{"protocol":"2.0","id":"42","error":{"code":"unsupported_artifact","message":"kind 'workflow' not supported"}}
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `protocol` | string | Must be `"1.0"` |
+| `protocol` | string | Must be `"2.0"` |
 | `id` | string | Echo of the request `id` |
 | `result` | object | Present on success; absent on error |
 | `error` | object | Present on error; absent on success |
@@ -59,23 +59,23 @@ Error:
 
 ## Protocol Version
 
-The current protocol version is `"1.0"`. MOSAIC sends `"1.0"` in every request. The module MUST echo `"1.0"` in every response. A response with a different `protocol` value causes MOSAIC to close the connection with `ErrProtocolMismatch`.
+The current protocol version is `"2.0"`. MOSAIC sends `"2.0"` in every request. The module MUST echo `"2.0"` in every response. A response with a different `protocol` value causes MOSAIC to close the connection with `ErrProtocolMismatch`.
 
 ## Methods
 
 ### handshake
 
-The first exchange. MOSAIC sends this immediately after starting the subprocess. The module responds with its identity. If the response's `protocol` field does not match `"1.0"`, MOSAIC rejects the module.
+The first exchange. MOSAIC sends this immediately after starting the subprocess. The module responds with its identity. If the response's `protocol` field does not match `"2.0"`, MOSAIC rejects the module.
 
 **Request params:**
 ```json
-{"protocol":"1.0"}
+{"protocol":"2.0"}
 ```
 
 **Response result:**
 ```json
 {
-  "protocol": "1.0",
+  "protocol": "2.0",
   "harness": {
     "id": "my-harness",
     "display_name": "My Harness",
@@ -87,7 +87,7 @@ The first exchange. MOSAIC sends this immediately after starting the subprocess.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `protocol` | string | Must be `"1.0"` |
+| `protocol` | string | Must be `"2.0"` |
 | `harness.id` | string | Harness identifier; used in provenance logging |
 | `harness.display_name` | string | Human-readable name for the TUI |
 | `harness.tier` | string | Always `"external"` for external modules |
@@ -103,7 +103,9 @@ Map an agent's generic tool list to harness-specific frontmatter fields.
   "agent_key": "test-runner",
   "generic": ["file_read", "terminal", "user_interaction"],
   "placeholder": "",
-  "custom_names": {},
+  "custom_tools": {
+    "terminal": [{"server": "github", "tool": "get_pr"}, {"server": "jira"}]
+  },
   "skipped_tools": {}
 }
 ```
@@ -113,7 +115,7 @@ Map an agent's generic tool list to harness-specific frontmatter fields.
 | `agent_key` | string | The agent being transformed |
 | `generic` | string[] | Generic tool names from the agent source |
 | `placeholder` | string | Non-empty when the source used a placeholder (e.g. `{tool-permissions}`) instead of a list |
-| `custom_names` | object | Map from generic tool name to user-supplied bare MCP server name. Write it in your harness's own MCP syntax; MOSAIC's whole-server and single-tool forms (`tools.mcp`) belong to descriptors and do not travel on this wire |
+| `custom_tools` | object | Map from generic tool name to the user's MCP entries, in answer order; omitted when there are no answers. Each entry has a non-empty `server` (the name as the user typed it, neutral, not harness syntax) and an optional `tool` (absent means the whole server; `*` never appears). Write each entry in your harness's own MCP syntax and return `outcome: "custom"` with every written name in `harness_tools`; MOSAIC's whole-server and single-tool forms (`tools.mcp`) belong to descriptors and do not travel on this wire. Replaces `custom_names` of protocol 1.0 |
 | `skipped_tools` | object | Map from generic tool name to `true` when the user chose to skip it |
 
 **Response result:**

@@ -260,9 +260,16 @@ func (s *stubToolConfig) Path() string                     { return s.path }
 // spyUserConfig — satisfies config.UserConfigStore and records Save calls
 // ---------------------------------------------------------------------------
 
+// spyPut is one recorded PutToolDestination call.
+type spyPut struct {
+	harnessID string
+	mapping   domain.ToolMapping
+}
+
 type spyUserConfig struct {
 	cfg   config.UserConfig
 	saved []config.UserConfig
+	puts  []spyPut
 	path  string
 
 	// loadErr, when non-nil, is returned by Load instead of (cfg, nil). Used to inject an
@@ -290,6 +297,9 @@ type spyUserConfig struct {
 	// lockErr, when non-nil, is returned by WithLock instead of calling fn.
 	// Simulates a lock-acquisition timeout for testing the notifyPersistFailure path.
 	lockErr error
+
+	// putErr, when non-nil, is returned by PutToolDestination instead of recording the put.
+	putErr error
 }
 
 func (s *spyUserConfig) Load() (config.UserConfig, error) {
@@ -308,6 +318,15 @@ func (s *spyUserConfig) Save(cfg config.UserConfig) error {
 	return nil
 }
 func (s *spyUserConfig) Path() string { return s.path }
+
+// PutToolDestination records the put; the spy keeps no file, so cfg is unchanged.
+func (s *spyUserConfig) PutToolDestination(harnessID string, mapping domain.ToolMapping) error {
+	if s.putErr != nil {
+		return s.putErr
+	}
+	s.puts = append(s.puts, spyPut{harnessID: harnessID, mapping: mapping})
+	return nil
+}
 
 // WithLock on the spy calls fn directly (no actual locking needed in unit tests).
 // When lockErr is non-nil, WithLock returns that error instead of calling fn,

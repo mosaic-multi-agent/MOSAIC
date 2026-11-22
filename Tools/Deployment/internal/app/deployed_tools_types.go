@@ -46,9 +46,9 @@ func allowGrants(names []string) []domain.ToolGrant {
 
 // ConvertedTools is the output of ConvertDeployedTools.
 type ConvertedTools struct {
-	Generic     []string          // generic tools, each once
-	CustomTools map[string]string // generic -> server; no longer filled by the MCP name conversion
-	TargetTools []string          // allowed target names: kept native names and MCP names in target form
+	Generic     []string                 // generic tools, each once
+	CustomTools domain.CustomToolAnswers // generic -> entries; no longer filled by the MCP name conversion
+	TargetTools []string                 // allowed target names: kept native names and MCP names in target form
 	// TargetDenied lists MCP names in target form to write as deny (permission-shape targets only).
 	TargetDenied []string
 	// UsePlaceholder is true when the target gets its placeholder expansion; Generic,

@@ -108,6 +108,13 @@ func TestMain(m *testing.M) {
 	case "injection-role-reflect":
 		runFakeHarnessInjectionRoleReflect()
 		os.Exit(0)
+	// Custom tool answer wire fake modes:
+	case "custom-tools-reflect":
+		runFakeHarnessCustomToolsReflect()
+		os.Exit(0)
+	case "protocol-1-0":
+		runFakeHarnessProtocolOnePointZero()
+		os.Exit(0)
 	}
 	os.Exit(m.Run())
 }
@@ -977,11 +984,11 @@ func TestProtocol_MessageTypesHaveProtocolField(t *testing.T) {
 	}
 }
 
-// TestProtocol_ProtocolVersionConst verifies the ProtocolVersion constant is "1.0" so that
+// TestProtocol_ProtocolVersionConst verifies the ProtocolVersion constant is "2.0" so that
 // any implementation-level change to the protocol version surfaces as a failing test.
 func TestProtocol_ProtocolVersionConst(t *testing.T) {
-	if external.ProtocolVersion != "1.0" {
-		t.Errorf("ProtocolVersion = %q, want %q; protocol version is a stable contract", external.ProtocolVersion, "1.0")
+	if external.ProtocolVersion != "2.0" {
+		t.Errorf("ProtocolVersion = %q, want %q; protocol version is a stable contract", external.ProtocolVersion, "2.0")
 	}
 }
 

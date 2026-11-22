@@ -362,8 +362,8 @@ type DeployRequest struct {
 	HookIDs                []string
 	// TierModels pre-answers the per-tier model selection step (QTierModel) for each tier key.
 	TierModels  map[domain.Tier]string
-	AgentModels map[string]string // agent key -> model id; pre-answers QAgentModel per agent
-	CustomTools map[string]string // generic tool -> MCP server name; pre-answers QCustomTool
+	AgentModels map[string]string        // agent key -> model id; pre-answers QAgentModel per agent
+	CustomTools domain.CustomToolAnswers // generic tool -> MCP entries; pre-answers QCustomTool
 	// SkipAll pre-latches SkippedAll for specified QuestionIDs, bypassing the ask entirely.
 	SkipAll         map[domain.QuestionID]bool
 	AutoConfirmPlan bool
@@ -393,7 +393,7 @@ type UpdateRequest struct {
 	ConflictDefault domain.ConflictDecision
 	TierModels      map[domain.Tier]string
 	AgentModels     map[string]string
-	CustomTools     map[string]string
+	CustomTools     domain.CustomToolAnswers
 	SkipAll         map[domain.QuestionID]bool
 	AutoConfirmPlan bool
 	DryRun          bool

@@ -86,6 +86,27 @@ type UserConfigStore interface {
 	// Callers wrap their Load-mutate-Save cycle inside fn so the entire
 	// read-modify-write is atomic with respect to other cooperating processes.
 	WithLock(fn func() error) error
+
+	// PutToolDestination writes mapping as the tool_destinations entry for
+	// mapping.Generic under harnessID in user-config.yaml: it is added at the end of
+	// that harness's list, or replaces the entry with the same generic in that list.
+	// It does not take the lock; callers wrap it in WithLock.
+	//
+	// Every byte outside the added or replaced entry is kept, including comments and
+	// formatting inside tool_destinations and inside other harnesses' and other
+	// generics' entries; line endings (LF or CRLF) are kept. Exceptions, each limited
+	// to what it names:
+	//   - "tool_destinations: {}" or a null value: the key line's value is replaced by
+	//     the block (a trailing comment on the key line is kept);
+	//   - a harness whose value is in flow style: that harness's value is re-rendered
+	//     in block style.
+	// A missing key is appended as a new top-level block at the end of the file; a
+	// missing file is created with that block only.
+	//
+	// The mapping is validated with the tool_destinations rules before anything is
+	// written; an invalid mapping, an unparseable existing file or a write failure
+	// returns an error and leaves the file unchanged.
+	PutToolDestination(harnessID string, mapping domain.ToolMapping) error
 }
 
 // ---------------------------------------------------------------------------

@@ -28,12 +28,12 @@ type transformRun struct {
 	targetManifest      manifest.Snapshot     // reconciled manifest narrowed to the target harness
 	sourceManifest      manifest.Snapshot     // reconciled manifest narrowed to the source harness
 
-	groupModels     TransformModelMapping // target model per source model group; "" = unresolved
-	customTools     map[string]string     // custom-tool answers: generic -> server
-	skippedTools    map[string]bool       // generics whose custom-tool question was skipped
-	declaredServers []string              // servers declared in the source harness's MCP configuration
-	mcpSplits       map[string]string     // answered and pre-answered MCP name splits: source name -> server
-	agents          []agentState          // parallel to plan.Agents
+	groupModels     TransformModelMapping    // target model per source model group; "" = unresolved
+	customTools     domain.CustomToolAnswers // custom-tool answers: generic -> entries
+	skippedTools    map[string]bool          // generics whose custom-tool question was skipped
+	declaredServers []string                 // servers declared in the source harness's MCP configuration
+	mcpSplits       map[string]string        // answered and pre-answered MCP name splits: source name -> server
+	agents          []agentState             // parallel to plan.Agents
 	inspections     []DeployedAgentInspection
 	skills          []skillState // parallel to plan.Skills
 	hooks           []hookState  // parallel to plan.Hooks

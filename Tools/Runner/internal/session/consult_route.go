@@ -226,8 +226,18 @@ func routingRequest(
 func (s *sessionImpl) consultSelectResolver(ctx context.Context, req domain.ConsultationRequest, config domain.RunConfig) (instr domain.RoutingInstruction, done bool, outcome domain.RunOutcome, err error) {
 	var consultErr error
 	var stop bool
-	if s.useManualResolver(req) {
-		instr, consultErr = s.deps.Manual.ConsultRouting(ctx, s.withAskOrchestratorOffer(req))
+	if use, origin := s.useManualResolver(req); use {
+		instr, stop, consultErr = s.consultManual(ctx, req, origin)
+		if errors.Is(consultErr, errManualRequestCancelled) {
+			return instr, true, domain.RunOutcome{}, consultErr
+		}
+		if consultErr == nil && instr.CancelRequest != nil {
+			// A stop requested during the dialogue wins over continuing.
+			if stopped, stopOut := s.stopBeforeConsult(); stopped {
+				return instr, true, stopOut, nil
+			}
+			instr, stop, consultErr = s.consultPrimary(ctx, req, config)
+		}
 	} else {
 		instr, stop, consultErr = s.consultPrimary(ctx, req, config)
 	}

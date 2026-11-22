@@ -5,6 +5,8 @@
 package screens
 
 import (
+	"time"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -68,4 +70,8 @@ type Styles struct {
 	// Currency is the effective currency every money figure is shown in; empty
 	// reads as USD.
 	Currency domain.CurrencyCode
+
+	// Location is the time zone run start times are shown in; nil reads as
+	// time.Local. Tests set a fixed zone.
+	Location *time.Location
 }

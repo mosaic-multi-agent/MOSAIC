@@ -83,6 +83,7 @@ type inRunRig struct {
 	flag       *requestFlag
 	hitl       *requestFlag // the pending in-run HITL request
 	logger     *sessionRecordingLogger
+	notes      *noticeRecorder
 	consultant *scriptedRoutingConsultant
 	orchPath   string
 
@@ -106,6 +107,7 @@ type inRunOptions struct {
 	approvals  domain.ApprovalReader      // nil: Deps.Approvals stays unset
 
 	consultations domain.ConsultationObserver // nil: Deps.Consultations stays unset
+	stopRequested func() bool                 // nil: Deps.StopRequested stays unset
 }
 
 func newInRunRig(t *testing.T, user *manualUser, o inRunOptions) *inRunRig {
@@ -117,7 +119,7 @@ func newInRunRig(t *testing.T, user *manualUser, o inRunOptions) *inRunRig {
 	}
 	rig := &inRunRig{
 		f: harness.NewMockAdapter(), store: &memStore{}, user: user, flag: &requestFlag{}, hitl: &requestFlag{},
-		logger: &sessionRecordingLogger{}, consultant: o.consultant, orchPath: orchPath,
+		logger: &sessionRecordingLogger{}, notes: &noticeRecorder{}, consultant: o.consultant, orchPath: orchPath,
 	}
 	before := &beforeInvokeHarness{delegate: rig.f, before: func(id string) {
 		rig.dialogueOpenAtInvoke = append(rig.dialogueOpenAtInvoke, rig.user.rowQuestions() > 0)
@@ -132,11 +134,12 @@ func newInRunRig(t *testing.T, user *manualUser, o inRunOptions) *inRunRig {
 	}}
 	deps := session.Deps{
 		Harness: wrapped, Store: rig.store, Clock: fixedClock{t: epoch},
-		Interact: &noopInteraction{}, Debug: rig.logger,
+		Interact: rig.notes, Debug: rig.logger,
 		TakeManualDispatchRequest: rig.flag.take, TakeHITLRequest: rig.hitl.take,
 	}
 	deps.Approvals = o.approvals
 	deps.Consultations = o.consultations
+	deps.StopRequested = o.stopRequested
 	if o.consultant != nil {
 		deps.Routing = o.consultant
 	}

@@ -147,6 +147,8 @@ The `--conflict` flag controls what happens when the tool cannot confirm a file 
 
 **What an update keeps.** Project and custom regions, the frontmatter, models and tool choices belong to you and survive an update. In the tools field, built-in tools follow the catalog (the plan lists those an update adds or removes), tools you added are kept, and custom tools the run produces are added.
 
+**Custom tool question.** The question takes a comma-separated list: `server` for every tool of an MCP server, `server/tool` for one tool. The CLI has no option to pre-answer it; without a pre-answer a non-interactive run skips the tool, records it in the TODO file and keeps its exit code. In Transform's JSON result, `customTools` lists the entries in the same syntax.
+
 **Edits to Deploy-owned content.** The agent body outside the project and custom regions, and whole skill and hook files, are Deploy-owned. When the content on disk differs from what Deploy recorded at its last write, the item becomes an update with the reason "Deploy-owned content was edited locally" (naming the differing regions of an agent) and the current file is backed up under `.mosaic/backups/` before it is replaced. Entries recorded before this check existed carry no record and get no edit check until their next write. `--conflict` applies to files Deploy cannot confirm as its own, not to these edits.
 
 **Plan reasons.** A plan item lists every reason for its action (version changes, workflow, protocol or bundle drift, catalog change, local edit, legacy file migration), one line each, in the plan review and in the `--dry-run` output. An item that is backed up before it is replaced says so. A catalog id recorded for a differently named catalog adds a name-collision warning to the item.

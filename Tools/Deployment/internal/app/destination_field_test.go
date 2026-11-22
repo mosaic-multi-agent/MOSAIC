@@ -701,9 +701,7 @@ func TestMapTools_ConfigMappingBeatsDescriptorCustomToolDefault(t *testing.T) {
 	result, err := descriptor.MapTools(desc, domain.ToolRequest{
 		AgentKey: "test-agent",
 		Generic:  []string{"my_mcp_tool"},
-		CustomNames: map[string]string{
-			"my_mcp_tool": "my-mcp-server",
-		},
+		CustomNames: domain.CustomToolAnswers{"my_mcp_tool": {{Server: "my-mcp-server"}}},
 	})
 	if err != nil {
 		t.Fatalf("descriptor.MapTools: %v", err)
@@ -821,8 +819,8 @@ Body.
 		Module: m,
 		Model:  domain.ModelSelection{Origin: domain.OriginUnresolved},
 		Scope:  domain.ScopeProject,
-		CustomTools: map[string]string{
-			"my_mcp_tool": "my-mcp-server",
+		CustomTools: domain.CustomToolAnswers{
+			"my_mcp_tool": {{Server: "my-mcp-server"}},
 		},
 	})
 	if err != nil {

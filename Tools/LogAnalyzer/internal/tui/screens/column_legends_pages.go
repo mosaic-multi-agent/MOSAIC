@@ -121,6 +121,7 @@ func runsLegend() []chrome.HelpGroup {
 	return []chrome.HelpGroup{legendGroup("", []columnDoc{
 		{"compare", "A or B for a run marked for a comparison, empty for an unmarked run."},
 		{"run", "The name of the run."},
+		{"started", "When the run started, in your local time zone; the run ID or the log timeline gives it, and it is empty when neither does."},
 		{"cost", "What the whole run cost in the display currency."},
 		{"invocations", "How many agent instances the run dispatched."},
 		{"duration", "Wall-clock time from the start to the end of the run."},

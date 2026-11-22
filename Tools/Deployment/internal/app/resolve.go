@@ -707,104 +707,6 @@ func (s *service) notifyPersistFailure(ctx context.Context, err error) {
 }
 
 // ---------------------------------------------------------------------------
-// Custom tool name resolution
-// ---------------------------------------------------------------------------
-
-// resolveCustomTools discovers every generic tool with no harness mapping across the given
-// agents, asks QCustomTool once per distinct unmapped tool (honouring pre-answers, skip, and
-// skip-all), and returns the resolved custom names plus the set of tools the user skipped.
-// Every skipped tool produces a GapUnmappedTool entry (AC18.5).
-func (s *service) resolveCustomTools(
-	ctx context.Context,
-	preAnswered map[string]string,
-	skipAll map[domain.QuestionID]bool,
-	module domain.HarnessModule,
-	agents []domain.Agent,
-) (map[string]string, map[string]bool) {
-	customNames := make(map[string]string, len(preAnswered))
-	for k, v := range preAnswered {
-		customNames[k] = v
-	}
-	skipped := make(map[string]bool)
-
-	var unmappedOrder []string
-	seen := make(map[string]bool)
-	for _, agent := range agents {
-		if len(agent.Tools) == 0 {
-			continue
-		}
-		result, err := module.Tools(domain.ToolRequest{
-			AgentKey: agent.Key, Generic: agent.Tools, Placeholder: agent.ToolsPlaceholder,
-		})
-		if err != nil {
-			continue
-		}
-		for _, res := range result.Resolutions {
-			if res.Outcome == domain.ToolUnmapped && !seen[res.Generic] {
-				seen[res.Generic] = true
-				unmappedOrder = append(unmappedOrder, res.Generic)
-			}
-		}
-	}
-
-	skippedAll := skipAll[domain.QCustomTool]
-	for _, toolName := range unmappedOrder {
-		if _, ok := customNames[toolName]; ok {
-			continue // pre-answered
-		}
-		if skippedAll {
-			skipped[toolName] = true
-			continue
-		}
-		q := domain.TextQuestion{
-			Question: domain.Question{
-				ID: domain.QCustomTool, Subject: toolName,
-				Title:        "Custom MCP server name for " + toolName,
-				Prompt:       "Enter the bare MCP server name that provides this tool -- not a specific tool name within the server.",
-				Detail:       "Example: enter github, not github_get_me",
-				AllowSkip:    true,
-				AllowSkipAll: true,
-			},
-		}
-		ans, err := s.deps.Interaction.AskText(ctx, q)
-		if err != nil {
-			skipped[toolName] = true
-			continue
-		}
-		switch ans.Status {
-		case domain.SkippedAll:
-			skippedAll = true
-			skipped[toolName] = true
-		case domain.Answered:
-			if ans.Text != "" {
-				customNames[toolName] = ans.Text
-			} else {
-				skipped[toolName] = true
-			}
-		default:
-			skipped[toolName] = true
-		}
-	}
-
-	// Re-resolve with the final custom-name and skip maps so the harness module records the
-	// propagated custom names (used by content generation during deployment).
-	for _, agent := range agents {
-		if len(agent.Tools) == 0 {
-			continue
-		}
-		_, _ = module.Tools(domain.ToolRequest{
-			AgentKey: agent.Key, Generic: agent.Tools, Placeholder: agent.ToolsPlaceholder,
-			CustomNames: customNames, SkippedTools: skipped,
-		})
-	}
-
-	// Unmapped-tool gaps are emitted solely by plan.Build, which names the owning agent and
-	// also fires in the update flow. Emitting them here would produce duplicates.
-
-	return customNames, skipped
-}
-
-// ---------------------------------------------------------------------------
 // Locally-modified file prompting (update flow)
 // ---------------------------------------------------------------------------
 
@@ -955,7 +857,7 @@ func (s *service) buildContent(
 	module domain.HarnessModule,
 	agentByKey map[string]domain.Agent,
 	models map[string]domain.ModelSelection,
-	customTools map[string]string,
+	customTools domain.CustomToolAnswers,
 	skippedTools map[string]bool,
 	workflowBlocks []transform.WorkflowBlock,
 	infrastructureBlocks []transform.InfrastructureBlock,

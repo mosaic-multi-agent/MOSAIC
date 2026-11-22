@@ -127,8 +127,9 @@ An external module is a subprocess that MOSAIC communicates with using the [JSON
 
 Read the full [external protocol specification](external-protocol.md) before implementing. The key points:
 - One JSON object per line on stdin (request) and stdout (response)
-- Protocol version `"1.0"` on every message
+- Protocol version `"2.0"` on every message
 - First exchange must be the `handshake` method
+- The `tools` request carries custom tool answers in `custom_tools` (server name to a list of entries; protocol 2.0 replaced the former `custom_names`)
 - Module exits when MOSAIC closes its stdin
 
 ### Step 1: Implement the handshake
@@ -136,8 +137,8 @@ Read the full [external protocol specification](external-protocol.md) before imp
 Your executable must respond to the `handshake` method as its first exchange:
 
 ```
-Request:  {"protocol":"1.0","id":"1","method":"handshake","params":{"protocol":"1.0"}}
-Response: {"protocol":"1.0","id":"1","result":{"protocol":"1.0","harness":{"id":"my-harness","display_name":"My Harness","tier":"external","usable":true}}}
+Request:  {"protocol":"2.0","id":"1","method":"handshake","params":{"protocol":"2.0"}}
+Response: {"protocol":"2.0","id":"1","result":{"protocol":"2.0","harness":{"id":"my-harness","display_name":"My Harness","tier":"external","usable":true}}}
 ```
 
 If your harness fails to start (e.g. missing configuration), set `"usable": false` in the handshake response and MOSAIC will surface the error to the user.
@@ -347,7 +348,7 @@ validation rules.
 
 **Writing to stdout before handshake response**: Any output before the first handshake response will be treated as a malformed response. Write nothing until you are ready to respond to the handshake.
 
-**Protocol version mismatch**: Always echo `"1.0"` in the `protocol` field of every response, including the handshake. A different value causes MOSAIC to reject the module with `ErrProtocolMismatch`.
+**Protocol version mismatch**: Always echo `"2.0"` in the `protocol` field of every response, including the handshake. A different value causes MOSAIC to reject the module with `ErrProtocolMismatch`.
 
 ---
 
@@ -461,7 +462,7 @@ Before submitting a harness, verify:
 
 For external modules, additionally:
 
-- [ ] Handshake correctly echoes `"1.0"` in the protocol field
+- [ ] Handshake correctly echoes `"2.0"` in the protocol field
 - [ ] Module exits cleanly when stdin is closed
 - [ ] Module does not write to stdout before the handshake response
 - [ ] Subprocess stderr contains useful diagnostic information when exiting non-zero

@@ -85,3 +85,15 @@ type WorkflowRegion struct {
 	Info    WorkflowInfo // identifier and version
 	Content []byte       // raw bytes between the boundary tags (for workflow.Parse)
 }
+
+// FirstRowInputs returns the Input column of the routing table's first row
+// (row index 0): the artifacts the run's first agent declares, verbatim
+// (templates and wildcards preserved, declaration order), including inputs the
+// row also writes. It returns nil when the table has no rows or the first row
+// declares no inputs. The returned slice is a copy.
+func (t RoutingTable) FirstRowInputs() []string {
+	if len(t.Rows) == 0 || len(t.Rows[0].InputArtifacts) == 0 {
+		return nil
+	}
+	return append([]string(nil), t.Rows[0].InputArtifacts...)
+}

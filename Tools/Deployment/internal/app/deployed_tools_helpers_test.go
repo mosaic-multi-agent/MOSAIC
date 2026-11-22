@@ -131,7 +131,7 @@ func withSkill(generics ...string) []string {
 }
 
 // assertCustomTools compares the custom tool map, treating nil and empty as equal.
-func assertCustomTools(t *testing.T, want, got map[string]string) {
+func assertCustomTools(t *testing.T, want, got domain.CustomToolAnswers) {
 	t.Helper()
 	if len(want) == 0 && len(got) == 0 {
 		return

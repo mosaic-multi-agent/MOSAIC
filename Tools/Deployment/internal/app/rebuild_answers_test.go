@@ -23,7 +23,7 @@ var claudeToClaude = rbPair{"claude-to-claude", hClaude, hClaude}
 var withWebSearch = withSourceEdit(replaceText("tools: Read, Grep", "tools: Read, Grep, WebSearch"))
 
 func TestRebuild_AnsweredUnmappedTool_BecomesCustomServerAndReportsNoGap(t *testing.T) {
-	answer := withCustomToolAnswers(map[string]string{"web_search": "srv"})
+	answer := withCustomToolAnswers(domain.CustomToolAnswers{"web_search": {{Server: "srv"}}})
 
 	res, out := rbRebuild(t, rbInput(t, claudeToOpencode, true, withWebSearch, answer))
 
@@ -94,7 +94,7 @@ func TestRebuild_MainOrchestratorPlaceholder_UnmappedExtraNeedsAnswerOrGetsGap(t
 	resSkip, _ := rbRebuild(t, rbInput(t, claudeToOpencode, true,
 		append(append([]rbOpt(nil), opts...), withSkippedTools(map[string]bool{"web_search": true}))...))
 	resAnswered, outAnswered := rbRebuild(t, rbInput(t, claudeToOpencode, true,
-		append(append([]rbOpt(nil), opts...), withCustomToolAnswers(map[string]string{"web_search": "srv"}))...))
+		append(append([]rbOpt(nil), opts...), withCustomToolAnswers(domain.CustomToolAnswers{"web_search": {{Server: "srv"}}}))...))
 
 	for name, res := range map[string]app.RebuildResult{"unanswered": resOpen, "skipped": resSkip} {
 		if len(res.UnmappedTools) != 1 || res.UnmappedTools[0] != "web_search" {

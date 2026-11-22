@@ -172,6 +172,10 @@ When the tool cannot confirm a file as its own, because it cannot be parsed or h
 
 **What an update keeps.** Project and custom regions, the frontmatter, models and tool choices belong to you and survive an update. In the tools field, built-in tools follow the catalog (the plan lists those an update adds or removes), tools you added are kept, and custom tools the run produces are added.
 
+**The custom tool question.** When an agent declares a generic tool the target harness cannot map, Deploy and Transform ask which MCP tools provide it. Answer with a comma-separated list: `server` grants every tool of that server, `server/tool` grants a single tool, for example `github/get_pr, github/list_comments, jira`. An entry that does not fit is refused with the entry named and the reason. Every entry reaches the agent's tools. In Transform's result, `customTools` lists the entries in this syntax.
+
+**Remembering the answer.** In interactive runs, after each answer Deploy offers to save it to `tool_destinations` in `user-config.yaml` for the harness (in Transform, the target harness). Accept, and later runs on that harness, in any workspace and also in the same Deploy session, do not ask for that tool again. Decline, and nothing is saved; the run is the same either way. A failed save is a warning. Non-interactive CLI runs get no offer. The saved entry is a normal `tool_destinations` entry, so you can edit or remove it in `user-config.yaml`; see [configuration](../Tools/Deployment/docs/configuration.md#tool_destinations).
+
 **Edits to Deploy-owned content.** The agent body outside the project and custom regions, and whole skill and hook files, are Deploy-owned. When one differs from what Deploy recorded at its last write, the plan shows an update with the reason "Deploy-owned content was edited locally" and the current file is backed up under `.mosaic/backups/` before it is replaced. Files written by an earlier Deploy version carry no such record and get no edit check until their next write. The plan lists every reason for an item, not only the first.
 
 ### The manifest

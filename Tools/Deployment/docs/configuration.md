@@ -182,14 +182,24 @@ Valid in **both** config files with identical syntax and semantics.
 A generic agent declares generic tool names (`file_read`, `terminal`, …). Each
 harness descriptor maps those to its own tool names. When an agent declares a
 generic tool the target harness has **no mapping for**, deployment prompts you
-to type a harness-side name for it.
+for the MCP entries that provide it.
 
-Those prompt answers are **not persisted**. Only `tier_models` and
-`custom_model_ids` are written back to `user-config.yaml`. So the same prompt
-returns on every deploy and every update, forever.
+After you answer, interactive Deploy (deploy, agents, workflows, update and
+transform) offers to remember the answer. Accepting writes a `tool_destinations`
+entry for that harness (in transform, the target harness) to `user-config.yaml`
+that reproduces your answer; declining saves nothing and does not change the run.
+Later runs on that harness, also in another workspace, no longer ask for the tool.
+A failed save is a warning and the run continues. The offer is made only for
+built-in and descriptor harnesses, and never in non-interactive CLI runs
+(for example `--auto-confirm`), which keep their TODO file and exit code. Saving
+changes the tool-mapping version stamp like any `tool_destinations` change, so
+deployed agents report the change at their next update.
 
-Declaring the mapping in `tool_destinations` answers it permanently: the tool is
-now *mapped*, so it is never asked about again.
+Besides `tool_destinations`, only `tier_models` and `custom_model_ids` are
+written back to `user-config.yaml` by prompts.
+
+Declaring the mapping in `tool_destinations` by hand answers it permanently in the
+same way: the tool is now *mapped*, so it is never asked about again.
 
 It also answers the mirror-image question. During `promote` (deployed agent →
 generic), a harness-side tool with no reverse mapping prompts "which generic

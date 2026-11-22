@@ -123,7 +123,7 @@ func TestOpenCodeV2Rules_UndeclaredToolsAreDeniedIncludingDefaultOnBuiltIns(t *t
 
 func TestOpenCodeV2Rules_ToolsOfUndeclaredMCPServersAreDenied(t *testing.T) {
 	rules := renderV2(t, domain.ToolRequest{
-		AgentKey: "a", Generic: []string{"file_read", "ask_user"}, CustomNames: map[string]string{"ask_user": "hitl"},
+		AgentKey: "a", Generic: []string{"file_read", "ask_user"}, CustomNames: domain.CustomToolAnswers{"ask_user": {{Server: "hitl"}}},
 	})
 
 	if got := effectFor(rules, "someother_lookup"); got != "deny" {
@@ -148,7 +148,7 @@ func TestOpenCodeV2Rules_NoUndeclaredActionFallsBackToAsk(t *testing.T) {
 
 func TestOpenCodeV2Rules_DeclaredCustomMCPToolIsAllowedAfterTheBuiltIns(t *testing.T) {
 	rules := renderV2(t, domain.ToolRequest{
-		AgentKey: "a", Generic: []string{"file_read", "ask_user"}, CustomNames: map[string]string{"ask_user": "hitl"},
+		AgentKey: "a", Generic: []string{"file_read", "ask_user"}, CustomNames: domain.CustomToolAnswers{"ask_user": {{Server: "hitl"}}},
 	})
 
 	if got := effectFor(rules, "hitl_ask_user"); got != "allow" {
@@ -220,7 +220,7 @@ func TestOpenCodeV2Rules_NoDeclaredToolsRendersOnlyTheFixedRules(t *testing.T) {
 func TestOpenCodeV2Rules_EveryRuleIsWholeToolWithNoAbsolutePath(t *testing.T) {
 	rules := renderV2(t, domain.ToolRequest{
 		AgentKey: "a", Generic: []string{"file_read", "file_write", "terminal", "ask_user"},
-		CustomNames: map[string]string{"ask_user": "hitl"},
+		CustomNames: domain.CustomToolAnswers{"ask_user": {{Server: "hitl"}}},
 	})
 
 	for _, r := range rules {
@@ -260,7 +260,7 @@ func TestOpenCodeV2Rules_ActionSharedByTwoDeclaredToolsIsRenderedOnce(t *testing
 func TestOpenCodeV2Rules_OutputIsDeterministic(t *testing.T) {
 	req := domain.ToolRequest{
 		AgentKey: "a", Generic: []string{"terminal", "ask_user", "file_read", "subagent"},
-		CustomNames: map[string]string{"ask_user": "hitl"},
+		CustomNames: domain.CustomToolAnswers{"ask_user": {{Server: "hitl"}}},
 	}
 
 	first, second := renderV2(t, req), renderV2(t, req)

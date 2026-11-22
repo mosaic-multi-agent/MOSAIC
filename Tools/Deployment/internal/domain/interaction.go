@@ -53,6 +53,9 @@ const (
 	QAgentModel            QuestionID = "agent-model"
 	QCustomModel           QuestionID = "custom-model"
 	QCustomTool            QuestionID = "custom-tool"
+	// QSaveCustomTool offers to save a custom tool answer to tool_destinations in
+	// user-config.yaml for the run's harness. Subject is the generic tool name.
+	QSaveCustomTool QuestionID = "save-custom-tool"
 	// QMCPNameSplit asks how an ambiguous MCP tool name splits into server and tool. SelectOne.
 	// Subject: the source tool name. Options: one per split, ID = the server part, Label
 	// "<server> / <tool>", shortest server first. Skippable and skip-all-able.

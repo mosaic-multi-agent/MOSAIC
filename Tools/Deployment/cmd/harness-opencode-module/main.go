@@ -12,7 +12,7 @@
 //
 // Protocol: one JSON object per line, UTF-8, no BOM. Requests include: protocol, id, method,
 // params. Responses include: protocol, id, and one of result or error. The protocol field on
-// every response must equal the ProtocolVersion constant "1.0".
+// every response must equal the ProtocolVersion constant "2.0".
 package main
 
 import (
@@ -26,7 +26,7 @@ import (
 )
 
 // protocolVersion is the version this server speaks. It must equal external.ProtocolVersion.
-const protocolVersion = "1.0"
+const protocolVersion = "2.0"
 
 // ---------------------------------------------------------------------------
 // Wire types (server-side, mirroring the adapter's unexported types)
@@ -76,11 +76,11 @@ type wireFrontmatterField struct {
 // ---------------------------------------------------------------------------
 
 type wireToolRequest struct {
-	AgentKey     string            `json:"agent_key"`
-	Generic      []string          `json:"generic,omitempty"`
-	Placeholder  string            `json:"placeholder,omitempty"`
-	CustomNames  map[string]string `json:"custom_names,omitempty"`
-	SkippedTools map[string]bool   `json:"skipped_tools,omitempty"`
+	AgentKey     string                    `json:"agent_key"`
+	Generic      []string                  `json:"generic,omitempty"`
+	Placeholder  string                    `json:"placeholder,omitempty"`
+	CustomTools  map[string][]wireMCPEntry `json:"custom_tools,omitempty"`
+	SkippedTools map[string]bool           `json:"skipped_tools,omitempty"`
 }
 
 type wireFrontmatterRequest struct {
@@ -405,7 +405,7 @@ func handleRequest(mod domain.HarnessModule, req wireRequest) wireResponse {
 			AgentKey:     params.AgentKey,
 			Generic:      params.Generic,
 			Placeholder:  params.Placeholder,
-			CustomNames:  params.CustomNames,
+			CustomNames:  fromWireCustomTools(params.CustomTools),
 			SkippedTools: params.SkippedTools,
 		}
 		toolResult, err := mod.Tools(domReq)

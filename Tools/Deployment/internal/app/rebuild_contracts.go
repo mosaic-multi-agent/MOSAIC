@@ -22,8 +22,8 @@ type RebuildInput struct {
 	TargetModule        domain.HarnessModule
 	Catalog             CatalogAgentLookup // nil = no cross-check
 	Model               domain.ModelSelection
-	CustomTools         map[string]string // custom-tool answers: generic -> server
-	SkippedTools        map[string]bool   // generics the user chose to skip
+	CustomTools         domain.CustomToolAnswers // custom-tool answers: generic -> entries
+	SkippedTools        map[string]bool          // generics the user chose to skip
 	ToolMappingsVersion string
 	Timestamp           string // RFC3339 UTC, passed to transform.Request
 

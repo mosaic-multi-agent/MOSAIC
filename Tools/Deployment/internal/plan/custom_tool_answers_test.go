@@ -8,6 +8,7 @@ package plan_test
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"mosaic-deploy/internal/domain"
@@ -30,7 +31,7 @@ func answerAwareModule(unmapped []string, seen *[]domain.ToolRequest) *fakeModul
 					continue
 				}
 				switch {
-				case req.CustomNames[g] != "":
+				case len(req.CustomNames[g]) > 0:
 					outcome = domain.ToolCustom
 				case req.SkippedTools[g]:
 					outcome = domain.ToolSkipped
@@ -47,7 +48,7 @@ func answerAwareModule(unmapped []string, seen *[]domain.ToolRequest) *fakeModul
 
 // buildWithTools plans one new agent declaring the given tools, with the given answers.
 func buildWithTools(t *testing.T, module domain.HarnessModule, tools []string,
-	custom map[string]string, skipped map[string]bool) domain.Plan {
+	custom domain.CustomToolAnswers, skipped map[string]bool) domain.Plan {
 	t.Helper()
 	agent := makeAgent("test-agent", "1.0")
 	agent.Tools = tools
@@ -83,7 +84,7 @@ func TestBuild_CustomNamedTool_RaisesNoUnmappedToolGap(t *testing.T) {
 	module := answerAwareModule([]string{"bash-shell"}, &seen)
 
 	p := buildWithTools(t, module, []string{"bash-shell"},
-		map[string]string{"bash-shell": "my-shell-server"}, nil)
+		domain.CustomToolAnswers{"bash-shell": {{Server: "my-shell-server"}}}, nil)
 
 	if gap, ok := findGapForSubject(p.Gaps, domain.GapUnmappedTool, "bash-shell"); ok {
 		t.Errorf("Plan.Gaps has an unmapped-tool gap %+v for a tool the user named; "+
@@ -98,7 +99,7 @@ func TestBuild_AnsweredAndUnaskedTools_OnlyUnaskedReported(t *testing.T) {
 	module := answerAwareModule([]string{"bash-shell", "web-search"}, &seen)
 
 	p := buildWithTools(t, module, []string{"bash-shell", "web-search"},
-		map[string]string{"bash-shell": "my-shell-server"}, nil)
+		domain.CustomToolAnswers{"bash-shell": {{Server: "my-shell-server"}}}, nil)
 
 	if _, ok := findGapForSubject(p.Gaps, domain.GapUnmappedTool, "bash-shell"); ok {
 		t.Error("answered tool \"bash-shell\" is reported as unmapped")
@@ -140,7 +141,7 @@ func TestBuild_SkippedTool_RaisesUnmappedToolGap(t *testing.T) {
 func TestBuild_AnswersForwardedIntoEveryToolRequest(t *testing.T) {
 	var seen []domain.ToolRequest
 	module := answerAwareModule([]string{"bash-shell", "web-search"}, &seen)
-	custom := map[string]string{"bash-shell": "my-shell-server"}
+	custom := domain.CustomToolAnswers{"bash-shell": {{Server: "my-shell-server"}}}
 	skipped := map[string]bool{"web-search": true}
 
 	p := buildWithTools(t, module, []string{"bash-shell", "web-search"}, custom, skipped)
@@ -149,7 +150,7 @@ func TestBuild_AnswersForwardedIntoEveryToolRequest(t *testing.T) {
 		t.Fatal("the planner issued no tool request")
 	}
 	for _, req := range seen {
-		if req.CustomNames["bash-shell"] != "my-shell-server" {
+		if !reflect.DeepEqual(req.CustomNames["bash-shell"], []domain.MCPEntry{{Server: "my-shell-server"}}) {
 			t.Errorf("tool request for %q carries CustomNames %v, want bash-shell answered",
 				req.AgentKey, req.CustomNames)
 		}

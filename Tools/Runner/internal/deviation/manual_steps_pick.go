@@ -60,6 +60,10 @@ func (d *manualDialogue) stepRow(ctx context.Context) error {
 		return err
 	}
 	if cancelled {
+		if d.req.OfferCancelRequest {
+			d.result = &domain.RoutingInstruction{CancelRequest: &domain.CancelRequestInstruction{}}
+			return nil
+		}
 		return d.abandoned("the user cancelled manual routing at the row choice")
 	}
 	choice := chosenValue(ans)

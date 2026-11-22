@@ -110,7 +110,7 @@ type Input struct {
 	// CustomToolNames are the run's answers to QCustomTool (pre-answers included): generic
 	// tool -> user-supplied server name. Forwarded into every ToolRequest the planner issues.
 	// nil: no answers (behaviour as before).
-	CustomToolNames map[string]string
+	CustomToolNames domain.CustomToolAnswers
 	// SkippedTools are the generic tools the user skipped for QCustomTool in this run.
 	// Forwarded into every ToolRequest; a skipped tool still raises GapUnmappedTool.
 	SkippedTools map[string]bool

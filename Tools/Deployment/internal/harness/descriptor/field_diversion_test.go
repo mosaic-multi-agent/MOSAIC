@@ -273,7 +273,7 @@ func TestMapTools_CustomTemplate_NameIsFormattedThroughTemplate(t *testing.T) {
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)
@@ -310,7 +310,7 @@ func TestMapTools_CustomTemplate_RawNameAbsentWhenTemplateApplied(t *testing.T) 
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)
@@ -343,7 +343,7 @@ func TestMapTools_CustomTool_AppearsInToolsField(t *testing.T) {
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)
@@ -477,7 +477,7 @@ func TestMapTools_CustomTemplateAndDest_DestinationsCarryFormattedName(t *testin
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)
@@ -522,7 +522,7 @@ func TestMapTools_CustomTemplateAndDest_RawNameAbsentFromDestinations(t *testing
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)
@@ -553,7 +553,7 @@ func TestMapTools_CustomTemplateAndDest_DestinationUsesFieldKind(t *testing.T) {
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)
@@ -591,7 +591,7 @@ func TestMapTools_TemplateWithoutCustomDest_FallsThroughToDestMainWithFormattedN
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)
@@ -631,7 +631,7 @@ func TestMapTools_CustomDestWithoutTemplate_DestinationsCarryRawName(t *testing.
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)
@@ -670,7 +670,7 @@ func TestMapTools_CustomTemplateAndDest_HarnessToolsCarriesFormattedName(t *test
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)

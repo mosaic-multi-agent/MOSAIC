@@ -83,7 +83,7 @@ type TransformFileOutcome struct {
 	Model         string           `json:"model,omitempty"` // written model id; "" = none
 	Tools         []string         `json:"tools,omitempty"`
 	DroppedTools  []DroppedTool    `json:"droppedTools,omitempty"`
-	CustomTools   []string         `json:"customTools,omitempty"`   // servers kept as custom tools
+	CustomTools   []string         `json:"customTools,omitempty"`   // custom entries: "server" or "server/tool"
 	UnmappedTools []string         `json:"unmappedTools,omitempty"` // generics whose custom-tool question was skipped
 	DroppedFields []string         `json:"droppedFields,omitempty"`
 	// StrippedFields reports source fields removed from the written agent: harness-specific

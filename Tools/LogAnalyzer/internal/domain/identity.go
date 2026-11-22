@@ -1,6 +1,9 @@
 package domain
 
-import "regexp"
+import (
+	"regexp"
+	"time"
+)
 
 // Harness names the adapter that emitted an event. Unrecognised values are
 // preserved verbatim rather than rejected.
@@ -77,6 +80,20 @@ var runIDPattern = regexp.MustCompile(`^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}$`)
 
 // IsRunID reports whether s matches the {YYYYMMDD}T{HHMMSS}Z-{4-hex} run-id format.
 func IsRunID(s string) bool { return runIDPattern.MatchString(s) }
+
+// RunIDTime returns the start moment encoded in a run ID of the form
+// YYYYMMDDTHHMMSSZ-xxxx, in UTC. ok is false when IsRunID(id) is false or the
+// timestamp is not a valid calendar time.
+func RunIDTime(id string) (t time.Time, ok bool) {
+	if !IsRunID(id) {
+		return time.Time{}, false
+	}
+	parsed, err := time.Parse("20060102T150405Z", id[:16])
+	if err != nil {
+		return time.Time{}, false
+	}
+	return parsed.UTC(), true
+}
 
 // ActorKind distinguishes the orchestrator's own cost from a subagent instance's.
 type ActorKind uint8

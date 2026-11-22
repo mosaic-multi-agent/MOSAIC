@@ -133,7 +133,7 @@ type ToolOutcome string
 
 const (
 	ToolMapped   ToolOutcome = "mapped"
-	ToolCustom   ToolOutcome = "custom"   // resolved by a user-supplied MCP server name
+	ToolCustom   ToolOutcome = "custom"   // resolved by the user's MCP entries
 	ToolSkipped  ToolOutcome = "skipped"  // user declined to name it
 	ToolUnmapped ToolOutcome = "unmapped" // no mapping and no user decision yet
 )
@@ -157,8 +157,33 @@ type ToolRequest struct {
 	AgentKey     string
 	Generic      []string          // the agent's declared generic tools, source order
 	Placeholder  string            // non-empty when the source used a placeholder instead of a list
-	CustomNames  map[string]string // generic tool -> user-supplied MCP server name
+	CustomNames  CustomToolAnswers // generic tool -> the user's MCP entries
 	SkippedTools map[string]bool   // generic tool -> user chose to skip
+}
+
+// MCPEntry is one entry of a custom tool answer in the neutral syntax: a whole
+// MCP server (Tool == "") or one tool of it. Server is never empty; Tool is
+// never "*".
+type MCPEntry struct {
+	Server string
+	Tool   string
+}
+
+// CustomToolAnswers maps a generic tool to the entries the user answered for
+// it, in answer order. A present key has at least one entry.
+type CustomToolAnswers map[string][]MCPEntry
+
+// CustomToolAnswersFromNames converts single-server answers (generic -> server name)
+// into CustomToolAnswers: each non-empty value becomes one whole-server entry, an empty
+// value gives no key. It is a bridge for callers that still carry single names.
+func CustomToolAnswersFromNames(names map[string]string) CustomToolAnswers {
+	out := CustomToolAnswers{}
+	for g, v := range names {
+		if v != "" {
+			out[g] = []MCPEntry{{Server: v}}
+		}
+	}
+	return out
 }
 
 // ToolResult is the module's answer: rendered frontmatter fields plus a full audit trail.

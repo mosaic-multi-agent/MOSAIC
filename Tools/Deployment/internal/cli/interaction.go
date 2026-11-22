@@ -141,12 +141,27 @@ func (n *nonInteractive) AskText(_ context.Context, q domain.TextQuestion) (doma
 		n.recordSkip(q.ID, q.Subject)
 		return domain.TextAnswer{Status: domain.SkippedOne}, nil
 	}
+	if q.Validate != nil {
+		if err := q.Validate(v); err != nil {
+			n.todos.AddGap(domain.Gap{
+				Kind:    domain.GapSkippedFile,
+				Subject: string(q.ID),
+				Detail: fmt.Sprintf("question %q (subject %q) had no usable pre-answer in non-interactive mode: %v",
+					q.ID, q.Subject, err),
+			})
+			return domain.TextAnswer{Status: domain.SkippedOne}, nil
+		}
+	}
 	return domain.TextAnswer{Status: domain.Answered, Text: v}, nil
 }
 
 // Confirm resolves a yes/no question from PreAnswers. The answer must be "true" or "false";
-// any other value (including absent) results in a skip-and-record.
+// any other value (including absent) results in a skip-and-record. The offer to save a custom
+// tool answer is the exception: a non-interactive run never saves, so it is skipped without a gap.
 func (n *nonInteractive) Confirm(_ context.Context, q domain.Question) (domain.ConfirmAnswer, error) {
+	if q.ID == domain.QSaveCustomTool {
+		return domain.ConfirmAnswer{Status: domain.SkippedOne}, nil
+	}
 	v, ok := n.lookup(q.ID, q.Subject)
 	if !ok {
 		n.recordSkip(q.ID, q.Subject)

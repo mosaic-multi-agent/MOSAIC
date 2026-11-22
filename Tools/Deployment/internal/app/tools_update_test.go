@@ -120,7 +120,7 @@ func TestUpdateTools_RunProducedCustomTool_WrittenAndNotReportedAsBuiltInChange(
 	source := strings.Replace(tuCatalogSource, "tools: [gen_read, gen_edit]", "tools: [gen_read, gen_edit, gen_mcp]", 1)
 	setup := tuSetup{registry: tuRegistry(), source: source}
 	run := runToolsUpdateWith(t, setup, tuDeployed("0.9.0", "[read, edit]", ""), func(r *app.DeployAgentsRequest) {
-		r.CustomTools = map[string]string{"gen_mcp": "my-server"}
+		r.CustomTools = domain.CustomToolAnswers{"gen_mcp": {{Server: "my-server"}}}
 	})
 
 	item := requireToolsRunItem(t, run)

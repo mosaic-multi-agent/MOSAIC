@@ -134,7 +134,7 @@ func withModelSelection(m domain.ModelSelection) rbOpt {
 	return func(_ *testing.T, in *app.RebuildInput) { in.Model = m }
 }
 
-func withCustomToolAnswers(answers map[string]string) rbOpt {
+func withCustomToolAnswers(answers domain.CustomToolAnswers) rbOpt {
 	return func(_ *testing.T, in *app.RebuildInput) { in.CustomTools = answers }
 }
 

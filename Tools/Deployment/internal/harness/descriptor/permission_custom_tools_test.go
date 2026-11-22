@@ -26,7 +26,7 @@ func mapPermission(t *testing.T, generic []string, custom map[string]string) []d
 	result, err := descriptor.MapTools(makePermNoCustomDestDescriptor(), domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     generic,
-		CustomNames: custom,
+		CustomNames: domain.CustomToolAnswersFromNames(custom),
 	})
 	if err != nil {
 		t.Fatalf("MapTools: %v", err)
@@ -107,7 +107,7 @@ func TestPermissionCustomTools_ServerFormIsAppliedToPermissionKey(t *testing.T) 
 	result, err := descriptor.MapTools(d, domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "srv"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "srv"}}},
 	})
 	if err != nil {
 		t.Fatalf("MapTools: %v", err)
@@ -127,7 +127,7 @@ func TestPermissionCustomTools_FieldDestinedCustomToolStaysOutOfPermissionMap(t 
 	result, err := descriptor.MapTools(d, domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	})
 	if err != nil {
 		t.Fatalf("MapTools: %v", err)

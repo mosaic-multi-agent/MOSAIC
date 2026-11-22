@@ -391,7 +391,7 @@ func TestCollapse_CustomToolOnly_ProducesReadOnly(t *testing.T) {
 	result, err := mod.Tools(domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"file_read"},
-		CustomNames: map[string]string{"file_read": "my-mcp-server"},
+		CustomNames: domain.CustomToolAnswers{"file_read": {{Server: "my-mcp-server"}}},
 	})
 	if err != nil {
 		t.Fatalf("Tools: %v", err)
@@ -690,7 +690,7 @@ func TestToolResolution_CustomName_IsCustom(t *testing.T) {
 	result, err := mod.Tools(domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"file_read"},
-		CustomNames: map[string]string{"file_read": "my-mcp-server"},
+		CustomNames: domain.CustomToolAnswers{"file_read": {{Server: "my-mcp-server"}}},
 	})
 	if err != nil {
 		t.Fatalf("Tools(custom name): %v", err)
