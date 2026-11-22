@@ -1,187 +1,89 @@
-# Unreleased
+# 0.8.0 (2026-11-22)
 
-## Hooks
-
-### mosaic-logger v1.12.0
-#### Changes
-- **OpenCode V2 (`opencode-v2`, experimental) is a mosaic-logger harness.** The bundle has a new `opencode-v2` variant, a TypeScript plugin deployed to `.opencode/plugins/`, with the logging of the OpenCode variant: sessions, subagent invocations, tool calls, permission evaluations, artifacts written, usage, compactions, Runner-mode invocation ownership and transcripts
-- The plugin never records cost: V2 reports none that can be trusted. LogAnalyzer prices usage itself
-- Under the Runner every record is written synchronously, because the private server of a standalone run exits together with the run. Native mode needs the `opencode` command on the PATH to export transcripts
-- Features V2 gives no signal for, such as re-binding a resumed root session to its run, are listed in the variant's `LIMITATIONS.md`
-
-### mosaic-logger v1.11.3
-#### Bugfixes
-- In Claude Code, every dispatched agent is now logged under its own instance id, even when it starts before the dispatch hook has finished
-- Existing deployments need a redeploy to get the new hook registration
-- Logs that were already written are not repaired
-
-### mosaic-logger v1.11.2
-#### Bugfixes
-- Claude Code, GitHub Copilot CLI and VS Code Copilot Chat now log each agent invocation under its own instance id, so parallel dispatches no longer end up in the wrong instance folder
-- Invocations that cannot be matched to a dispatch get a unique folder instead of a shared `unknown-agent` folder
-- When an agent's lifecycle fires again (for example after killing its orphaned process), the existing invocation continues and its usage is no longer logged twice
-- Logs that were already written are not repaired
+> **To upgrade:**
+> - Run `Update workspace` to get the updated agents, workflows, orchestrators and `mosaic-logger` hook.
+> - Five unused workflows and two agents were removed (see Catalog). `Update workspace` keeps your deployed copies and warns about each.
+> - External harness modules must use module protocol `2.0`.
 
 ## Tools
 
 ### Runner v1.16.0
 #### Changes
-- **The seed input screen says when the seed is required.** When the workflow's first agent reads input artifacts, the screen is labelled "required" and names those inputs. Enter on a blank required seed shows a warning first and starts only when you press Enter again, so a run no longer starts silently without a required seed
-- **Esc cancels an in-run manual dispatch request.** Esc at the first step of a manual dialogue opened by the in-run manual dispatch request (`m`) cancels the request instead of abandoning the dialogue; the step says so, a progress notice is shown, and the run continues as it would have without it
-
-### LogAnalyzer v1.6.0
-#### Changes
-- **The runs list shows when each run started.** A new `started` column shows each run's start date and time in local time, also for digest runs. On narrow terminals the column is among the first dropped, and the run column now keeps the width of a full run ID
+- **Codex and OpenCode V2 are Runner harnesses (experimental).** Experimental harnesses are marked in the TUI pickers, and the CLI warns about them at start and resume.
+  - Codex runs only through `mosaic-run`; native orchestration inside Codex is not supported. Codex runs have no per-invocation MOSAIC log, so LogAnalyzer cannot analyse them
+- **No-output watchdog for OpenCode V2.** An invocation without human-in-the-loop that writes no output for 10 minutes ends as a harness error. Set the limit with `--no-output-timeout` (`0` disables) or in the TUI run configuration
+- **The Runner log shows subagent output live**, and a killed invocation leaves its stdout, stderr and the reason it ended there
+- **The progress-screen step list scrolls** (Up/Down, PgUp/PgDn, Home/End)
+- **The seed input screen marks a required seed** and asks for confirmation before starting without it
+- **Esc cancels an in-run manual dispatch request** (`m`)
+#### Bugfixes
+- After a resume, a reviewer's loop-back to a creator includes the reviewer's report, and a creator sent back to revise receives its own earlier output
+- Resuming no longer overwrites the start of the Runner log
+- The activity panel stays visible on long runs
+- The help bar shows `x force-stop` while standing guidance is active
 
 ### Deploy v1.13.0
 #### Changes
-- **The custom tool question takes a list.** On every harness with MCP forms it accepts a comma-separated list of `server` and `server/tool` entries, validates it, and writes each entry in the harness's own form
-- Deploy offers to save the answer to `tool_destinations` in `user-config.yaml`, so later runs do not ask again
-- The external module protocol version is now `2.0` (was `1.0`); external harness modules must echo `"2.0"` in the handshake and every response
-
-### Runner v1.15.0
-#### Changes
-- **The Runner log shows subagent output live.** Each subagent stdout line is written to `RunnerLogs/<run_id>/<run_id>.log` as it arrives, attributed to its invocation, instead of one block after the invocation ends. The number of stdout bytes is logged at the end of each invocation
-- **A killed invocation leaves its output in the log.** After an invocation timeout, a no-output timeout, a force stop or a run cancellation (Ctrl+C in the TUI, best effort), the log holds the invocation's stdout, stderr and the reason it ended
-- **The progress-screen step list scrolls.** Up/Down, PgUp/PgDn and Home/End move through the steps. The list follows new rows at the bottom and stays where you scrolled to until you press End. Indicators show how many older and newer rows are hidden, the screen always fits the terminal, and the activity panel, banners, pending requests and help bar stay visible. The help bar lists the scroll keys
+- **Codex and OpenCode V2 are Deploy harnesses (experimental).** Experimental harnesses are marked in the pickers, and every writing command prints why they are experimental.
+- **A workspace holds either OpenCode or OpenCode V2**, not both. `Transform harness` moves a workspace between them in either direction
+- **The TUI starts at the mode screen**, and Esc goes back one screen. Update workspace, Change workflows and Transform harness offer only the harnesses the workspace holds
+- **Batch promote in the TUI.** Select several agents from a folder. Questions shared by the batch are asked once, an agent already in the catalog can be replaced or skipped, and one failing agent does not stop the batch. The CLI `promote` stays single-file
+- **Promote keeps project regions**, including nested ones. The TUI asks whether to keep or empty them; the CLI has `--empty-project-regions`. Custom regions are removed and reported
+- **The custom tool question takes a comma-separated list** of `server` and `server/tool` entries, and offers to save the answer to `tool_destinations` in `user-config.yaml`
+- **Claude Code subagents no longer get `AskUserQuestion`**, which Claude Code does not support for subagents. One you add by hand is kept
+- "Update workflows" is renamed "Change workflows" in the TUI; the CLI command is still `workflows`
+- Missing `user-config.yaml` and `tool-config.yaml` are created from the templates
+- External harness modules must use module protocol `2.0`
 #### Bugfixes
-- The progress-screen help bar now lists `x force-stop` while standing guidance is active, as it does without guidance
+- Redeploying over an existing agent keeps your edited regions
+- Promote no longer writes empty tier, tier rationale and required skills
+- `promote --overwrite` keeps the replaced agent's numeric id and no longer leaves two agents with the same key
+- A custom tool you gave a server name is no longer reported as unmapped
+- Saving `user-config.yaml` keeps your comments and indentation
+- Long lists no longer overflow the TUI
+- With `--output json`, stdout holds only the JSON document
+
+### LogAnalyzer v1.6.0
+#### Changes
+- **OpenCode V2 is a LogAnalyzer harness (experimental)**
+- **The runs list has a summary head** with run count, period, total cost and tokens, and per-run average and median cost and duration plus p90 cost. A new `started` column shows when each run started
+- **New findings overlay (`f`)** lists every kind of finding with its severity, count and effect on the figures; `e` exports them. New findings report log-integrity problems, such as invocations that cannot be tied to a dispatch
+- **`*.digest.json` files in the working directory are loaded by default**, together with `OrchestrationLogs/`
+- **"Cache hit" is redefined** as cache reads over the previous call's context, so perfect caching reads 100 %. Figures differ from earlier versions
+- **Tool context growth counts only the tool result** and is titled "result growth"
+#### Bugfixes
+- Per-actor figures no longer mix sessions; a smaller context in a new session is no longer counted as a compaction
 
 ### AgentTest v1.3.1
+#### Changes
+- **OpenCode V2 is supported (experimental)**
 #### Bugfixes
-- The `diag.log` shows the subject's stdout live, line by line, instead of one block after it exits
-- A killed subject leaves its stdout, stderr and the reason it ended in `diag.log`
-- `diag.log` entries show their fields, such as the stdout byte count
+- `diag.log` shows the subject's output live and keeps the output of a killed subject
 
-### Runner v1.14.0
-#### Changes
-- **OpenCode V2 is a Runner harness (experimental).** Select `opencode-v2` in the CLI (`--harness opencode-v2`), the TUI and test mode (`mosaic-run test`). The orchestrator is found at `.opencode/agents/orchestrator-script.md`
-- Every dispatch is one standalone `run` of the agent by id, in the workspace root, with the deployed agent file used in place. There is no backup-and-transform of agent files, and the agent file's own `model:` applies
-- New no-output watchdog for `opencode-v2` invocations without human-in-the-loop: an invocation that writes nothing to its output stream for the watchdog time ends like a timeout and is recorded as a `no-output-timeout` harness error. The default is 10 minutes; set it with `--no-output-timeout` (`0` disables) or in the TUI run configuration
-- The live activity panel shows `opencode-v2` tool calls, messages and context size, and no money cost; the cost comes from LogAnalyzer
-- Headless human-in-the-loop on `opencode-v2` needs an ask-the-user MCP server that you supply, because V2 auto-cancels its `question` tool in headless runs
-- `opencode-v2` runs write `run_start` and `run_end` to the MOSAIC log, and an `invocation_end` for an invocation the logger plugin left without one
-- Experimental, with the reason "Everything is supported, but the harness is not yet tested."
+## Hooks
 
-### Deploy v1.12.0
+### mosaic-logger v1.12.0
 #### Changes
-- **The TUI starts at the mode screen.** Esc on it exits; Esc on a later entry screen goes back one screen and keeps your choices. Deploy workspace, Deploy agents, Deploy hooks and Promote ask mode, harness, path, stack. Update workspace, Change workflows and Transform harness ask mode, path, harness, stack
-- The harness screen says the harness's role in the chosen mode (deploy to, whose deployment is updated or changed, written for, transform from). In Update workspace, Change workflows and Transform harness it offers only the harnesses recorded in the manifest at the entered path; one usable recorded harness is selected automatically, a missing, empty, corrupt or newer-schema manifest shows the full list, and unusable recorded harnesses are disabled with their reason
-- Transform asks the target harness on its own screen right after the source harness, with the source disabled
-- After a run, any key returns to the mode screen with the previous mode and harness highlighted; after a declined plan, to the mode screen with your choices cleared
-- **Promote keeps project regions.** Every project region of the source is in the generic with its tags, at any depth including inside managed regions, with its content kept byte-identical by default. The TUI batch promote asks once per batch whether to keep or empty it (Keep pre-selected; asked only when a selected agent has project content); the CLI `promote` has a new `--empty-project-regions` flag and never asks
-- Promote removes custom regions at any depth and reports them by name per agent in the CLI output (human and JSON `removedCustomRegions`) and the TUI summaries
-- Deploy and render accept a source whose managed region contains a project region with content; that content is the deploy-once default, and already deployed content wins on update
-- The Deploy tool and shared Common module test suites no longer read the live catalog or walk the whole repository; they run on their own fixtures, so catalog edits can no longer break or silently skip them
-- **Claude Code deployments no longer grant `AskUserQuestion`.** Subagents do not receive it for the generic user-interaction tool, which is now reported as unmapped for Claude Code. The main orchestrator's tools line no longer includes it. An `AskUserQuestion` you add by hand to a deployed Claude Code agent survives Claude Code rebuilds, and is dropped when the agent is promoted back to generic
+- **OpenCode V2 plugin (experimental).**
 #### Bugfixes
-- Promote no longer empties project regions nested inside managed regions
-- Notices and progress lines of CLI runs go to stderr, so `--output json` stdout is exactly one JSON document (for example the Codex promote warning that tools are not recorded no longer precedes the JSON)
-
-### Deploy v1.11.0
-#### Changes
-- **Batch promote in the TUI.** Promote asks for the harness and the folder holding the agents and the catalog stack, then lists the promotable agents for multi-select, including agents whose key already exists in the stack. The target layer, each unmapped tool name and the recommended tier per distinct source model are asked once per batch; the category, tier rationale and required skills are asked per agent, and an existing key gets a replace-or-skip question (default skip) that names the layer holding it. Esc aborts the batch and keeps agents already promoted; a failing agent does not stop the batch, and the summary lists every agent as promoted, skipped, failed or not processed. The CLI `promote` stays single-file
-- Replacing an existing agent keeps its numeric id and key, writes into the chosen layer under the chosen category, removes the old file in that layer when the category differs and leaves other layers untouched
-- The TUI mode "Update workflows" is now "Change workflows", which says what it does: it replaces the workflow set. The CLI command is still `workflows`
-- Any key on a final screen now returns to the first screen after any run, not only after some; Esc on the first screen exits and Ctrl+C exits at once
-- `user-config.yaml` and `tool-config.yaml` are created from the commented templates by the tool itself when missing, not only by `task install`. Existing files are never overwritten
-#### Bugfixes
-- Promote no longer writes empty tier, tier rationale or required skills into the generic agent
-- CLI `promote --overwrite` keeps the replaced agent's numeric id and leaves exactly one agent with that key; without `--overwrite`, an existing key in the target layer is refused whatever category is chosen
-- A tool you gave a server name during the run is no longer reported as unmapped
-- Long lists in the TUI no longer overflow the screen
-- Saving `user-config.yaml` keeps your comments and its two-space indentation
-
-### Deploy v1.10.0
-#### Changes
-- **OpenCode V2 is a Deploy harness (experimental).** `opencode-v2` deploys agents to `.opencode/agents`, skills to `.opencode/skills` and the mosaic-logger `opencode-v2` plugin to `.opencode/plugins`. Update, Deploy agents, Deploy hooks, Update workflows and Transform work for it
-- Agents carry V2 `permissions` rules: deny by default, then one allow per declared tool, and access outside the workspace asks. Declaring file write or file edit allows `write`, `edit` and `patch` together. Every agent gets an explicit `mode`
-- Deploy writes no `opencode.json` for `opencode-v2`; you select the orchestrator in the V2 TUI
-- **A workspace holds one OpenCode target, `opencode` or `opencode-v2`.** Both write to `.opencode/`, so the manifest entries decide. A run that would add the other target is refused before anything is asked or written, and the message names the Transform command. A workspace that holds both is refused until you remove one by hand
-- Transform moves a workspace between `opencode` and `opencode-v2` in both directions, replacing the source in place: recorded agents are overwritten, skills are kept, source plugin files the target does not write are removed, and replaced files are backed up under `.mosaic/backups/`
-- A tool mapping for `opencode-v2` in `tool_destinations` lets agents declare an MCP ask tool, which V2 otherwise denies
-- The descriptor schema has a new tool shape, `rules`, an ordered permission rule list with fixed leading and trailing rules and a permission action per tool
-
-### AgentTest v1.3.0
-#### Changes
-- **`mosaic-agent-test` supports `--harness opencode-v2` (experimental).** It drives OpenCode V2 headlessly through the same spawn path as the Runner and intercepts collaborator invocations with a generated plugin. The existing OpenCode suites run on it
-
-### LogAnalyzer v1.5.0
-#### Changes
-- **The default start also loads the `*.digest.json` files in the working directory.** They are merged with `OrchestrationLogs/` (logs win, then the most recently written digest). With digests but no `OrchestrationLogs/` they open without a prompt; the source prompt appears only when neither exists. `export` without a path uses the same default sources
-- **The "cache hit" figure has a new definition and keeps its name and JSON keys.** It is now how much of what could have been read from the cache actually was: cache reads (capped at the previous call's context) over the previous call's context. The first call of a session and calls after a compaction or a model change are excluded; a cache expiry after a pause counts as a miss. Perfect caching reads 100 %. It was cache reads over the whole context, so figures differ from earlier versions
-- **Tool context growth covers the tool result only.** The tool input is counted in the calling call's output tokens. The growth columns are titled "result growth"
-
-#### Bugfixes
-- **Per-actor figures respect session boundaries.** A smaller context in a new session is no longer a detected compaction, tool growth is measured only within a session, unread cache writes count the last call of every session, and the first-write context is computed per session
-
-### LogAnalyzer v1.4.0
-#### Changes
-- **`opencode-v2` is a LogAnalyzer harness (experimental).** Identity, built-in tools, settings template and harness keys, integrity checks, usage, cost and context size work for `opencode-v2` logs. Usage is read from the plugin's usage records
-- LogAnalyzer reads the V2 `session export` transcripts (`{info, messages}`) and follows child sessions through the dispatching `subagent` call
-
-### Runner v1.13.0
-#### Changes
-- **Codex is a Runner harness (experimental).** Select `codex` in the CLI (`--harness codex`), the TUI and test mode (`mosaic-run test`). Workflows run on a Codex-deployed workspace through `mosaic-run` only; native orchestration inside Codex is not supported. Each dispatch is one `codex exec` call with the agent's own instructions, model, sandbox and every other setting from its deployed `.codex/agents/<id>.toml`. The Runner never modifies your agent files or Codex configuration. Requires Codex CLI 0.169 or newer
-- Every Codex failure, including sandbox setup failures, ends the invocation as a `HARNESS_ERROR` and never hangs. Timeout and force stop also end helper processes Codex started
-- `contact-user` works during Codex runs without approval prompts
-- At every start and resume on Codex, the Runner checks your Codex configuration (read-only): a workspace Codex does not trust, or no enabled `contact-user` server, is a warning in the CLI and a "proceed?" question in the TUI
-- The live activity panel shows Codex tool calls and messages. Codex reports no model, context size or cost, so the header omits them
-- Codex runs write only `run_start` and `run_end` to the MOSAIC log; there are no invocation events yet
-- The Runner reads agent files in any format Deploy supports, through the same agent-format layer Deploy uses. Agent resolution, orchestrator discovery, the run-start definition check, tool extraction and the workflow and infrastructure-agent reads of the orchestrator script no longer assume Markdown. A new agent file format needs no Runner change
-- An agent file a run uses (orchestrator, routing-table agents, admitted infrastructure agents) that cannot be read refuses the run at start, naming the agent, the file and the reason
-- The Runner can mark a harness experimental with a reason, independently of Deploy. An experimental harness stays selectable: the TUI harness pickers mark it "Experimental" with the reason, and the CLI prints the reason once as a warning at start and resume. Codex is experimental
-
-### Deploy v1.9.0
-#### Changes
-- Codex agents get the capabilities their generic tools ask for. `web_search` gives web search `live`, otherwise it is `disabled`. `web_fetch` gives network access to agents with the `workspace-write` sandbox; a read-only agent gets none and the plan reports the withheld `web_fetch`. `terminal` alone grants no network access
-- The Codex experimental notice now says Codex runs through `mosaic-run` only, native orchestration is unsupported, and no MOSAIC log is produced
-- The agent-format layer and agent field vocabulary moved to `Tools/Common`, shared with the Runner. Deploy output is unchanged for every other harness
-
-### AgentTest v1.2.3
-#### Changes
-- `--harness codex` is refused with a clear "not supported by mosaic-agent-test" usage error instead of an unrecognised-harness error
-
-### Deploy v1.8.0
-#### Changes
-- Codex is an experimental harness. Agents are deployed as standalone TOML files under `.codex/agents/`, with skills in the shared `.agents/skills` root. Keys you add to a Codex agent file survive an update. Update and transform work. No MOSAIC orchestration runs on Codex yet: its native multi-agent dispatch is not usable for MOSAIC and `mosaic-run` has no Codex adapter. Minimum Codex version is 0.169.0
-- The agent-format layer (translators, edit detection, format-neutral deploy) is stable; only the Codex harness is experimental
-- A harness descriptor can declare `experimental:` with a required, non-blank `reason`. An experimental harness is still offered but is marked "Experimental" in the harness and question pickers, its reason is a warning at plan review, every writing command (deploy, update, workflows, agents, hooks, promote, transform, also with an experimental transform source) prints it once, and `--output json` results carry it as `experimentalHarnesses`. Read-only `render` is unaffected. The built-in Codex descriptor is experimental
-- Edit detection works the same for every agent file format. Deploy compares the agent body outside the project and custom regions, as decoded from the file, with what it recorded at its last write. Frontmatter and the project and custom regions are yours on every harness and are never reported as edits
-- A file Deploy cannot confirm as its own, or cannot parse, stays a conflict. When the manifest has no usable record for an edited agent, the conflict question appears and the differing frontmatter keys are reported for information
-- The import-boundary guards (read-funnel inventory, translator purity, format-blind `internal/deploy`) now run as part of `go test ./...`
-- Deploy features are proven format-neutral: a third, test-only agent format passes the same deploy, update, probe, refresh, promote and transform checks as Markdown, and adding a format needs only a translator and a descriptor entry
-#### Bugfixes
-- Redeploying over an existing Codex agent after a source version bump no longer fails for lack of the prior file bytes. Deploy, Deploy agents, Update and Update workflows read the deployed file the same way, so Markdown harnesses also keep edited regions when Deploy rewrites an existing file
-
-### Runner v1.12.1
-#### Bugfixes
-- A loop-back from a reviewer to a creator after a resume now includes the reviewer's report
-- A creator sent back to revise its work now receives its own earlier output
-- The live activity panel stays visible on long runs when it is shown
-- Resuming a run no longer overwrites the start of the existing Runner log
-
-### LogAnalyzer v1.3.0
-#### Changes
-- The runs list opens with a head of three lines: the number of runs, their period, total cost and tokens, and per run the average, median and (from 10 priced runs) p90 cost, and the average and median duration. Runs still in progress and runs without a price or a timeline are left out of the statistics concerned, and a note shows how many runs they cover
-- New `f` overlay on the runs list and inside a run: it lists the kinds of findings with severity, count, number of runs and a plain-language explanation of what each does to the figures. `e` in the overlay exports the findings it shows to a JSON file
-- New findings report log-integrity problems: an instance with different agent types, an invocation that cannot be tied to a dispatch, overlapping invocation starts, a dispatch without invocation, a gap in a captured transcript, and an instance prompt that differs from its dispatch. They appear as additional entries in `report` output
+- Claude Code, GHCP CLI and VS Code GHCP log each agent invocation under its own instance id, so parallel dispatches are no longer mixed up
+- An invocation that cannot be matched to a dispatch gets its own folder instead of a shared `unknown-agent` folder
+- Usage is no longer logged twice when an agent's lifecycle fires again
+- Logs already written are not repaired
 
 ## Catalog
-- **Removed** the unused workflows `quick-fix`, `implementation-only`, `brownfield-research-only`, `kb-verification-human` and `kb-correction`, and the agents `verification-questions-preparer` and `verification-answer-validator`. `Update workspace` keeps deployed copies of the removed workflows and warns about each; for small fixes, size `brownfield-tdd` down. Refresh an existing KB by re-running `kb-generation`
-- **kb-generation-branched** (v0.2, experimental, new): generates a new KB with top-level branches in parallel, each with its own dynamic tiers, and merges cross-branch duplicates afterwards. Not runnable by the Runner (nested blocks)
-- **kb-generation** (v2.2) and **hw-schema-kb-generation** (v1.1): sequential only; block iterations no longer run in parallel, because parallel writes to the shared progress and flags artifacts were lost. Not runnable by the Runner's auto modes. Corrections found during the correction pass are now recorded as flags instead of being lost
+- **Removed** the unused workflows `quick-fix`, `implementation-only`, `brownfield-research-only`, `kb-verification-human` and `kb-correction`, and the agents `verification-questions-preparer` and `verification-answer-validator`.
+- **kb-generation-branched** (v0.2, experimental, new): generates a KB with its top-level branches in parallel and merges duplicates across branches afterwards. Not runnable by the Runner
+- **kb-generation** (v2.2) and **hw-schema-kb-generation** (v1.1): iterations run one at a time, because parallel iterations lost writes to shared artifacts. Not runnable by the Runner's auto modes. Corrections found in the correction pass are now recorded instead of lost
 - **knowledge-base-duplicate-merger** (v1.0.2, new): merges KB documents that different branches wrote on the same topic
-- **knowledge-base-generator** (v4.1.0): new `overview` and `branch` modes for branched generation; `correct` records further correction work as flags. **knowledge-base-flag-sorter** (v3.5.0) and **knowledge-base-index-assembler** (v2.3.0) read per-branch progress and flags artifacts
-- **TDD scaffolding moved to RED.** **test-writer-tdd** (v5.4.0) creates behavior-free scaffolding for every type and member its tests reference and builds the tests until they compile; scaffolding never returns default values, which could give a false green. **lean-tdd** skill (v1.3.0) defines the rule; **implementation-tdd** (v4.2.2) fills scaffolded bodies and keeps their signatures; **planner-tdd-soft** (v7.7.0) and **plan-review** (v5.6.0) assign scaffolding to the test group
-- **Project templates can no longer break core mechanisms.** The parts other agents and the orchestrator depend on are now always written, whatever the project's `OutputArtifactTemplate` says, and the template shapes everything else: the Revision Log in **contracts-designer** (v4.5.0), the Review Ledger and finding IDs in **plan-review** (v5.6.0), and the plan's artifacts, sections and IDs in **planner-tdd-soft** (v7.7.0). Also the Review Ledger and finding IDs in **contracts-review** (v4.6.0), the `## Ungrouped` section, per-file checkboxes and immutability headers in **planner-audit** (v5.4.0), the per-attribution findings sections in **test-case-review** (v1.2.0), and the three finding-class sections in **requirements-testability-review** (v1.2.0). planner-tdd-soft also always writes new stages with `HITL` `FALSE`; only the user sets `TRUE`
-- **requirements-refinement** (v3.5.0): asks for the depth first, on its own, and words questions for who decides at that depth
-- **orchestrator** (v8.5.0): re-reads a block schedule after each iteration, so iterations added during the block run; dispatches only agents of its routing basis, never a helper described in the prompt; escalates to the user when the run log does not explain an error; changes `Orchestration.md` only with its file tools, never through a script or shell command
-- **orchestrator-script** (v3.5.1): appends its Workflow Notes row with the file edit tool
+- **knowledge-base-generator** (v4.1.0), **knowledge-base-flag-sorter** (v3.5.0) and **knowledge-base-index-assembler** (v2.3.0): support branched generation
+- **TDD scaffolding is done reliably at RED phase.** **test-writer-tdd** (v5.4.0) creates behavior-free scaffolding for everything its tests reference, so the tests compile; scaffolding never returns default values that could give a false green. **implementation-tdd** (v4.2.2) fills the scaffolded bodies. Also **lean-tdd** skill (v1.3.0), **planner-tdd-soft** (v7.7.0) and **plan-review** (v5.6.0)
+- **Project templates can no longer break core mechanisms.** Sections and IDs that other agents and the orchestrator depend on are always written, whatever `OutputArtifactTemplate` says: **contracts-designer** (v4.5.0), **contracts-review** (v4.6.0), **planner-tdd-soft** (v7.7.0), **plan-review** (v5.6.0), **planner-audit** (v5.4.0), **test-case-review** (v1.2.0) and **requirements-testability-review** (v1.2.0). planner-tdd-soft also writes new stages with `HITL` `FALSE`; only you set `TRUE`
+- **requirements-refinement** (v3.5.0): asks for the depth first and words its questions for whoever decides at that depth
+- **orchestrator** (v8.5.0): picks up iterations added to a block while it runs, dispatches only agents of its workflow, asks the user when the run log does not explain an error, and edits `Orchestration.md` only with its file tools
+- **orchestrator-script** (v3.5.1): writes its Workflow Notes row with the file edit tool
 - **workflow-creator** (v2.2.0): dispatches only the subagent creator
-- **orchestration-review** (v1.2.4): example no longer names a removed workflow
-- **requirements-to-test-cases**: hint updated, the workflow has now been run end to end
-- **test-runner** (v3.3.1): runs the whole test suite by default and asks only when it finds no tests to run. Only a task naming specific tests narrows it. Failures you accept in the requirements or in the new `AcceptedFailures` region are reported separately and don't count as findings. New `TestCommands` project region
+- **test-runner** (v3.3.1): runs the whole test suite unless the task names specific tests. Failures you accept, in the requirements or the new `AcceptedFailures` region, are reported separately and don't count as findings. New `TestCommands` project region
 - **brownfield-tdd** (v4.1): test-runner reads `Requirements.md` and `Plan.md`; requirements-refinement's open questions go back to codebase-research
 - **brownfield-tdd-build-verified** (v3.1): requirements-refinement's open questions go back to codebase-research
 - **brownfield-pr-fix** (v1.3): contracts design phase added, as in brownfield-tdd; test-runner reads `Requirements.md` and `Plan.md`
