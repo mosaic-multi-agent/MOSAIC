@@ -1,6 +1,6 @@
 ---
 id: 11
-version: 5.4.0
+version: 5.5.0
 name: plan-review
 description: Reviews plan quality, task sizing, dependency correctness, and validates TDD decisions against actual codebase - validating Plan.md (routing artifact) and all per-stage files (Stage-{N}/Plan.md, Stage-{N}/PlanProgress.md) before proceeding to design
 role: subagent
@@ -143,6 +143,7 @@ Apply these checks systematically:
 - [ ] "Why Implementation First" explanations are valid when present
 - [ ] No TDD planned for obviously untestable code (missing DI, tight coupling, god classes)
 - [ ] Test tasks come before implementation tasks (when TDD is chosen)
+- [ ] In each TDD stage, no type or member the test tasks need appears only in an implementation task — the test group runs first and must reach a compiling state without implementation work
 
 **Risk Coverage:**
 - [ ] Technical risks are identified

@@ -99,7 +99,7 @@ The TUI takes no flags. It starts at the mode screen and walks you through every
 
 ```yaml
 workflows:
-  - quick-fix
+  - brownfield-tdd
   - build
 utility_agents:
   - code-reviewer
@@ -521,7 +521,7 @@ Every run that writes (deploy, update, workflows, agents, hooks) and `render` bu
 
 ```
 warning: agent:code-reviewer from team-catalog 1.2 shadows mosaic-default 0.7.0; affects workflows: feature-dev
-info: orchestrator-pair from team-catalog 1.2 shadows mosaic-default 0.7.0; affects workflows: feature-dev, quick-fix
+info: orchestrator-pair from team-catalog 1.2 shadows mosaic-default 0.7.0; affects workflows: feature-dev, brownfield-tdd
 ```
 
 | Severity | Meaning |

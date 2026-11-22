@@ -166,7 +166,7 @@ need manual attention (empty injection sections, unmapped tools, hook registrati
 
 ```yaml
 workflows:
-  - quick-fix
+  - brownfield-tdd
   - build
 utility_agents:
   - code-reviewer

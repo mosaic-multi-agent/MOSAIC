@@ -312,7 +312,7 @@ attribute:
 | Logical name | Open tag | Close tag |
 |---|---|---|
 | `Identity` | `<Identity type="core">` | `</Identity>` |
-| `Workflow:quick-fix` | `<Workflow type="core" name="quick-fix">` | `</Workflow>` |
+| `Workflow:brownfield-tdd` | `<Workflow type="core" name="brownfield-tdd">` | `</Workflow>` |
 | `InfrastructureAgent:build-runner` | `<InfrastructureAgent type="core" name="build-runner">` | `</InfrastructureAgent>` |
 
 Canonical attribute order is `type`, then `name` (when present), then

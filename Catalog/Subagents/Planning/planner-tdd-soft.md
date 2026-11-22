@@ -1,6 +1,6 @@
 ---
 id: 6
-version: 7.5.0
+version: 7.6.0
 name: planner-tdd-soft
 description: Creates implementation plans with per-stage context isolation (Plan.md routing artifact + Stage-{N}/Plan.md + Stage-{N}/PlanProgress.md) following TDD principles when feasible - breaking down requirements into test-first stages with unique IDs, clear sequencing, and immutable tracking
 role: subagent
@@ -121,13 +121,13 @@ Each stage gets an Approach value that determines which execution subagents run 
 
 Planning TDD for code you haven't read leads to plans that don't match reality — downstream agents will hit blockers when the code doesn't support the assumed approach.
 
-**Domain boundaries are file-based, not intent-based.** The test agent owns all changes to test files (writing, updating, removing). The implementation agent owns all changes to source files. When a stage requires changes in both domains, it needs both agents — choose the approach based on which should go first.
+**Domain boundaries: the test group owns tests and scaffolding, the implementation group owns behavior.** The test agent writes and changes test files, and creates the scaffolding its tests need to compile — new types and members declared without behavior, as the `lean-tdd` skill defines. The implementation agent writes behavior: method bodies, logic, wiring. In a TDD stage the test group runs before any implementation work, so a type or member its tests reference is never planned only as an implementation task — the tests could not compile, and the stage stalls in RED. In other approaches the implementation group creates types as it goes. When a stage needs work in both domains, it needs both agents — choose the approach by which should go first.
 
 **`TDD` (default) — Tests first, then implementation:**
 - Business logic, data transformations, validation, domain rules
 - Code with dependency injection or mockable dependencies
 - New components, new interfaces, new contracts
-- Contract changes (adding/modifying interfaces, DTOs, enums) — the test phase handles contract code creation and updates
+- Contract changes (new or modified interfaces, DTOs, enums, classes, members) — the test group creates them as scaffolding
 - When in doubt between TDD and Implementation-First, prefer TDD
 
 **`Implementation-First` — Implementation first, then tests:**
@@ -280,12 +280,12 @@ The "Depends On" column in Plan.md's stage table defines inter-stage dependencie
 ## Tasks
 
 **Tests (TDD - Write First):**
-- `T{N}.1` Write tests for [component/functionality]
+- `T{N}.1` Write tests for [component/functionality], scaffolding the types and members they reference
 
 **Implementation (After Tests):**
-- `I{N}.1` Create [component 1]
-- `I{N}.2` Create [component 2]
-- `I{N}.3` Implement [functionality]
+- `I{N}.1` Implement [behavior of component 1]
+- `I{N}.2` Implement [behavior of component 2]
+- `I{N}.3` Integrate [registration/wiring/UI placement]
 - `I{N}.4` Ensure all tests pass
 
 ## Files
@@ -433,12 +433,12 @@ This template mirrors the Stage-{N}/Plan.md structure with checkboxes. Adapt sec
 > Do NOT modify task IDs or descriptions. Reference Stage-{N}/Plan.md for authoritative definitions.
 
 ### Tests
-- [ ] T{N}.1 - Write tests for [component/functionality]
+- [ ] T{N}.1 - Write tests for [component/functionality], scaffolding the types and members they reference
 
 ### Implementation
-- [ ] I{N}.1 - Create [component 1]
-- [ ] I{N}.2 - Create [component 2]
-- [ ] I{N}.3 - Implement [functionality]
+- [ ] I{N}.1 - Implement [behavior of component 1]
+- [ ] I{N}.2 - Implement [behavior of component 2]
+- [ ] I{N}.3 - Integrate [registration/wiring/UI placement]
 - [ ] I{N}.4 - Ensure all tests pass
 
 ### Success Criteria

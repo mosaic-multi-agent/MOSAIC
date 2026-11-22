@@ -1,7 +1,7 @@
 ---
 name: lean-tdd
-version: 1.2.0
-description: Lean TDD practices that eliminate wasteful testing patterns. Use when writing tests, reviewing test code, or validating RED/GREEN phases. Covers valid RED phase definition, behavioral testing principles, exception assertions, and mocking guidelines. Language-agnostic principles with C# examples.
+version: 1.3.0
+description: Lean TDD practices that eliminate wasteful testing patterns. Use when writing tests, reviewing test code, or validating RED/GREEN phases. Covers valid RED phase definition, scaffolding, behavioral testing principles, exception assertions, and mocking guidelines. Language-agnostic principles with C# examples.
 ---
 
 > **Read This Entire File:** This skill file must be read in full before applying any guidance. If your file reading tool has a line limit (e.g., 80 lines by default), use explicit limit/offset parameters to read beyond that. Keep reading until you reach the `END OF SKILL` marker at the bottom of this file. Do not proceed until you have done so.
@@ -34,6 +34,16 @@ Lean TDD eliminates wasteful testing practices while preserving TDD's core value
 | Test compiles but you haven't run it | [FAIL] NO | RED requires execution |
 | New-behavior test would pass without the required behavior | [FAIL] NO | False green - assertions do not require the new behavior |
 | Regression test passes because it covers behavior that already exists | [PASS] YES, as regression coverage | Legitimate test, but not evidence for new behavior |
+
+### Scaffolding Belongs to RED
+
+A test that does not compile has not reached RED. Making it compile is part of writing the test: create each type and member the test references that does not exist yet, declared with no behavior.
+
+- Interfaces, enums, and data structures (DTOs, records) with their declared members, fields, or values
+- Classes and methods as declarations, every method body throwing the language's not-implemented error
+- Constructors that accept their declared parameters and do nothing else — a throwing constructor fails the test during setup, which is not valid RED
+
+Scaffolding stops at the declaration. A body that computes a return value, branches, or calls a dependency is implementation and belongs to GREEN. A default return value is not scaffolding either: it can satisfy an assertion without the behavior and produce a false green. See Example 1 in [EXAMPLES-CSHARP.md](EXAMPLES-CSHARP.md).
 
 ### The Critical Insight
 
@@ -307,6 +317,7 @@ public void MethodName_When_Condition_Should_ExpectedResult()
 | Anti-Pattern | Problem | Solution |
 |--------------|---------|----------|
 | Claiming RED on compile error | Not TDD - test doesn't exist yet | Ensure test compiles before claiming RED |
+| Leaving types or members the tests need to the implementation phase | Tests cannot compile, so RED is never reached | Create behavior-free scaffolding while writing the test |
 | Claiming RED from setup, fixture, or environment failure | Intended behavior was not exercised | Fix the test environment and observe the behavioral failure |
 | Expected-success test can pass through a default path | Test does not require the new decision | Add assertions or inputs that discriminate the required condition |
 | Counting a passing regression test as new-behavior evidence | Existing behavior can satisfy it | Keep it as regression coverage and add a discriminating test |

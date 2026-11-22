@@ -150,6 +150,19 @@
 - New `f` overlay on the runs list and inside a run: it lists the kinds of findings with severity, count, number of runs and a plain-language explanation of what each does to the figures. `e` in the overlay exports the findings it shows to a JSON file
 - New findings report log-integrity problems: an instance with different agent types, an invocation that cannot be tied to a dispatch, overlapping invocation starts, a dispatch without invocation, a gap in a captured transcript, and an instance prompt that differs from its dispatch. They appear as additional entries in `report` output
 
+## Catalog
+- **Removed** the unused workflows `quick-fix`, `implementation-only`, `brownfield-research-only`, `kb-verification-human` and `kb-correction`, and the agents `verification-questions-preparer` and `verification-answer-validator`. `Update workspace` keeps deployed copies of the removed workflows and warns about each; for small fixes, size `brownfield-tdd` down. Refresh an existing KB by re-running `kb-generation`
+- **kb-generation-branched** (v0.2, experimental, new): generates a new KB with top-level branches in parallel, each with its own dynamic tiers, and merges cross-branch duplicates afterwards. Not runnable by the Runner (nested blocks)
+- **kb-generation** (v2.2) and **hw-schema-kb-generation** (v1.1): sequential only; block iterations no longer run in parallel, because parallel writes to the shared progress and flags artifacts were lost. Not runnable by the Runner's auto modes. Corrections found during the correction pass are now recorded as flags instead of being lost
+- **knowledge-base-duplicate-merger** (v1.0.2, new): merges KB documents that different branches wrote on the same topic
+- **knowledge-base-generator** (v4.1.0): new `overview` and `branch` modes for branched generation; `correct` records further correction work as flags. **knowledge-base-flag-sorter** (v3.5.0) and **knowledge-base-index-assembler** (v2.3.0) read per-branch progress and flags artifacts
+- **TDD scaffolding moved to RED.** **test-writer-tdd** (v5.4.0) creates behavior-free scaffolding for every type and member its tests reference and builds the tests until they compile; scaffolding never returns default values, which could give a false green. **lean-tdd** skill (v1.3.0) defines the rule; **implementation-tdd** (v4.2.2) fills scaffolded bodies and keeps their signatures; **planner-tdd-soft** (v7.6.0) and **plan-review** (v5.5.0) assign scaffolding to the test group
+- **requirements-refinement** (v3.5.0): asks for the depth first, on its own, and words questions for who decides at that depth
+- **orchestrator** (v8.4.0): re-reads a block schedule after each iteration, so iterations added during the block run; dispatches only agents of its routing basis, never a helper described in the prompt; escalates to the user when the run log does not explain an error
+- **workflow-creator** (v2.2.0): dispatches only the subagent creator
+- **orchestration-review** (v1.2.4): example no longer names a removed workflow
+- **requirements-to-test-cases**: hint updated, the workflow has now been run end to end
+
 # 0.7.5 (2026-11-11)
 
 > **To upgrade:**

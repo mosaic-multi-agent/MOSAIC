@@ -98,7 +98,7 @@ mosaic-deploy deploy [flags]
 ```yaml
 # selections.yaml
 workflows:
-  - quick-fix
+  - brownfield-tdd
   - build
 utility_agents:
   - code-reviewer

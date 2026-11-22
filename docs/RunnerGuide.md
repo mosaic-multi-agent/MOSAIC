@@ -38,7 +38,7 @@ Progress-screen keys: `s` graceful stop (asks for confirmation), `m` manual disp
 
 ```sh
 ./mosaic-run run \
-  --workflow quick-fix \
+  --workflow brownfield-tdd \
   --task "Fix the login timeout bug reported in issue #42" \
   --harness claude-code \
   --mode auto \

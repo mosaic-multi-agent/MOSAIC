@@ -99,11 +99,6 @@ tools:
           names:
             - "Task"
             - "TaskStop"
-    - generic: "user_interaction"
-      destinations:
-        - to: main
-          names:
-            - "AskUserQuestion"
     - generic: "web_search"
       destinations:
         - to: main

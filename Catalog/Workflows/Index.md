@@ -1,6 +1,6 @@
 # Workflow Index
 
-Workflow definitions organized by category. This file is a lookup table pointing at the 16 workflow files in this catalog — it is not the source of truth for any workflow's metadata. The **Version** column mirrors each file's frontmatter `version` and is updated whenever the workflow's version is bumped (`WorkflowFormat.md` §11.2); where the two disagree, the file wins. Description and hint come only from the file's frontmatter.
+Workflow definitions organized by category. This file is a lookup table pointing at the 12 workflow files in this catalog — it is not the source of truth for any workflow's metadata. The **Version** column mirrors each file's frontmatter `version` and is updated whenever the workflow's version is bumped (`WorkflowFormat.md` §11.2); where the two disagree, the file wins. Description and hint come only from the file's frontmatter.
 
 ## How to Use Workflows
 
@@ -15,10 +15,10 @@ Workflows are organized into six categories reflecting their primary purpose:
 
 - **Build** — Feature development and implementation (new projects, existing codebases, fixes)
 - **Audit** — Quality assessment of existing code (PR reviews, system-level audits)
-- **Research** — Codebase exploration and feasibility analysis without implementation
+- **Research** — Research and analysis (e.g. product comparison) without implementation
 - **Design** — Architecture review and design proposals without implementation
 - **Verification** — Deriving verification artifacts (test scenarios, test cases) from specifications; no implementation
-- **DataPreprocessing** — Knowledge base generation, verification, and correction
+- **DataPreprocessing** — Knowledge base generation and refresh
 
 Browse the [Workflow Summary](#workflow-summary) table to find a workflow by name and category, then open the file listed in the **File** column — that file's frontmatter, **Use when:** line and Design Rationale carry the actual description, hint, and reasoning.
 
@@ -41,7 +41,7 @@ Tools can read this index programmatically: **ID** and **File** are the stable k
 | Research | `Catalog/Workflows/Research/` | Exploration and feasibility — no implementation |
 | Design | `Catalog/Workflows/Design/` | Architecture and design — no implementation |
 | Verification | `Catalog/Workflows/Verification/` | Deriving verification artifacts from specifications — no implementation |
-| DataPreprocessing | `Catalog/Workflows/DataPreprocessing/` | Knowledge base lifecycle (generate, verify, correct) |
+| DataPreprocessing | `Catalog/Workflows/DataPreprocessing/` | Knowledge base lifecycle (generate, refresh) |
 
 Harness conformance fixtures for `mosaic-run` live under `Tools/Runner/TestCatalog/Workflows/MosaicTest/` — they are test fixtures for the Runner tool, not part of this catalog.
 
@@ -55,8 +55,6 @@ Harness conformance fixtures for `mosaic-run` live under `Tools/Runner/TestCatal
 |----|----------|---------|------|--------|------|
 | greenfield-tdd | Build | 4.0 | Greenfield TDD Workflow | MOSAIC | `Build/greenfield-tdd.md` |
 | brownfield-tdd | Build | 4.0 | Brownfield TDD Workflow | MOSAIC | `Build/brownfield-tdd.md` |
-| quick-fix | Build | 1.0 | Quick Fix Workflow | MOSAIC | `Build/quick-fix.md` |
-| implementation-only | Build | 4.0 | Implementation Only Workflow | MOSAIC | `Build/implementation-only.md` |
 | brownfield-tdd-build-verified | Build | 3.0 | Brownfield TDD Build-Verified Workflow | MOSAIC | `Build/brownfield-tdd-build-verified.md` |
 | brownfield-pr-fix | Build | 1.1 | Brownfield PR Fix Workflow | MOSAIC | `Build/brownfield-pr-fix.md` |
 
@@ -71,7 +69,6 @@ Harness conformance fixtures for `mosaic-run` live under `Tools/Runner/TestCatal
 
 | ID | Category | Version | Name | Author | File |
 |----|----------|---------|------|--------|------|
-| brownfield-research-only | Research | 1.0 | Brownfield Research Only Workflow | MOSAIC | `Research/brownfield-research-only.md` |
 | product-comparison | Research | 2.0 | Product Comparison Workflow | MOSAIC | `Research/product-comparison.md` |
 
 ### Design
@@ -90,7 +87,6 @@ Harness conformance fixtures for `mosaic-run` live under `Tools/Runner/TestCatal
 
 | ID | Category | Version | Name | Author | File |
 |----|----------|---------|------|--------|------|
-| kb-generation | DataPreprocessing | 2.0 | Knowledge Base Generation Workflow | MOSAIC | `DataPreprocessing/kb-generation.md` |
-| kb-verification-human | DataPreprocessing | 1.0 | Knowledge Verification (Human) Workflow | MOSAIC | `DataPreprocessing/kb-verification-human.md` |
-| kb-correction | DataPreprocessing | 1.0 | Knowledge Base Correction Workflow | MOSAIC | `DataPreprocessing/kb-correction.md` |
-| hw-schema-kb-generation | DataPreprocessing | 1.0 | HW Schema Knowledge Base Generation Workflow | MOSAIC | `DataPreprocessing/hw-schema-kb-generation.md` |
+| kb-generation | DataPreprocessing | 2.2 | Knowledge Base Generation Workflow (Sequential) | MOSAIC | `DataPreprocessing/kb-generation.md` |
+| kb-generation-branched | DataPreprocessing | 0.2 | Knowledge Base Generation Workflow (Branched, Experimental) | MOSAIC | `DataPreprocessing/kb-generation-branched.md` |
+| hw-schema-kb-generation | DataPreprocessing | 1.1 | HW Schema Knowledge Base Generation Workflow (Sequential) | MOSAIC | `DataPreprocessing/hw-schema-kb-generation.md` |

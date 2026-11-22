@@ -119,8 +119,8 @@ A region is bounded by an opening tag line and a closing tag line.
 ```
 <Name type="core">
 <Name type="managed" version="1.10">
-<Workflow type="core" name="quick-fix">
-<Workflow type="core" name="quick-fix" version="3.0">
+<Workflow type="core" name="brownfield-tdd">
+<Workflow type="core" name="brownfield-tdd" version="4.0">
 ```
 
 - The tag name is the region name, in PascalCase.
@@ -158,7 +158,7 @@ Self-closing form (`<CodebaseContext type="project" />`) is not used. An open/cl
 **Compound/enumerable names:** A compound name puts the prefix in the tag name and the id in a `name` attribute:
 
 ```
-<Workflow type="core" name="quick-fix">
+<Workflow type="core" name="brownfield-tdd">
 ...
 </Workflow>
 ```
@@ -900,4 +900,4 @@ A change to this schema is never local. The table below lists what must be check
 - **Role is still inferred from path in the tool.** The frontmatter field is specified here but nothing reads it. Until it does, `role` is documentation, and a file moved between folders still changes what it is.
 - **`Catalog/CatalogFilesFormat.md` and this document overlap.** That file states the agent format from the tool's side, with no rationale, and has already drifted. It should be reduced to a pointer plus the skill and hook conventions it uniquely covers (§10.1).
 - ~~**`InfrastructureAgentConcept.md` §3.1 shows an old project-injection marker for `InfrastructureAgents`.**~~ **Resolved 2026-09-27.** The managed form is now used in `InfrastructureAgentConcept.md` (§3.1 ×2, §5), `OrchestrationArtifactFormat.md` §3.1's type table, `OrchestrationReviewAgent.md` §5.3, and `Catalog/Subagents/Infrastructure/README.md`. `orchestration-review.md`'s own source was already correct — it names the region by name without a type. Runner test fixtures still declare the project form and are recorded in the code follow-up file.
-- **Severity default content is correct in the validation agents and absent everywhere else.** The nine validation agents carrying `SeverityThresholds` now hold the table and status-code logic inside the region, as §6.3 requires. The audit agents are the remaining gap: each states a "Severity Levels" definition table as core text with no `SeverityDefinitions` region beside it, so a project cannot restate what a severity means to them without editing core prose the next deploy overwrites. Two validation agents (`build-review`, `verification-answer-validator`) carry neither severity region, and `test-scenario-review` carries thresholds without definitions; whether those are deliberate is unexamined. Surveyed in `SubagentProjectRegions-Review.md`.
+- **Severity default content is correct in the validation agents and absent everywhere else.** The nine validation agents carrying `SeverityThresholds` now hold the table and status-code logic inside the region, as §6.3 requires. The audit agents are the remaining gap: each states a "Severity Levels" definition table as core text with no `SeverityDefinitions` region beside it, so a project cannot restate what a severity means to them without editing core prose the next deploy overwrites. One validation agent (`build-review`) carries neither severity region, and `test-scenario-review` carries thresholds without definitions; whether those are deliberate is unexamined. Surveyed in `SubagentProjectRegions-Review.md`.
