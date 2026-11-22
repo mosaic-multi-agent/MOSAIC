@@ -60,7 +60,7 @@ func callColumns() []table.Column {
 	cols[kcOutput] = table.Column{Title: "output", Align: right, Priority: 4}
 	cols[kcCost] = table.Column{Title: "cost", Align: right, Priority: 3}
 	cols[kcTools] = table.Column{Title: "requested tools", Priority: 2, Flex: true, MinWidth: 12}
-	cols[kcGrowth] = table.Column{Title: "context growth", Align: right, Priority: 3, MinWidth: 12}
+	cols[kcGrowth] = table.Column{Title: "result growth", Align: right, Priority: 3, MinWidth: 12}
 	cols[kcMark] = table.Column{Title: "mark", Priority: 2, Flex: true, MinWidth: 8}
 	return cols
 }

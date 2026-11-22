@@ -1,11 +1,9 @@
 package app
 
 import (
-	"os"
 	"path/filepath"
 
-	"mosaic-common/docformat"
-	"mosaic-deploy/internal/agentfields"
+	"mosaic-common/agentfields"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -14,13 +12,13 @@ import (
 // id) is reported present and parse-failed so the planner raises a conflict instead of
 // planning a create that would overwrite it. A cleanly parsed file (with a different id) or an
 // absent file yields Present: false.
-func probePlannedPathForAgent(workspace, targetPath, modelKey string, scanFlagged bool) domain.DeployedArtifactState {
-	state := probeDeployedArtifactOf(workspace, targetPath, modelKey, domain.ArtifactAgent)
+func probePlannedPathForAgent(workspace, targetPath, modelKey string, scanFlagged bool, src *domain.HarnessDescriptor) domain.DeployedArtifactState {
+	state := probeDeployedArtifact(workspace, targetPath, modelKey, domain.ArtifactAgent, src)
 	if !state.Present {
 		return domain.DeployedArtifactState{Present: false}
 	}
 
-	problem := plannedPathParseProblem(filepath.Join(workspace, targetPath))
+	problem := plannedPathParseProblem(filepath.Join(workspace, targetPath), src)
 	if problem == "" && !scanFlagged {
 		return domain.DeployedArtifactState{Present: false}
 	}
@@ -37,12 +35,15 @@ func probePlannedPathForAgent(workspace, targetPath, modelKey string, scanFlagge
 
 // plannedPathParseProblem returns a description of why the file at fullPath cannot be used as a
 // deployed agent, or "" when it parses cleanly and carries an id.
-func plannedPathParseProblem(fullPath string) string {
-	data, err := os.ReadFile(fullPath)
-	if err != nil {
-		return err.Error()
+func plannedPathParseProblem(fullPath string, src *domain.HarnessDescriptor) string {
+	read := readDeployedArtifact(fullPath, domain.ArtifactAgent, src)
+	if read.ReadErr != nil {
+		return read.ReadErr.Error()
 	}
-	doc, err := docformat.Parse(data)
+	if read.DecodeErr != nil {
+		return read.DecodeErr.Error()
+	}
+	doc, err := ParseGenericSource(read.Canonical)
 	if err != nil {
 		return err.Error()
 	}

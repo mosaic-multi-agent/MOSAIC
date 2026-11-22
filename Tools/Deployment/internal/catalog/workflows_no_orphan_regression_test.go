@@ -22,7 +22,7 @@ import (
 // even when Index.md exists and real drift might be present. The file-orphan code is the
 // exclusive responsibility of CheckWorkflowIndex.
 func TestCatalogLoad_NormalLoad_NeverEmitsFileOrphanIssue(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 
 	for _, issue := range cat.Issues() {
 		if issue.Code == "file-orphan" {
@@ -37,7 +37,7 @@ func TestCatalogLoad_NormalLoad_NeverEmitsFileOrphanIssue(t *testing.T) {
 // through the normal path never produces an Issue with code "index-orphan". The index-orphan
 // code is the exclusive responsibility of CheckWorkflowIndex.
 func TestCatalogLoad_NormalLoad_NeverEmitsIndexOrphanIssue(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 
 	for _, issue := range cat.Issues() {
 		if issue.Code == "index-orphan" {

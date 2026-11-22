@@ -1,6 +1,6 @@
 package catalog_test
 
-// Tests for skill enumeration against the real repository tree.
+// Tests for skill enumeration against the committed fixture MOSAIC root (testdata/catalog/mosaic-root).
 //
 // Skills live under Catalog/Skills/{key}/SKILL.md. Two skills have companion
 // files that must also be included in the skill's Files list:
@@ -45,10 +45,10 @@ import (
 // ---------------------------------------------------------------------------
 
 // TestSkills_MatchOnDiskSkillFolders verifies that Skills() returns exactly one entry
-// per subdirectory of the real repository's Catalog/Skills/ folder — no fewer
+// per subdirectory of the fixture root's Catalog/Skills/ folder — no fewer
 // (a folder failed to load) and no more (a phantom entry with no backing folder).
 func TestSkills_MatchOnDiskSkillFolders(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	skillsDir := filepath.Join(cat.CatalogRoot(), "Skills")
 
 	entries, err := os.ReadDir(skillsDir)
@@ -89,7 +89,7 @@ func TestSkills_MatchOnDiskSkillFolders(t *testing.T) {
 
 // TestSkills_AllHaveNonEmptyKey verifies that every skill has a non-empty key.
 func TestSkills_AllHaveNonEmptyKey(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, s := range cat.Skills() {
 		if s.Key == "" {
 			t.Errorf("skill at SourceDir %q has empty Key", s.SourceDir)
@@ -99,7 +99,7 @@ func TestSkills_AllHaveNonEmptyKey(t *testing.T) {
 
 // TestSkills_AllHaveVersion verifies that every skill has a non-empty version string.
 func TestSkills_AllHaveVersion(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, s := range cat.Skills() {
 		if s.Version == "" {
 			t.Errorf("skill %q has empty Version", s.Key)
@@ -109,7 +109,7 @@ func TestSkills_AllHaveVersion(t *testing.T) {
 
 // TestSkills_AllHaveName verifies that every skill has a non-empty name.
 func TestSkills_AllHaveName(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, s := range cat.Skills() {
 		if s.Name == "" {
 			t.Errorf("skill %q has empty Name", s.Key)
@@ -119,7 +119,7 @@ func TestSkills_AllHaveName(t *testing.T) {
 
 // TestSkills_AllHaveDescription verifies that every skill has a non-empty description.
 func TestSkills_AllHaveDescription(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, s := range cat.Skills() {
 		if s.Description == "" {
 			t.Errorf("skill %q has empty Description", s.Key)
@@ -130,7 +130,7 @@ func TestSkills_AllHaveDescription(t *testing.T) {
 // TestSkills_EntryFile_IsSKILLMd verifies that EntryFile is "SKILL.md" for every skill.
 // SKILL.md is the conventional entry point file for a skill folder.
 func TestSkills_EntryFile_IsSKILLMd(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, s := range cat.Skills() {
 		if s.EntryFile != "SKILL.md" {
 			t.Errorf("skill %q EntryFile = %q, want %q", s.Key, s.EntryFile, "SKILL.md")
@@ -140,7 +140,7 @@ func TestSkills_EntryFile_IsSKILLMd(t *testing.T) {
 
 // TestSkills_SourceDir_IsAbsolute verifies that SourceDir is an absolute path.
 func TestSkills_SourceDir_IsAbsolute(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, s := range cat.Skills() {
 		if !filepath.IsAbs(s.SourceDir) {
 			t.Errorf("skill %q SourceDir is not absolute: %q", s.Key, s.SourceDir)
@@ -150,7 +150,7 @@ func TestSkills_SourceDir_IsAbsolute(t *testing.T) {
 
 // TestSkills_SourceDir_Exists verifies that each skill's SourceDir exists on disk.
 func TestSkills_SourceDir_Exists(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, s := range cat.Skills() {
 		if _, err := os.Stat(s.SourceDir); os.IsNotExist(err) {
 			t.Errorf("skill %q SourceDir %q does not exist on disk", s.Key, s.SourceDir)
@@ -161,7 +161,7 @@ func TestSkills_SourceDir_Exists(t *testing.T) {
 // TestSkills_Files_IncludesEntryFile verifies that every skill's Files list contains
 // the EntryFile value (normally "SKILL.md"). The entry file is part of the skill.
 func TestSkills_Files_IncludesEntryFile(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, s := range cat.Skills() {
 		found := false
 		for _, f := range s.Files {
@@ -180,7 +180,7 @@ func TestSkills_Files_IncludesEntryFile(t *testing.T) {
 // TestSkills_Files_AreRelativePaths verifies that every file path in Files[] is relative
 // (not absolute). Paths are relative to SourceDir.
 func TestSkills_Files_AreRelativePaths(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, s := range cat.Skills() {
 		for _, f := range s.Files {
 			if filepath.IsAbs(f) {
@@ -193,7 +193,7 @@ func TestSkills_Files_AreRelativePaths(t *testing.T) {
 // TestSkills_Files_AllExistOnDisk verifies that every file listed in a skill's Files[]
 // actually exists on disk under SourceDir.
 func TestSkills_Files_AllExistOnDisk(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, s := range cat.Skills() {
 		for _, f := range s.Files {
 			full := filepath.Join(s.SourceDir, f)
@@ -291,7 +291,7 @@ func TestSkill_SkillWithoutCompanionFiles_HasExactlyOneFile(t *testing.T) {
 // TestSkillLookup_AllSkills_FoundByKey verifies that every skill returned by Skills()
 // can be looked up by key via Skill(key). This confirms the lookup index is consistent.
 func TestSkillLookup_AllSkills_FoundByKey(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, s := range cat.Skills() {
 		found, ok := cat.Skill(s.Key)
 		if !ok {
@@ -307,7 +307,7 @@ func TestSkillLookup_AllSkills_FoundByKey(t *testing.T) {
 // TestSkillLookup_UnknownKey_ReturnsFalse verifies that Skill(key) returns false for
 // a key that does not exist.
 func TestSkillLookup_UnknownKey_ReturnsFalse(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	_, ok := cat.Skill("this-skill-does-not-exist")
 	if ok {
 		t.Error("Skill(\"this-skill-does-not-exist\"): returned true, want false")
@@ -317,7 +317,7 @@ func TestSkillLookup_UnknownKey_ReturnsFalse(t *testing.T) {
 // TestSkill_KeyMatchesFolderName verifies that each skill's Key matches the folder name
 // that contains SKILL.md. The key is the folder name by convention.
 func TestSkill_KeyMatchesFolderName(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, s := range cat.Skills() {
 		folderName := filepath.Base(s.SourceDir)
 		if folderName != s.Key {

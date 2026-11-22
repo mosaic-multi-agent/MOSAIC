@@ -69,6 +69,15 @@ def fire(workspace, event, **fields):
     mosaic_logger.dispatch(json.dumps(payload))
 
 
+def fire_capture(workspace, **fields):
+    """Fire the synchronous dispatch-capture entry for one PreToolUse payload."""
+    payload = {"hook_event_name": "PreToolUse",
+               "session_id": fields.pop("session_id", SESSION_ID),
+               "cwd": str(workspace)}
+    payload.update(fields)
+    mosaic_logger.dispatch_capture(json.dumps(payload))
+
+
 def read_jsonl(path):
     path = pathlib.Path(path)
     if not path.exists():

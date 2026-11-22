@@ -30,30 +30,15 @@ type HarnessScreen struct {
 	styles      Styles
 	helpText    string
 	toolVersion string
+	role        HarnessRole
+	sourceName  string
 }
 
 // NewHarnessScreen creates the harness selection screen. harnesses is the live registry list;
 // it is shown in the order it is provided.
 func NewHarnessScreen(harnesses []domain.HarnessRef, width, height int, styles Styles) *HarnessScreen {
 	items := makeHarnessItems(harnesses, styles)
-	listStyles := widgets.ListStyles{
-		Normal:   styles.Body,
-		Selected: styles.Selected,
-		Disabled: styles.Muted,
-		Cursor:   "▶",
-	}
-	listHeight := height - 8 // reserve space for title, help, detail-border
-	if listHeight < 3 {
-		listHeight = 3
-	}
-	listWidth := width * 2 / 3
-	if listWidth < 30 {
-		listWidth = width
-	}
-	detailWidth := width - listWidth - 1
-	if detailWidth < 10 {
-		detailWidth = 10
-	}
+	listHeight, listWidth, detailWidth := harnessLayout(width, height)
 	detailStyles := widgets.DetailPaneStyles{
 		Title:  styles.Subtitle,
 		Body:   styles.Body,
@@ -63,7 +48,7 @@ func NewHarnessScreen(harnesses []domain.HarnessRef, width, height int, styles S
 
 	s := &HarnessScreen{
 		harnesses: harnesses,
-		list:      widgets.NewList(items, listHeight, listWidth, listStyles),
+		list:      widgets.NewList(items, listHeight, listWidth, harnessListStyles(styles)),
 		detail:    widgets.NewDetailPane(listHeight, detailWidth, detailStyles),
 		width:     width,
 		height:    height,
@@ -72,6 +57,33 @@ func NewHarnessScreen(harnesses []domain.HarnessRef, width, height int, styles S
 	}
 	s.updateDetail()
 	return s
+}
+
+// harnessListStyles is the list styling shared by the constructor and Configure.
+func harnessListStyles(styles Styles) widgets.ListStyles {
+	return widgets.ListStyles{
+		Normal:   styles.Body,
+		Selected: styles.Selected,
+		Disabled: styles.Muted,
+		Cursor:   "▶",
+	}
+}
+
+// harnessLayout returns the list height, list width and detail width for a screen size.
+func harnessLayout(width, height int) (listHeight, listWidth, detailWidth int) {
+	listHeight = height - 8 // reserve space for title, help, detail-border
+	if listHeight < 3 {
+		listHeight = 3
+	}
+	listWidth = width * 2 / 3
+	if listWidth < 30 {
+		listWidth = width
+	}
+	detailWidth = width - listWidth - 1
+	if detailWidth < 10 {
+		detailWidth = 10
+	}
+	return listHeight, listWidth, detailWidth
 }
 
 // makeHarnessItems converts the registry list into widget ListItems, annotating each with its
@@ -99,6 +111,9 @@ func makeHarnessItems(harnesses []domain.HarnessRef, styles Styles) []widgets.Li
 				fmt.Fprintf(&detail, "Module: %s\n", h.ExecutablePath)
 			}
 		}
+		if h.IsExperimental() {
+			fmt.Fprintf(&detail, "\n%s: %s\n", domain.ExperimentalLabel, h.ExperimentalReason)
+		}
 		if !h.Usable && h.UnusableReason != "" {
 			fmt.Fprintf(&detail, "\nUnavailable: %s\n", h.UnusableReason)
 		}
@@ -110,6 +125,9 @@ func makeHarnessItems(harnesses []domain.HarnessRef, styles Styles) []widgets.Li
 		displayLabel := fmt.Sprintf("%s  %s", padded, tier)
 		if h.Tier == domain.TierExternal && h.Usable {
 			displayLabel = fmt.Sprintf("%s  %s  [active external module]", padded, tier)
+		}
+		if h.IsExperimental() {
+			displayLabel += "  [" + domain.ExperimentalLabel + "]"
 		}
 
 		items[i] = widgets.ListItem{
@@ -173,11 +191,14 @@ func (s *HarnessScreen) updateDetail() {
 
 // View renders the full screen: title, list+detail side by side, status, and help bar.
 func (s *HarnessScreen) View() string {
-	titleText := "Select Harness"
+	titleText, subtitleText := harnessWording(s.role, s.sourceName)
 	if s.toolVersion != "" {
-		titleText = "MOSAIC Deploy v" + s.toolVersion + " -- Select Harness"
+		titleText = "MOSAIC Deploy v" + s.toolVersion + " -- " + titleText
 	}
 	title := s.styles.Title.Width(s.width).Render(titleText)
+	if subtitleText != "" {
+		title += "\n" + s.styles.Subtitle.Width(s.width).Render(subtitleText)
+	}
 	border := s.styles.Border.Width(s.width).Render(strings.Repeat("─", s.width))
 
 	listView := s.list.View()
@@ -214,18 +235,7 @@ func (s *HarnessScreen) SelectedID() string { return s.list.SelectedID() }
 func (s *HarnessScreen) Resize(width, height int) {
 	s.width = width
 	s.height = height
-	listHeight := height - 8
-	if listHeight < 3 {
-		listHeight = 3
-	}
-	listWidth := width * 2 / 3
-	if listWidth < 30 {
-		listWidth = width
-	}
-	detailWidth := width - listWidth - 1
-	if detailWidth < 10 {
-		detailWidth = 10
-	}
+	listHeight, listWidth, detailWidth := harnessLayout(width, height)
 	s.list.Resize(listHeight, listWidth)
 	s.detail.Resize(listHeight, detailWidth)
 }

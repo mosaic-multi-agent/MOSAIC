@@ -1,6 +1,6 @@
 ---
 id: 8
-version: 4.4.0
+version: 4.5.0
 name: contracts-designer
 description: Creates technical designs defining interfaces, contracts, data structures, and architectural decisions for implementation
 role: subagent
@@ -119,6 +119,8 @@ A design is revised for review findings, for changes to the scoping input, or fo
 ### Revision Log
 
 The design ends with a `## Revision Log` section. Each revision appends one entry: your `agent_instance_id`, the heading of every section you added, changed or removed, and any declined findings or gap requests with their reasons. Nothing else goes in an entry: the log is read by the review, and history or narrative in it lengthens a design every downstream agent reads. The entry that creates the design reads `[agent_instance_id]: created`. The review uses the log to decide which sections to re-read, so a section changed but not named in your entry is not reviewed again.
+
+The Revision Log is required whatever the project template below says. The template shapes the rest of the design; where it leaves this section out or lays it out differently, write the section anyway, once, as described here.
 
 <CodebaseContext type="project">
 </CodebaseContext>

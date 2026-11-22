@@ -27,11 +27,11 @@
 package claudecode
 
 import (
-	_ "embed"
 	"fmt"
 	"path"
 	"strings"
 
+	"mosaic-common/harness/builtindesc"
 	"mosaic-deploy/internal/catalog/catalogpaths"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
@@ -39,8 +39,8 @@ import (
 	"mosaic-deploy/internal/harness/registry"
 )
 
-//go:embed claude-code.yaml
-var embeddedDescriptor []byte
+// Descriptor bytes come from the shared Common package, not a local copy.
+var embeddedDescriptor, _ = builtindesc.Raw("claude-code")
 
 func init() {
 	registry.Register("claude-code", func(opts registry.BuiltinOptions) (domain.HarnessModule, error) {
@@ -80,6 +80,7 @@ func New(opts registry.BuiltinOptions) (domain.HarnessModule, error) {
 		DisplayName: desc.DisplayName,
 		Tier:        domain.TierBuiltin,
 		Usable:      true,
+		ExperimentalReason: desc.ExperimentalReason,
 	}
 	return &module{ref: ref, desc: desc, injections: content.Shared, orchInjections: content.Orchestrator}, nil
 }

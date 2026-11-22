@@ -6,6 +6,7 @@ package agentresolve_test
 import (
 	"testing"
 
+	"mosaic-run/internal/agentfile"
 	"mosaic-run/internal/orchfile"
 	"mosaic-run/internal/workflow"
 )
@@ -13,7 +14,7 @@ import (
 func TestOrchestratorFixture_WorkflowRegionIsAcceptedByTheStrictParser(t *testing.T) {
 	path := writeOrchFile(t, t.TempDir(), "guard-orchestrator.md")
 
-	regions, err := orchfile.EnumerateWorkflows(path)
+	regions, err := orchfile.EnumerateWorkflows(path, agentfile.Format{})
 	if err != nil {
 		t.Fatalf("EnumerateWorkflows: %v", err)
 	}

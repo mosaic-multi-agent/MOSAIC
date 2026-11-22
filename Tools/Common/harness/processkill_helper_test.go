@@ -72,6 +72,22 @@ func runTreeHelper(cmd string) {
 		writePidFile(gc.Process.Pid)
 		writeOut("done")
 
+	case "tree-exit-holds", "tree-exit1-holds":
+		// The started process exits while a grandchild keeps the inherited
+		// stdout/stderr open.
+		gc := exec.Command(os.Args[0])
+		gc.Env = append(os.Environ(), "GO_HELPER_CMD=tree-grandchild")
+		gc.Stdout = os.Stdout
+		gc.Stderr = os.Stderr
+		if err := gc.Start(); err != nil {
+			os.Exit(3)
+		}
+		writePidFile(gc.Process.Pid)
+		writeOut("done")
+		if cmd == "tree-exit1-holds" {
+			os.Exit(1)
+		}
+
 	default:
 		os.Stderr.WriteString("unknown GO_HELPER_CMD: " + cmd) //nolint:errcheck
 		os.Exit(2)

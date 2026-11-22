@@ -51,7 +51,7 @@ A boundary tag is an XML-style name-first tag occupying its own line. The trimme
 
 ```
 <ExecutionLog type="core">
-<Workflow type="core" name="quick-fix" version="3.0">
+<Workflow type="core" name="brownfield-tdd" version="4.0">
 ```
 
 - Attribute values are double-quoted.
@@ -82,7 +82,7 @@ No attributes. The tag name alone. Same own-line rule.
 | Open tag | Close tag |
 |---|---|
 | `<ExecutionLog type="core">` | `</ExecutionLog>` |
-| `<Workflow type="core" name="quick-fix" version="3.0">` | `</Workflow>` |
+| `<Workflow type="core" name="brownfield-tdd" version="4.0">` | `</Workflow>` |
 | `<InfrastructureAgent type="core" name="build-runner">` | `</InfrastructureAgent>` |
 
 **Version attribute:** Where a region carries a declared version, it appears as a `version` attribute on the opening tag. Regions that carry no version today do not gain one; the attribute is optional and its absence is not an error. Workflow regions always carry it (`WorkflowFormat.md` §5, F6).
@@ -112,8 +112,8 @@ Each data section (`ExecutionLog`, `Artifacts`, `WorkflowNotes`) is written as: 
 ---
 type: orchestration-artifact
 run_id: "20260129T090000Z-a3f9"
-workflow: quick-fix
-workflow_version: "3.0"
+workflow: brownfield-tdd
+workflow_version: "4.0"
 task: "Add JWT-based authentication to the user service API"
 started: 2026-01-29T09:00:00Z
 last_updated: 2026-01-29T11:30:00Z

@@ -3,7 +3,7 @@ package runflow
 // progress_requests_view_test.go verifies what the progress screen renders for
 // the in-run requests: the help bar entries and the pending lines.
 //
-// The screen is drawn at 120 columns: the help bar is wider than 80 and would
+// The screen is drawn at 200 columns: the help bar is wider than 80 and would
 // wrap, which would split the substrings asserted here.
 
 import (
@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	helpBarWithRequests = "s graceful-stop  m manual-dispatch  h hitl-next  g loop-guard  a artifact-view  ctrl+c force-quit"
+	helpBarWithRequests = "s graceful-stop  m manual-dispatch  h hitl-next  g loop-guard  a artifact-view  ctrl+c force-quit  l activity  x force-stop  up/down/pgup/pgdn scroll  home/end oldest/newest"
 	pendingManualLine   = "Requested: manual dispatch at the next routing decision (m to cancel)"
 	pendingHITLLine     = "Requested: HITL for the next agent (h to cancel)"
 )

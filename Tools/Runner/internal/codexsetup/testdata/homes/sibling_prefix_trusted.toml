@@ -1,0 +1,6 @@
+# The trusted path only shares a string prefix with the workspace; it is not an ancestor.
+[projects.'{{SIBLING}}']
+trust_level = "trusted"
+
+[mcp_servers.contact-user]
+command = "contact-user-server"

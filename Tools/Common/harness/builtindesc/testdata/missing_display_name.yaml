@@ -1,0 +1,22 @@
+schema_version: "1"
+id: "fixture"
+paths:
+  agents:
+    supported: true
+    project: ".fixture/agents"
+  skills:
+    supported: true
+    project: ".fixture/skills"
+  hooks:
+    supported: true
+    project: ".fixture/hooks"
+extensions:
+  agent: ".md"
+cli:
+  label: "Fixture CLI"
+  loading_mechanism: "name"
+models:
+  ids:
+    - "model-a"
+    - "model-b"
+  format_hint: "model-<n>"

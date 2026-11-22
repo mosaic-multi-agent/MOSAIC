@@ -1,0 +1,5 @@
+{"type":"user","uuid":"u-1","message":{"role":"user","content":"orchestrator task text"}}
+{"type":"assistant","uuid":"o-uuid-1","message":{"id":"msg_O1","role":"assistant","content":[]}}
+{"type":"assistant","uuid":"o-uuid-2","message":{"id":"msg_O2","role":"assistant","content":[]}}
+{"type":"assistant","uuid":"o-uuid-3","message":{"role":"assistant","content":[]}}
+{"type":"assistant","uuid":"o-uuid-4","message":{"id":"msg_O1","role":"assistant","content":[]}}

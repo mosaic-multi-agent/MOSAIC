@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/pathinput"
 )
@@ -56,7 +55,7 @@ func (r *transformRun) targetHarnessOptions() []domain.Option {
 	harnesses := r.s.deps.Registry.List()
 	opts := make([]domain.Option, 0, len(harnesses))
 	for _, h := range harnesses {
-		opt := domain.Option{ID: h.ID, Label: h.DisplayName}
+		opt := domain.HarnessOption(h)
 		if h.ID == r.req.SourceHarnessID {
 			opt.Disabled, opt.DisabledReason = true, "already the transform source"
 		} else if !h.Usable {
@@ -94,12 +93,11 @@ func (r *transformRun) resolveWorkspace(ctx context.Context) error {
 // makePlan computes the tool-mappings version stamped into the rebuilt agents and the whole
 // plan. It asks nothing and writes nothing.
 func (r *transformRun) makePlan() error {
-	toolCfg, _ := r.s.deps.ToolConfig.Load()
-	userCfg, err := r.s.deps.UserConfig.Load()
+	stamp, err := r.s.toolSettingsStamp(r.tgt)
 	if err != nil {
 		return err
 	}
-	r.toolMappingsVersion = config.HashToolDestinations(toolCfg.ToolDestinations, userCfg.ToolDestinations)
+	r.toolMappingsVersion = stamp
 
 	plan, err := r.s.planTransform(transformPlanInput{
 		Workspace: r.workspace, Source: r.src, Target: r.tgt, Overwrite: r.req.Overwrite,

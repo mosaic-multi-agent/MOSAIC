@@ -38,6 +38,8 @@ func TestCLIHarnesses_AllDeclaredConstantsAppearAsEntries(t *testing.T) {
 		harness.HarnessIDClaudeCode,
 		harness.HarnessIDOpenCode,
 		harness.HarnessIDGHCPCLI,
+		harness.HarnessIDCodex,
+		harness.HarnessIDOpenCodeV2,
 	}
 	for _, id := range knownIDs {
 		if _, ok := harness.LookupCLIHarness(id); !ok {
@@ -181,6 +183,9 @@ func TestIsCLIHarness_TrueForKnownIdentities(t *testing.T) {
 	}
 	if !harness.IsCLIHarness(harness.HarnessIDGHCPCLI) {
 		t.Errorf("want IsCLIHarness(%q) == true", harness.HarnessIDGHCPCLI)
+	}
+	if !harness.IsCLIHarness(harness.HarnessIDCodex) {
+		t.Errorf("want IsCLIHarness(%q) == true", harness.HarnessIDCodex)
 	}
 }
 
@@ -341,12 +346,17 @@ func TestLookupCLIHarness_ClaudeCodeIsNameBased(t *testing.T) {
 	}
 }
 
-// TestCLIHarnesses_AllEntriesAreNameBased verifies that every catalog entry
-// is name-based.
-func TestCLIHarnesses_AllEntriesAreNameBased(t *testing.T) {
+// TestCLIHarnesses_EveryEntryIsNameBasedOrRunnerLoaded verifies that every
+// catalog entry uses one of the two defined loading mechanisms; Codex is the
+// only runner-loaded harness.
+func TestCLIHarnesses_EveryEntryIsNameBasedOrRunnerLoaded(t *testing.T) {
 	for _, e := range harness.CLIHarnesses() {
-		if e.LoadingMechanism != harness.LoadingMechanismName {
-			t.Errorf("catalog entry %q: want LoadingMechanismName, got %v", e.ID, e.LoadingMechanism)
+		want := harness.LoadingMechanismName
+		if e.ID == harness.HarnessIDCodex {
+			want = harness.LoadingMechanismRunnerLoaded
+		}
+		if e.LoadingMechanism != want {
+			t.Errorf("catalog entry %q: want %v, got %v", e.ID, want, e.LoadingMechanism)
 		}
 	}
 }
@@ -419,7 +429,8 @@ func TestLoadingMechanism_StringRepresentations(t *testing.T) {
 	}{
 		{harness.LoadingMechanismUnset, false},
 		{harness.LoadingMechanismName, false},
-		{harness.LoadingMechanism(99), false}, // unrecognized value must still produce output
+		{harness.LoadingMechanismRunnerLoaded, false},
+		{harness.LoadingMechanism(99), false},// unrecognized value must still produce output
 	}
 	for _, tc := range cases {
 		s := tc.mechanism.String()

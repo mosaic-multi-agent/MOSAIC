@@ -43,6 +43,10 @@ func RegisterRunFlags(fs *pflag.FlagSet) {
 	fs.String("harness", harness.FakeHarnessID, fmt.Sprintf("Harness adapter to use (%s)", harness.FlagValues()))
 	fs.String("timeout", "30m", "Invocation timeout for dispatches without human_in_the_loop, consultations and infrastructure agents (e.g. 30m, 1h)")
 	fs.String("hitl-timeout", "4h", "Invocation timeout for dispatches sent with human_in_the_loop: true (e.g. 4h, 8h)")
+	// The 10m default is well above V2's legitimate silences (tool_use appears
+	// only when a tool completes, text per block, and the root stream is silent
+	// during a background_wait); see domain.DefaultNoOutputTimeout.
+	fs.String("no-output-timeout", "10m", "No-output watchdog for opencode-v2 invocations without human_in_the_loop: an invocation that writes nothing to its output stream for this long is ended like a timeout (default 10m; 0 disables)")
 	fs.String("executable-path", "", "Executable path override for the harness selected by --harness; when absent, each harness uses its own default (claude, opencode, copilot)")
 	fs.String("infra-class", "", "Comma-separated class=agent mappings for non-interactive agent-per-class selection (e.g. checkpoint=checkpoint-manager-git,commit=commit-manager-git)")
 	fs.StringArray("input", nil, "Path to a file or directory to copy into a new run's folder before the first dispatch; repeatable. Not permitted with --run.")

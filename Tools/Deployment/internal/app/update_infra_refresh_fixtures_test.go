@@ -14,6 +14,7 @@ import (
 
 	"mosaic-deploy/internal/app"
 	"mosaic-deploy/internal/app/interactiontest"
+	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
@@ -46,7 +47,11 @@ const (
 // frontmatter version: "1.0" matches the catalog, anything else makes the file protocol/version
 // stale on its own.
 func refreshOrchestrator(version, infraInner, workflowInner string) string {
-	doc := strings.Replace(injDeployedOrchestrator(infraInner, workflowInner), `version: "0.9"`, `version: "`+version+`"`, 1)
+	// The deployed file carries the stamp the stub module yields, so tool settings never make it stale.
+	mod := newMinimalModule()
+	stamp := config.ToolSettingsStamp(mod.Ref().ID, mod.Descriptor().Tools, nil, nil)
+	doc := strings.Replace(injDeployedOrchestrator(infraInner, workflowInner), `version: "0.9"`,
+		`version: "`+version+`"`+"\nmosaic_tool_mappings_version: \""+stamp+`"`, 1)
 	return strings.Replace(doc, "<IdentityExtension", refreshProtocolRegion+"\n<IdentityExtension", 1)
 }
 

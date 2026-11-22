@@ -2,6 +2,8 @@
 
 This guide explains how to build a custom harness module for MOSAIC. A harness defines how MOSAIC transforms generic agent definitions into harness-specific deployable files. Three provision tiers exist: **built-in** (compiled into MOSAIC), **descriptor-only** (declared in a YAML file with no code), and **external** (a standalone executable).
 
+Most harnesses produce Markdown agent files, which is the default. A harness can also produce non-Markdown files by declaring a format ID in its descriptor's `agent_format_id` field. The only non-Markdown format available today is `codex-toml` (used by the Codex built-in, which is experimental; the format layer lives in `Tools/Common`). A non-Markdown harness must supply a translator pair registered under its format ID; see [Non-Markdown harnesses](#non-markdown-harnesses) below for the additional steps.
+
 Read this guide to decide which tier fits your harness, then follow the step-by-step instructions for your chosen approach.
 
 ## Which Tier Should You Use?
@@ -88,6 +90,17 @@ frontmatter:
     - tools
 ```
 
+### Mark a harness experimental (optional)
+
+A harness that is not yet fully proven can declare itself experimental:
+
+```yaml
+experimental:
+  reason: "Agents deploy, but no orchestration runs on this harness yet."
+```
+
+`reason` is required and must not be blank; a bare `experimental:`, a missing or blank reason, or any other key makes the descriptor invalid. Leaving the key out means the harness is not experimental. The declaration works the same in every tier (built-in, descriptor-only and external module). MOSAIC still offers the harness, but marks it "Experimental" in the TUI pickers, shows the reason as a warning at plan review, prints it once from every writing CLI command, and adds it to the `--output json` result as `experimentalHarnesses`. Read-only `render` is unaffected. See the [descriptor schema](descriptor-schema.md#experimental-harnesses) for details. The built-in Codex harness is declared this way; its reason says Codex runs through `mosaic-run` only, native orchestration is unsupported and no MOSAIC log is produced.
+
 ### Register with MOSAIC
 
 MOSAIC discovers the descriptor at startup. Select it by its id:
@@ -114,8 +127,9 @@ An external module is a subprocess that MOSAIC communicates with using the [JSON
 
 Read the full [external protocol specification](external-protocol.md) before implementing. The key points:
 - One JSON object per line on stdin (request) and stdout (response)
-- Protocol version `"1.0"` on every message
+- Protocol version `"2.0"` on every message
 - First exchange must be the `handshake` method
+- The `tools` request carries custom tool answers in `custom_tools` (server name to a list of entries; protocol 2.0 replaced the former `custom_names`)
 - Module exits when MOSAIC closes its stdin
 
 ### Step 1: Implement the handshake
@@ -123,8 +137,8 @@ Read the full [external protocol specification](external-protocol.md) before imp
 Your executable must respond to the `handshake` method as its first exchange:
 
 ```
-Request:  {"protocol":"1.0","id":"1","method":"handshake","params":{"protocol":"1.0"}}
-Response: {"protocol":"1.0","id":"1","result":{"protocol":"1.0","harness":{"id":"my-harness","display_name":"My Harness","tier":"external","usable":true}}}
+Request:  {"protocol":"2.0","id":"1","method":"handshake","params":{"protocol":"2.0"}}
+Response: {"protocol":"2.0","id":"1","result":{"protocol":"2.0","harness":{"id":"my-harness","display_name":"My Harness","tier":"external","usable":true}}}
 ```
 
 If your harness fails to start (e.g. missing configuration), set `"usable": false` in the handshake response and MOSAIC will surface the error to the user.
@@ -217,7 +231,7 @@ Always set `"list"` explicitly: `"block"` for block-style YAML (one item per lin
 
 ## Tools Method: Shape Variants
 
-The `tools` method can use two shapes:
+The `tools` method can use three shapes:
 
 **List shape** (most harnesses): emit a list field with harness tool names.
 ```json
@@ -239,6 +253,8 @@ The `tools` method can use two shapes:
   "resolutions": [{"generic": "file_read", "outcome": "mapped", "harness_tools": ["read_file"]}]
 }
 ```
+
+**Rules shape** (OpenCode V2, experimental): emit one field under the descriptor's tools key whose value is an ordered list of `{action, resource, effect}` rules. The last matching rule wins, so the usual frame is a leading deny-everything rule, one whole-tool allow rule per permission action the agent uses, then trailing fixed rules (for example `external_directory` asks). Tools that share a permission action (for OpenCode V2, `write`, `edit` and `patch` all fall under `edit`) share one allow rule. The shared descriptor mapper builds this from `tools.rules` and the universe `action` fields; see the shape table in [descriptor-schema.md](descriptor-schema.md).
 
 The `resolutions` array must always have one entry per entry in `request.generic`, in the same order.
 
@@ -332,7 +348,101 @@ validation rules.
 
 **Writing to stdout before handshake response**: Any output before the first handshake response will be treated as a malformed response. Write nothing until you are ready to respond to the handshake.
 
-**Protocol version mismatch**: Always echo `"1.0"` in the `protocol` field of every response, including the handshake. A different value causes MOSAIC to reject the module with `ErrProtocolMismatch`.
+**Protocol version mismatch**: Always echo `"2.0"` in the `protocol` field of every response, including the handshake. A different value causes MOSAIC to reject the module with `ErrProtocolMismatch`.
+
+---
+
+---
+
+## Non-Markdown Harnesses
+
+Most harnesses write Markdown files and use the identity translator. A harness that writes a
+different file format (e.g. TOML) must do three additional things.
+
+### 1 — Declare a format ID in the descriptor
+
+Set `agent_format_id` in the descriptor to a recognised format ID string:
+
+```yaml
+agent_format_id: "codex-toml"
+```
+
+The only value other than the default empty string (`markdown`) that the tool recognises today
+is `codex-toml`. A future format requires a new constant in the `formatid` package and a new
+translator pair (see below). An unrecognised value is a fatal parse error at startup.
+
+The agent-format layer (`agentformat`, its `formatid`, `codextoml` and `all` sub-packages, and
+`agentfields`) lives in `Tools/Common`, not in Deploy. Deploy reads and writes agent files through
+it, and the Runner reads deployed agent files through the same layer (read-only, via `agentload`).
+A new format therefore needs no Runner code.
+
+The format ID, agent file extension, agents directory and model IDs of a built-in harness are
+declared once, in its descriptor under `Tools/Common/harness/builtindesc/`. There is no second
+copy to keep in step: Deploy parses the embedded YAML, and the Runner and AgentTest read the same
+descriptors through the `mosaic-common/harness` accessors.
+
+#### Adding a built-in harness that uses an existing agent format
+
+1. Add one descriptor, `<id>.yaml`, to `Tools/Common/harness/builtindesc/` and list it in that
+   package (the `go:embed` line and the builtin id list). Declare `models` (`ids`, `format_hint`)
+   for every built-in. For a harness the Runner and AgentTest can run, also declare the optional
+   `cli` section (see [descriptor-schema.md](descriptor-schema.md#cli-optional)).
+2. Add the harness's injection files (`HarnessInjections.md`, and `HarnessInjectionsOrchestrator.md`
+   where the harness has an orchestrator) under the catalog's `HarnessInjections/` directory.
+3. Write the adapter code each tool needs: the Deploy module (`Tools/Deployment/internal/harness/builtin/<id>/`),
+   and, for a harness with a `cli` section, the Runner and AgentTest adapters (spawn and decode).
+
+A coverage test fails the build if a tool that offers CLI harnesses has no adapter for a harness
+whose descriptor declares a `cli` section.
+
+#### Overriding a built-in harness from a descriptor on disk
+
+Runner and AgentTest read only the built-in descriptors. A descriptor-only or external harness
+(`MosaicDeploy/harnesses/<dir>/harness.yaml`) that reuses a built-in id overrides that harness for
+Deploy alone. If the override changes the agents directory, the agent file extension or the
+agent format, Runner and AgentTest do not see the change and keep using the built-in values.
+Change those facts in the built-in descriptor instead.
+
+### 2 — Supply a translator pair
+
+A translator pair is a Go value that implements the `agentformat.Translator` interface: two
+pure functions, `Encode` (canonical MOSAIC Markdown bytes to deployed file bytes) and `Decode`
+(deployed file bytes to canonical MOSAIC Markdown bytes). The translator is registered under
+its format ID from an `init()` function:
+
+```go
+func init() {
+    agentformat.Register(formatid.MyFormat, myTranslator{})
+}
+```
+
+The translator goes in a sub-package of `Tools/Common/agentformat`. If it can report every native
+setting of its files with values, it may also implement the optional `agentformat.SettingsReader`
+interface; the loader detects it, so no loader change is needed. The `agentformat/all` wiring package must blank-import your translator sub-package so that
+registration happens before any `LookupString` call at runtime. Add the import there; do not
+import your translator package directly from any other package that uses it — that would bypass
+the wiring check.
+
+### 3 — Read the deploy-only boundary
+
+The deployed artifact read funnel (`decodeDeployedBytes`) and the deployed-agent file naming
+helper (`agentFileName`) both use the format ID to select the right translator and file
+extension. These are inside `internal/app` and are updated as part of adding a format; you do
+not call them directly from the translator package.
+
+### 4 — Render tool grants through the harness module
+
+A non-Markdown harness typically cannot use the shared mapper's output directly. The Codex
+harness illustrates this: instead of a `tools` key, it emits `sandbox_mode` (`read-only` or `workspace-write`), `web_search`
+(`live` with the generic `web_search` tool, otherwise `disabled`) and, for a write-capable agent
+with `web_fetch`, a `[sandbox_workspace_write]` table granting network access. A read-only agent
+with `web_fetch` cannot be given network access; the module returns a `tool-capability-withheld`
+gap through `ToolResult.Gaps` and the plan reports it. `terminal` alone grants no network access.
+The `sandbox_mode` fallback is applied by the translator's `Encode` method, not by the shared
+mapper. When your harness uses a custom tool representation, implement it in the harness module's
+`Tools()` method and let the translator consume it; do not rely on the shared `descriptor.MapTools`
+output being present in the canonical frontmatter, because a format that does not carry a `tools`
+key will not have one.
 
 ---
 
@@ -352,7 +462,7 @@ Before submitting a harness, verify:
 
 For external modules, additionally:
 
-- [ ] Handshake correctly echoes `"1.0"` in the protocol field
+- [ ] Handshake correctly echoes `"2.0"` in the protocol field
 - [ ] Module exits cleanly when stdin is closed
 - [ ] Module does not write to stdout before the handshake response
 - [ ] Subprocess stderr contains useful diagnostic information when exiting non-zero

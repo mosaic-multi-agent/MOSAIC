@@ -22,6 +22,8 @@ import mosaic_logger_runner_mode as runner_mode
 # Handler registry — populated at import time from handler modules
 # ---------------------------------------------------------------------------
 
+CAPTURE_DISPATCH_ARG = "capture-dispatch"
+
 HANDLERS: dict = {}
 for _mod in [_session, _invocation, _tools]:
     if hasattr(_mod, "HANDLERS"):
@@ -186,14 +188,44 @@ def dispatch(raw_input: str) -> None:
         core.debug_log("dispatch outer exception", exc)
 
 
-def main() -> int:
+def dispatch_capture(raw_input: str) -> None:
+    """Capture-only entry for the synchronous Agent|Task PreToolUse registration.
+
+    Accepts only PreToolUse payloads and hands them to capture_dispatch, which
+    adopts the prompt's run id and queues the pending dispatch. Runs no
+    handler, appends no event, emits no usage and reads no transcript.
+    Never raises.
+    """
+    try:
+        try:
+            payload = json.loads(raw_input)
+        except Exception as exc:
+            core.debug_log("dispatch_capture: hook payload is not valid JSON", exc)
+            return
+        if not isinstance(payload, dict):
+            return
+        if payload.get("hook_event_name") != "PreToolUse":
+            return
+        _tools.capture_dispatch(build_context(payload))
+    except Exception as exc:
+        core.debug_log("dispatch_capture outer exception", exc)
+
+
+def main(argv: "list[str] | None" = None) -> int:
     """Process entrypoint. Reads one JSON object from stdin, dispatches, exits 0.
+
+    argv[1] == CAPTURE_DISPATCH_ARG selects dispatch_capture; anything else
+    selects the full dispatch.
 
     ALWAYS exits 0. Writes NOTHING to stdout. Never raises.
     """
     try:
+        args = sys.argv if argv is None else argv
         raw = sys.stdin.read()
-        dispatch(raw)
+        if len(args) > 1 and args[1] == CAPTURE_DISPATCH_ARG:
+            dispatch_capture(raw)
+        else:
+            dispatch(raw)
     except Exception as exc:
         core.debug_log("main() uncaught exception", exc)
     return 0

@@ -1,11 +1,11 @@
 package transform_test
 
 // body_preservation_test.go tests the core purity invariant: instruction body prose is
-// never altered. For every generic agent in the repository, the bytes between the
+// never altered. For every agent in the committed fixture corpus, the bytes between the
 // frontmatter and end of file must be identical to the source after transformation, except
 // for regions the transformation is explicitly permitted to change (injection content).
 //
-// This is the mechanised form of AC8.1: asserted over real agents, not a sample.
+// This is the mechanised form of the invariant, asserted over a corpus, not a sample.
 
 import (
 	"bytes"
@@ -19,8 +19,9 @@ import (
 	"mosaic-deploy/internal/transform"
 )
 
-// TestBodyPreservation_AllGenericAgentsBodyUnchanged asserts that for every .md file under
-// Catalog/Subagents/, the body structure is byte-identical before and after transformation,
+// TestBodyPreservation_AllCorpusAgentsBodyUnchanged asserts that for every .md file in the
+// committed agent corpus (testdata/transform/agent-corpus/), the body structure is
+// byte-identical before and after transformation,
 // with tool-managed managed region region content excluded from comparison.
 //
 // managed region regions (CommunicationProtocol, AvailableWorkflows, InfrastructureAgents,
@@ -29,16 +30,15 @@ import (
 // section names, boundary tag lines, plain prose, and user-owned project-injection region regions —
 // is never altered. Clearing DEPLOYED region content in both source and output before
 // comparison isolates exactly this structural invariant.
-func TestBodyPreservation_AllGenericAgentsBodyUnchanged(t *testing.T) {
+func TestBodyPreservation_AllCorpusAgentsBodyUnchanged(t *testing.T) {
 	mod := newFixtureModule(t)
 	model := fixtureModel()
-	agentsDir := genericAgentsDir(t)
-	paths := collectGenericAgentPaths(t, agentsDir)
+	paths := agentCorpusPaths(t)
 
 	for _, p := range paths {
 		p := p // capture for subtest
-		// Use the path relative to Catalog/Subagents/ as the subtest name for readability.
-		rel, _ := filepath.Rel(agentsDir, p)
+		// Use the file base name as the subtest name for readability.
+		rel := filepath.Base(p)
 		t.Run(rel, func(t *testing.T) {
 			t.Parallel()
 

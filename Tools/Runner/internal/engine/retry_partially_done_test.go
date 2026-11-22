@@ -108,8 +108,10 @@ func TestNext_PartiallyDone_Redispatch_DoesNotDuplicateOutputAlreadyAnInput(t *t
 	}
 }
 
-// With no response (resume) the previous status message comes from the log.
-func TestNext_PartiallyDone_Resume_TaskTextCarriesLoggedSummary(t *testing.T) {
+// With no response (resume) the previous status message comes from the log and
+// the previous outputs are derived from the row's Output column, wildcard
+// entries unexpanded; the result equals the live call's inputs.
+func TestNext_PartiallyDone_Resume_TaskTextAndInputsMatchTheLiveCall(t *testing.T) {
 	f := newRetryFixture(t)
 	log := (&runLog{}).partial(rtPlanner, "", rtRowPlanner).inPhase(rtPlanPhase)
 
@@ -120,9 +122,15 @@ func TestNext_PartiallyDone_Resume_TaskTextCarriesLoggedSummary(t *testing.T) {
 	if !hasText(task, engine.PartiallyDoneContextPrefix) || !hasText(task, rtLastMessage) {
 		t.Errorf("resume task description must carry the logged summary, got %q", task)
 	}
-	if len(step.Request.InputArtifacts) != 2 {
-		t.Errorf("resume appends no previous outputs, want the 2 row defaults, got %v",
-			step.Request.InputArtifacts)
+	want := []string{"Research.md", "Requirements.md", "Plan.md", "Stage-*/Plan.md", "Stage-*/PlanProgress.md"}
+	if !stringSlicesEqual(step.Request.InputArtifacts, want) {
+		t.Errorf("resume: want the row defaults followed by the row's declared outputs %v, got %v",
+			want, step.Request.InputArtifacts)
+	}
+	live := requireRetryStep(t, f.next(domain.ExecutionModeAuto, log, false),
+		rtRowPlanner, "", domain.RetryPartiallyDone)
+	if !stringSlicesEqual(live.Request.InputArtifacts, step.Request.InputArtifacts) {
+		t.Errorf("live inputs %v must equal resumed inputs %v", live.Request.InputArtifacts, step.Request.InputArtifacts)
 	}
 }
 

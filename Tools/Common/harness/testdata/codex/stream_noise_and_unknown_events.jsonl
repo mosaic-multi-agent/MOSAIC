@@ -1,0 +1,9 @@
+Reading prompt from stdin...
+{"type":"thread.started","thread_id":"t1"}
+WARNING: something unrelated on stdout
+{"type":"future.event","payload":{"anything":true}}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"hologram","text":"unknown item type"}}
+{"type":"item.completed","item":{"id":"item_1","type":"error","message":"non-fatal item error"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"the answer"}}
+{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1},"new_field":"tolerated"}

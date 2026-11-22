@@ -26,21 +26,17 @@ package app
 //   (ModelKey, ToolsKey) and its FrontmatterPlan.Set key names, passed in by the
 //   service layer via PromoteInput.DropKeys (see promoteHarnessDropKeys).
 //
-// AD-12 override (promote direction, three fields only):
-//   recommended_tier, tier_rationale, and required_skills are always written in the
-//   promote (harness → generic) direction, even when their PromoteInput values are
-//   empty or nil. An empty PromoteInput value produces an empty form in the output:
-//   recommended_tier: "", tier_rationale: "", required_skills: []. This is a
-//   deliberate, scoped override of AD-12 — the general "omit when empty" rule — for
-//   exactly these three fields in the promote direction only. All other fields and the
-//   deploy (generic → harness) direction continue to follow AD-12.
+// Recovered generic-only fields: recommended_tier, tier_rationale and required_skills are
+// written only when supplied (AD-12: omit when empty); a source that already carries one keeps
+// it. A generic agent without a tier is valid; it gets its own model question at deploy time.
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 
+	"mosaic-common/agentfields"
 	"mosaic-common/docformat"
-	"mosaic-deploy/internal/agentfields"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
 )
@@ -97,27 +93,35 @@ type PromoteInput struct {
 	// Tools is the authoritative generic tools list reconstructed by reverse mapping.
 	// A nil slice means no reconstruction was attempted and any source `tools` key is
 	// carried through unchanged. A non-nil slice (including empty) is authoritative and
-	// replaces the key outright; a non-nil empty slice removes the key entirely. Entries
-	// are written in slice order as a flow-style list (AD-7).
+	// replaces the key outright; a non-nil empty slice removes the key entirely unless
+	// WriteEmptyToolsList is true. Entries are written in slice order as a flow-style
+	// list (AD-7).
 	Tools []string
 
+	// WriteEmptyToolsList overrides the default removal behavior when Tools is a non-nil
+	// empty slice. When true, the tools key is written with an explicit empty flow list
+	// (tools: []) rather than removed. This is used by the non-recoverable promote path
+	// where a blank answer by the operator must produce tools: [] rather than no tools
+	// key, because an absent tools field is interpreted as "inherit all" by some consumers.
+	WriteEmptyToolsList bool
+
 	// RecommendedTier is the generic-only field recovered from the user during promote.
-	// An empty string means the field was not supplied and is written as an empty scalar
-	// (recommended_tier: "") rather than omitted. This is a deliberate, scoped override of
-	// AD-12 for the promote direction and this field only: a promoted generic agent always
-	// carries the key, so the gap is visible to whoever completes it.
+	// An empty string means the field was not supplied and is left out of the output.
 	RecommendedTier string
 
 	// TierRationale is the generic-only field recovered from the user during promote.
-	// An empty string means the field was not supplied and is written as an empty scalar
-	// (tier_rationale: ""), not omitted. Scoped AD-12 override, as for RecommendedTier.
+	// An empty string means the field was not supplied and is left out of the output.
 	TierRationale string
 
 	// RequiredSkills is the generic-only field recovered from the user during promote,
 	// entered as a comma-separated list and split by the service layer. A nil or empty
-	// slice means the field was not supplied and is written as an empty flow list
-	// (required_skills: []), not omitted. Scoped AD-12 override, as for RecommendedTier.
+	// slice means the field was not supplied and is left out of the output.
 	RequiredSkills []string
+
+	// EmptyProjectRegions empties every project region of the generic: each keeps only its
+	// nested project regions (themselves emptied), and one with none is an empty tag pair.
+	// False (the zero value) keeps each project region's content byte-identical to the source.
+	EmptyProjectRegions bool
 }
 
 // promoteProtectedGenericKeys names frontmatter keys a harness-derived drop-set may never
@@ -146,6 +150,9 @@ type promoteSourceFacts struct {
 	//
 	// Added in Stage 2 to support diverted-field recovery during promote.
 	DivertedTools []string
+	// Model is the scalar the file carries under the harness descriptor's model key; empty when
+	// the descriptor declares no model key or the file has no scalar under it.
+	Model string
 }
 
 // inspectPromoteSource reads the facts service.Promote needs from a deployed agent's
@@ -156,7 +163,7 @@ type promoteSourceFacts struct {
 // Pure: it parses src and returns; it performs no I/O and asks nothing. A source that
 // fails to parse returns an error wrapping ErrPromoteNotTransformed.
 func inspectPromoteSource(src []byte, d *domain.HarnessDescriptor) (promoteSourceFacts, error) {
-	doc, err := docformat.Parse(src)
+	doc, err := ParseGenericSource(src)
 	if err != nil {
 		return promoteSourceFacts{}, fmt.Errorf("%w: %s", ErrPromoteNotTransformed, err.Error())
 	}
@@ -198,10 +205,18 @@ func inspectPromoteSource(src []byte, d *domain.HarnessDescriptor) (promoteSourc
 		}
 	}
 
+	model := ""
+	if k := d.Frontmatter.ModelKey; k != "" {
+		if v, ok := fm.Get(k); ok && v.Kind == domain.KindScalar {
+			model = v.Scalar
+		}
+	}
+
 	return promoteSourceFacts{
 		Keys:          keys,
 		HarnessTools:  harnessTools,
 		DivertedTools: divertedTools,
+		Model:         model,
 	}, nil
 }
 
@@ -213,11 +228,14 @@ func inspectPromoteSource(src []byte, d *domain.HarnessDescriptor) (promoteSourc
 // ErrPromoteNotTransformed and no output.
 //
 // The generated file:
-//   - has every injection region stripped to an empty tag pair — no harness-
-//     specific injection content; the deploy pipeline fills injections per-harness;
-//   - has every managed region stripped to an empty tag pair — this matches
-//     real generic source files and satisfies the transform pipeline's constraint that
-//     deployed regions in a source must be empty (ErrSourceDeployedRegionNotEmpty);
+//   - keeps every project region, at any depth, byte-identical to the source (it becomes the
+//     region's deploy-once default), or empties it to an empty tag pair when
+//     PromoteInput.EmptyProjectRegions is set;
+//   - has every managed region emptied apart from the project regions inside it, which stay
+//     as its direct children — this matches real generic source files and satisfies the
+//     transform pipeline's constraint that a source's managed region holds no prose
+//     (ErrSourceDeployedRegionNotEmpty);
+//   - has every custom region removed, tags included, at any depth;
 //   - carries over the section tag structure and section body prose as-is;
 //   - carries frontmatter per the field policy documented at the top of promote.go.
 //
@@ -237,7 +255,7 @@ func buildGenericAgent(in PromoteInput) ([]byte, error) {
 
 	// Parse the source. eligibleHarnessOnly already parsed successfully, but guard
 	// defensively in case an edge case reaches here.
-	doc, err := docformat.Parse(in.Source)
+	doc, err := ParseGenericSource(in.Source)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrPromoteNotTransformed, err.Error())
 	}
@@ -316,12 +334,17 @@ func buildGenericAgent(in PromoteInput) ([]byte, error) {
 	fm.Set("role", domain.ScalarValue(string(role), domain.QuotePlain))
 
 	// Apply the tools reconstruction contract (AD-7).
-	//   nil  → carry source tools key unchanged (no-op here; existing carry logic handles it)
-	//   []   → remove the tools key (non-nil empty is an authoritative removal)
+	//   nil   → carry source tools key unchanged (no-op here; existing carry logic handles it)
+	//   []    → remove the tools key (non-nil empty is an authoritative removal), UNLESS
+	//           WriteEmptyToolsList is true, in which case write tools: [] explicitly
 	//   [...] → replace or add the tools key with the supplied list in flow-style order (AD-6)
 	if in.Tools != nil {
 		if len(in.Tools) == 0 {
-			fm.Remove("tools")
+			if in.WriteEmptyToolsList {
+				fm.Set("tools", domain.ListValue(nil, domain.ListFlow))
+			} else {
+				fm.Remove("tools")
+			}
 		} else {
 			items := make([]domain.FieldValue, len(in.Tools))
 			for i, t := range in.Tools {
@@ -331,52 +354,56 @@ func buildGenericAgent(in PromoteInput) ([]byte, error) {
 		}
 	}
 
-	// Apply recovered generic-only fields. For exactly these three fields in the promote
-	// direction, AD-12 is overridden: when the source does not already carry the key, an
-	// empty or nil PromoteInput value is written with an empty form (recommended_tier: "",
-	// tier_rationale: "", required_skills: []) rather than omitted. This makes the gap
-	// visible to whoever completes the promoted file.
-	//
-	// When the source already carries the key (value in the cloned frontmatter), its value
-	// is preserved — the service layer does not re-ask for a key the source already supplies,
-	// so PromoteInput will be empty for that field. Setting it to empty would destroy the
-	// carried value, which is the wrong outcome.
-	//
-	// In both paths the key is always present after this block. Absent keys are appended
-	// after the reorder step so they follow the carried keys in the fixed order tools,
-	// recommended_tier, tier_rationale, required_skills (AD-13).
-	if _, sourceHas := fm.Get("recommended_tier"); !sourceHas || in.RecommendedTier != "" {
+	applyRecoveredFields(fm, in)
+
+	// Reorder: generated keys first (in policy order), then every other surviving key in
+	// its original relative order. Reorder appends unlisted keys after the listed ones.
+	fm.Reorder([]string{"id", "version", "name", "role"})
+
+	// Apply the region rules to the body: project regions are kept or emptied, managed
+	// regions are emptied (transform.ErrSourceDeployedRegionNotEmpty rejects a source whose
+	// managed regions carry prose) and custom regions are removed. The frontmatter header
+	// is final here, so the body is the part after its lines.
+	all := out.Bytes()
+	header := leadingLines(all, out.BodyLineOffset())
+	walker := &regionWalker{empty: in.EmptyProjectRegions}
+	body, err := walker.rewriteBody(all[len(header):], out.Body().TopLevelNodes())
+	if err != nil {
+		return nil, fmt.Errorf("rewriting regions of the generic agent: %w", err)
+	}
+
+	return append(header[:len(header):len(header)], body...), nil
+}
+
+// leadingLines returns the first n lines of b, each with its terminator.
+func leadingLines(b []byte, n int) []byte {
+	end := 0
+	for i := 0; i < n && end < len(b); i++ {
+		next := bytes.IndexByte(b[end:], '\n')
+		if next < 0 {
+			return b
+		}
+		end += next + 1
+	}
+	return b[:end]
+}
+
+// applyRecoveredFields writes the generic-only fields the user supplied. A field is written
+// only when supplied; an unsupplied one is left out. When the source already carries the key,
+// its value is kept unless a value was supplied (the service does not re-ask for a key the
+// source has).
+func applyRecoveredFields(fm *docformat.Frontmatter, in PromoteInput) {
+	if in.RecommendedTier != "" {
 		fm.Set("recommended_tier", domain.ScalarValue(in.RecommendedTier, domain.QuoteDouble))
 	}
-	if _, sourceHas := fm.Get("tier_rationale"); !sourceHas || in.TierRationale != "" {
+	if in.TierRationale != "" {
 		fm.Set("tier_rationale", domain.ScalarValue(in.TierRationale, domain.QuoteDouble))
 	}
-	if _, sourceHas := fm.Get("required_skills"); !sourceHas || len(in.RequiredSkills) > 0 {
+	if len(in.RequiredSkills) > 0 {
 		skillItems := make([]domain.FieldValue, len(in.RequiredSkills))
 		for i, s := range in.RequiredSkills {
 			skillItems[i] = domain.ScalarValue(s, domain.QuotePlain)
 		}
 		fm.Set("required_skills", domain.ListValue(skillItems, domain.ListFlow))
 	}
-
-	// Reorder: generated keys first (in policy order), then every other surviving key in
-	// its original relative order. Reorder appends unlisted keys after the listed ones.
-	fm.Reorder([]string{"id", "version", "name", "role"})
-
-	// Strip every injection region to an empty tag pair. The deploy pipeline injects
-	// harness-specific content at deploy time; no harness content belongs in the generic
-	// source. Clear removes only the items slice; the open and close tags are preserved.
-	for _, node := range out.Body().Injections() {
-		node.Clear()
-	}
-
-	// Strip every deployed region to an empty tag pair. Generic source files carry empty
-	// deployed placeholders; the deploy pipeline fills them with canonical content.
-	// transform.ErrSourceDeployedRegionNotEmpty rejects a source whose deployed regions
-	// carry content, so this step is required for the generated file to be usable.
-	for _, node := range out.Body().DeployedRegions() {
-		node.Clear()
-	}
-
-	return out.Bytes(), nil
 }

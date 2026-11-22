@@ -26,7 +26,7 @@ These flags are accepted by all subcommands.
 
 ## Catalog stack flags
 
-The two stack flags are persistent: every subcommand (`deploy`, `update`, `workflows`, `agents`, `hooks`, `render`, `promote`, `transform`, `check-index`) accepts them, and so does the TUI launch. The stack is decided from the raw arguments before any subcommand runs.
+The two stack flags are persistent: every subcommand (`deploy`, `update`, `workflows`, `agents`, `hooks`, `render`, `promote`, `transform`, `check-index`) accepts them. The TUI launches only when `mosaic-deploy` is run with no arguments, so it takes no stack flags; it asks for the stack on its own stack screen. The stack is decided from the raw arguments before any subcommand runs.
 
 | Input | Stack |
 |-------|-------|
@@ -98,7 +98,7 @@ mosaic-deploy deploy [flags]
 ```yaml
 # selections.yaml
 workflows:
-  - quick-fix
+  - brownfield-tdd
   - build
 utility_agents:
   - code-reviewer
@@ -110,6 +110,8 @@ tier_models:
 ```
 
 Unknown keys in the selections file are silently ignored (forward-compatible).
+
+For `opencode` and `opencode-v2`, deploy refuses a workspace that already holds the other OpenCode target and points to `transform` (see "One OpenCode target per workspace" under `transform`).
 
 For `ghcp-cli` and `vscode-ghcp`, deploy refuses a workspace that already holds the other GHCP target and points to `transform`; both write agents as `X.agent.md` and migrate agents recorded as `X.md` (see "One GHCP target per workspace" and "GHCP agent file names" under `transform`).
 
@@ -144,6 +146,8 @@ The `--conflict` flag controls what happens when the tool cannot confirm a file 
 - `backup`: copy the file to `.mosaic/backups/<path>.<timestamp>.bak`, then overwrite
 
 **What an update keeps.** Project and custom regions, the frontmatter, models and tool choices belong to you and survive an update. In the tools field, built-in tools follow the catalog (the plan lists those an update adds or removes), tools you added are kept, and custom tools the run produces are added.
+
+**Custom tool question.** The question takes a comma-separated list: `server` for every tool of an MCP server, `server/tool` for one tool. The CLI has no option to pre-answer it; without a pre-answer a non-interactive run skips the tool, records it in the TODO file and keeps its exit code. In Transform's JSON result, `customTools` lists the entries in the same syntax.
 
 **Edits to Deploy-owned content.** The agent body outside the project and custom regions, and whole skill and hook files, are Deploy-owned. When the content on disk differs from what Deploy recorded at its last write, the item becomes an update with the reason "Deploy-owned content was edited locally" (naming the differing regions of an agent) and the current file is backed up under `.mosaic/backups/` before it is replaced. Entries recorded before this check existed carry no record and get no edit check until their next write. `--conflict` applies to files Deploy cannot confirm as its own, not to these edits.
 
@@ -231,6 +235,14 @@ For every pair except the GHCP pair below, source files and source manifest entr
 - The run is atomic on failure: if a write fails, the workspace is left as it was.
 
 A workspace that holds both GHCP targets is refused by Transform and by every deploy flow (see below); clean it up by hand first.
+
+### OpenCode pair
+
+`opencode` and `opencode-v2` (experimental) write the same paths under `.opencode/` (`agents`, `skills`, `plugins`), and a workspace holds one of them at a time. Transform between the two (either direction) replaces the source deployment in place, like the GHCP pair: a recorded agent is overwritten with the target content, a recorded skill folder is carried over, and every source-variant plugin file the target does not write is removed (backed up under `.mosaic/backups/` first). Only files the source harness's manifest entries record are touched. `--dry-run` and the confirmation plan list the removals and replacements. A workspace that holds both OpenCode targets is refused by Transform and by every deploy flow.
+
+### One OpenCode target per workspace
+
+The manifest entries, never the paths, decide whether a workspace holds `opencode` or `opencode-v2`. `deploy`, `update` and the other deploy flows for one of them refuse to run in a workspace that holds the other, change nothing before anything is asked or written, and print the Transform command to use: `mosaic-deploy transform --harness <held> --target-harness <requested> --workspace <path>`. A workspace that holds both must have the files of one removed by hand from `.opencode/`. Deploy writes no `opencode.json` for `opencode-v2`.
 
 ### One GHCP target per workspace
 
@@ -386,6 +398,9 @@ Turn a harness-only agent into a generic catalog source. Flags: `--file`, `--har
 | Flag | Type | Description |
 |------|------|-------------|
 | `--target-catalog <catalog id>` | string | Catalog id of the stack layer that receives a **new** agent. Required when promoting a new agent non-interactively into a stack of two or more layers |
+| `--empty-project-regions` | bool | Empty every project region in the generic. Without it the generic keeps the content of every project region byte-identical. The CLI never asks |
+
+Every project region of the source is present in the generic with its tags, at any depth including inside managed regions. Custom regions are removed at any depth and reported by name: the human output prints one `removed custom region: <name>` line each, and `--output json` carries them as `removedCustomRegions` (omitted when none were removed). Managed regions are emptied apart from project regions nested in them. The source file is never modified.
 
 Layer targeting:
 
@@ -395,6 +410,8 @@ Layer targeting:
 | New agent, stack of two or more layers, `--target-catalog` given | the layer with that id (the default layer included); an unknown id is an error |
 | New agent, stack of two or more layers, flag absent | the TUI asks; the CLI fails and writes nothing |
 | New agent, one layer | that layer; the flag may be absent or that layer's id |
+
+`promote` on the CLI handles a single file; batch promote is TUI-only. Empty tier, tier rationale and required skills are left out of the generated agent. With `--overwrite` the replaced agent keeps its numeric id and exactly one agent with that key remains; without `--overwrite` an existing key in the target layer is refused whatever category is chosen.
 
 The category comes from the target layer's `Subagents/` folder. The new numeric agent id is one greater than the largest id across all agents of the stack. `--output json` adds `targetCatalogId` to the result (and the usual `stackInEffect` key). `DestinationPath` is relative to the MOSAIC root when the target layer lies inside it, otherwise absolute.
 
@@ -445,10 +462,14 @@ Without the flag the gap goes to the TODO list as before.
 
 When `--output json` is set, `mosaic-deploy` writes a single JSON document to stdout containing the full `RunSummary`. The exit code is unchanged. With `deploy --strict-models` and an unresolved model, a failure document (see Exit codes) replaces the `RunSummary`. Scripting consumers should read from stdout and parse JSON; diagnostic messages go to stderr.
 
+Notices (warnings and info lines raised during a run) and progress lines are diagnostics: they are written to stderr in every output mode, with `--output json` and without it. Stdout carries only the result (the human summary, or the single JSON document), so a notice never precedes or follows the JSON document.
+
 ```sh
 result=$(mosaic-deploy deploy --harness claude-code --workspace /path --auto-confirm --output json)
 echo "$result" | jq '.Outcome'
 ```
+
+When an experimental harness is involved (for example Codex, whose reason says it runs through `mosaic-run` only, has no native orchestration and no MOSAIC log, or `opencode-v2`, whose reason says everything is supported but the harness is not yet tested), the result also carries `experimentalHarnesses`: an array of `{harnessId, displayName, reason}` entries, absent otherwise. The same field is in the `transform` document, and a transform with an experimental source or target lists it. In human output the same reason is printed once as a `warning:` line.
 
 The JSON object always contains at least `Mode`, `Outcome`, and `WorkspacePath`. A JSON document is written even when `Outcome` is `"failed"`, so consumers can inspect the failure reason programmatically.
 

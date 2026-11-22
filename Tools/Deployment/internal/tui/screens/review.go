@@ -144,6 +144,7 @@ func buildReviewLines(p domain.Plan) []reviewLine {
 	counts := p.Counts()
 	add(fmt.Sprintf("Mode: %s  Harness: %s  Workspace: %s",
 		modeDisplayName(p.Mode), p.Harness.DisplayName, p.WorkspacePath), "muted")
+	lines = append(lines, experimentalWarningLines(p)...)
 	add("", "body")
 	lines = append(lines, conflictReportLines(p.ConflictReport)...)
 
@@ -246,7 +247,7 @@ func modeDisplayName(mode domain.RunMode) string {
 	case domain.ModeUpdateWorkspace:
 		return "Update workspace"
 	case domain.ModeUpdateWorkflows:
-		return "Update workflows"
+		return "Change workflows"
 	case domain.ModeDeployAgents:
 		return "Deploy agents"
 	case domain.ModeDeployHooks:

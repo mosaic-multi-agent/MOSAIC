@@ -37,9 +37,9 @@ type ConfigSelection struct {
 	// to the fake adapter for test and backward-compatibility paths.
 	Harness string
 
-	Timeout     time.Duration // non-HITL invocation timeout
-	HITLTimeout time.Duration // HITL invocation timeout; domain.DefaultHITLTimeout when not asked
-
+	Timeout         time.Duration // non-HITL invocation timeout
+	HITLTimeout     time.Duration // HITL invocation timeout; domain.DefaultHITLTimeout when not asked
+	NoOutputTimeout time.Duration // opencode-v2 no-output watchdog: 0 when not asked, domain.NoOutputDisabled when "0" was typed
 	// InfraClassSelections maps gated infrastructure class names (e.g. "checkpoint",
 	// "commit") to the selected agent name for this run. Populated by the
 	// configStepInfraClass step when multiple agents of the same gated class are
@@ -131,6 +131,7 @@ type ConfigScreen struct {
 	styles             screens.Styles
 	timeoutInput       *widgets.TextInput
 	hitlTimeoutInput   *widgets.TextInput
+	noOutputInput      *widgets.TextInput // opencode-v2 no-output watchdog duration
 	limitInput         *widgets.TextInput
 	declaredAgents     []domain.DeclaredInfraAgent // populated by SetDeclaredAgents
 	harnessPreselected bool                        // true when harness was selected before config wizard
@@ -184,6 +185,7 @@ func NewConfigScreen(width, height int, styles screens.Styles) *ConfigScreen {
 	limitInput.SetValue(suggestedReviewLoopLimit)
 	return &ConfigScreen{
 		limitInput:       limitInput,
+		noOutputInput:    newNoOutputInput(width, inputStyles),
 		step:             configStepMode,
 		cursor:           -1, // mode step starts with no option preselected
 		sel:              ConfigSelection{HITLTimeout: domain.DefaultHITLTimeout},
@@ -393,7 +395,6 @@ func (s *ConfigScreen) advanceStep() tea.Cmd {
 	return nil
 }
 
-// hasCommitAgent reports whether any declared infrastructure agent has Class == "commit".
 func (s *ConfigScreen) Done() bool { return s.step == configStepDone }
 
 // Back reports whether the user pressed Esc on the first prompt.
@@ -407,8 +408,7 @@ func (s *ConfigScreen) Reset() {
 	s.sel = ConfigSelection{HITLTimeout: domain.DefaultHITLTimeout}
 	s.back = false
 	s.moveToFirstStep()
-	s.timeoutInput.Reset()
-	s.hitlTimeoutInput.Reset()
+	s.resetTimeoutInputs()
 	s.limitInput.Reset()
 	s.limitInput.SetValue(suggestedReviewLoopLimit)
 	s.infraClassQueue = nil
@@ -419,8 +419,7 @@ func (s *ConfigScreen) Reset() {
 func (s *ConfigScreen) Resize(width, height int) {
 	s.width = width
 	s.height = height
-	s.timeoutInput.Resize(width)
-	s.hitlTimeoutInput.Resize(width)
+	s.resizeTimeoutInputs(width)
 	s.limitInput.Resize(width)
 }
 

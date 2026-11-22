@@ -83,9 +83,12 @@ type TransformFileOutcome struct {
 	Model         string           `json:"model,omitempty"` // written model id; "" = none
 	Tools         []string         `json:"tools,omitempty"`
 	DroppedTools  []DroppedTool    `json:"droppedTools,omitempty"`
-	CustomTools   []string         `json:"customTools,omitempty"`   // servers kept as custom tools
+	CustomTools   []string         `json:"customTools,omitempty"`   // custom entries: "server" or "server/tool"
 	UnmappedTools []string         `json:"unmappedTools,omitempty"` // generics whose custom-tool question was skipped
 	DroppedFields []string         `json:"droppedFields,omitempty"`
+	// StrippedFields reports source fields removed from the written agent: harness-specific
+	// fields of a non-Markdown source and keys held in the source carriage container.
+	StrippedFields []StrippedField `json:"strippedFields,omitempty"`
 }
 
 // TransformHarnessResult is the whole-run report, rendered by both frontends.
@@ -116,13 +119,16 @@ type TransformHarnessResult struct {
 	Transformed int `json:"transformed"`
 	Skipped     int `json:"skipped"`
 	Failed      int `json:"failed"`
-	// Removals lists the files a GHCP-pair run removes, or would remove. Absent otherwise.
+	// Removals lists the files a GHCP or OpenCode pair run removes, or would remove. Absent otherwise.
 	Removals []TransformFileChange `json:"removals,omitempty"`
 	// Replacements lists existing files a GHCP-pair run overwrites, or would overwrite, after
 	// backing them up. Absent otherwise.
 	Replacements []TransformFileChange `json:"replacements,omitempty"`
 	// DroppedEntries lists manifest entries dropped before planning (upgrade and reconciliation).
 	DroppedEntries []TransformDroppedEntry `json:"droppedEntries,omitempty"`
+	// ExperimentalHarnesses are the experimental source and/or target harnesses of the run,
+	// source first. Absent from JSON when neither is experimental.
+	ExperimentalHarnesses []domain.ExperimentalHarness `json:"experimentalHarnesses,omitempty"`
 }
 
 // TransformDroppedEntry is one manifest entry removed before the transform was planned.
@@ -134,7 +140,7 @@ type TransformDroppedEntry struct {
 	Reason  string              `json:"reason"`
 }
 
-// TransformFileChange is one file a GHCP-pair transform removes or replaces.
+// TransformFileChange is one file a GHCP or OpenCode pair transform removes or replaces.
 type TransformFileChange struct {
 	Kind   domain.ArtifactKind `json:"kind"` // agent | hook
 	Key    string              `json:"key,omitempty"`

@@ -1,0 +1,11 @@
+{"type":"summary","summary":"synthetic","leafUuid":"leaf-0"}
+{"type":"user","uuid":"u-1","message":{"role":"user","content":"agent_instance_id: implementation-tdd#28\nWrite the parser."}}
+{"type":"assistant","uuid":"a-uuid-1","message":{"id":"msg_A","role":"assistant","content":[{"type":"text","text":"first part"}]}}
+this line is not json
+{"type":"assistant","uuid":"a-uuid-2","message":{"id":"msg_A","role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{}}]}}
+{"type":"assistant","uuid":"uuid-only-1","message":{"role":"assistant","content":[{"type":"text","text":"no message id"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"neither id"}]}}
+{"type":"assistant","uuid":"uuid-empty-id","message":{"id":"","role":"assistant","content":[]}}
+{"type":"user","uuid":"u-2","message":{"role":"user","content":"a later user prompt that must not be used"}}
+{"type":"assistant","uuid":"a-uuid-3","message":{"id":"msg_B","role":"assistant","content":[]}}
+{"type":"assistant","uuid":"a-uuid-4","message":{"id":"msg_A","role":"assistant","content":[]}}

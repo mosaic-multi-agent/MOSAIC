@@ -1,3 +1,93 @@
+# 0.8.0 (2026-11-22)
+
+> **To upgrade:**
+> - Run `Update workspace` to get the updated agents, workflows, orchestrators and `mosaic-logger` hook.
+> - Five unused workflows and two agents were removed (see Catalog). `Update workspace` keeps your deployed copies and warns about each.
+> - External harness modules must use module protocol `2.0`.
+
+## Tools
+
+### Runner v1.16.0
+#### Changes
+- **Codex and OpenCode V2 are Runner harnesses (experimental).** Experimental harnesses are marked in the TUI pickers, and the CLI warns about them at start and resume.
+  - Codex runs only through `mosaic-run`; native orchestration inside Codex is not supported. Codex runs have no per-invocation MOSAIC log, so LogAnalyzer cannot analyse them
+- **No-output watchdog for OpenCode V2.** An invocation without human-in-the-loop that writes no output for 10 minutes ends as a harness error. Set the limit with `--no-output-timeout` (`0` disables) or in the TUI run configuration
+- **The Runner log shows subagent output live**, and a killed invocation leaves its stdout, stderr and the reason it ended there
+- **The progress-screen step list scrolls** (Up/Down, PgUp/PgDn, Home/End)
+- **The seed input screen marks a required seed** and asks for confirmation before starting without it
+- **Esc cancels an in-run manual dispatch request** (`m`)
+#### Bugfixes
+- After a resume, a reviewer's loop-back to a creator includes the reviewer's report, and a creator sent back to revise receives its own earlier output
+- Resuming no longer overwrites the start of the Runner log
+- The activity panel stays visible on long runs
+- The help bar shows `x force-stop` while standing guidance is active
+
+### Deploy v1.13.0
+#### Changes
+- **Codex and OpenCode V2 are Deploy harnesses (experimental).** Experimental harnesses are marked in the pickers, and every writing command prints why they are experimental.
+- **A workspace holds either OpenCode or OpenCode V2**, not both. `Transform harness` moves a workspace between them in either direction
+- **The TUI starts at the mode screen**, and Esc goes back one screen. Update workspace, Change workflows and Transform harness offer only the harnesses the workspace holds
+- **Batch promote in the TUI.** Select several agents from a folder. Questions shared by the batch are asked once, an agent already in the catalog can be replaced or skipped, and one failing agent does not stop the batch. The CLI `promote` stays single-file
+- **Promote keeps project regions**, including nested ones. The TUI asks whether to keep or empty them; the CLI has `--empty-project-regions`. Custom regions are removed and reported
+- **The custom tool question takes a comma-separated list** of `server` and `server/tool` entries, and offers to save the answer to `tool_destinations` in `user-config.yaml`
+- **Claude Code subagents no longer get `AskUserQuestion`**, which Claude Code does not support for subagents. One you add by hand is kept
+- "Update workflows" is renamed "Change workflows" in the TUI; the CLI command is still `workflows`
+- Missing `user-config.yaml` and `tool-config.yaml` are created from the templates
+- External harness modules must use module protocol `2.0`
+#### Bugfixes
+- Redeploying over an existing agent keeps your edited regions
+- Promote no longer writes empty tier, tier rationale and required skills
+- `promote --overwrite` keeps the replaced agent's numeric id and no longer leaves two agents with the same key
+- A custom tool you gave a server name is no longer reported as unmapped
+- Saving `user-config.yaml` keeps your comments and indentation
+- Long lists no longer overflow the TUI
+- With `--output json`, stdout holds only the JSON document
+
+### LogAnalyzer v1.6.0
+#### Changes
+- **OpenCode V2 is a LogAnalyzer harness (experimental)**
+- **The runs list has a summary head** with run count, period, total cost and tokens, and per-run average and median cost and duration plus p90 cost. A new `started` column shows when each run started
+- **New findings overlay (`f`)** lists every kind of finding with its severity, count and effect on the figures; `e` exports them. New findings report log-integrity problems, such as invocations that cannot be tied to a dispatch
+- **`*.digest.json` files in the working directory are loaded by default**, together with `OrchestrationLogs/`
+- **"Cache hit" is redefined** as cache reads over the previous call's context, so perfect caching reads 100 %. Figures differ from earlier versions
+- **Tool context growth counts only the tool result** and is titled "result growth"
+#### Bugfixes
+- Per-actor figures no longer mix sessions; a smaller context in a new session is no longer counted as a compaction
+
+### AgentTest v1.3.1
+#### Changes
+- **OpenCode V2 is supported (experimental)**
+#### Bugfixes
+- `diag.log` shows the subject's output live and keeps the output of a killed subject
+
+## Hooks
+
+### mosaic-logger v1.12.0
+#### Changes
+- **OpenCode V2 plugin (experimental).**
+#### Bugfixes
+- Claude Code, GHCP CLI and VS Code GHCP log each agent invocation under its own instance id, so parallel dispatches are no longer mixed up
+- An invocation that cannot be matched to a dispatch gets its own folder instead of a shared `unknown-agent` folder
+- Usage is no longer logged twice when an agent's lifecycle fires again
+- Logs already written are not repaired
+
+## Catalog
+- **Removed** the unused workflows `quick-fix`, `implementation-only`, `brownfield-research-only`, `kb-verification-human` and `kb-correction`, and the agents `verification-questions-preparer` and `verification-answer-validator`.
+- **kb-generation-branched** (v0.2, experimental, new): generates a KB with its top-level branches in parallel and merges duplicates across branches afterwards. Not runnable by the Runner
+- **kb-generation** (v2.2) and **hw-schema-kb-generation** (v1.1): iterations run one at a time, because parallel iterations lost writes to shared artifacts. Not runnable by the Runner's auto modes. Corrections found in the correction pass are now recorded instead of lost
+- **knowledge-base-duplicate-merger** (v1.0.2, new): merges KB documents that different branches wrote on the same topic
+- **knowledge-base-generator** (v4.1.0), **knowledge-base-flag-sorter** (v3.5.0) and **knowledge-base-index-assembler** (v2.3.0): support branched generation
+- **TDD scaffolding is done reliably at RED phase.** **test-writer-tdd** (v5.4.0) creates behavior-free scaffolding for everything its tests reference, so the tests compile; scaffolding never returns default values that could give a false green. **implementation-tdd** (v4.2.2) fills the scaffolded bodies. Also **lean-tdd** skill (v1.3.0), **planner-tdd-soft** (v7.7.0) and **plan-review** (v5.6.0)
+- **Project templates can no longer break core mechanisms.** Sections and IDs that other agents and the orchestrator depend on are always written, whatever `OutputArtifactTemplate` says: **contracts-designer** (v4.5.0), **contracts-review** (v4.6.0), **planner-tdd-soft** (v7.7.0), **plan-review** (v5.6.0), **planner-audit** (v5.4.0), **test-case-review** (v1.2.0) and **requirements-testability-review** (v1.2.0). planner-tdd-soft also writes new stages with `HITL` `FALSE`; only you set `TRUE`
+- **requirements-refinement** (v3.5.0): asks for the depth first and words its questions for whoever decides at that depth
+- **orchestrator** (v8.5.0): picks up iterations added to a block while it runs, dispatches only agents of its workflow, asks the user when the run log does not explain an error, and edits `Orchestration.md` only with its file tools
+- **orchestrator-script** (v3.5.1): writes its Workflow Notes row with the file edit tool
+- **workflow-creator** (v2.2.0): dispatches only the subagent creator
+- **test-runner** (v3.3.1): runs the whole test suite unless the task names specific tests. Failures you accept, in the requirements or the new `AcceptedFailures` region, are reported separately and don't count as findings. New `TestCommands` project region
+- **brownfield-tdd** (v4.1): test-runner reads `Requirements.md` and `Plan.md`; requirements-refinement's open questions go back to codebase-research
+- **brownfield-tdd-build-verified** (v3.1): requirements-refinement's open questions go back to codebase-research
+- **brownfield-pr-fix** (v1.3): contracts design phase added, as in brownfield-tdd; test-runner reads `Requirements.md` and `Plan.md`
+
 # 0.7.5 (2026-11-11)
 
 > **To upgrade:**

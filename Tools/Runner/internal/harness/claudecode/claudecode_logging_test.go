@@ -135,18 +135,21 @@ func TestClaudeCodeAdapterWithLogger_SuccessfulInvocation_LogsInvokeStart(t *tes
 	}
 }
 
-// TestClaudeCodeAdapterWithLogger_SuccessfulInvocation_LogsRawStdout verifies
-// that EventHarnessStdout is logged after the subprocess exits, capturing the
-// raw stdout content.
-func TestClaudeCodeAdapterWithLogger_SuccessfulInvocation_LogsRawStdout(t *testing.T) {
+// TestClaudeCodeAdapterWithLogger_SuccessfulInvocation_LogsStdoutLinesNotWholeStdout
+// verifies that the raw stdout reaches the log as EventHarnessStdoutLines
+// entries and that no single whole-stdout entry is written after exit.
+func TestClaudeCodeAdapterWithLogger_SuccessfulInvocation_LogsStdoutLinesNotWholeStdout(t *testing.T) {
 	setHelperEnv(t, "success")
 	logger := &recordingLogger{}
 	adapter := claudecode.NewClaudeCodeAdapterWithLogger(helperExe(t), 5*time.Second, logger)
 
 	_, _ = adapter.Invoke(context.Background(), ordinaryAgentRefCC(t), minimalClaudeRequest("test-agent#1"))
 
-	if !logger.eventLogged(domain.EventHarnessStdout) {
-		t.Errorf("want %s logged after process exits, got events: %v", domain.EventHarnessStdout, logger.allEvents())
+	if !logger.eventLogged(domain.EventHarnessStdoutLines) {
+		t.Errorf("want %s logged, got events: %v", domain.EventHarnessStdoutLines, logger.allEvents())
+	}
+	if logger.eventLogged("harness.stdout") {
+		t.Errorf("want no whole-stdout harness.stdout entry, got events: %v", logger.allEvents())
 	}
 }
 

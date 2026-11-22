@@ -24,7 +24,7 @@ This guide is for **project authors** who have a deployed MOSAIC workspace and w
 
 1. **A deployed workspace** with an orchestrator agent (see [Deployment Guide](DeploymentGuide.md))
 2. **A requirements document** (or at least a task description) describing what you want done
-3. **A workflow choice** — which workflow to use (e.g., `brownfield-tdd`, `quick-fix`)
+3. **A workflow choice** — which workflow to use (e.g., `brownfield-tdd`, `brownfield-design`)
 
 ### The Startup Conversation
 

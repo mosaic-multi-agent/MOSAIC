@@ -7,6 +7,7 @@ import (
 
 	"mosaic-run/internal/artifact"
 	"mosaic-run/internal/domain"
+	"mosaic-run/internal/agentfile"
 	"mosaic-run/internal/orchfile"
 	"mosaic-run/internal/resumecheck"
 	"mosaic-run/internal/runselect"
@@ -130,7 +131,7 @@ func (m *rootModel) artifactRefusal() error {
 // deploymentRefusal applies the deployed-files early refusal checks to the
 // chosen run against what the orchestrator file declares. A deployment that
 // cannot be enumerated is left to the session's own run-start checks.
-func (m *rootModel) deploymentRefusal(orchPath string, regions []domain.WorkflowRegion) error {
+func (m *rootModel) deploymentRefusal(orchPath string, format agentfile.Format, regions []domain.WorkflowRegion) error {
 	if m.selections.isNewRun || m.selections.runFolder == "" || orchPath == "" {
 		return nil
 	}
@@ -138,7 +139,7 @@ func (m *rootModel) deploymentRefusal(orchPath string, regions []domain.Workflow
 	if err != nil {
 		return nil
 	}
-	agents, err := orchfile.EnumerateInfrastructureAgents(orchPath)
+	agents, err := orchfile.EnumerateInfrastructureAgents(orchPath, format)
 	if err != nil {
 		return nil
 	}

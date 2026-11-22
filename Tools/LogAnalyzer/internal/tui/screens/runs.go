@@ -20,7 +20,7 @@ const runsTitle = "Log Analyzer — Runs"
 // runsKeys are the short help keys of the runs list.
 var runsKeys = []tuicommon.HelpEntry{
 	{Key: "↑/↓", Desc: "navigate"}, {Key: "enter", Desc: "open"}, {Key: KeySort, Desc: "sort"},
-	{Key: KeyMarkRun, Desc: "mark run"}, {Key: KeyCompare, Desc: "compare marked"},
+	{Key: KeyMarkRun, Desc: "mark run"}, {Key: KeyCompare, Desc: "compare marked"}, findingsKeyEntry,
 	{Key: KeyAcrossRuns, Desc: "across runs"}, {Key: KeyExportRun, Desc: "export run"}, {Key: KeyExportAll, Desc: "export all"},
 	{Key: "s", Desc: "source"}, {Key: "p", Desc: "pricing"}, quitKeyEntry,
 }
@@ -45,6 +45,7 @@ func runsOverlayGroups() []chrome.HelpGroup {
 			{Key: "enter", Desc: "open the selected run"},
 			{Key: "esc", Desc: "quit"},
 			{Key: "q", Desc: "same as esc"},
+			findingsHelpEntry,
 			{Key: KeyHelp, Desc: "show or hide this help"},
 			{Key: "ctrl+c", Desc: "quit"},
 		}},
@@ -55,6 +56,7 @@ func runsOverlayGroups() []chrome.HelpGroup {
 const (
 	rcMark = iota
 	rcRun
+	rcStart
 	rcCost
 	rcInvocations
 	rcDuration
@@ -62,15 +64,17 @@ const (
 )
 
 // runsColumns lists the columns with the priority at which each is dropped on a
-// narrow terminal: the run and its cost stay.
+// narrow terminal: the run and its cost stay. The run column keeps the width of a
+// full run ID (21 characters).
 func runsColumns() []table.Column {
 	return []table.Column{
 		rcMark:        {Title: "compare"},
-		rcRun:         {Title: "run", Flex: true, MinWidth: 16},
+		rcRun:         {Title: "run", Flex: true, MinWidth: 21},
 		rcCost:        {Title: "cost", Align: table.AlignRight},
-		rcInvocations: {Title: "invocations", Align: table.AlignRight, Priority: 1},
-		rcDuration:    {Title: "duration", Align: table.AlignRight, Priority: 2},
-		rcMarkers:     {Title: "markers", Priority: 3},
+		rcStart:       {Title: "started", Priority: 1},
+		rcInvocations: {Title: "invocations", Align: table.AlignRight, Priority: 2},
+		rcDuration:    {Title: "duration", Align: table.AlignRight, Priority: 3},
+		rcMarkers:     {Title: "markers", Priority: 4},
 	}
 }
 
@@ -97,6 +101,7 @@ type RunsScreen struct {
 	marks  runMarks
 	// version is shown in the title when non-empty.
 	version string
+	findings findingsOverlay
 	pageChrome
 }
 
@@ -145,7 +150,7 @@ func (s *RunsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s, nil
 	}
 	k := key.String()
-	if s.help.handle(k) {
+	if s.handleOverlays(k) {
 		return s, nil
 	}
 	n := len(s.report.Runs)
@@ -211,7 +216,7 @@ func runsSortColumn(key SortKey) int {
 }
 
 // runCells builds the cells of one run row.
-func runCells(cur domain.CurrencyCode, r domain.RunReport, marker string) []table.Cell {
+func runCells(cur domain.CurrencyCode, loc *time.Location, r domain.RunReport, marker string) []table.Cell {
 	dur := durationCell(runDuration(r), r.Timeline.HasAxis)
 	var markers []string
 	if r.Provisional {
@@ -226,6 +231,7 @@ func runCells(cur domain.CurrencyCode, r domain.RunReport, marker string) []tabl
 	return []table.Cell{
 		rcMark:        markCell(marker),
 		rcRun:         {Text: r.Run.Label(), Role: tuicommon.RoleSubtitle},
+		rcStart:       startCell(r, loc),
 		rcCost:        moneyTotalCell(cur, r.Totals.Money),
 		rcInvocations: {Text: formatGrouped(int64(r.Overview.Subagents.Invocations))},
 		rcDuration:    dur,
@@ -242,6 +248,9 @@ func (s *RunsScreen) View(width, height int) string {
 	n := len(s.report.Runs)
 
 	head := []string{st.Subtitle.Render("All runs") + st.Body.Render("  "+FormatTotalsLine(st.Currency, s.report.AllRuns))}
+	if n > 0 {
+		head = runsHeadLines(st, s.report, width)
+	}
 	tail := s.tailLines()
 
 	var body []string
@@ -254,7 +263,7 @@ func (s *RunsScreen) View(width, height int) string {
 		rows := make([][]table.Cell, n)
 		for i, idx := range sorted {
 			run := s.report.Runs[idx]
-			rows[i] = runCells(st.Currency, run, s.marks.markerOf(run.Run.ID))
+			rows[i] = runCells(st.Currency, st.Location, run, s.marks.markerOf(run.Run.ID))
 		}
 		budget := PageBodyHeight(height) - len(head) - len(tail) - 1
 		t := table.Table{Columns: runsColumns(), Rows: rows, Cursor: s.cursor,
@@ -266,7 +275,21 @@ func (s *RunsScreen) View(width, height int) string {
 	}
 
 	page := Page{Title: s.title(), Badges: s.badges(), Keys: runsKeys, Help: true, Hint: FormatScrollHint(w, n)}
+	if s.findings.open {
+		page.Keys, page.Hint = findingsOverlayKeys, ""
+		body = s.findings.lines(s.FindingsScope(), true, width, PageBodyHeight(height), st)
+	}
 	return s.render(page, withLegend(runsOverlayGroups(), runsLegend()...), body, width, height, st)
+}
+
+// handleOverlays gives a key to the open overlay first: the findings overlay
+// opens only while the help overlay is closed, and the help key does nothing
+// inside the findings overlay.
+func (s *RunsScreen) handleOverlays(key string) bool {
+	if !s.help.open && s.findings.handle(key) {
+		return true
+	}
+	return s.help.handle(key)
 }
 
 // badges are the page header badges: the count of named runs, the findings and

@@ -64,6 +64,7 @@ func overlayGroups(escDesc string, screenKeys []tuicommon.HelpEntry, legend []ch
 		{Key: "enter", Desc: "open the selected row where the view has one"},
 		{Key: "esc", Desc: escDesc},
 		{Key: "q", Desc: "same as esc"},
+		findingsHelpEntry,
 		{Key: KeyHelp, Desc: "show or hide this help"},
 		{Key: "ctrl+c", Desc: "quit"},
 	}})...)
@@ -91,6 +92,10 @@ type runChrome struct {
 	configHelp
 	quality RunQuality
 	help    helpOverlay
+
+	findings    findingsOverlay
+	runFindings []domain.Finding // the run's own findings, for the findings overlay
+	runLabel    string           // label of the run, seen at the last render
 }
 
 // SetRunQuality sets the findings shown in the frame header.
@@ -117,6 +122,11 @@ type frameSpec struct {
 // render draws the view's body, or the help overlay in its place, in the frame.
 func (c *runChrome) render(spec frameSpec, body []string, width, height int, st Styles) string {
 	f := Frame{Run: spec.run, Quality: c.quality, Active: spec.active, Keys: spec.keys, Hint: spec.hint, Sort: spec.sort}
+	c.runLabel = spec.run.Run.Label()
+	if c.findings.open {
+		f.Keys, f.Hint = findingsOverlayKeys, ""
+		body = c.findings.lines(c.FindingsScope(), false, width, FrameBodyHeight(height), st)
+	}
 	if c.help.open {
 		f.Keys, f.Hint = overlayKeys, ""
 		body = c.help.linesIn(c.withConfigGroup(overlayGroups(spec.escDesc, spec.screenKeys, spec.legend)), width, FrameBodyHeight(height), st.Theme)

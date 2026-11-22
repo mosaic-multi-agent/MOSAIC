@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/pathinput"
 	"mosaic-deploy/internal/transform"
@@ -27,9 +28,9 @@ import (
 func (s *service) askHarness(ctx context.Context) (string, error) {
 	opts := make([]domain.Option, 0)
 	for _, h := range s.deps.Registry.List() {
-		opts = append(opts, domain.Option{
-			ID: h.ID, Label: h.DisplayName, Disabled: !h.Usable, DisabledReason: h.UnusableReason,
-		})
+		opt := domain.HarnessOption(h)
+		opt.Disabled, opt.DisabledReason = !h.Usable, h.UnusableReason
+		opts = append(opts, opt)
 	}
 	q := domain.ChoiceQuestion{
 		Question: domain.Question{ID: domain.QHarness, Title: "Select a harness"},
@@ -706,104 +707,6 @@ func (s *service) notifyPersistFailure(ctx context.Context, err error) {
 }
 
 // ---------------------------------------------------------------------------
-// Custom tool name resolution
-// ---------------------------------------------------------------------------
-
-// resolveCustomTools discovers every generic tool with no harness mapping across the given
-// agents, asks QCustomTool once per distinct unmapped tool (honouring pre-answers, skip, and
-// skip-all), and returns the resolved custom names plus the set of tools the user skipped.
-// Every skipped tool produces a GapUnmappedTool entry (AC18.5).
-func (s *service) resolveCustomTools(
-	ctx context.Context,
-	preAnswered map[string]string,
-	skipAll map[domain.QuestionID]bool,
-	module domain.HarnessModule,
-	agents []domain.Agent,
-) (map[string]string, map[string]bool) {
-	customNames := make(map[string]string, len(preAnswered))
-	for k, v := range preAnswered {
-		customNames[k] = v
-	}
-	skipped := make(map[string]bool)
-
-	var unmappedOrder []string
-	seen := make(map[string]bool)
-	for _, agent := range agents {
-		if len(agent.Tools) == 0 {
-			continue
-		}
-		result, err := module.Tools(domain.ToolRequest{
-			AgentKey: agent.Key, Generic: agent.Tools, Placeholder: agent.ToolsPlaceholder,
-		})
-		if err != nil {
-			continue
-		}
-		for _, res := range result.Resolutions {
-			if res.Outcome == domain.ToolUnmapped && !seen[res.Generic] {
-				seen[res.Generic] = true
-				unmappedOrder = append(unmappedOrder, res.Generic)
-			}
-		}
-	}
-
-	skippedAll := skipAll[domain.QCustomTool]
-	for _, toolName := range unmappedOrder {
-		if _, ok := customNames[toolName]; ok {
-			continue // pre-answered
-		}
-		if skippedAll {
-			skipped[toolName] = true
-			continue
-		}
-		q := domain.TextQuestion{
-			Question: domain.Question{
-				ID: domain.QCustomTool, Subject: toolName,
-				Title:        "Custom MCP server name for " + toolName,
-				Prompt:       "Enter the bare MCP server name that provides this tool -- not a specific tool name within the server.",
-				Detail:       "Example: enter github, not github_get_me",
-				AllowSkip:    true,
-				AllowSkipAll: true,
-			},
-		}
-		ans, err := s.deps.Interaction.AskText(ctx, q)
-		if err != nil {
-			skipped[toolName] = true
-			continue
-		}
-		switch ans.Status {
-		case domain.SkippedAll:
-			skippedAll = true
-			skipped[toolName] = true
-		case domain.Answered:
-			if ans.Text != "" {
-				customNames[toolName] = ans.Text
-			} else {
-				skipped[toolName] = true
-			}
-		default:
-			skipped[toolName] = true
-		}
-	}
-
-	// Re-resolve with the final custom-name and skip maps so the harness module records the
-	// propagated custom names (used by content generation during deployment).
-	for _, agent := range agents {
-		if len(agent.Tools) == 0 {
-			continue
-		}
-		_, _ = module.Tools(domain.ToolRequest{
-			AgentKey: agent.Key, Generic: agent.Tools, Placeholder: agent.ToolsPlaceholder,
-			CustomNames: customNames, SkippedTools: skipped,
-		})
-	}
-
-	// Unmapped-tool gaps are emitted solely by plan.Build, which names the owning agent and
-	// also fires in the update flow. Emitting them here would produce duplicates.
-
-	return customNames, skipped
-}
-
-// ---------------------------------------------------------------------------
 // Locally-modified file prompting (update flow)
 // ---------------------------------------------------------------------------
 
@@ -940,20 +843,30 @@ type harnessOnlyContentPlan struct {
 // rendered through transform.Apply; skill items are copied verbatim from source. Hook items
 // bypass this callback entirely and are handled by deployHooks.
 //
-// toolMappingsVersion is the hash of the effective tool-destination mapping set for this run
-// (from config.HashToolDestinations). It is forwarded to transform.Apply so the transform
-// can stamp it into the deployed file frontmatter as `tool_mappings_version`, closing the
-// probe → planner → executor → frontmatter staleness loop for config-mapping changes.
+// toolMappingsVersion is the tool settings stamp for this run (from service.toolSettingsStamp:
+// descriptor tool spec plus config tool_destinations). It is forwarded to transform.Apply so the
+// transform can stamp it into the deployed file frontmatter as `tool_mappings_version`, closing
+// the probe → planner → executor → frontmatter staleness loop for tool-setting changes.
+//
+// ownedKeyDiffSink, when non-nil, receives any OwnedKeyDifference entries emitted during
+// this run. The content callback appends to it for each agent item that carries conflict
+// classification with a parseable deployed form. Callers that do not need this reporting
+// must pass nil. The sink is written sequentially (the executor calls the content callback
+// one item at a time) and requires no synchronisation from the caller.
 func (s *service) buildContent(
 	module domain.HarnessModule,
 	agentByKey map[string]domain.Agent,
 	models map[string]domain.ModelSelection,
-	customTools map[string]string,
+	customTools domain.CustomToolAnswers,
 	skippedTools map[string]bool,
 	workflowBlocks []transform.WorkflowBlock,
 	infrastructureBlocks []transform.InfrastructureBlock,
 	scope domain.Scope,
-	deployedReader func(domain.PlanItem) []byte,
+	// deployedReader returns (DeployedRead, agentformat.Operation, error) for a plan item.
+	// The DeployedRead carries both the raw on-disk bytes and the decoded canonical bytes.
+	// The Operation carries the create-vs-update signal derived from item.Action.
+	// A non-nil error means the item cannot be processed at all (e.g. unrecognised Action).
+	deployedReader func(domain.PlanItem) (DeployedRead, agentformat.Operation, error),
 	toolMappingsVersion string,
 	protocol domain.ProtocolContent,
 	bundle domain.BundleContent,
@@ -961,6 +874,10 @@ func (s *service) buildContent(
 	// means no harness-only agents are in this run and the callback behaves exactly as
 	// it does today.
 	harnessOnly map[string]harnessOnlyContentPlan,
+	// ownedKeyDiffSink accumulates owned-key difference entries across all items this run.
+	// Nil means no collection. Non-nil callers must merge the resulting slice into the
+	// RunSummary after the executor returns.
+	ownedKeyDiffSink *[]domain.OwnedKeyDifference,
 	// opts adjust individual orchestrator-role files by target path; none leaves behaviour as is.
 	opts ...buildContentOption,
 ) func(domain.PlanItem) ([]byte, error) {
@@ -980,18 +897,35 @@ func (s *service) buildContent(
 		// bypassed: it rejects any path the catalog did not emit, and a harness-only agent
 		// has no catalog entry and no SourcePath.
 		if plan, ok := harnessOnly[item.TargetPath]; ok {
-			var deployed []byte
+			var read DeployedRead
 			if deployedReader != nil {
-				deployed = deployedReader(item)
+				var rdErr error
+				var op agentformat.Operation
+				read, op, rdErr = deployedReader(item)
+				_ = op // harness-only refresh does not call transform.Apply, so Op is unused
+				if rdErr != nil {
+					return nil, rdErr
+				}
+				if read.ReadErr != nil {
+					return nil, read.ReadErr
+				}
+				if read.DecodeErr != nil {
+					// Harness-only agents are never conflict items, so decode failure
+					// always fails the artifact.
+					return nil, read.DecodeErr
+				}
 			}
-			reportRoleRegion(deployed, plan.Agent.Role, plan.Agent.Key)
+			reportRoleRegion(read.Canonical, plan.Agent.Role, plan.Agent.Key)
 			res, err := refreshHarnessOnly(HarnessOnlyRefreshRequest{
-				Deployed: deployed,
-				Scope:    plan.Scope,
-				Role:     plan.Agent.Role,
-				Protocol: protocol,
-				Bundle:   bundle,
-				Subject:  item.TargetPath,
+				Deployed:    read.Canonical,
+				DeployedRaw: read.Raw,
+				AgentKey:    plan.Agent.Key,
+				FormatID:    module.Descriptor().AgentFormatID,
+				Scope:       plan.Scope,
+				Role:        plan.Agent.Role,
+				Protocol:    protocol,
+				Bundle:      bundle,
+				Subject:     item.TargetPath,
 			})
 			if err != nil {
 				return nil, err
@@ -1018,21 +952,99 @@ func (s *service) buildContent(
 			return nil, err
 		}
 		reportRoleRegion(src, agent.Role, agent.Key)
-		var deployed []byte
+
+		// Read the deployed file through the decode funnel (Layer 3). This provides both
+		// the raw on-disk bytes (DeployedRaw, for the translator's preservation channel)
+		// and the decoded canonical bytes (Deployed, for transform's inject/tool branches).
+		var deployedCanonical []byte
+		var deployedRaw []byte
+		var op agentformat.Operation
+		var decodeReport agentformat.Report
 		if deployedReader != nil {
-			deployed = deployedReader(item)
+			var rdErr error
+			var read DeployedRead
+			read, op, rdErr = deployedReader(item)
+			if rdErr != nil {
+				return nil, rdErr
+			}
+			if read.ReadErr != nil {
+				return nil, read.ReadErr
+			}
+			if read.DecodeErr != nil {
+				// A deployed file that failed to decode fails the artifact on a non-conflict
+				// item. On a conflict item (ActionConflict), the user chose to overwrite and
+				// the decode error is discharged by that decision. We proceed with raw bytes
+				// set and nil canonical, so the translator can still run the tolerant stamp
+				// and header-comment scan over the raw bytes.
+				if item.Action != domain.ActionConflict {
+					return nil, read.DecodeErr
+				}
+				// Conflict-overwrite path: Deployed nil, DeployedRaw set, Op OpUpdate.
+				deployedCanonical = nil
+				deployedRaw = read.Raw
+				op = agentformat.OpUpdate
+			} else {
+				deployedCanonical = read.Canonical
+				deployedRaw = read.Raw
+			}
+			if op == agentformat.OpCreate {
+				// The plan creates the agent, yet a file of another agent already sits at its
+				// path. That file is not this agent's prior artifact, so the translator
+				// receives no raw prior bytes; the operation stays a create.
+				deployedRaw = nil
+			}
+			decodeReport = read.Report
+			// Decode notices (e.g. missing developer_instructions) will be forwarded to the
+			// todo collector after Apply returns via mergeDecodeReport below.
 		}
+
+		if deployedReader == nil {
+			// No deployed reader (Deploy hooks) means this request carries no prior file
+			// bytes. Deploy workspace and Deploy agents pass a funnel reader, so over an
+			// existing agent file they take the branch above and supply the prior bytes.
+			// Derive the operation from the plan item's Action so the agentformat layer
+			// receives an explicit Op rather than OpUnspecified.
+			// Deployed and DeployedRaw stay nil: with no reader there are no prior bytes.
+			var opErr error
+			op, opErr = actionToOp(item.Action)
+			if opErr != nil {
+				return nil, opErr
+			}
+		}
+
 		var wfBlocks []transform.WorkflowBlock
 		var infraBlocks []transform.InfrastructureBlock
 		if agent.Role == domain.RoleOrchestrator {
 			wfBlocks = workflowBlocks
 			infraBlocks = infrastructureBlocks
 		}
+
+		// Derive Origin from the plan item's conflict classification and whether the
+		// deployed file was parseable (canonical bytes non-nil). The plan layer is the
+		// single source of truth; transform never recomputes the classification.
+		//
+		// item.Conflict == nil  → OriginConfirmed (zero value; no entry emitted)
+		// item.Conflict != nil, deployedCanonical != nil → OriginUnconfirmed
+		// item.Conflict != nil, deployedCanonical == nil → OriginUnconfirmedUnparseable
+		//
+		// The gate is item.Conflict != nil; agent conflicts always set ManifestMissing and
+		// leave RecordedHash empty, so no condition on hash fields is needed or correct.
+		origin := transform.OriginConfirmed
+		if item.Conflict != nil {
+			if deployedCanonical != nil {
+				origin = transform.OriginUnconfirmed
+			} else {
+				origin = transform.OriginUnconfirmedUnparseable
+			}
+		}
+
 		desc := module.Descriptor()
 		tReq := transform.Request{
 			Source: src, Kind: domain.ArtifactAgent, Key: agent.Key, Module: module,
 			Model: models[agent.Key], CustomTools: customTools, SkippedTools: skippedTools,
-			Scope: scope, Deployed: deployed, Workflows: wfBlocks,
+			Scope: scope, Deployed: deployedCanonical, DeployedRaw: deployedRaw, Op: op,
+			Origin:                        origin,
+			Workflows:                     wfBlocks,
 			InfrastructureAgents:          infraBlocks,
 			ToolMappingsVersion:           toolMappingsVersion,
 			Role:                          agent.Role,
@@ -1049,13 +1061,32 @@ func (s *service) buildContent(
 		if err != nil {
 			return nil, err
 		}
-		// Forward any gaps produced by the transform (e.g. parking events) to the
-		// todo collector so they appear in the TODO report for the user to act on.
+
+		// Merge the decode report into the transform result so that gaps emitted during
+		// format decoding (e.g. EntryMissingInstructions → GapManualStep) reach the
+		// same gap collector as transform gaps. For Markdown harnesses decodeReport is
+		// always empty so this is a no-op for the four existing harnesses.
+		mergeDecodeReport(&res.Report, decodeReport)
+		// Forward all gaps (transform + merged decode) to the todo collector.
 		for _, g := range res.Report.Gaps {
 			if g.Kind == domain.GapUndeliveredOrchestratorInjection && !undeliveredOnce.first(g) {
 				continue
 			}
 			s.deps.Todo.AddGap(g)
+		}
+		// Collect owned-key differences for surfacing in the run report. Only populated
+		// for conflict-classified artifacts with parseable deployed bytes; empty otherwise.
+		if ownedKeyDiffSink != nil && len(res.Report.OwnedKeyDifferences) > 0 {
+			for _, d := range res.Report.OwnedKeyDifferences {
+				*ownedKeyDiffSink = append(*ownedKeyDiffSink, domain.OwnedKeyDifference{
+					Key:             d.Key,
+					Deployed:        d.Deployed,
+					Incoming:        d.Incoming,
+					Reason:          d.Reason,
+					DeployedPresent: d.DeployedPresent,
+					IncomingPresent: d.IncomingPresent,
+				})
+			}
 		}
 		return res.Output, nil
 	}
@@ -1063,8 +1094,8 @@ func (s *service) buildContent(
 
 // buildVersionStamps derives the version stamps for every plan item from the resolved
 // artifact set and harness descriptor, keyed by target path (as deploy.ExecRequest requires).
-// toolMappingsVersion is the hash of the effective tool-destination mapping set for this run
-// (from HashToolDestinations); it is stamped into agent entries so the executor can record it
+// toolMappingsVersion is the tool settings stamp for this run (from service.toolSettingsStamp);
+// it is stamped into agent entries so the executor can record it
 // in the manifest and surface it in VersionDelta comparisons.
 func buildVersionStamps(
 	agents []domain.Agent, skills []domain.Skill, hooks []domain.HookBundle,

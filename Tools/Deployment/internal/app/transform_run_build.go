@@ -6,10 +6,13 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -63,6 +66,7 @@ func (r *transformRun) prepareAgents() {
 			ToolMappingsVersion: r.toolMappingsVersion, Timestamp: timestamp,
 			DeclaredServers: r.declaredServers, MCPSplits: r.req.MCPSplits,
 		}
+		r.setWriteOp(st, pa)
 		insp, err := InspectDeployedAgent(st.input)
 		if err != nil {
 			st.failReason = err.Error()
@@ -72,14 +76,33 @@ func (r *transformRun) prepareAgents() {
 	}
 }
 
+// setWriteOp sets the explicit operation of the rebuild from the planned write action and, on
+// setWriteOp sets the explicit operation of the rebuild from the planned write action and, on
+// overwrite, the destination file's raw bytes. The destination is read through the decode
+// funnel with the target descriptor. A file that cannot be read or decoded is passed on
+// without a decode result: the rebuild reports an undecodable destination, and an unreadable
+// one leaves the prior bytes missing so the encoder reports it.
+func (r *transformRun) setWriteOp(st *agentState, pa PlannedAgent) {
+	if pa.Action != PlanWriteOverwrite {
+		st.input.Op = agentformat.OpCreate
+		return
+	}
+	st.input.Op = agentformat.OpUpdate
+	dest := filepath.Join(r.workspace, filepath.FromSlash(pa.DestinationPath))
+	if read := readDeployedArtifact(dest, domain.ArtifactAgent, r.tgt.Descriptor()); read.Present && read.ReadErr == nil {
+		st.input.DestinationRaw = read.Raw
+	}
+}
+
 // resolveCustomTools asks QCustomTool once per generic tool the target cannot map, over the
 // agents that will be written. An answer names the server for every agent; a skip leaves the
 // tool unmapped. A cancelled or failed question aborts the run.
 func (r *transformRun) resolveCustomTools(ctx context.Context) error {
-	r.customTools = map[string]string{}
+	r.customTools = domain.CustomToolAnswers{}
 	r.skippedTools = map[string]bool{}
 	var order []string
 	seen := map[string]bool{}
+	agentKeys := map[string]string{} // generic -> key of the first agent declaring it
 	for i := range r.agents {
 		if !isWrite(r.plan.Agents[i]) || !r.agents[i].active() {
 			continue
@@ -87,26 +110,20 @@ func (r *transformRun) resolveCustomTools(ctx context.Context) error {
 		for _, generic := range r.inspections[i].Converted.Unmapped {
 			if !seen[generic] {
 				seen[generic] = true
+				agentKeys[generic] = r.agents[i].input.AgentKey
 				order = append(order, generic)
 			}
 		}
 	}
+	offers := r.s.newSaveOffer(r.tgtID, r.tgt)
+	defer offers.finish(ctx)
 	skippedAll := r.req.SkipAll[domain.QCustomTool]
 	for _, generic := range order {
 		if skippedAll {
 			r.skippedTools[generic] = true
 			continue
 		}
-		ans, err := r.s.deps.Interaction.AskText(ctx, domain.TextQuestion{
-			Question: domain.Question{
-				ID: domain.QCustomTool, Subject: generic,
-				Title:        "Custom MCP server name for " + generic,
-				Prompt:       "Enter the bare MCP server name that provides this tool -- not a specific tool name within the server.",
-				Detail:       "Example: enter github, not github_get_me",
-				AllowSkip:    true,
-				AllowSkipAll: true,
-			},
-		})
+		ans, err := r.s.deps.Interaction.AskText(ctx, customToolQuestion(generic))
 		if err != nil || ans.Status == domain.Cancelled {
 			return ErrSelectionCancelled
 		}
@@ -114,8 +131,9 @@ func (r *transformRun) resolveCustomTools(ctx context.Context) error {
 		case ans.Status == domain.SkippedAll:
 			skippedAll = true
 			r.skippedTools[generic] = true
-		case ans.Status == domain.Answered && ans.Text != "":
-			r.customTools[generic] = ans.Text
+		case ans.Status == domain.Answered && len(customToolEntries(ans.Text)) > 0:
+			r.customTools[generic] = customToolEntries(ans.Text)
+			offers.offer(ctx, generic, agentKeys[generic], "", r.customTools[generic])
 		default:
 			r.skippedTools[generic] = true
 		}
@@ -139,6 +157,9 @@ func (r *transformRun) buildAgents() {
 		res, err := RebuildDeployedAgent(st.input)
 		if err != nil {
 			st.failReason = err.Error()
+			if errors.Is(err, agentformat.ErrMalformedDeployed) {
+				st.failReason = fmt.Sprintf("existing destination %s: %v", filepath.ToSlash(r.plan.Agents[i].DestinationPath), err)
+			}
 			continue
 		}
 		st.built, st.result = true, res

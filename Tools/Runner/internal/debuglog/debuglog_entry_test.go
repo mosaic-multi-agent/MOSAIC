@@ -102,13 +102,13 @@ func TestLogger_MultiLineEntry_UsesBeginEndDelimiters(t *testing.T) {
 	logger := New(workDir)
 
 	logger.SetRunID(validRunID)
-	logger.Log(domain.EventHarnessStdout, "line1\nline2\nline3")
+	logger.Log(domain.EventHarnessStdoutLines, "line1\nline2\nline3")
 	logger.Close()
 
 	content := readLogFile(t, logger)
 
-	beginMark := "--- begin " + domain.EventHarnessStdout + " ---"
-	endMark := "--- end " + domain.EventHarnessStdout + " ---"
+	beginMark := "--- begin " + domain.EventHarnessStdoutLines + " ---"
+	endMark := "--- end " + domain.EventHarnessStdoutLines + " ---"
 
 	if !strings.Contains(content, beginMark) {
 		t.Errorf("multi-line entry must contain %q\ncontent:\n%s", beginMark, content)
@@ -125,7 +125,7 @@ func TestLogger_MultiLineEntry_PayloadWrittenVerbatim(t *testing.T) {
 
 	payload := "first line\nsecond line\n{\"type\":\"result\"}\n"
 	logger.SetRunID(validRunID)
-	logger.Log(domain.EventHarnessStdout, payload)
+	logger.Log(domain.EventHarnessStdoutLines, payload)
 	logger.Close()
 
 	content := readLogFile(t, logger)
@@ -147,7 +147,7 @@ func TestLogger_MultiLineEntry_LargePayloadNotTruncated(t *testing.T) {
 	largePayload := sb.String()
 
 	logger.SetRunID(validRunID)
-	logger.Log(domain.EventHarnessStdout, largePayload, domain.F("bytes", strconv.Itoa(len(largePayload))))
+	logger.Log(domain.EventHarnessStdoutLines, largePayload, domain.F("bytes", strconv.Itoa(len(largePayload))))
 	logger.Close()
 
 	content := readLogFile(t, logger)
@@ -182,7 +182,7 @@ func TestLogger_FieldsInMultiLineEntry_AppearsInHeader(t *testing.T) {
 	logger := New(workDir)
 
 	logger.SetRunID(validRunID)
-	logger.Log(domain.EventHarnessStdout, "line1\nline2", domain.F("bytes", "10"))
+	logger.Log(domain.EventHarnessStdoutLines, "line1\nline2", domain.F("bytes", "10"))
 	logger.Close()
 
 	content := readLogFile(t, logger)
@@ -191,7 +191,7 @@ func TestLogger_FieldsInMultiLineEntry_AppearsInHeader(t *testing.T) {
 	// Find the header line (starts with '[' and contains the event name).
 	found := false
 	for _, line := range lines {
-		if strings.Contains(line, domain.EventHarnessStdout) && strings.HasPrefix(line, "[") {
+		if strings.Contains(line, domain.EventHarnessStdoutLines) && strings.HasPrefix(line, "[") {
 			if strings.Contains(line, "bytes=10") {
 				found = true
 			}

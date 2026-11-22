@@ -145,6 +145,24 @@ func contextSparkCell(a domain.ActorContext, theme tuicommon.Theme) table.Cell {
 	}}
 }
 
+// firstWriteCell is the context at first write: the single figure, or the
+// figures of the sessions that wrote in session order joined by a slash. The
+// cell takes the role of the worst band among them.
+func firstWriteCell(a domain.ActorContext) table.Cell {
+	if len(a.FirstWrites) < 2 {
+		return contextCell(a.FirstWrite)
+	}
+	texts := make([]string, len(a.FirstWrites))
+	worst := a.FirstWrites[0].Figure.Band
+	for i, fw := range a.FirstWrites {
+		texts[i] = contextCell(fw.Figure).Text
+		if fw.Figure.Band > worst {
+			worst = fw.Figure.Band
+		}
+	}
+	return table.Cell{Text: strings.Join(texts, " / "), Role: BandRole(worst)}
+}
+
 // countCell is a plain count.
 func countCell(n int) table.Cell { return table.Cell{Text: strconv.Itoa(n)} }
 
@@ -159,7 +177,7 @@ func contextCells(cur domain.CurrencyCode, a domain.ActorContext, label string, 
 	cells[xcCalls] = countCell(len(a.Calls))
 	cells[xcRewrites] = rewriteCountCell(len(a.Rewrites))
 	cells[xcFirst] = contextCell(a.First)
-	cells[xcFirstWrite] = contextCell(a.FirstWrite)
+	cells[xcFirstWrite] = firstWriteCell(a)
 	cells[xcPeak] = contextCell(a.Peak)
 	cells[xcFinal] = contextCell(a.Final)
 	cells[xcLogged] = countCell(a.LoggedCount())

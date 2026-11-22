@@ -187,6 +187,7 @@ func (a *GHCPCLIAdapter) invoke(ctx context.Context, agent domain.AgentReference
 		spawnReq.ToolsDerived = true // signals derivation was performed; empty slice is valid (all ungated tools)
 	}
 
+	spawnReq.Sink = cliexec.WithAgent(a.sink, request.AgentInstanceID)
 	resp, err := a.spawner.Spawn(ctx, spawnReq)
 	if err != nil {
 		// Log parse-class failures (stream verdict errors) before the
@@ -306,7 +307,7 @@ func (a *GHCPCLIAdapter) invokeRaw(ctx context.Context, agent domain.AgentRefere
 		Env:          spawnReq.Env,
 		Stdin:        stdin,
 		Timeout:      a.timeout,
-		Sink:         a.sink,
+		Sink:         cliexec.WithAgent(a.sink, agent.Identifier),
 		OnStdoutLine: onLine,
 	})
 	if err != nil {
@@ -350,9 +351,6 @@ func (a *GHCPCLIAdapter) invokeRaw(ctx context.Context, agent domain.AgentRefere
 		return nil, parseErr
 	}
 
-	a.logger.Log(domain.EventHarnessStdout, text,
-		domain.F("agent", agent.Identifier),
-	)
 	a.logOutcome(domain.EventHarnessInvokeOK, "raw invocation succeeded", agent.Identifier, resp.Stdout)
 	return []byte(text), nil
 }

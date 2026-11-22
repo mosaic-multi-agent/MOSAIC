@@ -1,0 +1,30 @@
+schema_version: "1"
+id: "fixture"
+display_name: "Fixture"
+paths:
+  agents:
+    supported: true
+    project: ".fixture/agents"
+  skills:
+    supported: true
+    project: ".fixture/skills"
+  hooks:
+    supported: false
+extensions:
+  agent: ".toml"
+agent_format_id: "codex-toml"
+transform_version: "9.9.9"
+tools:
+  mappings:
+    - generic: "terminal"
+      destinations: []
+frontmatter:
+  model_key: "model"
+cli:
+  label: "Fixture CLI"
+  loading_mechanism: "name"
+models:
+  ids:
+    - "model-a"
+    - "model-b"
+  format_hint: "model-<n>"

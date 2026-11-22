@@ -1,0 +1,5 @@
+# Invalid: explicit null experimental value.
+schema_version: "1"
+id: "experimental-null"
+display_name: "Experimental Null"
+experimental: null

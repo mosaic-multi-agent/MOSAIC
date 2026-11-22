@@ -116,7 +116,8 @@ func TestActivityPanel_ManyItems_ShowTheMostRecentOnesWithinTheScreenHeight(t *t
 func TestActivityPanel_SmallScreen_KeepsTheStepRowsAndShrinksThePanel(t *testing.T) {
 	const height = 9
 	build := func(withActivity bool) *ProgressScreen {
-		s := NewProgressScreen(160, height, progressStyles())
+		// Wide enough that the help bar stays on one line.
+		s := NewProgressScreen(200, height, progressStyles())
 		s.AppendRow(ProgressRow{AgentInstance: "first#1", Phase: "PLANNING", Status: "SUCCESS"})
 		s.AppendRow(ProgressRow{AgentInstance: "second#2", Phase: "EXECUTION", Status: "running"})
 		if withActivity {

@@ -51,6 +51,8 @@ type ExportScreen struct {
 	confirm bool
 	action  ExportAction
 	path    string
+	// findings marks the findings export, which has its own title and heading.
+	findings bool
 	pageChrome
 }
 
@@ -112,7 +114,7 @@ func (s *ExportScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 func (s *ExportScreen) View(width, height int) string {
 	s.input.Resize(width)
 	body := []string{s.styles.Subtitle.Render(s.heading())}
-	page := Page{Title: exportTitle, Keys: exportPathKeys}
+	page := Page{Title: s.title(), Keys: exportPathKeys}
 	if !s.confirm {
 		body = append(body, strings.Split(s.input.View(), "\n")...)
 		return RenderPage(page, body, width, height, s.styles)
@@ -125,7 +127,20 @@ func (s *ExportScreen) View(width, height int) string {
 	return s.render(page, exportOverlayGroups(), body, width, height, s.styles)
 }
 
+func (s *ExportScreen) title() string {
+	if s.findings {
+		return findingsExportTitle
+	}
+	return exportTitle
+}
+
 func (s *ExportScreen) heading() string {
+	if s.findings {
+		if s.runID == "" {
+			return "Export findings"
+		}
+		return "Export findings of run " + s.runID
+	}
 	if s.runID == "" {
 		return "Export all runs"
 	}

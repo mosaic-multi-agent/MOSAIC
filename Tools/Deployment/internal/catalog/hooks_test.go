@@ -3,7 +3,7 @@ package catalog_test
 // Tests for hook bundle enumeration (T7.4) and integrity validation (T7.5).
 //
 // Hook bundles live under Catalog/Hooks/{bundle-id}/ and are described by a
-// hook.yaml manifest. The repository currently contains one bundle: mosaic-logger.
+// hook.yaml manifest. The fixture contains one bundle: mosaic-logger.
 //
 // T7.4 covers:
 //   - Bundle id, version, description, and placeholder flag
@@ -17,7 +17,7 @@ package catalog_test
 //   - Hook bundle integrity: if hook.yaml carries a content_hash field that does not
 //     match the computed hash of all listed variant files, the catalog reports an Issue
 //     with code "hook-hash-mismatch".
-//   - The real mosaic-logger bundle (which has no content_hash field) produces no
+//   - The fixture mosaic-logger bundle (which has no content_hash field) produces no
 //     hash-mismatch issue — the absence of a stored hash means no check is performed.
 //
 // Classification record (T7.1 decision on the two variant file-count assertions, per the
@@ -31,22 +31,17 @@ package catalog_test
 // silently dropping or duplicating a file without hardcoding how many files any one
 // variant happens to have today.
 //
-// TestHook_Variant_GhcpCli_Files_TargetNames (an exact list of the live ghcp-cli target
+// TestHook_Variant_GhcpCli_Files_TargetNames (an exact list of the ghcp-cli target
 // names) was later removed because that variant's inventory grows with the bundle (it now
 // also deploys shared modules from a sibling folder). The loader behaviour it guarded is
 // asserted on tool-local fixtures by TestHook_Variant_Files_TargetNames_MatchDeclaredSetExactly
-// and TestHook_Variant_Files_SiblingFolderSource_LoadedUnderTargetName. Whether the real
+// and TestHook_Variant_Files_SiblingFolderSource_LoadedUnderTargetName. Whether the live
 // bundle ships every module its adapter imports is bundle content, covered by the hook's
 // own Python suites.
 //
-// This stage's explicit item list scoped T7.5 to only these two assertions. The bundle id
-// ("mosaic-logger"), its harness variant keys ("claude-code", "opencode", "vscode-ghcp",
-// "ghcp-cli"), and the exact TargetName literals elsewhere in this file remain
-// content-coupled to the real repository's one hook bundle per the letter of AC7.2; a full
-// decoupling would mean building synthetic hook.yaml fixtures covering variants,
-// registration steps, and reuse links, which is materially larger than this stage's T7.1-
-// T7.7 item list and was not attempted here. Recorded as a follow-up finding rather than
-// silently left unaddressed.
+// The tests read the committed hook-logger-root fixture (testdata/catalog), a reduced
+// mosaic-logger bundle with four supported variants, so they do not depend on the live
+// Catalog/.
 
 import (
 	"os"
@@ -57,13 +52,13 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// T7.4 — Bundle enumeration: real mosaic-logger bundle
+// T7.4 — Bundle enumeration: fixture mosaic-logger bundle
 // ---------------------------------------------------------------------------
 
 // TestHooks_AtLeastOneBundlePresent verifies that the catalog enumerates at least one
-// hook bundle from the real repository tree.
+// hook bundle from the fixture tree.
 func TestHooks_AtLeastOneBundlePresent(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	hooks := cat.Hooks()
 	if len(hooks) == 0 {
 		t.Fatal("Hooks() returned an empty list; expected at least the mosaic-logger bundle")
@@ -72,7 +67,7 @@ func TestHooks_AtLeastOneBundlePresent(t *testing.T) {
 
 // TestHooks_MosaicLogger_IsPresent verifies that the mosaic-logger bundle is found.
 func TestHooks_MosaicLogger_IsPresent(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	_, ok := cat.Hook("mosaic-logger")
 	if !ok {
 		t.Fatal("Hook(\"mosaic-logger\"): returned not-found; expected this bundle to be present")
@@ -81,7 +76,7 @@ func TestHooks_MosaicLogger_IsPresent(t *testing.T) {
 
 // TestHook_MosaicLogger_Key verifies the mosaic-logger bundle's key matches its id.
 func TestHook_MosaicLogger_Key(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	h, ok := cat.Hook("mosaic-logger")
 	if !ok {
 		t.Fatal("Hook(\"mosaic-logger\"): not found")
@@ -93,7 +88,7 @@ func TestHook_MosaicLogger_Key(t *testing.T) {
 
 // TestHook_MosaicLogger_Version_NonEmpty verifies that the version field is populated.
 func TestHook_MosaicLogger_Version_NonEmpty(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 	if h.Version == "" {
 		t.Error("mosaic-logger Version is empty; expected non-empty version from hook.yaml")
@@ -102,7 +97,7 @@ func TestHook_MosaicLogger_Version_NonEmpty(t *testing.T) {
 
 // TestHook_MosaicLogger_Description_NonEmpty verifies that the description field is populated.
 func TestHook_MosaicLogger_Description_NonEmpty(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 	if h.Description == "" {
 		t.Error("mosaic-logger Description is empty; expected non-empty description from hook.yaml")
@@ -113,7 +108,7 @@ func TestHook_MosaicLogger_Description_NonEmpty(t *testing.T) {
 // for the mosaic-logger bundle. The claude-code variant is fully authored; the placeholder
 // key is absent from hook.yaml so the Go zero value (false) applies.
 func TestHook_MosaicLogger_Placeholder_IsFalse(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 	if h.Placeholder {
 		t.Error("mosaic-logger Placeholder = true; expected false (hook.yaml omits the placeholder key)")
@@ -123,7 +118,7 @@ func TestHook_MosaicLogger_Placeholder_IsFalse(t *testing.T) {
 // TestHook_MosaicLogger_SourceDir_IsAbsolute verifies that the bundle's SourceDir is
 // an absolute path.
 func TestHook_MosaicLogger_SourceDir_IsAbsolute(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 	if !filepath.IsAbs(h.SourceDir) {
 		t.Errorf("mosaic-logger SourceDir is not absolute: %q", h.SourceDir)
@@ -132,7 +127,7 @@ func TestHook_MosaicLogger_SourceDir_IsAbsolute(t *testing.T) {
 
 // TestHook_MosaicLogger_SourceDir_Exists verifies that the SourceDir exists on disk.
 func TestHook_MosaicLogger_SourceDir_Exists(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 	if _, err := os.Stat(h.SourceDir); os.IsNotExist(err) {
 		t.Errorf("mosaic-logger SourceDir %q does not exist on disk", h.SourceDir)
@@ -146,7 +141,7 @@ func TestHook_MosaicLogger_SourceDir_Exists(t *testing.T) {
 // TestHook_MosaicLogger_Variants_NonEmpty verifies that the Variants map is non-nil
 // and contains at least one entry.
 func TestHook_MosaicLogger_Variants_NonEmpty(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 	if len(h.Variants) == 0 {
 		t.Error("mosaic-logger Variants is empty; expected variant entries from hook.yaml")
@@ -156,7 +151,7 @@ func TestHook_MosaicLogger_Variants_NonEmpty(t *testing.T) {
 // TestHook_Variant_ClaudeCode_IsSupported verifies that the claude-code variant is marked
 // as supported.
 func TestHook_Variant_ClaudeCode_IsSupported(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 
 	v, ok := h.Variants["claude-code"]
@@ -171,7 +166,7 @@ func TestHook_Variant_ClaudeCode_IsSupported(t *testing.T) {
 // TestHook_Variant_OpenCode_IsSupported verifies that the opencode variant is marked
 // as supported.
 func TestHook_Variant_OpenCode_IsSupported(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 
 	v, ok := h.Variants["opencode"]
@@ -186,7 +181,7 @@ func TestHook_Variant_OpenCode_IsSupported(t *testing.T) {
 // TestHook_Variant_VscodeGhcp_IsSupported verifies that the vscode-ghcp variant is marked
 // as supported.
 func TestHook_Variant_VscodeGhcp_IsSupported(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 
 	v, ok := h.Variants["vscode-ghcp"]
@@ -201,7 +196,7 @@ func TestHook_Variant_VscodeGhcp_IsSupported(t *testing.T) {
 // TestHook_Variant_GhcpCli_IsSupported verifies that the ghcp-cli variant is marked
 // as supported.
 func TestHook_Variant_GhcpCli_IsSupported(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 
 	v, ok := h.Variants["ghcp-cli"]
@@ -218,12 +213,12 @@ func TestHook_Variant_GhcpCli_IsSupported(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestHook_Variant_Files_AreNonEmptyAndUniquelyNamed verifies, for every supported
-// variant of every hook bundle in the real repository, that Files is non-empty and that
+// variant of every hook bundle in the fixture, that Files is non-empty and that
 // no two files within the same variant share a TargetName. This is a structural
 // invariant: it catches the loader silently dropping or duplicating a file without
 // asserting how many files any one variant happens to declare today.
 func TestHook_Variant_Files_AreNonEmptyAndUniquelyNamed(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	for _, h := range cat.Hooks() {
 		for variantName, v := range h.Variants {
 			if !v.Supported {
@@ -247,7 +242,7 @@ func TestHook_Variant_Files_AreNonEmptyAndUniquelyNamed(t *testing.T) {
 // TestHook_Variant_ClaudeCode_Files_SourcePathsExist verifies that each file listed in
 // the claude-code variant has a SourcePath that exists on disk.
 func TestHook_Variant_ClaudeCode_Files_SourcePathsExist(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 
 	v, ok := h.Variants["claude-code"]
@@ -271,7 +266,7 @@ func TestHook_Variant_ClaudeCode_Files_SourcePathsExist(t *testing.T) {
 // TestHook_Variant_ClaudeCode_RegistrationSteps_Present verifies that the claude-code
 // variant has at least one registration step.
 func TestHook_Variant_ClaudeCode_RegistrationSteps_Present(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 
 	v, ok := h.Variants["claude-code"]
@@ -286,7 +281,7 @@ func TestHook_Variant_ClaudeCode_RegistrationSteps_Present(t *testing.T) {
 // TestHook_Variant_ClaudeCode_RegistrationSteps_HaveIDs verifies that each registration
 // step has a non-empty ID.
 func TestHook_Variant_ClaudeCode_RegistrationSteps_HaveIDs(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 
 	v, ok := h.Variants["claude-code"]
@@ -303,7 +298,7 @@ func TestHook_Variant_ClaudeCode_RegistrationSteps_HaveIDs(t *testing.T) {
 // TestHook_Variant_ClaudeCode_RegistrationSteps_HasRegisterStep verifies that the
 // register-mosaic-logger step is present and is marked as performable.
 func TestHook_Variant_ClaudeCode_RegistrationSteps_HasRegisterStep(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 
 	v, ok := h.Variants["claude-code"]
@@ -327,7 +322,7 @@ func TestHook_Variant_ClaudeCode_RegistrationSteps_HasRegisterStep(t *testing.T)
 // TestHook_Variant_OpenCode_RegistrationSteps_Empty verifies that the opencode variant
 // has no registration steps (declared as registration: [] in hook.yaml).
 func TestHook_Variant_OpenCode_RegistrationSteps_Empty(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 
 	v, ok := h.Variants["opencode"]
@@ -347,7 +342,7 @@ func TestHook_Variant_OpenCode_RegistrationSteps_Empty(t *testing.T) {
 // no reuse link. A reuses: claude-code link would silently ship the Python adapter into
 // VS Code deployments; the variant instead carries its own placeholder file.
 func TestHook_Variant_VscodeGhcp_DoesNotReuseClaudeCode(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 
 	v, ok := h.Variants["vscode-ghcp"]
@@ -362,7 +357,7 @@ func TestHook_Variant_VscodeGhcp_DoesNotReuseClaudeCode(t *testing.T) {
 // TestHook_Variant_VscodeGhcp_CarriesOwnFiles verifies that the vscode-ghcp variant carries
 // its own file list rather than inheriting claude-code's files.
 func TestHook_Variant_VscodeGhcp_CarriesOwnFiles(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 
 	v, ok := h.Variants["vscode-ghcp"]
@@ -380,7 +375,7 @@ func TestHook_Variant_VscodeGhcp_CarriesOwnFiles(t *testing.T) {
 // TestHook_Variant_GhcpCli_RegistrationSteps_HasRegisterStep verifies that the
 // ghcp-cli variant has a register-mosaic-logger registration step with a non-empty fragment.
 func TestHook_Variant_GhcpCli_RegistrationSteps_HasRegisterStep(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	h, _ := cat.Hook("mosaic-logger")
 
 	v, ok := h.Variants["ghcp-cli"]
@@ -408,7 +403,7 @@ func TestHook_Variant_GhcpCli_RegistrationSteps_HasRegisterStep(t *testing.T) {
 // TestHookLookup_AllBundles_FoundByKey verifies that every bundle returned by Hooks()
 // can be looked up by key via Hook(key).
 func TestHookLookup_AllBundles_FoundByKey(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	for _, h := range cat.Hooks() {
 		found, ok := cat.Hook(h.Key)
 		if !ok {
@@ -424,7 +419,7 @@ func TestHookLookup_AllBundles_FoundByKey(t *testing.T) {
 // TestHookLookup_UnknownKey_ReturnsFalse verifies that Hook(key) returns false for an
 // unknown bundle id.
 func TestHookLookup_UnknownKey_ReturnsFalse(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadHookLoggerCatalog(t)
 	_, ok := cat.Hook("this-bundle-does-not-exist")
 	if ok {
 		t.Error("Hook(\"this-bundle-does-not-exist\"): returned true, want false")
@@ -500,15 +495,15 @@ func TestIssues_TamperedHookBundle_SubjectIsBundle(t *testing.T) {
 	}
 }
 
-// TestIssues_RealMosaicLoggerBundle_NoHashMismatch verifies that the real
+// TestIssues_MosaicLoggerFixtureBundle_NoHashMismatch verifies that the fixture
 // mosaic-logger bundle does not produce a hook-hash-mismatch issue. The bundle has no
 // content_hash field in its hook.yaml, so no integrity check can be performed.
-func TestIssues_RealMosaicLoggerBundle_NoHashMismatch(t *testing.T) {
-	cat := loadRealCatalog(t)
+func TestIssues_MosaicLoggerFixtureBundle_NoHashMismatch(t *testing.T) {
+	cat := loadHookLoggerCatalog(t)
 
 	for _, iss := range cat.Issues() {
 		if iss.Code == "hook-hash-mismatch" {
-			t.Errorf("real mosaic-logger bundle produced unexpected hook-hash-mismatch issue: %+v", iss)
+			t.Errorf("fixture mosaic-logger bundle produced unexpected hook-hash-mismatch issue: %+v", iss)
 		}
 	}
 }

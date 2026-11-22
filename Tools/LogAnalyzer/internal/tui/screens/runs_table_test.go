@@ -63,8 +63,8 @@ func TestRuns_LongRunLabelsNeverBreakTheColumnsAtNarrowWidths(t *testing.T) {
 		}
 		if width >= 80 {
 			// One line per run: the label and the cost are never split over lines.
-			assertContains(t, rowFor(t, view, "$12.34"), runIDOne[:12])
-			assertContains(t, rowFor(t, view, "$5.67"), runIDTwo[:12])
+			assertContains(t, rowFor(t, view, runIDOne[:12]), "$12.34")
+			assertContains(t, rowFor(t, view, runIDTwo[:12]), "$5.67")
 		}
 	}
 }
@@ -74,10 +74,9 @@ func TestRuns_CostsAreAlignedWhateverTheLabelLength(t *testing.T) {
 	for _, width := range []int{140, 100, 80} {
 		view := runsView(runsReport(), width, tallH)
 
-		assertContains(t, rowFor(t, view, "$12.34"), runIDOne[:12])
-		assertContains(t, rowFor(t, view, "$5.67"), runIDTwo[:12])
-		long := displayColumn(rowFor(t, view, "$12.34"), "$12.34")
-		short := displayColumn(rowFor(t, view, "$5.67"), "$5.67")
+		longRow, shortRow := rowFor(t, view, runIDOne[:12]), rowFor(t, view, runIDTwo[:12])
+		long := displayColumn(longRow, "$12.34")
+		short := displayColumn(shortRow, "$5.67")
 		// Cells are aligned when they start at one column (left) or end at one (right).
 		if long < 0 || short < 0 || (long != short && long+len("$12.34") != short+len("$5.67")) {
 			t.Errorf("width %d: cost cells are not aligned (columns %d and %d)\n%s", width, long, short, view)

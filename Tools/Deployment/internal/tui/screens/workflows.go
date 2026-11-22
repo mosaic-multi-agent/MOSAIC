@@ -365,6 +365,10 @@ func (s *WorkflowBrowserScreen) View() string {
 	title := s.styles.Title.Width(s.width).Render("Select Workflows")
 	border := s.styles.Border.Width(s.width).Render(strings.Repeat("─", s.width))
 
+	summary := s.renderSummary()
+	help := s.renderHelp()
+	validation := validationLine(s.styles.Error, s.width, s.validationMsg)
+
 	var content string
 	switch {
 	case s.hasError:
@@ -374,10 +378,13 @@ func (s *WorkflowBrowserScreen) View() string {
 		content = s.styles.Muted.Width(s.width).Render("No workflows found in the catalog.")
 
 	case s.level == wfNavCategories:
+		fitList(s.catList, s.width, s.height, len(s.categories), title, border, border, summary, validation, help)
 		content = s.catList.View()
 
 	case s.level == wfNavWorkflows:
-		lw := wfListWidth(s.width)
+		fitMultiSelect(s.wfMultisel, s.detail, s.width, s.height, len(s.categories[s.currentCatIdx].Workflows),
+			title, border, border, summary, validation, help)
+		lw, _ := splitListWidths(s.width)
 		sep := s.styles.Border.Render("│")
 		content = lipgloss.JoinHorizontal(
 			lipgloss.Top,
@@ -387,12 +394,9 @@ func (s *WorkflowBrowserScreen) View() string {
 		)
 	}
 
-	summary := s.renderSummary()
-	help := s.renderHelp()
-
 	parts := []string{title, border, content, border, summary}
-	if s.validationMsg != "" {
-		parts = append(parts, s.styles.Error.Width(s.width).Render(s.validationMsg))
+	if validation != "" {
+		parts = append(parts, validation)
 	}
 	parts = append(parts, help)
 	return strings.Join(parts, "\n")
@@ -409,7 +413,7 @@ func (s *WorkflowBrowserScreen) renderSummary() string {
 		noun = "workflows"
 	}
 	label := fmt.Sprintf("Selected %d %s: %s", len(ids), noun, strings.Join(ids, ", "))
-	return s.styles.Success.Width(s.width).Render(label)
+	return oneLineSummary(s.styles.Success, s.width, label)
 }
 
 // renderHelp returns the context-sensitive help bar matching the active bindings at the

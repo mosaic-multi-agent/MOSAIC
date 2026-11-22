@@ -1,6 +1,9 @@
 package screens
 
-import "mosaic-common/tui/kit/chrome"
+import (
+	tuicommon "mosaic-common/tui"
+	"mosaic-common/tui/kit/chrome"
+)
 
 // Column descriptions of the overview, the timeline and the page screens.
 
@@ -19,6 +22,7 @@ func overviewLegend() []chrome.HelpGroup {
 			{"cost", "What the tokens of the category cost."},
 			{"share", "The category's share of the run's total cost."},
 		}),
+		{Title: "Cache figures", Entries: []tuicommon.HelpEntry{{Key: "Cache hit ratio", Desc: cacheHitDesc}}},
 		legendGroup("models", []columnDoc{
 			{"model", "The model that served the API calls of the row."},
 			{"API calls", "How many API calls the model answered."},
@@ -117,6 +121,7 @@ func runsLegend() []chrome.HelpGroup {
 	return []chrome.HelpGroup{legendGroup("", []columnDoc{
 		{"compare", "A or B for a run marked for a comparison, empty for an unmarked run."},
 		{"run", "The name of the run."},
+		{"started", "When the run started, in your local time zone; the run ID or the log timeline gives it, and it is empty when neither does."},
 		{"cost", "What the whole run cost in the display currency."},
 		{"invocations", "How many agent instances the run dispatched."},
 		{"duration", "Wall-clock time from the start to the end of the run."},

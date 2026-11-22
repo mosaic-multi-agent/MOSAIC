@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"mosaic-deploy/internal/domain"
-	"mosaic-deploy/internal/harness/mcpname"
 )
 
 // MapTools is the shared, descriptor-driven tool mapping algorithm (CD-2). It maps every
@@ -22,7 +21,7 @@ import (
 //
 // Outcomes per generic tool (list case only):
 //   - ToolSkipped: req.SkippedTools marks this tool as skipped by the user (checked first).
-//   - ToolCustom: no mapping entry exists but req.CustomNames supplies a name.
+//   - ToolCustom: no mapping entry exists but req.CustomNames supplies one or more MCP entries.
 //   - ToolMapped: an entry exists in d.Tools.Mappings for this generic name (including an entry
 //     with an empty HarnessTools slice, which means "explicitly unsupported by this harness").
 //   - ToolUnmapped: no mapping entry exists and no custom name was supplied.
@@ -36,7 +35,7 @@ import (
 //   - Otherwise, Destinations contains a single DestMain destination carrying the formatted
 //     custom-tool name — the historical behaviour.
 //
-// HarnessTools for a ToolCustom resolution is always the single formatted name, regardless of
+// HarnessTools for a ToolCustom resolution is one formatted name per entry, regardless of
 // how many destinations the tool fans out to.
 //
 // When multiple generic tools share the same harness tool (many-to-one), each produces its own
@@ -46,6 +45,9 @@ import (
 func MapTools(d *domain.HarnessDescriptor, req domain.ToolRequest) (domain.ToolResult, error) {
 	// Placeholder case: expand the descriptor's PlaceholderExpansion into a list field.
 	if req.Placeholder != "" {
+		if d.Tools.Shape == domain.ShapeRules {
+			return expandRulesPlaceholder(d), nil
+		}
 		return expandPlaceholder(d), nil
 	}
 
@@ -65,36 +67,16 @@ func MapTools(d *domain.HarnessDescriptor, req domain.ToolRequest) (domain.ToolR
 			// User explicitly declined to configure this tool.
 			res.Outcome = domain.ToolSkipped
 
-		case req.CustomNames != nil && req.CustomNames[genericTool] != "":
-			// User supplied a custom MCP server name for an otherwise unmapped tool.
-			name := req.CustomNames[genericTool]
-			if written, ok := mcpname.Format(d.Tools.MCP, mcpname.Name{Server: name}); ok {
-				name = written
-			}
+		case len(req.CustomNames[genericTool]) > 0:
+			// User supplied MCP entries for an otherwise unmapped tool.
+			names := customEntryNames(d, req.CustomNames[genericTool])
 			res.Outcome = domain.ToolCustom
-			res.HarnessTools = []string{name}
-			// When the descriptor declares a non-empty default custom-tool destination list and
-			// no explicit mapping entry exists for this generic tool, use that list. Config-declared
-			// tool_destinations entries are merged into d.Tools.Mappings before MapTools runs, so a
-			// mapping entry means an explicit config entry takes precedence over the harness default.
+			res.HarnessTools = names
+			// Config-declared tool_destinations entries are merged into d.Tools.Mappings before
+			// MapTools runs, so a mapping entry means an explicit config entry takes precedence
+			// over the harness default custom-tool destinations.
 			_, hasMappingEntry := mappingByGeneric[genericTool]
-			if len(d.Tools.CustomToolDestinations) > 0 && !hasMappingEntry {
-				dests := make([]domain.ToolDestination, len(d.Tools.CustomToolDestinations))
-				for i, decl := range d.Tools.CustomToolDestinations {
-					dests[i] = domain.ToolDestination{
-						Kind:      decl.Kind,
-						Field:     decl.Field,
-						Format:    decl.Format,
-						Separator: decl.Separator,
-						Names:     []string{name},
-					}
-				}
-				res.Destinations = dests
-			} else {
-				res.Destinations = []domain.ToolDestination{
-					{Kind: domain.DestMain, Names: []string{name}},
-				}
-			}
+			res.Destinations = customDestinations(d, hasMappingEntry, names)
 
 		default:
 			if mapping, ok := mappingByGeneric[genericTool]; ok {
@@ -184,6 +166,9 @@ func buildToolFields(d *domain.HarnessDescriptor, resolutions []domain.ToolResol
 	}
 	if d.Tools.Shape == domain.ShapePermission {
 		return buildPermissionToolFields(d, resolutions)
+	}
+	if d.Tools.Shape == domain.ShapeRules {
+		return buildRuleToolFields(d, resolutions)
 	}
 	return buildListToolFields(d, resolutions)
 }
@@ -376,7 +361,7 @@ func buildPermissionToolFields(d *domain.HarnessDescriptor, resolutions []domain
 		fieldBuckets[fieldKey].names[name] = true
 	}
 
-	var customNames []string // custom main-destination names, in resolution order
+	var mainNames []string // mapped and custom main-destination names, in resolution order
 	for _, res := range resolutions {
 		if res.Outcome != domain.ToolMapped && res.Outcome != domain.ToolCustom {
 			continue
@@ -386,9 +371,7 @@ func buildPermissionToolFields(d *domain.HarnessDescriptor, resolutions []domain
 			case domain.DestMain:
 				for _, name := range dest.Names {
 					resolved[name] = true
-					if res.Outcome == domain.ToolCustom {
-						customNames = append(customNames, name)
-					}
+					mainNames = append(mainNames, name)
 				}
 			case domain.DestField:
 				for _, name := range dest.Names {
@@ -411,7 +394,7 @@ func buildPermissionToolFields(d *domain.HarnessDescriptor, resolutions []domain
 		}
 	}
 
-	pairs = appendCustomPermissionPairs(pairs, d.Tools.Universe, customNames)
+	pairs = appendCustomPermissionPairs(pairs, d.Tools.Universe, mainNames)
 
 	fields := []domain.FrontmatterField{
 		{
@@ -480,12 +463,27 @@ func ResolveTargetPath(d *domain.HarnessDescriptor, req domain.TargetPathRequest
 		return "", err
 	}
 
-	// Determine the target filename: use req.FileName when given (skill or hook bundles
-	// may have source file names that differ from the artifact key), otherwise derive
-	// from the artifact key plus the harness's extension rule.
-	filename := req.FileName
-	if filename == "" {
-		ext := d.Extensions[req.Kind]
+	// Determine the target filename. Skill and hook bundle files are deployed verbatim
+	// (their filenames are not re-encoded to a different format). Agent artifacts use the
+	// harness-declared extension: when the descriptor declares an extension for the
+	// artifact kind, the deployed filename is derived from the stem of the source filename
+	// (or from req.Key if no filename was given) combined with the declared extension.
+	// This maps the MOSAIC generic-form source (.md) to the harness's deployed format
+	// (e.g. .toml for the Codex TOML format). When no extension is declared, the source
+	// filename is used as-is (Markdown harnesses that share the .md extension).
+	ext := d.Extensions[req.Kind]
+	var filename string
+	if req.Kind != domain.ArtifactSkill && ext != "" {
+		// Non-skill artifact with a harness-declared extension: replace the source
+		// extension with the declared one.
+		stem := req.Key
+		if req.FileName != "" {
+			stem = agentStem(req.FileName, ext)
+		}
+		filename = stem + ext
+	} else if req.FileName != "" {
+		filename = req.FileName
+	} else {
 		filename = req.Key + ext
 	}
 
@@ -517,6 +515,9 @@ func ExtractToolEntries(d *domain.HarnessDescriptor, toolsValue domain.FieldValu
 	// An empty ToolsKey means the harness declares no tools field; nothing to extract.
 	if d.Frontmatter.ToolsKey == "" {
 		return nil
+	}
+	if d.Tools.Shape == domain.ShapeRules {
+		return extractRuleEntries(d, toolsValue)
 	}
 
 	// Build a lookup set of by-convention tool names. Their presence in a deployed file

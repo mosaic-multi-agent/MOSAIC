@@ -31,11 +31,19 @@ func LineObserver(dec Decoder, feed domain.ActivityFeed) func(line []byte) {
 // observer or its feed is swallowed, and a feed that panicked receives
 // nothing further.
 func Begin(obs domain.ActivityObserver, inv domain.ActivityInvocation, dec Decoder) (onLine func([]byte), end func()) {
+	onLine, _, end = BeginReporting(obs, inv, dec)
+	return onLine, end
+}
+
+// BeginReporting is Begin that also returns report, which sends one item
+// straight to the invocation's feed (for items the stream cannot carry, such as
+// a watchdog end). Same observer-failure shielding as Begin.
+func BeginReporting(obs domain.ActivityObserver, inv domain.ActivityInvocation, dec Decoder) (onLine func([]byte), report func(domain.ActivityItem), end func()) {
 	if obs == nil {
 		obs = domain.NopActivityObserver{}
 	}
 	feed := startFeed(obs, inv)
-	return LineObserver(dec, feed), feed.Ended
+	return LineObserver(dec, feed), feed.Activity, feed.Ended
 }
 
 // safeFeed shields the caller from a misbehaving feed.

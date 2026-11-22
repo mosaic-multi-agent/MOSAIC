@@ -18,6 +18,8 @@ var wantInjectionDirs = map[string]string{
 	"opencode":    catalogpaths.HarnessDirNameOpenCode,
 	"ghcp-cli":    catalogpaths.HarnessDirNameGhcpCLI,
 	"vscode-ghcp": catalogpaths.HarnessDirNameVSCodeGHCP,
+	"codex":       catalogpaths.HarnessDirNameCodex,
+	"opencode-v2": catalogpaths.HarnessDirNameOpenCodeV2,
 }
 
 func assertBuiltinInjectionDirs(t *testing.T, reg registry.Registry) {

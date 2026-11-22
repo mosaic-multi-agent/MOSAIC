@@ -15,13 +15,13 @@ package catalog_test
 //   - WorkflowSection extracts the <Workflow type="core" name="{id}"> block including its
 //     boundary tags, byte-identically from the source file.
 //
-// Classification record (every loadRealCatalog-based assertion in this file):
+// Classification record (every fixture-root-based assertion in this file):
 //   - Content-coupled, rewritten to a structural invariant: the known-workflow-ID
 //     allowlist (was TestWorkflows_KnownIDs_AllPresent) and both known-category
 //     allowlists (was TestWorkflowCategories_AllSixKnownCategoriesPresent and
 //     TestWorkflowCategories_AllKnownCategoriesPresent, near-duplicates of each other) are
 //     replaced by TestWorkflowCategories_EveryOnDiskCategoryYieldsAtLeastOneWorkflow, which
-//     walks the real Workflows/ directory tree and asserts every category folder with an
+//     walks the fixture Workflows/ directory tree and asserts every category folder with an
 //     eligible file produces a matching WorkflowCategories() entry, without naming any
 //     workflow or category. Individual-workflow-loss detection within an existing category
 //     is deliberately traded away by this move — recorded here, not discovered later.
@@ -129,14 +129,14 @@ func makeWorkflowWithSectionFixture(t *testing.T) (catalog.Catalog, []byte) {
 // ---------------------------------------------------------------------------
 
 // TestWorkflowCategories_EveryOnDiskCategoryYieldsAtLeastOneWorkflow verifies that every
-// subdirectory of the real repository's Workflows/ folder that contains at least one
+// subdirectory of the fixture root's Workflows/ folder that contains at least one
 // eligible (non-underscore-prefixed) .md file produces a matching category in
 // WorkflowCategories(), and that WorkflowCategories() names no category absent from disk.
 // This is a structural invariant: it detects a whole category silently disappearing from
 // the catalog without naming any specific workflow or category, so it survives content
 // moves like relocating a whole category out of the scanned tree.
 func TestWorkflowCategories_EveryOnDiskCategoryYieldsAtLeastOneWorkflow(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	wfRoot := filepath.Join(cat.CatalogRoot(), "Workflows")
 
 	entries, err := os.ReadDir(wfRoot)
@@ -187,7 +187,7 @@ func TestWorkflowCategories_EveryOnDiskCategoryYieldsAtLeastOneWorkflow(t *testi
 // not returned by Workflows(). _Template.md and _Legacy-Appendices.md are utility files,
 // not actual workflow documents.
 func TestWorkflows_UnderscorePrefixed_Excluded(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, w := range cat.Workflows() {
 		base := filepath.Base(w.SourcePath)
 		if len(base) > 0 && base[0] == '_' {
@@ -198,7 +198,7 @@ func TestWorkflows_UnderscorePrefixed_Excluded(t *testing.T) {
 
 // TestWorkflows_AllHaveNonEmptyID verifies that every workflow has a non-empty id.
 func TestWorkflows_AllHaveNonEmptyID(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, w := range cat.Workflows() {
 		if w.ID == "" {
 			t.Errorf("workflow at SourcePath %q has empty ID", w.SourcePath)
@@ -208,7 +208,7 @@ func TestWorkflows_AllHaveNonEmptyID(t *testing.T) {
 
 // TestWorkflows_AllHaveName verifies that every workflow has a non-empty name.
 func TestWorkflows_AllHaveName(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, w := range cat.Workflows() {
 		if w.Name == "" {
 			t.Errorf("workflow %q has empty Name", w.ID)
@@ -218,7 +218,7 @@ func TestWorkflows_AllHaveName(t *testing.T) {
 
 // TestWorkflows_AllHaveDescription verifies that every workflow has a non-empty description.
 func TestWorkflows_AllHaveDescription(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, w := range cat.Workflows() {
 		if w.Description == "" {
 			t.Errorf("workflow %q has empty Description", w.ID)
@@ -229,7 +229,7 @@ func TestWorkflows_AllHaveDescription(t *testing.T) {
 // TestWorkflows_AllHaveHint verifies that every workflow has a non-empty hint.
 // The hint is shown in the workflow selection screen to help users pick quickly.
 func TestWorkflows_AllHaveHint(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, w := range cat.Workflows() {
 		if w.Hint == "" {
 			t.Errorf("workflow %q has empty Hint", w.ID)
@@ -239,7 +239,7 @@ func TestWorkflows_AllHaveHint(t *testing.T) {
 
 // TestWorkflows_AllHaveVersion verifies that every workflow has a non-empty version.
 func TestWorkflows_AllHaveVersion(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, w := range cat.Workflows() {
 		if w.Version == "" {
 			t.Errorf("workflow %q has empty Version", w.ID)
@@ -250,7 +250,7 @@ func TestWorkflows_AllHaveVersion(t *testing.T) {
 // TestWorkflows_AllHaveCategory verifies that every workflow has a non-empty category
 // (the source folder name, e.g. "Build").
 func TestWorkflows_AllHaveCategory(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, w := range cat.Workflows() {
 		if w.Category == "" {
 			t.Errorf("workflow %q has empty Category", w.ID)
@@ -261,7 +261,7 @@ func TestWorkflows_AllHaveCategory(t *testing.T) {
 // TestWorkflows_AllHaveAbsoluteSourcePath verifies that each workflow's SourcePath is
 // absolute and the file exists on disk.
 func TestWorkflows_AllHaveAbsoluteSourcePath(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, w := range cat.Workflows() {
 		if !filepath.IsAbs(w.SourcePath) {
 			t.Errorf("workflow %q SourcePath is not absolute: %q", w.ID, w.SourcePath)
@@ -354,7 +354,7 @@ func TestWorkflow_ReferencedAgents_PopulatedFromFrontmatter(t *testing.T) {
 // TestWorkflowCategories_TotalMatchesWorkflowsCount verifies that the total number of
 // workflows across all categories equals the count returned by Workflows().
 func TestWorkflowCategories_TotalMatchesWorkflowsCount(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	total := 0
 	for _, c := range cat.WorkflowCategories() {
 		total += len(c.Workflows)
@@ -370,7 +370,7 @@ func TestWorkflowCategories_TotalMatchesWorkflowsCount(t *testing.T) {
 // WorkflowCategories(). This asserts the category-membership property for every workflow
 // rather than spot-checking one named workflow against one named category.
 func TestWorkflowCategories_EveryWorkflowAppearsInItsCategory(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	idsByCategory := make(map[string]map[string]bool)
 	for _, c := range cat.WorkflowCategories() {
 		ids := make(map[string]bool, len(c.Workflows))
@@ -394,7 +394,7 @@ func TestWorkflowCategories_EveryWorkflowAppearsInItsCategory(t *testing.T) {
 // TestWorkflowLookup_AllWorkflows_FoundByID verifies that every workflow returned by
 // Workflows() can be looked up by id via Workflow(id).
 func TestWorkflowLookup_AllWorkflows_FoundByID(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, w := range cat.Workflows() {
 		found, ok := cat.Workflow(w.ID)
 		if !ok {
@@ -410,7 +410,7 @@ func TestWorkflowLookup_AllWorkflows_FoundByID(t *testing.T) {
 // TestWorkflowLookup_UnknownID_ReturnsFalse verifies that Workflow(id) returns false
 // for an unknown id.
 func TestWorkflowLookup_UnknownID_ReturnsFalse(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	_, ok := cat.Workflow("this-workflow-does-not-exist")
 	if ok {
 		t.Error("Workflow(\"this-workflow-does-not-exist\"): returned true, want false")
@@ -529,7 +529,7 @@ func TestWorkflowSection_EndsWithClosingBoundary(t *testing.T) {
 // TestWorkflowSection_AllWorkflows_ReturnNonEmpty verifies that WorkflowSection succeeds
 // and returns non-empty bytes for every workflow in the catalog.
 func TestWorkflowSection_AllWorkflows_ReturnNonEmpty(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, w := range cat.Workflows() {
 		section, err := cat.WorkflowSection(w.ID)
 		if err != nil {
@@ -545,7 +545,7 @@ func TestWorkflowSection_AllWorkflows_ReturnNonEmpty(t *testing.T) {
 // TestWorkflowSection_UnknownID_ReturnsError verifies that WorkflowSection returns an
 // error for a workflow id that does not exist in the catalog.
 func TestWorkflowSection_UnknownID_ReturnsError(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	_, err := cat.WorkflowSection("this-workflow-does-not-exist")
 	if err == nil {
 		t.Error("WorkflowSection(\"this-workflow-does-not-exist\"): expected error, got nil")

@@ -15,6 +15,7 @@ import (
 	"mosaic-run/internal/artifact"
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/harness"
+	"mosaic-run/internal/agentfile"
 	"mosaic-run/internal/orchfile"
 	"mosaic-run/internal/resumecheck"
 )
@@ -38,7 +39,7 @@ func (f *resumeFlow) sharedSummaryLines() []string {
 	if err != nil {
 		f.t.Fatalf("read the run artifact: %v", err)
 	}
-	agents, err := orchfile.EnumerateInfrastructureAgents(f.orchPath)
+	agents, err := orchfile.EnumerateInfrastructureAgents(f.orchPath, agentfile.Format{})
 	if err != nil {
 		f.t.Fatalf("enumerate infrastructure agents: %v", err)
 	}

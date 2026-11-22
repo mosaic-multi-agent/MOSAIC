@@ -237,6 +237,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleExportDone(done)
 	}
 
+	// Findings export complete.
+	if done, ok := msg.(findingsExportDoneMsg); ok {
+		return m.handleFindingsExportDone(done)
+	}
+
 	// Export action keys and the export screen.
 	var exportCmd tea.Cmd
 	var exportHandled bool
@@ -428,7 +433,7 @@ func (m Model) updateRuns(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	// The open help overlay takes every key, so none of the list's own keys below applies.
-	if key, ok := msg.(tea.KeyMsg); ok && !m.runsScreen.HelpOpen() && key.String() == "s" {
+	if key, ok := msg.(tea.KeyMsg); ok && !m.runsOverlayOpen() && key.String() == "s" {
 		// Intercept 's' to open the source-path entry screen from the Runs list.
 		style := m.screenStyles()
 		m.sourceScreen = screens.NewSourceScreen(m.width, m.height, style)
@@ -439,13 +444,13 @@ func (m Model) updateRuns(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Intercept 'a' to open the across-runs view.
-	if key, ok := msg.(tea.KeyMsg); ok && !m.runsScreen.HelpOpen() && key.String() == screens.KeyAcrossRuns {
+	if key, ok := msg.(tea.KeyMsg); ok && !m.runsOverlayOpen() && key.String() == screens.KeyAcrossRuns {
 		return m.openAcrossRuns(), nil
 	}
 
 	// Intercept 'p' for pricing navigation.
 	// Guard: require an active session; do nothing if analysis has not yet produced one.
-	if key, ok := msg.(tea.KeyMsg); ok && !m.runsScreen.HelpOpen() && key.String() == "p" {
+	if key, ok := msg.(tea.KeyMsg); ok && !m.runsOverlayOpen() && key.String() == "p" {
 		if m.result == nil || m.result.Session == nil {
 			return m, nil
 		}

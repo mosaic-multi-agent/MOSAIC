@@ -1,0 +1,161 @@
+# Tool Output Formats — Raw Captures
+
+| Field | Value |
+|-------|-------|
+| **Harness** | Codex |
+| **Harness version** | v0.170.0 |
+| **Context** | Subagent session |
+| **Captured** | 2026-11-18 |
+| **Formatting** | XML tags use bracket notation: `<tag>` -> `[tag]` to avoid rendering conflicts |
+| **Status** | PARTIAL — only tools exercised below were captured |
+
+---
+
+## exec_command — read full
+
+**Call:** `exec_command({"cmd":"Get-Content -Raw HarnessKnowledge/SystemPromptCapture/TestArtifacts/varied-content-test.txt","workdir":"C:\\AI\\MOSAIC\\MOSAIC"})`
+
+--- RAW OUTPUT START ---
+{"chunk_id":"0e01e7","wall_time_seconds":0.0000141,"exit_code":0,"original_token_count":258,"output":"Line 1: Greetings, Universe! đźš€\nLine 2: This file has \"double quotes\" and 'single quotes' for validation.\nLine 3:     Four-space indentation here.\nLine 4:\tTab-indented content here.\nLine 5: Special characters: [chevrons] & ampersand | pipe \\ backslash\nLine 6: Unicode: resume, naive, ä¸­ć–‡ćµ‹čŻ•, ĐšĐ¸Ń€Đ¸Đ»Đ»Đ¸Ń†Đ°, ×˘×‘×¨×™×Ş\nLine 7: Blank line follows:\n\nLine 9: Resumed after blank line.\nLine 10: Path-like content: /opt/tools/bin/run --mode=capture\nLine 11: Code-like content: const calc = (x) =] { return x ] 0 && x [ 100; }\nLine 12: Regex-like content: ^begin.*center[a-z]+finish$\nLine 13: XML-like content: [node role=\"test\"]nested value[/node]\nLine 14: JSON-like content: {\"name\": \"probe\", \"count\": 77, \"items\": [4, 5, 6]}\n--- EDIT TARGET START ---\nLine 16: Swap this line with different content.\n--- EDIT TARGET END ---\nLine 18: This line must stay intact after edit tests.\nLine 19: Grep target: DISTINCT_MATCH_TOKEN_ABC\nLine 20: Final line with trailing newline.\n\r\n"}
+--- RAW OUTPUT END ---
+
+## exec_command — read partial
+
+**Call:** `exec_command({"cmd":"Get-Content HarnessKnowledge/SystemPromptCapture/TestArtifacts/varied-content-test.txt | Select-Object -Skip 2 -First 4","workdir":"C:\\AI\\MOSAIC\\MOSAIC"})`
+
+--- RAW OUTPUT START ---
+{"chunk_id":"fde278","wall_time_seconds":0.0000271,"exit_code":0,"original_token_count":69,"output":"Line 3:     Four-space indentation here.\r\nLine 4:\tTab-indented content here.\r\nLine 5: Special characters: [chevrons] & ampersand | pipe \\ backslash\r\nLine 6: Unicode: resume, naive, ä¸­ć–‡ćµ‹čŻ•, ĐšĐ¸Ń€Đ¸Đ»Đ»Đ¸Ń†Đ°, ×˘×‘×¨×™×Ş\r\n"}
+--- RAW OUTPUT END ---
+
+## exec_command — read directory
+
+**Call:** `exec_command({"cmd":"Get-ChildItem HarnessKnowledge/SystemPromptCapture/TestArtifacts | Select-Object Name,Length","workdir":"C:\\AI\\MOSAIC\\MOSAIC"})`
+
+--- RAW OUTPUT START ---
+{"chunk_id":"3e6b0b","wall_time_seconds":0.0275666,"exit_code":0,"original_token_count":36,"output":"\r\nName                      Length\r\n----                      ------\r\nlarge-file-3000-lines.txt 111000\r\nvaried-content-test.txt      976\r\n\r\n\r\n"}
+--- RAW OUTPUT END ---
+
+## exec_command — read missing
+
+**Call:** `exec_command({"cmd":"Get-Content HarnessKnowledge/SystemPromptCapture/TestArtifacts/not-present.txt","workdir":"C:\\AI\\MOSAIC\\MOSAIC"})`
+
+--- RAW OUTPUT START ---
+{"chunk_id":"e9b859","wall_time_seconds":0.3214894,"exit_code":1,"original_token_count":137,"output":"Get-Content : Cannot find path 'C:\\AI\\MOSAIC\\MOSAIC\\HarnessKnowledge\\SystemPromptCapture\\TestArtifacts\\not-present.txt'\r\n because it does not exist.\r\nAt line:2 char:1\r\n+ Get-Content HarnessKnowledge/SystemPromptCapture/TestArtifacts/not-pr ...\r\n+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : ObjectNotFound: (C:\\AI\\MOSAIC\\MO...not-present.txt:String) [Get-Content], ItemNotFoundEx \r\n   ception\r\n    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand\r\n \r\n"}
+--- RAW OUTPUT END ---
+
+## exec_command — search matches
+
+**Call:** `exec_command({"cmd":"rg -n \"EDIT TARGET\" HarnessKnowledge/SystemPromptCapture/TestArtifacts/varied-content-test.txt","workdir":"C:\\AI\\MOSAIC\\MOSAIC"})`
+
+--- RAW OUTPUT START ---
+{"chunk_id":"073644","wall_time_seconds":0.8497111,"exit_code":0,"original_token_count":14,"output":"15:--- EDIT TARGET START ---\n17:--- EDIT TARGET END ---\n"}
+--- RAW OUTPUT END ---
+
+## exec_command — search no matches
+
+**Call:** `exec_command({"cmd":"rg -n \"zzzz_never_found_4921\" HarnessKnowledge/SystemPromptCapture/TestArtifacts/varied-content-test.txt","workdir":"C:\\AI\\MOSAIC\\MOSAIC"})`
+
+--- RAW OUTPUT START ---
+{"chunk_id":"d3e798","wall_time_seconds":0.624971,"exit_code":1,"original_token_count":0,"output":""}
+--- RAW OUTPUT END ---
+
+## exec_command — shell success
+
+**Call:** `exec_command({"cmd":"Write-Output capture-ok","workdir":"C:\\AI\\MOSAIC\\MOSAIC"})`
+
+--- RAW OUTPUT START ---
+{"chunk_id":"e353cf","wall_time_seconds":0.7998041,"exit_code":0,"original_token_count":3,"output":"capture-ok\r\n"}
+--- RAW OUTPUT END ---
+
+## exec_command — shell error
+
+**Call:** `exec_command({"cmd":"exit 7","workdir":"C:\\AI\\MOSAIC\\MOSAIC"})`
+
+--- RAW OUTPUT START ---
+{"chunk_id":"77f410","wall_time_seconds":0.0311571,"exit_code":7,"original_token_count":0,"output":""}
+--- RAW OUTPUT END ---
+
+## exec_command — large default
+
+**Call:** `exec_command({"cmd":"Get-Content HarnessKnowledge/SystemPromptCapture/TestArtifacts/large-file-3000-lines.txt","workdir":"C:\\AI\\MOSAIC\\MOSAIC"})`
+
+--- RAW OUTPUT START ---
+{"chunk_id":"1f0f57","wall_time_seconds":0.9958088,"exit_code":0,"original_token_count":27750,"output":"Warning: truncated output (original token count: 27750)\nTotal output lines: 3000\n\nfoxtrot golf [ROW:0001] hotel india\r\nfoxtrot golf [ROW:0002] hotel india\r\nfoxtrot golf [ROW:0003] hotel india\r\nfoxtrot golf [ROW:0004] hotel india\r\nfoxtrot golf [ROW:0005] hotel india\r\nfoxtrot golf [ROW:0006] hotel india\r\nfoxtrot golf [ROW:0007] hotel india\r\nfoxtrot golf [ROW:0008] hotel india\r\nfoxtrot golf [ROW:0009] hotel india\r\nfoxtrot golf [ROW:0010] hotel india\r\nfoxtrot golf [ROW:0011] hotel india\r\nfoxtrot golf [ROW:0012] hotel india\r\nfoxtrot golf [ROW:0013] hotel india\r\nfoxtrot golf [ROW:0014] hotel india\r\nfoxtrot golf [ROW:0015] hotel india\r\nfoxtrot golf [ROW:0016] hotel india\r\nfoxtrot golf [ROW:0017] hotel india\r\nfoxtrot golf [ROW:0018] hotel india\r\nfoxtrot golf [ROW:0019] hotel india\r\nfoxtrot golf [ROW:0020] hotel india\r\nfoxtrot golf [ROW:0021] hotel india\r\nfoxtrot golf [ROW:0022] hotel india\r\nfoxtrot golf [ROW:0023] hotel india\r\nfoxtrot golf [ROW:0024] hotel india\r\nfoxtrot golf [ROW:0025] hotel india\r\nfoxtrot golf [ROW:0026] hotel india\r\nfoxtrot golf [ROW:0027] hotel india\r\nfoxtrot golf [ROW:0028] hotel india\r\nfoxtrot golf [ROW:0029] hotel india\r\nfoxtrot golf [ROW:0030] hotel india\r\nfoxtrot golf [ROW:0031] hotel india\r\nfoxtrot golf [ROW:0032] hotel india\r\nfoxtrot golf [ROW:0033] hotel india\r\nfoxtrot golf [ROW:0034] hotel india\r\nfoxtrot golf [ROW:0035] hotel india\r\nfoxtrot golf [ROW:0036] hotel india\r\nfoxtrot golf [ROW:0037] hotel india\r\nfoxtrot golf [ROW:0038] hotel india\r\nfoxtrot golf [ROW:0039] hotel india\r\nfoxtrot golf [ROW:0040] hotel india\r\nfoxtrot golf [ROW:0041] hotel india\r\nfoxtrot golf [ROW:0042] hotel india\r\nfoxtrot golf [ROW:0043] hotel india\r\nfoxtrot golf [ROW:0044] hotel india\r\nfoxtrot golf [ROW:0045] hotel india\r\nfoxtrot golf [ROW:0046] hotel india\r\nfoxtrot golf [ROW:0047] hotel india\r\nfoxtrot golf [ROW:0048] hotel india\r\nfoxtrot golf [ROW:0049] hotel india\r\nfoxtrot golf [ROW:0050] hotel india\r\nfoxtrot golf [ROW:0051] hotel india\r\nfoxtrot golf [ROW:0052] hotel india\r\nfoxtrot golf [ROW:0053] hotel india\r\nfoxtrot golf [ROW:0054] hotel india\r\nfo…26750 tokens truncated…\r\nfoxtrot golf [ROW:2947] hotel india\r\nfoxtrot golf [ROW:2948] hotel india\r\nfoxtrot golf [ROW:2949] hotel india\r\nfoxtrot golf [ROW:2950] hotel india\r\nfoxtrot golf [ROW:2951] hotel india\r\nfoxtrot golf [ROW:2952] hotel india\r\nfoxtrot golf [ROW:2953] hotel india\r\nfoxtrot golf [ROW:2954] hotel india\r\nfoxtrot golf [ROW:2955] hotel india\r\nfoxtrot golf [ROW:2956] hotel india\r\nfoxtrot golf [ROW:2957] hotel india\r\nfoxtrot golf [ROW:2958] hotel india\r\nfoxtrot golf [ROW:2959] hotel india\r\nfoxtrot golf [ROW:2960] hotel india\r\nfoxtrot golf [ROW:2961] hotel india\r\nfoxtrot golf [ROW:2962] hotel india\r\nfoxtrot golf [ROW:2963] hotel india\r\nfoxtrot golf [ROW:2964] hotel india\r\nfoxtrot golf [ROW:2965] hotel india\r\nfoxtrot golf [ROW:2966] hotel india\r\nfoxtrot golf [ROW:2967] hotel india\r\nfoxtrot golf [ROW:2968] hotel india\r\nfoxtrot golf [ROW:2969] hotel india\r\nfoxtrot golf [ROW:2970] hotel india\r\nfoxtrot golf [ROW:2971] hotel india\r\nfoxtrot golf [ROW:2972] hotel india\r\nfoxtrot golf [ROW:2973] hotel india\r\nfoxtrot golf [ROW:2974] hotel india\r\nfoxtrot golf [ROW:2975] hotel india\r\nfoxtrot golf [ROW:2976] hotel india\r\nfoxtrot golf [ROW:2977] hotel india\r\nfoxtrot golf [ROW:2978] hotel india\r\nfoxtrot golf [ROW:2979] hotel india\r\nfoxtrot golf [ROW:2980] hotel india\r\nfoxtrot golf [ROW:2981] hotel india\r\nfoxtrot golf [ROW:2982] hotel india\r\nfoxtrot golf [ROW:2983] hotel india\r\nfoxtrot golf [ROW:2984] hotel india\r\nfoxtrot golf [ROW:2985] hotel india\r\nfoxtrot golf [ROW:2986] hotel india\r\nfoxtrot golf [ROW:2987] hotel india\r\nfoxtrot golf [ROW:2988] hotel india\r\nfoxtrot golf [ROW:2989] hotel india\r\nfoxtrot golf [ROW:2990] hotel india\r\nfoxtrot golf [ROW:2991] hotel india\r\nfoxtrot golf [ROW:2992] hotel india\r\nfoxtrot golf [ROW:2993] hotel india\r\nfoxtrot golf [ROW:2994] hotel india\r\nfoxtrot golf [ROW:2995] hotel india\r\nfoxtrot golf [ROW:2996] hotel india\r\nfoxtrot golf [ROW:2997] hotel india\r\nfoxtrot golf [ROW:2998] hotel india\r\nfoxtrot golf [ROW:2999] hotel india\r\nfoxtrot golf [ROW:3000] hotel india\r\n"}
+--- RAW OUTPUT END ---
+
+## exec_command — glob matches
+
+**Call:** `exec_command({"cmd":"rg --files HarnessKnowledge/SystemPromptCapture/TestArtifacts -g \"*.txt\"","workdir":"C:\\AI\\MOSAIC\\MOSAIC"})`
+
+--- RAW OUTPUT START ---
+{"chunk_id":"fabb60","wall_time_seconds":0.1110245,"exit_code":0,"original_token_count":38,"output":"HarnessKnowledge/SystemPromptCapture/TestArtifacts\\varied-content-test.txt\nHarnessKnowledge/SystemPromptCapture/TestArtifacts\\large-file-3000-lines.txt\n"}
+--- RAW OUTPUT END ---
+
+## exec_command — glob no matches
+
+**Call:** `exec_command({"cmd":"rg --files HarnessKnowledge/SystemPromptCapture/TestArtifacts -g \"*.notthere\"","workdir":"C:\\AI\\MOSAIC\\MOSAIC"})`
+
+--- RAW OUTPUT START ---
+{"chunk_id":"776494","wall_time_seconds":0.6715009,"exit_code":1,"original_token_count":0,"output":""}
+--- RAW OUTPUT END ---
+
+## exec_command — grep include
+
+**Call:** `exec_command({"cmd":"rg -n \"DISTINCT_MATCH_TOKEN_ABC\" HarnessKnowledge/SystemPromptCapture/TestArtifacts -g \"varied-content-test.txt\"","workdir":"C:\\AI\\MOSAIC\\MOSAIC"})`
+
+--- RAW OUTPUT START ---
+{"chunk_id":"e75205","wall_time_seconds":0.6732914,"exit_code":0,"original_token_count":32,"output":"HarnessKnowledge/SystemPromptCapture/TestArtifacts\\varied-content-test.txt:19:Line 19: Grep target: DISTINCT_MATCH_TOKEN_ABC\n"}
+--- RAW OUTPUT END ---
+
+## exec_command — long output
+
+**Call:** `exec_command({"cmd":"1..5000","workdir":"C:\\AI\\MOSAIC\\MOSAIC"})`
+
+--- RAW OUTPUT START ---
+{"chunk_id":"81e4df","wall_time_seconds":0.3880555,"exit_code":0,"original_token_count":7224,"output":"Warning: truncated output (original token count: 7224)\nTotal output lines: 5000\n\n1\r\n2\r\n3\r\n4\r\n5\r\n6\r\n7\r\n8\r\n9\r\n10\r\n11\r\n12\r\n13\r\n14\r\n15\r\n16\r\n17\r\n18\r\n19\r\n20\r\n21\r\n22\r\n23\r\n24\r\n25\r\n26\r\n27\r\n28\r\n29\r\n30\r\n31\r\n32\r\n33\r\n34\r\n35\r\n36\r\n37\r\n38\r\n39\r\n40\r\n41\r\n42\r\n43\r\n44\r\n45\r\n46\r\n47\r\n48\r\n49\r\n50\r\n51\r\n52\r\n53\r\n54\r\n55\r\n56\r\n57\r\n58\r\n59\r\n60\r\n61\r\n62\r\n63\r\n64\r\n65\r\n66\r\n67\r\n68\r\n69\r\n70\r\n71\r\n72\r\n73\r\n74\r\n75\r\n76\r\n77\r\n78\r\n79\r\n80\r\n81\r\n82\r\n83\r\n84\r\n85\r\n86\r\n87\r\n88\r\n89\r\n90\r\n91\r\n92\r\n93\r\n94\r\n95\r\n96\r\n97\r\n98\r\n99\r\n100\r\n101\r\n102\r\n103\r\n104\r\n105\r\n106\r\n107\r\n108\r\n109\r\n110\r\n111\r\n112\r\n113\r\n114\r\n115\r\n116\r\n117\r\n118\r\n119\r\n120\r\n121\r\n122\r\n123\r\n124\r\n125\r\n126\r\n127\r\n128\r\n129\r\n130\r\n131\r\n132\r\n133\r\n134\r\n135\r\n136\r\n137\r\n138\r\n139\r\n140\r\n141\r\n142\r\n143\r\n144\r\n145\r\n146\r\n147\r\n148\r\n149\r\n150\r\n151\r\n152\r\n153\r\n154\r\n155\r\n156\r\n157\r\n158\r\n159\r\n160\r\n161\r\n162\r\n163\r\n164\r\n165\r\n166\r\n167\r\n168\r\n169\r\n170\r\n171\r\n172\r\n173\r\n174\r\n175\r\n176\r\n177\r\n178\r\n179\r\n180\r\n181\r\n182\r\n183\r\n184\r\n185\r\n186\r\n187\r\n188\r\n189\r\n190\r\n191\r\n192\r\n193\r\n194\r\n195\r\n196\r\n197\r\n198\r\n199\r\n200\r\n201\r\n202\r\n203\r\n204\r\n205\r\n206\r\n207\r\n208\r\n209\r\n210\r\n211\r\n212\r\n213\r\n214\r\n215\r\n216\r\n217\r\n218\r\n219\r\n220\r\n221\r\n222\r\n223\r\n224\r\n225\r\n226\r\n227\r\n228\r\n229\r\n230\r\n231\r\n232\r\n233\r\n234\r\n235\r\n236\r\n237\r\n238\r\n239\r\n240\r\n241\r\n242\r\n243\r\n244\r\n245\r\n246\r\n247\r\n248\r\n249\r\n250\r\n251\r\n252\r\n253\r\n254\r\n255\r\n256\r\n257\r\n258\r\n259\r\n260\r\n261\r\n262\r\n263\r\n264\r\n265\r\n266\r\n267\r\n268\r\n269\r\n270\r\n271\r\n272\r\n273\r\n274\r\n275\r\n276\r\n277\r\n278\r\n279\r\n280\r\n281\r\n282\r\n283\r\n284\r\n285\r\n286\r\n287\r\n288\r\n289\r\n290\r\n291\r\n292\r\n293\r\n294\r\n295\r\n296\r\n297\r\n298\r\n299\r\n300\r\n301\r\n302\r\n303\r\n304\r\n305\r\n306\r\n307\r\n308\r\n309\r\n310\r\n311\r\n312\r\n313\r\n314\r\n315\r\n316\r\n317\r\n318\r\n319\r\n320\r\n321\r\n322\r\n323\r\n324\r\n325\r\n326\r\n327\r\n328\r\n329\r\n330\r\n331\r\n332\r\n333\r\n334\r\n335\r\n336\r\n337\r\n338\r\n339\r\n340\r\n341\r\n342\r\n343\r\n344\r\n345\r\n346\r\n347\r\n348\r\n349\r\n350\r\n351\r\n352\r\n353\r\n354\r\n355\r\n356\r\n357\r\n358\r\n359\r\n360\r\n361\r\n362\r\n363\r\n364\r\n365\r\n366\r\n367\r\n368\r\n369\r\n370\r\n371\r\n372\r\n373\r\n374\r\n375\r\n376\r\n377\r\n378\r\n379\r\n380\r\n381\r\n382\r\n383\r\n384\r\n385\r\n386\r\n387\r\n388\r\n389\r\n390\r\n391\r\n392\r\n393\r\n394\r\n395\r\n396\r\n397\r\n398\r\n399\r\n400\r\n401\r\n402\r\n403\r\n404\r\n405\r\n406\r\n407\r\n408\r\n409\r\n410\r\n411\r\n412\r\n413\r\n414\r\n415\r\n416\r\n417\r\n418\r\n419\r\n420\r\n421\r\n422…6224 tokens truncated…\r\n4668\r\n4669\r\n4670\r\n4671\r\n4672\r\n4673\r\n4674\r\n4675\r\n4676\r\n4677\r\n4678\r\n4679\r\n4680\r\n4681\r\n4682\r\n4683\r\n4684\r\n4685\r\n4686\r\n4687\r\n4688\r\n4689\r\n4690\r\n4691\r\n4692\r\n4693\r\n4694\r\n4695\r\n4696\r\n4697\r\n4698\r\n4699\r\n4700\r\n4701\r\n4702\r\n4703\r\n4704\r\n4705\r\n4706\r\n4707\r\n4708\r\n4709\r\n4710\r\n4711\r\n4712\r\n4713\r\n4714\r\n4715\r\n4716\r\n4717\r\n4718\r\n4719\r\n4720\r\n4721\r\n4722\r\n4723\r\n4724\r\n4725\r\n4726\r\n4727\r\n4728\r\n4729\r\n4730\r\n4731\r\n4732\r\n4733\r\n4734\r\n4735\r\n4736\r\n4737\r\n4738\r\n4739\r\n4740\r\n4741\r\n4742\r\n4743\r\n4744\r\n4745\r\n4746\r\n4747\r\n4748\r\n4749\r\n4750\r\n4751\r\n4752\r\n4753\r\n4754\r\n4755\r\n4756\r\n4757\r\n4758\r\n4759\r\n4760\r\n4761\r\n4762\r\n4763\r\n4764\r\n4765\r\n4766\r\n4767\r\n4768\r\n4769\r\n4770\r\n4771\r\n4772\r\n4773\r\n4774\r\n4775\r\n4776\r\n4777\r\n4778\r\n4779\r\n4780\r\n4781\r\n4782\r\n4783\r\n4784\r\n4785\r\n4786\r\n4787\r\n4788\r\n4789\r\n4790\r\n4791\r\n4792\r\n4793\r\n4794\r\n4795\r\n4796\r\n4797\r\n4798\r\n4799\r\n4800\r\n4801\r\n4802\r\n4803\r\n4804\r\n4805\r\n4806\r\n4807\r\n4808\r\n4809\r\n4810\r\n4811\r\n4812\r\n4813\r\n4814\r\n4815\r\n4816\r\n4817\r\n4818\r\n4819\r\n4820\r\n4821\r\n4822\r\n4823\r\n4824\r\n4825\r\n4826\r\n4827\r\n4828\r\n4829\r\n4830\r\n4831\r\n4832\r\n4833\r\n4834\r\n4835\r\n4836\r\n4837\r\n4838\r\n4839\r\n4840\r\n4841\r\n4842\r\n4843\r\n4844\r\n4845\r\n4846\r\n4847\r\n4848\r\n4849\r\n4850\r\n4851\r\n4852\r\n4853\r\n4854\r\n4855\r\n4856\r\n4857\r\n4858\r\n4859\r\n4860\r\n4861\r\n4862\r\n4863\r\n4864\r\n4865\r\n4866\r\n4867\r\n4868\r\n4869\r\n4870\r\n4871\r\n4872\r\n4873\r\n4874\r\n4875\r\n4876\r\n4877\r\n4878\r\n4879\r\n4880\r\n4881\r\n4882\r\n4883\r\n4884\r\n4885\r\n4886\r\n4887\r\n4888\r\n4889\r\n4890\r\n4891\r\n4892\r\n4893\r\n4894\r\n4895\r\n4896\r\n4897\r\n4898\r\n4899\r\n4900\r\n4901\r\n4902\r\n4903\r\n4904\r\n4905\r\n4906\r\n4907\r\n4908\r\n4909\r\n4910\r\n4911\r\n4912\r\n4913\r\n4914\r\n4915\r\n4916\r\n4917\r\n4918\r\n4919\r\n4920\r\n4921\r\n4922\r\n4923\r\n4924\r\n4925\r\n4926\r\n4927\r\n4928\r\n4929\r\n4930\r\n4931\r\n4932\r\n4933\r\n4934\r\n4935\r\n4936\r\n4937\r\n4938\r\n4939\r\n4940\r\n4941\r\n4942\r\n4943\r\n4944\r\n4945\r\n4946\r\n4947\r\n4948\r\n4949\r\n4950\r\n4951\r\n4952\r\n4953\r\n4954\r\n4955\r\n4956\r\n4957\r\n4958\r\n4959\r\n4960\r\n4961\r\n4962\r\n4963\r\n4964\r\n4965\r\n4966\r\n4967\r\n4968\r\n4969\r\n4970\r\n4971\r\n4972\r\n4973\r\n4974\r\n4975\r\n4976\r\n4977\r\n4978\r\n4979\r\n4980\r\n4981\r\n4982\r\n4983\r\n4984\r\n4985\r\n4986\r\n4987\r\n4988\r\n4989\r\n4990\r\n4991\r\n4992\r\n4993\r\n4994\r\n4995\r\n4996\r\n4997\r\n4998\r\n4999\r\n5000\r\n"}
+--- RAW OUTPUT END ---
+
+## get_goal — read-only success
+
+**Call:** `get_goal({})`
+
+--- RAW OUTPUT START ---
+{"goal":null,"remainingTokens":null,"completionBudgetReport":null}
+--- RAW OUTPUT END ---
+
+## clock__curr_time — read-only success
+
+**Call:** `clock__curr_time({})`
+
+--- RAW OUTPUT START ---
+{"current_time":"2026-11-18 17:51:54 UTC"}
+--- RAW OUTPUT END ---
+
+## read, glob, grep, edit, write, bash, ask_user, task — Not captured: These named legacy built-in tools are not available in this Codex subagent context. Equivalent shell read/search/bash cases above exercise exec_command only.
+
+## Other visible built-in tools — Not captured: Invoking them would require unrelated external effects, user interaction, or resources unavailable to this capture. The tool inventory is incomplete because the serialized prompt cannot be retrieved.
+
+## functions.exec — success
+
+**Call:** `functions.exec(text("capture probe"))`
+
+--- RAW OUTPUT START ---
+Script completed
+Wall time 0.0 seconds
+Output:
+capture probe
+--- RAW OUTPUT END ---
+
+## functions.exec — error
+
+**Call:** `functions.exec(throw new Error("capture probe error"))`
+
+--- RAW OUTPUT START ---
+Script failed
+Wall time 0.0 seconds
+Output:
+Script error:
+Error: capture probe error
+    at exec_main.mjs:1:7
+--- RAW OUTPUT END ---
+

@@ -1,8 +1,10 @@
 # Configuration Reference
 
 Complete reference for the two configuration files `mosaic-deploy` reads at
-startup. Both live in `MosaicDeploy/config/` at the MOSAIC root and are seeded
-from the templates in `Tools/Deployment/config/` by `task install`.
+startup. Both live in `MosaicDeploy/config/` at the MOSAIC root. A missing file
+is created by the tool itself from the commented templates in
+`Tools/Deployment/config/` (`task install` seeds them too); an existing file is
+never overwritten.
 
 - [The two files](#the-two-files)
 - [tool-config.yaml](#tool-configyaml)
@@ -47,16 +49,15 @@ Both files are optional:
   key takes its zero value, which for `utility_agent_allow_list` means *no*
   utility agents, not *all* of them. This is the one place where "absent file"
   and "present file with the key omitted" differ.
-- If `user-config.yaml` is absent, an empty config applies and the file is
-  created on the first selection you confirm.
+- If `user-config.yaml` is absent, the tool creates it from the commented
+  template; it is updated when you confirm a selection.
 
 An unrecognised key in either file is ignored. A malformed value is a fatal
 startup error.
 
-> **Comments are not preserved in `user-config.yaml`.** The tool rewrites the
-> whole file when it records a selection. All keys survive; your comments do
-> not. Keep notes elsewhere. `tool-config.yaml` is never rewritten, so comments
-> there are safe.
+> **Comments and indentation are preserved.** When the tool records a selection
+> in `user-config.yaml` it rewrites the file, keeping all keys, your comments and
+> the two-space indentation. `tool-config.yaml` is never rewritten.
 
 ---
 
@@ -181,14 +182,24 @@ Valid in **both** config files with identical syntax and semantics.
 A generic agent declares generic tool names (`file_read`, `terminal`, …). Each
 harness descriptor maps those to its own tool names. When an agent declares a
 generic tool the target harness has **no mapping for**, deployment prompts you
-to type a harness-side name for it.
+for the MCP entries that provide it.
 
-Those prompt answers are **not persisted**. Only `tier_models` and
-`custom_model_ids` are written back to `user-config.yaml`. So the same prompt
-returns on every deploy and every update, forever.
+After you answer, interactive Deploy (deploy, agents, workflows, update and
+transform) offers to remember the answer. Accepting writes a `tool_destinations`
+entry for that harness (in transform, the target harness) to `user-config.yaml`
+that reproduces your answer; declining saves nothing and does not change the run.
+Later runs on that harness, also in another workspace, no longer ask for the tool.
+A failed save is a warning and the run continues. The offer is made only for
+built-in and descriptor harnesses, and never in non-interactive CLI runs
+(for example `--auto-confirm`), which keep their TODO file and exit code. Saving
+changes the tool-mapping version stamp like any `tool_destinations` change, so
+deployed agents report the change at their next update.
 
-Declaring the mapping in `tool_destinations` answers it permanently: the tool is
-now *mapped*, so it is never asked about again.
+Besides `tool_destinations`, only `tier_models` and `custom_model_ids` are
+written back to `user-config.yaml` by prompts.
+
+Declaring the mapping in `tool_destinations` by hand answers it permanently in the
+same way: the tool is now *mapped*, so it is never asked about again.
 
 It also answers the mirror-image question. During `promote` (deployed agent →
 generic), a harness-side tool with no reverse mapping prompts "which generic
@@ -440,18 +451,24 @@ Every deployed agent's frontmatter carries a `tool_mappings_version: <hex>`
 field. This is bookkeeping written by the deployment tool, not something you
 author or edit:
 
-- **What it is** — a content hash of the effective `tool_destinations`
-  mappings for that agent's harness.
-- **Where it comes from** — both config files combined: the project-level
-  `tool-config.yaml` and the user-level `user-config.yaml`, per harness.
-- **What it is for** — letting `update` detect that a harness's tool mappings
-  changed without re-diffing the full tool list. Editing `tool_destinations`
-  changes the hash, so already-deployed agents are correctly detected as
-  stale on the next `update` and regenerated with the new mappings. You do
-  not need to redeploy from scratch.
-- **Empty is normal** — when neither config file declares any mappings for a
-  harness, the hash is empty, so agents deployed before this feature existed
-  do not report spurious staleness.
+- **What it is** — a content hash of the tool settings that shape an agent's
+  tools field for its harness: the harness descriptor's tool data (shape,
+  tool universe and unused-tool dispositions, name mappings, MCP name forms,
+  custom-tool destinations, placeholder expansion, rules) plus the harness's
+  `tool_destinations` from the config files.
+- **Where it comes from** — the harness descriptor shipped with the release,
+  and both config files combined: the project-level `tool-config.yaml` and
+  the user-level `user-config.yaml`, per harness.
+- **What it is for** — letting `update` detect that a harness's tool settings
+  changed without re-diffing the full tool list. Editing `tool_destinations`,
+  or upgrading to a release whose descriptor changed its tool data, changes
+  the hash, so already-deployed agents are correctly detected as stale on the
+  next `update` and regenerated with the new settings. You do not need to
+  redeploy from scratch.
+- **Never empty** — every deployed agent carries a stamp, also when no config
+  file declares any mappings. The first `update` after a release that changed
+  how the stamp is computed rewrites each agent once; after that, consecutive
+  runs are clean.
 - **Safe to ignore, do not hand-edit** — the value has no meaning to read by
   eye; hand-editing it only causes incorrect staleness detection on the next
   `update`. Leave it alone.
@@ -544,6 +561,8 @@ Built-in harness IDs, for use as `tool_destinations` keys:
 | `opencode` | OpenCode | permission (allow/deny map) |
 | `ghcp-cli` | GHCP CLI / VS Code GHCP Copilot | list |
 | `vscode-ghcp` | VS Code GHCP Local | list |
+| `codex` | Codex (experimental) | no tools key; tool grants expressed via sandbox_mode, web_search and network access |
+| `opencode-v2` | OpenCode V2 (experimental) | rules (ordered permission rule list: deny by default, one allow per declared action, `external_directory` asks) |
 
 A descriptor-only or external harness uses the `id:` declared in its
 `harness.yaml`.

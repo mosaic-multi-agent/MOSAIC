@@ -40,7 +40,10 @@ func (s *Service) readSource(ctx context.Context, src domain.Source, digestFiles
 	logFindings = append(logFindings, enumFindings...)
 	logFindings = append(logFindings, readFindings...)
 	logFindings = append(logFindings, aggFindings...)
+	logFindings = append(logFindings, analysis.OverlappingStartFindings(streams)...)
+	logFindings = append(logFindings, analysis.DispatchWithoutInvocationFindings(streams, agg)...)
 	logFindings = append(logFindings, s.alarmFindings(ctx, src, agg)...)
+	logFindings = append(logFindings, s.transcriptFindings(ctx, inv, streams)...)
 
 	// Merge digest runs into the aggregate. Load-time findings (skipped or
 	// duplicate digests) join the report's findings but are never exported.

@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"mosaic-common/agentfields"
 	"mosaic-common/docformat"
-	"mosaic-deploy/internal/agentfields"
 	"mosaic-deploy/internal/catalog"
 	"mosaic-deploy/internal/domain"
 )
@@ -37,7 +37,7 @@ func bundleConformance(
 		}
 
 		// Parse the deployed file to read the role from frontmatter.
-		doc, err := docformat.Parse(rawBody)
+		doc, err := ParseGenericSource(rawBody)
 		if err != nil {
 			continue // unparseable deployed file — skip silently
 		}

@@ -7,9 +7,9 @@ package builtin_test
 //
 // Coverage:
 //
-//   Model block retirement (four harnesses):
-//   - No builtin descriptor (claude-code, opencode, ghcp-cli, vscode-ghcp) declares a
-//     models: block; model data comes from the shared catalog.
+//   Model block declaration (five harnesses):
+//   - Every builtin descriptor (claude-code, opencode, ghcp-cli, vscode-ghcp, codex)
+//     declares a models: block; the descriptors are the source of model data.
 //
 //   Key order preservation (three harnesses):
 //   - mosaic_orchestrator_injections_version is present in FrontmatterSpec.KeyOrder for every
@@ -29,8 +29,10 @@ package builtin_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"mosaic-common/harness/builtindesc"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
 )
@@ -39,20 +41,25 @@ import (
 // Helpers
 // ─────────────────────────────────────────────────────────────────
 
-// loadEmbeddedDescriptor reads and parses the embedded descriptor YAML for the named
-// builtin harness. dir is the subdirectory under internal/harness/builtin/; file is
-// the YAML filename inside it.
-func loadEmbeddedDescriptor(t *testing.T, dir, file string) *domain.HarnessDescriptor {
+// builtinSource returns the raw descriptor YAML of a builtin harness from the shared Common
+// descriptor package. A missing descriptor fails the test; it is never skipped.
+func builtinSource(t *testing.T, id string) []byte {
 	t.Helper()
-	root := repoRoot(t) // declared in noinjections_test.go, same package
-	path := filepath.Join(root, "Tools", "Deployment", "internal", "harness", "builtin", dir, file)
-	src, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read embedded descriptor %s: %v", path, err)
+	src, ok := builtindesc.Raw(id)
+	if !ok || len(src) == 0 {
+		t.Fatalf("builtin descriptor %s missing from Common", id)
 	}
-	d, err := descriptor.Parse(src, path)
+	return src
+}
+
+// loadEmbeddedDescriptor parses the descriptor of the builtin harness whose YAML file name
+// is file (for example "claude-code.yaml").
+func loadEmbeddedDescriptor(t *testing.T, file string) *domain.HarnessDescriptor {
+	t.Helper()
+	id := strings.TrimSuffix(file, ".yaml")
+	d, err := descriptor.Parse(builtinSource(t, id), "builtin:"+id)
 	if err != nil {
-		t.Fatalf("parse embedded descriptor %s: %v", path, err)
+		t.Fatalf("parse builtin descriptor %s: %v", id, err)
 	}
 	return d
 }
@@ -101,41 +108,37 @@ func indexInSlice(slice []string, name string) int {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Model block retirement (all builtin harnesses)
+// Model block declaration (all builtin harnesses)
 // ─────────────────────────────────────────────────────────────────
 
-// TestDescriptorConsolidation_BuiltinHarnesses_ModelsBlockRetired verifies that the four
-// builtin descriptors (claude-code, opencode, ghcp-cli, vscode-ghcp) no longer declare a
-// models: block in their YAML. Model data for these harnesses is sourced exclusively
-// from the shared catalog via the registry ModelCatalog hook. An accidentally re-added
-// models: block would create a silent disagreement between the YAML and the shared catalog.
-func TestDescriptorConsolidation_BuiltinHarnesses_ModelsBlockRetired(t *testing.T) {
+// TestDescriptorConsolidation_BuiltinHarnesses_DeclareModelsBlock verifies that every
+// builtin descriptor (claude-code, opencode, ghcp-cli, vscode-ghcp, codex) declares a
+// models: block with at least one id and a format hint. The descriptors are the single
+// source of model data; Common derives its model catalogs from them.
+func TestDescriptorConsolidation_BuiltinHarnesses_DeclareModelsBlock(t *testing.T) {
 	cases := []struct {
 		harness string
-		dir     string
 		file    string
 	}{
-		{harness: "claude-code", dir: "claudecode", file: "claude-code.yaml"},
-		{harness: "opencode", dir: "opencode", file: "opencode.yaml"},
-		{harness: "ghcp-cli", dir: "ghcpcli", file: "ghcp-cli.yaml"},
-		{harness: "vscode-ghcp", dir: "vscodeghcp", file: "vscode-ghcp.yaml"},
+		{harness: "claude-code", file: "claude-code.yaml"},
+		{harness: "opencode", file: "opencode.yaml"},
+		{harness: "ghcp-cli", file: "ghcp-cli.yaml"},
+		{harness: "vscode-ghcp", file: "vscode-ghcp.yaml"},
+		{harness: "codex", file: "codex.yaml"},
+		{harness: "opencode-v2", file: "opencode-v2.yaml"},
 	}
 
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.harness, func(t *testing.T) {
-			d := loadEmbeddedDescriptor(t, tc.dir, tc.file)
-			if len(d.Models.IDs) != 0 {
-				t.Errorf("%s: descriptor Models.IDs is non-empty (%v); "+
-					"the models: block must be retired from builtin harness YAML descriptors; "+
-					"model data for this harness now comes exclusively from the shared catalog",
-					tc.harness, d.Models.IDs)
+			d := loadEmbeddedDescriptor(t, tc.file)
+			if len(d.Models.IDs) == 0 {
+				t.Errorf("%s: descriptor Models.IDs is empty; "+
+					"every builtin descriptor must declare its model ids", tc.harness)
 			}
-			if d.Models.FormatHint != "" {
-				t.Errorf("%s: descriptor Models.FormatHint = %q; "+
-					"the models: block must be retired from builtin harness YAML descriptors; "+
-					"model data comes from the shared catalog",
-					tc.harness, d.Models.FormatHint)
+			if d.Models.FormatHint == "" {
+				t.Errorf("%s: descriptor Models.FormatHint is empty; "+
+					"every builtin descriptor must declare its model format hint", tc.harness)
 			}
 		})
 	}
@@ -152,24 +155,35 @@ func TestDescriptorConsolidation_BuiltinHarnesses_ModelsBlockRetired(t *testing.
 func TestDescriptorConsolidation_MosaicOrchestratorInjectionsVersionAbsentFromKeyOrder(t *testing.T) {
 	cases := []struct {
 		harness string
-		dir     string
 		file    string
 	}{
-		{harness: "claude-code", dir: "claudecode", file: "claude-code.yaml"},
-		{harness: "ghcp-cli", dir: "ghcpcli", file: "ghcp-cli.yaml"},
-		{harness: "vscode-ghcp", dir: "vscodeghcp", file: "vscode-ghcp.yaml"},
+		{harness: "claude-code", file: "claude-code.yaml"},
+		{harness: "ghcp-cli", file: "ghcp-cli.yaml"},
+		{harness: "vscode-ghcp", file: "vscode-ghcp.yaml"},
+		{harness: "codex", file: "codex.yaml"},
 	}
 
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.harness, func(t *testing.T) {
-			d := loadEmbeddedDescriptor(t, tc.dir, tc.file)
+			d := loadEmbeddedDescriptor(t, tc.file)
 			if containsStr(d.Frontmatter.KeyOrder, "mosaic_orchestrator_injections_version") {
 				t.Errorf("%s: Frontmatter.KeyOrder contains \"mosaic_orchestrator_injections_version\"; "+
 					"Stage 2 relocated this version to region tag attributes — it must not appear in key_order\n  KeyOrder: %v",
 					tc.harness, d.Frontmatter.KeyOrder)
 			}
 		})
+	}
+}
+
+// TestDescriptorConsolidation_Codex_HasNonEmptyModelList verifies that the Codex
+// embedded descriptor carries a non-empty model list.
+func TestDescriptorConsolidation_Codex_HasNonEmptyModelList(t *testing.T) {
+	d := loadEmbeddedDescriptor(t, "codex.yaml")
+	if len(d.Models.IDs) == 0 {
+		t.Errorf("codex: Models.IDs is empty; " +
+			"Codex must declare its model list in the embedded YAML; " +
+			"the four expected model IDs are gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna")
 	}
 }
 
@@ -182,7 +196,7 @@ func TestDescriptorConsolidation_MosaicOrchestratorInjectionsVersionAbsentFromKe
 // and TaskStop, in that order. The public copy already declares this; the embedded copy
 // currently maps only to Task. This test fails until I1.2 is applied.
 func TestDescriptorConsolidation_ClaudeCode_SubagentMapsToTaskAndTaskStop(t *testing.T) {
-	d := loadEmbeddedDescriptor(t, "claudecode", "claude-code.yaml")
+	d := loadEmbeddedDescriptor(t, "claude-code.yaml")
 
 	var subagentMapping *domain.ToolMapping
 	for i, m := range d.Tools.Mappings {
@@ -218,7 +232,7 @@ func TestDescriptorConsolidation_ClaudeCode_SubagentMapsToTaskAndTaskStop(t *tes
 // and shape makes emission order deterministic and keeps TaskStop adjacent to Task in
 // all rendered tool lists. This test fails until I1.2 is applied.
 func TestDescriptorConsolidation_ClaudeCode_TaskStopInUniverse(t *testing.T) {
-	d := loadEmbeddedDescriptor(t, "claudecode", "claude-code.yaml")
+	d := loadEmbeddedDescriptor(t, "claude-code.yaml")
 
 	taskIdx := indexInUniverse(d.Tools.Universe, "Task")
 	if taskIdx < 0 {
@@ -251,7 +265,7 @@ func TestDescriptorConsolidation_ClaudeCode_TaskStopInUniverse(t *testing.T) {
 // an orchestrator uses the {tool-permissions} placeholder, the expansion must include
 // TaskStop so orchestrator agents receive it. This test fails until I1.2 is applied.
 func TestDescriptorConsolidation_ClaudeCode_TaskStopInPlaceholderExpansion(t *testing.T) {
-	d := loadEmbeddedDescriptor(t, "claudecode", "claude-code.yaml")
+	d := loadEmbeddedDescriptor(t, "claude-code.yaml")
 
 	taskIdx := indexInSlice(d.Tools.PlaceholderExpansion, "Task")
 	if taskIdx < 0 {

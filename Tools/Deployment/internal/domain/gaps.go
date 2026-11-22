@@ -77,6 +77,11 @@ const (
 	// GapUnknownHarnessTool reports a tool name written into an agent for a harness that ignores
 	// unknown names. Subject: the tool name. Owner: the agent key. Todo category: TodoToolMappings.
 	GapUnknownHarnessTool GapKind = "unknown-harness-tool"
+
+	// GapToolCapabilityWithheld reports a generic tool whose capability the harness module
+	// deliberately did not grant the agent. Subject: the generic tool; Owner: the agent key.
+	// Todo category: TodoToolMappings.
+	GapToolCapabilityWithheld GapKind = "tool-capability-withheld"
 )
 
 // Gap is produced by transform, plan, and deploy when a decision could not be made automatically.

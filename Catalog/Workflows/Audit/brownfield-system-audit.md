@@ -36,6 +36,30 @@ artifacts:
 
 ---
 
+## Flow
+
+Solid arrows: the happy path (`On Success`). `[HITL]`: a human stop. `codebase-research(architecture)` forks into two branches; the run ends when both audits have finished. No fix targets: the audit findings are the deliverable.
+
+```mermaid
+flowchart TD
+    subgraph RESEARCH
+        RF["requirements-refinement [HITL]"] --> CR["codebase-research"]
+        CR --> CRA["codebase-research(architecture)"]
+        CRC["codebase-research(contracts)"]
+    end
+    subgraph EXECUTION
+        AA["architecture-audit"]
+        CA["contracts-audit"]
+    end
+    CRA -- fork --> AA
+    CRA -- fork --> CRC
+    CRC --> CA
+    AA --> DONE(["ArchitectureAudit.md + ContractsAudit.md"])
+    CA --> DONE
+```
+
+---
+
 ## Design Rationale
 
 An essential trim of `brownfield-pr-audit`: keeps its fixed architecture and contracts audit tracks (the high-level, whole-codebase passes) but drops the staged per-file audit tracks (tests-audit, implementation-audit) and the entire PR comment integration layer (audit-to-pull-request, audit-response-merger, pull-request-comment-interface). What's left is a cheap, high-level pass meant to identify problem areas before paying for expensive per-file analysis — its output (ArchitectureAudit.md, ContractsAudit.md) can guide follow-up per-component PR audits.

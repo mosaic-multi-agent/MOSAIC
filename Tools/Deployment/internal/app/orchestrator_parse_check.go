@@ -5,25 +5,27 @@ package app
 // agent, instead of planning an ordinary update over it.
 
 import (
-	"os"
 	"path/filepath"
 
-	"mosaic-common/docformat"
 	"mosaic-deploy/internal/domain"
 )
 
-// unreadableAgentProblem returns why the file at targetPath is no agent document (it does not
-// parse or has no frontmatter), or "" when state shows no file at targetPath itself (absent, or
-// read from a legacy file) or the file reads as an agent document.
-func unreadableAgentProblem(workspace, targetPath string, state domain.DeployedArtifactState) string {
+// unreadableAgentProblem returns why the file at targetPath is no agent document (it cannot be
+// read or decoded in the harness's agent format, does not parse, or has no frontmatter), or ""
+// when state shows no file (absent) or the file reads as an agent document. The file is read through the decode funnel, so a
+// non-Markdown agent format (such as Codex TOML) is judged in its canonical form.
+func unreadableAgentProblem(workspace, targetPath string, state domain.DeployedArtifactState, src *domain.HarnessDescriptor) string {
 	if !state.Present || state.ParseFailed {
 		return ""
 	}
-	data, err := os.ReadFile(filepath.Join(workspace, filepath.FromSlash(targetPath)))
-	if err != nil {
+	read := readDeployedArtifact(filepath.Join(workspace, filepath.FromSlash(targetPath)), domain.ArtifactAgent, src)
+	if !read.Present || read.ReadErr != nil {
 		return ""
 	}
-	doc, err := docformat.Parse(data)
+	if read.DecodeErr != nil {
+		return read.DecodeErr.Error()
+	}
+	doc, err := ParseGenericSource(read.Canonical)
 	if err != nil {
 		return err.Error()
 	}

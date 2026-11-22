@@ -1,0 +1,73 @@
+schema_version: "1"
+id: mosaic-logger
+version: 1.0.0
+description: >-
+  Fixture hook bundle shaped like a session-logging hook: four supported
+  harness variants with their own files and registration steps.
+
+variants:
+  claude-code:
+    supported: true
+    files:
+      - source: adapter.py
+        target: adapter.py
+      - source: adapter_core.py
+        target: adapter_core.py
+    registration:
+      - id: register-mosaic-logger
+        target_path: .claude/settings.json
+        performable: true
+        instruction: >-
+          Check that the hooks section of .claude/settings.json has every
+          entry below.
+        fragment: |
+          {
+            "hooks": {
+              "SessionStart": []
+            }
+          }
+
+  opencode:
+    supported: true
+    files:
+      - source: plugin.js
+        target: plugin.js
+    registration: []
+
+  vscode-ghcp:
+    supported: true
+    files:
+      - source: vscode_adapter.py
+        target: vscode_adapter.py
+    registration:
+      - id: register-mosaic-logger
+        target_path: .github/hooks/mosaic-logger.json
+        performable: true
+        instruction: >-
+          Replace the contents of .github/hooks/mosaic-logger.json with the
+          JSON below.
+        fragment: |
+          {
+            "hooks": {
+              "SessionStart": []
+            }
+          }
+
+  ghcp-cli:
+    supported: true
+    files:
+      - source: cli_adapter.py
+        target: cli_adapter.py
+    registration:
+      - id: register-mosaic-logger
+        target_path: .github/hooks/mosaic-logger.json
+        performable: true
+        instruction: >-
+          Replace the contents of .github/hooks/mosaic-logger.json with the
+          JSON below.
+        fragment: |
+          {
+            "hooks": {
+              "sessionStart": []
+            }
+          }

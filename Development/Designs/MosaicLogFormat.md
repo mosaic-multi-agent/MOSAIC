@@ -2,7 +2,7 @@
 
 > **Status:** Draft for review
 > **Created:** 2026-07-27
-> **Last Updated:** 2026-10-31
+> **Last Updated:** 2026-11-14
 > **Scope:** The canonical log event schema, the on-disk artifact layout, run identity, and the merge utility's contract. 
 
 ---
@@ -66,7 +66,7 @@ These twelve event types are the complete set in schema version 1. A human promp
 | `schema_version` | string | Required | See §6. |
 | `event` | enum (§3.1) | Required | Discriminator field. |
 | `timestamp` | string (ISO 8601) | Required | Time the adapter captured/emitted the event. **Exception:** on a `usage_record` with `source: "otel"` it is the start time of the API call, taken from the span (§4.7); on a `ghcp-cli` `usage_record` read from the session transcript it is the start time of the API call, the transcript event's timestamp minus the call's `duration` in milliseconds (§4.8); on a `claude-code` `usage_record` it is the start time of the API call, the timestamp of the first transcript line of the API message (`message.id`) that has a usable one (UTC, milliseconds, `Z`), with no duration subtracted because the Claude Code transcript carries none, and it is the hook-firing time when no line of the message has a usable timestamp; on an `opencode` `usage_record` it is the start time of the message, `info.time.created` read as epoch milliseconds, and the observation time when that value is absent or unusable. |
-| `harness` | enum: `"claude-code"` \| `"opencode"` \| `"vscode-ghcp"` \| `"ghcp-cli"` | Required | Which harness adapter emitted this entry. |
+| `harness` | enum: `"claude-code"` \| `"opencode"` \| `"opencode-v2"` \| `"vscode-ghcp"` \| `"ghcp-cli"` | Required | Which harness adapter emitted this entry. |
 | `session_id` | string | Optional | Harness-native session identifier, normalized to this single field name regardless of the harness's native casing. |
 | `run_id` | string | Optional | Identifier of the orchestration run, when determinable. Primary correlation key for the merge utility — see §4. |
 
@@ -122,6 +122,12 @@ No `duration_ms` field — see §3.5.
 | `agent_type` | string | Optional | Bare agent name (e.g., `"RequirementsRefinement"`). May be unreliable on some harnesses; adapters must not attempt to work around known harness bugs here, and consumers must tolerate incorrect values. |
 | `prompt` | string | Optional | Full invocation prompt text sent to the subagent. |
 | `spawn_call_id` | string | Optional | Harness-native ID of the tool call that spawned this invocation (`runSubagent`, `task`, `Agent` and similar), in the form the harness's other records use for that call, so a consumer can join on it without adapter state. Adapters strip harness-specific decorations that the other records don't carry; which ones is adapter design. Omitted when the harness doesn't expose it, and in Runner mode, where each process is its own invocation. Used by the OTel ingest (§4.7). |
+
+**Invocation identity rules** (native mode):
+- An invocation's `agent_instance_id` must belong to that invocation's own dispatch. Where the harness reports the started agent's type, an instance id is taken only from a dispatch of that type; correlation by arrival order alone is not enough when dispatches are parallel or starts arrive late.
+- A dispatch is captured before its agent starts. A harness does not wait for an async hook, so the dispatch capture runs in a synchronous hook. In Claude Code an async `PreToolUse` let `SubagentStart` reach the queue first. That start fell back to a unique id, and the late entry was then consumed by the next start of the same type. On Claude Code this means a synchronous `PreToolUse` registration limited to the dispatch tools, which does only the capture. The catch-all `PreToolUse` registration stays async, because in orchestrator scope it re-reads the transcript on every tool call.
+- One harness agent is one invocation. A start event for a harness agent the adapter has already mapped (a resume, or a harness re-firing the start of an agent that already finished) continues that invocation: same `agent_instance_id`, same folder and stream. It neither consumes a pending dispatch nor writes usage records a second time.
+- When no instance id can be resolved, the adapter uses the unique fallback described for `agent_instance_id` above. Unresolved invocations never share one folder.
 
 **`invocation_end`**
 
@@ -383,6 +389,7 @@ An adapter is in Runner mode only when `MOSAIC_ROLE` is set. Without it the adap
   - Subagent role: no synthetic closing `tool_call_end` for a dispatching `task` call, and no orchestrator transcript refresh on invocation start/end.
   - Orchestrator role: no `run_start`/`run_end`; `session_start` omits any run id extracted from history (`MOSAIC_RUN_ID` is authoritative); no durable closed-session marker (exactly-once is per process).
   - `04_session.raw`/`04_session.meta.json` (and the session-scoped orchestrator transcript) exist only when the SDK returns messages during the session; each refresh writes the raw file and then the sidecar (the commit marker) synchronously once the SDK returns, so the final refresh is lost only if that SDK call has not returned when the process exits (not observed on OpenCode 1.18.18). `02_output.md` is best-effort.
+- Codex (Runner-only harness, no hook adapter): the Runner writes `run_start` and `run_end` as for every harness; nothing else is written, so a Codex run has no invocation folders, turns, tool events, usage records or transcript exports. Native Codex orchestration is not supported, so there is no native mode either.
 
 **OpenCode safety net.** After an OpenCode subagent process has exited, the Runner appends an `invocation_end` (`agent_instance_id`, `status_code` and `response` from the protocol response it received) when the invocation folder exists without one. It is re-evaluated, and dropped together with its call in the Runner's adapter construction, once live Runner runs on OpenCode show it never fires, that is, every invocation folder already holds the plugin's own `invocation_end`.
 
@@ -475,6 +482,7 @@ Every event carries `schema_version` in its common envelope (§3.3).
 - `mosaic-logger` 1.11.0: an `opencode` `usage_record` is timestamped with the message start (`info.time.created`, epoch milliseconds) instead of the time of each observation, so every re-emitted copy of a message carries one timestamp; the observation time is the fallback when `time.created` is absent or unusable (§3.3). Field and format are unchanged, so `usage_record` stays at `1.7.0`.
 - `mosaic-logger` 1.11.0: a session is bound to a run only by a MOSAIC dispatch, Runner `MOSAIC_RUN_ID`, the native env fallback or its existing binding; quoted run ids in user prompts, replies and notifications no longer bind, and the shared orchestrator transcript is no longer replaced by a different session (§4.2). The `.meta.json` sidecar of the shared orchestrator transcript gains the optional `session_id` field; no event field changes.
 - `mosaic-logger` 1.11.1: the `claude-code` hook reads the `prompt` field of the `UserPromptSubmit` payload, so the user turns of a native orchestrator session and of a Runner-hosted orchestrator session, and the prompt turn of a Runner-mode subagent log, are recorded as `turn` events with role `user`. No event field or format changes; `turn` keeps its version and the schema version does not change.
+- `mosaic-logger` 1.12.0 and Runner 1.14.0: the envelope `harness` admits `opencode-v2`, written by the OpenCode V2 adapter and by the Runner for its OpenCode V2 runs. A harness value adds no event type or field and changes no event shape, so the schema version does not change; a consumer that does not know the value still reads the events under the consumer rule and may report the harness as unknown.
 
 Adapters emit the highest version whose fields they implement; an adapter that does not produce the 1.2.0 sub-fields keeps emitting its earlier version. A version covers its fields as a set of things the adapter implements, not as fields that must appear on every event: an adapter that implements 1.3.0 but cannot know the provider in a given run still emits 1.3.0 and omits `provider`. The version is per event, so an event type added in a version (for example `usage_record` in 1.1.0) is never written with an earlier version.
 

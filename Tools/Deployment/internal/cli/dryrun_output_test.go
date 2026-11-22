@@ -362,7 +362,7 @@ func TestDeployDryRunAutoConfirmStrictJson_KeepsDocumentFields(t *testing.T) {
 	}
 	sort.Strings(keys)
 	want := []string{"Actions", "ConflictReport", "DeploymentRoot", "External", "Fallback", "Harness", "LogDegraded",
-		"Logs", "Mode", "Outcome", "StackInEffect", "TodoFilePath", "Todos", "WorkspacePath"}
+		"Logs", "Mode", "Outcome", "OwnedKeyDifferences", "StackInEffect", "TodoFilePath", "Todos", "WorkspacePath"}
 	if !reflect.DeepEqual(keys, want) {
 		t.Errorf("JSON top-level fields = %v, want %v", keys, want)
 	}

@@ -23,9 +23,9 @@ const settingsTemplate = `# MosaicLogAnalyzer analysis settings
 #   the split are priced as reported.
 #
 # A harness key is the harness name as logged (claude-code, ghcp-cli,
-# opencode, vscode-ghcp). A harness list written here REPLACES that harness's
-# default list; an empty list ([]) means no tools. A harness you do not list
-# keeps its default list.
+# opencode, opencode-v2, vscode-ghcp). A harness list written here REPLACES
+# that harness's default list; an empty list ([]) means no tools. A harness
+# you do not list keeps its default list.
 #
 # A tool name is exact, or a pattern where '*' matches any run of characters
 # (including none), for example "mcp__contact-user__*". Every other character
@@ -36,6 +36,7 @@ const settingsTemplate = `# MosaicLogAnalyzer analysis settings
 #     claude-code:  Write, Edit, MultiEdit, NotebookEdit
 #     ghcp-cli:     create, edit
 #     opencode:     apply_patch
+#     opencode-v2:  write, edit, patch
 #     vscode-ghcp:  create_file, replace_string_in_file,
 #                   multi_replace_string_in_file, insert_edit_into_file,
 #                   apply_patch, edit_notebook_file, edit/createFile,
@@ -44,12 +45,14 @@ const settingsTemplate = `# MosaicLogAnalyzer analysis settings
 #     claude-code:  AskUserQuestion
 #     ghcp-cli:     ask_user
 #     opencode:     question
+#     opencode-v2:  question
 #     vscode-ghcp:  vscode/askQuestions, askQuestions, vscode_askQuestions
 #
 # Verification status of the defaults
 #   claude-code: verified (Write, Edit and AskUserQuestion seen in real logs).
 #   ghcp-cli: UNVERIFIED defaults; from captured system prompts, not real MOSAIC logs.
 #   opencode: UNVERIFIED defaults; from captured system prompts, not real MOSAIC logs.
+#   opencode-v2: UNVERIFIED defaults; from the OpenCode V2 tool list, not real MOSAIC logs.
 #   vscode-ghcp: partly verified (create_file, replace_string_in_file,
 #     multi_replace_string_in_file and vscode_askQuestions seen in real logs).
 #     The other vscode-ghcp names are UNVERIFIED; they come from agent

@@ -231,10 +231,7 @@ func (s *DeployAgentScreen) buildLevelWidget(node *AgentTreeNode) {
 		}
 	}
 
-	dw := s.width - lw - 1
-	if dw < 10 {
-		dw = 10
-	}
+	_, dw := splitListWidths(s.width)
 	detailStyles := widgets.DetailPaneStyles{
 		Title:  s.styles.Subtitle,
 		Body:   s.styles.Body,
@@ -463,12 +460,18 @@ func (s *DeployAgentScreen) View() string {
 		return strings.Join([]string{title, border, emptyLine}, "\n")
 	}
 
+	summary := s.renderSummary()
+	help := s.renderHelp()
+	validation := validationLine(s.styles.Error, s.width, s.validationMsg)
+
 	var content string
 	switch {
 	case s.levelList != nil:
+		fitList(s.levelList, s.width, s.height, len(s.levelRows), title, border, border, summary, validation, help)
 		content = s.levelList.View()
 	case s.levelMultisel != nil:
-		lw := uaListWidth(s.width)
+		fitMultiSelect(s.levelMultisel, s.detail, s.width, s.height, len(s.levelRows), title, border, border, summary, validation, help)
+		lw, _ := splitListWidths(s.width)
 		sep := s.styles.Border.Render("│")
 		content = lipgloss.JoinHorizontal(
 			lipgloss.Top,
@@ -478,12 +481,9 @@ func (s *DeployAgentScreen) View() string {
 		)
 	}
 
-	summary := s.renderSummary()
-	help := s.renderHelp()
-
 	parts := []string{title, border, content, border, summary}
-	if s.validationMsg != "" {
-		parts = append(parts, s.styles.Error.Width(s.width).Render(s.validationMsg))
+	if validation != "" {
+		parts = append(parts, validation)
 	}
 	parts = append(parts, help)
 	return strings.Join(parts, "\n")
@@ -500,7 +500,7 @@ func (s *DeployAgentScreen) renderSummary() string {
 		noun = "agents"
 	}
 	label := fmt.Sprintf("Selected %d %s: %s", len(ids), noun, strings.Join(ids, ", "))
-	return s.styles.Success.Width(s.width).Render(label)
+	return oneLineSummary(s.styles.Success, s.width, label)
 }
 
 // renderHelp returns the context-sensitive help bar matching the active bindings at
@@ -561,10 +561,7 @@ func (s *DeployAgentScreen) Resize(width, height int) {
 	s.height = height
 	lh := uaListHeight(height)
 	lw := uaListWidth(width)
-	dw := width - lw - 1
-	if dw < 10 {
-		dw = 10
-	}
+	_, dw := splitListWidths(width)
 	if s.levelList != nil {
 		s.levelList.Resize(lh, lw)
 	}

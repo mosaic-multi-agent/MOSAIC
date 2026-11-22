@@ -11,8 +11,9 @@ const (
 
 // Debug log event names of the in-run requests.
 const (
-	EventTUIRequestSet         = "tui.request.set"
-	EventTUIRequestCancelled   = "tui.request.cancelled"
-	EventTUIRequestDiscarded   = "tui.request.discarded"
-	EventSessionRequestApplied = "session.request.applied"
+	EventTUIRequestSet           = "tui.request.set"
+	EventTUIRequestCancelled     = "tui.request.cancelled"
+	EventTUIRequestDiscarded     = "tui.request.discarded"
+	EventSessionRequestApplied   = "session.request.applied"
+	EventSessionRequestCancelled = "session.request.cancelled"
 )

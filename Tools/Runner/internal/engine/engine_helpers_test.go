@@ -84,7 +84,7 @@ package engine_test
 //   - auto-review + non-CNA non-SUCCESS → DeviationDecision.
 //
 //   Review artifact injection (Stage 2, auto-review only):
-//   - auto-review CNA auto-route-back: LastOutputArtifacts injected into dispatched InputArtifacts.
+//   - auto-review CNA auto-route-back: previous-step outputs injected into dispatched InputArtifacts.
 //   - Injected artifacts appear after table-row entries, not before.
 //   - Paths already in table InputArtifacts are not duplicated by injection.
 //   - SUCCESS-routed dispatches never carry injected artifacts.

@@ -1,0 +1,30 @@
+{
+  "data": [
+    {
+      "info": {
+        "id": "msg_1",
+        "role": "user",
+        "summary": {
+          "title": "synthetic",
+          "diffs": [
+            {"file": "a.go", "before": "package a", "after": "package a // changed", "additions": 1, "deletions": 0},
+            {"file": "b.go", "before": "", "after": "package b", "additions": 1, "deletions": 0}
+          ]
+        }
+      },
+      "parts": [
+        {"id": "p1", "type": "text", "text": "agent_instance_id: implementation-tdd#28"},
+        {"id": "p2", "type": "file", "url": "file:///ignored"},
+        {"id": "p3", "type": "text", "text": "Write the parser."}
+      ]
+    },
+    {
+      "info": {"id": "msg_2", "role": "assistant"},
+      "parts": [{"id": "p4", "type": "text", "text": "assistant reply"}]
+    },
+    {
+      "info": {"id": "msg_3", "role": "user"},
+      "parts": [{"id": "p5", "type": "text", "text": "a later user message that must not be used"}]
+    }
+  ]
+}

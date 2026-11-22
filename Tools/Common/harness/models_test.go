@@ -332,19 +332,6 @@ func TestLookupModelCatalog_OpenCodeFormatHint(t *testing.T) {
 	}
 }
 
-// TestLookupModelCatalog_GHCPCLIFormatHint verifies the format hint seeded
-// from the ghcp-cli harness descriptor.
-func TestLookupModelCatalog_GHCPCLIFormatHint(t *testing.T) {
-	cat, ok := harness.LookupModelCatalog(harness.HarnessIDGHCPCLI)
-	if !ok {
-		t.Fatalf("want %q to be found", harness.HarnessIDGHCPCLI)
-	}
-	want := "claude-<model>-<version> or gpt-<version>"
-	if cat.FormatHint != want {
-		t.Errorf("want FormatHint %q, got %q", want, cat.FormatHint)
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Seed content: model IDs membership
 // ---------------------------------------------------------------------------

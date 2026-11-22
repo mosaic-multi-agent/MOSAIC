@@ -77,10 +77,11 @@ tasks:
   # The layout staged here is the expected logger-bundle layout the
   # composition root's binary-relative default and the preflight bundle
   # check both describe: dist/logger-bundle/hook.yaml (the manifest) plus
-  # one directory per harness variant. Both the claude-code and opencode
-  # variants are staged: both adapters provision the bundle into sandboxes
-  # at runtime (claudecode via provisionLoggerBundle, opencode via
-  # loadLoggerBundleContribution).
+  # one directory per harness variant. The claude-code, opencode and
+  # opencode-v2 variants are staged: the first two adapters provision the
+  # bundle into sandboxes at runtime (claudecode via provisionLoggerBundle,
+  # opencode via loadLoggerBundleContribution); the opencode-v2 variant is
+  # provisioned by the V2 adapter.
   # ---------------------------------------------------------------------------
 
   stage:bundle:
@@ -88,10 +89,13 @@ tasks:
     cmds:
       - mkdir -p {{.DIST_DIR}}/logger-bundle/claude-code
       - mkdir -p {{.DIST_DIR}}/logger-bundle/opencode/lib
+      - mkdir -p {{.DIST_DIR}}/logger-bundle/opencode-v2/lib
       - cp {{.HOOKS_SRC_DIR}}/hook.yaml {{.DIST_DIR}}/logger-bundle/hook.yaml
       - cp {{.HOOKS_SRC_DIR}}/claude-code/mosaic_logger*.py {{.DIST_DIR}}/logger-bundle/claude-code/
       - cp {{.HOOKS_SRC_DIR}}/opencode/plugin.ts {{.DIST_DIR}}/logger-bundle/opencode/plugin.ts
       - cp {{.HOOKS_SRC_DIR}}/opencode/lib/*.ts {{.DIST_DIR}}/logger-bundle/opencode/lib/
+      - cp {{.HOOKS_SRC_DIR}}/opencode-v2/plugin.ts {{.DIST_DIR}}/logger-bundle/opencode-v2/plugin.ts
+      - cp {{.HOOKS_SRC_DIR}}/opencode-v2/lib/*.ts {{.DIST_DIR}}/logger-bundle/opencode-v2/lib/
     generates:
       - "{{.DIST_DIR}}/logger-bundle/hook.yaml"
 

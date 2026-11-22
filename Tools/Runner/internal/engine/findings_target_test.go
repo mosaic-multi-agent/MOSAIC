@@ -88,7 +88,7 @@ func TestNext_OnFindings_NamedRowRoute_InjectsReviewOutputs(t *testing.T) {
 		Schedules:           singleSchedules("TDD"),
 		State:               log.state(),
 		LastResponse:        cnaResponse(log.last().Agent),
-		LastOutputArtifacts: []string{reviewOutput},
+		LastOutputsOverride: overrideOf([]string{reviewOutput}),
 		Agents:              twoGroupAgents(),
 		Seq:                 log.last().Seq,
 		Now:                 fixedNow,

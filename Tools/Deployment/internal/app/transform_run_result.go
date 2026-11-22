@@ -5,6 +5,7 @@ package app
 import (
 	"path/filepath"
 
+	"mosaic-deploy/internal/customtool"
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 )
@@ -32,11 +33,13 @@ func (r *transformRun) agentOutcome(i int) TransformFileOutcome {
 		out.Tools, out.DroppedTools = res.Tools, res.Dropped
 		out.UnmappedTools, out.DroppedFields = res.UnmappedTools, res.DroppedFields
 		out.CustomTools = r.customToolServers(i)
+		out.StrippedFields = res.StrippedFields
 	}
 	return out
 }
 
-// customToolServers lists the servers kept as custom tools in a rebuilt agent, each once.
+// customToolServers lists the custom tool entries of a rebuilt agent, each once: converted MCP
+// servers, and the user's answers in the neutral syntax ("server" or "server/tool").
 func (r *transformRun) customToolServers(i int) []string {
 	var servers []string
 	for _, c := range r.agents[i].result.Conversions {
@@ -45,8 +48,8 @@ func (r *transformRun) customToolServers(i int) []string {
 		}
 	}
 	for _, generic := range r.inspections[i].Converted.Unmapped {
-		if server, ok := r.customTools[generic]; ok {
-			servers = append(servers, server)
+		for _, e := range r.customTools[generic] {
+			servers = append(servers, customtool.EntryText(e))
 		}
 	}
 	return uniqueStrings(servers)
@@ -80,6 +83,9 @@ func (r *transformRun) result(todoPath string) TransformHarnessResult {
 	}
 	res.DroppedEntries = r.droppedEntryResults()
 	res.Notes = append([]TransformNote(nil), r.plan.Notes...)
+	if note, ok := r.minimalGrantNote(); ok {
+		res.Notes = append(res.Notes, note)
+	}
 	if res.Transformed > 0 {
 		res.Notes = append(res.Notes, TransformNote{Kind: NoteNewerTargetContent, Message: newerInjectionsMessage})
 	}
@@ -148,6 +154,7 @@ func (r *transformRun) addModelSummary(res *TransformHarnessResult) {
 func (r *transformRun) identifiers() TransformHarnessResult {
 	return TransformHarnessResult{
 		SourceHarnessID: r.srcID, TargetHarnessID: r.tgtID, Workspace: r.workspace,
-		SourceAgentsDir: r.plan.SourceAgentsDir,
+		SourceAgentsDir:       r.plan.SourceAgentsDir,
+		ExperimentalHarnesses: r.experimentalOfRun(),
 	}
 }

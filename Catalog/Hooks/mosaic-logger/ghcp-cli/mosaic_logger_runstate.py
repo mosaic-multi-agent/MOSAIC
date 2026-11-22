@@ -6,12 +6,11 @@ agent_id -> agent_instance_id mapping files, pending dispatch queue.
 
 import datetime
 import json
-import os
 import random
 import re
-import sys
 
 import mosaic_logger_core as core
+import mosaic_logger_pending_dispatch as pending_dispatch
 
 
 # ---------------------------------------------------------------------------
@@ -74,28 +73,19 @@ _STRUCTURED_RE = re.compile(
     r'([A-Za-z][A-Za-z0-9_.-]*#[0-9]+)'
 )
 
-# Bare match: {Name}#{Number} not immediately preceded by an alnum/.-_ character.
-_BARE_RE = re.compile(r'(?<![A-Za-z0-9_.-])([A-Za-z][A-Za-z0-9_.-]*#[0-9]+)')
-
 
 def extract_instance_id(prompt: "str | None") -> "str | None":
-    """Extract a MOSAIC {AgentName}#{Number} instance ID from text.
+    """Extract a MOSAIC {AgentName}#{Number} instance ID from dispatched prompt text.
 
-    Matching order (stops at first hit):
-      1. Structured: agent_instance_id key followed by the value.
-      2. Bare: earliest {Name}#{Number} occurrence in the text.
-    Returns None when no confident match exists. Never raises.
+    Only an explicit agent_instance_id key followed by the value counts; a bare
+    {Name}#{Number} elsewhere in the text is never used. Returns None otherwise.
+    Never raises.
     """
     if not prompt:
         return None
     try:
         m = _STRUCTURED_RE.search(prompt)
-        if m:
-            return m.group(1)
-        m = _BARE_RE.search(prompt)
-        if m:
-            return m.group(1)
-        return None
+        return m.group(1) if m else None
     except Exception:
         return None
 
@@ -326,7 +316,7 @@ def resolve_run_for_agent(paths: "core.LogPaths",
 # Pending-dispatch state management
 # ---------------------------------------------------------------------------
 
-PENDING_DISPATCH_MAX_AGE_SECONDS = 120
+PENDING_DISPATCH_MAX_AGE_SECONDS = pending_dispatch.PENDING_DISPATCH_MAX_AGE_SECONDS
 
 
 def put_pending_dispatch(
@@ -336,118 +326,13 @@ def put_pending_dispatch(
     agent_instance_id: str,
     extracted_run_id: "str | None",
     prompt: "str | None" = None,
+    agent_type: "str | None" = None,
 ) -> bool:
-    """Persist a pending dispatch entry for the given session.
-
-    Appends a single JSON line to a per-session JSONL file keyed by session_id.
-    Uses OS-appropriate locking for concurrent safety.
-    Returns True on success. Never raises.
-    """
-    try:
-        now = datetime.datetime.now(datetime.timezone.utc)
-        entry = {
-            "agent_instance_id": agent_instance_id,
-            "run_id": extracted_run_id,
-            "created_at": _iso_ms(now),
-        }
-        if prompt is not None:
-            entry["prompt"] = prompt
-        path = paths.pending_dispatch_entry(path_run_id, session_id)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        data = (json.dumps(entry, ensure_ascii=False) + "\n").encode("utf-8")
-
-        if sys.platform == "win32":
-            import msvcrt
-            fd = os.open(str(path), os.O_RDWR | os.O_CREAT, 0o666)
-            try:
-                os.lseek(fd, 0, 0)
-                msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
-                try:
-                    os.lseek(fd, 0, 2)
-                    os.write(fd, data)
-                finally:
-                    os.lseek(fd, 0, 0)
-                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
-            finally:
-                os.close(fd)
-        else:
-            fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o666)
-            try:
-                os.write(fd, data)
-            finally:
-                os.close(fd)
-
-        return True
-    except Exception:
-        return False
-
-
-def pop_pending_dispatch(
-    paths: "core.LogPaths",
-    path_run_id: str,
-    session_id: str,
-    max_age_seconds: int = PENDING_DISPATCH_MAX_AGE_SECONDS,
-) -> "dict | None":
-    """Pop and return the oldest non-stale pending dispatch for the given session.
-
-    Evicts leading stale entries, pops the first remaining one. Atomically
-    replaces the file with the remaining lines. Returns None when the queue
-    is empty, the file is absent, or any I/O/parse error occurs. Never raises.
-    """
-    try:
-        path = paths.pending_dispatch_entry(path_run_id, session_id)
-        if not path.exists():
-            return None
-
-        text = path.read_text(encoding="utf-8")
-        raw_lines = [ln for ln in text.splitlines() if ln.strip()]
-
-        if not raw_lines:
-            return None
-
-        now = datetime.datetime.now(datetime.timezone.utc)
-
-        parsed = []
-        for ln in raw_lines:
-            try:
-                parsed.append((ln, json.loads(ln)))
-            except (json.JSONDecodeError, ValueError):
-                return None
-
-        # Evict leading stale entries.
-        first_fresh = 0
-        for i, (ln, entry) in enumerate(parsed):
-            try:
-                created_at = entry.get("created_at", "")
-                ts = datetime.datetime.fromisoformat(
-                    created_at.replace("Z", "+00:00")
-                )
-                age_seconds = (now - ts).total_seconds()
-                if age_seconds > max_age_seconds:
-                    first_fresh = i + 1
-                    continue
-            except Exception:
-                first_fresh = i + 1
-                continue
-            break
-
-        if first_fresh >= len(parsed):
-            core.atomic_replace(path, b"")
-            return None
-
-        popped_entry = parsed[first_fresh][1]
-        remaining_lines = [ln for ln, _ in parsed[first_fresh + 1:]]
-
-        remaining_text = "".join(ln + "\n" for ln in remaining_lines)
-        core.atomic_replace(path, remaining_text.encode("utf-8"))
-
-        return {
-            "agent_instance_id": popped_entry.get("agent_instance_id"),
-            "run_id": popped_entry.get("run_id"),
-            "prompt": popped_entry.get("prompt"),
-        }
-    except Exception:
-        return None
+    """Queue a pending dispatch; delegates to mosaic_logger_pending_dispatch."""
+    return pending_dispatch.put_pending_dispatch(
+        paths, path_run_id, session_id, agent_instance_id, extracted_run_id,
+        prompt=prompt, agent_type=agent_type,
+    )
 
 
 # ---------------------------------------------------------------------------

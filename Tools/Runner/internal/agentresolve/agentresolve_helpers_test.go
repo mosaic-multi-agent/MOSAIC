@@ -37,10 +37,15 @@ import (
 	"path/filepath"
 	"testing"
 
+	"mosaic-run/internal/agentfile"
 	"mosaic-run/internal/domain"
 )
 
 const agentresolveTestdataDir = "../../testdata/agentresolve"
+
+// legacyMarkdown is the Format of a harness without format data: Markdown
+// agent files, accepted as .agent.md and .md.
+var legacyMarkdown = agentfile.Format{}
 
 // agentsDir returns the path to the fixture directory containing agent files.
 func agentsDir() string {

@@ -79,6 +79,7 @@ import (
 
 	"mosaic-deploy/internal/app"
 	"mosaic-deploy/internal/app/interactiontest"
+	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/transform"
 )
@@ -1168,6 +1169,8 @@ func TestRenderAgent_RenderedBytes_ByteIdenticalToTransformApply(t *testing.T) {
 		Role:     domain.RoleSubagent,
 		Protocol: protocol,
 		Bundle:   bundle,
+		// The service stamps the module's tool settings; the stub has no config declarations.
+		ToolMappingsVersion: config.ToolSettingsStamp(mod.Ref().ID, mod.Descriptor().Tools, nil, nil),
 	})
 	if transformErr != nil {
 		t.Fatalf("transform.Apply returned error: %v", transformErr)

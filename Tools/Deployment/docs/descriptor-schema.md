@@ -41,6 +41,15 @@ display_name: "My Harness"
 transform_version: "1.0.0"
 
 # --------------------------------------------------------------------------
+# OPTIONAL: mark the harness experimental. Leave the key out for a regular
+# harness. When declared, "reason" is required and must not be blank.
+# The harness is still offered, but marked "Experimental" in the pickers and
+# its reason is shown as a warning (see the field table below).
+# --------------------------------------------------------------------------
+# experimental:
+#   reason: "Agents deploy, but no orchestration runs on this harness yet."
+
+# --------------------------------------------------------------------------
 # Field group 2 — OPTIONAL: model catalog
 #
 # ids: the model identifiers presented to the user during model selection.
@@ -62,6 +71,9 @@ models:
 # shape: how tools are written in the deployed frontmatter.
 #   "list"       — a flat YAML sequence (e.g. Claude Code agents).
 #   "permission" — a nested allow/deny mapping (e.g. OpenCode agents).
+#   "rules"      — an ordered list of {action, resource, effect} permission rules,
+#                  last matching rule wins (e.g. OpenCode V2 agents). Needs
+#                  frontmatter.tools_key and optional tools.rules (see below).
 #
 # universe: the complete set of tool names this harness understands.
 #   Declared order is the canonical output order; the tool never reorders
@@ -275,6 +287,28 @@ hooks:
 |-------|------|-------------|
 | `transform_version` | string | Stamped into every deployed agent's frontmatter as `transform_version`. Bump when the transform logic changes so stale agents can be detected. |
 | `injections_version` | string | Removed. A descriptor that still declares it loads, and the value is ignored. Injection versions come from the frontmatter `version` of `HarnessInjections.md` (the subagent and shared-region version) and of `HarnessInjectionsOrchestrator.md` (the orchestrator-region version). A present injection file without a `version` fails loading. |
+| `agent_format_id` | string | Identifies the file format used for deployed agent files. Empty or absent means `markdown` (the default). The only other recognised value today is `codex-toml`, which causes the deployment tool to write TOML files through the Codex translator rather than Markdown files. An unrecognised value is a fatal parse error. |
+| `experimental` | mapping | Optional. Marks the harness as experimental. Absent means not experimental. When present it must be a mapping whose only key is `reason`, a non-blank string. Rejected with a validation error: a bare or null `experimental:`, a scalar or list value, a mapping without `reason`, a non-string `reason`, a blank (empty or whitespace-only) `reason`, and any other key. See [Experimental harnesses](#experimental-harnesses). |
+| `cli` | mapping | Optional. CLI-only facts for the Runner and AgentTest. See [`cli`](#cli-optional). |
+| `tool_info_recoverable` | bool | When absent or `true` (the default), the tool's deployed format is considered to carry a recoverable tool list. Set to `false` to declare that it does not -- for example, Codex expresses tool grants via `sandbox_mode` rather than a `tools` field, so `promote` cannot reverse-map the grant and asks the user instead. Most harnesses omit this field (equivalent to `true`). |
+
+---
+
+### Experimental harnesses
+
+```yaml
+experimental:
+  reason: "Agents deploy, but no orchestration runs on this harness yet."
+```
+
+Declare `experimental` when a harness works only in part, or is not yet proven. The declaration applies to descriptors of every tier (built-in, descriptor-only, external module). The harness stays available; only its presentation and warnings change:
+
+- **TUI:** the harness picker and the question pickers mark it "Experimental", and the reason is shown with it. Plan review shows the reason as a warning.
+- **CLI:** every writing command (`deploy`, `update`, `workflows`, `agents`, `hooks`, `promote`, `transform`) prints the reason once as a `warning:` line. `transform` warns when either the source or the target is experimental. The reason is whitespace-normalised to a single line.
+- **JSON:** with `--output json` the result carries an `experimentalHarnesses` array (absent when no experimental harness is involved). Each entry has `harnessId`, `displayName` and `reason`.
+- **Read-only `render`** is unaffected.
+
+The `reason` is trimmed. A blank reason is rejected at load time, so an experimental harness always explains itself.
 
 ---
 
@@ -284,6 +318,34 @@ hooks:
 |-------|------|-------------|
 | `ids` | list of strings | Model identifiers offered during model selection. Any string is accepted — provider prefixes, colons, uppercase, arbitrary formats. Nothing is validated against a known list. |
 | `format_hint` | string | Display-only format guidance for the user, e.g. `"provider/model-id"`. Never enforced. |
+
+The block is optional for descriptor-only and external harnesses. Every built-in descriptor
+declares it, because the Runner and AgentTest read the model ids and format hint from the
+built-in descriptors.
+
+---
+
+### `cli` (optional)
+
+```yaml
+cli:
+  label: "Claude Code CLI"
+  loading_mechanism: "name"
+```
+
+Facts that only matter to tools that run the harness as a CLI (Runner, AgentTest). Deploy parses
+the section and validates it but does not use it when deploying.
+
+| Key | Type | Allowed values | Description |
+|-----|------|----------------|-------------|
+| `label` | string | any non-blank string | Name shown for the CLI harness, e.g. `"Codex CLI"`. Required inside the section. |
+| `loading_mechanism` | string | `name`, `runner-loaded` | How the harness finds agent definitions. `name`: the harness resolves agents by name from the agents directory. `runner-loaded`: the Runner loads the agent file itself on every invocation. Required inside the section. |
+
+The section is optional. Its presence is what marks a harness as CLI-backed: a descriptor without
+`cli` (for example `vscode-ghcp`) is not offered for Runner or AgentTest runs, and every
+descriptor-only or external harness is in that case. When present, the section must be a mapping
+with both keys: a bare or null `cli:`, a blank `label`, a missing or other `loading_mechanism`, and
+any unknown key inside the section are rejected at load time.
 
 ---
 
@@ -295,6 +357,7 @@ hooks:
 |-------|---------|
 | `list` | Tools are written as a flat YAML sequence. |
 | `permission` | Tools are written as a nested allow/deny mapping. |
+| `rules` | Tools are written as an ordered list of `{action, resource, effect}` permission rules under `frontmatter.tools_key`; the last matching rule wins (OpenCode V2). Requires `tools_key`. The fixed rules go in `tools.rules.leading` and `tools.rules.trailing` (each entry has `action`, `resource`, `effect`); between them the module writes one whole-tool `allow` rule per permission action the agent uses. A universe entry may declare `action` (the permission action it falls under); several tools can share one action, so allowing any of them allows the action. `OpenCode V2` leads with `{*, *, deny}` (deny by default) and trails with `{external_directory, *, ask}`. `tools.rules` and `action` are valid only for this shape. |
 
 #### `tools.universe`
 
@@ -499,13 +562,22 @@ code and are documented here so a descriptor author knows when to escalate:
 - **Custom placeholder expansion logic:** `PlaceholderExpansion` names fixed tool subsets;
   conditional expansion (e.g. "expand differently for orchestrators") requires a module.
 
-### Exceptions established across the four built-in harnesses
+### Exceptions established across the six built-in harnesses
 
-All four built-in harnesses (Claude Code, GHCP CLI, OpenCode, VS Code GHCP) were implemented
-using a module + embedded descriptor structure. The exceptions below are documented so that
-future descriptor authors recognise when a built-in module is required.
+All six built-in harnesses (Claude Code, Codex (experimental), GHCP CLI, OpenCode, OpenCode V2 (experimental), VS Code GHCP) were
+implemented using a module + embedded descriptor structure. Their descriptors live in one package,
+`Tools/Common/harness/builtindesc/` (`claude-code.yaml`, `codex.yaml`, `ghcp-cli.yaml`,
+`opencode.yaml`, `opencode-v2.yaml`, `vscode-ghcp.yaml`), and are the single source of the shared harness facts:
+Deploy parses the embedded YAML, and Runner and AgentTest read the same descriptors through the
+`mosaic-common/harness` accessors.
 
-#### Exceptions common to all four harnesses
+A descriptor-only or external harness (`MosaicDeploy/harnesses/<dir>/harness.yaml`) that reuses a
+built-in id overrides that harness for Deploy only. Runner and AgentTest read only the built-in
+descriptors, so an override that changes the agents directory, the agent file extension or the
+agent format is not seen by them. The exceptions below are documented
+so that future descriptor authors recognise when a built-in module is required.
+
+#### Exceptions common to all six harnesses
 
 - **Tool output format serialization:** `tools.shape = "list"` produces a standard KindList
   value, but each harness serializes tools differently. Claude Code emits a comma-separated
@@ -515,7 +587,7 @@ future descriptor authors recognise when a built-in module is required.
   by `descriptor.MapTools`.
 
 - **Skill path key subdirectory:** the `paths.skills.*` templates are flat directory paths with
-  no token for an intermediate key segment. All four harnesses deploy skills under
+  no token for an intermediate key segment. The Markdown harnesses deploy skills under
   `<skills-dir>/<key>/<filename>` (e.g. `.github/skills/lean-tdd/SKILL.md`) to prevent
   filename collisions when multiple skills share the same entry filename (`SKILL.md`). Module
   code composes this path; the descriptor provides only the base directory.
@@ -528,6 +600,8 @@ future descriptor authors recognise when a built-in module is required.
   4 of `applyFrontmatter`, after the descriptor's static `add` list is applied.
 
 #### Exceptions unique to specific harnesses
+
+- **Codex — TOML agent files and no tools key:** Codex is the only built-in harness that uses a non-Markdown agent format. Its descriptor declares `agent_format_id: codex-toml`, which routes agent encoding and decoding through the Codex TOML translator rather than the Markdown identity translator. Tool grants are expressed through Codex settings rather than a `tools` frontmatter key; there is no tools key at all in a Codex agent file. The module computes `sandbox_mode` (`"read-only"`, or `"workspace-write"` for an agent whose generic tools can write), `web_search` (`"live"` when the agent has `web_search`, otherwise `"disabled"`) and, for a write-capable agent with `web_fetch`, a `[sandbox_workspace_write]` table with `network_access = true`. A read-only agent with `web_fetch` gets no network access, and the module reports a `tool-capability-withheld` gap for it in the plan; `terminal` alone grants no network access. The Codex descriptor's `experimental.reason` says the harness runs through `mosaic-run` only, native orchestration is unsupported and no MOSAIC log is produced. The translator code lives in `Tools/Common/agentformat`, shared with the Runner. Skills are resolved from the shared `.agents/skills` root rather than a harness-local skills directory, which is another departure from the Markdown harnesses. Because the deployed form is TOML, the deploy-path normalisations (name forcing, description fallback, sandbox_mode fallback, foreign-key drop) are applied by the Codex translator's `Encode` method rather than the shared frontmatter pipeline.
 
 - **Claude Code — comma-separated scalar tools:** Claude Code requires tools as a plain scalar
   (`"Read, Write, Edit"`). This is the only harness with this format; module code converts the
@@ -547,6 +621,8 @@ future descriptor authors recognise when a built-in module is required.
   `{tool-permissions}` placeholder into a flat list, but OpenCode needs a full allow/deny
   permission block. Module code overrides the placeholder path to produce the correct shape.
 
+- **OpenCode V2 (experimental) — rules shape and role-dependent `mode`:** the descriptor declares `tools.shape: rules`, so the tool list is a rule list under `permissions` (deny everything first, one allow rule per declared permission action, then `external_directory` asks). Several tools share one action (`write`, `edit` and `patch` all fall under `edit`), so declaring file write or file edit allows all three. `mode` comes from the descriptor (`value_by_role`: `subagent` for subagents, `primary` otherwise). Deploy writes no `opencode.json`.
+
 - **VS Code GHCP — `search/listDirectory` universe ordering and `subagent` mapping:**
   `search/listDirectory` is emitted by convention (`by_convention: true`). Its position in the
   universe (after `agent`, before `execute/runInTerminal`) ensures the rendered tool list matches
@@ -554,9 +630,9 @@ future descriptor authors recognise when a built-in module is required.
   agents (via universe sort). The `subagent` → `agent` mapping and the `skill` → `[]` (empty)
   mapping are purely data-driven in the descriptor.
 
-#### Four-harness retrospective: the module-versus-descriptor split
+#### Five-harness retrospective: the module-versus-descriptor split
 
-After implementing all four built-in harnesses, the stable split is:
+After implementing all five built-in harnesses, the stable split is:
 
 **Belongs in the descriptor (declarative, always):**
 - Tool universe and mappings (including one-to-many, many-to-one, empty, and by-convention)
@@ -565,6 +641,7 @@ After implementing all four built-in harnesses, the stable split is:
 - Frontmatter model key, tools key, static `add` fields, `drop` list, and key order
 - Injection content (harness-level injection text)
 - Model catalog and format hint
+- CLI-only facts (`cli` section: label, loading mechanism; its presence marks a harness CLI-backed)
 
 **Requires module code (imperative, by exception):**
 - Tool output format: any serialization that is not a plain KindList — comma-separated scalar,
@@ -576,7 +653,7 @@ After implementing all four built-in harnesses, the stable split is:
 **Conclusion:** A purely descriptor-driven harness (no module code beyond the adapter) is
 achievable when the tool output is a standard KindList (block-style YAML sequence), skills are
 deployed to a flat directory (no key subdirectory), frontmatter `add` fields are static, and
-the `{tool-permissions}` placeholder expands to a flat list. None of the four current built-ins
+the `{tool-permissions}` placeholder expands to a flat list. None of the six current built-ins
 satisfies all four conditions simultaneously. The skill key subdirectory and the tool output
 format serialization are the two most common reasons a harness needs module code. A future
 descriptor schema version could address both by adding a `skill.key_subdir: true` flag and a

@@ -6,26 +6,33 @@ package app_test
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
+	"mosaic-common/harness/builtindesc"
 	"mosaic-deploy/internal/app"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
 )
 
 const (
-	harnessClaude = "claudecode/claude-code.yaml"
-	harnessOpen   = "opencode/opencode.yaml"
-	harnessCLI    = "ghcpcli/ghcp-cli.yaml"
-	harnessVSCode = "vscodeghcp/vscode-ghcp.yaml"
+	harnessClaude = "claude-code.yaml"
+	harnessOpen   = "opencode.yaml"
+	harnessCLI    = "ghcp-cli.yaml"
+	harnessVSCode = "vscode-ghcp.yaml"
 )
 
-// loadToolHarness loads a built-in harness descriptor from its YAML file.
+// loadToolHarness parses a built-in harness descriptor taken from the shared Common package.
 func loadToolHarness(t *testing.T, rel string) *domain.HarnessDescriptor {
 	t.Helper()
-	d, err := descriptor.Load("../harness/builtin/" + rel)
+	id := strings.TrimSuffix(rel, ".yaml")
+	src, ok := builtindesc.Raw(id)
+	if !ok || len(src) == 0 {
+		t.Fatalf("builtin descriptor %s missing from Common", id)
+	}
+	d, err := descriptor.Parse(src, "builtin:"+id)
 	if err != nil {
-		t.Fatalf("load %s: %v", rel, err)
+		t.Fatalf("parse %s: %v", rel, err)
 	}
 	return d
 }
@@ -124,7 +131,7 @@ func withSkill(generics ...string) []string {
 }
 
 // assertCustomTools compares the custom tool map, treating nil and empty as equal.
-func assertCustomTools(t *testing.T, want, got map[string]string) {
+func assertCustomTools(t *testing.T, want, got domain.CustomToolAnswers) {
 	t.Helper()
 	if len(want) == 0 && len(got) == 0 {
 		return

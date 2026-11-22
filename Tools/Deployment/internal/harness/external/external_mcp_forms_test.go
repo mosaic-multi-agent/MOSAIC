@@ -18,7 +18,7 @@ func TestReferenceModule_CustomServerAnswerIsWrittenInOpenCodeServerForm(t *test
 
 	m, err := external.New(binPath, desc, external.Options{
 		Timeout:    10 * time.Second,
-		MosaicRoot: findRepoRoot(t),
+		MosaicRoot: frozenCatalogRoot(t),
 	})
 	if err != nil {
 		t.Fatalf("external.New with reference module binary: %v", err)
@@ -28,7 +28,7 @@ func TestReferenceModule_CustomServerAnswerIsWrittenInOpenCodeServerForm(t *test
 	result, err := m.Tools(domain.ToolRequest{
 		AgentKey:    "mcp-user",
 		Generic:     []string{"user_feedback"},
-		CustomNames: map[string]string{"user_feedback": "my server"},
+		CustomNames: domain.CustomToolAnswers{"user_feedback": {{Server: "my server"}}},
 	})
 	if err != nil {
 		t.Fatalf("Tools: %v", err)

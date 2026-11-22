@@ -24,7 +24,7 @@ function opencodeSources(): string[] {
       continue;
     }
     if (!inVariants) continue;
-    const variant = /^ {2}([a-z][a-z-]*):\s*$/.exec(line);
+    const variant = /^ {2}([a-z][a-z0-9-]*):\s*$/.exec(line);
     if (variant) {
       inOpencode = variant[1] === "opencode";
       continue;

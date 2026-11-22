@@ -232,7 +232,7 @@ func (s *ghcpCLISpawner) Spawn(ctx context.Context, req SpawnRequest) (Response,
 		Env:        req.Env,
 		Stdin:      stdin,
 		Timeout:    timeout,
-		Sink:       s.cfg.sink,
+		Sink:       s.cfg.sinkFor(req),
 
 		OnStdoutLine: req.OnStdoutLine,
 	})

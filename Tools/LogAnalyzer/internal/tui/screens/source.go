@@ -94,7 +94,7 @@ func (s *SourceScreen) View(width, height int) string {
 }
 
 // sourceGuidance says what the path entry accepts.
-const sourceGuidance = "Accepts: OrchestrationLogs/ directory, a single run folder (e.g. 20260101T120000Z-abcd), a .digest.json file, or a directory containing digests"
+const sourceGuidance = "Started without a path, LogAnalyzer opens OrchestrationLogs/ and the .digest.json files in the working directory; none found. Accepts:OrchestrationLogs/ directory, a single run folder (e.g. 20260101T120000Z-abcd), a .digest.json file, or a directory containing digests"
 
 // sourceKeys are the short help keys of the source page.
 var sourceKeys = []tuicommon.HelpEntry{

@@ -22,6 +22,9 @@ type Deps struct {
 	Ingester    domain.UsageIngester    // nil = ingest-otel off
 	IngestProbe domain.IngestStateProbe // nil = pending usage is never reported
 	Alarms      domain.AlarmSource      // nil = adapter alarms are not read
+	Transcripts domain.TranscriptSource // nil = transcripts are not read (no transcript findings)
+
+	FindingsFiles domain.FindingsFileWriter // nil = ExportFindings returns an error
 }
 
 // Service is the single use-case layer both frontends drive.
@@ -76,8 +79,9 @@ func (s *Service) PricingPath() string {
 // aggregate, price, optionally resolve pricing gaps, assemble the report.
 //
 // Binding flow rules:
-//  1. Source resolution order: ExplicitPath -> default OrchestrationLogs/ under
-//     WorkDir -> prompt via Interaction. A missing source is NEVER a hard failure;
+//  1. Source resolution order: ExplicitPath -> default start (OrchestrationLogs/
+//     under WorkDir plus the *.digest.json files directly in WorkDir) -> prompt
+//     via Interaction, asked only when neither exists. A missing source is NEVER a hard failure;
 //     a declined, skipped or cancelled prompt yields OutcomeSourceNotFound.
 //  2. A usable but empty source yields OutcomeNoData, not an error.
 //  3. Every returned Report carries its QualitySummary, so a frontend cannot

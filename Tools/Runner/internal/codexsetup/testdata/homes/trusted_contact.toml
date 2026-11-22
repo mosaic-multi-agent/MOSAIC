@@ -1,0 +1,8 @@
+model = "gpt-5"
+
+[projects.'{{WORKDIR}}']
+trust_level = "trusted"
+
+[mcp_servers.contact-user]
+command = "contact-user-server"
+args = ["--stdio"]

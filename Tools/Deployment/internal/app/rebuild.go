@@ -3,7 +3,7 @@ package app
 import (
 	"strings"
 
-	"mosaic-common/docformat"
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/transform"
 )
@@ -17,7 +17,7 @@ import (
 // harness-filled regions. The function performs no I/O; the catalog is consulted only through
 // in.Catalog for the role, the generic tool list and the manifest ref key.
 func RebuildDeployedAgent(in RebuildInput) (RebuildResult, error) {
-	doc, err := docformat.Parse(in.Source)
+	canonical, doc, err := decodeRebuildSource(in)
 	if err != nil {
 		return RebuildResult{}, err
 	}
@@ -29,17 +29,18 @@ func RebuildDeployedAgent(in RebuildInput) (RebuildResult, error) {
 	facts := readDeployedAgentFacts(doc.Frontmatter(), srcDesc)
 
 	entry := lookupCatalogEntry(in.Catalog, facts.ID, in.AgentKey)
-	role := rebuildRole(facts.Role, in.FileName, entry)
+	role := rebuildRole(facts.Role, in.FileName, srcDesc, entry)
 	refKey := in.AgentKey
-	var catalogTools []string
 	placeholder, catalogName := "", ""
 	if entry != nil {
 		refKey, catalogName = entry.Key, entry.Key
-		catalogTools = entry.Tools
 		placeholder = entry.ToolsPlaceholder
 	}
 
-	conv := ConvertDeployedTools(deployedToolsInput(in, facts, role, placeholder != "", catalogTools))
+	conv, minimalGrant, err := rebuildToolsConversion(in, facts, role, entry)
+	if err != nil {
+		return RebuildResult{}, err
+	}
 	customTools := mergeCustomTools(conv.CustomTools, in.CustomTools)
 	appendTools := append([]string(nil), conv.TargetTools...)
 	if conv.UsePlaceholder {
@@ -50,35 +51,49 @@ func RebuildDeployedAgent(in RebuildInput) (RebuildResult, error) {
 	if err != nil {
 		return RebuildResult{}, err
 	}
+	stripped, strippedKeys := sourceStrippedFields(in, role, doc.Frontmatter())
+	dropKeys = append(dropKeys, strippedKeys...)
 	toolsValue, _ := genericToolsValue(conv, placeholder)
 	hadTools := len(facts.Grants) > 0 || len(facts.Tools) > 0 || len(conv.Generic) > 0 || conv.UsePlaceholder
-	generic, err := buildRebuildGenericSource(in.Source, facts, dropKeys, toolsValue, hadTools, catalogName)
+	generic, err := buildRebuildGenericSource(canonical, facts, dropKeys, toolsValue, hadTools, catalogName)
+	if err != nil {
+		return RebuildResult{}, err
+	}
+
+	generic, destGaps, err := carryDestination(in, tgtDesc, generic)
 	if err != nil {
 		return RebuildResult{}, err
 	}
 
 	res, err := transform.Apply(transform.Request{
-		Source: generic, Deployed: in.Source, Kind: domain.ArtifactAgent, Key: refKey,
+		Source: generic, Deployed: canonical, Kind: domain.ArtifactAgent, Key: refKey,
 		Module: in.TargetModule, Model: in.Model, CustomTools: customTools, SkippedTools: in.SkippedTools, DenyTools: conv.TargetDenied,
 		Scope: domain.ScopeProject, PreserveDeployedWorkflows: true,
 		ToolMappingsVersion: in.ToolMappingsVersion, Role: role, Timestamp: in.Timestamp,
 		InjectionsVersion:             tgtDesc.InjectionsVersion,
 		OrchestratorInjectionsVersion: tgtDesc.OrchestratorInjectionsVersion,
 		PreserveDeployedManaged:       true, IgnoreDeployedFrontmatter: true, AppendTools: appendTools,
+		Op: in.Op, DeployedRaw: in.DestinationRaw,
 	})
 	if err != nil {
 		return RebuildResult{}, err
 	}
-	return assembleRebuildResult(in, tgtDesc, facts, role, refKey, conv, res)
+	res.Report.Gaps = append(res.Report.Gaps, destGaps...)
+	result, err := assembleRebuildResult(in, tgtDesc, facts, role, refKey, conv, res)
+	if err != nil {
+		return RebuildResult{}, err
+	}
+	result.StrippedFields, result.MinimalToolGrant = stripped, minimalGrant
+	return result, nil
 }
 
 // mergeCustomTools combines the custom servers found in the source file with the user's
 // answers; an answer wins over a found server of the same generic name.
-func mergeCustomTools(found, answers map[string]string) map[string]string {
+func mergeCustomTools(found, answers domain.CustomToolAnswers) domain.CustomToolAnswers {
 	if len(found) == 0 && len(answers) == 0 {
 		return nil
 	}
-	merged := make(map[string]string, len(found)+len(answers))
+	merged := make(domain.CustomToolAnswers, len(found)+len(answers))
 	for k, v := range found {
 		merged[k] = v
 	}
@@ -90,7 +105,7 @@ func mergeCustomTools(found, answers map[string]string) map[string]string {
 
 // placeholderExtraTools resolves the generic tools a placeholder agent has beyond the target's
 // placeholder expansion to target tool names, so they can be appended to the tools field.
-func placeholderExtraTools(in RebuildInput, conv ConvertedTools, customTools map[string]string) []string {
+func placeholderExtraTools(in RebuildInput, conv ConvertedTools, customTools domain.CustomToolAnswers) []string {
 	if len(conv.Generic) == 0 {
 		return nil
 	}
@@ -135,7 +150,13 @@ func outputToolNames(v domain.FieldValue) []string {
 // gathered before it.
 func assembleRebuildResult(in RebuildInput, tgtDesc *domain.HarnessDescriptor, facts deployedAgentFacts,
 	role domain.AgentRole, refKey string, conv ConvertedTools, res transform.Result) (RebuildResult, error) {
-	outDoc, err := docformat.Parse(res.Output)
+	// The output is in the target's on-disk format; decode it to the canonical Markdown form
+	// before inspecting the frontmatter.
+	decoded := decodeDeployedBytes(res.Output, domain.ArtifactAgent, tgtDesc)
+	if decoded.DecodeErr != nil {
+		return RebuildResult{}, decoded.DecodeErr
+	}
+	outDoc, err := ParseGenericSource(decoded.Canonical)
 	if err != nil {
 		return RebuildResult{}, err
 	}
@@ -151,7 +172,7 @@ func assembleRebuildResult(in RebuildInput, tgtDesc *domain.HarnessDescriptor, f
 		present[key] = true
 	}
 	for _, key := range facts.Keys {
-		if !present[key] {
+		if !present[key] && !agentformat.IsCarriageKey(key) {
 			dropped = append(dropped, key)
 		}
 	}

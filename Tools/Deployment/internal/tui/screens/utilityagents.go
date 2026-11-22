@@ -151,6 +151,10 @@ func (s *UtilityAgentScreen) View() string {
 	)
 	border := s.styles.Border.Width(s.width).Render(strings.Repeat("─", s.width))
 
+	help := s.styles.Help.Width(s.width).Render(
+		"↑/k up  ↓/j down  space toggle  enter confirm  esc back  ctrl+c quit",
+	)
+
 	var content string
 	switch {
 	case s.hasError:
@@ -160,7 +164,8 @@ func (s *UtilityAgentScreen) View() string {
 			"No utility agents are available. Check the tool configuration allow-list.",
 		)
 	default:
-		lw := uaListWidth(s.width)
+		fitMultiSelect(s.multisel, s.detail, s.width, s.height, len(s.agents), title, subtitle, border, border, help)
+		lw, _ := splitListWidths(s.width)
 		sep := s.styles.Border.Render("│")
 		content = lipgloss.JoinHorizontal(
 			lipgloss.Top,
@@ -170,9 +175,6 @@ func (s *UtilityAgentScreen) View() string {
 		)
 	}
 
-	help := s.styles.Help.Width(s.width).Render(
-		"↑/k up  ↓/j down  space toggle  enter confirm  esc back  ctrl+c quit",
-	)
 	return strings.Join([]string{title, subtitle, border, content, border, help}, "\n")
 }
 

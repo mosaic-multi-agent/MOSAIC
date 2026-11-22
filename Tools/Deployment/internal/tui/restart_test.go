@@ -5,7 +5,7 @@ package tui
 // every other kind of error.
 //
 // The restart contract:
-//   - screen resets to screenHarness (the first entry screen)
+//   - screen resets to screenMode (the first entry screen)
 //   - errMsg is cleared (not set to the plan-not-confirmed message)
 //   - activeQuestion and reviewOverlay are cleared (no stale overlay after restart)
 //   - the model's context is NOT cancelled (the session continues)
@@ -40,24 +40,22 @@ func newRestartModel() *rootModel {
 	return m
 }
 
-// advanceToRunning navigates a freshly created rootModel through all three entry screens
-// (harness → mode → workspace) and returns the service command that would start execution.
+// advanceToRunning navigates a freshly created rootModel through all entry screens for
+// deploy-new and returns the service command that would start execution.
 // The model must have been created with newFlowModel so the workspace screen is pre-filled.
-func advanceToRunning(m *rootModel) tea.Cmd {
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // mode → workspace (deploy-new)
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // workspace → running
-	return cmd
+func advanceToRunning(t *testing.T, m *rootModel) tea.Cmd {
+	t.Helper()
+	return driveToRunning(t, m, domain.ModeDeployWorkspace)
 }
 
 // ---------------------------------------------------------------------------
 // Restart on ErrPlanNotConfirmed
 // ---------------------------------------------------------------------------
 
-// TestRunError_PlanNotConfirmed_ResetsToHarnessScreen verifies the core restart behaviour:
+// TestRunError_PlanNotConfirmed_ResetsToModeScreen verifies the core restart behaviour:
 // when runErrorMsg carries app.ErrPlanNotConfirmed, the root model must return to the first
 // entry screen rather than showing the done/error state.
-func TestRunError_PlanNotConfirmed_ResetsToHarnessScreen(t *testing.T) {
+func TestRunError_PlanNotConfirmed_ResetsToModeScreen(t *testing.T) {
 	// Arrange
 	m := newRestartModel()
 
@@ -65,8 +63,8 @@ func TestRunError_PlanNotConfirmed_ResetsToHarnessScreen(t *testing.T) {
 	m.Update(runErrorMsg{err: app.ErrPlanNotConfirmed})
 
 	// Assert
-	if m.screen != screenHarness {
-		t.Errorf("screen = %v after ErrPlanNotConfirmed; want screenHarness — "+
+	if m.screen != screenMode {
+		t.Errorf("screen = %v after ErrPlanNotConfirmed; want screenMode — "+
 			"a declined plan must restart the selection flow, not show the error state",
 			m.screen)
 	}
@@ -74,7 +72,7 @@ func TestRunError_PlanNotConfirmed_ResetsToHarnessScreen(t *testing.T) {
 
 // TestRunError_PlanNotConfirmed_ClearsErrMsg verifies that the restart does not leave an
 // error message behind. errMsg is shown on the screenDone error view; after a restart the
-// model is on screenHarness, and showing a stale error message there would confuse the user.
+// model is on screenMode, and showing a stale error message there would confuse the user.
 func TestRunError_PlanNotConfirmed_ClearsErrMsg(t *testing.T) {
 	// Arrange — prime errMsg to confirm the restart clears it.
 	m := newRestartModel()
@@ -86,7 +84,7 @@ func TestRunError_PlanNotConfirmed_ClearsErrMsg(t *testing.T) {
 	// Assert
 	if m.errMsg != "" {
 		t.Errorf("errMsg = %q after ErrPlanNotConfirmed restart; want empty string — "+
-			"the error message must be cleared when restarting to screenHarness", m.errMsg)
+			"the error message must be cleared when restarting to screenMode", m.errMsg)
 	}
 }
 
@@ -218,9 +216,9 @@ func TestRunError_OtherError_SetsErrMsg(t *testing.T) {
 	}
 }
 
-// TestRunError_OtherError_DoesNotRestartToHarness verifies explicitly that a non-sentinel
-// error does not return to screenHarness. There must be no accidental restart for real failures.
-func TestRunError_OtherError_DoesNotRestartToHarness(t *testing.T) {
+// TestRunError_OtherError_DoesNotRestartToMode verifies explicitly that a non-sentinel
+// error does not return to screenMode. There must be no accidental restart for real failures.
+func TestRunError_OtherError_DoesNotRestartToMode(t *testing.T) {
 	// Arrange
 	m := newRestartModel()
 
@@ -228,8 +226,8 @@ func TestRunError_OtherError_DoesNotRestartToHarness(t *testing.T) {
 	m.Update(runErrorMsg{err: errors.New("some other error")})
 
 	// Assert
-	if m.screen == screenHarness {
-		t.Error("screen = screenHarness after a generic error; " +
+	if m.screen == screenMode {
+		t.Error("screen = screenMode after a generic error; " +
 			"the restart path must only activate for app.ErrPlanNotConfirmed")
 	}
 }
@@ -240,7 +238,7 @@ func TestRunError_OtherError_DoesNotRestartToHarness(t *testing.T) {
 
 // TestRunError_PlanNotConfirmed_SecondRunCanReachRunning verifies that after a restart the
 // user can navigate through all three entry screens again and reach screenRunning. This
-// confirms the restart is genuinely re-runnable, not just visually resetting to screenHarness.
+// confirms the restart is genuinely re-runnable, not just visually resetting to screenMode.
 func TestRunError_PlanNotConfirmed_SecondRunCanReachRunning(t *testing.T) {
 	// Arrange: use a flow service so screenRunning is reachable via the service command.
 	workspace := t.TempDir()
@@ -248,30 +246,17 @@ func TestRunError_PlanNotConfirmed_SecondRunCanReachRunning(t *testing.T) {
 	m := newFlowModel(svc, workspace)
 
 	// First run: navigate to screenRunning.
-	cmd := advanceToRunning(m)
-	if m.screen != screenRunning {
-		t.Fatalf("precondition: screen = %v after first navigation; want screenRunning", m.screen)
-	}
-	// We don't need to execute cmd; just simulate the not-confirmed outcome arriving.
-	_ = cmd
+	_ = advanceToRunning(t, m)
 
 	// Simulate the not-confirmed outcome from the service.
 	m.Update(runErrorMsg{err: app.ErrPlanNotConfirmed})
 
-	if m.screen != screenHarness {
-		t.Fatalf("screen = %v after ErrPlanNotConfirmed; want screenHarness before second run", m.screen)
-	}
-
-	// Second run: navigate again through all three entry screens.
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // harness → mode
 	if m.screen != screenMode {
-		t.Fatalf("screen = %v after harness Enter in second run; want screenMode", m.screen)
+		t.Fatalf("screen = %v after ErrPlanNotConfirmed; want screenMode before second run", m.screen)
 	}
 
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // mode → workspace
-	if m.screen != screenWorkspace {
-		t.Fatalf("screen = %v after mode Enter in second run; want screenWorkspace", m.screen)
-	}
+	// Second run: navigate again through all entry screens.
+	driveToPath(t, m, domain.ModeDeployWorkspace, "")
 
 	_, secondCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // workspace → running
 	if m.screen != screenRunning {

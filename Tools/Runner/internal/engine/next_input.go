@@ -29,15 +29,19 @@ type NextInput struct {
 	// there is none (the first decision of a new run).
 	LastResponse *domain.ProtocolResponse
 
-	// LastOutputArtifacts are the output artifact paths of the step that
-	// produced LastResponse, exactly as they were dispatched. They are the
-	// injection source for the auto-review auto-route-back and are ignored in
-	// every other case. Empty or nil is valid and injects nothing.
-	LastOutputArtifacts []string
+	// LastOutputsOverride replaces the previous step's outputs that the
+	// engine otherwise derives from the routing table (see Next). nil: the
+	// engine derives them from the Output column of the row it routes from,
+	// resolved for the recorded iteration. Non-nil: *LastOutputsOverride is
+	// used verbatim, bare or run-scoped paths alike; a non-nil empty slice
+	// injects nothing. The session sets it only for a consultation-routed
+	// step. Read only by the auto-review On Findings route-back and the
+	// PARTIALLY_DONE mechanical re-dispatch; ignored in every other case.
+	LastOutputsOverride *[]string
 
-	Agents      map[string]domain.AgentReference
-	Seq         int
-	Now         time.Time
+	Agents map[string]domain.AgentReference
+	Seq    int
+	Now    time.Time
 	// StageSources describes where each block's schedule was looked for, one
 	// per declared block. A stop for a block without a schedule names the
 	// entry for that block; StageSource is the fallback descriptor when no

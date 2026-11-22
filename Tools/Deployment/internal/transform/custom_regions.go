@@ -11,13 +11,15 @@ import (
 // nestedRegionRecord is one user-owned region that must survive regeneration of its
 // enclosing managed region parent.
 //
-// The record deliberately holds no content — content is resolved from the deployed region
-// map at re-emission time, so there is one source of truth for content and rename resolution
-// applies uniformly.
+// Content is resolved from the deployed region map at re-emission time, so there is one source
+// of truth for deployed content and rename resolution applies uniformly. The only content the
+// record holds is the source-declared default of a project region, used when the deployed file
+// has no region of that name.
 type nestedRegionRecord struct {
-	Kind  docformat.NodeKind // NodeInjection (source-declared) or NodeCustom (deployed-only)
-	Name  string
-	Order int // emission order; deployed-file-origin regions first, then source-only regions
+	Kind          docformat.NodeKind // NodeInjection (source-declared) or NodeCustom (deployed-only)
+	Name          string
+	Order         int    // emission order; deployed-file-origin regions first, then source-only regions
+	SourceContent []byte // source-declared default of a project region; nil for custom regions
 }
 
 // customRegionRecord is a custom region found in the deployed file along with

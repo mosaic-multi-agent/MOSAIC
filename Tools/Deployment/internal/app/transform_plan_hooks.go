@@ -22,12 +22,15 @@ func (s *service) planHooks(in transformPlanInput, plan *TransformPlan) {
 	}
 	srcHooks := in.Source.Descriptor().Paths.Hooks.Project
 	tgtHooks := in.Target.Descriptor().Paths.Hooks.Project
-	pair := inputIsGhcpPair(in)
+	ghcpPair, openCodePair := inputIsGhcpPair(in), inputIsOpenCodePair(in)
 	for _, key := range s.deployedHookIDs(in.Source, in.Workspace, domain.ScopeProject) {
-		hb := planHookBundle(in, bundles[key], srcHooks == tgtHooks, pair)
+		hb := planHookBundle(in, bundles[key], srcHooks == tgtHooks, ghcpPair || openCodePair)
 		plan.Hooks = append(plan.Hooks, hb)
-		if pair {
+		switch {
+		case ghcpPair:
 			planPairHookChanges(in, bundles[key], hb, plan)
+		case openCodePair:
+			planOpenCodeHookChanges(in, bundles[key], hb, plan)
 		}
 	}
 }

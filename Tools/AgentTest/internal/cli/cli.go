@@ -111,6 +111,9 @@ type Options struct {
 	// flag validation cannot drift from the catalog.
 	Harnesses []commonharness.CLIHarness
 
+	// UnsupportedHarnesses are catalog harnesses this tool knows but refuses.
+	UnsupportedHarnesses []commonharness.CLIHarness
+
 	// Models is the per-harness model catalog, supplied by the composition
 	// root from mosaic-common/harness. --subject-model and --stub-model are
 	// validated against the entry matching the resolved harness id. The CLI

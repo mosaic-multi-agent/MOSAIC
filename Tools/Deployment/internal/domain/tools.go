@@ -54,6 +54,7 @@ type ToolShape string
 const (
 	ShapeList       ToolShape = "list"       // flat list value
 	ShapePermission ToolShape = "permission" // nested allow/deny mapping
+	ShapeRules      ToolShape = "rules"      // ordered list of {action, resource, effect} rules
 )
 
 // Disposition is the default permission assigned to a tool that an agent does not explicitly use.
@@ -105,6 +106,8 @@ type ToolSpec struct {
 	// PlaceholderExpansion names the tools the orchestrator's {tool-permissions} placeholder
 	// resolves to. Empty means "the whole Universe".
 	PlaceholderExpansion []string
+	// Rules holds the descriptor's fixed rules. Rules shape only; zero otherwise.
+	Rules RuleFrame
 }
 
 // HarnessTool is one entry in the harness's full tool universe.
@@ -112,6 +115,8 @@ type HarnessTool struct {
 	Name         string      // harness-side name, possibly hierarchical: "read/readFile"
 	Unused       Disposition // permission shape: disposition when the agent does not use it
 	ByConvention bool        // emitted for every agent regardless of generic tools
+	// Action is the permission action that governs the tool. Rules shape only; "" means Name.
+	Action string
 }
 
 // ToolMapping declares how one generic tool name maps to harness-specific output.
@@ -128,7 +133,7 @@ type ToolOutcome string
 
 const (
 	ToolMapped   ToolOutcome = "mapped"
-	ToolCustom   ToolOutcome = "custom"   // resolved by a user-supplied MCP server name
+	ToolCustom   ToolOutcome = "custom"   // resolved by the user's MCP entries
 	ToolSkipped  ToolOutcome = "skipped"  // user declined to name it
 	ToolUnmapped ToolOutcome = "unmapped" // no mapping and no user decision yet
 )
@@ -152,14 +157,43 @@ type ToolRequest struct {
 	AgentKey     string
 	Generic      []string          // the agent's declared generic tools, source order
 	Placeholder  string            // non-empty when the source used a placeholder instead of a list
-	CustomNames  map[string]string // generic tool -> user-supplied MCP server name
+	CustomNames  CustomToolAnswers // generic tool -> the user's MCP entries
 	SkippedTools map[string]bool   // generic tool -> user chose to skip
+}
+
+// MCPEntry is one entry of a custom tool answer in the neutral syntax: a whole
+// MCP server (Tool == "") or one tool of it. Server is never empty; Tool is
+// never "*".
+type MCPEntry struct {
+	Server string
+	Tool   string
+}
+
+// CustomToolAnswers maps a generic tool to the entries the user answered for
+// it, in answer order. A present key has at least one entry.
+type CustomToolAnswers map[string][]MCPEntry
+
+// CustomToolAnswersFromNames converts single-server answers (generic -> server name)
+// into CustomToolAnswers: each non-empty value becomes one whole-server entry, an empty
+// value gives no key. It is a bridge for callers that still carry single names.
+func CustomToolAnswersFromNames(names map[string]string) CustomToolAnswers {
+	out := CustomToolAnswers{}
+	for g, v := range names {
+		if v != "" {
+			out[g] = []MCPEntry{{Server: v}}
+		}
+	}
+	return out
 }
 
 // ToolResult is the module's answer: rendered frontmatter fields plus a full audit trail.
 type ToolResult struct {
 	Fields      []FrontmatterField // ready to place into frontmatter, in emission order
 	Resolutions []ToolResolution   // one per entry in ToolRequest.Generic, same order
+	// Gaps are notices the harness module raises about this agent's tool
+	// request. Plan building appends them to the plan's gaps (the same place
+	// GapUnmappedTool is raised); nothing else re-emits them.
+	Gaps []Gap
 }
 
 // ReverseToolResolution is the per-harness-tool audit record produced when promoting a

@@ -31,6 +31,9 @@ func (s *sessionImpl) setupSnapshotOrBackup(ctx context.Context, rs *runStartCtx
 	switch entry.LoadingMechanism {
 	case commonharness.LoadingMechanismName:
 		return s.setupNameBackup(ctx, rs)
+	case commonharness.LoadingMechanismRunnerLoaded:
+		// The Runner loads agent files itself: no copy, backup or transform.
+		return domain.RunOutcome{}, false, nil
 	default:
 		return s.refusal(fmt.Sprintf(
 			"harness %q has unset or unrecognized loading mechanism (%s); catalog misconfiguration",
@@ -77,7 +80,7 @@ func (s *sessionImpl) setupInfraAndStages(ctx context.Context, rs *runStartCtx) 
 	}
 
 	// Step 6b: enumerate declared infrastructure agents.
-	declaredInfraAgents, err := orchfile.EnumerateInfrastructureAgents(rs.config.OrchestratorFilePath)
+	declaredInfraAgents, err := orchfile.EnumerateInfrastructureAgents(rs.config.OrchestratorFilePath, agentFormat(rs.config.HarnessID))
 	if err != nil {
 		return s.refusal(err.Error()), true, nil
 	}
@@ -210,7 +213,7 @@ func (s *sessionImpl) createOrResumeArtifact(ctx context.Context, rs *runStartCt
 	// an unresolvable agent is a refusal that leaves no artifact.
 	var setupAgent domain.AgentReference
 	if rs.config.Commits && (rs.config.IsNewRun || needsCommitSetup(rs.existingState)) {
-		ref, refusalMsg := resolveCommitSetupAgent(rs.declaredInfraAgents, rs.orchDir)
+		ref, refusalMsg := resolveCommitSetupAgent(rs.declaredInfraAgents, rs.orchDir, rs.config.HarnessID)
 		if refusalMsg != "" {
 			return s.refusal(refusalMsg), true, nil
 		}

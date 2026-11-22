@@ -7,9 +7,9 @@ package app
 import (
 	"context"
 
-	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
+	"mosaic-deploy/internal/logging"
 	"mosaic-deploy/internal/plan"
 	"mosaic-deploy/internal/todo"
 )
@@ -43,7 +43,7 @@ func deployHooks(ctx context.Context, s *service, req DeployHooksRequest) (domai
 		workspace = ws
 	}
 
-	if err := s.checkGhcpTarget(harnessID, workspace); err != nil {
+	if err := s.checkTargetPairs(harnessID, workspace); err != nil {
 		return domain.RunSummary{}, err
 	}
 
@@ -85,7 +85,11 @@ func deployHooks(ctx context.Context, s *service, req DeployHooksRequest) (domai
 	agentsDir := module.Descriptor().Paths.Agents.Project
 	var deployedAgentIndex DeployedAgentIndex
 	if module.Descriptor().Paths.Agents.Supported && agentsDir != "" {
-		deployedAgentIndex = buildDeployedAgentIndex(workspace, agentsDir)
+		var indexNotices []string
+		deployedAgentIndex, indexNotices = buildDeployedAgentIndex(workspace, agentsDir, module.Descriptor())
+		for _, notice := range indexNotices {
+			s.deps.Logger.Event(logging.Event{Level: logging.LevelWarn, Kind: "decode", Message: notice})
+		}
 	}
 
 	probeAgentByKey := make(map[string]domain.Agent, len(probeSet.Agents))
@@ -97,17 +101,15 @@ func deployHooks(ctx context.Context, s *service, req DeployHooksRequest) (domai
 	if pathErr != nil {
 		return domain.RunSummary{}, pathErr
 	}
-	deployedState, err := probeDeployedStateWithIndex(workspace, plannedPaths, module.Descriptor().Frontmatter.ModelKey, nil, deployedAgentIndex, probeAgentByKey, nil)
+	deployedState, err := probeDeployedStateWithIndex(workspace, plannedPaths, module.Descriptor().Frontmatter.ModelKey, nil, deployedAgentIndex, probeAgentByKey, nil, module.Descriptor())
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
 
-	toolCfg, _ := s.deps.ToolConfig.Load()
-	userCfg, err := s.deps.UserConfig.Load()
+	toolMappingsVersion, err := s.toolSettingsStamp(module)
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
-	toolMappingsVersion := config.HashToolDestinations(toolCfg.ToolDestinations, userCfg.ToolDestinations)
 
 	// Load the protocol and bundle versions for stamp consistency even though no agent
 	// content is generated; the planner and executor still record them.
@@ -176,6 +178,7 @@ func deployHooks(ctx context.Context, s *service, req DeployHooksRequest) (domai
 
 	report := s.conflictReportFor(module.Ref().ID, nil, s.deployedWorkflowIDs(module, workspace, scope, true), req.AutoConfirmPlan)
 	p.ConflictReport = report
+	p.ExperimentalHarnesses = domain.ExperimentalHarnessesOf(module.Ref())
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {
 		return domain.RunSummary{}, rerr
@@ -186,7 +189,7 @@ func deployHooks(ctx context.Context, s *service, req DeployHooksRequest) (domai
 
 	// No workflow blocks and no infrastructure blocks: this mode never rewrites the
 	// orchestrator's workflow or infrastructure regions. buildContent receives nil maps.
-	contentFn := s.buildContent(module, nil, nil, nil, nil, nil, nil, scope, nil, toolMappingsVersion, protocol, bundle, nil)
+	contentFn := s.buildContent(module, nil, nil, nil, nil, nil, nil, scope, nil, toolMappingsVersion, protocol, bundle, nil, nil)
 
 	now := s.now()
 	execReq := deploy.ExecRequest{

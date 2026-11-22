@@ -11,8 +11,10 @@ and <key>.claimed (the completion was claimed; created exclusively so that only 
 firing writes the invocation_end).
 """
 
+import datetime
 import json
 import os
+import random
 import re
 
 import mosaic_logger_core as core
@@ -29,19 +31,79 @@ def normalize_call_id(value) -> "str | None":
 
 def put_spawn_entry(paths: "core.LogPaths", key: str, run_id: str,
                     agent_instance_id: str, session_id: "str | None",
-                    agent_type: "str | None") -> bool:
-    """Persist the index entry for key. Never raises."""
+                    agent_type: "str | None", agent_name: "str | None" = None,
+                    minted_key: bool = False) -> bool:
+    """Persist the index entry for key. Never raises.
+
+    agent_name and minted_key are stored for a spawn whose key was minted because the
+    start carried no agent id; a later name-only SubagentStop finds the spawn through them.
+    """
     try:
-        data = {"key": key, "run_id": run_id, "agent_instance_id": agent_instance_id}
+        data = {"key": key, "run_id": run_id, "agent_instance_id": agent_instance_id,
+                "created_at": _iso_ms(datetime.datetime.now(datetime.timezone.utc))}
         if session_id:
             data["session_id"] = session_id
         if agent_type:
             data["agent_type"] = agent_type
+        if agent_name:
+            data["agent_name"] = agent_name
+        if minted_key:
+            data["minted_key"] = True
         path = paths.subagent_index_file(key, "json")
         path.parent.mkdir(parents=True, exist_ok=True)
         return core.atomic_replace(path, json.dumps(data, ensure_ascii=False).encode("utf-8"))
     except Exception:
         return False
+
+
+def _iso_ms(now: datetime.datetime) -> str:
+    return now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
+
+
+def mint_spawn_key(agent_name, now: "datetime.datetime | None" = None) -> str:
+    """Mint a unique correlation key {name}_{YYYYMMDD}T{HHMMSS}Z-{4 hex} for a spawn
+    that carries no agent id. Never raises; an unusable name yields the prefix 'agent'."""
+    try:
+        name = agent_name.strip() if isinstance(agent_name, str) else ""
+        prefix = core.sanitize_component(name) if name else "agent"
+        moment = now or datetime.datetime.now(datetime.timezone.utc)
+        suffix = "".join(random.choices("0123456789abcdef", k=4))
+        return f"{prefix}_{moment.strftime('%Y%m%dT%H%M%SZ')}-{suffix}"
+    except Exception:
+        return "agent_" + "".join(random.choices("0123456789abcdef", k=12))
+
+
+def _unstopped_minted(paths: "core.LogPaths", agent_name: str) -> list:
+    """Index entries of minted-key spawns of agent_name not yet stopped, oldest first."""
+    found = []
+    for entry_file in paths.subagent_index_dir().glob("*.json"):
+        entry = _read_entry_file(entry_file)
+        if (entry and entry.get("minted_key") is True and entry.get("key")
+                and entry.get("agent_name") == agent_name
+                and not paths.subagent_index_file(entry["key"], "stopped").exists()):
+            found.append(entry)
+    return sorted(found, key=lambda e: (e.get("created_at") or "", e["key"]))
+
+
+def mark_stopped_by_name(paths: "core.LogPaths", session_id: "str | None",
+                         agent_name: str) -> "str | None":
+    """Mark the oldest not-yet-stopped minted-key spawn of agent_name as stopped.
+
+    Candidates of the stop's own session are preferred; without one (or without a
+    session id) every session is considered. The marker is created exclusively, so
+    concurrent stops mark distinct spawns. Returns the marked key, or None. Never raises.
+    """
+    try:
+        candidates = _unstopped_minted(paths, agent_name)
+        own = [e for e in candidates if session_id and e.get("session_id") == session_id]
+        for entry in own or candidates:
+            if _create_exclusive(paths.subagent_index_file(entry["key"], "stopped")):
+                return entry["key"]
+        if own:
+            return mark_stopped_by_name(paths, None, agent_name)
+        return None
+    except Exception:
+        return None
 
 
 def get_spawn_entry(paths: "core.LogPaths", key: str) -> "dict | None":

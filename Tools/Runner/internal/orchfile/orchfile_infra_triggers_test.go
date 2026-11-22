@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"mosaic-run/internal/agentfile"
 	"mosaic-run/internal/orchfile"
 )
 
@@ -53,7 +54,7 @@ func TestEnumerateInfrastructureAgents_EveryVocabularyTrigger_Accepted(t *testin
 		infraRow("commit", "MANUAL")
 	path := writeInfraOrch(t, infraSection("agent-x", body))
 
-	agents, err := orchfile.EnumerateInfrastructureAgents(path)
+	agents, err := orchfile.EnumerateInfrastructureAgents(path, agentfile.Format{})
 
 	if err != nil {
 		t.Fatalf("want no error for the four vocabulary triggers, got %v", err)
@@ -72,7 +73,7 @@ func TestEnumerateInfrastructureAgents_EveryVocabularyTrigger_Accepted(t *testin
 func TestEnumerateInfrastructureAgents_UnknownTrigger_RefusedNamingAgentAndTrigger(t *testing.T) {
 	path := writeInfraOrch(t, infraSection("commit-manager-x", infraTableHeader+infraRow("commit", "WHENEVER")))
 
-	agents, err := orchfile.EnumerateInfrastructureAgents(path)
+	agents, err := orchfile.EnumerateInfrastructureAgents(path, agentfile.Format{})
 
 	re := asRefusalError(t, err)
 	if agents != nil {
@@ -106,7 +107,7 @@ func TestEnumerateInfrastructureAgents_InvalidTriggerCases_Refused(t *testing.T)
 		t.Run(tc.name, func(t *testing.T) {
 			path := writeInfraOrch(t, infraSection("agent-x", infraTableHeader+infraRow("commit", tc.trigger)))
 
-			_, err := orchfile.EnumerateInfrastructureAgents(path)
+			_, err := orchfile.EnumerateInfrastructureAgents(path, agentfile.Format{})
 
 			re := asRefusalError(t, err)
 			if re.Resource != "agent-x" || re.Token != tc.trigger {
@@ -123,7 +124,7 @@ func TestEnumerateInfrastructureAgents_UnknownTriggerOnLaterRow_Refused(t *testi
 		infraRow("commit", "EVERY_FULL_MOON")
 	path := writeInfraOrch(t, infraSection("agent-x", body))
 
-	_, err := orchfile.EnumerateInfrastructureAgents(path)
+	_, err := orchfile.EnumerateInfrastructureAgents(path, agentfile.Format{})
 
 	re := asRefusalError(t, err)
 	if re.Token != "EVERY_FULL_MOON" {
@@ -136,7 +137,7 @@ func TestEnumerateInfrastructureAgents_UnknownTriggerOnLaterAgent_Refused(t *tes
 		infraSection("good-agent", infraTableHeader+infraRow("checkpoint", "PHASE_END")),
 		infraSection("bad-agent", infraTableHeader+infraRow("commit", "NEVER")))
 
-	_, err := orchfile.EnumerateInfrastructureAgents(path)
+	_, err := orchfile.EnumerateInfrastructureAgents(path, agentfile.Format{})
 
 	re := asRefusalError(t, err)
 	if re.Resource != "bad-agent" {
@@ -147,7 +148,7 @@ func TestEnumerateInfrastructureAgents_UnknownTriggerOnLaterAgent_Refused(t *tes
 func TestEnumerateInfrastructureAgents_UnknownTriggerOnRestoreClassAgent_Refused(t *testing.T) {
 	path := writeInfraOrch(t, infraSection("restore-agent", infraTableHeader+infraRow("restore", "AT_DAWN")))
 
-	_, err := orchfile.EnumerateInfrastructureAgents(path)
+	_, err := orchfile.EnumerateInfrastructureAgents(path, agentfile.Format{})
 
 	re := asRefusalError(t, err)
 	if re.Resource != "restore-agent" || re.Token != "AT_DAWN" {
@@ -158,7 +159,7 @@ func TestEnumerateInfrastructureAgents_UnknownTriggerOnRestoreClassAgent_Refused
 func TestEnumerateInfrastructureAgents_StageEnd_RefusalGuidesToIterationEndAndRedeploy(t *testing.T) {
 	path := writeInfraOrch(t, infraSection("agent-x", infraTableHeader+infraRow("commit", "STAGE_END")))
 
-	_, err := orchfile.EnumerateInfrastructureAgents(path)
+	_, err := orchfile.EnumerateInfrastructureAgents(path, agentfile.Format{})
 
 	re := asRefusalError(t, err)
 	reason := strings.ToLower(re.Reason)
@@ -173,7 +174,7 @@ func TestEnumerateInfrastructureAgents_BlankTriggerCell_Refused(t *testing.T) {
 	body := infraTableHeader + infraRow("commit", "ITERATION_END") + infraRow("commit", "   ")
 	path := writeInfraOrch(t, infraSection("agent-x", body))
 
-	_, err := orchfile.EnumerateInfrastructureAgents(path)
+	_, err := orchfile.EnumerateInfrastructureAgents(path, agentfile.Format{})
 
 	re := asRefusalError(t, err)
 	if re.Resource != "agent-x" {
@@ -190,7 +191,7 @@ func TestEnumerateInfrastructureAgents_TableWithRowsAndNoTriggerColumn_Refused(t
 		"| commit | - | halt | row |\n"
 	path := writeInfraOrch(t, infraSection("agent-x", body))
 
-	_, err := orchfile.EnumerateInfrastructureAgents(path)
+	_, err := orchfile.EnumerateInfrastructureAgents(path, agentfile.Format{})
 
 	re := asRefusalError(t, err)
 	if re.Resource != "agent-x" {
@@ -204,7 +205,7 @@ func TestEnumerateInfrastructureAgents_TableWithRowsAndNoTriggerColumn_Refused(t
 func TestEnumerateInfrastructureAgents_SectionWithoutTable_EnumeratesAgentWithNoTriggers(t *testing.T) {
 	path := writeInfraOrch(t, infraSection("agent-x", "A section with prose and no table.\n"))
 
-	agents, err := orchfile.EnumerateInfrastructureAgents(path)
+	agents, err := orchfile.EnumerateInfrastructureAgents(path, agentfile.Format{})
 
 	if err != nil {
 		t.Fatalf("want no error for a section without a table, got %v", err)
@@ -217,7 +218,7 @@ func TestEnumerateInfrastructureAgents_SectionWithoutTable_EnumeratesAgentWithNo
 func TestEnumerateInfrastructureAgents_TableWithoutRows_EnumeratesAgentWithNoTriggers(t *testing.T) {
 	path := writeInfraOrch(t, infraSection("agent-x", infraTableHeader))
 
-	agents, err := orchfile.EnumerateInfrastructureAgents(path)
+	agents, err := orchfile.EnumerateInfrastructureAgents(path, agentfile.Format{})
 
 	if err != nil {
 		t.Fatalf("want no error for a table without rows, got %v", err)

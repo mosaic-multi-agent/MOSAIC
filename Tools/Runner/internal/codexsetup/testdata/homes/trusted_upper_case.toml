@@ -1,0 +1,5 @@
+[projects.'{{WORKDIR_UPPER}}']
+trust_level = "trusted"
+
+[mcp_servers.contact-user]
+command = "contact-user-server"

@@ -1,0 +1,179 @@
+schema_version: "1"
+id: "vscode-ghcp"
+display_name: "VS Code GHCP Local"
+transform_version: "3.0.0"
+
+models:
+  ids:
+    - "Claude Opus 5.5"
+    - "Claude Sonnet 5.5"
+    - "Claude Haiku 5.5"
+    - "Claude Fable 5.2"
+    - "Claude Fable 5.1"
+    - "Claude Fable 5"
+    - "Claude Sonnet 5"
+    - "Claude Sonnet 4.6"
+    - "Claude Haiku 4.5"
+    - "Gpt 6.2 Astra"
+    - "Gpt 6.2 Sol"
+    - "Gpt 6.1 Terra"
+    - "Gpt 6.1 Sol"
+    - "Gpt 6 Astra"
+    - "Gpt 6 Sol"
+    - "Gpt 6 Luna"
+    - "Gpt 5.6 Sol"
+    - "Gpt 5.6 Luna"
+    - "Gpt 5.4 Nano"
+    - "Gpt 5.3 Codex"
+    - "Gemini 4 Hydrogen"
+    - "Gemini 4 Carbon"
+    - "Gemini 4 Argon"
+    - "Gemini 3.8 Flash"
+    - "Mai Code 2"
+    - "Mai Code 2 Flash"
+    - "Mai Code 1.1 Flash"
+    - "Kimi K3"
+    - "Grok 4.7"
+    - "Grok 4.6"
+  format_hint: "display-name"
+tools:
+  shape: list
+  mcp:
+    server_form: "{server}/*"
+    tool_form: "{server}/{tool}"
+  report_unknown_tool_names: true
+  universe:
+    - name: "read/readFile"
+      unused: deny
+      by_convention: false
+    - name: "edit/createFile"
+      unused: deny
+      by_convention: false
+    - name: "edit/createDirectory"
+      unused: deny
+      by_convention: false
+    - name: "edit/editFiles"
+      unused: deny
+      by_convention: false
+    - name: "search/fileSearch"
+      unused: deny
+      by_convention: false
+    - name: "search/textSearch"
+      unused: deny
+      by_convention: false
+    - name: "agent"
+      unused: deny
+      by_convention: false
+    - name: "search/listDirectory"
+      unused: deny
+      by_convention: true
+    - name: "execute/runInTerminal"
+      unused: deny
+      by_convention: false
+    - name: "vscode/askQuestions"
+      unused: deny
+      by_convention: false
+  mappings:
+    - generic: "file_read"
+      destinations:
+        - to: main
+          names:
+            - "read/readFile"
+    - generic: "file_write"
+      destinations:
+        - to: main
+          names:
+            - "edit/createFile"
+            - "edit/editFiles"
+    - generic: "file_edit"
+      destinations:
+        - to: main
+          names:
+            - "edit/editFiles"
+    - generic: "file_search"
+      destinations:
+        - to: main
+          names:
+            - "search/fileSearch"
+    - generic: "content_search"
+      destinations:
+        - to: main
+          names:
+            - "search/textSearch"
+    - generic: "terminal"
+      destinations:
+        - to: main
+          names:
+            - "execute/runInTerminal"
+    - generic: "user_interaction"
+      destinations:
+        - to: main
+          names:
+            - "vscode/askQuestions"
+    - generic: "subagent"
+      destinations:
+        - to: main
+          names:
+            - "agent"
+    - generic: "skill"
+      destinations: []
+  placeholder_expansion:
+    - "read/readFile"
+    - "edit/createFile"
+    - "edit/createDirectory"
+    - "edit/editFiles"
+    - "search/fileSearch"
+    - "search/textSearch"
+    - "search/listDirectory"
+    - "execute/runInTerminal"
+    - "agent"
+    - "vscode/askQuestions"
+
+paths:
+  agents:
+    supported: true
+    project: ".github/agents"
+  skills:
+    supported: true
+    project: ".github/skills"
+  hooks:
+    supported: true
+    project: ".github/hooks"
+
+extensions:
+  agent: ".agent.md"
+
+frontmatter:
+  model_key: "model"
+  tools_key: "tools"
+  add:
+    - key: "disable-model-invocation"
+      value: false
+    - key: "user-invocable"
+      value_by_role:
+        subagent: false
+        orchestrator: true
+        utility: true
+        standalone: true
+  drop:
+    - "recommended_tier"
+    - "tier_rationale"
+    - "required_skills"
+    - "infrastructure"
+    - "triggers"
+    - "on_failure"
+  key_order:
+    - "mosaic_id"
+    - "version"
+    - "mosaic_transform_version"
+    - "mosaic_injections_version"
+    - "name"
+    - "description"
+    - "model"
+    - "tools"
+    - "disable-model-invocation"
+    - "user-invocable"
+
+hooks:
+  supported: true
+  variant_key: "vscode-ghcp"

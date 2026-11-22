@@ -18,13 +18,31 @@ package orchfile
 import (
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
+	"mosaic-common/agentload"
 	"mosaic-common/docformat"
 	"mosaic-common/mdtable"
+	"mosaic-run/internal/agentfile"
 	"mosaic-run/internal/domain"
 )
+
+// loadScript loads the orchestrator script at path through the shared
+// read-only loader, using the agent file format of the harness. The document is
+// the script's standard form, so every format yields the same regions.
+// A failure is a *domain.RefusalError carrying the loader failure as its cause.
+func loadScript(path string, format agentfile.Format) (*docformat.Document, error) {
+	agent, err := agentload.Load(path, format.FormatID)
+	if err != nil {
+		return nil, &domain.RefusalError{
+			Component: "orchfile",
+			Resource:  path,
+			Reason:    "cannot load orchestrator script: " + err.Error(),
+			Cause:     err,
+		}
+	}
+	return agent.Document, nil
+}
 
 // collectWorkflowNodes performs a depth-first, document-order traversal of
 // nodes and appends any node whose name starts with "Workflow:" to dst.
@@ -53,23 +71,10 @@ func collectWorkflowNodes(nodes []*docformat.Node, dst *[]*docformat.Node) {
 //   - A region has no parseable identifier (empty id part)
 //   - A region has no version attribute
 //   - Two regions declare the same identifier
-func EnumerateWorkflows(path string) ([]domain.WorkflowRegion, error) {
-	data, err := os.ReadFile(path)
+func EnumerateWorkflows(path string, format agentfile.Format) ([]domain.WorkflowRegion, error) {
+	doc, err := loadScript(path, format)
 	if err != nil {
-		return nil, &domain.RefusalError{
-			Component: "orchfile",
-			Resource:  path,
-			Reason:    "file not found or cannot be read",
-		}
-	}
-
-	doc, err := docformat.Parse(data)
-	if err != nil {
-		return nil, &domain.RefusalError{
-			Component: "orchfile",
-			Resource:  path,
-			Reason:    fmt.Sprintf("cannot parse file: %v", err),
-		}
+		return nil, err
 	}
 
 	// Collect all nodes named "Workflow:{id}" at any nesting depth, regardless
@@ -150,23 +155,10 @@ func EnumerateWorkflows(path string) ([]domain.WorkflowRegion, error) {
 //     vocabulary (domain.IsValidInfraTrigger), has a blank Trigger cell, or the
 //     table has rows but no Trigger column. Every row is checked, whatever the
 //     agent's class.
-func EnumerateInfrastructureAgents(path string) ([]domain.DeclaredInfraAgent, error) {
-	data, err := os.ReadFile(path)
+func EnumerateInfrastructureAgents(path string, format agentfile.Format) ([]domain.DeclaredInfraAgent, error) {
+	doc, err := loadScript(path, format)
 	if err != nil {
-		return nil, &domain.RefusalError{
-			Component: "orchfile",
-			Resource:  path,
-			Reason:    "file not found or cannot be read",
-		}
-	}
-
-	doc, err := docformat.Parse(data)
-	if err != nil {
-		return nil, &domain.RefusalError{
-			Component: "orchfile",
-			Resource:  path,
-			Reason:    fmt.Sprintf("cannot parse file: %v", err),
-		}
+		return nil, err
 	}
 
 	// Collect all sections named "InfrastructureAgent:{name}" at any nesting depth.
@@ -304,8 +296,8 @@ func WorkflowNotFoundReason(id string) string {
 //
 // Returns a *domain.RefusalError if the identifier is not found in the file,
 // or if the file itself cannot be enumerated (see EnumerateWorkflows).
-func GetWorkflow(path string, id string) (domain.WorkflowRegion, error) {
-	regions, err := EnumerateWorkflows(path)
+func GetWorkflow(path string, format agentfile.Format, id string) (domain.WorkflowRegion, error) {
+	regions, err := EnumerateWorkflows(path, format)
 	if err != nil {
 		return domain.WorkflowRegion{}, err
 	}

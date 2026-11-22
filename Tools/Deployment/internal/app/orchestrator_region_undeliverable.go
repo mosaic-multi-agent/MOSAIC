@@ -58,7 +58,7 @@ func sourceHasOrchestratorMarker(cat catalog.Catalog, sourcePath string) (hasMar
 	if err != nil {
 		return false, false
 	}
-	doc, err := docformat.Parse(data)
+	doc, err := ParseGenericSource(data)
 	if err != nil {
 		return false, false
 	}

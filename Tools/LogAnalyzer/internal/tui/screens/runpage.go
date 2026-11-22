@@ -12,7 +12,7 @@ import (
 )
 
 // scrollKeys are the short help keys of the views that only scroll.
-var scrollKeys = []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "scroll"}, exportKeyEntry, {Key: "esc", Desc: "back"}}
+var scrollKeys = []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "scroll"}, findingsKeyEntry, exportKeyEntry, {Key: "esc", Desc: "back"}}
 
 // bodyBudget returns how many body lines fit on a terminal of the given height.
 func bodyBudget(height int) int { return FrameBodyHeight(height) }

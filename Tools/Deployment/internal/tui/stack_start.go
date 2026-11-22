@@ -76,17 +76,16 @@ func (m *rootModel) startStack() stackStart {
 }
 
 // persistedWorkspace returns the workspace whose persisted stack applies to the confirmed path:
-// for promote the workspace containing the file, for the other modes the path
-// itself when it is a workspace.
+// for the workspace modes the path itself when it is a workspace. Promote has none: its path is
+// an agents folder, which never determines the stack.
 func (m *rootModel) persistedWorkspace() (string, bool) {
+	if m.selections.mode == domain.ModePromoteToGeneric {
+		return "", false
+	}
 	path := m.selections.workspacePath
 	workspace, ok := m.svc.FindWorkspace(path)
 	if !ok {
 		return "", false
-	}
-	switch m.selections.mode {
-	case domain.ModePromoteToGeneric:
-		return workspace, true
 	}
 	return workspace, sameDirectory(workspace, path)
 }

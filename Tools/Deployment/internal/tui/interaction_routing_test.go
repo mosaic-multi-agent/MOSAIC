@@ -30,6 +30,11 @@ func (s *stubRoutingService) DeployNew(_ context.Context, _ app.DeployRequest) (
 func (s *stubRoutingService) Update(_ context.Context, _ app.UpdateRequest) (domain.RunSummary, error) {
 	return domain.RunSummary{}, nil
 }
+// PromoteBatch satisfies app.Service; the batch is not exercised by these tests.
+func (s *stubRoutingService) PromoteBatch(_ context.Context, _ app.PromoteBatchRequest) (app.PromoteBatchResult, error) {
+	return app.PromoteBatchResult{}, nil
+}
+
 func (s *stubRoutingService) Promote(_ context.Context, _ app.PromoteRequest) (app.PromoteResult, error) {
 	return app.PromoteResult{}, nil
 }

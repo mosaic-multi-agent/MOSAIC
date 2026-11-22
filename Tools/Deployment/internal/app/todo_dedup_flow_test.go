@@ -165,7 +165,7 @@ func TestFreshDeploy_TodoListsEachMissingModelOnce(t *testing.T) {
 }
 
 // TestFreshDeploy_TodoListsEachUnmappedToolOncePerAgent checks one line per unmapped tool per
-// agent. parity-runner declares both tools and parity-helper and orchestrator-script only file_search; the placeholder
+// agent. parity-runner declares both tools and parity-helper and orchestrator-script only file_search; on Claude Code parity-runner and parity-helper also declare the unmapped user_interaction; the placeholder
 // orchestrators declare none.
 func TestFreshDeploy_TodoListsEachUnmappedToolOncePerAgent(t *testing.T) {
 	lines := deployWithoutModels(t, "terminal", "file_search")
@@ -279,7 +279,7 @@ func TestUpdate_AgentsWithoutDeployedModel_TodoListsModelAndToolsOnce(t *testing
 	assertOneToolLinePerAgent(t, sectionLines(lines, string(domain.TodoToolMappings)))
 }
 
-// assertOneToolLinePerAgent checks the tool section has exactly one line for each of the four
+// assertOneToolLinePerAgent checks the tool section has exactly one line for each of the six
 // tool/agent pairs of the sample catalog and nothing else.
 func assertOneToolLinePerAgent(t *testing.T, tools []string) {
 	t.Helper()
@@ -289,6 +289,8 @@ func assertOneToolLinePerAgent(t *testing.T, tools []string) {
 		"file_search/parity-runner":       0,
 		"file_search/parity-helper":       0,
 		"file_search/orchestrator-script": 0,
+		"user_interaction/parity-runner":  0,
+		"user_interaction/parity-helper":  0,
 	}
 	for _, l := range tools {
 		matched := false

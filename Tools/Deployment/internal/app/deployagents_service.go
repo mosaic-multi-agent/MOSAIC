@@ -23,7 +23,6 @@ import (
 	"context"
 
 	"mosaic-deploy/internal/catalog"
-	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/plan"
@@ -107,7 +106,7 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 		workspace = ws
 	}
 
-	if err := s.checkGhcpTarget(harnessID, workspace); err != nil {
+	if err := s.checkTargetPairs(harnessID, workspace); err != nil {
 		return domain.RunSummary{}, err
 	}
 
@@ -215,7 +214,9 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 	agentsDir := module.Descriptor().Paths.Agents.Project
 	var deployedAgentIndex DeployedAgentIndex
 	if module.Descriptor().Paths.Agents.Supported && agentsDir != "" {
-		deployedAgentIndex = buildDeployedAgentIndex(workspace, agentsDir)
+		var indexNotices []string
+		deployedAgentIndex, indexNotices = buildDeployedAgentIndex(workspace, agentsDir, module.Descriptor())
+		s.logDecodeNotices(indexNotices)
 	}
 
 	probeAgentByKey := make(map[string]domain.Agent, len(probeSet.Agents))
@@ -227,10 +228,11 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 	if pathErr != nil {
 		return domain.RunSummary{}, pathErr
 	}
-	deployedState, err := probeDeployedStateWithIndex(workspace, plannedPaths, module.Descriptor().Frontmatter.ModelKey, orch.seedStates(), deployedAgentIndex, probeAgentByKey, nil)
+	deployedState, err := probeDeployedStateWithIndex(workspace, plannedPaths, module.Descriptor().Frontmatter.ModelKey, orch.seedStates(), deployedAgentIndex, probeAgentByKey, nil, module.Descriptor())
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
+	s.logProbeDecodeNotices(deployedState)
 	legacyAgentPaths := applyRecordedLegacyAgents(workspace, module, snap, plannedPaths, deployedState)
 	askAgents, migratingAgents := splitMigratingAgents(nonInfraProbeAgents, plannedPaths, legacyAgentPaths)
 	askInfraAgents, migratingInfra := splitMigratingAgents(infraAgents, plannedPaths, legacyAgentPaths)
@@ -279,7 +281,7 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 	}
 	resolveMigratingModels(modelRes.models, append(migratingAgents, migratingInfra...), module, req.AgentModels, suppliedTiers)
 
-	customTools, skippedTools := s.resolveCustomTools(ctx, req.CustomTools, req.SkipAll, module, orch.withoutOrchestrators(probeSet.Agents))
+	customTools, skippedTools := s.resolveCustomTools(ctx, harnessID, req.CustomTools, req.SkipAll, module, orch.withoutOrchestrators(probeSet.Agents))
 
 	// A rewritten agent keeps its deployed model unless this run resolved one for it.
 	keepDeployedModels(modelRes.models,
@@ -287,12 +289,10 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 		false,
 		probeSet.Agents, plannedPaths, deployedState)
 
-	toolCfg, _ := s.deps.ToolConfig.Load()
-	userCfg, err := s.deps.UserConfig.Load()
+	toolMappingsVersion, err := s.toolSettingsStamp(module)
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
-	toolMappingsVersion := config.HashToolDestinations(toolCfg.ToolDestinations, userCfg.ToolDestinations)
 
 	// Build plan.Input. WorkflowIDs and HookIDs are nil — deploy-agents never touches
 	// orchestrator workflow regions or hook registrations. Only orchestrator files that need
@@ -318,6 +318,8 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 		ToolMappingsVersion:    toolMappingsVersion,
 		ProtocolVersion:        protocol.Version,
 		BundleVersion:          bundle.Version,
+		CustomToolNames:        customTools,
+		SkippedTools:           skippedTools,
 	}
 	planInput.ScannedAgentKeys = orch.agentKeys()
 	planInput.InfrastructureDeclarations = orch.intent()
@@ -370,7 +372,8 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 
 	report := s.conflictReportFor(module.Ref().ID, nil, s.deployedWorkflowIDs(module, workspace, scope, true), req.AutoConfirmPlan)
 	p.ConflictReport = report
-	s.annotateToolsChanges(&p, module, customTools, skippedTools, scope, newDeployedBytes(workspace, orch.readPaths()).withMigratedAgents(p).reader(), probeSet.Agents, infraAgents)
+	p.ExperimentalHarnesses = domain.ExperimentalHarnessesOf(module.Ref())
+	s.annotateToolsChanges(&p, module, customTools, skippedTools, scope, newDeployedBytes(workspace, orch.readPaths()).withMigratedAgents(p).canonicalReader(module.Descriptor()), probeSet.Agents, infraAgents)
 	ans, rerr := s.deps.Interaction.Review(ctx, p)
 	if rerr != nil {
 		return domain.RunSummary{}, rerr
@@ -391,17 +394,20 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 	// No catalog workflow blocks: orchestrator files keep their deployed workflows, and only
 	// their infrastructure declarations are merged (see orch.contentOptions).
 	models := orch.withDeployedModels(modelRes.models)
-	contentFn := s.buildContent(module, agentByKey, models, customTools, skippedTools, nil, nil, scope, newDeployedBytes(workspace, orch.readPaths()).withMigratedAgents(p).reader(), toolMappingsVersion, protocol, bundle, nil, orch.contentOptions(s)...)
+	deployedRule := newDeployedBytes(workspace, orch.readPaths()).withMigratedAgents(p)
+	var ownedKeyDiffs []domain.OwnedKeyDifference
+	contentFn := s.buildContent(module, agentByKey, models, customTools, skippedTools, nil, nil, scope, deployedRule.funnelReader(module.Descriptor()), toolMappingsVersion, protocol, bundle, nil, &ownedKeyDiffs, orch.contentOptions(s)...)
 
 	now := s.now()
 	execReq := deploy.ExecRequest{
-		Plan:          p,
-		MosaicRoot:    s.deps.MosaicRoot,
-		Content:       newDeployedBytes(workspace, nil).withMigratedAgents(p).keepingUnchangedMigrations(p, contentFn),
-		Conflicts:     conflicts,
-		VersionStamps: s.withProvenance(buildVersionStamps(append(probeSet.Agents, infraAgents...), probeSet.Skills, nil, p.Items, module.Descriptor(), toolMappingsVersion), p.Items),
-		Hooks:         nil,
-		TodoItems:     s.deps.Todo.Items,
+		Plan:              p,
+		MosaicRoot:        s.deps.MosaicRoot,
+		Content:           deployedRule.keepingUnchangedMigrations(p, contentFn),
+		AgentOwnedContent: agentOwnedContentFor(module.Descriptor()),
+		Conflicts:         conflicts,
+		VersionStamps:     s.withProvenance(buildVersionStamps(append(probeSet.Agents, infraAgents...), probeSet.Skills, nil, p.Items, module.Descriptor(), toolMappingsVersion), p.Items),
+		Hooks:             nil,
+		TodoItems:         s.deps.Todo.Items,
 		TodoMeta: todo.Meta{
 			Harness: harnessRef.DisplayName, WorkspacePath: workspace, DeploymentRoot: workspace,
 			GeneratedAt: now, Mode: domain.ModeDeployAgents,
@@ -432,5 +438,7 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 		s.notifyPersistFailure(ctx, err)
 	}
 
-	return withDryRunPlan(withConflictReport(s.buildSummary(domain.ModeDeployAgents, harnessRef, workspace, result), report), req.DryRun, p), nil
+	summary := s.buildSummary(domain.ModeDeployAgents, harnessRef, workspace, result)
+	summary.OwnedKeyDifferences = ownedKeyDiffs
+	return withDryRunPlan(withConflictReport(summary, report), req.DryRun, p), nil
 }

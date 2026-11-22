@@ -1,24 +1,30 @@
 ---
 description: Onboarding assistant that helps users understand the MOSAIC system, answers questions using documentation, and directs them to the right utility agent for hands-on tasks
 mode: primary
-model: openai/gpt-5.6-luna
-permission:
-  read: allow
-  write: allow
-  edit: allow
-  glob: allow
-  grep: allow
-  list: allow
-  bash: deny
-  patch: deny
-  webfetch: deny
-  question: allow
-  lsp: deny
-  task: deny
-  todowrite: deny
-  todoread: deny
-  skill: deny
-mosaic_harness_version: 3.0.0
+model: openai/gpt-6-luna
+permissions:
+  - action: "*"
+    resource: "*"
+    effect: deny
+  - action: read
+    resource: "*"
+    effect: allow
+  - action: edit
+    resource: "*"
+    effect: allow
+  - action: glob
+    resource: "*"
+    effect: allow
+  - action: grep
+    resource: "*"
+    effect: allow
+  - action: question
+    resource: "*"
+    effect: allow
+  - action: external_directory
+    resource: "*"
+    effect: ask
+mosaic_harness_version: 1.0.0
 mosaic_role: utility
 mosaic_version: 1.1.1
 ---

@@ -43,6 +43,7 @@ import (
 	"mosaic-agent-test/internal/harness/claudecode"
 	"mosaic-agent-test/internal/harness/fake"
 	"mosaic-agent-test/internal/harness/opencode"
+	"mosaic-agent-test/internal/harness/opencodev2"
 	"mosaic-agent-test/internal/launch"
 	"mosaic-agent-test/internal/preflight"
 	"mosaic-agent-test/internal/workspace"
@@ -122,6 +123,14 @@ func (fakeHarnessFactory) Bundle(_ context.Context, harnessID string) (HarnessBu
 	case commonharness.HarnessIDOpenCode:
 		return HarnessBundle{
 			Adapter:        opencode.New(opencode.Options{}),
+			Decoder:        fakeDecoder,
+			Launcher:       fakeLauncher{},
+			Environment:    domain.EnvironmentReport{},
+			InterpreterCmd: "",
+		}, nil
+	case commonharness.HarnessIDOpenCodeV2:
+		return HarnessBundle{
+			Adapter:        opencodev2.New(opencodev2.Options{}),
 			Decoder:        fakeDecoder,
 			Launcher:       fakeLauncher{},
 			Environment:    domain.EnvironmentReport{},

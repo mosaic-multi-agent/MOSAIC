@@ -62,9 +62,9 @@ func flatText(view string) string {
 func growthTitles(view string) []string { return headerTitles(view, "tool") }
 
 // growthGroup is the label of the group of growth columns, growthColumns its columns.
-const growthGroup = "context growth (tokens)"
+const growthGroup = "tool result growth (tokens)"
 
-var growthColumns = []string{"average growth", "minimum growth", "maximum growth", "growth samples", "negative growth", "not measurable"}
+var growthColumns = []string{"average result growth", "minimum result growth", "maximum result growth", "result growth samples", "negative result growth", "not measurable"}
 
 // growthHeader is the header of the first table of the view; the stacked tables
 // share its column positions.

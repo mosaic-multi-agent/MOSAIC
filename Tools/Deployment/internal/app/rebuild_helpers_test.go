@@ -19,6 +19,7 @@ import (
 	"mosaic-deploy/internal/harness/builtin/claudecode"
 	"mosaic-deploy/internal/harness/builtin/ghcpcli"
 	"mosaic-deploy/internal/harness/builtin/opencode"
+	"mosaic-deploy/internal/harness/builtin/opencodev2"
 	"mosaic-deploy/internal/harness/builtin/vscodeghcp"
 	"mosaic-deploy/internal/harness/registry"
 )
@@ -27,6 +28,7 @@ import (
 const (
 	hClaude = "claude-code"
 	hOpen   = "opencode"
+	hOpenV2 = "opencode-v2"
 	hCLI    = "ghcp-cli"
 	hVSCode = "vscode-ghcp"
 )
@@ -48,6 +50,8 @@ func rbModule(t *testing.T, id string) domain.HarnessModule {
 		m, err = claudecode.New(opts)
 	case hOpen:
 		m, err = opencode.New(opts)
+	case hOpenV2:
+		m, err = opencodev2.New(opts)
 	case hCLI:
 		m, err = ghcpcli.New(opts)
 	case hVSCode:
@@ -130,7 +134,7 @@ func withModelSelection(m domain.ModelSelection) rbOpt {
 	return func(_ *testing.T, in *app.RebuildInput) { in.Model = m }
 }
 
-func withCustomToolAnswers(answers map[string]string) rbOpt {
+func withCustomToolAnswers(answers domain.CustomToolAnswers) rbOpt {
 	return func(_ *testing.T, in *app.RebuildInput) { in.CustomTools = answers }
 }
 

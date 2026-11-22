@@ -9,15 +9,11 @@ import (
 	"testing"
 
 	"mosaic-deploy/internal/domain"
-	"mosaic-deploy/internal/harness/descriptor"
 )
 
 func vscodeGhcpAgentsDir(t *testing.T) string {
 	t.Helper()
-	d, err := descriptor.Load(filepath.Join("..", "harness", "builtin", "vscodeghcp", "vscode-ghcp.yaml"))
-	if err != nil {
-		t.Fatalf("load vscode-ghcp descriptor: %v", err)
-	}
+	d := parseBuiltinDescriptor(t, "vscode-ghcp")
 	if d.Paths.Agents.Project == "" {
 		t.Fatal("vscode-ghcp declares no project agents directory")
 	}
@@ -35,7 +31,7 @@ func TestScanWorkspaceAgents_VSCodeGhcpDir_FindsLegacyMdAndAgentMdAgents(t *test
 	cat.byKey["legacy-agent"] = domain.Agent{Key: "legacy-agent", Role: domain.RoleSubagent}
 	cat.byKey["new-agent"] = domain.Agent{Key: "new-agent", Role: domain.RoleSubagent}
 
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, nil)
 
 	keys := scan.MatchedKeys()
 	if len(keys) != 2 || keys[0] != "legacy-agent" || keys[1] != "new-agent" {

@@ -26,6 +26,9 @@ type failedAttempt struct {
 func classifyHarnessFailure(err error) domain.HarnessFailure {
 	text := err.Error()
 	switch {
+	case errors.Is(err, commonharness.ErrNoOutput):
+		// Checked before ErrTimeout: the watchdog error wraps both.
+		return domain.HarnessFailure{Kind: domain.HarnessFailureNoOutput, Detail: text}
 	case errors.Is(err, commonharness.ErrTimeout):
 		return domain.HarnessFailure{Kind: domain.HarnessFailureTimeout, Detail: text}
 	case errors.Is(err, commonharness.ErrGHCPCLIAgentDeselected):
@@ -35,7 +38,13 @@ func classifyHarnessFailure(err error) domain.HarnessFailure {
 	case errors.Is(err, commonharness.ErrGHCPCLIStreamError),
 		errors.Is(err, commonharness.ErrGHCPCLIStreamIncomplete),
 		errors.Is(err, commonharness.ErrOpenCodeStreamError),
-		errors.Is(err, commonharness.ErrOpenCodeStreamIncomplete):
+		errors.Is(err, commonharness.ErrOpenCodeStreamIncomplete),
+		errors.Is(err, commonharness.ErrCodexStreamError),
+		errors.Is(err, commonharness.ErrCodexStreamIncomplete),
+		errors.Is(err, commonharness.ErrOpenCodeV2UnknownAgent),
+		errors.Is(err, commonharness.ErrOpenCodeV2UnknownModel),
+		errors.Is(err, commonharness.ErrOpenCodeV2RunFailed),
+		errors.Is(err, commonharness.ErrOpenCodeV2StreamIncomplete):
 		return domain.HarnessFailure{Kind: domain.HarnessFailureStreamError, Detail: text}
 	case errors.Is(err, commonharness.ErrEmptyResponse):
 		return domain.HarnessFailure{Kind: domain.HarnessFailureEmpty, Detail: text}
@@ -47,6 +56,9 @@ func classifyHarnessFailure(err error) domain.HarnessFailure {
 	var launchErr *domain.HarnessLaunchError
 	if errors.Is(err, commonharness.ErrNonZeroExit) ||
 		errors.Is(err, commonharness.ErrExecutableNotFound) ||
+		errors.Is(err, commonharness.ErrOpenCodeV2UsageError) ||
+		errors.Is(err, commonharness.ErrOpenCodeV2Interrupted) ||
+		errors.Is(err, commonharness.ErrOpenCodeV2Terminated) ||
 		errors.As(err, &launchErr) {
 		return domain.HarnessFailure{Kind: domain.HarnessFailureProcess, Detail: text}
 	}

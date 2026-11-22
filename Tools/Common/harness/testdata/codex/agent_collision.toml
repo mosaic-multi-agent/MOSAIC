@@ -1,0 +1,18 @@
+name = "collider"
+description = "Declares settings the invocation fixes itself"
+model = "gpt-5"
+sandbox_mode = "read-only"
+approval_policy = "on-request"
+developer_instructions = """
+You collide on purpose.
+"""
+
+[mcp_servers.contact-user]
+command = "contact-server"
+default_tools_approval_mode = "prompt"
+
+[mcp_servers.contact-user.tools.ask_user_questions]
+approval_mode = "prompt"
+
+[mcp_servers.contact-user.tools.get_answered_questions]
+approval_mode = "prompt"

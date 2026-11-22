@@ -1,0 +1,5 @@
+# Invalid: experimental mapping without a reason key.
+schema_version: "1"
+id: "experimental-empty-mapping"
+display_name: "Experimental Empty Mapping"
+experimental: {}

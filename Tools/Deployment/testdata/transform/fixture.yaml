@@ -7,6 +7,11 @@
 #   - Stamps transform_version (the injections version is set by the test module, not here)
 #   - Applies a key_order that includes the stamped fields
 #
+# injections_version is intentionally absent. Tests that need a specific injection version
+# on region tags pass InjectionsVersion explicitly in the transform.Request. Tests that
+# verify body-prose purity (region tags unchanged) rely on the descriptor having no version
+# so that the descriptor-fallback path in applyHarnessRegion produces no stamp.
+#
 # The placeholder_expansion covers the orchestrator's {tool-permissions} placeholder (T8.7).
 schema_version: "1"
 id: "fixture-harness"

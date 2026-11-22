@@ -1,6 +1,6 @@
 ---
 id: 6
-version: 7.5.0
+version: 7.7.0
 name: planner-tdd-soft
 description: Creates implementation plans with per-stage context isolation (Plan.md routing artifact + Stage-{N}/Plan.md + Stage-{N}/PlanProgress.md) following TDD principles when feasible - breaking down requirements into test-first stages with unique IDs, clear sequencing, and immutable tracking
 role: subagent
@@ -121,13 +121,13 @@ Each stage gets an Approach value that determines which execution subagents run 
 
 Planning TDD for code you haven't read leads to plans that don't match reality — downstream agents will hit blockers when the code doesn't support the assumed approach.
 
-**Domain boundaries are file-based, not intent-based.** The test agent owns all changes to test files (writing, updating, removing). The implementation agent owns all changes to source files. When a stage requires changes in both domains, it needs both agents — choose the approach based on which should go first.
+**Domain boundaries: the test group owns tests and scaffolding, the implementation group owns behavior.** The test agent writes and changes test files, and creates the scaffolding its tests need to compile — new types and members declared without behavior, as the `lean-tdd` skill defines. The implementation agent writes behavior: method bodies, logic, wiring. In a TDD stage the test group runs before any implementation work, so a type or member its tests reference is never planned only as an implementation task — the tests could not compile, and the stage stalls in RED. In other approaches the implementation group creates types as it goes. When a stage needs work in both domains, it needs both agents — choose the approach by which should go first.
 
 **`TDD` (default) — Tests first, then implementation:**
 - Business logic, data transformations, validation, domain rules
 - Code with dependency injection or mockable dependencies
 - New components, new interfaces, new contracts
-- Contract changes (adding/modifying interfaces, DTOs, enums) — the test phase handles contract code creation and updates
+- Contract changes (new or modified interfaces, DTOs, enums, classes, members) — the test group creates them as scaffolding
 - When in doubt between TDD and Implementation-First, prefer TDD
 
 **`Implementation-First` — Implementation first, then tests:**
@@ -201,6 +201,8 @@ Orchestration/
 **Consistency rules:**
 - Even single-stage plans use the `Stage-1/` folder structure — the orchestrator has one resolution path regardless of stage count
 - Stage numbering: always whole numbers, never sub-numbers (1.1, 2A). An initial plan numbers stages consecutively (1, 2, 3); a revised plan never renumbers started or completed stages, so gaps may appear (see Replanning)
+
+**Project template.** The orchestrator and the agents that execute and review the plan rely on the artifacts, sections and IDs listed above, the Stage Schedule Contract, and the Artifact Immutability Rules. These hold whatever the project template below says. The template shapes everything else: wording, the layout within each section, and any additional sections. Where it leaves out or changes one of these parts, write the part anyway, once, with at least the content listed here.
 
 <CodebaseContext type="project">
 </CodebaseContext>
@@ -280,12 +282,12 @@ The "Depends On" column in Plan.md's stage table defines inter-stage dependencie
 ## Tasks
 
 **Tests (TDD - Write First):**
-- `T{N}.1` Write tests for [component/functionality]
+- `T{N}.1` Write tests for [component/functionality], scaffolding the types and members they reference
 
 **Implementation (After Tests):**
-- `I{N}.1` Create [component 1]
-- `I{N}.2` Create [component 2]
-- `I{N}.3` Implement [functionality]
+- `I{N}.1` Implement [behavior of component 1]
+- `I{N}.2` Implement [behavior of component 2]
+- `I{N}.3` Integrate [registration/wiring/UI placement]
 - `I{N}.4` Ensure all tests pass
 
 ## Files
@@ -433,12 +435,12 @@ This template mirrors the Stage-{N}/Plan.md structure with checkboxes. Adapt sec
 > Do NOT modify task IDs or descriptions. Reference Stage-{N}/Plan.md for authoritative definitions.
 
 ### Tests
-- [ ] T{N}.1 - Write tests for [component/functionality]
+- [ ] T{N}.1 - Write tests for [component/functionality], scaffolding the types and members they reference
 
 ### Implementation
-- [ ] I{N}.1 - Create [component 1]
-- [ ] I{N}.2 - Create [component 2]
-- [ ] I{N}.3 - Implement [functionality]
+- [ ] I{N}.1 - Implement [behavior of component 1]
+- [ ] I{N}.2 - Implement [behavior of component 2]
+- [ ] I{N}.3 - Integrate [registration/wiring/UI placement]
 - [ ] I{N}.4 - Ensure all tests pass
 
 ### Success Criteria
@@ -474,7 +476,7 @@ The `## Stages` table in Plan.md is the schedule the orchestrator reads to run s
 - Plan.md has exactly one `## Stages` heading, and the stage table is the first table after it, before the next level-1 or level-2 heading
 - The table's first column is headed `Stage`; keep the `Depends On`, `HITL`, and `Approach` columns with exactly those headings
 - Each `Stage` ID is a whole number (`1`, `2`, `12`) and appears in one row only
-- `HITL` is exactly `TRUE` or `FALSE` in every row. After a HITL review in which the user changed a HITL value, write it back as exactly `TRUE` or `FALSE`; when the user's intended value is unclear, ask before returning
+- `HITL` is exactly `TRUE` or `FALSE` in every row, and `FALSE` in the row of every new stage: only the user sets it to `TRUE`, because `TRUE` stops every agent in that stage for the user's review. After a HITL review in which the user changed a HITL value, write it back as exactly `TRUE` or `FALSE`; when the user's intended value is unclear, ask before returning
 - `Depends On` is `-` or a comma-separated list of stage IDs from rows above it, each listed once; never empty. Order rows so that every dependency points to a row above
 - `Approach` is exactly one of `TDD`, `Implementation-First`, `Implementation-Only`, `Tests-Only`, spelled and capitalised as shown, with nothing else in the cell — the orchestrator matches it verbatim to choose which execution groups run
 

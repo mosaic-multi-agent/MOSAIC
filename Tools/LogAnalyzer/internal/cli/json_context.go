@@ -18,6 +18,14 @@ type jsonFirstWrite struct {
 	Heuristic bool `json:"heuristic"`
 }
 
+// jsonSessionFirstWrite is the first-write figure of one session of the actor.
+type jsonSessionFirstWrite struct {
+	jsonFirstWrite
+	Session   int     `json:"session"`
+	SessionID *string `json:"session_id"`
+	At        *string `json:"at"`
+}
+
 type jsonCompactionCounts struct {
 	Logged       int `json:"logged"`
 	Detected     int `json:"detected"`
@@ -46,6 +54,7 @@ type jsonActorContext struct {
 	Final               *jsonContextFigure       `json:"final"`
 	FinalDefinition     string                   `json:"final_definition"`
 	FirstWrite          *jsonFirstWrite          `json:"first_write"`
+	FirstWriteSessions  []jsonSessionFirstWrite  `json:"first_write_sessions"`
 	Compactions         jsonCompactionCounts     `json:"compactions"`
 	DetectedCompactions []jsonDetectedCompaction `json:"detected_compactions"`
 	CallsByKind         jsonCallsByKind          `json:"calls_by_kind"`
@@ -68,6 +77,24 @@ func encodeFirstWrite(f domain.ContextFigure) *jsonFirstWrite {
 		return nil
 	}
 	return &jsonFirstWrite{jsonContextFigure: *fig, Heuristic: true}
+}
+
+// encodeFirstWriteSessions lists the per-session figures; always an array.
+func encodeFirstWriteSessions(list []domain.SessionFirstWrite) []jsonSessionFirstWrite {
+	out := []jsonSessionFirstWrite{}
+	for _, fw := range list {
+		enc := encodeFirstWrite(fw.Figure)
+		if enc == nil {
+			continue
+		}
+		entry := jsonSessionFirstWrite{jsonFirstWrite: *enc, Session: fw.Session, At: timeOrNull(fw.At)}
+		if fw.SessionID != "" {
+			id := fw.SessionID
+			entry.SessionID = &id
+		}
+		out = append(out, entry)
+	}
+	return out
 }
 
 func encodeActorContext(a domain.ActorContext) jsonActorContext {
@@ -96,6 +123,8 @@ func encodeActorContext(a domain.ActorContext) jsonActorContext {
 		Final:           encodeContextFigure(a.Final),
 		FinalDefinition: domain.FinalContextDefinition,
 		FirstWrite:      encodeFirstWrite(a.FirstWrite),
+
+		FirstWriteSessions: encodeFirstWriteSessions(a.FirstWrites),
 		Compactions: jsonCompactionCounts{
 			Logged: a.LoggedCount(), Detected: a.DetectedCount(),
 			Harness: a.HarnessCount(), DetectedOnly: a.DetectedOnlyCount(),

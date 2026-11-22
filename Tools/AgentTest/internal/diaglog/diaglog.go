@@ -1,11 +1,16 @@
 // Package diaglog is the file-backed diagnostic sink for one run's subject
 // process output.
 //
-// The shared spawner logs the subject's whole captured stdout and stderr as
-// two diagnostic events when the spawn finishes — tens of kilobytes per run,
-// including raw task prompts and provider usage records. That output is the
-// primary artifact for diagnosing an unexpectedly-behaving run, so it is
-// retained; what changes is where. One Sink corresponds to one run.
+// The shared spawner logs the subject's stdout as it arrives (line events, in
+// order), and on every end path, including kills by timeout or cancellation,
+// its stderr and an end event carrying the end reason and the stdout byte
+// count. The file is therefore a faithful record of the subject's output, kept
+// even for a run that was killed. One Sink corresponds to one run, so the file
+// identifies the invocation.
+//
+// Each entry is "<name> <key>=<value>...: <message>": event fields follow the
+// name in order (values quoted when ambiguous), and a multi-line message is a
+// block closed by an "--- end <name> ---" line.
 //
 // The two most important properties:
 //   - An open Sink does not write to the process's own stdout or stderr.
@@ -20,6 +25,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 
 	commonharness "mosaic-common/harness"
@@ -91,12 +98,57 @@ func (s *Sink) Log(ev commonharness.Event) {
 		return
 	}
 
-	_, werr := fmt.Fprintf(f, "%s: %s\n", ev.Name, ev.Message)
+	_, werr := f.WriteString(formatEvent(ev))
 	_ = f.Close()
 
 	if werr != nil && s.firstErr == nil {
 		s.firstErr = werr
 	}
+}
+
+// formatEvent renders one event as a diag.log entry.
+//
+// The entry header is the event name, then each field as key=value in event
+// order, then a colon. A single-line message follows the colon on the same
+// line. A multi-line message starts on the next line and is closed by an
+// "--- end <name> ---" marker line, so where it stops is unambiguous. An empty
+// message leaves the header ending at the colon.
+func formatEvent(ev commonharness.Event) string {
+	var b strings.Builder
+	b.WriteString(ev.Name)
+	for _, fld := range ev.Fields {
+		b.WriteByte(' ')
+		b.WriteString(fld.Key)
+		b.WriteByte('=')
+		b.WriteString(fieldValue(fld.Value))
+	}
+	b.WriteByte(':')
+
+	msg := strings.TrimSuffix(ev.Message, "\n")
+	switch {
+	case msg == "" && len(ev.Fields) > 0:
+		b.WriteByte('\n')
+	case msg == "":
+		b.WriteString(" \n")
+	case strings.Contains(msg, "\n"):
+		b.WriteByte('\n')
+		b.WriteString(msg)
+		b.WriteString("\n--- end " + ev.Name + " ---\n")
+	default:
+		b.WriteByte(' ')
+		b.WriteString(msg)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+// fieldValue returns v bare when it is a plain token, and Go-quoted when it is
+// empty or contains characters that would blur the entry header.
+func fieldValue(v string) string {
+	if v == "" || strings.ContainsAny(v, " \t\r\n:=\"") || strconv.Quote(v) != `"`+v+`"` {
+		return strconv.Quote(v)
+	}
+	return v
 }
 
 // Close returns the first write error encountered during logging, if any, so a

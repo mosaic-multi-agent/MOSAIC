@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"mosaic-run/internal/agentfile"
 	"mosaic-run/internal/orchfile"
 	"mosaic-run/internal/workflow"
 )
@@ -23,7 +24,7 @@ func TestOrchestratorFixtures_WorkflowRegionsAreAcceptedByTheStrictParser(t *tes
 	}
 
 	for name, path := range fixtures {
-		regions, err := orchfile.EnumerateWorkflows(path)
+		regions, err := orchfile.EnumerateWorkflows(path, agentfile.Format{})
 		if err != nil {
 			t.Errorf("%s: EnumerateWorkflows: %v", name, err)
 			continue

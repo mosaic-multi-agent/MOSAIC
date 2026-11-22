@@ -678,7 +678,7 @@ class TestNonCompliantSessionDegradation(unittest.TestCase):
 
     def test_prose_dispatch_degrades_gracefully(self):
         """A SubagentStart whose agent_prompt is free-form prose (no structured
-        fields) degrades to unknown-run/unknown-agent/ without raising.
+        fields) degrades to unknown-run/{unique fallback id}/ without raising.
 
         This is the 'weaker subject model' case documented in the plan.
         """

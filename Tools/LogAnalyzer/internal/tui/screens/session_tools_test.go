@@ -72,16 +72,16 @@ func TestSessionTools_GrowthFiguresAreShownWithSampleCount(t *testing.T) {
 	view := sessFindingsView(t, "builder#1")
 
 	sessToolCells(t, view, "Edit",
-		"average growth", "1,234", "minimum growth", "777", "maximum growth", "1,691",
-		"growth samples", "2", "negative growth", "0", "not measurable", "0")
+		"average result growth", "1,234", "minimum result growth", "777", "maximum result growth", "1,691",
+		"result growth samples", "2", "negative result growth", "0", "not measurable", "0")
 }
 
 func TestSessionTools_ToolWithoutGrowthSamplesShowsNotProvidedAndItsLeftOutCounts(t *testing.T) {
 	view := sessFindingsView(t, "builder#1")
 
 	sessToolCells(t, view, "Bash",
-		"average growth", notProvided, "minimum growth", screens.AbsentMarker, "maximum growth", screens.AbsentMarker,
-		"growth samples", "0", "negative growth", "2", "not measurable", "1")
+		"average result growth", notProvided, "minimum result growth", screens.AbsentMarker, "maximum result growth", screens.AbsentMarker,
+		"result growth samples", "0", "negative result growth", "2", "not measurable", "1")
 }
 
 func TestSessionTools_ToolSeenOnlyThroughGrowthHasARowWithoutCalls(t *testing.T) {
@@ -89,13 +89,13 @@ func TestSessionTools_ToolSeenOnlyThroughGrowthHasARowWithoutCalls(t *testing.T)
 
 	sessToolCells(t, view, "Glob",
 		"calls", "0", "errors", "0", "average duration", screens.AbsentMarker,
-		"average growth", "4,321", "growth samples", "1")
+		"average result growth", "4,321", "result growth samples", "1")
 }
 
 func TestSessionTools_OlderLogWithoutRequestedToolsShowsNotProvidedForTheTools(t *testing.T) {
 	view := sessFindingsView(t, "coder#1")
 
-	sessToolCells(t, view, "Bash", "calls", "1", "average growth", notProvided, "growth samples", "0")
+	sessToolCells(t, view, "Bash", "calls", "1", "average result growth", notProvided, "result growth samples", "0")
 }
 
 func TestSessionTools_EachActorShowsOnlyItsOwnTools(t *testing.T) {
@@ -152,7 +152,7 @@ func TestSessionTools_SampleCountAndLeftOutCountsSurviveEveryWidth(t *testing.T)
 
 			titles := sessToolsBlock(t, view).titles()
 
-			for _, want := range []string{"tool", "calls", "errors", "growth samples", "negative growth", "not measurable"} {
+			for _, want := range []string{"tool", "calls", "errors", "result growth samples", "negative result growth", "not measurable"} {
 				if !hasTitle(titles, want) {
 					t.Errorf("width %d: the tools table lost the column %q; its columns are %q", w, want, titles)
 				}

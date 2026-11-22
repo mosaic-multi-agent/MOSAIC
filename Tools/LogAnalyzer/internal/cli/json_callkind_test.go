@@ -77,7 +77,7 @@ func TestEncodeReport_Context_KeepsItsExistingKeysAndAddsOnlyTheAdditiveFields(t
 	assertKeySet(t, "context", sortedKeys(ctx), []string{
 		"calls", "first", "peak", "final", "final_definition", "first_write",
 		"compactions", "detected_compactions", "calls_by_kind", "compaction_calls",
-		"rewrites",
+		"rewrites", "first_write_sessions",
 	})
 }
 

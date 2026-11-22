@@ -90,6 +90,14 @@ func (m *rootModel) updateStack(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmd := scr.Update(msg)
 	if scr.Back() {
 		scr.SetExternalError("") // clears the back flag; the screen keeps its state
+		if m.selections.mode == domain.ModeTransformHarness {
+			m.enterTarget()
+			return m, nil
+		}
+		if m.asksPathFirst() && m.harnessShown {
+			m.showNarrowedHarness(m.offeredHarnesses(m.selections.workspacePath))
+			return m, nil
+		}
 		m.screen = screenWorkspace
 		return m, m.wsScreen.InputInit()
 	}

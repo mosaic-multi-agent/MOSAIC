@@ -65,7 +65,7 @@ func TestRuns_ShortHelpLineListsTheSortKeyAndTheHelpKey(t *testing.T) {
 	lines := viewLines(newRuns(tableW, tallH).View(tableW, tallH))
 	help := tailOf(lines)
 
-	assertContains(t, help, screens.KeySort+" sort", "? help", "enter")
+	assertContains(t, help, screens.KeySort+" sort", screens.KeyFindings+" findings", "? help", "enter")
 }
 
 func runsOverlay(s screens.Screen, width, height int) string {
@@ -98,7 +98,7 @@ func TestRunsHelpOverlay_ListsThisScreenNavigationAndExportKeysButNoViews(t *tes
 
 	assertContains(t, overlay, "This screen", "Navigation", "Export")
 	assertNotContains(t, overlay, "Views")
-	for _, k := range []string{screens.KeySort, screens.KeyAcrossRuns, "s", "p", "enter", "esc", screens.KeyHelp} {
+	for _, k := range []string{screens.KeySort, screens.KeyAcrossRuns, screens.KeyFindings, "s", "p", "enter", "esc", screens.KeyHelp} {
 		if !regexp.MustCompile(`(?m)^\s+` + regexp.QuoteMeta(k) + `\s+\S`).MatchString(overlay) {
 			t.Errorf("overlay must list key %q on its own entry\n%s", k, overlay)
 		}

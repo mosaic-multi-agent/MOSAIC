@@ -3,8 +3,8 @@ package transform
 import (
 	"strings"
 
+	"mosaic-common/agentfields"
 	"mosaic-common/docformat"
-	"mosaic-deploy/internal/agentfields"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -90,7 +90,12 @@ func appendRequestedTools(fm *docformat.Frontmatter, names []string, desc *domai
 	before := renderValue(current)
 
 	var newValue domain.FieldValue
-	if desc.Tools.Shape == domain.ShapePermission {
+	if desc.Tools.Shape == domain.ShapeRules {
+		var changed bool
+		if newValue, changed = appendRulesTools(current, names, desc); !changed {
+			return nil
+		}
+	} else if desc.Tools.Shape == domain.ShapePermission {
 		newValue = appendPermissionPairs(current, names)
 	} else {
 		var toAppend []string

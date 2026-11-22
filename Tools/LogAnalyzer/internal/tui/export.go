@@ -35,12 +35,18 @@ type exportFlow struct {
 	path   string              // the path being exported to
 	status string              // one-line outcome shown on the origin screen
 	role   tuicommon.StyleRole // signal role the status is drawn in
+
+	findings *findingsExportFlow // non-nil while a findings export owns the prompt and the write
 }
 
 // exportKeyHook handles export-related messages ahead of normal screen
 // routing. It reports whether the message was consumed.
 func (m Model) exportKeyHook(msg tea.Msg) (Model, tea.Cmd, bool) {
 	key, isKey := msg.(tea.KeyMsg)
+	if m.screen == screenExport && m.export.findings != nil {
+		model, cmd := m.updateFindingsExport(msg)
+		return model, cmd, true
+	}
 	if m.screen == screenExport {
 		model, cmd := m.updateExport(msg)
 		return model, cmd, true
@@ -49,6 +55,9 @@ func (m Model) exportKeyHook(msg tea.Msg) (Model, tea.Cmd, bool) {
 		return m, nil, false
 	}
 	m.export.status = ""
+	if scope, open := m.openOverlayScope(); open && key.String() == screens.KeyExportRun {
+		return m.startFindingsExport(scope), nil, true
+	}
 	if !m.exportOrigin() {
 		return m, nil, false
 	}
@@ -65,10 +74,10 @@ func (m Model) exportKeyHook(msg tea.Msg) (Model, tea.Cmd, bool) {
 func (m Model) exportOrigin() bool {
 	switch m.screen {
 	case screenRuns:
-		return m.runsScreen == nil || !m.runsScreen.HelpOpen() // the open help overlay takes every key
+		return m.runsScreen == nil || !m.runsOverlayOpen() // an open overlay takes every key
 	case screenRunDetail, screenOverview, screenAgentTypes, screenStatus, screenTools, screenTimeline, screenContext, screenSession:
-		help, ok := m.runView.(interface{ HelpOpen() bool })
-		return !ok || !help.HelpOpen() // the open help overlay takes every key
+		overlays, ok := m.runView.(interface{ HelpOpen() bool })
+		return !ok || !(overlays.HelpOpen() || findingsOpen(m.runView)) // an open overlay takes every key
 	}
 	return false
 }

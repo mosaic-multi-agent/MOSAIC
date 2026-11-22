@@ -19,7 +19,7 @@ var wantTools = map[string][]string{
 	// companion (list / search/listDirectory), as a fresh deploy writes it.
 	"claude-to-opencode": {"bash", "grep", "list", "read", "skill"},
 	"claude-to-vscode":   {"execute/runInTerminal", "read/readFile", "search/listDirectory", "search/textSearch"},
-	"ghcpcli-to-claude":  {"AskUserQuestion", "Bash", "Read"},
+	"ghcpcli-to-claude":  {"Bash", "Read"},
 }
 
 // targetToolsKey is the frontmatter key that holds the tools of each target harness.

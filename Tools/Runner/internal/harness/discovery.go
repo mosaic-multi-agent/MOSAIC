@@ -4,31 +4,28 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
-	commonharness "mosaic-common/harness"
-
+	"mosaic-run/internal/agentfile"
 	"mosaic-run/internal/domain"
 )
 
-const (
-	orchestratorPlainName = "orchestrator-script.md"
-	orchestratorAgentName = "orchestrator-script.agent.md"
-)
+const orchestratorStem = "orchestrator-script"
 
 // DiscoverOrchestrator computes the expected path to the script-mode
 // orchestrator agent file from the harness convention and verifies the file
 // exists.
 //
-// The path is either {workDir}/{agentsDir}/orchestrator-script.md or
-// {workDir}/{agentsDir}/orchestrator-script.agent.md.
+// The path is {workDir}/{agentsDir}/orchestrator-script{ext} for an extension
+// the harness's agent files accept (for Markdown harnesses .md or .agent.md).
 //
 // Returns the absolute path on success.
 // Returns *domain.RefusalError with Component "harness" if:
-//   - harnessID is not a known CLI harness (unknown identity)
-//   - neither file exists on disk (workspace not deployed)
-//   - both files exist (ambiguous; no file is preferred)
+//   - harnessID has no agent format data (unknown identity)
+//   - no candidate file exists on disk (workspace not deployed)
+//   - more than one candidate exists (ambiguous; no file is preferred)
 func DiscoverOrchestrator(workDir, harnessID string) (string, error) {
-	entry, ok := commonharness.LookupCLIHarness(harnessID)
+	format, ok := agentfile.For(harnessID)
 	if !ok {
 		return "", &domain.RefusalError{
 			Component: "harness",
@@ -37,37 +34,42 @@ func DiscoverOrchestrator(workDir, harnessID string) (string, error) {
 		}
 	}
 
-	plainPath := filepath.Join(workDir, entry.AgentsDir, orchestratorPlainName)
-	agentPath := filepath.Join(workDir, entry.AgentsDir, orchestratorAgentName)
-
-	plainExists, err := fileExists(plainPath)
-	if err != nil {
-		return "", accessRefusal(plainPath, err)
+	// Shortest extension first, so a Markdown harness lists the plain name
+	// before the .agent.md name.
+	exts := format.Extensions()
+	candidates := make([]string, 0, len(exts))
+	for i := len(exts) - 1; i >= 0; i-- {
+		candidates = append(candidates, filepath.Join(workDir, format.AgentsDir, orchestratorStem+exts[i]))
 	}
-	agentExists, err := fileExists(agentPath)
-	if err != nil {
-		return "", accessRefusal(agentPath, err)
+
+	var existing []string
+	for _, candidate := range candidates {
+		exists, err := fileExists(candidate)
+		if err != nil {
+			return "", accessRefusal(candidate, err)
+		}
+		if exists {
+			existing = append(existing, candidate)
+		}
 	}
 
 	switch {
-	case plainExists && agentExists:
+	case len(existing) > 1:
 		return "", &domain.RefusalError{
 			Component: "harness",
-			Resource:  filepath.Join(workDir, entry.AgentsDir),
-			Reason: fmt.Sprintf("ambiguous orchestrator-script for harness %s: both %s and %s exist; keep only one",
-				harnessID, plainPath, agentPath),
+			Resource:  filepath.Join(workDir, format.AgentsDir),
+			Reason: fmt.Sprintf("ambiguous orchestrator-script for harness %s: %s exist; keep only one",
+				harnessID, strings.Join(existing, " and ")),
 		}
-	case plainExists:
-		return plainPath, nil
-	case agentExists:
-		return agentPath, nil
+	case len(existing) == 1:
+		return existing[0], nil
 	}
 
 	return "", &domain.RefusalError{
 		Component: "harness",
-		Resource:  plainPath,
-		Reason: fmt.Sprintf("workspace not deployed for harness %s: expected orchestrator-script at %s or %s",
-			harnessID, plainPath, agentPath),
+		Resource:  candidates[0],
+		Reason: fmt.Sprintf("workspace not deployed for harness %s: expected orchestrator-script at %s",
+			harnessID, strings.Join(candidates, " or ")),
 	}
 }
 

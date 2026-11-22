@@ -62,13 +62,6 @@ func TestVersionFlag_WorksInsideAMosaicRootToo(t *testing.T) {
 	}
 }
 
-// One-off release guard: update the literal at each future version bump.
-func TestToolVersion_IsBumped(t *testing.T) {
-	if ToolVersion != "1.7.0" {
-		t.Errorf("ToolVersion = %q, want 1.7.0", ToolVersion)
-	}
-}
-
 // Chosen convention: --version is honoured only when it is the sole argument. Combined with
 // anything else it is an ordinary unknown flag: a usage error, no stdout. Each case runs inside a
 // valid fixture root, so the failure cannot come from root resolution.

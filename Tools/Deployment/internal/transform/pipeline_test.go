@@ -1,7 +1,7 @@
 package transform_test
 
 // pipeline_test.go tests the full transform pipeline end-to-end using the fixture harness
-// descriptor and a real generic agent source file. The expected output is stored in
+// descriptor and a committed agent fixture source file. The expected output is stored in
 // testdata/transform/golden/ and compared byte-for-byte.
 //
 // Running with -update regenerates the golden files from the current engine output. The
@@ -29,15 +29,11 @@ var updateGolden = flag.Bool("update", false, "regenerate golden files from curr
 //
 // To regenerate: go test ./internal/transform/... -run TestGoldenFile -update
 func TestGoldenFile_TestRunnerAgent(t *testing.T) {
-	// Locate the generic test-runner source.
-	srcPath := filepath.Join("..", "..", "..", "..", "Catalog", "Agents", "Generic", "Agents", "Execution", "test-runner.md")
-	srcAbs, err := filepath.Abs(srcPath)
+	// The committed test-runner fixture source.
+	srcPath := filepath.Join("..", "..", "testdata", "agent-fixtures", "test-runner.md")
+	src, err := os.ReadFile(srcPath)
 	if err != nil {
-		t.Fatalf("resolve test-runner source path: %v", err)
-	}
-	src, err := os.ReadFile(srcAbs)
-	if err != nil {
-		t.Skipf("generic test-runner agent not found at %s: %v", srcAbs, err)
+		t.Fatalf("read test-runner fixture source %s: %v", srcPath, err)
 	}
 
 	req := transform.Request{
@@ -130,21 +126,6 @@ Body content for bytes check.
 		t.Errorf("Report.OutputBytes = %d, len(Output) = %d; they must be equal",
 			result.Report.OutputBytes, len(result.Output))
 	}
-}
-
-// TestGoldenFile_OrchestratorAgent is a placeholder that documents the deferred golden
-// file for the orchestrator. The orchestrator's {tool-permissions} placeholder expansion
-// is the highest-risk transformation path and deserves a byte-level golden pin to catch
-// serialisation regressions that the unit tests in special_cases_test.go cannot detect.
-//
-// This test is skipped until the Stage 8 implementation (I8.1–I8.6) is complete. Once
-// complete, run with -update on the orchestrator source to generate the golden file, then
-// remove the t.Skip call.
-//
-// Source: Catalog/Orchestrator/orchestrator.md
-// Golden: testdata/transform/golden/orchestrator.md
-func TestGoldenFile_OrchestratorAgent(t *testing.T) {
-	t.Skip("orchestrator golden file deferred: generate with -update once Stage 8 implementation is complete")
 }
 
 // firstOutputDiff returns the byte offset of the first difference between a and b.

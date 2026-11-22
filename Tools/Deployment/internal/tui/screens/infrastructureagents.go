@@ -147,13 +147,18 @@ func (s *InfrastructureAgentScreen) View() string {
 	)
 	border := s.styles.Border.Width(s.width).Render(strings.Repeat("─", s.width))
 
+	help := s.styles.Help.Width(s.width).Render(
+		"↑/k up  ↓/j down  space toggle  enter confirm  esc back  ctrl+c quit",
+	)
+
 	var content string
 	if len(s.agents) == 0 {
 		content = s.styles.Muted.Width(s.width).Render(
 			"No infrastructure agents are available in the catalog.",
 		)
 	} else {
-		lw := uaListWidth(s.width)
+		fitMultiSelect(s.multisel, s.detail, s.width, s.height, len(s.agents), title, subtitle, border, border, help)
+		lw, _ := splitListWidths(s.width)
 		sep := s.styles.Border.Render("│")
 		content = lipgloss.JoinHorizontal(
 			lipgloss.Top,
@@ -163,9 +168,6 @@ func (s *InfrastructureAgentScreen) View() string {
 		)
 	}
 
-	help := s.styles.Help.Width(s.width).Render(
-		"↑/k up  ↓/j down  space toggle  enter confirm  esc back  ctrl+c quit",
-	)
 	return strings.Join([]string{title, subtitle, border, content, border, help}, "\n")
 }
 

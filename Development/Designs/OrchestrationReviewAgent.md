@@ -103,9 +103,9 @@ This also happens to be the right target on the merits. Checking a run against t
 **Located by content discovery, not by configuration.** The agent reads `workflow` from the artifact's frontmatter and searches the workspace for the file containing that workflow's region marker:
 
 ```
-Orchestration.md frontmatter:  workflow: quick-fix
+Orchestration.md frontmatter:  workflow: brownfield-tdd
                                     ↓
-search for the literal string:  <Workflow type="core" name="quick-fix">
+search for the literal string:  <Workflow type="core" name="brownfield-tdd">
                                     ↓
              keep only matches inside  <AvailableWorkflows type="project">
                                     ↓

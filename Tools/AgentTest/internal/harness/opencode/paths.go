@@ -5,26 +5,49 @@
 // compile time, but is explicitly not implemented yet — a later pass
 // replaces the stubs in stub.go with real behaviour.
 //
-// This file declares the harness's project-scoped layout as this adapter's
-// own constants, mirroring internal/harness/claudecode's own paths.go:
-// deliberately not shared with the deployment tool, since an adapter must
-// know its harness's layout regardless and sharing would mean importing an
-// entire descriptor model for a handful of short paths.
+// This file declares the harness's project-scoped layout. The harness identity
+// and the agents and plugins directories come from the shared builtin
+// descriptor via mosaic-common/harness; only facts no descriptor carries are
+// local.
 package opencode
 
 import (
 	"path/filepath"
 
+	commonharness "mosaic-common/harness"
 	"mosaic-agent-test/internal/domain"
 )
 
-// This harness's project-scoped layout.
-const (
-	HarnessID      = "opencode"
-	AgentsRelDir   = ".opencode/agents"
-	PluginsRelDir  = ".opencode/plugins"
-	ConfigFileName = "opencode.json"
+// HarnessID is this harness's stable identity, from the shared catalog.
+const HarnessID = commonharness.HarnessIDOpenCode
+
+// ConfigFileName is the project config file; no descriptor carries it.
+const ConfigFileName = "opencode.json"
+
+// This harness's project-scoped directories, read from the shared descriptor.
+// The descriptor's hooks directory is this harness's plugins directory.
+var (
+	entry         = mustEntry()
+	AgentsRelDir  = entry.AgentsDir
+	PluginsRelDir = entry.HooksDir
 )
+
+// mustEntry returns this harness's catalog entry. The builtin descriptor for
+// this harness always exists with its directories set; a missing entry or an
+// empty directory is a build defect.
+func mustEntry() commonharness.CLIHarness {
+	e, ok := commonharness.LookupCLIHarness(HarnessID)
+	if !ok {
+		panic("opencode: harness " + HarnessID + " missing from the shared catalog")
+	}
+	if e.AgentsDir == "" {
+		panic("opencode: harness " + HarnessID + " has no agents directory in the shared catalog")
+	}
+	if e.HooksDir == "" {
+		panic("opencode: harness " + HarnessID + " has no plugins directory in the shared catalog")
+	}
+	return e
+}
 
 // OpenCodeCLIExecutable names the product CLI this adapter spawns as the
 // subject-under-test's own process. Resolving it, including the Windows

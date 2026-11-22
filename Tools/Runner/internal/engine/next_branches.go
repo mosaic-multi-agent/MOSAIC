@@ -119,7 +119,7 @@ func findingsRouteBack(
 	// step's InputArtifacts. Entries already present in the table row's
 	// resolved list are not duplicated.
 	step.Request.InputArtifacts = injectReviewArtifacts(in.State.RunID,
-		step.Request.InputArtifacts, in.LastOutputArtifacts)
+		step.Request.InputArtifacts, previousOutputs(in, pos))
 	step.Request.InputArtifacts = injectCreatorArtifacts(in.State.RunID,
 		step.Request.InputArtifacts, step.Request.OutputArtifacts, in.ArtifactRegistry)
 	return domain.EngineDecision{Dispatch: &domain.DispatchDecision{

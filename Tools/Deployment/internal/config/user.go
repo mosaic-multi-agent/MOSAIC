@@ -4,12 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
 	"time"
 
 	"github.com/goccy/go-yaml"
-	"github.com/goccy/go-yaml/ast"
-	"github.com/goccy/go-yaml/parser"
 	"github.com/gofrs/flock"
 	"mosaic-deploy/internal/domain"
 )
@@ -64,6 +61,15 @@ type UserConfigStore interface {
 
 	// Save writes cfg to MosaicDeploy/config/user-config.yaml, creating the config
 	// directory if it does not exist.
+	//
+	// When the file exists, it is updated in place:
+	//   - keys whose value did not change are left byte-identical, including their comments;
+	//   - a rewritten key's value is written with two spaces of indentation per nesting level,
+	//     however many times the key was rewritten before;
+	//   - a key whose new value is empty is removed; only its key line and value lines go, and
+	//     every comment line outside that block survives;
+	//   - every comment line outside a rewritten or removed value block survives.
+	// When the file does not exist, a plain YAML document is written.
 	Save(cfg UserConfig) error
 
 	// Path returns the absolute path of user-config.yaml.
@@ -80,6 +86,27 @@ type UserConfigStore interface {
 	// Callers wrap their Load-mutate-Save cycle inside fn so the entire
 	// read-modify-write is atomic with respect to other cooperating processes.
 	WithLock(fn func() error) error
+
+	// PutToolDestination writes mapping as the tool_destinations entry for
+	// mapping.Generic under harnessID in user-config.yaml: it is added at the end of
+	// that harness's list, or replaces the entry with the same generic in that list.
+	// It does not take the lock; callers wrap it in WithLock.
+	//
+	// Every byte outside the added or replaced entry is kept, including comments and
+	// formatting inside tool_destinations and inside other harnesses' and other
+	// generics' entries; line endings (LF or CRLF) are kept. Exceptions, each limited
+	// to what it names:
+	//   - "tool_destinations: {}" or a null value: the key line's value is replaced by
+	//     the block (a trailing comment on the key line is kept);
+	//   - a harness whose value is in flow style: that harness's value is re-rendered
+	//     in block style.
+	// A missing key is appended as a new top-level block at the end of the file; a
+	// missing file is created with that block only.
+	//
+	// The mapping is validated with the tool_destinations rules before anything is
+	// written; an invalid mapping, an unparseable existing file or a write failure
+	// returns an error and leaves the file unchanged.
+	PutToolDestination(harnessID string, mapping domain.ToolMapping) error
 }
 
 // ---------------------------------------------------------------------------
@@ -309,144 +336,4 @@ func (s *userConfigStore) saveFresh(raw userConfigYAML) error {
 		return fmt.Errorf("write user config: %w", err)
 	}
 	return nil
-}
-
-// mergeUserConfigInPlace parses existing as YAML (preserving comments) and edits the four
-// modeled keys in raw into it, returning the resulting document bytes. It does not write
-// anything to disk. A parse failure on existing is returned as an error and existing is
-// never touched by the caller in that case.
-func mergeUserConfigInPlace(existing []byte, raw userConfigYAML) ([]byte, error) {
-	file, err := parser.ParseBytes(existing, parser.ParseComments)
-	if err != nil {
-		return nil, fmt.Errorf("parse existing user config: %w", err)
-	}
-
-	if len(file.Docs) == 0 || file.Docs[0].Body == nil {
-		// Nothing to edit in place (e.g. a comments-only or empty file): fall back to a
-		// fresh marshal of the four modeled keys.
-		data, err := yaml.Marshal(&raw)
-		if err != nil {
-			return nil, fmt.Errorf("marshal user config: %w", err)
-		}
-		return data, nil
-	}
-
-	root, ok := file.Docs[0].Body.(*ast.MappingNode)
-	if !ok {
-		return nil, fmt.Errorf("root of existing user config is not a mapping")
-	}
-
-	fields := []struct {
-		key   string
-		value interface{}
-	}{
-		{"schema_version", raw.SchemaVersion},
-		{"tier_models", raw.TierModels},
-		{"custom_model_ids", raw.CustomModelIDs},
-		{"tool_destinations", raw.ToolDestinations},
-	}
-
-	for _, f := range fields {
-		if err := applyUserConfigField(root, f.key, f.value); err != nil {
-			return nil, fmt.Errorf("update %s: %w", f.key, err)
-		}
-	}
-
-	return []byte(file.String()), nil
-}
-
-// applyUserConfigField updates key's entry in root to reflect value, per the per-key write
-// rules: a non-empty value replaces an existing key's value (leaving that key's own
-// comments attached) or is appended when the key is absent; an empty/nil value removes the
-// key when present and is a no-op when the key is already absent. A non-empty value that is
-// unchanged from what root already holds for key is left completely untouched, so unrelated
-// comments and formatting nested under it survive.
-func applyUserConfigField(root *ast.MappingNode, key string, value interface{}) error {
-	idx := findUserConfigKey(root, key)
-
-	if isEmptyUserConfigValue(value) {
-		if idx >= 0 {
-			root.Values = append(root.Values[:idx], root.Values[idx+1:]...)
-		}
-		return nil
-	}
-
-	if idx >= 0 {
-		if unchanged, err := userConfigValueUnchanged(root.Values[idx].Value, value); err == nil && unchanged {
-			return nil
-		}
-		newValueNode, err := userConfigValueNode(key, value)
-		if err != nil {
-			return err
-		}
-		return root.Values[idx].Replace(newValueNode)
-	}
-
-	mv, err := userConfigKeyValueNode(key, value)
-	if err != nil {
-		return err
-	}
-	root.Values = append(root.Values, mv)
-	return nil
-}
-
-// findUserConfigKey returns the index of key within root.Values, or -1 if absent.
-func findUserConfigKey(root *ast.MappingNode, key string) int {
-	for i, v := range root.Values {
-		if v.Key.GetToken().Value == key {
-			return i
-		}
-	}
-	return -1
-}
-
-// isEmptyUserConfigValue reports whether value is the zero-ish value that means "this key
-// should not appear in the document" for a modeled user-config field.
-func isEmptyUserConfigValue(value interface{}) bool {
-	if value == nil {
-		return true
-	}
-	rv := reflect.ValueOf(value)
-	switch rv.Kind() {
-	case reflect.Map, reflect.Slice:
-		return rv.Len() == 0
-	case reflect.String:
-		return rv.Len() == 0
-	default:
-		return false
-	}
-}
-
-// userConfigValueUnchanged reports whether existing, decoded as the same type as value,
-// is deep-equal to value.
-func userConfigValueUnchanged(existing ast.Node, value interface{}) (bool, error) {
-	target := reflect.New(reflect.TypeOf(value))
-	if err := yaml.NodeToValue(existing, target.Interface()); err != nil {
-		return false, err
-	}
-	return reflect.DeepEqual(target.Elem().Interface(), value), nil
-}
-
-// userConfigKeyValueNode marshals a single key/value pair into a fresh MappingValueNode,
-// suitable for appending to an existing document's root mapping.
-func userConfigKeyValueNode(key string, value interface{}) (*ast.MappingValueNode, error) {
-	node, err := yaml.ValueToNode(map[string]interface{}{key: value})
-	if err != nil {
-		return nil, fmt.Errorf("marshal %s: %w", key, err)
-	}
-	m, ok := node.(*ast.MappingNode)
-	if !ok || len(m.Values) != 1 {
-		return nil, fmt.Errorf("unexpected node shape marshaling %s", key)
-	}
-	return m.Values[0], nil
-}
-
-// userConfigValueNode is like userConfigKeyValueNode but returns only the value subtree,
-// suitable for replacing an existing key's value in place.
-func userConfigValueNode(key string, value interface{}) (ast.Node, error) {
-	mv, err := userConfigKeyValueNode(key, value)
-	if err != nil {
-		return nil, err
-	}
-	return mv.Value, nil
 }

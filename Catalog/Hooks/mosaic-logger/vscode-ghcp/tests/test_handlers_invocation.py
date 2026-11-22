@@ -3,20 +3,21 @@
 Key vscode-ghcp behaviours:
   D3: Subagent correlation is keyed on the spawning tool-call ID: SubagentStart /
       SubagentStop `agent_id` (`toolu_...`) with any `__vscode-<ms>` suffix stripped;
-      `agent_name` is a fallback only when `agent_id` is absent
-  D3: SubagentStart must still be processed when `agent_id` is absent (fallback key)
+      without `agent_id` the key is not derived from `agent_name`: a unique key is
+      minted per spawn so same-named spawns never share one
+  D3: SubagentStart must still be processed when `agent_id` is absent (minted key)
   D3: resolve_agent_type returns agent_type when present, falls back to agent_name
   The invocation_end is written by the orchestrator's PostToolUse for the spawning
   tool (or the Stop sweep), not by SubagentStop; those paths are covered by the
   subagent completion tests.
 
 Covers:
-  resolve_agent_key: normalised agent_id first, agent_name fallback, None when both absent
+  resolve_agent_key: normalised agent_id, None when absent (no agent_name fallback)
   resolve_agent_type: returns agent_type, falls back to agent_name
   extract_status_code: last valid code wins; invalid strings ignored
   SubagentStart: pops pending dispatch; keyed mapping written BEFORE event emission;
     invocation_start + user turn to invocation stream
-  Round trip: start writes mapping under the tool-call ID key
+  (round trip of the tool-call ID key lives in test_handlers_invocation_roundtrip.py)
 """
 
 import json
@@ -104,8 +105,9 @@ def _pre_populate_pending_dispatch(tmp_path, run_id, session_id,
 # ---------------------------------------------------------------------------
 
 class TestResolveAgentKey(unittest.TestCase):
-    """resolve_agent_key returns the normalised agent_id when present, falls back to
-    agent_name, and returns None when both are absent.
+    """resolve_agent_key returns the normalised agent_id when present and None when it
+    is absent. It never falls back to agent_name: two same-named spawns without an
+    agent_id must not share a correlation key (a start mints a unique key instead).
 
     This is the D3 seam: SubagentStart and SubagentStop both route through it,
     so start and stop cannot disagree about which key was used.
@@ -132,19 +134,19 @@ class TestResolveAgentKey(unittest.TestCase):
                              agent_id="toolu_01AbCdEfGhIjKlMn__vscode-1793098349279")
         self.assertEqual("toolu_01AbCdEfGhIjKlMn", invocation.resolve_agent_key(ctx))
 
-    def test_falls_back_to_agent_name_when_agent_id_absent(self):
+    def test_does_not_fall_back_to_agent_name_when_agent_id_absent(self):
         ctx = _make_start_ctx(self.tmp.name, agent_name="TestWriter")
-        self.assertEqual("TestWriter", invocation.resolve_agent_key(ctx))
+        self.assertIsNone(invocation.resolve_agent_key(ctx))
 
     def test_returns_none_when_both_absent(self):
         """A firing with neither id nor name cannot be correlated at all."""
         ctx = _make_start_ctx(self.tmp.name)  # no agent_name, no agent_id
         self.assertIsNone(invocation.resolve_agent_key(ctx))
 
-    def test_empty_agent_id_normalizes_to_none_and_falls_back_to_agent_name(self):
-        """Empty string agent_id normalizes to None via ctx.field(); agent_name is used."""
+    def test_empty_agent_id_normalizes_to_none_and_does_not_use_agent_name(self):
+        """Empty string agent_id normalizes to None via ctx.field(); agent_name is not a key."""
         ctx = _make_stop_ctx(self.tmp.name, agent_id="", agent_name="fallback-name")
-        self.assertEqual("fallback-name", invocation.resolve_agent_key(ctx))
+        self.assertIsNone(invocation.resolve_agent_key(ctx))
 
 
 # ---------------------------------------------------------------------------
@@ -180,6 +182,14 @@ class TestResolveAgentType(unittest.TestCase):
         ctx = _make_start_ctx(self.tmp.name)
         result = invocation.resolve_agent_type(ctx)
         self.assertIsNone(result)
+
+    def test_empty_values_count_as_absent(self):
+        ctx = _make_start_ctx(self.tmp.name, agent_type="", agent_name="")
+        self.assertIsNone(invocation.resolve_agent_type(ctx))
+
+    def test_empty_agent_type_falls_back_to_agent_name(self):
+        ctx = _make_start_ctx(self.tmp.name, agent_type="", agent_name="Planner")
+        self.assertEqual("Planner", invocation.resolve_agent_type(ctx))
 
 
 # ---------------------------------------------------------------------------
@@ -240,9 +250,13 @@ class TestExtractStatusCode(unittest.TestCase):
 class TestHandleSubagentStart(unittest.TestCase):
     """handle_subagent_start processes every firing that carries a correlation key.
 
-    The key is the normalised agent_id (the spawning tool-call ID); agent_name is
-    the fallback when agent_id is absent. The tests below use the fallback key.
+    The key is the normalised agent_id (the spawning tool-call ID); when agent_id is
+    absent a unique key is minted from agent_name. The tests below start by name only.
     """
+
+    def _agent_map_files(self):
+        folder = self.paths.agent_map_dir(_RUN_ID)
+        return sorted(folder.glob("*.json")) if folder.exists() else []
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -274,8 +288,8 @@ class TestHandleSubagentStart(unittest.TestCase):
         self.assertEqual(0, len(dirs),
                          "No directory should be created when agent correlation key is absent")
 
-    def test_agent_map_entry_keyed_on_agent_name_fallback(self):
-        """Without agent_id the agent map entry is written under agent_name."""
+    def test_agent_map_entry_is_keyed_on_a_minted_key_not_the_bare_agent_name(self):
+        """Without agent_id the agent map entry is written under a minted unique key."""
         ctx = _make_start_ctx(self.tmp.name, agent_name="TestWriter",
                               agent_type="TestWriter")
         prompt = '{"agent_instance_id": "TestWriter#1"}'
@@ -283,10 +297,13 @@ class TestHandleSubagentStart(unittest.TestCase):
             self.tmp.name, _RUN_ID, _SESSION_ID, "TestWriter#1", _RUN_ID, prompt=prompt
         )
         invocation.handle_subagent_start(ctx)
-        # Mapping must be readable by the fallback key
-        mapping = runstate.get_agent_mapping(self.paths, _RUN_ID, "TestWriter")
-        self.assertIsNotNone(mapping,
-                             "Agent map entry must be readable via the fallback agent_name key")
+        self.assertIsNone(runstate.get_agent_mapping(self.paths, _RUN_ID, "TestWriter"),
+                          "The bare agent_name must not be a mapping key")
+        files = self._agent_map_files()
+        self.assertEqual(1, len(files))
+        self.assertRegex(files[0].stem, r"^TestWriter_\d{8}T\d{6}Z-[0-9a-f]{4}$")
+        mapping = json.loads(files[0].read_text("utf-8"))
+        self.assertEqual("TestWriter#1", mapping["agent_instance_id"])
 
     def test_agent_map_entry_written_before_event_emission(self):
         """Mapping is persisted before any event write to minimize correlation window."""
@@ -298,8 +315,8 @@ class TestHandleSubagentStart(unittest.TestCase):
         )
         invocation.handle_subagent_start(ctx)
         # After the handler completes, the mapping must exist
-        mapping = runstate.get_agent_mapping(self.paths, _RUN_ID, "Researcher")
-        self.assertIsNotNone(mapping, "Mapping must exist after handle_subagent_start")
+        self.assertEqual(1, len(self._agent_map_files()),
+                         "Mapping must exist after handle_subagent_start")
 
     def test_emits_invocation_start_event(self):
         ctx = _make_start_ctx(self.tmp.name, agent_name="PlanWriter",
@@ -382,17 +399,34 @@ class TestHandleSubagentStart(unittest.TestCase):
             "SubagentStart must not write to the orchestrator events stream"
         )
 
-    def test_fallback_to_unknown_agent_when_no_pending_dispatch(self):
-        """When no pending dispatch exists, agent_instance_id falls back to 'unknown-agent'."""
+    def test_unique_fallback_id_when_no_pending_dispatch(self):
+        """With no pending dispatch the instance id is {type}_{timestamp}-{4 hex}."""
         ctx = _make_start_ctx(self.tmp.name, agent_name="SomeAgent")
         invocation.handle_subagent_start(ctx)
         dirs = self._invocation_dirs()
         self.assertEqual(1, len(dirs))
-        # Fallback: either unknown-agent or some derived name
-        # The design says fallback is 'unknown-agent' when extraction fails
-        self.assertIn(dirs[0].name, ["unknown-agent", "SomeAgent"],
-                      "When no pending dispatch exists, fallback should be 'unknown-agent' "
-                      "or derived from available context")
+        self.assertRegex(dirs[0].name, r"^SomeAgent_\d{8}T\d{6}Z-[0-9a-f]{4}$")
+        self.assertNotEqual("unknown-agent", dirs[0].name)
+
+    def test_start_consumes_only_a_dispatch_of_its_own_type(self):
+        _pre_populate_pending_dispatch(
+            self.tmp.name, _RUN_ID, _SESSION_ID, "Planner#1", _RUN_ID,
+            prompt='{"agent_instance_id": "Planner#1"}')
+        ctx = _make_start_ctx(self.tmp.name, agent_name="Reviewer", agent_type="Reviewer")
+        invocation.handle_subagent_start(ctx)
+        self.assertEqual(1, len(self._invocation_dirs()))
+        self.assertTrue(self.paths.pending_dispatch_entry(_RUN_ID, _SESSION_ID).read_text("utf-8"))
+        self.assertFalse(self.paths.invocation_dir(_RUN_ID, "Planner#1").exists())
+
+    def test_untyped_start_consumes_no_dispatch(self):
+        _pre_populate_pending_dispatch(
+            self.tmp.name, _RUN_ID, _SESSION_ID, "Planner#1", _RUN_ID,
+            prompt='{"agent_instance_id": "Planner#1"}')
+        ctx = _make_start_ctx(self.tmp.name, agent_id="toolu_untyped")
+        invocation.handle_subagent_start(ctx)
+        mapping = runstate.get_agent_mapping(self.paths, _RUN_ID, "toolu_untyped")
+        self.assertRegex(mapping["agent_instance_id"], r"^agent_\d{8}T\d{6}Z-[0-9a-f]{4}$")
+        self.assertFalse(self.paths.invocation_dir(_RUN_ID, "Planner#1").exists())
 
     def test_handler_does_not_raise(self):
         ctx = _make_start_ctx(self.tmp.name, agent_name="TestWriter")
@@ -400,41 +434,6 @@ class TestHandleSubagentStart(unittest.TestCase):
             invocation.handle_subagent_start(ctx)
         except Exception as exc:
             self.fail(f"handle_subagent_start raised unexpectedly: {exc}")
-
-
-# ---------------------------------------------------------------------------
-# Round-trip: SubagentStart writes the mapping under the tool-call ID key
-# ---------------------------------------------------------------------------
-
-class TestSubagentCorrelationRoundTrip(unittest.TestCase):
-    """SubagentStart writes the tool-call-ID-keyed mapping that later firings resolve.
-
-    The handlers run in separate processes but must agree on the key; the mapping
-    on disk is the handoff.
-    """
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.paths = core.build_paths(pathlib.Path(self.tmp.name))
-
-    def tearDown(self):
-        self.tmp.cleanup()
-
-    def test_start_writes_tool_call_id_keyed_mapping(self):
-        """The mapping written by SubagentStart must be readable via the normalised agent_id."""
-        call_id = "toolu_01MappingTestAbCdEfGh"
-        prompt = '{"agent_instance_id": "MappingTestAgent#1"}'
-
-        _pre_populate_pending_dispatch(
-            self.tmp.name, _RUN_ID, _SESSION_ID, "MappingTestAgent#1", _RUN_ID, prompt=prompt
-        )
-        start_ctx = _make_start_ctx(self.tmp.name, agent_id=call_id + "__vscode-1793098349279")
-        invocation.handle_subagent_start(start_ctx)
-
-        mapping = runstate.get_agent_mapping(self.paths, _RUN_ID, call_id)
-        self.assertIsNotNone(mapping,
-                             "Mapping written by SubagentStart must be readable via the tool-call ID")
-        self.assertEqual("MappingTestAgent#1", mapping.get("agent_instance_id"))
 
 
 # ---------------------------------------------------------------------------

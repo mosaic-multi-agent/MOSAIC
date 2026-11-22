@@ -65,8 +65,10 @@ func (s *sink) Log(ev commonharness.Event) {
 // leaves a trace even if this mapping has not been extended for it yet.
 func eventName(name string) string {
 	switch name {
-	case "spawn.stdout":
-		return domain.EventHarnessStdout
+	case "spawn.stdout.lines":
+		return domain.EventHarnessStdoutLines
+	case "spawn.end":
+		return domain.EventHarnessProcessEnd
 	case "spawn.stderr":
 		return domain.EventHarnessStderr
 	case "spawn.timeout", "spawn.error":

@@ -1,0 +1,5 @@
+# Invalid: bare experimental key (null value).
+schema_version: "1"
+id: "experimental-bare"
+display_name: "Experimental Bare"
+experimental:

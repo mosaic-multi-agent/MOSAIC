@@ -72,6 +72,13 @@ type ConsultationRequest struct {
 	// the wire. False: the dialogue is exactly the one without the option.
 	OfferAskOrchestrator bool
 
+	// OfferCancelRequest makes the ManualResolver treat Esc at its row step as
+	// cancelling the in-run manual dispatch request: it returns a RoutingInstruction
+	// with CancelRequest set and shows the Esc hint on the row step. NEVER
+	// serialised onto the wire. False: Esc at the row step abandons the dialogue
+	// (ConsultFailUserAbandoned), as before.
+	OfferCancelRequest bool
+
 	// UserMessage is the user's message for this one routing consultation,
 	// verbatim (line breaks kept). Nil for every other consultation, for every
 	// pre-consultation and when the user left the message step empty. Always
@@ -102,7 +109,15 @@ type RoutingInstruction struct {
 	// AskOrchestrator is set only by the ManualResolver: the user handed the
 	// decision to the orchestrator consultant.
 	AskOrchestrator *AskOrchestratorInstruction
+	// CancelRequest is set only by the ManualResolver, and only when the request
+	// had OfferCancelRequest: the user cancelled the in-run manual dispatch
+	// request at the row step. The session makes the decision as if the request
+	// had never been made.
+	CancelRequest *CancelRequestInstruction
 }
+
+// CancelRequestInstruction carries no data; its presence is the signal.
+type CancelRequestInstruction struct{}
 
 // AskOrchestratorInstruction asks the session to obtain this routing
 // decision from the orchestrator consultant.

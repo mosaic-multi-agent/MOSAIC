@@ -27,7 +27,8 @@ import mosaic_logger
 import mosaic_logger_core as core
 import mosaic_logger_runstate as runstate
 from runner_mode_support import (
-    OTHER_RUN_ID, RUN_ID, WorkspaceTestCase, fire, read_jsonl, runner_env,
+    OTHER_RUN_ID, RUN_ID, WorkspaceTestCase, fire, fire_capture, read_jsonl,
+    runner_env,
 )
 
 _FAR_FUTURE = "2999-01-01T00:00:00.000Z"
@@ -69,9 +70,16 @@ class _BindingCase(WorkspaceTestCase):
         with runner_env(self.workspace):
             fire(self.workspace, event, **{"session_id": "bind-sess", **fields})
 
+    def fire_capture_native(self, **fields):
+        with runner_env(self.workspace):
+            fire_capture(self.workspace, **{"session_id": "bind-sess", **fields})
+
     def dispatch_via_tool(self, run_id, tool_name="Agent", instance=_INSTANCE):
-        self.fire_native("PreToolUse", tool_name=tool_name, tool_use_id="tu-1",
-                         tool_input={"prompt": _dispatch_prompt(run_id, instance)})
+        """A dispatch as the registration fires it: capture entry, then catch-all."""
+        fields = dict(tool_name=tool_name, tool_use_id="tu-1",
+                      tool_input={"prompt": _dispatch_prompt(run_id, instance)})
+        self.fire_capture_native(**fields)
+        self.fire_native("PreToolUse", **fields)
 
 
 class TestQuotedRunIdDoesNotBind(_BindingCase):
@@ -141,8 +149,10 @@ class TestQuotedRunIdDoesNotBind(_BindingCase):
                     f"{event} carrying a dispatch payload wrote into the run")
 
     def test_agent_tool_prompt_without_instance_id_does_not_bind(self):
-        self.fire_native("PreToolUse", tool_name="Agent", tool_use_id="tu-3",
-                         tool_input={"prompt": f"look at run_id: {RUN_ID}"})
+        fields = dict(tool_name="Agent", tool_use_id="tu-3",
+                      tool_input={"prompt": f"look at run_id: {RUN_ID}"})
+        self.fire_capture_native(**fields)
+        self.fire_native("PreToolUse", **fields)
         self.assertIsNone(self.binding())
         self.assertFalse(self.run_dir_exists(RUN_ID))
 
@@ -286,6 +296,9 @@ class TestLegitimateBindingSources(_BindingCase):
 
     def test_runner_run_id_is_not_overridden_by_an_agent_dispatch(self):
         with runner_env(self.workspace, role="orchestrator", run_id=RUN_ID):
+            fire_capture(self.workspace, session_id="bind-sess",
+                         tool_name="Agent", tool_use_id="tu-9",
+                         tool_input={"prompt": _dispatch_prompt(OTHER_RUN_ID)})
             fire(self.workspace, "PreToolUse", session_id="bind-sess",
                  tool_name="Agent", tool_use_id="tu-9",
                  tool_input={"prompt": _dispatch_prompt(OTHER_RUN_ID)})

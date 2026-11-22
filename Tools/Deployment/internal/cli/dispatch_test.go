@@ -195,6 +195,11 @@ func (s *countingService) UpdateWorkflows(ctx context.Context, req app.WorkflowU
 	return domain.RunSummary{Outcome: domain.OutcomeSuccess}, nil
 }
 
+// PromoteBatch satisfies app.Service; the batch is not exercised by these tests.
+func (s *countingService) PromoteBatch(_ context.Context, _ app.PromoteBatchRequest) (app.PromoteBatchResult, error) {
+	return app.PromoteBatchResult{}, nil
+}
+
 func (s *countingService) Promote(ctx context.Context, req app.PromoteRequest) (app.PromoteResult, error) {
 	return app.PromoteResult{}, nil
 }

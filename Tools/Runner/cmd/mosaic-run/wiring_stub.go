@@ -165,7 +165,7 @@ func buildInteractiveWiring(in interactiveWiringInput) interactiveWiring {
 			artifactPath = filepath.Join(mintedFolder, "Orchestration.md")
 			effectiveRunFolder = mintedFolder
 		}
-		h := buildAdapterFn(effectiveRunFolder, cfg.Harness, execPath, cfg.GHCPCLIMode, domain.InvocationTimeouts{NonHITL: cfg.Timeout, HITL: cfg.HITLTimeout}, activityObserverOf(in.ProgramRef), in.Debug)
+		h := buildAdapterFn(effectiveRunFolder, cfg.Harness, execPath, cfg.GHCPCLIMode, domain.InvocationTimeouts{NonHITL: cfg.Timeout, HITL: cfg.HITLTimeout, NoOutput: cfg.NoOutputTimeout}, activityObserverOf(in.ProgramRef), in.Debug)
 		store := newLoggedArtifactStore(artifactPath, in.Debug)
 
 		// Extract the raw-JSON transport if the selected harness adapter
@@ -232,6 +232,8 @@ func buildInteractiveWiring(in interactiveWiringInput) interactiveWiring {
 				sessionRunFolder := resolveSessionRunFolder(runFolder, in)
 				deps := newDeps(sessionRunFolder, isNewRun, orchFile, cfg)
 				sess := withGHCPTrustPreflight(session.New(deps),
+					sessionRunFolder, cfg.Harness, in.ProgramRef, true, in.Debug)
+				sess = withCodexSetupPreflight(sess,
 					sessionRunFolder, cfg.Harness, in.ProgramRef, true, in.Debug)
 				return newRunLifecycleSession(sess,
 					newRunLogConfig(sessionRunFolder, cfg.Harness, in.Debug, in.Clock))

@@ -1,6 +1,7 @@
 package plan_test
 
-// resolve_test.go covers artifact set resolution.
+// resolve_test.go covers artifact set resolution for error cases, utility agents and
+// infrastructure agents. Workflow-driven resolution is in resolve_workflows_test.go.
 //
 // Existing behavior (T16.1, T16.2):
 //
@@ -34,193 +35,8 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// T16.1 — Single workflow resolution
-// ---------------------------------------------------------------------------
-
-// TestResolveArtifacts_SingleWorkflow_ContainsReferencedAgents verifies that selecting the
-// quick-fix workflow yields all four of its referenced agents in the result.
-// quick-fix references: planner-tdd-soft, plan-review, implementation-tdd, test-runner.
-func TestResolveArtifacts_SingleWorkflow_ContainsReferencedAgents(t *testing.T) {
-	cat := loadRealCatalog(t)
-
-	set, err := plan.ResolveArtifacts(cat, []string{"quick-fix"}, nil, nil, nil)
-	must(t, err)
-
-	wantAgents := []string{"planner-tdd-soft", "plan-review", "implementation-tdd", "test-runner"}
-	for _, key := range wantAgents {
-		if !containsAgent(set.Agents, key) {
-			t.Errorf("ArtifactSet.Agents missing %q; quick-fix must include all its referenced agents", key)
-		}
-	}
-}
-
-// TestResolveArtifacts_SingleWorkflow_AgentCountMatchesWorkflowPlusOrchestrator verifies that
-// the resolved agent count equals the number of referenced agents plus both orchestrator-role
-// files. quick-fix has 4 referenced agents + 1 main orchestrator + 1 orchestrator-script = 6 total.
-func TestResolveArtifacts_SingleWorkflow_AgentCountMatchesWorkflowPlusOrchestrator(t *testing.T) {
-	cat := loadRealCatalog(t)
-
-	set, err := plan.ResolveArtifacts(cat, []string{"quick-fix"}, nil, nil, nil)
-	must(t, err)
-
-	const wantCount = 6 // 4 referenced agents + 1 main orchestrator + 1 orchestrator-script
-	if len(set.Agents) != wantCount {
-		t.Errorf("ArtifactSet.Agents: got %d agents, want %d (4 referenced + 1 main orchestrator + 1 orchestrator-script)",
-			len(set.Agents), wantCount)
-	}
-}
-
-// TestResolveArtifacts_SingleWorkflow_IncludesTransitiveSkills verifies that every skill
-// required by any agent in the resolved set is included in ArtifactSet.Skills.
-// planner-tdd-soft requires lean-tdd and efficient-file-reading; these must appear.
-func TestResolveArtifacts_SingleWorkflow_IncludesTransitiveSkills(t *testing.T) {
-	cat := loadRealCatalog(t)
-
-	set, err := plan.ResolveArtifacts(cat, []string{"quick-fix"}, nil, nil, nil)
-	must(t, err)
-
-	// planner-tdd-soft requires lean-tdd and efficient-file-reading.
-	// plan-review and implementation-tdd also require efficient-file-reading.
-	wantSkills := []string{"lean-tdd", "efficient-file-reading"}
-	for _, key := range wantSkills {
-		if !containsSkill(set.Skills, key) {
-			t.Errorf("ArtifactSet.Skills missing %q; it is transitively required by agents in quick-fix", key)
-		}
-	}
-}
-
-// TestResolveArtifacts_SingleWorkflow_SkillsAreDeduplicated verifies that a skill required
-// by multiple agents appears exactly once in ArtifactSet.Skills.
-// efficient-file-reading is required by planner-tdd-soft, plan-review, and implementation-tdd,
-// but must appear only once.
-func TestResolveArtifacts_SingleWorkflow_SkillsAreDeduplicated(t *testing.T) {
-	cat := loadRealCatalog(t)
-
-	set, err := plan.ResolveArtifacts(cat, []string{"quick-fix"}, nil, nil, nil)
-	must(t, err)
-
-	seen := make(map[string]int)
-	for _, s := range set.Skills {
-		seen[s.Key]++
-	}
-	for key, count := range seen {
-		if count > 1 {
-			t.Errorf("skill %q appears %d times in ArtifactSet.Skills; each skill must appear at most once",
-				key, count)
-		}
-	}
-}
-
-// ---------------------------------------------------------------------------
-// T16.1 — Multiple overlapping workflows
-// ---------------------------------------------------------------------------
-
-// TestResolveArtifacts_TwoWorkflows_DeduplicatesAgents verifies that agents referenced by
-// both quick-fix and greenfield-tdd appear exactly once in the result. Both workflows
-// reference planner-tdd-soft, plan-review, implementation-tdd, and test-runner.
-func TestResolveArtifacts_TwoWorkflows_DeduplicatesAgents(t *testing.T) {
-	cat := loadRealCatalog(t)
-
-	set, err := plan.ResolveArtifacts(cat, []string{"quick-fix", "greenfield-tdd"}, nil, nil, nil)
-	must(t, err)
-
-	seen := make(map[string]int)
-	for _, a := range set.Agents {
-		seen[a.Key]++
-	}
-	for key, count := range seen {
-		if count > 1 {
-			t.Errorf("agent %q appears %d times in ArtifactSet.Agents; each agent must appear at most once",
-				key, count)
-		}
-	}
-}
-
-// TestResolveArtifacts_TwoWorkflows_UnionContainsAllAgents verifies that the union of both
-// workflows' referenced agents is fully represented in the result.
-// quick-fix adds: planner-tdd-soft, plan-review, implementation-tdd, test-runner.
-// greenfield-tdd adds additionally: requirements-refinement, requirements-review,
-// system-designer, system-design-review, contracts-designer, contracts-review,
-// test-writer-tdd, tests-review-tdd, implementation-review.
-func TestResolveArtifacts_TwoWorkflows_UnionContainsAllAgents(t *testing.T) {
-	cat := loadRealCatalog(t)
-
-	// Verify all quick-fix agents appear when combining both workflows.
-	set, err := plan.ResolveArtifacts(cat, []string{"quick-fix", "greenfield-tdd"}, nil, nil, nil)
-	must(t, err)
-
-	// Agents unique to greenfield-tdd must be present when selected alongside quick-fix.
-	greenfieldOnly := []string{
-		"requirements-refinement",
-		"requirements-review",
-		"system-designer",
-		"system-design-review",
-		"contracts-designer",
-		"contracts-review",
-		"test-writer-tdd",
-		"tests-review-tdd",
-		"implementation-review",
-	}
-	for _, key := range greenfieldOnly {
-		if !containsAgent(set.Agents, key) {
-			t.Errorf("ArtifactSet.Agents missing %q; it is referenced by greenfield-tdd", key)
-		}
-	}
-}
-
-// TestResolveArtifacts_TwoWorkflows_SkillsAreDeduplicated verifies that skills shared by
-// both workflows appear exactly once in ArtifactSet.Skills.
-func TestResolveArtifacts_TwoWorkflows_SkillsAreDeduplicated(t *testing.T) {
-	cat := loadRealCatalog(t)
-
-	set, err := plan.ResolveArtifacts(cat, []string{"quick-fix", "greenfield-tdd"}, nil, nil, nil)
-	must(t, err)
-
-	seen := make(map[string]int)
-	for _, s := range set.Skills {
-		seen[s.Key]++
-	}
-	for key, count := range seen {
-		if count > 1 {
-			t.Errorf("skill %q appears %d times in ArtifactSet.Skills; each skill must appear at most once",
-				key, count)
-		}
-	}
-}
-
-// TestResolveArtifacts_EmptyWorkflowIDs_ResultIsNonNil verifies that passing an empty
-// workflow list returns a non-nil ArtifactSet (with just the orchestrator) rather than
-// returning an error or a zero-value struct.
-func TestResolveArtifacts_EmptyWorkflowIDs_ResultIsNonNil(t *testing.T) {
-	cat := loadRealCatalog(t)
-
-	set, err := plan.ResolveArtifacts(cat, nil, nil, nil, nil)
-	must(t, err)
-
-	// The orchestrator must always be present.
-	if !containsAgent(set.Agents, "orchestrator") {
-		t.Error("ArtifactSet.Agents missing orchestrator; the orchestrator is always included")
-	}
-}
-
-// ---------------------------------------------------------------------------
 // T16.1 — Error cases
 // ---------------------------------------------------------------------------
-
-// TestResolveArtifacts_UnknownWorkflow_ReturnsErrUnknownWorkflow verifies that an unknown
-// workflow ID causes ResolveArtifacts to return ErrUnknownWorkflow rather than silently
-// producing a smaller artifact set. An unknown reference must always be surfaced.
-func TestResolveArtifacts_UnknownWorkflow_ReturnsErrUnknownWorkflow(t *testing.T) {
-	cat := loadRealCatalog(t)
-
-	_, err := plan.ResolveArtifacts(cat, []string{"this-workflow-does-not-exist"}, nil, nil, nil)
-	if err == nil {
-		t.Fatal("ResolveArtifacts with unknown workflow ID: expected error, got nil")
-	}
-	if !errors.Is(err, plan.ErrUnknownWorkflow) {
-		t.Errorf("ResolveArtifacts with unknown workflow: got error %v, want errors.Is(err, plan.ErrUnknownWorkflow)", err)
-	}
-}
 
 // TestResolveArtifacts_WorkflowReferencingMissingAgent_ReturnsErrUnknownAgent verifies that a
 // workflow whose referenced_agents includes a key not found in the catalog returns
@@ -268,99 +84,6 @@ func TestResolveArtifacts_WorkflowReferencingMissingAgent_DoesNotReturnSmallerSe
 }
 
 // ---------------------------------------------------------------------------
-// T16.1 — Deterministic ordering
-// ---------------------------------------------------------------------------
-
-// TestResolveArtifacts_AgentsAreSortedByKey verifies that ArtifactSet.Agents is in
-// ascending key order. Deterministic order is required for stable plan rendering and
-// consistent manifest comparison.
-func TestResolveArtifacts_AgentsAreSortedByKey(t *testing.T) {
-	cat := loadRealCatalog(t)
-
-	set, err := plan.ResolveArtifacts(cat, []string{"quick-fix", "greenfield-tdd"}, nil, nil, nil)
-	must(t, err)
-
-	if len(set.Agents) < 2 {
-		t.Skip("fewer than 2 agents; cannot check ordering")
-	}
-	for i := 1; i < len(set.Agents); i++ {
-		if set.Agents[i].Key < set.Agents[i-1].Key {
-			t.Errorf("ArtifactSet.Agents is not sorted by Key at index %d: %q < %q",
-				i, set.Agents[i].Key, set.Agents[i-1].Key)
-		}
-	}
-}
-
-// TestResolveArtifacts_SkillsAreSortedByKey verifies that ArtifactSet.Skills is in
-// ascending key order.
-func TestResolveArtifacts_SkillsAreSortedByKey(t *testing.T) {
-	cat := loadRealCatalog(t)
-
-	set, err := plan.ResolveArtifacts(cat, []string{"quick-fix", "greenfield-tdd"}, nil, nil, nil)
-	must(t, err)
-
-	if len(set.Skills) < 2 {
-		t.Skip("fewer than 2 skills; cannot check ordering")
-	}
-	for i := 1; i < len(set.Skills); i++ {
-		if set.Skills[i].Key < set.Skills[i-1].Key {
-			t.Errorf("ArtifactSet.Skills is not sorted by Key at index %d: %q < %q",
-				i, set.Skills[i].Key, set.Skills[i-1].Key)
-		}
-	}
-}
-
-// ---------------------------------------------------------------------------
-// T16.2 — Orchestrator always included
-// ---------------------------------------------------------------------------
-
-// TestResolveArtifacts_OrchestratorAlwaysIncluded_WithNoWorkflows verifies that the
-// orchestrator appears in the resolved set even when no workflows are selected.
-// The orchestrator is a mandatory member of every deployment.
-func TestResolveArtifacts_OrchestratorAlwaysIncluded_WithNoWorkflows(t *testing.T) {
-	cat := loadRealCatalog(t)
-
-	set, err := plan.ResolveArtifacts(cat, nil, nil, nil, nil)
-	must(t, err)
-
-	if !containsAgent(set.Agents, "orchestrator") {
-		t.Error("ArtifactSet.Agents missing orchestrator; the orchestrator must be present regardless of workflow selection")
-	}
-}
-
-// TestResolveArtifacts_OrchestratorAlwaysIncluded_WithWorkflow verifies that the orchestrator
-// is present even when workflows are selected, not just when the selection is empty.
-func TestResolveArtifacts_OrchestratorAlwaysIncluded_WithWorkflow(t *testing.T) {
-	cat := loadRealCatalog(t)
-
-	set, err := plan.ResolveArtifacts(cat, []string{"quick-fix"}, nil, nil, nil)
-	must(t, err)
-
-	if !containsAgent(set.Agents, "orchestrator") {
-		t.Error("ArtifactSet.Agents missing orchestrator; the orchestrator must always be included")
-	}
-}
-
-// TestResolveArtifacts_OrchestratorAppearsExactlyOnce verifies that the orchestrator is not
-// duplicated, even if workflows somehow trigger a second inclusion path.
-func TestResolveArtifacts_OrchestratorAppearsExactlyOnce(t *testing.T) {
-	cat := loadRealCatalog(t)
-
-	set, err := plan.ResolveArtifacts(cat, []string{"quick-fix", "greenfield-tdd"}, nil, nil, nil)
-	must(t, err)
-
-	count := 0
-	for _, a := range set.Agents {
-		if a.Key == "orchestrator" {
-			count++
-		}
-	}
-	if count != 1 {
-		t.Errorf("orchestrator appears %d times in ArtifactSet.Agents; must appear exactly once", count)
-	}
-}
-
-// ---------------------------------------------------------------------------
 // T16.2 — Utility agents included only when explicitly selected
 // ---------------------------------------------------------------------------
 
@@ -397,41 +120,6 @@ func TestResolveArtifacts_UtilityAgent_NotIncludedWhenNotSelected(t *testing.T) 
 	if containsAgent(set.Agents, "my-utility") {
 		t.Error("ArtifactSet.Agents contains utility agent that was NOT selected via utilityAgentIDs; " +
 			"utility agents must be opt-in")
-	}
-}
-
-// TestResolveArtifacts_UtilityAgent_WithRealCatalog_KnownUtilityIncluded verifies that a
-// real utility agent from the catalog (workflow-creator) is present when selected,
-// and absent when not selected.
-func TestResolveArtifacts_UtilityAgent_WithRealCatalog_KnownUtilityIncluded(t *testing.T) {
-	cat := loadRealCatalog(t)
-
-	const utilityKey = "workflow-creator"
-	// Confirm the agent exists as a utility agent in the real catalog.
-	ua := cat.UtilityAgents()
-	found := false
-	for _, a := range ua {
-		if a.Key == utilityKey {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Skipf("utility agent %q not found in real catalog; test cannot proceed", utilityKey)
-	}
-
-	// Selected: must appear.
-	setWithUtility, err := plan.ResolveArtifacts(cat, nil, []string{utilityKey}, nil, nil)
-	must(t, err)
-	if !containsAgent(setWithUtility.Agents, utilityKey) {
-		t.Errorf("ArtifactSet.Agents missing %q even though it was selected via utilityAgentIDs", utilityKey)
-	}
-
-	// Not selected: must not appear.
-	setWithout, err := plan.ResolveArtifacts(cat, nil, nil, nil, nil)
-	must(t, err)
-	if containsAgent(setWithout.Agents, utilityKey) {
-		t.Errorf("ArtifactSet.Agents contains %q even though it was NOT selected via utilityAgentIDs", utilityKey)
 	}
 }
 
@@ -614,37 +302,6 @@ func TestResolveArtifacts_NilInfrastructureAgentIDs_ExistingBehaviorUnchanged(t 
 	}
 }
 
-// TestResolveArtifacts_InfrastructureAgent_WithRealCatalog verifies that a known infrastructure
-// agent from the real MOSAIC catalog is present when selected and absent when not selected.
-func TestResolveArtifacts_InfrastructureAgent_WithRealCatalog(t *testing.T) {
-	cat := loadRealCatalog(t)
-
-	const infraKey = "checkpoint-manager-git"
-
-	// Confirm the agent exists and has a non-empty Infrastructure field.
-	a, ok := cat.Agent(infraKey)
-	if !ok {
-		t.Skipf("infrastructure agent %q not found in real catalog; test cannot proceed", infraKey)
-	}
-	if a.Infrastructure == "" {
-		t.Skipf("agent %q has empty Infrastructure field in real catalog; test assumes it is an infrastructure agent", infraKey)
-	}
-
-	// Selected: must appear.
-	setWith, err := plan.ResolveArtifacts(cat, nil, nil, []string{infraKey}, nil)
-	must(t, err)
-	if !containsAgent(setWith.Agents, infraKey) {
-		t.Errorf("ArtifactSet.Agents missing %q even though it was selected via infrastructureAgentIDs", infraKey)
-	}
-
-	// Not selected: must not appear.
-	setWithout, err := plan.ResolveArtifacts(cat, nil, nil, nil, nil)
-	must(t, err)
-	if containsAgent(setWithout.Agents, infraKey) {
-		t.Errorf("ArtifactSet.Agents contains %q even though it was NOT selected via infrastructureAgentIDs", infraKey)
-	}
-}
-
 // TestResolveArtifacts_InfrastructureAgent_IncludesTransitiveSkills verifies that a selected
 // infrastructure agent's required skills are transitively included in ArtifactSet.Skills.
 func TestResolveArtifacts_InfrastructureAgent_IncludesTransitiveSkills(t *testing.T) {
@@ -681,9 +338,6 @@ func TestResolveArtifacts_InfrastructureAgent_AreSortedByKey(t *testing.T) {
 	set, err := plan.ResolveArtifacts(cat, nil, nil, []string{"z-infra", "a-infra"}, nil)
 	must(t, err)
 
-	if len(set.Agents) < 2 {
-		t.Skip("fewer than 2 agents; cannot check ordering")
-	}
 	for i := 1; i < len(set.Agents); i++ {
 		if set.Agents[i].Key < set.Agents[i-1].Key {
 			t.Errorf("ArtifactSet.Agents is not sorted by Key at index %d: %q < %q "+

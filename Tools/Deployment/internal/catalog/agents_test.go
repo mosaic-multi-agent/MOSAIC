@@ -1,10 +1,11 @@
 package catalog_test
 
-// Tests for agent enumeration against the real repository tree.
+// Tests for agent enumeration against the committed fixture MOSAIC root
+// (testdata/catalog/mosaic-root).
 //
 // The catalog exposes three distinct agent roles — worker, orchestrator, and utility —
 // through three separate methods. Tests here verify:
-//   - Correct counts matching the actual repository tree
+//   - Correct counts matching the fixture tree
 //   - Role segregation: Agents() contains only workers; Orchestrator() and UtilityAgents()
 //     expose the remaining roles
 //   - Frontmatter fields are populated: key, version, name, description, recommended tier,
@@ -12,14 +13,14 @@ package catalog_test
 //   - SourcePath is absolute and points to an existing file
 //   - Agent(key) lookup works for any role
 //
-// All tests load from the real repository root to ensure the catalog correctly handles
-// the actual source tree.
+// All catalog-backed tests load the fixture root, so they do not depend on the content of
+// the live Catalog/ tree.
 //
-// Classification record (every loadRealCatalog-based assertion in this file):
+// Classification record (every fixture-root-based assertion in this file):
 //   - Content-coupled, rewritten to structural invariants: the worker-ID allowlist (was
 //     TestAgents_KnownWorkerIDs_AllPresent) and the known-category allowlist (was
 //     TestAgents_KnownCategories_AllPresent) are replaced by
-//     TestAgents_EveryOnDiskCategoryYieldsAtLeastOneAgent, which walks the real category
+//     TestAgents_EveryOnDiskCategoryYieldsAtLeastOneAgent, which walks the fixture category
 //     directories and asserts every one produces at least one Agents() entry with a
 //     matching Category, without naming any category or agent.
 //   - Content-coupled, rewritten to a structural invariant: the utility-agent exact count
@@ -34,7 +35,7 @@ package catalog_test
 //   - Content-coupled, removed as redundant: TestAgentLookup_ExistingWorker_ReturnsAgent
 //     spot-checked Agent(key) lookup against the hardcoded key "test-runner". The identical
 //     property — Agent(key) finds every key that Agents() returns — is already asserted
-//     generically, over every real agent, by TestAgentLookup_AllAgents_FoundByKey directly
+//     generically, over every fixture agent, by TestAgentLookup_AllAgents_FoundByKey directly
 //     below; naming "test-runner" added no additional detection power.
 //   - Behaviour-under-test, moved onto a synthetic fixture: the
 //     TestInfrastructureAgent_* family verifies frontmatter parsing (infrastructure class,
@@ -58,29 +59,14 @@ import (
 	"mosaic-deploy/internal/domain"
 )
 
-// loadRealCatalog calls catalog.Load with the real repository root and fails the test if
-// loading fails. It is a shared helper used by all agent, skill, hook, workflow, and tier tests.
-func loadRealCatalog(t *testing.T) catalog.Catalog {
-	t.Helper()
-	root, err := catalog.ResolveRoot(repoRoot())
-	if err != nil {
-		t.Fatalf("ResolveRoot: %v", err)
-	}
-	cat, err := catalog.Load(root, "")
-	if err != nil {
-		t.Fatalf("catalog.Load(%q): %v", root, err)
-	}
-	return cat
-}
-
 // ---------------------------------------------------------------------------
 // Worker agents — Agents()
 // ---------------------------------------------------------------------------
 
 // TestAgents_ReturnsNonEmptyList verifies that Agents() returns at least one agent.
-// This is the minimum sanity check for the repository tree walk.
+// This is the minimum sanity check for the fixture tree walk.
 func TestAgents_ReturnsNonEmptyList(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	agents := cat.Agents()
 	if len(agents) == 0 {
 		t.Fatal("Agents() returned an empty list; expected at least one worker agent")
@@ -88,14 +74,14 @@ func TestAgents_ReturnsNonEmptyList(t *testing.T) {
 }
 
 // TestAgents_EveryOnDiskCategoryYieldsAtLeastOneAgent verifies that every category
-// directory present under Catalog/Subagents/ in the real repository tree produces at
+// directory present under Catalog/Subagents/ in the fixture tree produces at
 // least one agent in Agents() with a matching Category, and that Agents() contains no
 // category not backed by an on-disk directory. This is a structural invariant: it detects
 // a whole category (or every agent within one) silently disappearing from the catalog
 // without naming any specific agent, workflow, or category, so it survives content moves
 // like relocating a whole category out of the scanned tree.
 func TestAgents_EveryOnDiskCategoryYieldsAtLeastOneAgent(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	agentsDir := filepath.Join(cat.CatalogRoot(), "Subagents")
 
 	entries, err := os.ReadDir(agentsDir)
@@ -134,10 +120,10 @@ func TestAgents_EveryOnDiskCategoryYieldsAtLeastOneAgent(t *testing.T) {
 // TestAgents_SortedByKey verifies that Agents() returns agents in ascending key order.
 // Deterministic ordering is required so the UI and plan output are stable across runs.
 func TestAgents_SortedByKey(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	agents := cat.Agents()
 	if len(agents) < 2 {
-		t.Skip("fewer than 2 agents returned; cannot check ordering")
+		t.Fatalf("Agents() returned %d agents; the fixture must hold at least 2 to check ordering", len(agents))
 	}
 
 	for i := 1; i < len(agents); i++ {
@@ -151,7 +137,7 @@ func TestAgents_SortedByKey(t *testing.T) {
 // TestAgents_AllHaveSubagentRole verifies that every agent returned by Agents() carries
 // RoleSubagent. Orchestrator and utility agents must not appear in this list.
 func TestAgents_AllHaveSubagentRole(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.Agents() {
 		if a.Role != domain.RoleSubagent {
 			t.Errorf("Agents()[%q].Role = %q, want RoleSubagent", a.Key, a.Role)
@@ -161,7 +147,7 @@ func TestAgents_AllHaveSubagentRole(t *testing.T) {
 
 // TestAgents_AllHaveNonEmptyKey verifies that every worker agent has a non-empty key.
 func TestAgents_AllHaveNonEmptyKey(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.Agents() {
 		if a.Key == "" {
 			t.Errorf("agent at SourcePath %q has empty Key", a.SourcePath)
@@ -171,7 +157,7 @@ func TestAgents_AllHaveNonEmptyKey(t *testing.T) {
 
 // TestAgents_AllHaveVersion verifies that every worker agent has a non-empty version string.
 func TestAgents_AllHaveVersion(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.Agents() {
 		if a.Version == "" {
 			t.Errorf("agent %q has empty Version", a.Key)
@@ -181,7 +167,7 @@ func TestAgents_AllHaveVersion(t *testing.T) {
 
 // TestAgents_AllHaveName verifies that every worker agent has a non-empty name.
 func TestAgents_AllHaveName(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.Agents() {
 		if a.Name == "" {
 			t.Errorf("agent %q has empty Name", a.Key)
@@ -191,7 +177,7 @@ func TestAgents_AllHaveName(t *testing.T) {
 
 // TestAgents_AllHaveDescription verifies that every worker agent has a non-empty description.
 func TestAgents_AllHaveDescription(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.Agents() {
 		if a.Description == "" {
 			t.Errorf("agent %q has empty Description", a.Key)
@@ -202,7 +188,7 @@ func TestAgents_AllHaveDescription(t *testing.T) {
 // TestAgents_AllHaveRecommendedTier verifies that every worker agent has a non-empty
 // recommended tier string. Tier strings are open and not validated against a fixed list.
 func TestAgents_AllHaveRecommendedTier(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.Agents() {
 		if a.RecommendedTier == "" {
 			t.Errorf("agent %q has empty RecommendedTier", a.Key)
@@ -213,7 +199,7 @@ func TestAgents_AllHaveRecommendedTier(t *testing.T) {
 // TestAgents_AllHaveTierRationale verifies that every worker agent has non-empty tier
 // rationale text. The rationale is shown to the user during model selection.
 func TestAgents_AllHaveTierRationale(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.Agents() {
 		if a.TierRationale == "" {
 			t.Errorf("agent %q has empty TierRationale", a.Key)
@@ -225,7 +211,7 @@ func TestAgents_AllHaveTierRationale(t *testing.T) {
 // non-nil Tools slice or a non-empty ToolsPlaceholder, but never both simultaneously.
 // Both being set at once is a data integrity error.
 func TestAgents_AllHaveToolsOrPlaceholder(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.Agents() {
 		hasTools := a.Tools != nil
 		hasPlaceholder := a.ToolsPlaceholder != ""
@@ -243,7 +229,7 @@ func TestAgents_AllHaveToolsOrPlaceholder(t *testing.T) {
 // TestAgents_AllHaveRequiredSkills verifies that every worker agent has a non-nil
 // RequiredSkills slice (may be empty, but must not be nil).
 func TestAgents_AllHaveRequiredSkills(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.Agents() {
 		if a.RequiredSkills == nil {
 			t.Errorf("agent %q has nil RequiredSkills; expected non-nil (possibly empty) slice", a.Key)
@@ -254,7 +240,7 @@ func TestAgents_AllHaveRequiredSkills(t *testing.T) {
 // TestAgents_AllHaveCategory verifies that every worker agent has a non-empty category
 // (the source folder name, e.g. "Execution").
 func TestAgents_AllHaveCategory(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.Agents() {
 		if a.Category == "" {
 			t.Errorf("agent %q has empty Category", a.Key)
@@ -265,7 +251,7 @@ func TestAgents_AllHaveCategory(t *testing.T) {
 // TestAgents_AllHaveNumericID verifies that every worker agent has a non-empty NumericID.
 // Worker agents carry an integer id in their frontmatter (e.g. "id: 17").
 func TestAgents_AllHaveNumericID(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.Agents() {
 		if a.NumericID == "" {
 			t.Errorf("worker agent %q has empty NumericID", a.Key)
@@ -276,7 +262,7 @@ func TestAgents_AllHaveNumericID(t *testing.T) {
 // TestAgents_AllHaveAbsoluteSourcePath verifies that SourcePath is absolute and that
 // the file actually exists on disk.
 func TestAgents_AllHaveAbsoluteSourcePath(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.Agents() {
 		if !filepath.IsAbs(a.SourcePath) {
 			t.Errorf("agent %q SourcePath is not absolute: %q", a.Key, a.SourcePath)
@@ -291,7 +277,7 @@ func TestAgents_AllHaveAbsoluteSourcePath(t *testing.T) {
 // TestAgent_KeysAreUnique verifies that no two agents share the same Key.
 // Keys are slugs derived from the file base name and must be unique.
 func TestAgent_KeysAreUnique(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	agents := cat.Agents()
 	seen := make(map[string]bool, len(agents))
 	for _, a := range agents {
@@ -309,7 +295,7 @@ func TestAgent_KeysAreUnique(t *testing.T) {
 // TestOrchestrator_ReturnsOrchestratorRole verifies that Orchestrator() returns an agent
 // with RoleOrchestrator.
 func TestOrchestrator_ReturnsOrchestratorRole(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	orc := cat.Orchestrator()
 	if orc.Role != domain.RoleOrchestrator {
 		t.Errorf("Orchestrator().Role = %q, want RoleOrchestrator", orc.Role)
@@ -318,7 +304,7 @@ func TestOrchestrator_ReturnsOrchestratorRole(t *testing.T) {
 
 // TestOrchestrator_Key_IsOrchestrator verifies that the orchestrator's key is "orchestrator".
 func TestOrchestrator_Key_IsOrchestrator(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	orc := cat.Orchestrator()
 	if orc.Key != "orchestrator" {
 		t.Errorf("Orchestrator().Key = %q, want %q", orc.Key, "orchestrator")
@@ -328,7 +314,7 @@ func TestOrchestrator_Key_IsOrchestrator(t *testing.T) {
 // TestOrchestrator_ToolsPlaceholder_IsSet verifies that the orchestrator uses a tools
 // placeholder (the orchestrator's tools list is determined at deploy time, not statically).
 func TestOrchestrator_ToolsPlaceholder_IsSet(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	orc := cat.Orchestrator()
 	if orc.ToolsPlaceholder == "" {
 		t.Error("Orchestrator().ToolsPlaceholder is empty; expected a non-empty placeholder")
@@ -341,7 +327,7 @@ func TestOrchestrator_ToolsPlaceholder_IsSet(t *testing.T) {
 // TestOrchestrator_Category_IsEmpty verifies that the orchestrator has an empty category.
 // The orchestrator is not in any category folder; only worker agents have categories.
 func TestOrchestrator_Category_IsEmpty(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	orc := cat.Orchestrator()
 	if orc.Category != "" {
 		t.Errorf("Orchestrator().Category = %q, want empty string", orc.Category)
@@ -351,7 +337,7 @@ func TestOrchestrator_Category_IsEmpty(t *testing.T) {
 // TestOrchestrator_NumericID_IsEmpty verifies that the orchestrator does not have a
 // numeric id. The frontmatter convention says numeric id is absent from the orchestrator.
 func TestOrchestrator_NumericID_IsEmpty(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	orc := cat.Orchestrator()
 	if orc.NumericID != "" {
 		t.Errorf("Orchestrator().NumericID = %q, want empty string (orchestrator has no numeric id)", orc.NumericID)
@@ -361,7 +347,7 @@ func TestOrchestrator_NumericID_IsEmpty(t *testing.T) {
 // TestOrchestrator_LookupByKey_ReturnsOrchestrator verifies that Agent("orchestrator")
 // returns the same agent as Orchestrator().
 func TestOrchestrator_LookupByKey_ReturnsOrchestrator(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	orc := cat.Orchestrator()
 
 	byKey, ok := cat.Agent("orchestrator")
@@ -377,7 +363,7 @@ func TestOrchestrator_LookupByKey_ReturnsOrchestrator(t *testing.T) {
 // TestOrchestrator_NotIncludedInAgents verifies that the orchestrator does not appear
 // in the list returned by Agents(), which must contain only worker agents.
 func TestOrchestrator_NotIncludedInAgents(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.Agents() {
 		if a.Key == "orchestrator" {
 			t.Error("orchestrator appeared in Agents() list; it must be excluded (use Orchestrator() instead)")
@@ -390,10 +376,10 @@ func TestOrchestrator_NotIncludedInAgents(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestUtilityAgents_ReturnsNonEmptyList verifies that UtilityAgents() returns at least
-// one utility agent. The repository is expected to always ship at least one; an exact
-// count is content-coupled and is asserted nowhere in this suite.
+// one utility agent. The fixture holds more than one; an exact count is content-coupled
+// and is asserted nowhere in this suite.
 func TestUtilityAgents_ReturnsNonEmptyList(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	utility := cat.UtilityAgents()
 	if len(utility) == 0 {
 		t.Fatal("UtilityAgents() returned an empty list; expected at least one utility agent")
@@ -403,7 +389,7 @@ func TestUtilityAgents_ReturnsNonEmptyList(t *testing.T) {
 // TestUtilityAgents_AllHaveUtilityRole verifies that every agent returned by
 // UtilityAgents() carries RoleUtility.
 func TestUtilityAgents_AllHaveUtilityRole(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.UtilityAgents() {
 		if a.Role != domain.RoleUtility {
 			t.Errorf("UtilityAgents()[%q].Role = %q, want RoleUtility", a.Key, a.Role)
@@ -414,7 +400,7 @@ func TestUtilityAgents_AllHaveUtilityRole(t *testing.T) {
 // TestUtilityAgents_Category_IsEmpty verifies that utility agents have an empty category.
 // Utility agents are not in category folders.
 func TestUtilityAgents_Category_IsEmpty(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.UtilityAgents() {
 		if a.Category != "" {
 			t.Errorf("utility agent %q Category = %q, want empty string", a.Key, a.Category)
@@ -425,7 +411,7 @@ func TestUtilityAgents_Category_IsEmpty(t *testing.T) {
 // TestUtilityAgents_NumericID_IsEmpty verifies that utility agents have no numeric id.
 // The frontmatter convention says numeric id is absent from utility agents.
 func TestUtilityAgents_NumericID_IsEmpty(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.UtilityAgents() {
 		if a.NumericID != "" {
 			t.Errorf("utility agent %q NumericID = %q, want empty string", a.Key, a.NumericID)
@@ -436,7 +422,7 @@ func TestUtilityAgents_NumericID_IsEmpty(t *testing.T) {
 // TestUtilityAgents_NotIncludedInAgents verifies that utility agents do not appear in
 // the list returned by Agents().
 func TestUtilityAgents_NotIncludedInAgents(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	utilityKeys := make(map[string]bool)
 	for _, a := range cat.UtilityAgents() {
 		utilityKeys[a.Key] = true
@@ -455,7 +441,7 @@ func TestUtilityAgents_NotIncludedInAgents(t *testing.T) {
 // TestAgentLookup_UnknownKey_ReturnsFalse verifies that Agent(key) returns false for
 // a key that does not match any agent in any role.
 func TestAgentLookup_UnknownKey_ReturnsFalse(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 
 	_, ok := cat.Agent("this-agent-does-not-exist-in-the-repository")
 	if ok {
@@ -467,7 +453,7 @@ func TestAgentLookup_UnknownKey_ReturnsFalse(t *testing.T) {
 // can be looked up by key via Agent(key). This confirms the lookup index is consistent
 // with the enumeration.
 func TestAgentLookup_AllAgents_FoundByKey(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.Agents() {
 		found, ok := cat.Agent(a.Key)
 		if !ok {
@@ -483,7 +469,7 @@ func TestAgentLookup_AllAgents_FoundByKey(t *testing.T) {
 // TestAgents_RequiredSkills_AreKnownSkillKeys verifies that every skill key listed in
 // an agent's RequiredSkills refers to a skill present in the catalog.
 func TestAgents_RequiredSkills_AreKnownSkillKeys(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.Agents() {
 		for _, sk := range a.RequiredSkills {
 			if _, ok := cat.Skill(sk); !ok {
@@ -496,7 +482,7 @@ func TestAgents_RequiredSkills_AreKnownSkillKeys(t *testing.T) {
 // TestAgents_SourcePathHasMdExtension verifies that each agent's SourcePath ends with
 // ".md", confirming the scanner correctly identifies markdown files.
 func TestAgents_SourcePathHasMdExtension(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.Agents() {
 		if ext := strings.ToLower(filepath.Ext(a.SourcePath)); ext != ".md" {
 			t.Errorf("agent %q SourcePath %q has unexpected extension %q, want .md",
@@ -509,7 +495,7 @@ func TestAgents_SourcePathHasMdExtension(t *testing.T) {
 // base name (without the .md extension) of its SourcePath. The key is the slug; slugs
 // derive from file names.
 func TestAgents_KeyMatchesFileName(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	for _, a := range cat.Agents() {
 		base := strings.TrimSuffix(filepath.Base(a.SourcePath), ".md")
 		if base != a.Key {
@@ -526,7 +512,7 @@ func TestAgents_KeyMatchesFileName(t *testing.T) {
 // TestCatalog_Root_NonEmpty verifies that Root() returns a non-empty string.
 // An empty root would be invalid as it cannot be an absolute path.
 func TestCatalog_Root_NonEmpty(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	if cat.Root() == "" {
 		t.Error("Catalog.Root() returned empty string; expected the absolute MOSAIC repository root")
 	}
@@ -535,7 +521,7 @@ func TestCatalog_Root_NonEmpty(t *testing.T) {
 // TestCatalog_Root_IsAbsolute verifies that Root() returns an absolute path.
 // Callers rely on this guarantee when constructing paths relative to the root.
 func TestCatalog_Root_IsAbsolute(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	root := cat.Root()
 	if !filepath.IsAbs(root) {
 		t.Errorf("Catalog.Root() returned non-absolute path: %q", root)
@@ -546,7 +532,7 @@ func TestCatalog_Root_IsAbsolute(t *testing.T) {
 // was passed to Load. Callers that resolve the root first and then pass it to Load
 // should get back the exact same string.
 func TestCatalog_Root_MatchesLoadInput(t *testing.T) {
-	resolved, err := catalog.ResolveRoot(repoRoot())
+	resolved, err := catalog.ResolveRoot(fixtureMosaicRoot(t))
 	if err != nil {
 		t.Fatalf("ResolveRoot: %v", err)
 	}
@@ -567,10 +553,10 @@ func TestCatalog_Root_MatchesLoadInput(t *testing.T) {
 // returns the raw bytes of a file that the catalog emitted (via a SourcePath field).
 // The returned bytes must be byte-identical to os.ReadFile of the same path.
 func TestCatalog_ReadSource_CataloguedPath_ReturnsCorrectBytes(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	agents := cat.Agents()
 	if len(agents) == 0 {
-		t.Skip("no agents available for ReadSource test")
+		t.Fatal("Agents() returned no agents; the fixture must hold agents for the ReadSource test")
 	}
 	// Use the first agent's SourcePath — it was emitted by the catalog, so it is valid.
 	sp := agents[0].SourcePath
@@ -593,7 +579,7 @@ func TestCatalog_ReadSource_CataloguedPath_ReturnsCorrectBytes(t *testing.T) {
 // "callers must not invent paths"; returning an error for an unrecognised path enforces
 // this at runtime and prevents callers from reading arbitrary files via the catalog.
 func TestCatalog_ReadSource_InventedPath_ReturnsError(t *testing.T) {
-	cat := loadRealCatalog(t)
+	cat := loadFixtureRootCatalog(t)
 	// Construct an absolute path that looks plausible but was never emitted by the catalog.
 	invented := filepath.Join(cat.Root(), "this-path-was-not-emitted-by-the-catalog.md")
 	_, err := cat.ReadSource(invented)

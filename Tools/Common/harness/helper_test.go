@@ -160,9 +160,29 @@ func runHelperProcess() {
 		// select{} would emit on stderr.
 		time.Sleep(24 * time.Hour)
 
-	case "tree-agent", "tree-intermediate", "tree-grandchild", "tree-exit-leaves":
+	case "tree-agent", "tree-intermediate", "tree-grandchild", "tree-exit-leaves",
+		"tree-exit-holds", "tree-exit1-holds":
 		// Process-tree modes live in processkill_helper_test.go.
 		runTreeHelper(os.Getenv("GO_HELPER_CMD"))
+
+	case "codex-success", "codex-exit1", "codex-turn-failed-exit1", "codex-turn-failed-exit0",
+		"codex-incomplete", "codex-empty", "codex-exit-holds-stdout":
+		// Codex modes live in helper_codex_test.go.
+		runCodexHelper(os.Getenv("GO_HELPER_CMD"))
+
+	case "v2-success", "v2-echo", "v2-error-agent", "v2-error-model", "v2-error-other", "v2-error-exit0",
+		"v2-usage", "v2-exit1-stream", "v2-exit130", "v2-exit143", "v2-incomplete-wait":
+		// OpenCode V2 modes live in helper_opencodev2_test.go.
+		runV2Helper(os.Getenv("GO_HELPER_CMD"))
+
+	case "wd-drip", "wd-drip-then-hang", "wd-silent-then-line", "wd-silent-exit",
+		"wd-stderr-drip", "wd-v2-start-then-hang":
+		// No-output watchdog modes live in helper_noutput_test.go.
+		runNoOutputHelper(os.Getenv("GO_HELPER_CMD"))
+
+	case "ll-kill-partial", "ll-lines-then-hang":
+		// Live-logging modes live in helper_livelog_test.go.
+		runLiveLogHelper(os.Getenv("GO_HELPER_CMD"))
 
 	default:
 		// Streaming modes live in helper_stream_test.go; it exits 2 for an

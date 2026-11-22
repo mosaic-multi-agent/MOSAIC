@@ -1,0 +1,2 @@
+{"type":"user","uuid":"u-1","message":{"role":"user","content":"agent_instance_id: coder#8\nReview the parser."}}
+{"type":"assistant","uuid":"cu-1","message":{"id":"c1","role":"assistant","content":[]}}

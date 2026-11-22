@@ -1,6 +1,9 @@
 package domain
 
-import "regexp"
+import (
+	"regexp"
+	"time"
+)
 
 // Harness names the adapter that emitted an event. Unrecognised values are
 // preserved verbatim rather than rejected.
@@ -11,12 +14,14 @@ const (
 	HarnessOpenCode   Harness = "opencode"
 	HarnessVSCodeGHCP Harness = "vscode-ghcp"
 	HarnessGHCPCLI    Harness = "ghcp-cli"
+
+	HarnessOpenCodeV2 Harness = "opencode-v2"
 )
 
 // IsRecognised reports whether the harness value is one of the known adapters.
 // Unrecognised harness values are tolerated (not rejected) by the decoder.
 func (h Harness) IsRecognised() bool {
-	return h == HarnessClaudeCode || h == HarnessOpenCode || h == HarnessVSCodeGHCP || h == HarnessGHCPCLI
+	return h == HarnessClaudeCode || h == HarnessOpenCode || h == HarnessOpenCodeV2 || h == HarnessVSCodeGHCP || h == HarnessGHCPCLI
 }
 
 // ModelID is a model identifier as it appears in the logs and as it keys the
@@ -75,6 +80,20 @@ var runIDPattern = regexp.MustCompile(`^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}$`)
 
 // IsRunID reports whether s matches the {YYYYMMDD}T{HHMMSS}Z-{4-hex} run-id format.
 func IsRunID(s string) bool { return runIDPattern.MatchString(s) }
+
+// RunIDTime returns the start moment encoded in a run ID of the form
+// YYYYMMDDTHHMMSSZ-xxxx, in UTC. ok is false when IsRunID(id) is false or the
+// timestamp is not a valid calendar time.
+func RunIDTime(id string) (t time.Time, ok bool) {
+	if !IsRunID(id) {
+		return time.Time{}, false
+	}
+	parsed, err := time.Parse("20060102T150405Z", id[:16])
+	if err != nil {
+		return time.Time{}, false
+	}
+	return parsed.UTC(), true
+}
 
 // ActorKind distinguishes the orchestrator's own cost from a subagent instance's.
 type ActorKind uint8

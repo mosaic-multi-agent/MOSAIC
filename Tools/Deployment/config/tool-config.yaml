@@ -94,7 +94,7 @@ log_retention_runs: 0
 # both directions read this same table.
 #
 # STRUCTURE: harness-id -> ordered list of mappings.
-# Built-in harness ids: claude-code, opencode, ghcp-cli, vscode-ghcp
+# Built-in harness ids: claude-code, opencode, ghcp-cli, vscode-ghcp, codex, opencode-v2
 # (a descriptor-only or external harness uses the `id:` in its harness.yaml).
 #
 # The syntax is intentionally IDENTICAL to the `tools.mappings:` block of a
@@ -108,8 +108,9 @@ log_retention_runs: 0
 # never merged across layers. To extend a built-in mapping rather than replace
 # it, restate the built-in destinations alongside your new ones.
 #
-# Changing this file changes the deployed agents' tool_mappings_version stamp,
-# so already-deployed agents are correctly detected as stale on the next update.
+# Changing the tool_destinations here changes the deployed agents' tool_mappings_version
+# stamp (which also covers the harness descriptor's tool data), so already-deployed
+# agents are correctly detected as stale on the next update.
 # See "The tool_mappings_version stamp" in docs/configuration.md for details —
 # it is tool-managed bookkeeping; do not hand-edit the stamped value.
 #
@@ -139,7 +140,7 @@ log_retention_runs: 0
 # A mapping may declare several destinations; each is rendered independently.
 # Two destinations in one mapping may not share the same (to, field) pair.
 #
-# Generic tool names all four built-in harnesses already map (you only need an
+# Generic tool names all five built-in harnesses already map (you only need an
 # entry here to OVERRIDE one of these):
 #   file_read, file_write, file_edit, file_search, content_search,
 #   terminal, subagent, user_interaction, skill

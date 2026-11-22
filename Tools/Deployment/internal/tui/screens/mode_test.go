@@ -149,8 +149,8 @@ func TestModeScreen_Enter_DoesNotSetBack(t *testing.T) {
 // Back navigation — Esc
 // ---------------------------------------------------------------------------
 
-// TestModeScreen_Esc_SetsBack verifies that pressing Esc signals back navigation so the root
-// model can return to the harness selection screen while preserving the harness selection.
+// TestModeScreen_Esc_SetsBack verifies that pressing Esc signals back navigation; the mode
+// screen is the first entry screen, so the root model exits the TUI on it.
 func TestModeScreen_Esc_SetsBack(t *testing.T) {
 	// Arrange
 	s := newModeScreen()
@@ -260,7 +260,7 @@ func TestModeScreen_View_ShowsAllFiveSurvivingModeLabels(t *testing.T) {
 	wantLabels := []string{
 		"Deploy workspace",
 		"Update workspace",
-		"Update workflows",
+		"Change workflows",
 		"Promote to generic",
 		"Transform harness",
 	}
@@ -504,7 +504,7 @@ func TestModeScreen_KeyboardOnly_VimKeysNavigate(t *testing.T) {
 }
 
 // TestModeScreen_KeyboardOnly_EscNavigatesBack verifies that the Esc key alone triggers back
-// navigation on the mode screen, so the user can return to harness selection without a mouse.
+// navigation on the mode screen, so the user can leave the first entry screen without a mouse.
 func TestModeScreen_KeyboardOnly_EscNavigatesBack(t *testing.T) {
 	// Arrange
 	s := newModeScreen()

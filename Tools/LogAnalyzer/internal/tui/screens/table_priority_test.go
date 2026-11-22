@@ -111,10 +111,10 @@ func TestCompareTable_TypeOutlastsEveryFigureColumn(t *testing.T) {
 	)
 }
 
-func TestRunsTable_RunOutlastsTheInvocationsAndTheDuration(t *testing.T) {
+func TestRunsTable_RunOutlastsTheStartTheInvocationsAndTheDuration(t *testing.T) {
 	render := func(width int) string { return runsView(runsReport(), width, tallH) }
 
-	assertDropOrder(t, render, "compare|cmp", []string{"duration", "invocations"}, []string{"run", "cost"})
+	assertDropOrder(t, render, "compare|cmp", []string{"markers"}, []string{"duration"}, []string{"invocations"}, []string{"started"}, []string{"run", "cost"})
 }
 
 func TestOverviewModelTable_ShareBarIsDroppedBeforeTheFigures(t *testing.T) {

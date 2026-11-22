@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"mosaic-deploy/internal/domain"
-	"mosaic-deploy/internal/harness/descriptor"
 	"mosaic-deploy/internal/harness/registry"
 )
 
@@ -21,17 +20,4 @@ import (
 //	HarnessInjectionsOrchestrator.md.
 func NewWithOptsForTesting(_ testing.TB, opts registry.BuiltinOptions) (domain.HarnessModule, error) {
 	return New(opts)
-}
-
-// DescriptorForTesting parses the embedded opencode.yaml descriptor and
-// returns the resulting HarnessDescriptor. It is used by consistency tests
-// that compare the embedded YAML's path values against the shared harness
-// catalog without requiring an on-disk fixture directory.
-func DescriptorForTesting(t testing.TB) *domain.HarnessDescriptor {
-	t.Helper()
-	desc, err := descriptor.Parse(embeddedDescriptor, "builtin:opencode")
-	if err != nil {
-		t.Fatalf("DescriptorForTesting: parse embedded opencode descriptor: %v", err)
-	}
-	return desc
 }

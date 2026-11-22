@@ -20,13 +20,13 @@ import (
 
 	"github.com/mattn/go-isatty"
 
+	defaultconfig "mosaic-deploy/config"
 	"mosaic-deploy/internal/app"
 	"mosaic-deploy/internal/app/stackconfig"
 	"mosaic-deploy/internal/catalog"
 	"mosaic-deploy/internal/cli"
 	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/deploy"
-	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/registry"
 	"mosaic-deploy/internal/logging"
 	"mosaic-deploy/internal/pathinput"
@@ -34,17 +34,24 @@ import (
 	"mosaic-deploy/internal/todo"
 	"mosaic-deploy/internal/tui"
 
-	commonharness "mosaic-common/harness"
-
 	// Import built-in harnesses so their init() functions run and register
 	// themselves with the package-level registry before Discover is called.
 	_ "mosaic-deploy/internal/harness/builtin/claudecode"
+	_ "mosaic-deploy/internal/harness/builtin/codex"
 	_ "mosaic-deploy/internal/harness/builtin/ghcpcli"
 	_ "mosaic-deploy/internal/harness/builtin/opencode"
+	_ "mosaic-deploy/internal/harness/builtin/opencodev2"
 	_ "mosaic-deploy/internal/harness/builtin/vscodeghcp"
+
+	// Import the translator wiring package so that all format translators (CodexTOML
+	// and any future ones) register themselves via their init() functions before any
+	// LookupString call at runtime. This is the non-test owner of translator registration;
+	// the T2.8a test in main_test.go guards that both this import and the Codex harness
+	// import above are present.
+	_ "mosaic-common/agentformat/all"
 )
 
-const ToolVersion = "1.7.0"
+const ToolVersion = "1.13.0"
 
 // wantsTUI reports whether mosaic-deploy should launch the interactive TUI: no subcommand
 // was given, and both stdin and stdout are attached to a real terminal (not a pipe/redirect).
@@ -118,6 +125,12 @@ func main() {
 		os.Exit(cli.ExitFailure)
 	}
 
+	// Step 2c: Create any missing config file from the commented templates. A failure
+	// only warns: the stores fall back to defaults and the command proceeds unchanged.
+	if err := config.SeedConfigFiles(mosaicRoot, defaultconfig.Templates); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not create default config files: %v\n", err)
+	}
+
 	// Step 3: Load project-level tool configuration. Absent file yields documented
 	// defaults (no error); other I/O errors are fatal.
 	toolConfigStore := config.NewToolConfigStore(mosaicRoot)
@@ -156,26 +169,17 @@ func main() {
 	// hook wires config-declared tool-destination mappings into each harness module's
 	// descriptor at construction time, so that destination fields are emitted on every
 	// deploy and update without any further module-level knowledge of config stores.
-	// The ModelCatalog hook overlays the shared catalog's model data onto every
-	// harness the catalog knows, builtin VS Code GHCP included, so
-	// Descriptor().Models reflects the single source of truth for model IDs and
-	// format hints; any harness the shared catalog does not know keeps
-	// its own descriptor-sourced catalog unchanged.
-	reg, err := registry.DiscoverForStack(registry.Options{
-		MosaicRoot:    mosaicRoot,
-		AllowExternal: allowExternal || toolCfg.AllowExternalModules,
-		GOOS:          runtime.GOOS,
-		ToolMappings: func(harnessID string, declared []domain.ToolMapping) []domain.ToolMapping {
-			return config.EffectiveToolMappings(harnessID, declared, toolCfg.ToolDestinations, userCfg.ToolDestinations)
-		},
-		ModelCatalog: func(harnessID string, declared domain.ModelCatalog) domain.ModelCatalog {
-			cat, ok := commonharness.LookupModelCatalog(harnessID)
-			if !ok {
-				return domain.ModelCatalog{} // miss → keep descriptor's own catalog
-			}
-			return domain.ModelCatalog{IDs: cat.IDs, FormatHint: cat.FormatHint}
-		},
-	}, cat.HarnessInjections())
+	// The ModelCatalog hook overlays the shared catalog's descriptor-derived model
+	// data onto every harness the catalog knows. It is a no-op for an unmodified
+	// builtin id, whose own descriptor already declares the same data, and matters
+	// for a Deploy-side override of a builtin id; a harness the shared catalog does
+	// not know keeps its own descriptor-sourced catalog unchanged.
+	// The ToolMappings hook re-reads both config files at every registry build, so a registry
+	// rebuilt after a saved custom tool answer applies it in the same process.
+	reg, err := registry.DiscoverForStack(registryOptions(
+		mosaicRoot, allowExternal || toolCfg.AllowExternalModules,
+		toolConfigStore, userConfigStore, toolCfg, userCfg,
+	), cat.HarnessInjections())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: discover harnesses: %v\n", err)
 		os.Exit(cli.ExitFailure)
@@ -231,7 +235,9 @@ func main() {
 	}
 
 	preAnswers := buildPreAnswers(args)
-	deps.Interaction = cli.NewInteraction(preAnswers, todoCollector, os.Stdout)
+	// Notices and progress lines are diagnostics: they go to stderr in every output mode so
+	// stdout carries only the subcommand's result.
+	deps.Interaction = cli.NewInteraction(preAnswers, todoCollector, os.Stderr)
 
 	// Step 8: Dispatch to the CLI adapter with a fully-wired service. cli.Run
 	// handles all subcommand routing and output formatting; main.go is purely

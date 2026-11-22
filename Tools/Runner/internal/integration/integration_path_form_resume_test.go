@@ -131,8 +131,15 @@ func TestIntegration_PathForm_ResumeIntoReviewRouteBack_DispatchesRunScopedOnceA
 	if in := invs[0].Request.InputArtifacts; len(in) != 1 || in[0] != runPath("design.md") {
 		t.Errorf("reviewer inputs from the unprefixed registry: want exactly [%s], got %v", runPath("design.md"), in)
 	}
-	if in := invs[1].Request.InputArtifacts; len(in) != 1 || in[0] != runPath("review.md") {
-		t.Errorf("route-back inputs: want exactly [%s], got %v", runPath("review.md"), in)
+	// Route-back lists the reviewer findings once (run-scoped) plus the creator's
+	// own previous output from the registry; no duplicates, no extra entries.
+	in := invs[1].Request.InputArtifacts
+	seen := map[string]int{}
+	for _, p := range in {
+		seen[p]++
+	}
+	if len(in) != 2 || seen[runPath("review.md")] != 1 || seen[runPath("design.md")] != 1 {
+		t.Errorf("route-back inputs: want review.md and design.md once each, got %v", in)
 	}
 	if text := readArtifactText(t, r.runFolder); strings.Contains(text, runPrefixText()) {
 		t.Errorf("artifact written after the resumed route-back still contains %q: %s", runPrefixText(), text)

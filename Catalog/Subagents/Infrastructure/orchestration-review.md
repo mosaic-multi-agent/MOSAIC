@@ -1,6 +1,6 @@
 ---
 id: 39
-version: 1.2.3
+version: 1.2.4
 name: orchestration-review
 description: Checks a run's bookkeeping and routing against its declared workflow, and reports observations
 role: subagent
@@ -95,9 +95,9 @@ This is an explicit, stated exception to the standing rule that subagents never 
 **The workflow table**, located by content discovery rather than configuration:
 
 ```
-Orchestration.md frontmatter:  workflow: quick-fix
+Orchestration.md frontmatter:  workflow: brownfield-tdd
                                     ↓
-search for the literal string:  <Workflow type="core" name="quick-fix">
+search for the literal string:  <Workflow type="core" name="brownfield-tdd">
                                     ↓
              keep only matches inside  <AvailableWorkflows type="managed">
                                     ↓

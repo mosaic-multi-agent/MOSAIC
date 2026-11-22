@@ -219,7 +219,7 @@ func TestScanWorkspaceAgents_NumericIDMatch_FileInMatched(t *testing.T) {
 	cat.byNumericID["5"] = domain.Agent{Key: "worker-agent", NumericID: "5", Role: domain.RoleSubagent}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert
 	if len(scan.Matched) == 0 {
@@ -251,7 +251,7 @@ func TestScanWorkspaceAgents_NumericIDMatch_MatchedByIsNumericID(t *testing.T) {
 	cat.byNumericID["5"] = domain.Agent{Key: "worker-agent", NumericID: "5", Role: domain.RoleSubagent}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert
 	if len(scan.Matched) == 0 {
@@ -278,7 +278,7 @@ func TestScanWorkspaceAgents_NumericIDMatch_AgentKeyFromCatalog(t *testing.T) {
 	// "old-name" key deliberately absent from catalog so the filename-key lookup would fail.
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert
 	if len(scan.Matched) == 0 {
@@ -304,7 +304,7 @@ func TestScanWorkspaceAgents_NumericIDMatch_NumericIDCarried(t *testing.T) {
 	cat.byNumericID["5"] = domain.Agent{Key: "worker-agent", NumericID: "5"}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert
 	if len(scan.Matched) == 0 {
@@ -332,7 +332,7 @@ func TestScanWorkspaceAgents_NumericIDTakesPriorityOverFilenameKey(t *testing.T)
 	cat.byKey["agent-b"] = domain.Agent{Key: "agent-b", NumericID: "9"}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert
 	if len(scan.Matched) == 0 {
@@ -367,7 +367,7 @@ func TestScanWorkspaceAgents_FilenameKeyMatch_FileInMatched(t *testing.T) {
 	// byNumericID is empty — numeric-id lookup will fail.
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert
 	if len(scan.Matched) == 0 {
@@ -390,7 +390,7 @@ func TestScanWorkspaceAgents_FilenameKeyMatch_MatchedByIsFilenameKey(t *testing.
 	cat.byKey["utility-tool"] = domain.Agent{Key: "utility-tool"}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert
 	if len(scan.Matched) == 0 {
@@ -418,7 +418,7 @@ func TestScanWorkspaceAgents_FilenameKeyFallback_NumericIDFailsThenKeySucceeds(t
 	cat.byKey["known-agent"] = domain.Agent{Key: "known-agent", NumericID: "42"}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert
 	if len(scan.Matched) == 0 {
@@ -444,7 +444,7 @@ func TestScanWorkspaceAgents_AgentDotMdSuffix_StrippedCorrectly(t *testing.T) {
 	cat.byKey["orchestrator"] = domain.Agent{Key: "orchestrator", Role: domain.RoleOrchestrator}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert
 	if len(scan.Matched) == 0 {
@@ -473,7 +473,7 @@ func TestScanWorkspaceAgents_UnmatchedEligible_InHarnessOnly(t *testing.T) {
 	cat := newScanCatalog() // empty catalog — no matches
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert
 	if len(scan.HarnessOnly) == 0 {
@@ -494,7 +494,7 @@ func TestScanWorkspaceAgents_UnmatchedEligible_NotInMatched(t *testing.T) {
 	cat := newScanCatalog()
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert — Matched must be empty (the file is harness-only, not catalog-matched).
 	if len(scan.Matched) != 0 {
@@ -520,7 +520,7 @@ func TestScanWorkspaceAgents_NeitherMatchedNorEligible_AbsentFromBothSlices(t *t
 	cat := newScanCatalog()
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert — both slices must be empty.
 	if len(scan.Matched) != 0 {
@@ -551,7 +551,7 @@ func TestScanWorkspaceAgents_CatalogMatchedFile_NeverInHarnessOnly(t *testing.T)
 	cat.byNumericID["5"] = domain.Agent{Key: "worker-agent", NumericID: "5"}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert — the file must appear in Matched, not in HarnessOnly.
 	if len(scan.Matched) == 0 {
@@ -588,7 +588,7 @@ func TestScanWorkspaceAgents_NonMdFile_Skipped(t *testing.T) {
 	cat.byNumericID["5"] = domain.Agent{Key: "worker-agent", NumericID: "5"}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert — non-.md file must not appear in either slice.
 	if len(scan.Matched) != 0 || len(scan.HarnessOnly) != 0 {
@@ -616,7 +616,7 @@ func TestScanWorkspaceAgents_SubdirectoryEntry_Skipped(t *testing.T) {
 	cat.byNumericID["5"] = domain.Agent{Key: "worker-agent", NumericID: "5"}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert — the subdirectory must be skipped; the nested file must not be found.
 	if len(scan.Matched) != 0 || len(scan.HarnessOnly) != 0 {
@@ -644,7 +644,7 @@ func TestScanWorkspaceAgents_UnparseableFile_SkippedSilently(t *testing.T) {
 	cat.byNumericID["1"] = domain.Agent{Key: "some-agent", NumericID: "1"}
 
 	// Act — must not panic
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert — the unparseable file must produce no entries.
 	if len(scan.Matched) != 0 || len(scan.HarnessOnly) != 0 {
@@ -671,7 +671,7 @@ func TestScanWorkspaceAgents_NoFrontmatterFile_SkippedSilently(t *testing.T) {
 	cat := newScanCatalog()
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert
 	if len(scan.Matched) != 0 || len(scan.HarnessOnly) != 0 {
@@ -698,7 +698,7 @@ func TestScanWorkspaceAgents_EmptyAgentsDir_ReturnsEmptyScan(t *testing.T) {
 	cat.byNumericID["5"] = domain.Agent{Key: "some-agent", NumericID: "5"}
 
 	// Act — empty agentsDir must yield empty scan
-	scan := scanWorkspaceAgents(workspace, "", cat)
+	scan, _ := scanWorkspaceAgents(workspace, "", cat, &domain.HarnessDescriptor{})
 
 	// Assert
 	if len(scan.Matched) != 0 || len(scan.HarnessOnly) != 0 {
@@ -716,7 +716,7 @@ func TestScanWorkspaceAgents_AbsentDirectory_ReturnsEmptyScan(t *testing.T) {
 	cat := newScanCatalog()
 
 	// Act — must not panic; directory simply doesn't exist
-	scan := scanWorkspaceAgents(workspace, "nonexistent-agents-dir", cat)
+	scan, _ := scanWorkspaceAgents(workspace, "nonexistent-agents-dir", cat, &domain.HarnessDescriptor{})
 
 	// Assert
 	if len(scan.Matched) != 0 || len(scan.HarnessOnly) != 0 {
@@ -745,7 +745,7 @@ func TestScanWorkspaceAgents_DuplicateNumericID_BothFilesInMatched(t *testing.T)
 	cat.byNumericID["12"] = domain.Agent{Key: "worker-agent", NumericID: "12"}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert — both files must appear in Matched.
 	if len(scan.Matched) < 2 {
@@ -771,7 +771,7 @@ func TestScanWorkspaceAgents_DuplicateNumericID_MatchedKeysDeduplicates(t *testi
 	cat.byNumericID["12"] = domain.Agent{Key: "worker-agent", NumericID: "12"}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 	keys := scan.MatchedKeys()
 
 	// Assert — key must appear exactly once.
@@ -811,7 +811,7 @@ func TestScanWorkspaceAgents_MatchedSlice_SortedByTargetPath(t *testing.T) {
 	cat.byNumericID["3"] = domain.Agent{Key: "bravo-agent", NumericID: "3"}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert — sorted by TargetPath (agents/alpha.md < agents/bravo.md < agents/charlie.md).
 	if len(scan.Matched) < 3 {
@@ -843,7 +843,7 @@ func TestScanWorkspaceAgents_MatchedKeys_Sorted(t *testing.T) {
 	cat.byNumericID["3"] = domain.Agent{Key: "m-agent", NumericID: "3"}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 	keys := scan.MatchedKeys()
 
 	// Assert — must be sorted: a-agent < m-agent < z-agent.
@@ -872,7 +872,7 @@ func TestScanWorkspaceAgents_HarnessOnlySlice_SortedByTargetPath(t *testing.T) {
 	cat := newScanCatalog() // empty — both files have no catalog match
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert — sorted by TargetPath (agents/a-tool.md < agents/z-tool.md).
 	if len(scan.HarnessOnly) < 2 {
@@ -909,7 +909,7 @@ func TestScanWorkspaceAgents_MixedDirectory_ThreeOutcomesClassifiedCorrectly(t *
 	cat.byNumericID["10"] = domain.Agent{Key: "catalog-agent", NumericID: "10"}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert — exactly one entry in each slice.
 	if len(scan.Matched) != 1 {
@@ -968,7 +968,7 @@ func TestScanWorkspaceAgents_UnreadableFile_SkippedSilently(t *testing.T) {
 	cat.byNumericID["5"] = domain.Agent{Key: "locked-agent", NumericID: "5"}
 
 	// Act — must not panic; the unreadable file must be skipped silently.
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert — the unreadable file must produce no entries in either slice.
 	if len(scan.Matched) != 0 || len(scan.HarnessOnly) != 0 {
@@ -995,7 +995,7 @@ func TestScanWorkspaceAgents_EmptyScan_MatchedKeysReturnsNil(t *testing.T) {
 	cat := newScanCatalog()
 
 	// Act — must not panic
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 	keys := scan.MatchedKeys()
 
 	// Assert — nil or empty slice, no panic.
@@ -1041,7 +1041,7 @@ func TestScanWorkspaceAgents_ParseFailedFile_CatalogKeyMatch_InMatched(t *testin
 	// byNumericID is empty: the numeric id cannot be extracted from an unparseable file.
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert — the parse-failed file must appear in Matched, not be silently skipped.
 	if len(scan.Matched) == 0 {
@@ -1066,7 +1066,7 @@ func TestScanWorkspaceAgents_ParseFailedFile_CatalogKeyMatch_ParseFailedIsTrue(t
 	cat.byKey["worker-agent"] = domain.Agent{Key: "worker-agent", Role: domain.RoleWorker}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert
 	if len(scan.Matched) == 0 {
@@ -1093,7 +1093,7 @@ func TestScanWorkspaceAgents_ParseFailedFile_CatalogKeyMatch_MatchedByIsParseFai
 	cat.byKey["worker-agent"] = domain.Agent{Key: "worker-agent", Role: domain.RoleWorker}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert
 	if len(scan.Matched) == 0 {
@@ -1121,7 +1121,7 @@ func TestScanWorkspaceAgents_ParseFailedFile_CatalogKeyMatch_NumericIDIsEmpty(t 
 	cat.byKey["worker-agent"] = domain.Agent{Key: "worker-agent", Role: domain.RoleWorker}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert
 	if len(scan.Matched) == 0 {
@@ -1148,7 +1148,7 @@ func TestScanWorkspaceAgents_ParseFailedFile_CatalogKeyMatch_AgentKeyFromCatalog
 	cat.byKey["known-catalog-agent"] = domain.Agent{Key: "known-catalog-agent", Role: domain.RoleWorker}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert
 	if len(scan.Matched) == 0 {
@@ -1175,7 +1175,7 @@ func TestScanWorkspaceAgents_ParseFailedFile_NoCatalogKeyMatch_StillSkipped(t *t
 	// byKey and byNumericID are both empty — "foreign-tool" is not a known agent.
 
 	// Act — must not panic; parse-failure without catalog key match must skip silently.
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert — the foreign file must produce no entries in either slice (FR-3 preserved).
 	if len(scan.Matched) != 0 {
@@ -1205,7 +1205,7 @@ func TestScanWorkspaceAgents_ParseFailedFile_TargetPathSet(t *testing.T) {
 	cat.byKey["worker-agent"] = domain.Agent{Key: "worker-agent", Role: domain.RoleWorker}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert
 	if len(scan.Matched) == 0 {
@@ -1233,7 +1233,7 @@ func TestScanWorkspaceAgents_NormalMatchedFile_ParseFailedIsFalse(t *testing.T) 
 	cat.byNumericID["5"] = domain.Agent{Key: "worker-agent", NumericID: "5"}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert
 	if len(scan.Matched) == 0 {
@@ -1268,7 +1268,7 @@ func TestScanWorkspaceAgents_MixedDirectory_ParseFailedAndNormal_BothClassifiedC
 	// "foreign-broken" is deliberately absent from the catalog.
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert — exactly two entries in Matched: one normal, one parse-failed.
 	if len(scan.Matched) != 2 {
@@ -1316,7 +1316,7 @@ func TestScanWorkspaceAgents_ParseFailedFile_NotInHarnessOnly(t *testing.T) {
 	cat.byKey["worker-agent"] = domain.Agent{Key: "worker-agent", Role: domain.RoleWorker}
 
 	// Act
-	scan := scanWorkspaceAgents(workspace, agentsDir, cat)
+	scan, _ := scanWorkspaceAgents(workspace, agentsDir, cat, &domain.HarnessDescriptor{})
 
 	// Assert — must be in Matched, not HarnessOnly.
 	if len(scan.HarnessOnly) != 0 {

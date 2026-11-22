@@ -17,6 +17,10 @@
 | **cmd/mosaic-log-analyzer** | Composition root. The only place concrete adapter implementations are constructed and wired together (via `app.Deps`), and the only place that decides CLI vs. TUI dispatch. | Imports everything; nothing imports it. |
 | **tools/importcheck** | A standalone dev-time checker (not part of the shipped binary) that statically parses imports of every non-test source file and fails the build if any package violates the dependency-direction rules below. Run via `task check:imports`. | Enforces the architecture described in this document; does not participate in runtime flows. |
 
+## Harnesses
+
+The harness keys as logged are `claude-code`, `ghcp-cli`, `opencode`, `opencode-v2` (experimental) and `vscode-ghcp`. For `opencode-v2` the analyzer reads usage from `usage_record` events (not from `invocation_end`), decodes the V2 `session export` transcript shape (`{info, messages}`, child sessions through the `subagent` tool's session id) in `transcript/opencodev2.go`, and prices usage itself: the logger records no cost for this harness.
+
 ## System-Wide Patterns
 
 - **Hexagonal / ports-and-adapters architecture.** `domain` defines port interfaces (`LogSource`, `EventReader`, `PricingStore`, `Clock`, `Interaction`); `logscan`, `logread`, `pricing` are the production adapters, `app` is the use-case layer that depends only on the ports, and `cli`/`tui` are sibling frontend adapters that both drive `app` and never each other. The dependency direction is machine-enforced by `tools/importcheck` (`task check:imports`), not just documented convention — treat any import-direction change as needing that check.
@@ -41,5 +45,9 @@ No areas currently warrant deeper-tier documentation beyond this overview — se
 
 ## Further Reading
 
-- [ReworkAndCache.md](ReworkAndCache.md) - likely-rework rule, outcome split, cache figures (net benefit, unread writes) and run comparison semantics.
-- [SchemaAndCompactions.md](SchemaAndCompactions.md) - major-version schema rule, compaction pairing rules (phased and legacy), digest round trip, and the 1.4.0/1.5.0 field inventory.
+- [ReworkAndCache.md](ReworkAndCache.md) - likely-rework rule, outcome split, cache figures (the cache hit definition, net benefit, per-session unread writes) and run comparison semantics.
+- [SchemaAndCompactions.md](SchemaAndCompactions.md) - major-version schema rule, compaction pairing rules (phased and legacy), session-aware compaction detection, per-session first write, tool growth scope, digest round trip, and the 1.4.0/1.5.0 field inventory.
+
+## Default Source
+
+With no `--path` the digest-aware resolver (`app/digestsource.go`) probes `OrchestrationLogs/` under the working directory and also lists `*.digest.json` files lying directly in the working directory. A usable logs folder keeps its kind and gains the digests beside it and those in the working directory (a file seen twice is passed once). Without a usable logs folder, working-directory digests alone become a digest-directory source and open without a prompt; the source prompt appears only when neither exists. `export` without a path uses the same default. On a duplicate run the logs win, then the most recently written digest.

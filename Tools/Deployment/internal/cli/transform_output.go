@@ -94,6 +94,7 @@ func hookNotCarried(f app.TransformFileOutcome) bool {
 // renderTransformHuman writes the transform plan and summary to out. The plan listing is the
 // same for a real run, a dry run and a plan that was not confirmed.
 func renderTransformHuman(out io.Writer, result app.TransformHarnessResult) {
+	writeExperimentalWarnings(out, result.ExperimentalHarnesses)
 	title := "transform plan"
 	if result.DryRun {
 		title = "dry run: transform plan (nothing is written)"

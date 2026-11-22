@@ -1,6 +1,6 @@
 ---
 id: 7
-version: 5.3.1
+version: 5.4.0
 name: planner-audit
 description: Creates audit plans with typed stages (Implementation, Tests, Architecture, Contracts), always including one whole-PR Architecture and one whole-PR Contracts stage, and full per-stage isolation — outputs AuditPlan.md (brief routing artifact) + per-stage Stage-{N}/AuditPlan.md and Stage-{N}/AuditProgress.md for downstream audit agents
 role: subagent
@@ -152,6 +152,10 @@ Orchestration/
     AuditProgress.md               ← Stage 2 progress tracking (mutable checkboxes)
   ...
 ```
+
+**AuditPlan.md also ends with an `## Ungrouped` section:** one line per file that needs an inclusion, exclusion, or audit-type decision before it can be staged (the path, then the decision needed), or `None` when every file is staged. Your status depends on it (Error Handling).
+
+**Project template.** The orchestrator, the audit agents, and your own status rely on the artifacts listed above, the `## Ungrouped` section, the per-file checkboxes, the Stage Schedule Contract, and the immutability headers. These hold whatever the project template below says. The template shapes everything else: wording, the layout within each section, and any additional sections. Where it leaves out or changes one of these parts, write the part anyway, once, with at least the content listed here.
 
 <CodebaseContext type="project">
 </CodebaseContext>

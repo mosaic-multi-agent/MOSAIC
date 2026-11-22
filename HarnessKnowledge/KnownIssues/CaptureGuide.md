@@ -53,6 +53,14 @@ HarnessKnowledge/KnownIssues/
 │   ├── index.md
 │   ├── active-issues.md
 │   └── resolved-issues.md
+├── OpenCodeV2/                  # OpenCode 2.x ONLY (O2- IDs). Separate harness from OpenCodeV1; never mix entries
+│   ├── index.md
+│   ├── active-issues.md
+│   └── resolved-issues.md
+├── Codex/                       # Codex CLI (CX- IDs), repo openai/codex
+│   ├── index.md
+│   ├── active-issues.md
+│   └── resolved-issues.md
 └── VsCodeGHCP/
     ├── index.md
     ├── active-issues.md
@@ -69,8 +77,10 @@ Each harness gets exactly **3 files**. No additional files, no per-issue files.
 |---------|--------|---------|
 | Claude Code | `CC-` | CC-001 |
 | GitHub Copilot CLI | `GC-` | GC-001 |
-| OpenCode | `OC-` | OC-001 |
+| OpenCode 1.x | `OC-` | OC-001 |
+| OpenCode 2.x | `O2-` | O2-001 |
 | VS Code GHCP | `VC-` | VC-001 |
+| Codex CLI | `CX-` | CX-001 |
 
 IDs are **permanent and sequential**. When an issue moves from active to resolved, it keeps its original ID. IDs are never reused.
 

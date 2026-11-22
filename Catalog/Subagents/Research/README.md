@@ -11,7 +11,7 @@ Research agents analyze and explore to build foundational understanding for down
 | ID | Agent | Version | Description |
 |----|-------|---------|-------------|
 | 1 | [codebase-research](./codebase-research.md) | 4.2.2 | Analyzes codebase, explores existing patterns, and documents findings |
-| 3 | [knowledge-base-generator](./knowledge-base-generator.md) | 3.3.1 | Researches codebase scope and produces N-tier knowledge base documentation |
+| 3 | [knowledge-base-generator](./knowledge-base-generator.md) | 4.1.0 | Researches codebase scope and produces N-tier knowledge base documentation |
 | 2 | [library-research](./library-research.md) | 3.2.2 | Researches libraries, frameworks, and external dependencies |
 | 29 | [hw-schema-research](./hw-schema-research.md) | 3.3.0 | Analyzes hardware schematics and documents circuit topology, component relationships, and signal flow |
 | 30 | [hw-schema-kb-generator](./hw-schema-kb-generator.md) | 3.3.1 | Produces domain-oriented hardware-schematic knowledge base documentation |

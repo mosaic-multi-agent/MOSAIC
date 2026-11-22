@@ -76,6 +76,11 @@ func (s *spyService) UpdateWorkflows(ctx context.Context, req app.WorkflowUpdate
 	return s.workflowsResp, s.workflowsErr
 }
 
+// PromoteBatch satisfies app.Service; the batch is not exercised by these tests.
+func (s *spyService) PromoteBatch(_ context.Context, _ app.PromoteBatchRequest) (app.PromoteBatchResult, error) {
+	return app.PromoteBatchResult{}, nil
+}
+
 func (s *spyService) Promote(ctx context.Context, req app.PromoteRequest) (app.PromoteResult, error) {
 	s.promoteReq = &req
 	return s.promoteResp, s.promoteErr

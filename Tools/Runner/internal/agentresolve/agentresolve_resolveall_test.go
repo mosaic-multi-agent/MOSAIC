@@ -8,7 +8,7 @@ import (
 )
 
 func TestResolveAll_SingleAgent_ReturnsNonNilMap(t *testing.T) {
-	result, err := agentresolve.ResolveAll(agentsDir(), []string{"test-writer-tdd"})
+	result, err := agentresolve.ResolveAll(agentsDir(), legacyMarkdown, []string{"test-writer-tdd"})
 
 	if err != nil {
 		t.Fatalf("ResolveAll returned unexpected error: %v", err)
@@ -19,7 +19,7 @@ func TestResolveAll_SingleAgent_ReturnsNonNilMap(t *testing.T) {
 }
 
 func TestResolveAll_SingleAgent_MapContainsRequestedKey(t *testing.T) {
-	result, err := agentresolve.ResolveAll(agentsDir(), []string{"test-writer-tdd"})
+	result, err := agentresolve.ResolveAll(agentsDir(), legacyMarkdown, []string{"test-writer-tdd"})
 	if err != nil {
 		t.Fatalf("ResolveAll: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestResolveAll_SingleAgent_MapContainsRequestedKey(t *testing.T) {
 }
 
 func TestResolveAll_SingleAgent_AgentReference_IdentifierMatches(t *testing.T) {
-	result, err := agentresolve.ResolveAll(agentsDir(), []string{"test-writer-tdd"})
+	result, err := agentresolve.ResolveAll(agentsDir(), legacyMarkdown, []string{"test-writer-tdd"})
 	if err != nil {
 		t.Fatalf("ResolveAll: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestResolveAll_SingleAgent_AgentReference_IdentifierMatches(t *testing.T) {
 func TestResolveAll_SingleAgent_AgentReference_DefinitionPath_EndsWithFilename(t *testing.T) {
 	// The resolved path must end with "test-writer-tdd.md" so that the harness
 	// adapter can locate the agent definition file.
-	result, err := agentresolve.ResolveAll(agentsDir(), []string{"test-writer-tdd"})
+	result, err := agentresolve.ResolveAll(agentsDir(), legacyMarkdown, []string{"test-writer-tdd"})
 	if err != nil {
 		t.Fatalf("ResolveAll: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestResolveAll_MultipleAgents_ReturnsAllRequested(t *testing.T) {
 	// The agents directory contains test-writer-tdd.md, implementation-tdd.md,
 	// and build-review.md.
 	ids := []string{"test-writer-tdd", "implementation-tdd", "build-review"}
-	result, err := agentresolve.ResolveAll(agentsDir(), ids)
+	result, err := agentresolve.ResolveAll(agentsDir(), legacyMarkdown, ids)
 
 	if err != nil {
 		t.Fatalf("ResolveAll returned unexpected error: %v", err)
@@ -73,7 +73,7 @@ func TestResolveAll_MultipleAgents_ReturnsAllRequested(t *testing.T) {
 
 func TestResolveAll_MultipleAgents_EachIdentifierCorrect(t *testing.T) {
 	ids := []string{"test-writer-tdd", "implementation-tdd", "build-review"}
-	result, err := agentresolve.ResolveAll(agentsDir(), ids)
+	result, err := agentresolve.ResolveAll(agentsDir(), legacyMarkdown, ids)
 	if err != nil {
 		t.Fatalf("ResolveAll: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestResolveAll_MultipleAgents_EachIdentifierCorrect(t *testing.T) {
 
 func TestResolveAll_MultipleAgents_EachDefinitionPathNamesCorrectFile(t *testing.T) {
 	ids := []string{"test-writer-tdd", "implementation-tdd", "build-review"}
-	result, err := agentresolve.ResolveAll(agentsDir(), ids)
+	result, err := agentresolve.ResolveAll(agentsDir(), legacyMarkdown, ids)
 	if err != nil {
 		t.Fatalf("ResolveAll: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestResolveAll_MultipleAgents_EachDefinitionPathNamesCorrectFile(t *testing
 func TestResolveAll_Subset_ReturnsOnlyRequestedEntries(t *testing.T) {
 	// Requesting only one of the three available agents must return a map
 	// with exactly one entry, not all agents in the directory.
-	result, err := agentresolve.ResolveAll(agentsDir(), []string{"build-review"})
+	result, err := agentresolve.ResolveAll(agentsDir(), legacyMarkdown, []string{"build-review"})
 	if err != nil {
 		t.Fatalf("ResolveAll: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestResolveAll_Subset_ReturnsOnlyRequestedEntries(t *testing.T) {
 // --- Happy path: empty identifiers ---
 
 func TestResolveAll_EmptyIdentifiers_ReturnsEmptyMap(t *testing.T) {
-	result, err := agentresolve.ResolveAll(agentsDir(), []string{})
+	result, err := agentresolve.ResolveAll(agentsDir(), legacyMarkdown, []string{})
 
 	if err != nil {
 		t.Fatalf("ResolveAll with empty identifiers must not return an error; got: %v", err)
@@ -139,7 +139,7 @@ func TestResolveAll_EmptyIdentifiers_ReturnsEmptyMap(t *testing.T) {
 
 func TestResolveAll_MissingAgent_ReturnsError(t *testing.T) {
 	// "planner" does not exist in the agents directory.
-	_, err := agentresolve.ResolveAll(agentsDir(), []string{"planner"})
+	_, err := agentresolve.ResolveAll(agentsDir(), legacyMarkdown, []string{"planner"})
 
 	if err == nil {
 		t.Fatal("requesting a missing agent must return an error")
@@ -147,13 +147,13 @@ func TestResolveAll_MissingAgent_ReturnsError(t *testing.T) {
 }
 
 func TestResolveAll_MissingAgent_ReturnsRefusalError(t *testing.T) {
-	_, err := agentresolve.ResolveAll(agentsDir(), []string{"planner"})
+	_, err := agentresolve.ResolveAll(agentsDir(), legacyMarkdown, []string{"planner"})
 
 	asRefusalError(t, err)
 }
 
 func TestResolveAll_MissingAgent_RefusalError_ComponentIsAgentresolve(t *testing.T) {
-	_, err := agentresolve.ResolveAll(agentsDir(), []string{"planner"})
+	_, err := agentresolve.ResolveAll(agentsDir(), legacyMarkdown, []string{"planner"})
 
 	re := asRefusalError(t, err)
 	if re.Component != "agentresolve" {
@@ -164,7 +164,7 @@ func TestResolveAll_MissingAgent_RefusalError_ComponentIsAgentresolve(t *testing
 func TestResolveAll_MissingAgent_RefusalError_NamesIdentifier(t *testing.T) {
 	// The error must name "planner" so the user knows which agent definition
 	// is missing, without having to inspect the directory manually.
-	_, err := agentresolve.ResolveAll(agentsDir(), []string{"planner"})
+	_, err := agentresolve.ResolveAll(agentsDir(), legacyMarkdown, []string{"planner"})
 
 	re := asRefusalError(t, err)
 	if !strings.Contains(re.Error(), "planner") {
@@ -176,7 +176,7 @@ func TestResolveAll_MissingAgent_RefusalError_NamesDirectory(t *testing.T) {
 	// The error must name the directory that was searched so the user knows
 	// where to place the missing agent definition file.
 	dir := agentsDir()
-	_, err := agentresolve.ResolveAll(dir, []string{"planner"})
+	_, err := agentresolve.ResolveAll(dir, legacyMarkdown, []string{"planner"})
 
 	re := asRefusalError(t, err)
 	// The directory name or a recognisable part of it must appear in the error.
@@ -188,7 +188,7 @@ func TestResolveAll_MissingAgent_RefusalError_NamesDirectory(t *testing.T) {
 func TestResolveAll_OneMissingOnePresent_ReturnsRefusalError(t *testing.T) {
 	// Even when some identifiers resolve successfully, a single missing one
 	// must produce a refusal error rather than silently returning a partial map.
-	_, err := agentresolve.ResolveAll(agentsDir(), []string{"test-writer-tdd", "planner"})
+	_, err := agentresolve.ResolveAll(agentsDir(), legacyMarkdown, []string{"test-writer-tdd", "planner"})
 
 	if err == nil {
 		t.Fatal("a single missing agent among multiple requested must return an error")

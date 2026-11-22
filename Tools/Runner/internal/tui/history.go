@@ -39,7 +39,7 @@ func (m *rootModel) declaredInfraSet() domain.InfraAgentSet {
 	if m.selections.orchestratorFile == "" {
 		return nil
 	}
-	declared, err := orchfile.EnumerateInfrastructureAgents(m.selections.orchestratorFile)
+	declared, err := orchfile.EnumerateInfrastructureAgents(m.selections.orchestratorFile, m.selectedAgentFormat())
 	if err != nil {
 		return nil
 	}

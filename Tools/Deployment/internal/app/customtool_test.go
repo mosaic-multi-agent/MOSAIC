@@ -95,7 +95,7 @@ func TestDeployNew_CustomToolPreAnswered_DoesNotAskQCustomTool(t *testing.T) {
 		HarnessID:       "stub-harness",
 		WorkspacePath:   workspace,
 		WorkflowIDs:     []string{"quick-fix"},
-		CustomTools:     map[string]string{"bash": "my-bash-server"},
+		CustomTools:     domain.CustomToolAnswers{"bash": {{Server: "my-bash-server"}}},
 		AutoConfirmPlan: true,
 	})
 
@@ -364,7 +364,7 @@ func TestDeployNew_UnmappedTool_CustomName_PropagatesIntoToolRequest(t *testing.
 	// Assert — at least one Tools call must have CustomNames["bash"] == "my-bash-server"
 	found := false
 	for _, req := range capturedReqs {
-		if req.CustomNames != nil && req.CustomNames["bash"] == "my-bash-server" {
+		if e := req.CustomNames["bash"]; len(e) == 1 && e[0] == (domain.MCPEntry{Server: "my-bash-server"}) {
 			found = true
 			break
 		}

@@ -27,7 +27,7 @@ func creatorInjectionInputs(t *testing.T, registry []domain.ArtifactRegistryEntr
 		Schedules:           singleSchedules("TDD"),
 		State:               state,
 		LastResponse:        cnaResponse("tests-review-tdd#5"),
-		LastOutputArtifacts: []string{"Stage-1/tests-review-tdd.md"},
+		LastOutputsOverride: overrideOf([]string{"Stage-1/tests-review-tdd.md"}),
 		Agents:              agents,
 		Seq:                 5,
 		Now:                 fixedNow,

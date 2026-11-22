@@ -27,7 +27,7 @@ import (
 	"github.com/mattn/go-isatty"
 )
 
-const ToolVersion = "1.12.0"
+const ToolVersion = "1.16.0"
 
 // stdioIsTerminal reports whether stdin and stdout are both real terminals.
 func stdioIsTerminal() bool {
@@ -226,6 +226,8 @@ func runCLIMode(args, cobraArgs []string) int {
 	// resolution step and uses the same run folder that was used to wire the session.
 	// Use cobraArgs (not args) so the entry-point-only --dev flag does not reach cobra.
 	sess = withGHCPTrustPreflight(sess, runIdentity.RunFolder, harnessStr, interact, false, logger)
+	sess = withCodexSetupPreflight(sess, runIdentity.RunFolder, harnessStr, interact, false, logger)
+	sess = withExperimentalNotice(sess, harnessStr, interact)
 	sess = newPanicLoggingSession(sess, logger)
 	sess = newRunLifecycleSession(sess, newRunLogConfig(runIdentity.RunFolder, harnessStr, logger, &realClock{}))
 	runCtx, releaseRunCtx := newCLIRunContext(context.Background(), osInterrupt)

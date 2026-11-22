@@ -9,13 +9,12 @@ Detailed code examples for Lean TDD principles. Reference from [SKILL.md](SKILL.
 ### Example 1: Valid RED with NotImplementedException
 
 ```csharp
-// Contract (created by TestCreator)
+// Scaffolding, created while writing the test: declarations only, no behavior
 public interface IOrderCalculator
 {
     decimal CalculateTotal(Order order);
 }
 
-// Stub implementation (minimal to compile)
 public class OrderCalculator : IOrderCalculator
 {
     public decimal CalculateTotal(Order order)
@@ -67,39 +66,45 @@ public void CalculateTotal_Should_Sum_Item_Prices()
 
 **Result:** Compilation error → **NOT valid RED** [FAIL]
 
-Create the interface/stub first, THEN claim RED.
+Scaffold the types the test references first (see Example 1), THEN claim RED.
 
 ---
 
 ### Example 3: Valid RED with Assertion Failure (Ideal)
 
 ```csharp
-// Stub implementation returns wrong value
+// Existing code: sums prices, but the new premium discount does not exist yet
 public class OrderCalculator : IOrderCalculator
 {
     public decimal CalculateTotal(Order order)
     {
-        return 0m;  // Stub returns zero
+        return order.Items.Sum(i => i.Price);
     }
 }
 
-// Test
+// Test for the new behavior
 [TestMethod]
-public void CalculateTotal_Should_Sum_Item_Prices()
+public void CalculateTotal_When_PremiumMember_Should_Apply_20_Percent_Discount()
 {
     // Arrange
     var calculator = new OrderCalculator();
-    var order = new Order { Items = new List<Item> { new Item { Price = 30 } } };
+    var order = new Order
+    {
+        MembershipLevel = Level.Premium,
+        Items = new List<Item> { new Item { Price = 100 } }
+    };
 
     // Act
     var result = calculator.CalculateTotal(order);
 
     // Assert
-    Assert.AreEqual(30m, result);  // Fails: Expected 30, Actual 0
+    Assert.AreEqual(80m, result);  // Fails: Expected 80, Actual 100
 }
 ```
 
-**Result:** Assertion fails with clear message → **Ideal RED** [PASS]
+**Result:** Assertion fails because the discount is absent → **Ideal RED** [PASS]
+
+Do not manufacture this kind of failure with a scaffold that returns a default value (`return 0m;`). A default can match an expected result, which gives a false green. Scaffolding throws (Example 1).
 
 ---
 

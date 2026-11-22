@@ -1,0 +1,6 @@
+# Invalid: whitespace-only reason.
+schema_version: "1"
+id: "experimental-whitespace-reason"
+display_name: "Experimental Whitespace Reason"
+experimental:
+  reason: "   "

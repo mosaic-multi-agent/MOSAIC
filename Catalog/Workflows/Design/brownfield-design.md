@@ -2,7 +2,7 @@
 version: "4.0"
 name: "Brownfield Design Workflow"
 description: "Architecture review, design proposals, or planning large features for an existing codebase without implementation."
-hint: "The RESEARCH/PLANNING/DESIGN head of brownfield-tdd, ending before EXECUTION — the mirror image of implementation-only's EXECUTION/REVIEW tail. Unlike implementation-only, this one has a genuine standalone reason to exist beyond resuming a split run: 'produce a design without implementing it' is a real, distinct request, not just a workaround for something native run-continuation now covers."
+hint: "The RESEARCH/PLANNING/DESIGN head of brownfield-tdd, ending before EXECUTION. Use it when you want a design without implementing it — a real, distinct request, not a way to split a run (native run continuation covers resuming)."
 author: MOSAIC
 id: brownfield-design
 referenced_agents:
@@ -43,14 +43,37 @@ artifacts:
 
 ---
 
+## Flow
+
+Solid arrows: the happy path (`On Success`). Dotted arrows: where findings usually go (`On Findings`). `[HITL]`: a human stop.
+
+```mermaid
+flowchart TD
+    subgraph RESEARCH
+        CR["codebase-research"] --> RF["requirements-refinement [HITL]"]
+        RF --> RV["requirements-review"]
+        RV -. findings .-> RF
+    end
+    subgraph PLANNING
+        PL["planner-tdd-soft [HITL]<br/>Plan.md + per-stage Plan / PlanProgress"] --> PR["plan-review"]
+        PR -. findings .-> PL
+    end
+    subgraph DESIGN
+        CD["contracts-designer [HITL]"] --> CRV["contracts-review"]
+        CRV -. findings .-> CD
+    end
+    RV --> PL
+    PR --> CD
+    CRV --> DONE(["Requirements, plan and contracts design; no implementation"])
+```
+
+---
+
 ## Design Rationale
 
-Structurally the complement of `implementation-only`: together, RESEARCH → PLANNING → DESIGN (this workflow) plus EXECUTION → REVIEW (`implementation-only`) reconstitute `brownfield-tdd`. Both came from the same split.
+Structurally the RESEARCH → PLANNING → DESIGN head of `brownfield-tdd`, stopping before EXECUTION. It exists because "produce an architecture review, a design proposal, or a plan for a large feature, but stop before writing any code" is a legitimate, distinct request in its own right — a user asking for a design review does not want implementation to happen next. It is not a way to split a long run; native run continuation covers resuming.
 
-The difference is in why each half is still worth keeping. `implementation-only` existed mainly to let a run resume past DESIGN by hand-carrying Plan.md/ContractsDesign.md into a fresh run — a workaround now largely superseded by native mid-execution run persistence and continuation. This half doesn't have that problem: "produce architecture review, a design proposal, or a plan for a large feature, but stop before writing any code" is a legitimate, distinct request in its own right — not a workaround for anything. A user asking for a design review genuinely does not want implementation to happen next, run-continuation or not. That makes this workflow's standalone existence better justified than its sibling's.
-
-**No Stage block.** `planner-tdd-soft` still writes `Plan.md` with its `## Stages` schedule and the per-stage files, but no row iterates over them: the plan is a deliverable here, not something the run executes. The schedule becomes a block schedule only when the artifacts are carried into an implementing run (`implementation-only` declares `Plan.md` / `Stages` as its Stage block source).
-
+**No Stage block.** `planner-tdd-soft` still writes `Plan.md` with its `## Stages` schedule and the per-stage files, but no row iterates over them: the plan is a deliverable here, not something the run executes.
 **Fix targets.** Each reviewer's suggested fix target is its own creator. A `contracts-review` finding that traces back to the plan, or a `plan-review` finding that traces back to requirements, is routed upstream by the orchestrator's routing policy, not by a declared route.
 
 ---

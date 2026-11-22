@@ -195,6 +195,6 @@ func addPartiallyDoneContext(step *domain.DispatchStep, in NextInput, pos positi
 	if in.LastResponse != nil {
 		msg = in.LastResponse.StatusMessage
 	}
-	step.Request.InputArtifacts = injectReviewArtifacts(in.State.RunID, step.Request.InputArtifacts, in.LastOutputArtifacts)
+	step.Request.InputArtifacts = injectReviewArtifacts(in.State.RunID, step.Request.InputArtifacts, previousOutputs(in, pos))
 	step.Request.TaskDescription = partiallyDoneTaskDescription(in.Workflow.Table.Rows[step.RowIndex], msg)
 }

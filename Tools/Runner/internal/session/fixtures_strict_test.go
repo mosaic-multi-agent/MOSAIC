@@ -12,6 +12,7 @@ import (
 
 	"mosaic-run/internal/compat"
 	"mosaic-run/internal/domain"
+	"mosaic-run/internal/agentfile"
 	"mosaic-run/internal/orchfile"
 	"mosaic-run/internal/workflow"
 )
@@ -49,7 +50,7 @@ func TestSessionFixtures_EveryWorkflowRegion_ParsesStrictlyAndIsAdmitted(t *test
 		}
 		checked++
 		t.Run(name, func(t *testing.T) {
-			regions, err := orchfile.EnumerateWorkflows(path)
+			regions, err := orchfile.EnumerateWorkflows(path, agentfile.Format{})
 			if err != nil {
 				t.Fatalf("enumerate workflows: %v", err)
 			}

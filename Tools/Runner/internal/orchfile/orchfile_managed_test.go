@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"mosaic-run/internal/agentfile"
 	"mosaic-run/internal/orchfile"
 )
 
@@ -18,7 +19,7 @@ import (
 func TestEnumerateWorkflows_DeployManaged_ReturnsBothWorkflows(t *testing.T) {
 	// deploy-managed.md declares two workflows: quick-fix and greenfield-tdd.
 	// EnumerateWorkflows must return both when the traversal is kind-agnostic.
-	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("deploy-managed.md"))
+	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("deploy-managed.md"), agentfile.Format{})
 
 	if err != nil {
 		t.Fatalf("EnumerateWorkflows returned unexpected error for deploy-managed fixture: %v", err)
@@ -30,7 +31,7 @@ func TestEnumerateWorkflows_DeployManaged_ReturnsBothWorkflows(t *testing.T) {
 
 func TestEnumerateWorkflows_DeployManaged_FirstWorkflow_ID(t *testing.T) {
 	// The first injected workflow must be quick-fix (document order).
-	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("deploy-managed.md"))
+	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("deploy-managed.md"), agentfile.Format{})
 	if err != nil {
 		t.Fatalf("EnumerateWorkflows: %v", err)
 	}
@@ -46,7 +47,7 @@ func TestEnumerateWorkflows_DeployManaged_FirstWorkflow_ID(t *testing.T) {
 
 func TestEnumerateWorkflows_DeployManaged_FirstWorkflow_Version(t *testing.T) {
 	// The version attribute on the managed workflow tag must be read correctly.
-	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("deploy-managed.md"))
+	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("deploy-managed.md"), agentfile.Format{})
 	if err != nil {
 		t.Fatalf("EnumerateWorkflows: %v", err)
 	}
@@ -62,7 +63,7 @@ func TestEnumerateWorkflows_DeployManaged_FirstWorkflow_Version(t *testing.T) {
 
 func TestEnumerateWorkflows_DeployManaged_SecondWorkflow_ID(t *testing.T) {
 	// The second injected workflow must be greenfield-tdd (document order preserved).
-	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("deploy-managed.md"))
+	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("deploy-managed.md"), agentfile.Format{})
 	if err != nil {
 		t.Fatalf("EnumerateWorkflows: %v", err)
 	}
@@ -77,7 +78,7 @@ func TestEnumerateWorkflows_DeployManaged_SecondWorkflow_ID(t *testing.T) {
 }
 
 func TestEnumerateWorkflows_DeployManaged_SecondWorkflow_Version(t *testing.T) {
-	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("deploy-managed.md"))
+	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("deploy-managed.md"), agentfile.Format{})
 	if err != nil {
 		t.Fatalf("EnumerateWorkflows: %v", err)
 	}
@@ -94,7 +95,7 @@ func TestEnumerateWorkflows_DeployManaged_SecondWorkflow_Version(t *testing.T) {
 func TestGetWorkflow_DeployManaged_SelectFirstByID_ReturnsRegion(t *testing.T) {
 	// GetWorkflow must find a workflow region by its identifier even when the region
 	// carries type="managed" (NodeDeployed) rather than type="core" (NodeSection).
-	region, err := orchfile.GetWorkflow(orchfileFixture("deploy-managed.md"), "quick-fix")
+	region, err := orchfile.GetWorkflow(orchfileFixture("deploy-managed.md"), agentfile.Format{}, "quick-fix")
 
 	if err != nil {
 		t.Fatalf("GetWorkflow returned unexpected error for deploy-managed fixture: %v", err)
@@ -107,7 +108,7 @@ func TestGetWorkflow_DeployManaged_SelectFirstByID_ReturnsRegion(t *testing.T) {
 
 func TestGetWorkflow_DeployManaged_SelectFirstByID_ReturnsVersion(t *testing.T) {
 	// The returned region must carry the correct version attribute from the managed tag.
-	region, err := orchfile.GetWorkflow(orchfileFixture("deploy-managed.md"), "quick-fix")
+	region, err := orchfile.GetWorkflow(orchfileFixture("deploy-managed.md"), agentfile.Format{}, "quick-fix")
 	if err != nil {
 		t.Fatalf("GetWorkflow: %v", err)
 	}
@@ -120,7 +121,7 @@ func TestGetWorkflow_DeployManaged_SelectFirstByID_ReturnsVersion(t *testing.T) 
 
 func TestGetWorkflow_DeployManaged_SelectFirstByID_ContentIsNonEmpty(t *testing.T) {
 	// The routing-table content between the managed boundary tags must be returned.
-	region, err := orchfile.GetWorkflow(orchfileFixture("deploy-managed.md"), "quick-fix")
+	region, err := orchfile.GetWorkflow(orchfileFixture("deploy-managed.md"), agentfile.Format{}, "quick-fix")
 	if err != nil {
 		t.Fatalf("GetWorkflow: %v", err)
 	}
@@ -132,7 +133,7 @@ func TestGetWorkflow_DeployManaged_SelectFirstByID_ContentIsNonEmpty(t *testing.
 
 func TestGetWorkflow_DeployManaged_SelectFirstByID_ContentContainsRoutingTable(t *testing.T) {
 	// The routing table rows declared inside the workflow region must appear in Content.
-	region, err := orchfile.GetWorkflow(orchfileFixture("deploy-managed.md"), "quick-fix")
+	region, err := orchfile.GetWorkflow(orchfileFixture("deploy-managed.md"), agentfile.Format{}, "quick-fix")
 	if err != nil {
 		t.Fatalf("GetWorkflow: %v", err)
 	}
@@ -145,7 +146,7 @@ func TestGetWorkflow_DeployManaged_SelectFirstByID_ContentContainsRoutingTable(t
 
 func TestGetWorkflow_DeployManaged_SelectSecondByID_ReturnsRegion(t *testing.T) {
 	// GetWorkflow must select the correct workflow when multiple managed regions exist.
-	region, err := orchfile.GetWorkflow(orchfileFixture("deploy-managed.md"), "greenfield-tdd")
+	region, err := orchfile.GetWorkflow(orchfileFixture("deploy-managed.md"), agentfile.Format{}, "greenfield-tdd")
 	if err != nil {
 		t.Fatalf("GetWorkflow: %v", err)
 	}
@@ -169,7 +170,7 @@ func TestEnumerateWorkflows_MixedTypes_ReturnsBothWorkflows(t *testing.T) {
 	// A file containing one authored (type="core") and one managed (type="managed") workflow
 	// must enumerate both, since the kind-agnostic traversal visits both NodeSection and
 	// NodeDeployed nodes.
-	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("mixed-workflows.md"))
+	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("mixed-workflows.md"), agentfile.Format{})
 
 	if err != nil {
 		t.Fatalf("EnumerateWorkflows returned unexpected error for mixed fixture: %v", err)
@@ -182,7 +183,7 @@ func TestEnumerateWorkflows_MixedTypes_ReturnsBothWorkflows(t *testing.T) {
 func TestEnumerateWorkflows_MixedTypes_PreservesDocumentOrder(t *testing.T) {
 	// The authored workflow appears first in the file; the managed workflow second.
 	// Document order must be preserved regardless of region kind.
-	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("mixed-workflows.md"))
+	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("mixed-workflows.md"), agentfile.Format{})
 	if err != nil {
 		t.Fatalf("EnumerateWorkflows: %v", err)
 	}
@@ -206,7 +207,7 @@ func TestEnumerateWorkflows_MixedTypes_NoDuplicates(t *testing.T) {
 	// duplicates if the same node were ever visited by both. This test guards against that
 	// regression: it verifies that the single depth-first traversal used by
 	// collectWorkflowNodes returns each of the two mixed-fixture regions exactly once.
-	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("mixed-workflows.md"))
+	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("mixed-workflows.md"), agentfile.Format{})
 	if err != nil {
 		t.Fatalf("EnumerateWorkflows: %v", err)
 	}
@@ -223,7 +224,7 @@ func TestEnumerateWorkflows_MixedTypes_NoDuplicates(t *testing.T) {
 }
 
 func TestEnumerateWorkflows_MixedTypes_AuthoredWorkflow_VersionCorrect(t *testing.T) {
-	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("mixed-workflows.md"))
+	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("mixed-workflows.md"), agentfile.Format{})
 	if err != nil {
 		t.Fatalf("EnumerateWorkflows: %v", err)
 	}
@@ -238,7 +239,7 @@ func TestEnumerateWorkflows_MixedTypes_AuthoredWorkflow_VersionCorrect(t *testin
 }
 
 func TestEnumerateWorkflows_MixedTypes_ManagedWorkflow_VersionCorrect(t *testing.T) {
-	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("mixed-workflows.md"))
+	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("mixed-workflows.md"), agentfile.Format{})
 	if err != nil {
 		t.Fatalf("EnumerateWorkflows: %v", err)
 	}
@@ -267,7 +268,7 @@ func TestEnumerateInfrastructureAgents_DeployManaged_ReturnsOneDeclaredAgent(t *
 	// reaches them even though their parent InfrastructureAgents region uses type="managed".
 	// This test confirms infra agent enumeration is NOT broken by the same defect as workflow
 	// enumeration, and documents the expected count for the deploy-managed fixture.
-	agents, err := orchfile.EnumerateInfrastructureAgents(orchfileFixture("deploy-managed.md"))
+	agents, err := orchfile.EnumerateInfrastructureAgents(orchfileFixture("deploy-managed.md"), agentfile.Format{})
 
 	if err != nil {
 		t.Fatalf("EnumerateInfrastructureAgents returned unexpected error: %v", err)
@@ -279,7 +280,7 @@ func TestEnumerateInfrastructureAgents_DeployManaged_ReturnsOneDeclaredAgent(t *
 
 func TestEnumerateInfrastructureAgents_DeployManaged_AgentName(t *testing.T) {
 	// The declared agent must be identified by name from the InfrastructureAgent tag.
-	agents, err := orchfile.EnumerateInfrastructureAgents(orchfileFixture("deploy-managed.md"))
+	agents, err := orchfile.EnumerateInfrastructureAgents(orchfileFixture("deploy-managed.md"), agentfile.Format{})
 	if err != nil {
 		t.Fatalf("EnumerateInfrastructureAgents: %v", err)
 	}
@@ -294,7 +295,7 @@ func TestEnumerateInfrastructureAgents_DeployManaged_AgentName(t *testing.T) {
 
 func TestEnumerateInfrastructureAgents_DeployManaged_AgentClass(t *testing.T) {
 	// The Class column from the agent's declaration table must be read correctly.
-	agents, err := orchfile.EnumerateInfrastructureAgents(orchfileFixture("deploy-managed.md"))
+	agents, err := orchfile.EnumerateInfrastructureAgents(orchfileFixture("deploy-managed.md"), agentfile.Format{})
 	if err != nil {
 		t.Fatalf("EnumerateInfrastructureAgents: %v", err)
 	}
@@ -315,7 +316,7 @@ func TestEnumerateWorkflows_DeployManaged_Content_ExcludesBoundaryTagLines(t *te
 	// This is the managed-fixture counterpart of TestEnumerateWorkflows_BareFile_Content_ExcludesBoundaryTagLines.
 	// If boundary-tag stripping is inadvertently kind-specific, the managed opening tag
 	// could leak into Content; this test catches that regression.
-	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("deploy-managed.md"))
+	regions, err := orchfile.EnumerateWorkflows(orchfileFixture("deploy-managed.md"), agentfile.Format{})
 	if err != nil {
 		t.Fatalf("EnumerateWorkflows: %v", err)
 	}

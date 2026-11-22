@@ -1,0 +1,3 @@
+Reading prompt from stdin...
+this is not JSON at all
+{"unterminated":

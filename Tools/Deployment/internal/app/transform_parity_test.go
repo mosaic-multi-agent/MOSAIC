@@ -7,7 +7,8 @@ package app_test
 // harness, given the same model.
 //
 // The one allowed difference: skill access on a utility agent whose catalog entry does not
-// list the skill tool. File naming is no difference: both write X.agent.md for the GHCP
+// list the skill tool. A transform from Claude Code is compared with a fresh deploy without the
+// user-interaction tool, which Claude Code deployments never grant. File naming is no difference: both write X.agent.md for the GHCP
 // targets.
 //
 // Between the two GHCP targets the transform migrates the recorded X.md agents of the sample
@@ -29,6 +30,13 @@ func TestDeployTransformParity_EveryOrderedPairMatchesAFreshDeploy(t *testing.T)
 	for _, id := range parityHarnesses {
 		fresh[id] = parityDeploy(t, id)
 	}
+	var noUI map[string]string
+	noUserInteraction := func() map[string]string {
+		if noUI == nil {
+			noUI = parityNoUserInteractionDeploys(t)
+		}
+		return noUI
+	}
 
 	for _, src := range parityHarnesses {
 		for _, tgt := range parityHarnesses {
@@ -39,11 +47,16 @@ func TestDeployTransformParity_EveryOrderedPairMatchesAFreshDeploy(t *testing.T)
 			t.Run(src+"_to_"+tgt, func(t *testing.T) {
 				ws := parityDeploy(t, src)
 				res := parityTransform(t, ws, src, tgt)
+				reference := fresh
+				if src == hClaude {
+					// Claude Code deployments never grant the user-interaction tool.
+					reference = noUserInteraction()
+				}
 
 				for _, a := range parityAgents {
 					a := a
 					t.Run(a.key, func(t *testing.T) {
-						assertParityAgent(t, res, ws, fresh[tgt], src, tgt, a)
+						assertParityAgent(t, res, ws, reference[tgt], src, tgt, a)
 					})
 				}
 			})

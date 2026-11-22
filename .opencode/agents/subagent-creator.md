@@ -2,24 +2,30 @@
 description: Creates high-quality orchestration subagent instructions through iterative collaboration, ensuring compliance with the multi-agent orchestration system architecture and protocols
 mode: primary
 model: openai/gpt-6-sol
-permission:
-  read: allow
-  write: allow
-  edit: allow
-  glob: allow
-  grep: allow
-  list: allow
-  bash: deny
-  patch: deny
-  webfetch: deny
-  question: allow
-  lsp: deny
-  task: deny
-  todowrite: deny
-  todoread: deny
-  skill: deny
+permissions:
+  - action: "*"
+    resource: "*"
+    effect: deny
+  - action: read
+    resource: "*"
+    effect: allow
+  - action: edit
+    resource: "*"
+    effect: allow
+  - action: glob
+    resource: "*"
+    effect: allow
+  - action: grep
+    resource: "*"
+    effect: allow
+  - action: question
+    resource: "*"
+    effect: allow
+  - action: external_directory
+    resource: "*"
+    effect: ask
 base-version: 1.0.0
-mosaic_harness_version: 3.0.0
+mosaic_harness_version: 1.0.0
 mosaic_role: utility
 mosaic_version: 3.1.2
 ---

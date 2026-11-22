@@ -74,7 +74,7 @@ func TestResolveOrchestrator_IdentifierIsFileStem(t *testing.T) {
 	dir := t.TempDir()
 	path := writeOrchFile(t, dir, "my-orchestrator.md")
 
-	ref, err := agentresolve.ResolveOrchestrator(path)
+	ref, err := agentresolve.ResolveOrchestrator(path, legacyMarkdown)
 
 	if err != nil {
 		t.Fatalf("ResolveOrchestrator: unexpected error: %v", err)
@@ -91,7 +91,7 @@ func TestResolveOrchestrator_DefinitionPathMatchesSuppliedFile(t *testing.T) {
 	dir := t.TempDir()
 	path := writeOrchFile(t, dir, "my-orchestrator.md")
 
-	ref, err := agentresolve.ResolveOrchestrator(path)
+	ref, err := agentresolve.ResolveOrchestrator(path, legacyMarkdown)
 
 	if err != nil {
 		t.Fatalf("ResolveOrchestrator: unexpected error: %v", err)
@@ -109,7 +109,7 @@ func TestResolveOrchestrator_NonexistentFile_ReturnsError(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "does-not-exist.md")
 
-	_, err := agentresolve.ResolveOrchestrator(path)
+	_, err := agentresolve.ResolveOrchestrator(path, legacyMarkdown)
 
 	if err == nil {
 		t.Fatal("want error for a path that does not exist, got nil")
@@ -122,7 +122,7 @@ func TestResolveOrchestrator_NonexistentFile_ReturnsRefusalError(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "does-not-exist.md")
 
-	_, err := agentresolve.ResolveOrchestrator(path)
+	_, err := agentresolve.ResolveOrchestrator(path, legacyMarkdown)
 
 	asRefusalErrorOrch(t, err)
 }
@@ -133,7 +133,7 @@ func TestResolveOrchestrator_NonexistentFile_ComponentIsAgentresolve(t *testing.
 	dir := t.TempDir()
 	path := filepath.Join(dir, "does-not-exist.md")
 
-	_, err := agentresolve.ResolveOrchestrator(path)
+	_, err := agentresolve.ResolveOrchestrator(path, legacyMarkdown)
 
 	re := asRefusalErrorOrch(t, err)
 	if re.Component != "agentresolve" {
@@ -147,7 +147,7 @@ func TestResolveOrchestrator_NonexistentFile_NamesPath(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "does-not-exist.md")
 
-	_, err := agentresolve.ResolveOrchestrator(path)
+	_, err := agentresolve.ResolveOrchestrator(path, legacyMarkdown)
 
 	re := asRefusalErrorOrch(t, err)
 	// Path should appear either in Resource or in the full error string.
@@ -164,7 +164,7 @@ func TestResolveOrchestrator_NonexistentFile_NamesPath(t *testing.T) {
 func TestResolveOrchestrator_Directory_ReturnsRefusalError(t *testing.T) {
 	dir := t.TempDir()
 
-	_, err := agentresolve.ResolveOrchestrator(dir)
+	_, err := agentresolve.ResolveOrchestrator(dir, legacyMarkdown)
 
 	asRefusalErrorOrch(t, err)
 }
@@ -174,7 +174,7 @@ func TestResolveOrchestrator_Directory_ReturnsRefusalError(t *testing.T) {
 func TestResolveOrchestrator_Directory_ComponentIsAgentresolve(t *testing.T) {
 	dir := t.TempDir()
 
-	_, err := agentresolve.ResolveOrchestrator(dir)
+	_, err := agentresolve.ResolveOrchestrator(dir, legacyMarkdown)
 
 	re := asRefusalErrorOrch(t, err)
 	if re.Component != "agentresolve" {
@@ -194,7 +194,7 @@ func TestResolveOrchestrator_EmptyStem_ReturnsRefusalError(t *testing.T) {
 		t.Fatalf("write .md file: %v", err)
 	}
 
-	_, err := agentresolve.ResolveOrchestrator(path)
+	_, err := agentresolve.ResolveOrchestrator(path, legacyMarkdown)
 
 	asRefusalErrorOrch(t, err)
 }
@@ -208,7 +208,7 @@ func TestResolveOrchestrator_EmptyStem_ComponentIsAgentresolve(t *testing.T) {
 		t.Fatalf("write .md file: %v", err)
 	}
 
-	_, err := agentresolve.ResolveOrchestrator(path)
+	_, err := agentresolve.ResolveOrchestrator(path, legacyMarkdown)
 
 	re := asRefusalErrorOrch(t, err)
 	if re.Component != "agentresolve" {
@@ -232,7 +232,7 @@ func TestResolveAll_OrchestratorFilePresent_NotIncludedWhenNotRequested(t *testi
 		t.Fatalf("write agent-a.md: %v", err)
 	}
 
-	result, err := agentresolve.ResolveAll(dir, []string{"agent-a"})
+	result, err := agentresolve.ResolveAll(dir, legacyMarkdown, []string{"agent-a"})
 
 	if err != nil {
 		t.Fatalf("ResolveAll: %v", err)
@@ -254,7 +254,7 @@ func TestResolveOrchestrator_AgentMdFile_IdentifierIsBaseStem(t *testing.T) {
 	dir := t.TempDir()
 	path := writeOrchFile(t, dir, "orchestrator-script.agent.md")
 
-	ref, err := agentresolve.ResolveOrchestrator(path)
+	ref, err := agentresolve.ResolveOrchestrator(path, legacyMarkdown)
 
 	if err != nil {
 		t.Fatalf("ResolveOrchestrator: unexpected error: %v", err)
@@ -271,7 +271,7 @@ func TestResolveOrchestrator_AgentMdFile_DefinitionPathMatchesFile(t *testing.T)
 	dir := t.TempDir()
 	path := writeOrchFile(t, dir, "orchestrator-script.agent.md")
 
-	ref, err := agentresolve.ResolveOrchestrator(path)
+	ref, err := agentresolve.ResolveOrchestrator(path, legacyMarkdown)
 
 	if err != nil {
 		t.Fatalf("ResolveOrchestrator: unexpected error: %v", err)
@@ -288,7 +288,7 @@ func TestResolveOrchestrator_AgentMdCaseInsensitive_IdentifierIsBaseStem(t *test
 	dir := t.TempDir()
 	path := writeOrchFile(t, dir, "orchestrator-script.AGENT.MD")
 
-	ref, err := agentresolve.ResolveOrchestrator(path)
+	ref, err := agentresolve.ResolveOrchestrator(path, legacyMarkdown)
 
 	if err != nil {
 		t.Fatalf("ResolveOrchestrator: unexpected error: %v", err)
@@ -315,7 +315,7 @@ func TestResolveOrchestrator_NonMdExtension_ReturnsRefusalError(t *testing.T) {
 		t.Fatalf("write orchestrator.txt: %v", err)
 	}
 
-	_, err := agentresolve.ResolveOrchestrator(path)
+	_, err := agentresolve.ResolveOrchestrator(path, legacyMarkdown)
 
 	if err == nil {
 		t.Fatal("want RefusalError for a .txt path (non-.md extension), got nil")
@@ -332,7 +332,7 @@ func TestResolveOrchestrator_NonMdExtension_ComponentIsAgentresolve(t *testing.T
 		t.Fatalf("write orchestrator.txt: %v", err)
 	}
 
-	_, err := agentresolve.ResolveOrchestrator(path)
+	_, err := agentresolve.ResolveOrchestrator(path, legacyMarkdown)
 
 	re := asRefusalErrorOrch(t, err)
 	if re.Component != "agentresolve" {
@@ -352,11 +352,11 @@ func TestResolveAll_MissingAgentRefusal_UnchangedByOrchestratorResolution(t *tes
 	// "missing-agent" has no .md file in dir.
 
 	// Call ResolveOrchestrator first (as the session will, after Stage 5).
-	_, orchErr := agentresolve.ResolveOrchestrator(orchPath)
+	_, orchErr := agentresolve.ResolveOrchestrator(orchPath, legacyMarkdown)
 	// We do not assert on orchErr here; we are testing ResolveAll, not ResolveOrchestrator.
 	_ = orchErr
 
-	_, err := agentresolve.ResolveAll(dir, []string{"missing-agent"})
+	_, err := agentresolve.ResolveAll(dir, legacyMarkdown, []string{"missing-agent"})
 
 	if err == nil {
 		t.Fatal("want error from ResolveAll for a missing agent, got nil")

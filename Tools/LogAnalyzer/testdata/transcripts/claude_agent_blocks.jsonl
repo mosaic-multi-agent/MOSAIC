@@ -1,0 +1,2 @@
+{"type":"user","uuid":"u-1","message":{"role":"user","content":[{"type":"text","text":"agent_instance_id: reviewer#3"},{"type":"image","source":"ignored"},{"type":"text","text":"Review the change."}]}}
+{"type":"assistant","uuid":"a-1","message":{"id":"msg_X","role":"assistant","content":[]}}

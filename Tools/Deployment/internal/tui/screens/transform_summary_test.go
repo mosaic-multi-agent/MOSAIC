@@ -155,8 +155,8 @@ func TestTransformSummaryScreen_View_ShowsFailedFileWithReason(t *testing.T) {
 func TestTransformSummaryScreen_View_ShowsExitHint(t *testing.T) {
 	view := strings.ToLower(collapseWhitespace(tsView(tsTransformedResult(), plainStyles())))
 
-	if !strings.Contains(view, "press q") && !strings.Contains(view, "enter to exit") {
-		t.Errorf("view does not contain an exit hint:\n%s", view)
+	if !strings.Contains(view, "back to start") {
+		t.Errorf("view does not contain the back-to-start hint:\n%s", view)
 	}
 }
 
@@ -228,7 +228,7 @@ func TestTransformSummaryScreen_View_HeaderStyleFollowsOverallOutcome(t *testing
 
 func TestTransformSummaryScreen_View_ExitHint_RendersInHelpStyle(t *testing.T) {
 	styles := coloredStyles()
-	line := lineWith(strings.ToLower(tsView(tsTransformedResult(), styles)), "press q")
+	line := lineWith(strings.ToLower(tsView(tsTransformedResult(), styles)), "back to start")
 
 	if !strings.HasPrefix(line, rolePrefix(styles.Help)) {
 		t.Errorf("exit hint is not in the Help style: %q", line)

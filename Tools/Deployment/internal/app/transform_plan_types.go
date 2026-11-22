@@ -27,7 +27,7 @@ const (
 	SkipUnsupported         TransformSkipKind = "unsupported"
 	SkipNoTargetVariant     TransformSkipKind = "no-target-variant"
 	SkipSharedHooksFolder   TransformSkipKind = "shared-hooks-folder"
-	// SkipNotRecorded - GHCP pair only: the agent file has no manifest record, so the pair
+	// SkipNotRecorded - GHCP or OpenCode pair only: the agent file has no manifest record, so the pair
 	// transform neither writes, replaces nor removes it.
 	SkipNotRecorded TransformSkipKind = "not-recorded"
 )
@@ -39,6 +39,9 @@ const (
 	NoteBothForms          TransformNoteKind = "both-forms"
 	NoteNewerTargetContent TransformNoteKind = "newer-target-content"
 	NoteNoAgentsFound      TransformNoteKind = "no-agents-found"
+	// NoteMinimalToolGrant warns that the source harness records no tool information and a
+	// minimal read-only grant was applied; Paths lists the affected destination files.
+	NoteMinimalToolGrant TransformNoteKind = "minimal-tool-grant"
 )
 
 // TransformNote is one run-level note.
@@ -89,7 +92,7 @@ type TransformPlan struct {
 	Skills          []PlannedSkill
 	Hooks           []PlannedHookBundle
 	Notes           []TransformNote
-	// Removals and Replacements are filled for the GHCP pair only; nil otherwise.
+	// Removals and Replacements are filled for the GHCP or OpenCode pair only; nil otherwise.
 	Removals     []domain.Removal
 	Replacements []domain.Replacement
 }

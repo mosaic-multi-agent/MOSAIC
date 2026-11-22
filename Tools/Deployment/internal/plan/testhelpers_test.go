@@ -2,15 +2,13 @@ package plan_test
 
 // testhelpers_test.go provides shared infrastructure for plan package tests:
 //
-//   - loadRealCatalog: loads the real MOSAIC repository catalog from disk
 //   - fakeCatalog: a configurable catalog.Catalog implementation for isolated unit tests
 //   - fakeModule: a configurable domain.HarnessModule stub for plan tests
 //   - fixture helpers for constructing ManifestEntry, Agent, Skill, and HookBundle values
 //   - file system state helpers for T16.10 (no-write verification)
 //
-// Real-catalog tests exercise ResolveArtifacts against the actual repository, verifying
-// counts and relationships. Fake-catalog tests cover edge cases (unknown workflows, missing
-// agents, specific classification scenarios) without a repository dependency.
+// All plan tests build their catalogs in memory with fakeCatalog; none depends on the
+// repository catalog.
 
 import (
 	"fmt"
@@ -26,37 +24,6 @@ import (
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/manifest"
 )
-
-// ---------------------------------------------------------------------------
-// Real catalog loader
-// ---------------------------------------------------------------------------
-
-// repoRoot returns the absolute path to the MOSAIC repository root by navigating up from
-// this package's directory with a fixed offset. Tests run with the working directory set to
-// the package directory (internal/plan). The path climbs four levels:
-// plan/ → internal/ → Deployment/ → Tools/ → repo root.
-func repoRoot() string {
-	abs, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
-	if err != nil {
-		panic("plan_test: resolve repo root: " + err.Error())
-	}
-	return abs
-}
-
-// loadRealCatalog resolves the MOSAIC repository root using a fixed offset from the package
-// directory and returns a loaded Catalog. The test is fatally failed if loading fails.
-func loadRealCatalog(t *testing.T) catalog.Catalog {
-	t.Helper()
-	root, err := catalog.ResolveRoot(repoRoot())
-	if err != nil {
-		t.Fatalf("catalog.ResolveRoot: %v", err)
-	}
-	cat, err := catalog.Load(root, "")
-	if err != nil {
-		t.Fatalf("catalog.Load(%q): %v", root, err)
-	}
-	return cat
-}
 
 // ---------------------------------------------------------------------------
 // fakeCatalog — implements catalog.Catalog for isolated unit tests

@@ -48,6 +48,7 @@ func defaultWriteTools() map[Harness][]string {
 		HarnessClaudeCode: {"Write", "Edit", "MultiEdit", "NotebookEdit"},
 		HarnessGHCPCLI:    {"create", "edit"},
 		HarnessOpenCode:   {"apply_patch"},
+		HarnessOpenCodeV2: {"write", "edit", "patch"},
 		HarnessVSCodeGHCP: {
 			"create_file", "replace_string_in_file", "multi_replace_string_in_file",
 			"insert_edit_into_file", "apply_patch", "edit_notebook_file",
@@ -62,6 +63,7 @@ func defaultUserInteractionTools() map[Harness][]string {
 		HarnessClaudeCode: {"AskUserQuestion"},
 		HarnessGHCPCLI:    {"ask_user"},
 		HarnessOpenCode:   {"question"},
+		HarnessOpenCodeV2: {"question"},
 		HarnessVSCodeGHCP: {"vscode/askQuestions", "askQuestions", "vscode_askQuestions"},
 	}
 }

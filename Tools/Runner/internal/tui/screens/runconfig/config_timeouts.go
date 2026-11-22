@@ -60,6 +60,8 @@ func (s *ConfigScreen) updateTimeoutStep(msg tea.Msg) (cmd tea.Cmd, handled bool
 		return s.updateNonHITLTimeout(msg), true
 	case configStepHITLTimeout:
 		return s.updateHITLTimeout(msg), true
+	case configStepNoOutputTimeout:
+		return s.updateNoOutputTimeout(msg), true
 	}
 	return nil, false
 }
@@ -105,6 +107,11 @@ func (s *ConfigScreen) updateHITLTimeout(msg tea.Msg) tea.Cmd {
 	if s.hitlTimeoutInput.Done() {
 		s.sel.HITLTimeout = parseTimeout(s.hitlTimeoutInput.Value(), domain.DefaultHITLTimeout)
 		s.hitlTimeoutInput.Reset()
+		if s.asksNoOutputTimeout() {
+			s.step = configStepNoOutputTimeout
+			s.cursor = 0
+			return s.startNoOutputInput()
+		}
 		s.step = s.stepAfterTimeout()
 		s.cursor = s.entryCursor(s.step)
 		return nil
@@ -123,6 +130,8 @@ func (s *ConfigScreen) timeoutStepInit() tea.Cmd {
 		s.hitlTimeoutInput.Reset()
 		s.hitlTimeoutInput.SetValue(s.sel.HITLTimeout.String())
 		return s.hitlTimeoutInput.Init()
+	case configStepNoOutputTimeout:
+		return s.startNoOutputInput()
 	}
 	return nil
 }

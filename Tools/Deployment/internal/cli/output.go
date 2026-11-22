@@ -39,6 +39,7 @@ func renderJSON(out io.Writer, summary domain.RunSummary) {
 // renderHuman writes a human-readable one-paragraph summary of the run to out.
 // The output always includes the workspace path and an outcome word (success / fail / skip).
 func renderHuman(out io.Writer, summary domain.RunSummary) {
+	writeExperimentalWarnings(out, summary.ExperimentalHarnesses)
 	if writeDryRunReport(out, summary) {
 		return
 	}
@@ -123,6 +124,7 @@ func renderAgentsOutput(out, errOut io.Writer, format string, dryRun bool, summa
 
 // renderAgentsHuman writes a human-readable summary of a deploy-agents run.
 func renderAgentsHuman(out io.Writer, dryRun bool, summary domain.RunSummary) {
+	writeExperimentalWarnings(out, summary.ExperimentalHarnesses)
 	if writeDryRunReport(out, summary) {
 		return
 	}
@@ -161,6 +163,7 @@ func renderHooksOutput(out, errOut io.Writer, format string, dryRun bool, summar
 
 // renderHooksHuman writes a human-readable summary of a deploy-hooks run.
 func renderHooksHuman(out io.Writer, dryRun bool, summary domain.RunSummary) {
+	writeExperimentalWarnings(out, summary.ExperimentalHarnesses)
 	if writeDryRunReport(out, summary) {
 		return
 	}
@@ -223,6 +226,7 @@ func splitTrimmedParts(s string) []string {
 // nothing was written when result.DryRun is true. Diverted tools recovered from harness
 // frontmatter fields and any stripped fields are reported after the primary summary.
 func renderPromoteHuman(out io.Writer, result app.PromoteResult) {
+	writeExperimentalWarnings(out, result.ExperimentalHarnesses)
 	if result.DryRun {
 		fmt.Fprintf(out, "dry run: promote validated\nsource: %s\ndestination: %s (not written)\nkey: %s\nid: %s\n",
 			result.SourcePath, result.DestinationPath, result.Key, result.NumericID)
@@ -239,5 +243,8 @@ func renderPromoteHuman(out io.Writer, result app.PromoteResult) {
 		} else {
 			fmt.Fprintf(out, "stripped field: %s (%s)\n", sf.Key, string(sf.Reason))
 		}
+	}
+	for _, name := range result.RemovedCustomRegions {
+		fmt.Fprintf(out, "removed custom region: %s\n", name)
 	}
 }

@@ -103,14 +103,18 @@ func TestOverview_Shares_NumeratorIsZeroForAnOrchestratorTotalThatIsNotKnown(t *
 	assertRatio(t, "subagent share", ov.SubagentShare, 1_000_000, 1_000_000)
 }
 
-func TestOverview_CacheHitRatio_AbsentCacheReadCountsAsZeroOverLoggedContext(t *testing.T) {
+func TestOverview_CacheHitRatio_CallWithoutALoggedCacheReadFigureIsNotCounted(t *testing.T) {
 	in := analysis.Input{Streams: []analysis.Stream{
-		coderInvocation("coder#1", "SUCCESS", 1, usageRecordEvent("coder#1", "a", viewsModel, viewsUsage(100, 0, 0, 10))),
+		coderInvocation("coder#1", "SUCCESS", 1,
+			chTimedUsageEvent("coder#1", "a", 10, chFullUsage(100, 0, 0, 10)),
+			chTimedUsageEvent("coder#1", "b", 20, viewsUsage(100, 0, 0, 10))),
 	}}
 
 	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
 
-	assertRatio(t, "cache hit ratio", requireRunReport(t, report, testRunID).Overview.CacheHitRatio, 0, 100)
+	// The second call logged no cache read: it is neither a zero read nor a pair.
+	ratio := requireRunReport(t, report, testRunID).Overview.CacheHitRatio
+	chAssertUndefined(t, "cache hit ratio", ratio)
 }
 
 func TestByAgentType_Dispatch_ModelsAreDistinctSortedAndUnpricedOnesListed(t *testing.T) {

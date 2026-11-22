@@ -116,6 +116,24 @@ func TestHarnessFlag_OpenCodeAccepted(t *testing.T) {
 	}
 }
 
+// TestHarnessFlag_CodexAccepted verifies that --harness codex is accepted on a
+// workspace whose orchestrator script is a Codex TOML file.
+func TestHarnessFlag_CodexAccepted(t *testing.T) {
+	newTestCLIHarnessWorkDir(t, "codex")
+	sess := &scriptedSession{outcome: domain.RunOutcome{Status: domain.RunCompleted}}
+	args := append(baseHarnessArgs(), "--harness", "codex")
+	code, _, errOut := runCLIWithStore(t, args, &spyStore{}, sess)
+	if code != cli.ExitSuccess {
+		t.Errorf("exit code = %d, want ExitSuccess (%d); stderr: %q", code, cli.ExitSuccess, errOut)
+	}
+	if !sess.called {
+		t.Error("session.Start was not called for --harness codex")
+	}
+	if sess.config.HarnessID != "codex" {
+		t.Errorf("RunConfig.HarnessID = %q, want codex", sess.config.HarnessID)
+	}
+}
+
 // TestHarnessFlag_EveryCatalogEntryAccepted verifies that every harness the
 // shared catalog declares passes --harness validation, so a future catalog
 // addition is accepted here without an edit to this test or to run.go.
@@ -162,7 +180,7 @@ func TestHarnessFlag_UsageErrorMessageListsEveryAcceptedValue(t *testing.T) {
 	args := append(baseHarnessArgs(), "--harness", "still-not-a-harness")
 	_, _, errOut := runCLI(t, args, sess)
 
-	for _, want := range []string{"fake", "claude-code", "opencode"} {
+	for _, want := range []string{"fake", "claude-code", "opencode", "ghcp-cli", "codex", "opencode-v2"} {
 		if !strings.Contains(errOut, want) {
 			t.Errorf("usage-error message %q does not mention accepted value %q", errOut, want)
 		}
@@ -176,7 +194,7 @@ func TestHarnessFlag_HelpUsageListsEveryAcceptedValue(t *testing.T) {
 	sess := &scriptedSession{}
 	_, _, errOut := runCLI(t, []string{"run", "--help"}, sess)
 
-	for _, want := range []string{"fake", "claude-code", "opencode"} {
+	for _, want := range []string{"fake", "claude-code", "opencode", "ghcp-cli", "codex", "opencode-v2"} {
 		if !strings.Contains(errOut, want) {
 			t.Errorf("--help usage text %q does not mention accepted value %q", errOut, want)
 		}

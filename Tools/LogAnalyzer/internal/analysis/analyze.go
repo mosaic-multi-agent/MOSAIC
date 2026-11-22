@@ -44,6 +44,7 @@ func Price(agg domain.Aggregate, table domain.PricingTable, settings domain.Anal
 	for _, run := range agg.Runs {
 		rr := priceRunAggregate(run, table, settings)
 		findings = append(findings, compactionFindings(run.Run, rr.Context, run.Activity.Compactions)...)
+		findings = append(findings, RunModelIntegrityFindings(run)...)
 		// Compaction matching settles the marks in place; the actor figures read them after.
 		rr.ActorSessions = buildActorSessions(run, rr)
 		runReports = append(runReports, rr)
@@ -73,6 +74,7 @@ func Price(agg domain.Aggregate, table domain.PricingTable, settings domain.Anal
 	if agg.Unattributable != nil {
 		rr := priceRunAggregate(*agg.Unattributable, table, settings)
 		unattribReport = &rr
+		findings = append(findings, RunModelIntegrityFindings(*agg.Unattributable)...)
 		for _, m := range rr.UnpricedModels {
 			allUnpricedModels[m] = true
 		}
@@ -232,13 +234,13 @@ func priceRunAggregate(run domain.RunAggregate, table domain.PricingTable, setti
 		}
 	}
 	markRework(dispatches)
-	attachDispatchCache(dispatches, table, settings)
+	attachDispatchCache(dispatches, rr.Context, table, settings)
 	groups := groupByType(dispatches)
 	rr.Overview = buildOverview(run, rr, dispatches, table, settings)
-	rr.ByAgentType = buildAgentTypeGroups(groups, table, settings)
+	rr.ByAgentType = buildAgentTypeGroups(groups, rr.Context, table, settings)
 	rr.Rework = buildReworkFigures(dispatches)
-	rr.Cache = buildRunCache(run, rr.Totals, table, settings)
-	rr.OrchestratorCache = buildOrchestratorCache(run, orchReport.Totals, table, settings)
+	rr.Cache = buildRunCache(run, rr.Context, rr.Totals, table, settings)
+	rr.OrchestratorCache = buildOrchestratorCache(run, rr.Context, orchReport.Totals, table, settings)
 	rr.ByStatus = buildStatusBreakdown(dispatches, groups)
 	rr.Tools = buildToolsBreakdown(run, groups, rr.Context)
 	rr.Timeline = buildTimeline(run)

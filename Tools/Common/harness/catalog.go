@@ -9,6 +9,8 @@ const (
 	HarnessIDClaudeCode = "claude-code"
 	HarnessIDOpenCode   = "opencode"
 	HarnessIDGHCPCLI    = "ghcp-cli"
+	HarnessIDCodex      = "codex"
+	HarnessIDOpenCodeV2 = "opencode-v2"
 )
 
 // LoadingMechanism describes how a CLI harness locates agent definition files.
@@ -24,10 +26,14 @@ const (
 	// agents directory. Runner uses the backup-and-transform strategy, which
 	// does nothing for a harness with no transformation rules.
 	LoadingMechanismName LoadingMechanism = 2
+
+	// LoadingMechanismRunnerLoaded means the Runner loads the agent file
+	// itself on every invocation; no snapshot is taken for the harness.
+	LoadingMechanismRunnerLoaded LoadingMechanism = 3
 )
 
 // String returns a human-readable label for the loading mechanism.
-// Returns "unset" or "name" for defined constants, or "unknown(<N>)" for
+// Returns "unset", "name" or "runner-loaded" for defined constants, or "unknown(<N>)" for
 // unrecognized values.
 func (m LoadingMechanism) String() string {
 	switch m {
@@ -35,6 +41,8 @@ func (m LoadingMechanism) String() string {
 		return "unset"
 	case LoadingMechanismName:
 		return "name"
+	case LoadingMechanismRunnerLoaded:
+		return "runner-loaded"
 	default:
 		return fmt.Sprintf("unknown(%d)", int(m))
 	}
@@ -59,45 +67,51 @@ type CLIHarness struct {
 	AgentsDir string
 
 	// LoadingMechanism describes how this harness locates agent definition
-	// files. All CLI harnesses are name-based: they resolve agents by name;
-	// the Runner passes the agent name, not a file path.
-	// This field has no counterpart in the Deployment tool's harness YAML
-	// descriptors; it is not drift-guarded.
+	// files, from the descriptor's cli.loading_mechanism. Name-based harnesses
+	// resolve agents by name; the Runner passes the agent name, not a file path.
 	LoadingMechanism LoadingMechanism
+
+	// AgentFormatID is the formatid value of the harness's agent files
+	// ("markdown", "codex-toml"), from the descriptor's agent_format_id
+	// (absent means "markdown").
+	AgentFormatID string
+
+	// AgentExtension is the agent file extension including the leading dot
+	// (".md", ".agent.md", ".toml"), from the descriptor's extensions.agent.
+	AgentExtension string
+
+	// SkillsDir is the project-relative skills directory (paths.skills.project).
+	// Empty means the harness does not support skills.
+	SkillsDir string
+
+	// HooksDir is the project-relative hooks or plugins directory
+	// (paths.hooks.project). Empty means the harness does not support hooks.
+	HooksDir string
+
+	// ExperimentalReason is the descriptor's experimental.reason; "" when the
+	// descriptor marks no experimental status.
+	ExperimentalReason string
 }
 
-// cliHarnesses is the catalog's single declaration of every CLI-backed
-// harness this module can spawn through, in stable declared order.
+// cliHarnesses and modelCatalogs are derived once, at package init, from the
+// builtin harness descriptors embedded in the builtindesc package. A
+// descriptor is the only place a harness's directories, extension, format ID,
+// label, loading mechanism and model data are written down.
 //
-// This is the single place a new CLI harness's identity is added. Adding an
-// entry here is what makes it appear in every consumer's flag validation,
-// usage text and selection UI; each consumer additionally maps the identity
-// to a concrete adapter in its own composition root, and a coverage test in
-// each consumer fails when that mapping is missed.
+// A descriptor with a "cli" section is CLI-backed and becomes a CLIHarness;
+// descriptors without one (e.g. "vscode-ghcp") still contribute model data.
+// Adding a CLI harness here therefore needs only its descriptor; each consumer
+// additionally maps the identity to a concrete adapter in its own composition
+// root, and a coverage test in each consumer fails when that mapping is missed.
 //
 // The catalog answers "which harnesses exist and what are they called". It
 // never answers "how is one constructed": each tool's adapters implement
 // that tool's own port, whose types live in that tool's internal packages,
 // which this module must not import.
 //
-// Every entry here is CLI-backed by construction — that is what the type's
-// name says and what this list is for. A tool-local test double is not a
-// CLI harness and has no entry; a tool that accepts one composes it into its
-// own accepted set alongside these entries.
-//
-// AgentsDir values are seeded verbatim from the Deployment tool's builtin
-// harness descriptors (paths.agents.project) and must stay in sync with
-// those YAML manifests. The consistency test in Tools/Deployment guards
-// against drift.
-//
-// LoadingMechanism values are not present in Deployment YAML descriptors and
-// are not drift-guarded; they reflect the harness's own agent-loading
-// convention.
-var cliHarnesses = []CLIHarness{
-	{ID: HarnessIDClaudeCode, Label: "Claude Code CLI", AgentsDir: ".claude/agents", LoadingMechanism: LoadingMechanismName},
-	{ID: HarnessIDOpenCode, Label: "OpenCode CLI", AgentsDir: ".opencode/agents", LoadingMechanism: LoadingMechanismName},
-	{ID: HarnessIDGHCPCLI, Label: "GitHub Copilot CLI", AgentsDir: ".github/agents", LoadingMechanism: LoadingMechanismName},
-}
+// A tool-local test double is not a CLI harness and has no descriptor; a tool
+// that accepts one composes it into its own accepted set alongside these.
+var cliHarnesses, modelCatalogs = loadCatalogs()
 
 // CLIHarnesses returns every CLI-backed harness this module can spawn
 // through, in a stable order, as a fresh slice the caller may not corrupt

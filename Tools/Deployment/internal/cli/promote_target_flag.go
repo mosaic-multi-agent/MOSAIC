@@ -8,3 +8,10 @@ func registerPromoteTargetFlag(cmd *cobra.Command, target *string) {
 	cmd.Flags().StringVar(target, "target-catalog", "",
 		"Catalog id of the stack layer that receives a new agent (required when promoting a new agent non-interactively into a stack of two or more layers)")
 }
+
+// registerPromoteEmptyRegionsFlag declares promote's --empty-project-regions flag. Without it
+// the generic keeps the content of every project region.
+func registerPromoteEmptyRegionsFlag(cmd *cobra.Command, empty *bool) {
+	cmd.Flags().BoolVar(empty, "empty-project-regions", false,
+		"Empty every project region in the generic instead of keeping its content")
+}

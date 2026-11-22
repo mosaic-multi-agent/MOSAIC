@@ -55,7 +55,7 @@ type RunOverview struct {
 	OrchestratorShare Ratio        // orchestrator Money.Total nanos / run Money.Total nanos
 	SubagentShare     Ratio        // sum of agents' Money.Total nanos / run Money.Total nanos
 	ByModel           []ModelFigures
-	CacheHitRatio     Ratio // CacheRead / TotalContext() of the run tokens
+	CacheHitRatio     Ratio // capped cache reads / previous-call contexts over the run's qualifying calls
 	Outcomes          OutcomeSplit
 
 	// Unattributed is the run-level unattributed usage; nil when the run has none.

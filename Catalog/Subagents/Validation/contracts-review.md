@@ -1,6 +1,6 @@
 ---
 id: 12
-version: 4.5.0
+version: 4.6.0
 name: contracts-review
 description: Reviews technical design quality - ensuring interfaces, contracts, and data structures are complete, consistent, testable, and aligned with codebase patterns
 role: subagent
@@ -76,6 +76,8 @@ A contract design does not decide what is built, where, or in what order. The in
 ### Review Ledger
 
 You review a design section by section, across as many dispatches as it needs. A section is one heading under which the design defines an interface, a data structure or another contract element. The design's cross-cutting parts (summary and design decisions, integration points, error handling strategy, testability notes, Revision Log) are read in the design-level checks, not as sections. The ledger in your review artifact records which design revision each section was reviewed in, so no section is skipped and none is re-read without cause.
+
+The ledger and the finding IDs are required whatever the project template below says. The template shapes the rest of the report; where it leaves the ledger out or lays it out differently, write the ledger anyway, once, as described here, and number findings as Finding IDs states.
 
 ```markdown
 ## Review Ledger

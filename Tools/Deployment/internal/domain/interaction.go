@@ -53,6 +53,9 @@ const (
 	QAgentModel            QuestionID = "agent-model"
 	QCustomModel           QuestionID = "custom-model"
 	QCustomTool            QuestionID = "custom-tool"
+	// QSaveCustomTool offers to save a custom tool answer to tool_destinations in
+	// user-config.yaml for the run's harness. Subject is the generic tool name.
+	QSaveCustomTool QuestionID = "save-custom-tool"
 	// QMCPNameSplit asks how an ambiguous MCP tool name splits into server and tool. SelectOne.
 	// Subject: the source tool name. Options: one per split, ID = the server part, Label
 	// "<server> / <tool>", shortest server first. Skippable and skip-all-able.
@@ -78,7 +81,9 @@ const (
 	// QPromoteCustomTool is asked once per distinct harness-side tool entry that has no
 	// reverse mapping to a generic tool. It is the inverse of QCustomTool: that question
 	// asks for a harness-side name given a generic tool, this one asks for a generic name
-	// given a harness-side tool. Subject is the harness-side tool name. It is a text
+	// given a harness-side tool. Subject is the harness-side tool name. The answer is one
+	// generic tool name (a list is refused by the question's Validate hook; several harness
+	// tools may share a name; a blank answer keeps the harness name). It is a text
 	// question and therefore reaches the existing TextPromptScreen overlay with no TUI
 	// routing change.
 	QPromoteCustomTool QuestionID = "promote-custom-tool"
@@ -115,6 +120,36 @@ const (
 	// ModeDeployAgents. It supersedes QUtilityAgents/QInfrastructureAgents/QStandaloneAgents
 	// for that mode only; those three questions remain in use by the Deploy workspace flow.
 	QDeployAgents QuestionID = "deploy-agents"
+
+	// QPromoteNonRecoverableTools is asked during promote when the source harness cannot
+	// recover tool information (ToolInfoUnrecoverable=true on the source descriptor). The
+	// question names the source harness and states that tool information is not recorded;
+	// the user supplies a comma-separated list of generic tool names. Subject is the source
+	// file path.
+	//
+	// Answer format: a comma-separated list of generic names (e.g. "bash, file_read").
+	// Whitespace around names is stripped. Names are compared case-insensitively against
+	// the generic vocabulary. An unknown name is rejected with the vocabulary named back
+	// to the user and the question re-asked. A blank answer means an explicit empty tools
+	// list, never "all tools".
+	//
+	// Non-interactive: the flow uses an explicit empty tools list and emits a warning
+	// Notice at NoticeWarning level.
+	QPromoteNonRecoverableTools QuestionID = "promote-nonrecoverable-tools"
+
+	// QPromoteAgents is the batch promote agent selection (SelectMany), asked once per
+	// PromoteBatch run. Option IDs are file base names in the agents folder.
+	QPromoteAgents QuestionID = "promote-agents"
+
+	// QPromoteExistingAgent asks, per agent of a batch promote whose key already exists, whether
+	// to replace the existing generic agent or skip this agent (SelectOne, default skip).
+	QPromoteExistingAgent QuestionID = "promote-existing-agent"
+
+	// QPromoteProjectRegions asks, once per batch promote, whether the content of the selected
+	// agents' project regions is kept in the generic sources or emptied (SelectOne, default keep).
+	// Asked only when at least one loaded selected agent has a project region with content.
+	// Option IDs: app.ProjectRegionsKeep, app.ProjectRegionsEmpty.
+	QPromoteProjectRegions QuestionID = "promote-project-regions"
 )
 
 // PlanReviewer is the deployment-specific interface for plan review. The shared Interaction

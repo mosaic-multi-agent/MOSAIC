@@ -2,7 +2,8 @@ package tui
 
 // stack_flow_test.go verifies where the stack screen sits in the entry flow:
 //
-//	harness -> mode -> path screen -> stack -> running
+//	mode -> harness -> path screen -> stack -> running   (Deploy modes, Promote)
+//	mode -> path screen -> harness -> stack -> running   (Update, Workflows, Transform)
 //
 // It is shown in every mode when the reload capability is configured and omitted in every mode
 // when it is not. The path screen keeps the kind of its mode, a pre-filled path is still shown,
@@ -25,7 +26,7 @@ func TestStackFlow_EveryMode_StackScreenFollowsThePathScreen(t *testing.T) {
 			f := newStackFlow(t, mode)
 			f.toPath(t)
 
-			f.key(tea.KeyEnter) // confirm the pre-filled path
+			f.confirmPath(t) // confirm the pre-filled path (and the harness after it, where it follows)
 
 			if !f.onStack() {
 				t.Errorf("after confirming the path in %s the screen is not the stack screen (screen = %v):\n%s",
@@ -44,7 +45,7 @@ func TestStackFlow_NoReloadCapability_PathScreenLeadsStraightToRunning(t *testin
 			f := newStackFlow(t, mode, withoutReload())
 			f.toPath(t)
 
-			cmd := f.key(tea.KeyEnter)
+			cmd := f.confirmPath(t)
 
 			if f.m.screen != screenRunning {
 				t.Fatalf("screen = %v after the path in %s without a reload capability, want screenRunning:\n%s",
@@ -90,8 +91,8 @@ func TestStackFlow_PathScreenKind_FollowsTheMode(t *testing.T) {
 		{"update-workflows takes a directory", domain.ModeUpdateWorkflows, dir, true},
 		{"deploy-agents takes a directory", domain.ModeDeployAgents, dir, true},
 		{"deploy-hooks takes a directory", domain.ModeDeployHooks, dir, true},
-		{"promote takes a file", domain.ModePromoteToGeneric, file, true},
-		{"promote rejects a directory", domain.ModePromoteToGeneric, dir, false},
+		{"promote takes an agents folder", domain.ModePromoteToGeneric, dir, true},
+		{"promote rejects a file", domain.ModePromoteToGeneric, file, false},
 		{"transform rejects a file", domain.ModeTransformHarness, file, false},
 		{"transform takes a directory", domain.ModeTransformHarness, dir, true},
 	}
@@ -101,7 +102,7 @@ func TestStackFlow_PathScreenKind_FollowsTheMode(t *testing.T) {
 			f.m.wsScreen.SetPrefilledPath(tc.path)
 			f.toPath(t)
 
-			f.key(tea.KeyEnter)
+			f.confirmPath(t)
 
 			if got := f.onStack(); got != tc.wantOnStack {
 				t.Errorf("%s with path %q: on the stack screen = %v, want %v:\n%s",
@@ -143,7 +144,7 @@ func TestStackFlow_PreselectedHarness_StartsAtModeSelectionAndStillShowsTheStack
 	f.toStack(t)
 }
 
-func TestStackFlow_Back_StackToPathToMode(t *testing.T) {
+func TestStackFlow_Back_StackToPathToHarnessToMode(t *testing.T) {
 	f := newStackFlow(t, domain.ModeDeployWorkspace)
 	f.toStack(t)
 
@@ -152,9 +153,13 @@ func TestStackFlow_Back_StackToPathToMode(t *testing.T) {
 		t.Fatalf("screen = %v after Esc on the stack screen, want the path screen", f.m.screen)
 	}
 	f.key(tea.KeyEsc)
+	if f.m.screen != screenHarness {
+		t.Fatalf("screen = %v after Esc on the path screen, want the harness screen", f.m.screen)
+	}
+	f.key(tea.KeyEsc)
 
 	if f.m.screen != screenMode {
-		t.Errorf("screen = %v after Esc on the path screen, want the mode screen", f.m.screen)
+		t.Errorf("screen = %v after Esc on the harness screen, want the mode screen", f.m.screen)
 	}
 }
 

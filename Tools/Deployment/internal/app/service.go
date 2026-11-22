@@ -185,6 +185,10 @@ type Service interface {
 	// Catalog/UtilityAgents/, so writing a well-formed file into the chosen directory
 	// with a unique numeric id IS the registration. No catalog file is edited.
 	//
+	// An agent with the same key already in the target layer, in any category, is refused
+	// unless req.Overwrite is set; a replacement keeps the replaced agent's numeric id and
+	// removes the old file when the chosen category differs.
+	//
 	// The harness-only source file is never modified or deleted. Deploying the promoted agent
 	// out to a harness is a separate, user-initiated step.
 	//
@@ -212,6 +216,12 @@ type Service interface {
 	// validation runs after source-path validation and before the source read, eligibility
 	// evaluation, and the category question.
 	Promote(ctx context.Context, req PromoteRequest) (PromoteResult, error)
+
+	// PromoteBatch promotes a user-selected subset of the promotable agents in one agents
+	// folder (TUI only). Pre-run failures return an error and a zero result; once the
+	// selection is answered it returns a populated result and a nil error. Types and the
+	// error sentinels are in promote_batch_types.go.
+	PromoteBatch(ctx context.Context, req PromoteBatchRequest) (PromoteBatchResult, error)
 }
 
 // PromoteCategoryUtility is the sentinel Category value selecting
@@ -246,75 +256,6 @@ var ErrPromoteSourceNotFile = errors.New("promote source path is not a file; a s
 // from the user (the question was cancelled or skipped).
 var ErrPromoteCategoryRequired = errors.New("promote requires a target category")
 
-// PromoteRequest carries the caller's pre-answers for the promote flow. A set field is
-// used directly without asking; an unset field causes the flow to ask through Interaction.
-type PromoteRequest struct {
-	// FilePath is the harness-only agent file to promote. Required; there is no
-	// interactive fallback for it.
-	FilePath string
-	// Category is the destination placement. An empty value causes QPromoteCategory to
-	// be asked. A value of PromoteCategoryUtility places the file under
-	// Catalog/UtilityAgents/; any other value names a subdirectory under
-	// Catalog/Subagents/.
-	Category string
-	// Overwrite is explicit consent to replace an existing file at the destination
-	// path. Without it a collision is refused.
-	Overwrite bool
-	// DryRun computes and validates everything but writes no file.
-	DryRun bool
-	// HarnessID names the harness that produced the deployed file being promoted. It is
-	// required and has no interactive fallback: the TUI supplies its already-selected
-	// harness and the CLI supplies the --harness flag. An empty value is
-	// ErrPromoteHarnessRequired; a value naming no registered harness is
-	// ErrPromoteHarnessUnresolvable. Neither writes a file.
-	HarnessID string
-	// TargetCatalogID names the stack layer that receives a NEW item (no resolved source).
-	// Empty means ask (interactive) or error (non-interactive) when the stack has two or
-	// more layers.
-	TargetCatalogID string
-}
-
-// PromoteResult describes what a successful promote produced. It is returned populated only
-// when Service.Promote returns a nil error; on any failure it is the zero value.
-type PromoteResult struct {
-	// SourcePath is the harness-only file that was read. It is never modified or deleted.
-	SourcePath string `json:"sourcePath"`
-	// DestinationPath is the generic file written, relative to the MOSAIC root.
-	DestinationPath string `json:"destinationPath"`
-	// Key is the agent key the catalog will derive from the written file.
-	Key string `json:"key"`
-	// NumericID is the id assigned to the new agent.
-	NumericID string `json:"numericId"`
-	// Category is the resolved placement, either PromoteCategoryUtility or a
-	// subdirectory name under Catalog/Subagents/.
-	Category string `json:"category"`
-	// DryRun reports that nothing was written.
-	DryRun bool `json:"dryRun"`
-	// HarnessID echoes the harness the promotion was interpreted against, so a caller
-	// can confirm the outcome without re-reading the file.
-	HarnessID string `json:"harnessId"`
-	// Tools is the generic tools list written to the promoted file, in written order.
-	// Empty when the source declared no harness-side tool entries.
-	Tools []string `json:"tools,omitempty"`
-	// VerbatimTools names the harness-side tool entries that reached the generic tools
-	// list unchanged because no reverse mapping existed and no generic name was supplied.
-	// A non-empty value is the documented limitation of the autonomous path, not an error.
-	VerbatimTools []string `json:"verbatimTools,omitempty"`
-	// RecoveredFields names the generic-only frontmatter fields the user supplied during
-	// this run, in ask order. Fields left absent are not listed.
-	RecoveredFields []string `json:"recoveredFields,omitempty"`
-	// StrippedFields lists frontmatter fields removed from the generated generic agent
-	// because they could not be recovered — unmappable diverted tool values and fields
-	// unknown to MOSAIC. Empty when nothing was stripped.
-	StrippedFields []StrippedField `json:"strippedFields,omitempty"`
-	// DivertedTools lists the harness-side tool entries recovered from diverted
-	// frontmatter fields (as opposed to the harness's main tools key), in extraction
-	// order. Reported separately from Tools so the user can see the recovery happened.
-	DivertedTools []string `json:"divertedTools,omitempty"`
-	// TargetCatalogID is the id of the layer that received the file; empty for a plain catalog.
-	TargetCatalogID string `json:"targetCatalogId,omitempty"`
-}
-
 // New constructs a Service with the supplied dependency set.
 func New(d Deps) Service {
 	return &service{deps: d}
@@ -327,6 +268,8 @@ type service struct {
 	deps Deps
 	// ghcpHeld, when set by the test-only constructor, replaces GHCP target detection.
 	ghcpHeld *ghcpTargets
+	// openCodeHeld, when set by the test-only constructor, replaces OpenCode target detection.
+	openCodeHeld *openCodeTargets
 }
 
 // ListHarnesses returns every harness the registry knows about, including gated ones.
@@ -419,8 +362,8 @@ type DeployRequest struct {
 	HookIDs                []string
 	// TierModels pre-answers the per-tier model selection step (QTierModel) for each tier key.
 	TierModels  map[domain.Tier]string
-	AgentModels map[string]string // agent key -> model id; pre-answers QAgentModel per agent
-	CustomTools map[string]string // generic tool -> MCP server name; pre-answers QCustomTool
+	AgentModels map[string]string        // agent key -> model id; pre-answers QAgentModel per agent
+	CustomTools domain.CustomToolAnswers // generic tool -> MCP entries; pre-answers QCustomTool
 	// SkipAll pre-latches SkippedAll for specified QuestionIDs, bypassing the ask entirely.
 	SkipAll         map[domain.QuestionID]bool
 	AutoConfirmPlan bool
@@ -450,7 +393,7 @@ type UpdateRequest struct {
 	ConflictDefault domain.ConflictDecision
 	TierModels      map[domain.Tier]string
 	AgentModels     map[string]string
-	CustomTools     map[string]string
+	CustomTools     domain.CustomToolAnswers
 	SkipAll         map[domain.QuestionID]bool
 	AutoConfirmPlan bool
 	DryRun          bool

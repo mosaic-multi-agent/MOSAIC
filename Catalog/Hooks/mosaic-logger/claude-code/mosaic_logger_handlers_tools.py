@@ -19,6 +19,7 @@ import mosaic_logger_handlers_invocation as invocation
 import mosaic_logger_runner_mode as runner_mode
 
 HANDBACK_TOOL_NAME = "SubagentHandback"
+DISPATCH_TOOL_NAMES = ("Agent", "Task")
 
 
 def resolve_destination(ctx: "core.HookContext"):
@@ -85,55 +86,61 @@ def resolve_call_id(ctx: "core.HookContext") -> str:
     return runstate.fallback_call_id(ctx.field("tool_name"))
 
 
-def handle_pre_tool_use(ctx: "core.HookContext") -> None:
-    """Emit tool_call_start. Additionally, when tool_name is 'Agent' or 'Task',
-    extract agent_instance_id and run_id from tool_input.prompt, adopt any
-    extracted run_id into the session-run binding, and persist a pending
-    dispatch for the current session_id.
+def capture_dispatch(ctx: "core.HookContext") -> None:
+    """Record a subagent dispatch from a PreToolUse payload.
 
-    Both 'Agent' and 'Task' tool names are accepted because Claude Code may
-    dispatch subagents under either name depending on the harness version.
-
-    tool_call_start's own destination is resolved before the Agent/Task
-    capture runs, so an extraction that adopts a new run_id for this session
-    extends the binding for LATER firings without changing where THIS
-    firing's own event lands -- that decision was already made by
-    resolve_run_identity ahead of this handler.
-
-    The pending-dispatch write is best-effort; failure does not prevent
-    the tool_call_start event from being emitted. Never raises.
+    When tool_name is a dispatch tool and tool_input.prompt carries an agent
+    instance id, adopts the prompt's run id (if any) and queues one pending
+    dispatch for ctx.session_id. Writes no event and reads no transcript.
+    Both 'Agent' and 'Task' are accepted because Claude Code may dispatch
+    subagents under either name depending on the harness version.
+    Never raises.
     """
-    tool_name = ctx.field("tool_name")
+    try:
+        if ctx.field("tool_name") not in DISPATCH_TOOL_NAMES:
+            return
+        tool_input = ctx.field("tool_input")
+        if not isinstance(tool_input, dict):
+            return
+        prompt = tool_input.get("prompt") or None
+        if not prompt:
+            return
+        agent_instance_id = runstate.extract_instance_id(prompt)
+        if not agent_instance_id:
+            return
+        dispatch_type = tool_input.get("subagent_type")
+        if not (isinstance(dispatch_type, str) and dispatch_type):
+            dispatch_type = None
+        extracted_run_id = runstate.extract_run_id(prompt)
+        try:
+            runstate.adopt_run_id(ctx, extracted_run_id)
+        except Exception as exc:
+            # A failed binding write must not prevent the queue write.
+            core.debug_log("capture_dispatch: run adoption failed", exc)
+        runstate.put_pending_dispatch(
+            ctx.paths,
+            ctx.session_id,
+            agent_instance_id,
+            extracted_run_id,
+            prompt=prompt,
+            agent_type=dispatch_type,
+        )
+    except Exception as exc:
+        core.debug_log("capture_dispatch failed", exc)
 
+
+def handle_pre_tool_use(ctx: "core.HookContext") -> None:
+    """Emit tool_call_start, then usage records, for every tool (Agent and
+    Task included). Does not adopt a run id and does not queue a dispatch:
+    the synchronous capture-only invocation (capture_dispatch) owns that.
+    """
     event = core.build_event(
         "tool_call_start", ctx,
         call_id=resolve_call_id(ctx),
-        tool_name=tool_name,
+        tool_name=ctx.field("tool_name"),
         tool_input=ctx.field("tool_input"),
     )
     core.append_event(resolve_destination(ctx), event)
-
-    # Capture pending dispatch for Agent/Task tool invocations.
-    if tool_name in ("Agent", "Task"):
-        try:
-            tool_input = ctx.field("tool_input")
-            prompt = None
-            if isinstance(tool_input, dict):
-                prompt = tool_input.get("prompt") or None
-            if prompt:
-                agent_instance_id = runstate.extract_instance_id(prompt)
-                if agent_instance_id:
-                    extracted_run_id = runstate.extract_run_id(prompt)
-                    runstate.adopt_run_id(ctx, extracted_run_id)
-                    runstate.put_pending_dispatch(
-                        ctx.paths,
-                        ctx.session_id,
-                        agent_instance_id,
-                        extracted_run_id,
-                        prompt=prompt,
-                    )
-        except Exception:
-            pass  # Never let dispatch capture suppress the tool_call_start event.
 
     # Deliberate reversal of the "no transcript reads" property on this
     # high-frequency path, gated by tool_capture_enabled() (design decision,

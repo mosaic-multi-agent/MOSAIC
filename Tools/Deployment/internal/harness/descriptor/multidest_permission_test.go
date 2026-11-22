@@ -365,7 +365,7 @@ func TestMultiDestPermission_CustomDest_FieldDest_CustomNameAbsentFromPermission
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)
@@ -393,7 +393,7 @@ func TestMultiDestPermission_CustomDest_FieldDest_SeparateFieldEmitted(t *testin
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)
@@ -420,7 +420,7 @@ func TestMultiDestPermission_CustomDest_FieldDest_FieldContainsCustomName(t *tes
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)
@@ -447,7 +447,7 @@ func TestMultiDestPermission_CustomDest_PermissionMapContainsOnlyUniverseTools(t
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)
@@ -528,7 +528,7 @@ func TestMultiDestPermission_Regression_NoCustomDest_CustomToolUsesDestMain(t *t
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)
@@ -564,7 +564,7 @@ func TestMultiDestPermission_Regression_NoCustomDest_PermissionMapAppendsCustomA
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"file_read", "terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)

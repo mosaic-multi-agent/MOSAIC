@@ -13,8 +13,6 @@ package builtin_test
 //   - Server names with characters outside A-Za-z0-9_- are normalised where declared.
 
 import (
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -50,7 +48,7 @@ var mcpHarnesses = []mcpHarness{
 func TestBuiltInDescriptors_DeclareMCPForms(t *testing.T) {
 	for _, h := range mcpHarnesses {
 		t.Run(h.dir, func(t *testing.T) {
-			d := loadEmbeddedDescriptor(t, h.dir, h.file)
+			d := loadEmbeddedDescriptor(t, h.file)
 			if !reflect.DeepEqual(d.Tools.MCP, h.forms) {
 				t.Errorf("Tools.MCP: want %+v, got %+v", h.forms, d.Tools.MCP)
 			}
@@ -62,13 +60,8 @@ func TestBuiltInDescriptors_DeclareMCPForms(t *testing.T) {
 }
 
 func TestBuiltInDescriptors_DoNotUseCustomToolTemplate(t *testing.T) {
-	root := repoRoot(t)
 	for _, h := range mcpHarnesses {
-		path := filepath.Join(root, "Tools", "Deployment", "internal", "harness", "builtin", h.dir, h.file)
-		src, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
+		src := builtinSource(t, strings.TrimSuffix(h.file, ".yaml"))
 		if strings.Contains(string(src), "custom_tool_template") {
 			t.Errorf("%s still declares custom_tool_template; it is replaced by tools.mcp", h.file)
 		}
@@ -82,7 +75,7 @@ func customServerNames(t *testing.T, d *domain.HarnessDescriptor, server string)
 	res, err := descriptor.MapTools(d, domain.ToolRequest{
 		AgentKey:    "mcp-user",
 		Generic:     []string{"user_feedback"},
-		CustomNames: map[string]string{"user_feedback": server},
+		CustomNames: domain.CustomToolAnswers{"user_feedback": {{Server: server}}},
 	})
 	if err != nil {
 		t.Fatalf("MapTools: %v", err)
@@ -113,7 +106,7 @@ func customServerNames(t *testing.T, d *domain.HarnessDescriptor, server string)
 func TestCustomServerAnswer_IsWrittenInTheTargetHarnessWholeServerForm(t *testing.T) {
 	for _, h := range mcpHarnesses {
 		t.Run(h.dir, func(t *testing.T) {
-			d := loadEmbeddedDescriptor(t, h.dir, h.file)
+			d := loadEmbeddedDescriptor(t, h.file)
 			written := customServerNames(t, d, "my-server")
 
 			disp, ok := written[h.wantWhole]
@@ -139,7 +132,7 @@ func TestCustomServerAnswer_NormalisedOnlyWhereTheDescriptorDeclaresIt(t *testin
 	}
 	for _, h := range mcpHarnesses {
 		t.Run(h.dir, func(t *testing.T) {
-			d := loadEmbeddedDescriptor(t, h.dir, h.file)
+			d := loadEmbeddedDescriptor(t, h.file)
 			written := customServerNames(t, d, "my server")
 			if _, ok := written[want[h.dir]]; !ok {
 				t.Errorf("want %q among the written tool names, got %v", want[h.dir], written)

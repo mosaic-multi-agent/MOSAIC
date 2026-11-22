@@ -1,5 +1,5 @@
 ---
-version: "4.0"
+version: "4.1"
 name: "Brownfield TDD Workflow"
 description: "New features or significant changes to an existing codebase requiring test-first development with full research and design."
 hint: "The main workhorse — best on shell-buildable codebases. Works best at a certain feature size, discovered through use rather than designed in. The two size-mismatch directions fail differently: too small wastes cost on overspecified Requirements/Plan and triggers unnecessary correction round-trips; too big genuinely starves execution agents of context, making them more error-prone and pushing you toward needing stronger models."
@@ -35,7 +35,7 @@ artifacts:
   - TestResults.md
 ---
 
-<Workflow type="core" name="brownfield-tdd" version="4.0">
+<Workflow type="core" name="brownfield-tdd" version="4.1">
 ## Brownfield TDD Workflow
 
 **Use when:** New features or significant changes to an **existing codebase** requiring test-first development with full research and design.
@@ -43,7 +43,7 @@ artifacts:
 | Phase | Subagent | HITL | On Success | On Findings | Input | Output |
 |-------|----------|:----:|------------|-------------|-------|--------|
 | RESEARCH | codebase-research | FALSE | requirements-refinement | - | Requirements.md | Research.md |
-| RESEARCH | requirements-refinement | TRUE | requirements-review | - | Research.md, Requirements.md | Requirements.md |
+| RESEARCH | requirements-refinement | TRUE | requirements-review | codebase-research | Research.md, Requirements.md | Requirements.md |
 | RESEARCH | requirements-review | FALSE | planner-tdd-soft | requirements-refinement | Requirements.md, Research.md | requirements-review.md |
 | PLANNING | planner-tdd-soft | TRUE | plan-review | - | Research.md, Requirements.md | Plan.md, Stage-*/Plan.md, Stage-*/PlanProgress.md |
 | PLANNING | plan-review | FALSE | contracts-designer | planner-tdd-soft | Requirements.md, Plan.md, Stage-*/Plan.md, Stage-*/PlanProgress.md | plan-review.md |
@@ -53,7 +53,7 @@ artifacts:
 | EXECUTION.[Stage].Test | tests-review-tdd | FALSE | COMPLETE | test-writer-tdd | Stage-{Stage}/Plan.md, ContractsDesign.md, Stage-{Stage}/PlanProgress.md | Stage-{Stage}/tests-review-tdd.md |
 | EXECUTION.[Stage].Implementation | implementation-tdd | FALSE | implementation-review | - | Stage-{Stage}/Plan.md, ContractsDesign.md, Stage-{Stage}/PlanProgress.md | Stage-{Stage}/PlanProgress.md |
 | EXECUTION.[Stage].Implementation | implementation-review | FALSE | COMPLETE | implementation-tdd | Stage-{Stage}/Plan.md, ContractsDesign.md, Stage-{Stage}/PlanProgress.md | Stage-{Stage}/implementation-review.md |
-| REVIEW | test-runner | FALSE | COMPLETE | planner-tdd-soft | - | TestResults.md |
+| REVIEW | test-runner | FALSE | COMPLETE | planner-tdd-soft | Requirements.md, Plan.md | TestResults.md |
 
 **Blocks:**
 
@@ -83,6 +83,7 @@ flowchart TD
         CR["codebase-research"] --> RF["requirements-refinement [HITL]"]
         RF --> RV["requirements-review"]
         RV -. findings .-> RF
+        RF -. open questions .-> CR
     end
     subgraph PLANNING
         PL["planner-tdd-soft [HITL]<br/>Plan.md + per-stage Plan / PlanProgress"] --> PR["plan-review"]
@@ -123,7 +124,9 @@ Quality tracks feature sizing more than it tracks raw context budget. This was n
 
 **Too big:** Plan and Design tend to stay too vague to pin down the real scope, because the non-execution phases genuinely cannot hold enough context to spec a large feature precisely. This one is a real quality risk, not just wasted cost — the execution agents inherit under-specified direction, downstream errors become more likely, and the practical mitigation is reaching for stronger models to compensate, not just accepting slower convergence. Same underlying sensitivity as `greenfield-tdd`'s context-overload behavior, showing up here as an oversized-feature failure mode specifically rather than a general one.
 
-**Fix targets.** Each reviewer's suggested fix target is its own creator. `test-runner` runs after the Stage block has exited, so its fix target is `planner-tdd-soft`: completed stages are frozen, and the planner adds a fix stage, which runs when the block is entered again. When an implementation review traces a defect to the tests, the contracts or the plan rather than to the code, sending the findings there is the orchestrator's decision under its routing policy, not a declared route.
+**Fix targets.** Each reviewer's suggested fix target is its own creator. `test-runner` runs after the Stage block has exited, so its fix target is `planner-tdd-soft`: completed stages are frozen, and the planner adds a fix stage, which runs when the block is entered again. When an implementation review traces a defect to the tests, the contracts or the plan rather than to the code, sending the findings there is the orchestrator's decision under its routing policy, not a declared route. `requirements-refinement` sends its open questions to `codebase-research`: its `COMPLETED_NEEDS_ACTION` only ever means the user asked for something research must answer, and research's next step leads back to refinement.
+
+**test-runner runs the whole suite.** It is the regression check for impacts nobody planned, so its inputs never narrow the scope. `Requirements.md` is where the user accepts known failures for this run; `Plan.md` is only orientation on what the run built. Stage plans are left out: matching a failure to a stage is the planner's job, and it has the best context for it. Every failure that is not accepted is a finding, including ones that may have failed before the run. test-runner does not check out earlier code to tell them apart: switching code versions mid-run risks the run's own work, and the planner can decline a finding that is out of scope.
 
 ---
 
@@ -137,6 +140,7 @@ Quality tracks feature sizing more than it tracks raw context budget. This was n
 | 3.9 | 2026-09-28 | MOSAIC | Add Research.md to requirements-review inputs; its codebase alignment and feasibility checks run on research findings. |
 | 3.10 | 2026-10-05 | MOSAIC | Remove note making design phase optional, it decreased realibility for very little savings |
 | 4.0 | 2026-10-10 | MOSAIC | Migrated to WorkflowFormat 2.16: `[StageNumber]` → declared block `[Stage]` (`**Blocks:**` table), Phase cells in `PHASE.[Block].Group` order, `**Groups:**` table with `Block` column. Routing made scope-correct: `contracts-review` enters `[Stage]`; group-ending reviewers say `COMPLETE` (was a jump into the other group / out of the block). Prose removed from `implementation-review`'s `On Findings` (moved to Design Rationale). Notes removed — redundant with **Use when** and the tables. |
+| 4.1 | 2026-11-22 | MOSAIC | test-runner reads `Requirements.md` and `Plan.md` (was `-`): under a generic task message it had no context and asked for its scope every run. `requirements-refinement` On Findings → `codebase-research` (was `-`): its open questions always need research, so they no longer cost a consultation. |
 
 ---
 

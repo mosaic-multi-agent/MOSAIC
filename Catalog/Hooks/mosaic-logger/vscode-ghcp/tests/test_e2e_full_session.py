@@ -983,7 +983,11 @@ class TestVsCodeDivergences(unittest.TestCase):
         """AC4.4: harness field must be 'vscode-ghcp' on every line in every file."""
         with _ReplayHarness(self.tmp_path) as h:
             h.replay(_full_session_payloads(self.tmp_path))
-            all_files = h.all_jsonl_files()
+            root = core.build_paths(self.tmp_path).root
+            # Dot-folders (e.g. the pending-dispatch queue) hold state, not event lines.
+            all_files = [f for f in h.all_jsonl_files()
+                         if not any(part.startswith(".") for part in f.relative_to(root).parts)]
+        self.assertTrue(all_files)
         for f in all_files:
             for ln in f.read_text("utf-8").splitlines():
                 if not ln.strip():

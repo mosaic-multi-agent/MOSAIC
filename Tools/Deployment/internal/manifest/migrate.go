@@ -19,6 +19,9 @@ var pathPrefixHarnesses = []struct{ prefix, harness string }{
 // Entries under .claude/ and .opencode/ take their harness from the path; any other entry
 // takes the old top-level harness when that harness deploys to the entry's path, and is
 // dropped (and reported) otherwise. Nothing is written.
+//
+// The .opencode/ to opencode attribution is a pre-schema-2 rule only: only manifests older than
+// schema 2 reach this path, and a current manifest always records its harness per entry.
 func (s *store) upgradeLegacy(snap Snapshot, raw yamlManifest) Snapshot {
 	updatedAt, err := time.Parse(time.RFC3339, raw.UpdatedAt)
 	if err != nil {

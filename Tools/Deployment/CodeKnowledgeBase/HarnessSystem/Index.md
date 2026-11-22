@@ -5,7 +5,7 @@
 
 ## Overview
 
-A "harness" (Claude Code, GHCP CLI / VS Code GHCP Copilot, OpenCode, VS Code GHCP Local, or a
+A "harness" (Claude Code, Codex, GHCP CLI / VS Code GHCP Copilot, OpenCode, OpenCode V2, VS Code GHCP Local, or a
 third-party harness someone else authors) is anything that can implement the
 single `domain.HarnessModule` port: map generic tools to harness-specific
 ones, shape frontmatter, resolve deployment paths, supply injection content,
@@ -16,8 +16,8 @@ a `domain.HarnessModule`.
 Three tiers can provide a `HarnessModule`, in ascending precedence:
 
 1. **Built-in** — Go code compiled into the binary, one sub-package per
-   harness, each embedding its own `harness.yaml` descriptor and registering
-   itself via `init()`.
+   harness, each using its descriptor from `Tools/Common/harness/builtindesc`
+   and registering itself via `init()`.
 2. **Descriptor-only** — a `harness.yaml` dropped on disk under
    `<MosaicRoot>/MosaicDeploy/harnesses/<folder>/` with no code at all. Every
    method is driven purely by shared, descriptor-interpreting algorithms.
@@ -38,7 +38,7 @@ contract" checks.
 |-----------|---------|
 | **descriptor** | Owns the YAML wire format for `harness.yaml` (`Load`/`Parse`/`Validate`), maps it onto the tag-free `domain.HarnessDescriptor`, and exports the three shared algorithms every tier ultimately delegates to: `MapTools`, `ApplyFrontmatterSpec`, `ResolveTargetPath`. |
 | **registry** | `Discover` walks built-in factories plus on-disk harness folders, applies tier precedence, and returns a `Registry` whose `List`/`Resolve` are the only way any other package obtains a `HarnessModule`. Also holds `runtimeModule`, the descriptor-driven implementation used for the descriptor-only tier. External-tier harnesses are constructed via `external.New` instead. |
-| **builtin** | Parent namespace for four harness sub-packages (`claudecode`, `ghcpcli`, `opencode`, `vscodeghcp`). Each embeds its own descriptor YAML and adds the minimal module code needed for behaviour the descriptor schema cannot express. |
+| **builtin** | Parent namespace for six harness sub-packages (`claudecode`, `codex`, `ghcpcli`, `opencode`, `opencodev2`, `vscodeghcp`). Each takes its descriptor YAML from `Tools/Common/harness/builtindesc` (the single source also read by Runner and AgentTest) and adds the minimal module code needed for behaviour the descriptor schema cannot express. |
 | **external** | Client-side implementation of the JSON-over-stdio protocol: `external.New` spawns a subprocess, performs a version handshake, and forwards every `HarnessModule` method as one JSON request/response line. Defines the full error taxonomy for subprocess failure modes. |
 | **contracttest** | `contracttest.Run(t, module, fixtures)` drives universal invariants unconditionally, plus optional per-method sub-suites (`ToolCases`, `FrontmatterCases`, `InjectionCases`, `TargetPathCases`, `HookPlanCases`) when fixtures are supplied. |
 
@@ -123,7 +123,7 @@ A built-in module does not own a fixed MOSAIC-root path for its injection files.
 ### External module protocol (client side)
 `external.New(execPath, descriptor, opts)` spawns the executable over
 anonymous pipes, sends a `handshake` request carrying `ProtocolVersion`
-("1.0"), and requires the reply to echo the same version — any mismatch
+("2.0"), and requires the reply to echo the same version — any mismatch
 (`ErrProtocolMismatch`) makes the harness unusable at resolution time, not
 mid-transform. Every subsequent `HarnessModule` method becomes one
 `{protocol, id, method, params}` JSON line out and one
@@ -150,7 +150,7 @@ per-method behaviour on the same module value — works unmodified against the
 external tier.
 
 ### Built-in module exceptions
-All four built-in harnesses are thin wrappers around the same shared
+All six built-in harnesses are thin wrappers around the same shared
 algorithms; each documents (in its package doc comment) the small number of
 things its descriptor genuinely cannot express and that require Go code:
 
@@ -158,7 +158,9 @@ things its descriptor genuinely cannot express and that require Go code:
 |---------|-------------------------------------|
 | **claudecode** | Tools rendered as a comma-separated scalar (not a YAML list); skill path key-subdirectory composition; version stamps applied later by transform, not by the module. |
 | **ghcpcli** | Tools rendered as a flow-style, single-quoted YAML sequence (descriptor `FieldValue` has no combined flow+per-item-quote option); same skill-subdirectory and version-stamp notes; agents are named `X.agent.md` (descriptor extension), hooks use the `ghcp-cli` variant in `.github/hooks`. |
+| **codex** | Agent files are TOML, not Markdown — the descriptor declares `agent_format_id: codex-toml` and all encode/decode goes through the Codex TOML translator. No `tools` key is emitted; tool grants are expressed via `sandbox_mode = "read-only"` (always emitted). Skills are resolved from a shared `.agents/skills` root rather than a harness-local directory. Deploy-path normalisations (name forcing, description fallback, sandbox_mode fallback, foreign-key drop) are applied by the translator's `Encode` method. Hooks are unsupported. |
 | **opencode** | Tools replaced by a full permission mapping; `mode: subagent` vs `mode: primary` depends on whether the agent is the orchestrator (inspects `AgentKey`, which a static descriptor `Add` field cannot do); distinct key order; hooks deployed as plugins with no registration steps. Explicitly designed with no in-process-only assumptions so the identical logic can run as the external reference module (`cmd/harness-opencode-module`). |
+| **opencodev2** (experimental) | Shares the `.opencode/` paths with `opencode`, so the one-target rule (`opencode_targets.go`, manifest harness decides, never paths) and the OpenCode pair transform (`transform_plan_opencode_pair.go`) live in the app layer. Tools use the `rules` shape (ordered permission rules, deny by default; `write`, `edit` and `patch` share the `edit` action) rendered by the shared descriptor mapper; `mode` comes from the descriptor `value_by_role`. The module never writes `opencode.json` or any config file; hooks deploy the `opencode-v2` bundle variant as plugins, and a bundle without that variant yields a supported plan with no files. |
 | **vscodeghcp** | Same flow-style/single-quote tool rendering and skill-subdirectory notes as ghcpcli; agents are named `X.agent.md` like ghcpcli; hooks use the `vscode-ghcp` variant in `.github/hooks`; the "enable chat hooks" registration step is always `Performable: false` because it requires a user-level VS Code setting the tool cannot write, so it always surfaces as a TODO item. |
 
 ### Contract testing

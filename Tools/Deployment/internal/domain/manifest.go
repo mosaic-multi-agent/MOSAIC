@@ -15,7 +15,7 @@ type VersionStamp struct {
 	HarnessVersion                string // transform engine version (agents only); written as mosaic_harness_version
 	InjectionsVersion             string // role-selected injection version (agents only)
 	OrchestratorInjectionsVersion string // reserved; no longer populated after Stage 3
-	ToolMappingsVersion           string // hash of the effective tool-destination mapping set; agents only; empty when no config mappings
+	ToolMappingsVersion           string // tool settings stamp (descriptor tool spec plus config tool_destinations); agents only
 	Catalog                       CatalogIdentity // source catalog of the item; zero = unknown
 }
 
@@ -125,7 +125,7 @@ type ManifestEntry struct {
 	HarnessVersion                string    // agents only; written as harness_version in manifest YAML
 	InjectionsVersion             string    // agents only; role-selected injection version
 	OrchestratorInjectionsVersion string    // reserved; no longer populated after Stage 3
-	ToolMappingsVersion           string    // agents only; hash of the effective tool-destination mapping set at deploy time
+	ToolMappingsVersion           string    // agents only; tool settings stamp (descriptor tool spec plus config tool_destinations) at deploy time
 	ContentHash                   string    // "sha256:<hex>" over the exact deployed bytes (CD-11)
 	DeployedAt                    time.Time
 	Catalog                       CatalogIdentity // source catalog of the deployed file; zero = unknown

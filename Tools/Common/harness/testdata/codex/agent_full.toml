@@ -1,0 +1,25 @@
+name = "reviewer"
+description = "Reviews code"
+model = "gpt-5"
+sandbox_mode = "workspace-write"
+web_search = "live"
+developer_instructions = """
+You review code.
+Second instruction line.
+"""
+pi = 3.14
+retries = 3
+verbose = true
+since = 2026-01-02
+notes = "first\nsecond"
+tags = ["alpha", "beta"]
+extra_servers = [{ command = "tool-a", args = ["-y"] }]
+
+[sandbox_workspace_write]
+network_access = true
+
+[mcp_servers.docs]
+command = "docs-server"
+
+[mcp_servers."my server"]
+command = "spaced-server"

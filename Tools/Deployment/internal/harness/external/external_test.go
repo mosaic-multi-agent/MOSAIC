@@ -58,6 +58,7 @@ import (
 	"testing"
 	"time"
 
+	"mosaic-common/harness/builtindesc"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/contracttest"
 	"mosaic-deploy/internal/harness/descriptor"
@@ -106,6 +107,13 @@ func TestMain(m *testing.M) {
 	// Role wire-forwarding capture mode (T1.4):
 	case "injection-role-reflect":
 		runFakeHarnessInjectionRoleReflect()
+		os.Exit(0)
+	// Custom tool answer wire fake modes:
+	case "custom-tools-reflect":
+		runFakeHarnessCustomToolsReflect()
+		os.Exit(0)
+	case "protocol-1-0":
+		runFakeHarnessProtocolOnePointZero()
 		os.Exit(0)
 	}
 	os.Exit(m.Run())
@@ -732,20 +740,6 @@ func buildReferenceModule(t *testing.T) string {
 	return outBin
 }
 
-// findRepoRoot returns the absolute path to the MOSAIC repository root by navigating
-// up from this package's directory with a fixed offset. The package is at
-// Tools/Deployment/internal/harness/external/, which is five levels below the
-// repository root.
-func findRepoRoot(t *testing.T) string {
-	t.Helper()
-	rel := filepath.Join("..", "..", "..", "..", "..")
-	abs, err := filepath.Abs(rel)
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
-	return abs
-}
-
 // findModuleRoot walks up from the test source tree to find go.mod.
 func findModuleRoot(t *testing.T) string {
 	t.Helper()
@@ -767,18 +761,15 @@ func findModuleRoot(t *testing.T) string {
 	}
 }
 
-// openCodeDescriptor loads and parses the embedded OpenCode descriptor by reading it from
-// the built-in OpenCode module. If the module cannot be constructed, the test is skipped.
+// openCodeDescriptor loads and parses the builtin OpenCode descriptor from the shared Common
+// descriptor package. A missing descriptor fails the test; it is never skipped.
 func openCodeDescriptor(t *testing.T) *domain.HarnessDescriptor {
 	t.Helper()
-	// Load the descriptor from the harness.yaml in the source tree. Walk up to find it.
-	moduleRoot := findModuleRoot(t)
-	descPath := filepath.Join(moduleRoot, "internal", "harness", "builtin", "opencode", "opencode.yaml")
-	src, err := os.ReadFile(descPath)
-	if err != nil {
-		t.Skipf("opencode.yaml not found at %s; skipping: %v", descPath, err)
+	src, ok := builtindesc.Raw("opencode")
+	if !ok || len(src) == 0 {
+		t.Fatal("builtin descriptor opencode missing from Common")
 	}
-	desc, err := descriptor.Parse(src, descPath)
+	desc, err := descriptor.Parse(src, "builtin:opencode")
 	if err != nil {
 		t.Fatalf("parse opencode.yaml: %v", err)
 	}
@@ -993,11 +984,11 @@ func TestProtocol_MessageTypesHaveProtocolField(t *testing.T) {
 	}
 }
 
-// TestProtocol_ProtocolVersionConst verifies the ProtocolVersion constant is "1.0" so that
+// TestProtocol_ProtocolVersionConst verifies the ProtocolVersion constant is "2.0" so that
 // any implementation-level change to the protocol version surfaces as a failing test.
 func TestProtocol_ProtocolVersionConst(t *testing.T) {
-	if external.ProtocolVersion != "1.0" {
-		t.Errorf("ProtocolVersion = %q, want %q; protocol version is a stable contract", external.ProtocolVersion, "1.0")
+	if external.ProtocolVersion != "2.0" {
+		t.Errorf("ProtocolVersion = %q, want %q; protocol version is a stable contract", external.ProtocolVersion, "2.0")
 	}
 }
 
@@ -1534,7 +1525,7 @@ func TestContractTest_ExternalAdapter_PassesSharedContractSuite(t *testing.T) {
 
 	m, err := external.New(binPath, desc, external.Options{
 		Timeout:    10 * time.Second,
-		MosaicRoot: findRepoRoot(t),
+		MosaicRoot: frozenCatalogRoot(t),
 	})
 	if err != nil {
 		t.Fatalf("external.New with reference module binary: %v", err)

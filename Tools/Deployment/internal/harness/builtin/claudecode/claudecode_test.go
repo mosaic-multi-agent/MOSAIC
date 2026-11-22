@@ -216,7 +216,7 @@ func truncate(b []byte, n int) []byte {
 
 // TestGoldenFile_ClaudeCode_ContractsReviewAgent tests a "tool-light" agent: contracts-review
 // uses [skill, file_read, file_write, file_edit, file_search, content_search, user_interaction]
-// but no terminal. The output should list Read, Write, Edit, Glob, Grep, AskUserQuestion
+// but no terminal. The output should list Read, Write, Edit, Glob, Grep
 // (skill maps to empty/unsupported and is omitted).
 //
 // Deliberate deviation from committed Agents/Claude Code/CodebaseAgnostic/Agents/contracts-review.md:
@@ -251,8 +251,8 @@ func TestGoldenFile_ClaudeCode_ContractsReviewAgent(t *testing.T) {
 
 // TestGoldenFile_ClaudeCode_TestRunnerAgent tests a "tool-heavy" agent: test-runner uses all
 // seven generic tools [file_read, file_write, file_edit, file_search, content_search, terminal,
-// user_interaction]. The output should list all eight Claude Code tools: Read, Write, Edit,
-// Bash, Glob, Grep, AskUserQuestion (in universe order, comma-separated).
+// user_interaction]. The output should list all six Claude Code tools: Read, Write, Edit,
+// Bash, Glob, Grep (user_interaction is unmapped) (in universe order, comma-separated).
 //
 // Deliberate deviation from committed Agents/Claude Code/CodebaseAgnostic/Agents/test-runner.md:
 // the committed file uses "opus 4.6" as model; this golden uses the fixed test model
@@ -287,7 +287,7 @@ func TestGoldenFile_ClaudeCode_TestRunnerAgent(t *testing.T) {
 // TestGoldenFile_ClaudeCode_PlannerTDDSoftAgent tests an agent that uses the skill generic tool
 // in addition to a full tool set: planner-tdd-soft uses [skill, file_read, file_write, file_edit,
 // file_search, content_search, terminal, user_interaction]. The output should list Read, Write,
-// Edit, Bash, Glob, Grep, AskUserQuestion — skill maps to empty/unsupported and is omitted;
+// Edit, Bash, Glob, Grep — skill maps to empty/unsupported and is omitted;
 // terminal maps to Bash and must appear.
 //
 // Deliberate deviation from committed Agents/Claude Code/CodebaseAgnostic/Agents/planner-tdd-soft.md:
@@ -322,7 +322,7 @@ func TestGoldenFile_ClaudeCode_PlannerTDDSoftAgent(t *testing.T) {
 
 // TestGoldenFile_ClaudeCode_Orchestrator tests the orchestrator, which uses {tool-permissions}
 // as a tools placeholder. The placeholder expands to the full Claude Code universe:
-// Read, Write, Edit, Bash, Glob, Grep, Task, AskUserQuestion (comma-separated scalar).
+// Read, Write, Edit, Bash, Glob, Grep, Task, TaskStop (comma-separated scalar).
 //
 // Deliberate deviation from committed Agents/Claude Code/CodebaseAgnostic/orchestrator.md:
 // the committed file uses "opus 4.6" as model. This golden uses "claude-sonnet-4-6". Project
@@ -491,7 +491,7 @@ func TestContract_ClaudeCode(t *testing.T) {
 				// format that distinguishes Claude Code from GHCP CLI. The tools field must be a
 				// plain (unquoted) scalar containing harness tool names in universe order, separated
 				// by ", ". Universe order from the descriptor: Read, Write, Edit, Bash, Glob, Grep,
-				// Task, AskUserQuestion. Task is absent here because subagent is not in the request.
+				// Task, TaskStop, AskUserQuestion. Task is absent here because subagent is not in the request.
 				Name: "all_seven_generic_tools",
 				Request: domain.ToolRequest{
 					AgentKey: "test-runner",
@@ -502,7 +502,7 @@ func TestContract_ClaudeCode(t *testing.T) {
 						Key: "tools",
 						Value: domain.FieldValue{
 							Kind:   domain.KindScalar,
-							Scalar: "Read, Write, Edit, Bash, Glob, Grep, AskUserQuestion",
+							Scalar: "Read, Write, Edit, Bash, Glob, Grep",
 							Quote:  domain.QuotePlain,
 						},
 					},
@@ -514,7 +514,7 @@ func TestContract_ClaudeCode(t *testing.T) {
 					{Generic: "file_search", Outcome: domain.ToolMapped, HarnessTools: []string{"Glob"}},
 					{Generic: "content_search", Outcome: domain.ToolMapped, HarnessTools: []string{"Grep"}},
 					{Generic: "terminal", Outcome: domain.ToolMapped, HarnessTools: []string{"Bash"}},
-					{Generic: "user_interaction", Outcome: domain.ToolMapped, HarnessTools: []string{"AskUserQuestion"}},
+					{Generic: "user_interaction", Outcome: domain.ToolUnmapped},
 				},
 			},
 			{

@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"errors"
 
+	"mosaic-common/agentfields"
 	"mosaic-common/docformat"
-	"mosaic-deploy/internal/agentfields"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/harness/descriptor"
 )
@@ -99,7 +99,7 @@ func sourceOnlyKeys(in RebuildInput, facts deployedAgentFacts, role domain.Agent
 // them; none is invented. dropKeys are the source-only frontmatter keys to remove; name is the
 // catalog key written when the source has no name key.
 func buildRebuildGenericSource(source []byte, facts deployedAgentFacts, dropKeys []string, tools domain.FieldValue, setTools bool, name string) ([]byte, error) {
-	doc, err := docformat.Parse(source)
+	doc, err := ParseGenericSource(source)
 	if err != nil {
 		return nil, err
 	}

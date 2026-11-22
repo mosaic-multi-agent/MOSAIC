@@ -1,0 +1,6 @@
+# Invalid: reason must be a string.
+schema_version: "1"
+id: "experimental-non-string-reason"
+display_name: "Experimental Non String Reason"
+experimental:
+  reason: 5

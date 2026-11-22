@@ -23,7 +23,7 @@ const (
 func (s *service) annotateToolsChanges(
 	p *domain.Plan,
 	module domain.HarnessModule,
-	customTools map[string]string,
+	customTools domain.CustomToolAnswers,
 	skippedTools map[string]bool,
 	scope domain.Scope,
 	deployedReader func(domain.PlanItem) []byte,

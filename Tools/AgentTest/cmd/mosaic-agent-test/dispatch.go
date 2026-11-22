@@ -30,6 +30,7 @@ import (
 	"mosaic-agent-test/internal/fixtures"
 	"mosaic-agent-test/internal/harness/claudecode"
 	"mosaic-agent-test/internal/harness/opencode"
+	"mosaic-agent-test/internal/harness/opencodev2"
 	"mosaic-agent-test/internal/launch"
 	"mosaic-agent-test/internal/modelevidence"
 	"mosaic-agent-test/internal/preflight"
@@ -164,7 +165,7 @@ func supportedHarnesses() []commonharness.CLIHarness {
 // local restatement of identity strings.
 func isSupportedHarness(id string) bool {
 	switch id {
-	case commonharness.HarnessIDClaudeCode, commonharness.HarnessIDOpenCode:
+	case commonharness.HarnessIDClaudeCode, commonharness.HarnessIDOpenCode, commonharness.HarnessIDOpenCodeV2:
 		return true
 	default:
 		return false
@@ -194,6 +195,7 @@ func supportedModelCatalogs() []commonharness.ModelCatalog {
 type adapterOptions struct {
 	ClaudeCode claudecode.Options
 	OpenCode   opencode.Options
+	OpenCodeV2 opencodev2.Options
 }
 
 // ErrUnknownHarness reports a harness identity that resolves to no adapter.
@@ -210,7 +212,12 @@ func newAdapter(id string, opts adapterOptions) (domain.HarnessAdapter, error) {
 		return claudecode.New(opts.ClaudeCode), nil
 	case commonharness.HarnessIDOpenCode:
 		return opencode.New(opts.OpenCode), nil
+	case commonharness.HarnessIDOpenCodeV2:
+		return opencodev2.New(opts.OpenCodeV2), nil
 	default:
+		if isUnsupportedCatalogHarness(id) {
+			return nil, unsupportedHarnessError(id)
+		}
 		return nil, fmt.Errorf("%w: %q", ErrUnknownHarness, id)
 	}
 }
@@ -227,7 +234,12 @@ func decoderFor(id string) (launch.Decoder, error) {
 		return claudecode.DecodeEnvelope, nil
 	case commonharness.HarnessIDOpenCode:
 		return opencode.DecodeEnvelope, nil
+	case commonharness.HarnessIDOpenCodeV2:
+		return opencodev2.DecodeEnvelope, nil
 	default:
+		if isUnsupportedCatalogHarness(id) {
+			return nil, unsupportedHarnessError(id)
+		}
 		return nil, fmt.Errorf("%w: %q", ErrUnknownHarness, id)
 	}
 }
@@ -982,6 +994,9 @@ func cliOptions(d Deps, stdout, stderr io.Writer) cli.Options {
 		// set newAdapter/decoderFor switch on, so the CLI's flag validation
 		// cannot drift from what the composition root can actually wire.
 		Harnesses: supportedHarnesses(),
+
+		// Known catalog harnesses this tool refuses; never offered.
+		UnsupportedHarnesses: unsupportedHarnesses(),
 
 		// Filtered to the same supported set as Harnesses, so the frontend
 		// cannot accept a model identifier for a harness the binary cannot wire.

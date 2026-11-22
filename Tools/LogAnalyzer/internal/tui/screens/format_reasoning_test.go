@@ -199,5 +199,7 @@ func TestRuns_ShowsReasoningInAllRunsAndUnattributableSummaries(t *testing.T) {
 
 	view := screens.NewRunsScreen(report, tableW, tallH, plain()).View(tableW, tallH)
 
-	assertContains(t, view, "(reasoning: 42)", "(reasoning: 43)")
+	// The All runs head shows one token total and no per-category breakdown.
+	assertContains(t, view, "(reasoning: 43)")
+	assertNotContains(t, view, "(reasoning: 42)")
 }

@@ -208,7 +208,8 @@ func (l *Logger) initFileLocked() {
 //
 // On success, the out-of-run file is removed and l.path is updated to the
 // run-folder file. On any failure, l.path and the out-of-run file are left
-// untouched, no partially-written file is left at the run-folder path, and
+// untouched, a file created by the replay is removed, a pre-existing run log
+// is restored to its prior length (it is appended to, never overwritten), and
 // every entry logged afterward continues to append to the out-of-run file
 // via the normal appendEntryLocked path.
 func (l *Logger) replayLocked() {
@@ -222,7 +223,14 @@ func (l *Logger) replayLocked() {
 	}
 
 	runPath := filepath.Join(runDir, l.runID+".log")
-	f, err := os.OpenFile(runPath, os.O_CREATE|os.O_WRONLY, 0644)
+	// An existing run log (resumed run) is appended to, never overwritten.
+	priorInfo, statErr := os.Stat(runPath)
+	preExisted := statErr == nil
+	if statErr != nil && !os.IsNotExist(statErr) {
+		return
+	}
+
+	f, err := os.OpenFile(runPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return
 	}
@@ -236,10 +244,17 @@ func (l *Logger) replayLocked() {
 	if writeErr == nil {
 		writeErr = f.Sync()
 	}
+
 	_ = f.Close()
 
 	if writeErr != nil {
-		_ = os.Remove(runPath)
+		if preExisted {
+			// Restore the pre-replay length by path: truncating through the
+			// append-only handle is denied on Windows.
+			_ = os.Truncate(runPath, priorInfo.Size())
+		} else {
+			_ = os.Remove(runPath)
+		}
 		return
 	}
 

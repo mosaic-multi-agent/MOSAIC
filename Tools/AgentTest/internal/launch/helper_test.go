@@ -30,6 +30,13 @@ func runHelperProcess() {
 	switch os.Getenv("GO_HELPER_CMD") {
 	case "success":
 		os.Stdout.WriteString(`[{"type":"result","subtype":"success","is_error":false,"result":"{\"agent_instance_id\":\"orchestrator#1\",\"status_code\":\"SUCCESS\",\"status_message\":\"ok\"}"}]`) //nolint:errcheck
+	case "lines_exit":
+		os.Stdout.WriteString(helperStdout)           //nolint:errcheck
+		os.Stderr.WriteString("helper-stderr-marker") //nolint:errcheck
+	case "lines_hang":
+		os.Stdout.WriteString(helperStdout)           //nolint:errcheck
+		os.Stderr.WriteString("helper-stderr-marker") //nolint:errcheck
+		time.Sleep(24 * time.Hour)
 	case "hang":
 		time.Sleep(24 * time.Hour)
 	default:

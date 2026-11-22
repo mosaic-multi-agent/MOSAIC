@@ -143,12 +143,12 @@ func TestWorkflowSection_Stage4_SourceFileBytesHaveTypeCoreAfterLoad(t *testing.
 	}
 }
 
-// TestWorkflowSection_Stage4_RealRepoCatalogSourcesHaveTypeCore verifies that every
-// real workflow source file found under the real Catalog/Workflows/ tree declares
+// TestWorkflowSection_Stage4_FixtureCatalogSourcesHaveTypeCore verifies that every
+// workflow source file found under the fixture Catalog/Workflows/ tree declares
 // type="core" on its <Workflow> block boundary tag. This is the on-disk invariant that
 // must survive Stage 4 unchanged.
-func TestWorkflowSection_Stage4_RealRepoCatalogSourcesHaveTypeCore(t *testing.T) {
-	cat := loadRealCatalog(t)
+func TestWorkflowSection_Stage4_FixtureCatalogSourcesHaveTypeCore(t *testing.T) {
+	cat := loadFixtureRootCatalog(t)
 
 	for _, wf := range cat.Workflows() {
 		wf := wf // capture

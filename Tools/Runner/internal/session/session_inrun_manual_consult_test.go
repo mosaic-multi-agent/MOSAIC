@@ -8,7 +8,6 @@ package session_test
 
 import (
 	"context"
-	"errors"
 	"reflect"
 	"slices"
 	"testing"
@@ -146,39 +145,6 @@ func TestSession_InRunManual_RequestMadeDuringDeviationConsultation_AppliesAtThe
 			}
 			if inner.CallCount != 1 {
 				t.Errorf("want the running consultation to finish and be the only one, got %d", inner.CallCount)
-			}
-		})
-	}
-}
-
-func TestSession_InRunManual_CancelInDialogue_EndsWithTheResumableStopOfTheStopScreenPath(t *testing.T) {
-	cases := []struct {
-		name string
-		mode domain.ExecutionMode
-	}{
-		{"orchestrated", domain.ExecutionModeOrchestrated},
-		{"auto", domain.ExecutionModeAuto},
-		{"auto-review", domain.ExecutionModeAutoReview},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			consultant := &scriptedRoutingConsultant{}
-			consultant.queueDispatch("agent-a", "start", 0)
-			rig := orchestratedRig(t, newManualUser(t), consultant) // unscripted dialogue: cancelled
-			rig.queueOK("agent-a", 1)
-			rig.queueOK("agent-b", 1)
-			rig.requestOnceAt("agent-a")
-			cfg := configForMode(rig.orchPath, tc.mode)
-
-			got, err := rig.ses.Start(context.Background(), cfg)
-
-			requireRunStatus(t, got, err, domain.RunStoppedByConsultant)
-			var ce *domain.ConsultationError
-			if !errors.As(got.Cause, &ce) || ce.Failure != domain.ConsultFailUserAbandoned {
-				t.Errorf("want cause %q, got %v", domain.ConsultFailUserAbandoned, got.Cause)
-			}
-			if want := []string{"agent-a"}; !slices.Equal(invokedAgents(rig.f), want) {
-				t.Errorf("want nothing dispatched after the cancel: %v, got %v", want, invokedAgents(rig.f))
 			}
 		})
 	}

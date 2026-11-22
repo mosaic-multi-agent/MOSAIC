@@ -56,7 +56,7 @@ func probeAgentWithRecordedLegacy(
 	workspace string, module domain.HarnessModule, snap manifest.Snapshot, key, target string,
 ) domain.DeployedArtifactState {
 	modelKey := module.Descriptor().Frontmatter.ModelKey
-	state := probeDeployedArtifactOf(workspace, target, modelKey, domain.ArtifactAgent)
+	state := probeDeployedArtifact(workspace, target, modelKey, domain.ArtifactAgent, module.Descriptor())
 	if state.Present {
 		return state
 	}
@@ -64,9 +64,21 @@ func probeAgentWithRecordedLegacy(
 		return state // something is at the target path (not a readable agent file): not a rename
 	}
 	if legacy := recordedLegacyPath(module, snap, key, target); legacy != "" {
-		return probeDeployedArtifactOf(workspace, legacy, modelKey, domain.ArtifactAgent)
+		return probeDeployedArtifact(workspace, legacy, modelKey, domain.ArtifactAgent, module.Descriptor())
 	}
 	return state
+}
+
+// probedReadPath returns the file probeAgentWithRecordedLegacy reads for the agent planned at
+// target: the manifest-recorded legacy X.md when nothing is at target, else target itself.
+func probedReadPath(workspace string, module domain.HarnessModule, snap manifest.Snapshot, key, target string) string {
+	if target == "" || pathExists(filepath.Join(workspace, filepath.FromSlash(target))) {
+		return target
+	}
+	if legacy := recordedLegacyPath(module, snap, key, target); legacy != "" {
+		return legacy
+	}
+	return target
 }
 
 // recordedLegacyPath returns the X.md path the manifest records for the agent whose planned
@@ -109,12 +121,17 @@ func applyRecordedLegacyAgents(
 		if legacy == "" || pathExists(filepath.Join(workspace, filepath.FromSlash(pp.TargetPath))) {
 			continue
 		}
-		legacyState := probeDeployedArtifactOf(workspace, legacy, modelKey, domain.ArtifactAgent)
+		legacyState := probeDeployedArtifact(workspace, legacy, modelKey, domain.ArtifactAgent, module.Descriptor())
 		if !legacyState.Present {
 			continue
 		}
-		if cur := state[pp.TargetPath]; cur.Present && cur.ContentHash != legacyState.ContentHash {
+		cur := state[pp.TargetPath]
+		if cur.Present && cur.ContentHash != legacyState.ContentHash {
 			continue // resolved to another file of the same agent (renamed by the user)
+		}
+		if cur.ParseFailed {
+			// The seeded state already judged this same file unreadable: it stays a conflict.
+			legacyState.ParseFailed, legacyState.ParseProblem = true, cur.ParseProblem
 		}
 		state[pp.TargetPath] = legacyState
 		if migrating == nil {

@@ -19,7 +19,7 @@ package harness_test
 //     by InvokeRaw: there is no protocol extraction step on this path.
 //   - Context cancellation terminates the subprocess and returns ctx.Err().
 //   - Logging: InvokeRaw emits the same event vocabulary as Invoke
-//     (EventHarnessInvokeStart, EventHarnessStdout, EventHarnessInvokeOK,
+//     (EventHarnessInvokeStart, EventHarnessInvokeOK,
 //     EventHarnessInvokeError) through the injected DebugLogger.
 //
 //   T3.5 — composition-root probe:

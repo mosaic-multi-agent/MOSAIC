@@ -59,7 +59,7 @@ func (r *transformRun) sourceBundleCatalog(key string) domain.CatalogIdentity {
 // retiredHarness is the harness whose manifest records the run drops: the source harness of a
 // move between the two GHCP targets, which share their files; empty for every other transform.
 func (r *transformRun) retiredHarness() string {
-	if isGhcpPair(r.srcID, r.tgtID) {
+	if isGhcpPair(r.srcID, r.tgtID) || isOpenCodePair(r.srcID, r.tgtID) {
 		return r.srcID
 	}
 	return ""

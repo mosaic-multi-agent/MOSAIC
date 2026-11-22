@@ -7,7 +7,7 @@ package catalog_test
 // when that directory is not a MOSAIC root — it does NOT walk up the tree.
 // All tests here verify the public contract, not the internal detection heuristic.
 //
-// Integration tests use the real repository tree (this test file lives within it).
+// Integration tests use the committed fixture MOSAIC root (testdata/catalog/mosaic-root).
 // Failure-mode tests use t.TempDir(), which is guaranteed to not contain a MOSAIC repo.
 
 import (
@@ -20,39 +20,27 @@ import (
 	"mosaic-deploy/internal/catalog/catalogpaths"
 )
 
-// repoRoot returns the absolute path to the MOSAIC repository root, navigating up from
-// this package's working directory. Tests run with the working directory set to the
-// package directory (internal/catalog). The path climbs four levels:
-// catalog/ → internal/ → Deployment/ → Tools/ → repo root.
-func repoRoot() string {
-	abs, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
-	if err != nil {
-		panic("catalog_test: resolve repo root: " + err.Error())
-	}
-	return abs
-}
-
 // ---------------------------------------------------------------------------
-// Happy-path: resolving the real repository root
+// Happy-path: resolving the fixture MOSAIC root
 // ---------------------------------------------------------------------------
 
 // TestResolveRoot_FromPackageDirectory_ReturnsNonEmptyRoot verifies that
 // ResolveRoot succeeds when called with the repository root — which contains
 // the MOSAIC marker files.
 func TestResolveRoot_FromPackageDirectory_ReturnsNonEmptyRoot(t *testing.T) {
-	root, err := catalog.ResolveRoot(repoRoot())
+	root, err := catalog.ResolveRoot(fixtureMosaicRoot(t))
 	if err != nil {
-		t.Fatalf("ResolveRoot(repoRoot()) returned error: %v", err)
+		t.Fatalf("ResolveRoot(fixtureMosaicRoot(t)) returned error: %v", err)
 	}
 	if root == "" {
-		t.Fatal("ResolveRoot(repoRoot()) returned empty string with nil error")
+		t.Fatal("ResolveRoot(fixtureMosaicRoot(t)) returned empty string with nil error")
 	}
 }
 
 // TestResolveRoot_FromPackageDirectory_RootIsAbsolute verifies that the path
 // returned by ResolveRoot is absolute, so callers do not need to resolve it.
 func TestResolveRoot_FromPackageDirectory_RootIsAbsolute(t *testing.T) {
-	root, err := catalog.ResolveRoot(repoRoot())
+	root, err := catalog.ResolveRoot(fixtureMosaicRoot(t))
 	if err != nil {
 		t.Fatalf("ResolveRoot: %v", err)
 	}
@@ -66,7 +54,7 @@ func TestResolveRoot_FromPackageDirectory_RootIsAbsolute(t *testing.T) {
 // Catalog/ location: Catalog/CatalogFilesFormat.md.
 // Catalog/Workflows/Index.md is no longer a required root marker.
 func TestResolveRoot_FromPackageDirectory_RootContainsRequiredMarker(t *testing.T) {
-	root, err := catalog.ResolveRoot(repoRoot())
+	root, err := catalog.ResolveRoot(fixtureMosaicRoot(t))
 	if err != nil {
 		t.Fatalf("ResolveRoot: %v", err)
 	}
@@ -82,9 +70,9 @@ func TestResolveRoot_FromPackageDirectory_RootContainsRequiredMarker(t *testing.
 // ResolveRoot with the repo root directly returns the same root (idempotent).
 func TestResolveRoot_FromRepoRoot_ReturnsStableResult(t *testing.T) {
 	// Resolve from the repo root to get the canonical absolute root.
-	canonical, err := catalog.ResolveRoot(repoRoot())
+	canonical, err := catalog.ResolveRoot(fixtureMosaicRoot(t))
 	if err != nil {
-		t.Fatalf("ResolveRoot(repoRoot()) to get canonical root: %v", err)
+		t.Fatalf("ResolveRoot(fixtureMosaicRoot(t)) to get canonical root: %v", err)
 	}
 
 	// Then resolve from the canonical root itself — must agree.
@@ -104,17 +92,17 @@ func TestResolveRoot_FromRepoRoot_ReturnsStableResult(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestResolveRoot_NestedDirectory_ReturnsErrNotMosaicRoot verifies that a directory
-// nested inside the repository is NOT accepted as the MOSAIC root. ResolveRoot must
+// nested inside a MOSAIC root is NOT accepted as the MOSAIC root. ResolveRoot must
 // validate the directory it is given rather than climbing the tree to find a root above it.
 //
 // This test fails while ResolveRoot still performs an upward walk (the pre-Stage-8
 // behaviour), and passes once the walk is replaced with a single-directory check.
 func TestResolveRoot_NestedDirectory_ReturnsErrNotMosaicRoot(t *testing.T) {
-	// Tools/ is a well-known subdirectory of the repository root that is not itself
-	// the root — it does not carry the root markers.
-	nestedDir := filepath.Join(repoRoot(), "Tools")
-	if _, err := os.Stat(nestedDir); os.IsNotExist(err) {
-		t.Skipf("expected nested directory %s not found; skipping", nestedDir)
+	// Docs/ is a subdirectory of the fixture MOSAIC root that is not itself the root —
+	// it does not carry the root markers, while its parent does.
+	nestedDir := filepath.Join(fixtureMosaicRoot(t), "Docs")
+	if _, err := os.Stat(nestedDir); err != nil {
+		t.Fatalf("fixture nested directory %s is missing: %v", nestedDir, err)
 	}
 
 	_, err := catalog.ResolveRoot(nestedDir)

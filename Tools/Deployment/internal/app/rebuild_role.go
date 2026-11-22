@@ -6,11 +6,11 @@ import "mosaic-deploy/internal/domain"
 // applies: the source's role stamp, the orchestrator file names, the catalog entry's role,
 // and finally subagent. The role only drives role-dependent output; no stamp is written
 // from it.
-func rebuildRole(stamp, fileName string, catalogEntry *domain.Agent) domain.AgentRole {
+func rebuildRole(stamp, fileName string, srcDesc *domain.HarnessDescriptor, catalogEntry *domain.Agent) domain.AgentRole {
 	if role, ok := domain.ParseAgentRole(stamp); ok {
 		return role
 	}
-	if isOrchestratorFileName(fileName) {
+	if isOrchestratorFileName(fileName, srcDesc) {
 		return domain.RoleOrchestrator
 	}
 	if catalogEntry != nil && catalogEntry.Role != "" {

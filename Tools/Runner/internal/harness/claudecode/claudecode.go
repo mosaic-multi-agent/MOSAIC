@@ -143,6 +143,7 @@ func (a *ClaudeCodeAdapter) invoke(ctx context.Context, agent domain.AgentRefere
 		ToolsDerived:       true, // signals derivation was performed; empty slice is valid (strict dontAsk, no tools)
 	}
 
+	spawnReq.Sink = cliexec.WithAgent(a.sink, request.AgentInstanceID)
 	resp, err := a.spawner.Spawn(ctx, spawnReq)
 	if err != nil {
 		// ErrMalformedJSON is only ever returned once the shared package's
@@ -283,7 +284,7 @@ func (a *ClaudeCodeAdapter) invokeRaw(ctx context.Context, agent domain.AgentRef
 		Env:          spawnReq.Env,
 		Stdin:        stdin,
 		Timeout:      a.timeout,
-		Sink:         a.sink,
+		Sink:         cliexec.WithAgent(a.sink, agent.Identifier),
 		OnStdoutLine: onLine,
 	})
 	if err != nil {
@@ -321,9 +322,6 @@ func (a *ClaudeCodeAdapter) invokeRaw(ctx context.Context, agent domain.AgentRef
 		return nil, err
 	}
 
-	a.logger.Log(domain.EventHarnessStdout, text,
-		domain.F("agent", agent.Identifier),
-	)
 	a.logger.Log(domain.EventHarnessInvokeOK, "raw invocation succeeded",
 		domain.F("agent", agent.Identifier),
 	)

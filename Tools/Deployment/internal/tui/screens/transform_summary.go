@@ -40,11 +40,8 @@ func NewTransformSummaryScreen(result app.TransformHarnessResult, width, height 
 
 // Update handles key input and reports whether the user dismissed the screen.
 func (s *TransformSummaryScreen) Update(msg tea.Msg) bool {
-	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		switch keyMsg.String() {
-		case "q", "enter", "esc":
-			s.done = true
-		}
+	if _, ok := msg.(tea.KeyMsg); ok {
+		s.done = true
 	}
 	return s.done
 }

@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -16,6 +15,11 @@ import (
 // defaultTimeout is applied when neither the request nor the spawner
 // configuration specifies one, matching the prior Runner behaviour.
 const defaultTimeout = 30 * time.Minute
+
+// RunOutputGrace is how long Run keeps reading stdout/stderr after the started
+// process exited while a descendant still holds them open. Same value for every
+// harness; not configurable per call.
+const RunOutputGrace = 2 * time.Second
 
 // WithTimeout sets the per-invocation timeout on a Spawner constructed by
 // NewClaudeCode.
@@ -73,7 +77,7 @@ func (s *claudeCodeSpawner) Spawn(ctx context.Context, req SpawnRequest) (Respon
 		Env:        req.Env,
 		Stdin:      stdin,
 		Timeout:    timeout,
-		Sink:       s.cfg.sink,
+		Sink:       s.cfg.sinkFor(req),
 
 		OnStdoutLine: req.OnStdoutLine,
 	})
@@ -206,6 +210,16 @@ func EnvBlock(workingDir string) string {
 // points: start, wait, adapter timeout with process kill, and parent-context
 // cancellation with process kill. Timeout and cancellation remain
 // distinguishable to the caller via ErrTimeout and ErrCancelled.
+//
+// With a non-nil o.Sink, Run logs, in this order: spawn.stdout.lines events
+// while the process runs (consecutive non-empty stdout lines, numbered by the
+// first and lines fields, none dropped on any end path); on a kill,
+// spawn.timeout or spawn.no_output; spawn.stderr on every end path;
+// spawn.error on a non-zero exit; and finally spawn.end with the reason
+// (exit, nonzero_exit, timeout, no_output, cancelled), stdout_bytes and, for
+// exits, exit_code.
+// Nothing is logged when the process fails to start. Logging never blocks
+// reading the process output; Run returns after every event reached the sink.
 func Run(ctx context.Context, cmd Command, args []string, o RunOptions) (Response, error) {
 	start := time.Now()
 
@@ -229,8 +243,14 @@ func Run(ctx context.Context, cmd Command, args []string, o RunOptions) (Respons
 	if o.OnStdoutLine != nil {
 		obs = startLineObserver(o.OnStdoutLine)
 	}
-	execCmd.Stdout = teeStdout(&stdout, obs)
+	watch := startOutputWatch(o.NoOutputTimeout)
+	defer watch.stop()
+	lg := startStdoutLogger(o.Sink)
+	execCmd.Stdout = teeWatch(withStdoutLogger(teeStdout(&stdout, obs), lg), watch)
 	execCmd.Stderr = &stderr
+	// A descendant that inherited stdout/stderr can keep them open after the
+	// started process exited; Wait stops waiting for the output after this delay.
+	execCmd.WaitDelay = RunOutputGrace
 
 	group := newKillGroup(execCmd)
 	if err := execCmd.Start(); err != nil {
@@ -238,6 +258,7 @@ func Run(ctx context.Context, cmd Command, args []string, o RunOptions) (Respons
 		if obs != nil {
 			obs.stop()
 		}
+		lg.close()
 		return Response{}, fmt.Errorf("%w: %v", ErrExecutableNotFound, err)
 	}
 	group.attach(execCmd.Process)
@@ -250,34 +271,56 @@ func Run(ctx context.Context, cmd Command, args []string, o RunOptions) (Respons
 		timeout = defaultTimeout
 	}
 
+	// killed ends the invocation after a kill: the process is gone, every
+	// received stdout line and the captured stderr reach the sink, then the
+	// end reason. extra logs the path's own event between them.
+	killed := func(reason string, extra func()) {
+		group.kill(execCmd.Process)
+		<-waitCh
+		if obs != nil {
+			obs.stop()
+		}
+		lg.close()
+		if extra != nil {
+			extra()
+		}
+		logStderr(o.Sink, &stderr)
+		logEnd(o.Sink, reason, stdout.Len(), nil)
+	}
+
 	var waitErr error
 	select {
 	case <-ctx.Done():
-		group.kill(execCmd.Process)
-		<-waitCh
-		if obs != nil {
-			obs.stop()
-		}
+		killed("cancelled", nil)
 		return Response{}, ErrCancelled
 	case <-time.After(timeout):
-		group.kill(execCmd.Process)
-		<-waitCh
-		if obs != nil {
-			obs.stop()
-		}
-		logEvent(o.Sink, "spawn.timeout", "invocation exceeded configured timeout", nil)
+		killed("timeout", func() {
+			logEvent(o.Sink, "spawn.timeout", "invocation exceeded configured timeout", nil)
+		})
 		return Response{}, ErrTimeout
+	case <-watch.firedCh():
+		killed("no_output", func() {
+			logEvent(o.Sink, "spawn.no_output", watch.message(), []Field{{Key: "after", Value: watch.after.String()}})
+		})
+		return Response{}, watch.err()
 	case waitErr = <-waitCh:
 	}
 
-	group.release()
+	if errors.Is(waitErr, exec.ErrWaitDelay) {
+		// The process exited with success but a descendant still held its
+		// output past the grace: end the remaining tree and report the exit.
+		group.kill(execCmd.Process)
+		waitErr = nil
+	} else {
+		group.release()
+	}
 	duration := time.Since(start)
 	if obs != nil {
 		obs.finish(observerDrainGrace)
 	}
 
-	logEvent(o.Sink, "spawn.stdout", stdout.String(), []Field{{Key: "bytes", Value: strconv.Itoa(stdout.Len())}})
-	logEvent(o.Sink, "spawn.stderr", stderr.String(), []Field{{Key: "bytes", Value: strconv.Itoa(stderr.Len())}})
+	lg.close()
+	logStderr(o.Sink, &stderr)
 
 	if waitErr != nil {
 		var exitErr *exec.ExitError
@@ -295,6 +338,7 @@ func Run(ctx context.Context, cmd Command, args []string, o RunOptions) (Respons
 			wrapped = fmt.Errorf("%w: %v", ErrNonZeroExit, waitErr)
 		}
 		logEvent(o.Sink, "spawn.error", wrapped.Error(), nil)
+		logEnd(o.Sink, "nonzero_exit", stdout.Len(), &exitCode)
 		// The exit code and captured stderr are carried through even on
 		// failure: a caller decoding a non-zero exit (an authentication or
 		// environment failure, for instance) needs both to diagnose it
@@ -308,6 +352,8 @@ func Run(ctx context.Context, cmd Command, args []string, o RunOptions) (Respons
 		}, wrapped
 	}
 
+	zero := 0
+	logEnd(o.Sink, "exit", stdout.Len(), &zero)
 	return Response{
 		ExitCode: 0,
 		Stdout:   stdout.Bytes(),

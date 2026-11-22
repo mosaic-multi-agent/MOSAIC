@@ -88,6 +88,10 @@ func (c *toolConverter) emitTarget(source, target string, deny bool) {
 		if !slices.Contains(c.out.TargetDenied, target) {
 			c.out.TargetDenied = append(c.out.TargetDenied, target)
 		}
+	case c.in.Target.Tools.Shape == domain.ShapeRules:
+		// The rule list denies everything it does not allow, so the deny needs no rule; it is
+		// only withheld from the grants.
+		c.inDenied[target] = true
 	default:
 		c.inDenied[target] = true
 		c.out.Dropped = append(c.out.Dropped, DroppedTool{

@@ -30,7 +30,9 @@ func TestNewSinkMapsEventNamesToDebugLogVocabulary(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"stdout", "spawn.stdout", domain.EventHarnessStdout},
+		{"stdout lines", "spawn.stdout.lines", domain.EventHarnessStdoutLines},
+		{"process end", "spawn.end", domain.EventHarnessProcessEnd},
+		{"no output passes through under its shared name", "spawn.no_output", "spawn.no_output"},
 		{"stderr", "spawn.stderr", domain.EventHarnessStderr},
 		{"timeout", "spawn.timeout", domain.EventHarnessInvokeError},
 		{"error", "spawn.error", domain.EventHarnessInvokeError},
@@ -55,7 +57,7 @@ func TestNewSinkMapsEventNamesToDebugLogVocabulary(t *testing.T) {
 func TestNewSinkForwardsMessageAndFieldsInOrder(t *testing.T) {
 	logger := &recordingLogger{}
 	cliexec.NewSink(logger).Log(commonharness.Event{
-		Name:    "spawn.stdout",
+		Name:    "spawn.stdout.lines",
 		Message: "line one\nline two",
 		Fields:  []commonharness.Field{{Key: "pid", Value: "42"}, {Key: "path", Value: "/bin/x"}},
 	})

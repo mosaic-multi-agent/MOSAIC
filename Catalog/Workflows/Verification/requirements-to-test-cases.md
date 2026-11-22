@@ -2,7 +2,7 @@
 version: "1.0"
 name: "Requirements to Test Cases Workflow"
 description: "Derive abstract test cases from a requirement held in large external specification documents. Resolves the requirement to closure via runtime retrieval, models the test scenario space, authors test cases in a project-defined format, and exports them to the target system."
-hint: "Fresh and untested — theoretical only, no real-world runs yet. Open experiments already planned for first real use, e.g. dropping test-scenario-review once the full path is proven — check the workflow file's Design Rationale before running it for real."
+hint: "Run for real and works end to end, but not yet optimized or polished — expect rough edges in cost, run time and output quality. Planned tuning, e.g. dropping test-scenario-review once the full path is proven, is in the workflow file's Design Rationale and Open Ideas."
 author: MOSAIC
 id: requirements-to-test-cases
 referenced_agents:
@@ -47,6 +47,44 @@ artifacts:
 **Notes:**
 - No agent asks the user a domain question: route `NEEDS_CLARIFICATION` from any row to `document-research`, which accepts a targeted "this is missing" invocation. Where the documents do not answer it, that is a finding about the specification, not a question for the user.
 </Workflow>
+
+---
+
+## Flow
+
+Solid arrows: the happy path (`On Success`). Dotted arrows: where findings usually go (`On Findings`). `[HITL]`: a human stop. Not drawn: a `NEEDS_CLARIFICATION` from any row goes to `document-research`, never to the user.
+
+```mermaid
+flowchart TD
+    subgraph RESEARCH
+        DR["document-research"] --> RV["requirements-review"]
+        RV -. findings .-> DR
+    end
+    subgraph DESIGN
+        SD["test-scenario-designer"] --> SR["test-scenario-review"]
+        SR -. findings .-> SD
+        SR --> PS["approval-presenter(scenarios) [HITL]"]
+        PS -. objection .-> SD
+    end
+    subgraph EXECUTION
+        TW["test-case-writer"]
+    end
+    subgraph REVIEW
+        TR["test-case-review"] --> PC["approval-presenter(cases) [HITL]"]
+    end
+    subgraph COMPLETION
+        EX["test-case-export [HITL]<br/>writes to the target system"]
+    end
+    RV --> SD
+    PS --> TW
+    TW -. scenario gap .-> SD
+    TW --> TR
+    TR -. findings .-> TW
+    PC -. objection .-> TW
+    PC --> EX
+    EX -. findings .-> TW
+    EX --> DONE(["Test cases exported"])
+```
 
 ---
 
@@ -170,7 +208,7 @@ In a safety context an agent's plausible guess is the most dangerous possible ou
 - **A third `approval-presenter` row after `requirements-review`**, if running the workflow shows that retrieval gaps need catching before scenario design rather than surfacing as missing dimensions afterwards. Omitted in 0.2 because the dossier is large and dense and a human reading it is unlikely to spot what is absent.
 - **Watch the row cost.** One presenter row per convergence loop is cheap here at two rows; across the library it may not be. `OnSuccessHITL.md` §5.3 — a separate `Gate` column with a `gate_on` invocation field — is the parked alternative if it becomes noisy.
 - **Coverage counter-check.** An agent that queries retrieval for what *should* have been found and compares against `TestScenarios.md` — defends against a retrieval miss that every downstream agent then inherits silently. Currently mitigated only by `requirements-review`.
-- **Backport `approval-presenter` to the older creator-gated workflows once this pattern is proven.** This workflow is the first place the presenter-on-convergence pattern was used for real, and it fixes a real inefficiency present across most of the older Build/Design workflows: those mark the *creator* row `TRUE` directly (the library's older convention), so a human reviews every draft the creator produces — including drafts an automated reviewer would have flagged anyway — instead of only the version that already converged. Once this workflow has enough real use to trust the pattern, that's the trigger to revisit `brownfield-tdd`, `greenfield-tdd`, `brownfield-design`, `brownfield-tdd-build-verified`, and `quick-fix`, all of which currently spend human attention this way.
+- **Backport `approval-presenter` to the older creator-gated workflows once this pattern is proven.** This workflow is the first place the presenter-on-convergence pattern was used for real, and it fixes a real inefficiency present across most of the older Build/Design workflows: those mark the *creator* row `TRUE` directly (the library's older convention), so a human reviews every draft the creator produces — including drafts an automated reviewer would have flagged anyway — instead of only the version that already converged. Once this workflow has enough real use to trust the pattern, that's the trigger to revisit `brownfield-tdd`, `greenfield-tdd`, `brownfield-design`, and `brownfield-tdd-build-verified`, all of which currently spend human attention this way.
 
 **Dead ends (tried and rejected):**
 - **KB ingestion of the specification** — rejected; see Design Rationale.

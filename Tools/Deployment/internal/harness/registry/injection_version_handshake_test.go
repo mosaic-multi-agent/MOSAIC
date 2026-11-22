@@ -56,6 +56,14 @@ func runVersionsCaptureModule() {
 			})
 		case "descriptor":
 			reply(id, map[string]any{"descriptor": map[string]any{"schema_version": "1", "id": "capture", "display_name": "capture"}})
+		case "tools":
+			params, _ := req["params"].(map[string]any)
+			generic, _ := params["generic"].([]any)
+			resolutions := make([]map[string]any, len(generic))
+			for i, g := range generic {
+				resolutions[i] = map[string]any{"generic": g, "outcome": "unmapped"}
+			}
+			reply(id, map[string]any{"fields": []any{}, "resolutions": resolutions})
 		case "frontmatter":
 			params, _ := req["params"].(map[string]any)
 			raw, _ := json.Marshal(params["versions"])

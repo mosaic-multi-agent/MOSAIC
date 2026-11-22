@@ -69,6 +69,9 @@ type ExecRequest struct {
 	// DryRun disables all filesystem writes when true; the result still reports what would
 	// have happened.
 	DryRun bool
+	// PruneEmptyDirs opts this run into removing the subfolders its removals left empty. Off by
+	// default: other runs leave an emptied folder in place.
+	PruneEmptyDirs bool
 	// Atomic opts this run into all-or-nothing execution. When false (the default and the
 	// behaviour of every pre-existing caller), a mid-plan failure is non-fatal: files already
 	// written stay on disk, ExecResult.Partial carries the first error, and the manifest is
@@ -91,6 +94,19 @@ type ExecRequest struct {
 	RetireHarness string
 	// ManifestMeta carries the manifest-level data this run supplies; see ManifestMeta.
 	ManifestMeta ManifestMeta
+	// AgentOwnedContent computes the Deploy-owned content record of the bytes the executor
+	// writes (or, in a dry run, would write) for an agent item.
+	//
+	// Field set: it is called only for items of kind ArtifactAgent with non-empty content,
+	// exactly once per manifest entry built, with the same bytes whose ContentHash is
+	// recorded. The executor stores the returned value verbatim in ManifestEntry.Owned: a nil
+	// return leaves ManifestEntry.Owned nil (no record).
+	//
+	// Field nil: the executor computes the agent record from the whole written bytes.
+	//
+	// Skill and hook records are always computed by the executor from the whole file and
+	// never through this field.
+	AgentOwnedContent func(item domain.PlanItem, written []byte) *domain.OwnedContent
 
 	// probeBackups maps a target path to the backup already taken of it before the workspace
 	// probe overwrote it; set by Execute. See backupBeforeProbe.
@@ -229,6 +245,7 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 	// it is carried as the first partial error and the per-item Err in fallback mode.
 	// contentErrors lists items whose Content callback failed during probe iteration.
 	req.probeBackups = map[string]string{}
+	req.Content = cachingContent(req.Content)
 	deployRoot, fallback, probeErr, contentErrors, probeItem, probeFormat, err := resolveDeploymentRoot(req, journal)
 	if err != nil {
 		return ExecResult{}, err
@@ -485,6 +502,10 @@ func (e *executor) Execute(ctx context.Context, req ExecRequest) (ExecResult, er
 		}
 	}
 
+	if req.PruneEmptyDirs && !req.DryRun && fallback == domain.FallbackNone && partialErr == nil {
+		moves.pruneEmptyDirs()
+	}
+
 	outcome := computeOutcome(actions, partialErr, fallback)
 	e.log.EndRun(outcome)
 
@@ -564,7 +585,7 @@ func (e *executor) executeItem(
 			ar.Taken = domain.TakenUpdated
 		}
 		stamp := resolveVersionStamp(item, req.VersionStamps)
-		entry := newManifestEntry(item, content, stamp)
+		entry := newManifestEntry(item, content, stamp, req.AgentOwnedContent)
 		return ar, &entry
 
 	case domain.ActionConflict:
@@ -679,7 +700,7 @@ func (e *executor) executeConflict(
 		ar.FormatChange = formatChange
 		ar.Taken = domain.TakenUpdated
 		stamp := resolveVersionStamp(item, req.VersionStamps)
-		entry := newManifestEntry(item, content, stamp)
+		entry := newManifestEntry(item, content, stamp, req.AgentOwnedContent)
 		return ar, &entry
 
 	case domain.DecisionBackupThenOverwrite:
@@ -718,7 +739,7 @@ func (e *executor) executeConflict(
 		ar.FormatChange = formatChange
 		ar.Taken = domain.TakenBackedUp
 		stamp := resolveVersionStamp(item, req.VersionStamps)
-		entry := newManifestEntry(item, content, stamp)
+		entry := newManifestEntry(item, content, stamp, req.AgentOwnedContent)
 		return ar, &entry
 	}
 

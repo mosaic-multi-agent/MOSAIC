@@ -6,27 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"mosaic-run/internal/agentfile"
 	"mosaic-run/internal/domain"
 )
-
-// agentStem returns the identifier stem for the given agent filename.
-// It recognizes two compound extensions (case-insensitive):
-//   - ".agent.md" -- strips the full ".agent.md" suffix.
-//   - ".md"        -- strips the ".md" suffix.
-//
-// Returns an empty string for filenames that match neither pattern, or whose
-// stem after stripping is empty (e.g. ".md", ".agent.md").
-// Callers must skip files whose stem is empty.
-func agentStem(name string) string {
-	lower := strings.ToLower(name)
-	if strings.HasSuffix(lower, ".agent.md") {
-		return name[:len(name)-len(".agent.md")]
-	}
-	if strings.HasSuffix(lower, ".md") {
-		return name[:len(name)-len(".md")]
-	}
-	return ""
-}
 
 // ResolveAll resolves every agent identifier in the given set to a definition
 // file in the specified directory. The directory is the one containing the
@@ -34,7 +16,8 @@ func agentStem(name string) string {
 //
 // Returns a map from agent identifier to AgentReference.
 //
-// Recognizes both .md and .agent.md extensions (case-insensitive). Both
+// Recognizes the extensions f accepts (case-insensitive); for Markdown both
+// .md and .agent.md. Both
 // "foo.md" and "foo.agent.md" resolve to identifier "foo". If both forms exist
 // for the same identifier, resolution fails with a RefusalError (cross-format
 // duplicate guard). This guard runs before the early-return path for empty
@@ -44,7 +27,7 @@ func agentStem(name string) string {
 // has no matching definition file. The match is by filename stem: identifier
 // "foo-bar" matches "foo-bar.md" or "foo-bar.agent.md". The match is
 // case-sensitive and exact.
-func ResolveAll(dir string, identifiers []string) (map[string]domain.AgentReference, error) {
+func ResolveAll(dir string, f agentfile.Format, identifiers []string) (map[string]domain.AgentReference, error) {
 	// Always read the directory so the cross-format duplicate scan runs before
 	// the early-return path for empty identifiers. This means a non-existent
 	// directory returns a RefusalError even when no identifiers are requested.
@@ -67,10 +50,10 @@ func ResolveAll(dir string, identifiers []string) (map[string]domain.AgentRefere
 			continue
 		}
 		name := e.Name()
-		stem := agentStem(name)
+		stem := f.Stem(name)
 		if stem == "" {
 			// Skip files with empty stems (e.g. ".md", ".agent.md") and
-			// non-agent files that agentStem does not recognize.
+			// non-agent files the format does not recognize.
 			continue
 		}
 		absPath := filepath.Join(dir, name)
@@ -104,7 +87,7 @@ func ResolveAll(dir string, identifiers []string) (map[string]domain.AgentRefere
 			return nil, &domain.RefusalError{
 				Component: "agentresolve",
 				Resource:  id,
-				Reason:    fmt.Sprintf("no definition file for agent %q found in directory %q", id, dir),
+				Reason:    fmt.Sprintf("no definition file for agent %q found in directory \"%s\"", id, dir),
 			}
 		}
 
@@ -133,7 +116,7 @@ func ResolveAll(dir string, identifiers []string) (map[string]domain.AgentRefere
 //
 // Returns *domain.RefusalError if the identifier has no matching definition
 // file or is ambiguous, same error type as ResolveAll.
-func ResolveOne(dir string, id string) (domain.AgentReference, error) {
+func ResolveOne(dir string, f agentfile.Format, id string) (domain.AgentReference, error) {
 	if id == "" {
 		return domain.AgentReference{}, &domain.RefusalError{
 			Component: "agentresolve",
@@ -157,7 +140,7 @@ func ResolveOne(dir string, id string) (domain.AgentReference, error) {
 			continue
 		}
 		name := e.Name()
-		stem := agentStem(name)
+		stem := f.Stem(name)
 		if stem == id {
 			matches = append(matches, name)
 		}
@@ -168,7 +151,7 @@ func ResolveOne(dir string, id string) (domain.AgentReference, error) {
 		return domain.AgentReference{}, &domain.RefusalError{
 			Component: "agentresolve",
 			Resource:  id,
-			Reason:    fmt.Sprintf("no definition file for agent %q found in directory %q", id, dir),
+			Reason:    fmt.Sprintf("no definition file for agent %q found in directory \"%s\"", id, dir),
 		}
 	case 1:
 		absPath := filepath.Join(dir, matches[0])

@@ -2,7 +2,7 @@ package tui
 
 // stack_flow_helpers_test.go holds the shared fixtures for the stack-screen flow tests: a
 // recording service double, a recording reload capability, and helpers that advance the root
-// model through the entry flow (harness -> mode -> path screen -> stack screen). Nothing in
+// model through the entry flow (mode -> harness -> path screen -> stack screen). Nothing in
 // this file is a test itself.
 
 import (
@@ -19,17 +19,6 @@ import (
 
 // stackScreenTitle is the title the stack screen renders; it identifies the screen in a view.
 const stackScreenTitle = "Catalogue Stack"
-
-// entryModes lists the modes in the order the mode screen offers them.
-var entryModes = []domain.RunMode{
-	domain.ModeDeployWorkspace,
-	domain.ModeUpdateWorkspace,
-	domain.ModeUpdateWorkflows,
-	domain.ModeDeployAgents,
-	domain.ModeDeployHooks,
-	domain.ModePromoteToGeneric,
-	domain.ModeTransformHarness,
-}
 
 // runLog records which service ran which operation, as "<service id>:<operation>".
 type runLog struct{ entries []string }
@@ -48,7 +37,7 @@ type stackFlowSvc struct {
 
 func newStackFlowSvc(id string, log *runLog) *stackFlowSvc {
 	return &stackFlowSvc{
-		stubFlowService: stubFlowService{harnesses: []domain.HarnessRef{flowTestHarness}},
+		stubFlowService: stubFlowService{harnesses: []domain.HarnessRef{flowTestHarness, flowTargetHarness}},
 		id:              id,
 		log:             log,
 	}
@@ -84,9 +73,9 @@ func (s *stackFlowSvc) DeployHooks(ctx context.Context, r app.DeployHooksRequest
 	return s.stubFlowService.DeployHooks(ctx, r)
 }
 
-func (s *stackFlowSvc) Promote(ctx context.Context, r app.PromoteRequest) (app.PromoteResult, error) {
+func (s *stackFlowSvc) PromoteBatch(ctx context.Context, r app.PromoteBatchRequest) (app.PromoteBatchResult, error) {
 	s.log.add(s.id + ":promote")
-	return s.stubFlowService.Promote(ctx, r)
+	return s.stubFlowService.PromoteBatch(ctx, r)
 }
 
 func (s *stackFlowSvc) TransformHarness(ctx context.Context, r app.TransformHarnessRequest) (app.TransformHarnessResult, error) {
@@ -153,13 +142,13 @@ func withPreselectedHarness() flowOption {
 	return func(o *Options) { o.InitialRequest.HarnessID = flowTestHarness.ID }
 }
 
-// entryPath returns a path the path screen accepts for mode: a file for promote, otherwise a
-// directory.
+// entryPath returns a path the path screen accepts for mode: a directory (for promote, an
+// agents folder).
 func entryPath(t *testing.T, mode domain.RunMode) string {
 	t.Helper()
 	dir := t.TempDir()
 	if mode == domain.ModePromoteToGeneric {
-		return createAgentFile(t, dir)
+		return createAgentsFolder(t, dir)
 	}
 	return dir
 }
@@ -203,40 +192,44 @@ func (f *stackFlow) onStack() bool {
 	return f.m.screen != screenRunning && strings.Contains(f.m.View(), stackScreenTitle)
 }
 
-// toMode advances to the mode screen.
+// toMode requires the mode screen, which is the first screen of the entry flow.
 func (f *stackFlow) toMode(t *testing.T) {
 	t.Helper()
-	if f.m.screen == screenHarness {
-		f.key(tea.KeyEnter)
-	}
-	if f.m.screen != screenMode {
-		t.Fatalf("screen = %v, want the mode screen", f.m.screen)
-	}
+	requireScreen(t, f.m, screenMode)
 }
 
-// toPath advances to the path screen of the flow's mode.
+// toPath advances through the entry screens to the path screen of the flow's mode (through the
+// harness screen first in the harness-first modes).
 func (f *stackFlow) toPath(t *testing.T) {
 	t.Helper()
-	f.toMode(t)
-	for i, mode := range entryModes {
-		if mode != f.mode {
-			continue
-		}
-		for n := 0; n < i; n++ {
-			f.key(tea.KeyDown)
-		}
-	}
-	f.key(tea.KeyEnter)
-	if f.m.screen != screenWorkspace {
-		t.Fatalf("screen = %v after selecting %s, want the path screen", f.m.screen, f.mode)
-	}
+	driveToPath(t, f.m, f.mode, "")
 }
 
-// toStack advances through the path screen to the stack screen.
+// confirmPath confirms the path and, in the path-first modes, chooses the first listed harness
+// when the harness screen follows. It returns the command of the last key pressed.
+func (f *stackFlow) confirmPath(t *testing.T) tea.Cmd {
+	t.Helper()
+	return confirmPath(t, f.m, "")
+}
+
+// backToPath presses Esc on the stack screen and, in the path-first modes, once more on each
+// harness screen (the source, and in Transform the target) that precedes it, so the model shows
+// the path screen.
+func (f *stackFlow) backToPath(t *testing.T) {
+	t.Helper()
+	f.key(tea.KeyEsc)
+	for i := 0; i < 2 && f.m.screen == screenHarness; i++ {
+		f.key(tea.KeyEsc)
+	}
+	requireScreen(t, f.m, screenWorkspace)
+}
+
+// toStack advances through the path screen (and the harness screen after it, in the path-first
+// modes) to the stack screen.
 func (f *stackFlow) toStack(t *testing.T) {
 	t.Helper()
 	f.toPath(t)
-	f.key(tea.KeyEnter)
+	f.confirmPath(t)
 	if !f.onStack() {
 		t.Fatalf("not on the stack screen after confirming the path; screen = %v, view:\n%s", f.m.screen, f.m.View())
 	}

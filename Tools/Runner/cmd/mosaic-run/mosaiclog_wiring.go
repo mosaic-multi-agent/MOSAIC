@@ -17,8 +17,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	commonharness "mosaic-common/harness"
-
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/mosaiclog"
 	"mosaic-run/internal/session"
@@ -191,15 +189,15 @@ func resolveSessionRunFolder(runFolder string, in interactiveWiringInput) string
 	return mintedFolder
 }
 
-// withOpenCodeSafetyNet applies the invocation_end safety net to the OpenCode
-// adapter when runFolder is an Orchestration-{run_id} folder; otherwise the
-// adapter is returned undecorated (there is no workspace to log under). The
+// withOpenCodeSafetyNet applies the invocation_end safety net to an OpenCode
+// family adapter (V1 or V2, logged under harnessID) when runFolder is an
+// Orchestration-{run_id} folder; otherwise the adapter is returned undecorated (there is no workspace to log under). The
 // log root is the run folder's parent directory, as for the run lifecycle.
-func withOpenCodeSafetyNet(adapter openCodeHarness, runFolder string, logger domain.DebugLogger) domain.HarnessAdapter {
+func withOpenCodeSafetyNet(adapter openCodeHarness, harnessID, runFolder string, logger domain.DebugLogger) domain.HarnessAdapter {
 	if _, ok := domain.ParseRunFolder(filepath.Base(runFolder)); !ok {
 		return adapter
 	}
-	w := mosaiclog.NewWriter(filepath.Dir(runFolder), commonharness.HarnessIDOpenCode,
+	w := mosaiclog.NewWriter(filepath.Dir(runFolder), harnessID,
 		mosaiclog.WithClock(&realClock{}), mosaiclog.WithDebugLogger(logger))
 	return newOpenCodeSafetyNet(adapter, w)
 }

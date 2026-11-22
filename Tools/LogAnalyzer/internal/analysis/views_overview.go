@@ -18,7 +18,7 @@ func buildOverview(run domain.RunAggregate, rr domain.RunReport, dispatches []do
 		OrchestratorShare: share(rr.Orchestrator.Totals.Money.Total, rr.Totals.Money.Total),
 		SubagentShare:     share(subagents.Totals.Money.Total, rr.Totals.Money.Total),
 		ByModel:           buildByModel(run, table, settings),
-		CacheHitRatio:     cacheHitRatio(rr.Totals.Tokens),
+		CacheHitRatio:     cacheHitRatio(runActorContexts(rr.Context)...),
 		Outcomes:          buildOutcomeSplit(dispatches),
 	}
 	if rr.Unattributed != nil {

@@ -6,6 +6,9 @@ import "mosaic-deploy/internal/domain"
 // deny pairs, list shape returns every item as Allow; by-convention universe names excluded;
 // document order, first occurrence wins.
 func ExtractToolGrants(d *domain.HarnessDescriptor, toolsValue domain.FieldValue) []domain.ToolGrant {
+	if d.Tools.Shape == domain.ShapeRules {
+		return extractRuleGrants(d, toolsValue)
+	}
 	if d.Tools.Shape != domain.ShapePermission {
 		entries := ExtractToolEntries(d, toolsValue)
 		grants := make([]domain.ToolGrant, len(entries))

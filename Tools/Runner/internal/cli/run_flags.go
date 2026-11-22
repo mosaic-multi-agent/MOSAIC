@@ -25,6 +25,7 @@ type runFlags struct {
 	harness               string
 	timeout               string
 	hitlTimeout           string
+	noOutputTimeout       string
 	infraClass            string
 	inputFlags            []string
 	infrastructure        string
@@ -66,6 +67,7 @@ func readRunFlags(cmd *cobra.Command) runFlags {
 	f.harness, _ = cmd.Flags().GetString("harness")
 	f.timeout, _ = cmd.Flags().GetString("timeout")
 	f.hitlTimeout, _ = cmd.Flags().GetString("hitl-timeout")
+	f.noOutputTimeout, _ = cmd.Flags().GetString("no-output-timeout")
 	f.infraClass, _ = cmd.Flags().GetString("infra-class")
 	f.reviewLoopLimit, _ = cmd.Flags().GetString("review-loop-limit")
 	f.modeChanged = cmd.Flags().Changed("mode")
@@ -158,6 +160,19 @@ func validateTimeoutFlag(raw string, errOut io.Writer) (exitCode int, ok bool) {
 // validateHITLTimeoutFlag verifies that --hitl-timeout is a parseable duration.
 func validateHITLTimeoutFlag(raw string, errOut io.Writer) (exitCode int, ok bool) {
 	return validateDurationFlag("--hitl-timeout", raw, errOut)
+}
+
+// validateNoOutputTimeoutFlag verifies that --no-output-timeout is a parseable,
+// non-negative duration (0 disables the watchdog).
+func validateNoOutputTimeoutFlag(raw string, errOut io.Writer) (exitCode int, ok bool) {
+	if code, ok := validateDurationFlag("--no-output-timeout", raw, errOut); !ok {
+		return code, false
+	}
+	if d, _ := time.ParseDuration(raw); d < 0 {
+		fmt.Fprintf(errOut, "error: invalid --no-output-timeout value %q: must not be negative (0 disables)\n", raw)
+		return ExitUsage, false
+	}
+	return ExitSuccess, true
 }
 
 func validateDurationFlag(name, raw string, errOut io.Writer) (exitCode int, ok bool) {

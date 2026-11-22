@@ -156,7 +156,7 @@ FIXTURES="C:/AI/MOSAIC/MOSAIC/Tools/Runner/TestCatalog/Workflows/MosaicTest/Fixt
 
 **Dispatch logs** (`RunnerLogs/<run_id>/<run_id>-dispatch.log`): JSONL with request/response pairs at the protocol level. Best for quick pass/fail assessment.
 
-**Runner logs** (`RunnerLogs/<run_id>/<run_id>.log`): Full harness I/O including raw stdout/stderr. Use for diagnosing parser or harness adapter bugs.
+**Runner logs** (`RunnerLogs/<run_id>/<run_id>.log`): Full harness I/O: subagent stdout is written line by line as it arrives, attributed to its invocation, together with stderr, the end reason and the stdout byte count; a killed invocation (timeout, no-output timeout, force stop, cancellation) keeps what it produced. Use for diagnosing parser or harness adapter bugs.
 
 **Orchestration artifact** (`Orchestration-<run_id>/Orchestration.md`): The execution log table. Compare against the expected run table in the workflow document.
 

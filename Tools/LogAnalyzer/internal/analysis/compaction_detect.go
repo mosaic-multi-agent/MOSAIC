@@ -10,25 +10,26 @@ import (
 // zero-valued settings value cannot turn every call pair into a detection.
 const defaultDropPercent = 30
 
-// detectedMarks finds the sharp context drops between consecutive calls of an
-// actor. Only main calls count; calls without a context are skipped; a pair involving a partial call,
+// detectedMarks finds the sharp context drops between consecutive calls of one
+// session of an actor; the first call of a session is never a detection. Only main calls count; calls without a context are skipped; a pair involving a partial call,
 // or starting at a zero context, is never a detection.
 func detectedMarks(calls []domain.ContextCall, dropPercent int) []domain.CompactionMark {
 	if dropPercent < 1 {
 		dropPercent = defaultDropPercent
 	}
 	var marks []domain.CompactionMark
-	prev := -1
+	sessions := callSessions(calls)
+	prev := make(map[string]int)
 	for i, c := range calls {
 		if c.Kind != domain.CallMain || !c.Context.IsPresent() {
 			continue
 		}
-		if prev >= 0 {
-			if mark, ok := dropBetween(calls, prev, i, dropPercent); ok {
+		if p, ok := prev[sessions[i]]; ok {
+			if mark, ok := dropBetween(calls, p, i, dropPercent); ok {
 				marks = append(marks, mark)
 			}
 		}
-		prev = i
+		prev[sessions[i]] = i
 	}
 	return marks
 }

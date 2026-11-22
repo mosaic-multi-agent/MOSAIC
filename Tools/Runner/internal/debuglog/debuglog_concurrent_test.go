@@ -69,7 +69,7 @@ func TestLogger_ConcurrentWrites_EntriesNotInterleaved(t *testing.T) {
 			defer wg.Done()
 			for i := 0; i < entriesEach; i++ {
 				payload := "goroutine=" + strconv.Itoa(g) + "\nentry=" + strconv.Itoa(i) + "\npayload-end"
-				logger.Log(domain.EventHarnessStdout, payload, domain.F("bytes", strconv.Itoa(len(payload))))
+				logger.Log(domain.EventHarnessStdoutLines, payload, domain.F("bytes", strconv.Itoa(len(payload))))
 			}
 		}()
 	}

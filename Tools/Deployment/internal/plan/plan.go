@@ -106,6 +106,14 @@ type Input struct {
 	// OrchestratorHarnessConstraints marker while the harness has no orchestrator content.
 	// For these the expected orchestrator_injections_version is "". nil: compare as before.
 	OrchestratorRegionUndeliverable map[string]bool
+
+	// CustomToolNames are the run's answers to QCustomTool (pre-answers included): generic
+	// tool -> user-supplied server name. Forwarded into every ToolRequest the planner issues.
+	// nil: no answers (behaviour as before).
+	CustomToolNames domain.CustomToolAnswers
+	// SkippedTools are the generic tools the user skipped for QCustomTool in this run.
+	// Forwarded into every ToolRequest; a skipped tool still raises GapUnmappedTool.
+	SkippedTools map[string]bool
 }
 
 // ArtifactSet is the derived deployment set: the union of referenced agents across all

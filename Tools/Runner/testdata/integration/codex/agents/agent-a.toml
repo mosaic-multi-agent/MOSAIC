@@ -1,0 +1,15 @@
+# mosaic_id: agent-a
+# mosaic_role: subagent
+# mosaic_version: 1.0.0
+# mosaic_transform_version: 1.0.0
+# mosaic_injections_version: 1.0.0
+
+name = "agent-a"
+description = "First agent of the linear workflow"
+model = "gpt-5.6-sol"
+sandbox_mode = "workspace-write"
+web_search = "disabled"
+developer_instructions = """
+INSTRUCTIONS-OF-AGENT-A
+You plan the work and report the result in the protocol format.
+"""

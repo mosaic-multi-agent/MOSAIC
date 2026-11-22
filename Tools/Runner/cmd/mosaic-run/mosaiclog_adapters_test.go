@@ -54,7 +54,7 @@ func TestBuildAdapter_OpenCodeWithRunFolderAppliesTheSafetyNet(t *testing.T) {
 }
 
 func TestBuildAdapter_OtherHarnessesGetNoSafetyNet(t *testing.T) {
-	for _, harnessStr := range []string{"claude-code", "ghcp-cli"} {
+	for _, harnessStr := range []string{"claude-code", "ghcp-cli", "codex"} {
 		t.Run(harnessStr, func(t *testing.T) {
 			runFolder, _ := mlRunFolder(t)
 

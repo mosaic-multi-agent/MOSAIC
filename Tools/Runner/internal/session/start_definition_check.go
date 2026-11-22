@@ -2,6 +2,7 @@ package session
 
 import (
 	commonharness "mosaic-common/harness"
+	"mosaic-run/internal/agentfile"
 	"mosaic-run/internal/agentresolve"
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/orchfile"
@@ -17,7 +18,8 @@ import (
 // file cannot be found is left to its dispatch-time handling. The check reads
 // files only, so a refusal precedes every artifact write and every invocation.
 func (s *sessionImpl) checkAgentDefinitions(rs *runStartCtx) (domain.RunOutcome, bool) {
-	if !commonharness.IsCLIHarness(rs.config.HarnessID) {
+	format, hasFormat := agentfile.For(rs.config.HarnessID)
+	if !hasFormat {
 		return domain.RunOutcome{}, false
 	}
 	requireName := rs.config.HarnessID == commonharness.HarnessIDClaudeCode
@@ -27,14 +29,14 @@ func (s *sessionImpl) checkAgentDefinitions(rs *runStartCtx) (domain.RunOutcome,
 	for _, id := range rs.identifiers {
 		refs = append(refs, rs.agents[id])
 	}
-	infraRefs, err := admittedInfraDefinitions(rs.config, rs.orchDir)
+	infraRefs, err := admittedInfraDefinitions(rs.config, rs.orchDir, format)
 	if err != nil {
 		return s.refusal(err.Error()), true
 	}
 	refs = append(refs, infraRefs...)
 
 	for _, ref := range refs {
-		if err := agentresolve.CheckDefinition(ref, requireName); err != nil {
+		if err := agentresolve.CheckDefinition(ref, format, requireName); err != nil {
 			return s.refusalCaused(err.Error(), err), true
 		}
 	}
@@ -44,8 +46,8 @@ func (s *sessionImpl) checkAgentDefinitions(rs *runStartCtx) (domain.RunOutcome,
 // admittedInfraDefinitions returns the definition references of the declared
 // infrastructure agents admitted by the run's infrastructure filter, skipping
 // agents whose definition file cannot be found.
-func admittedInfraDefinitions(config domain.RunConfig, orchDir string) ([]domain.AgentReference, error) {
-	declared, err := orchfile.EnumerateInfrastructureAgents(config.OrchestratorFilePath)
+func admittedInfraDefinitions(config domain.RunConfig, orchDir string, format agentfile.Format) ([]domain.AgentReference, error) {
+	declared, err := orchfile.EnumerateInfrastructureAgents(config.OrchestratorFilePath, format)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +63,7 @@ func admittedInfraDefinitions(config domain.RunConfig, orchDir string) ([]domain
 		if admitted != nil && !admitted[agent.Name] {
 			continue
 		}
-		ref, err := agentresolve.ResolveOne(orchDir, agent.Name)
+		ref, err := agentresolve.ResolveOne(orchDir, format, agent.Name)
 		if err != nil {
 			continue
 		}

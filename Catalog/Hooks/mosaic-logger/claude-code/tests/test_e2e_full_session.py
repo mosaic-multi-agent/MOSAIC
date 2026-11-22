@@ -1025,15 +1025,16 @@ class TestFieldLevelDegradation(unittest.TestCase):
                 if ln.strip()]
 
     def test_absent_agent_prompt_still_yields_agent_instance_id(self):
-        """When agent_prompt is absent, agent_instance_id falls back to 'unknown-agent';
-        the field must still be present and non-empty."""
+        """When agent_prompt is absent and no dispatch is pending, agent_instance_id
+        is the unique fallback id (type prefix), never 'unknown-agent'; the field
+        must still be present and non-empty."""
         agent_id = "agt-noprompt-001"
         self._dispatch({
             "hook_event_name": "SessionStart",
             "session_id": self.session_id,
             "source": "startup",
         })
-        # SubagentStart without agent_prompt — fallback is 'unknown-agent'.
+        # SubagentStart without agent_prompt — unique fallback id.
         self._dispatch({
             "hook_event_name": "SubagentStart",
             "session_id": self.session_id,
@@ -1060,7 +1061,8 @@ class TestFieldLevelDegradation(unittest.TestCase):
         agent_instance_id = inv_start.get("agent_instance_id")
         self.assertIsNotNone(agent_instance_id)
         self.assertIsInstance(agent_instance_id, str)
-        self.assertGreater(len(agent_instance_id), 0)
+        self.assertRegex(agent_instance_id, r"^Research_\d{8}T\d{6}Z-[0-9a-f]{4}$")
+        self.assertNotIn("unknown-agent", [d.name for d in run_root.iterdir()])
 
     def test_absent_agent_prompt_omits_prompt_field_from_invocation_start(self):
         """No pending dispatch → prompt field absent from invocation_start, not null.

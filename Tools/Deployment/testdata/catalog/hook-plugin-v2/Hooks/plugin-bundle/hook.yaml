@@ -1,0 +1,21 @@
+schema_version: "1"
+id: plugin-bundle
+version: 1.0.0
+description: Fixture bundle with an opencode-v2 variant that has one top-level plugin file and one helper in a lib subfolder.
+placeholder: false
+
+variants:
+  opencode-v2:
+    supported: true
+    files:
+      - source: plugin.ts
+        target: plugin.ts
+      - source: lib/helper.ts
+        target: lib/helper.ts
+    registration: []
+  opencode:
+    supported: true
+    files:
+      - source: v1-plugin.ts
+        target: v1-plugin.ts
+    registration: []

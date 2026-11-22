@@ -35,7 +35,8 @@ type Options struct {
 //
 // Persistent flags:
 //
-//	--path string   logs root OR a single run folder
+//	--path string   logs root OR a single run folder (without it: OrchestrationLogs/
+//	                and the *.digest.json files in the working directory)
 //	--run  string   restrict to one run id
 //	--format string json | text (default: json for `total`, text for `report`)
 //	--tui           recognised and ignored here; consumed by the composition root

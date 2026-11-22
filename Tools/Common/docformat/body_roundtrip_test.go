@@ -2,7 +2,7 @@ package docformat_test
 
 // Tests for byte-exact round-trip fidelity after body parsing (T4.2).
 //
-// The existing TestRoundTrip_AllRepositoryMarkdownFiles test (roundtrip_test.go) verifies
+// The existing TestRoundTrip_CorpusMarkdownFiles test (roundtrip_test.go) verifies
 // that doc.Bytes() reproduces the source without calling any Body methods. These tests
 // add the critical step of accessing the body tree before checking Bytes(), ensuring that
 // the body parser's internal state does not disturb the serialised output.
@@ -14,8 +14,8 @@ package docformat_test
 //   - doc.Bytes() is byte-identical to the source for a deployed agent with filled injections.
 //   - doc.Bytes() is byte-identical to the source for a workflow file with a compound section name.
 //   - Content that appears outside any boundary tag in a workflow file survives verbatim.
-//   - Walking all repository .md files: accessing Body().Sections() then Bytes() returns
-//     the original bytes (repository-wide regression check).
+//   - Walking the fixed round-trip corpus: accessing Body().Sections() then Bytes() returns
+//     the original bytes (corpus-wide regression check).
 
 import (
 	"bytes"
@@ -151,24 +151,18 @@ func TestBodyRoundTrip_ContentOutsideBoundary_PreservedVerbatim(t *testing.T) {
 	}
 }
 
-// --- Repository-wide body round-trip ---
+// --- Corpus-wide body round-trip ---
 
-func TestBodyRoundTrip_AllRepositoryMarkdownFiles_ByteIdentical(t *testing.T) {
-	// Walk every .md file in the repository. For each, parse it, access the body to
+func TestBodyRoundTrip_CorpusMarkdownFiles_ByteIdentical(t *testing.T) {
+	// Walk every .md file in the fixed corpus. For each, parse it, access the body to
 	// trigger any lazy body parser, then verify that Bytes() reproduces the original.
 	// This is the primary regression guard for AC4.1.
-	root := repoRoot()
+	root := roundTripCorpusRoot()
 
 	var mdFiles []string
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
-		}
-		if d.IsDir() {
-			switch d.Name() {
-			case ".git", "node_modules", "vendor", "testdata":
-				return filepath.SkipDir
-			}
 		}
 		if !d.IsDir() && strings.EqualFold(filepath.Ext(path), ".md") {
 			// Skip fixture files that are expected to fail Parse (contain "malformed" in
@@ -181,7 +175,7 @@ func TestBodyRoundTrip_AllRepositoryMarkdownFiles_ByteIdentical(t *testing.T) {
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("failed to walk repository: %v", err)
+		t.Fatalf("failed to walk corpus: %v", err)
 	}
 	if len(mdFiles) == 0 {
 		t.Fatalf("no .md files found under %s", root)

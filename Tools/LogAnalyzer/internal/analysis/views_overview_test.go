@@ -9,8 +9,8 @@ package analysis_test
 //   - Shares are exact nanodollar ratios; they are undefined (denominator 0)
 //     when the run total is not a known amount.
 //   - The model breakdown is sorted, counts requests and marks unpriced models.
-//   - The cache hit ratio is cache-read tokens over total context tokens, from
-//     logged token counts only.
+//   - The cache hit ratio is capped cache-read tokens over previous-call context
+//     tokens, from logged token counts of timed calls only.
 //   - Incompleteness (unpriced, assumed tier, missing usage, open) is carried on
 //     the affected figures.
 
@@ -60,11 +60,26 @@ func TestOverview_Shares_UndefinedWhenNothingIsPriced(t *testing.T) {
 	}
 }
 
-func TestOverview_CacheHitRatio_IsCacheReadOverTotalContext(t *testing.T) {
+func TestOverview_CacheHitRatio_IsCappedCacheReadOverPreviousContext(t *testing.T) {
+	in := analysis.Input{Streams: []analysis.Stream{{Ref: agentStream(testRunRef, "coder#1"), Events: []domain.Event{
+		rmInvStart("coder#1", "coder", rmAt(1)),
+		chTimedUsageEvent("coder#1", "r1", 10, chFullUsage(1_000, 0, 3_000, 10)),
+		chTimedUsageEvent("coder#1", "r2", 20, chFullUsage(1_500, 2_000, 1_000, 50)),
+		rmInvEnd("coder#1", "SUCCESS", viewsModel, rmAt(100)),
+	}}}}
+	report := analysis.Analyze(in, viewsPricing(t), domain.DefaultAnalysisSettings(), testSource(), nil)
+
+	run := requireRunReport(t, report, testRunID)
+
+	// r2 reads 2,000 of the 4,000 tokens of r1's context.
+	assertRatio(t, "cache hit ratio", run.Overview.CacheHitRatio, 2_000, 4_000)
+}
+
+func TestOverview_CacheHitRatio_CallsWithoutATimeFormNoPair(t *testing.T) {
 	run := viewsScenarioRun(t, viewsPricing(t))
 
-	// cache read 4,000 over input 5,310 + cache read 4,000 + cache write 1,100.
-	assertRatio(t, "cache hit ratio", run.Overview.CacheHitRatio, 4_000, 10_410)
+	// The scenario logs its calls without timestamps, so none has a previous call.
+	chAssertUndefined(t, "cache hit ratio", run.Overview.CacheHitRatio)
 }
 
 func TestOverview_CacheHitRatio_UndefinedWithoutLoggedTokens(t *testing.T) {

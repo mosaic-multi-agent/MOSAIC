@@ -1,7 +1,7 @@
 package hookbundle_test
 
 // Tests for manifest parsing (Parse and Load) against fixture manifests and
-// against the real mosaic-logger bundle.
+// against the committed mosaic-logger manifest fixture.
 //
 // Fixture coverage (Tools/Common/testdata/hookbundle/):
 //   - complete.yaml               — every field populated, multiple variants
@@ -26,10 +26,6 @@ import (
 
 // testdataDir is relative to this package's working directory (Common/hookbundle).
 const testdataDir = "../testdata/hookbundle"
-
-// repoRoot locates the repository root from this package's working directory
-// (Tools/Common/hookbundle), so tests can exercise the real mosaic-logger bundle.
-const repoRoot = "../../.."
 
 func readFixture(t *testing.T, name string) []byte {
 	t.Helper()
@@ -361,21 +357,21 @@ func TestLoad_MissingBundleDirectory_ReturnsError(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// AC3.3 — The real mosaic-logger manifest parses through the shared package
+// AC3.3 — The committed mosaic-logger manifest fixture parses through the shared package
 // with all four variants, their file lists and registration fragments intact.
 // ---------------------------------------------------------------------------
 
-func realLoggerBundleDir(t *testing.T) string {
+func loggerBundleFixtureDir(t *testing.T) string {
 	t.Helper()
-	dir := filepath.Join(repoRoot, "Catalog", "Hooks", "mosaic-logger")
+	dir := filepath.Join(testdataDir, "mosaic-logger")
 	if _, err := os.Stat(filepath.Join(dir, "hook.yaml")); err != nil {
-		t.Skipf("real mosaic-logger bundle not found at %q: %v", dir, err)
+		t.Fatalf("mosaic-logger fixture not found at %q: %v", dir, err)
 	}
 	return dir
 }
 
-func TestLoad_RealMosaicLoggerBundle_AllFourVariantsPresent(t *testing.T) {
-	m, err := hookbundle.Load(realLoggerBundleDir(t))
+func TestLoad_MosaicLoggerFixture_AllFourVariantsPresent(t *testing.T) {
+	m, err := hookbundle.Load(loggerBundleFixtureDir(t))
 	if err != nil {
 		t.Fatalf("Load: unexpected error: %v", err)
 	}
@@ -392,22 +388,22 @@ func TestLoad_RealMosaicLoggerBundle_AllFourVariantsPresent(t *testing.T) {
 	}
 }
 
-func TestLoad_RealMosaicLoggerBundle_PlaceholderAndContentHashAbsent(t *testing.T) {
-	m, err := hookbundle.Load(realLoggerBundleDir(t))
+func TestLoad_MosaicLoggerFixture_PlaceholderAndContentHashAbsent(t *testing.T) {
+	m, err := hookbundle.Load(loggerBundleFixtureDir(t))
 	if err != nil {
 		t.Fatalf("Load: unexpected error: %v", err)
 	}
 
 	if m.Placeholder {
-		t.Error("Placeholder = true, want false; the real bundle's comments explain both variants are fully authored")
+		t.Error("Placeholder = true, want false; the fixture declares both variants as fully authored")
 	}
 	if m.ContentHash != "" {
-		t.Errorf("ContentHash = %q, want empty; the bundle does not declare a content_hash", m.ContentHash)
+		t.Errorf("ContentHash = %q, want empty; the fixture does not declare a content_hash", m.ContentHash)
 	}
 }
 
-func TestLoad_RealMosaicLoggerBundle_OpenCodeRegistrationEmpty(t *testing.T) {
-	m, err := hookbundle.Load(realLoggerBundleDir(t))
+func TestLoad_MosaicLoggerFixture_OpenCodeRegistrationEmpty(t *testing.T) {
+	m, err := hookbundle.Load(loggerBundleFixtureDir(t))
 	if err != nil {
 		t.Fatalf("Load: unexpected error: %v", err)
 	}
@@ -421,8 +417,8 @@ func TestLoad_RealMosaicLoggerBundle_OpenCodeRegistrationEmpty(t *testing.T) {
 	}
 }
 
-func TestLoad_RealMosaicLoggerBundle_ClaudeCodeFragmentPreservesStructureVerbatim(t *testing.T) {
-	m, err := hookbundle.Load(realLoggerBundleDir(t))
+func TestLoad_MosaicLoggerFixture_ClaudeCodeFragmentPreservesStructureVerbatim(t *testing.T) {
+	m, err := hookbundle.Load(loggerBundleFixtureDir(t))
 	if err != nil {
 		t.Fatalf("Load: unexpected error: %v", err)
 	}

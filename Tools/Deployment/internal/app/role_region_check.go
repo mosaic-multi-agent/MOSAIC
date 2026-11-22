@@ -28,7 +28,7 @@ func roleRegionGaps(doc []byte, role domain.AgentRole, agentKey string) []domain
 	if libRole == "" || len(doc) == 0 {
 		return nil
 	}
-	parsed, err := docformat.Parse(doc)
+	parsed, err := ParseGenericSource(doc)
 	if err != nil {
 		return nil
 	}

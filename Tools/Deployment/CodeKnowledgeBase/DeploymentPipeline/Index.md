@@ -34,7 +34,7 @@ to make anything happen on disk.
 | **catalog/stack** | Composes an ordered list of single-root layers (highest first, each with a `catalog-identity.yaml` read by `catalog/identity`) into one resolved catalog that satisfies `catalog.Catalog`. Resolves keyed items (agents, workflows, skills, hooks) from the highest layer having the key, the orchestrator pair as one unit, and, through the pure sub-packages `systemfile` and `injections`, `CommunicationProtocol.md`, `DeployedSections.md` and per-harness injection directories as whole units with no fallback. Reports provenance and shadow records, per-layer `check-index`, and validates the stack (`stackerr`: empty stack, invalid layer, load or identity failure, duplicate catalog id, incomplete orchestrator pair, numeric-id collision). `app` takes the protocol and bundle from `SystemFiles()` and builds the conflict report and manifest provenance from `Shadows()` and `Provenance()`. |
 | **docformat** | The single authority on the MOSAIC document format (YAML-like frontmatter + markdown body with `<Name type="core">` / `<Name type="project">` boundary tags). Parses and serialises with byte-exact fidelity — untouched regions of a document round-trip unchanged. Used by both `catalog` (to extract workflow sections) and `transform` (to mutate frontmatter and injection regions). |
 | **plan** | Computes a complete `domain.Plan` — what would happen to every selected artifact — by resolving the artifact set, deriving each target path via the harness module, and classifying each item against the manifest snapshot and current on-disk hashes. Performs no I/O; the caller supplies all catalog/manifest reads and on-disk hash lookups as plain data. |
-| **transform** | A pure function (`Apply`): given one generic source file's bytes plus a harness module and request context, produces the harness-shaped output bytes and an audit `Report`. Drives all frontmatter field shaping and injection-region content through the harness module — no harness-specific logic lives in this package. |
+| **transform** | A pure function (`Apply`): given one generic source file's bytes plus a harness module and request context, produces the harness-shaped output bytes and an audit `Report`. Drives all frontmatter field shaping and injection-region content through the harness module — no harness-specific logic lives in this package. A source whose managed region holds a project region with content is accepted; that nested content is the deploy-once default, and already deployed content wins on update. |
 | **deploy** | Executes a `domain.Plan` against the real filesystem: resolves the deployment root once, writes/creates/updates/skips each item per its classified action, manages conflict resolution and backups, deploys and registers hooks, and persists the manifest and TODO file. The only package in the module that performs content writes. |
 | **manifest** | Reads and writes `<workspace>/.mosaic/manifest.yaml` — the record of what this tool has deployed. Distinguishes five load states (present / absent / empty / corrupt / future-schema) so callers never conflate "no manifest" with "manifest we can't trust." Also owns the canonical content-hash function used for local-modification detection. |
 | **config** (supporting) | Loads/saves `tool-config.yaml` (project-scoped: utility-agent allow-list, external-module opt-in, log retention) and `user-config.yaml` (user-scoped: tier-to-model mappings). Absent files yield documented defaults, never errors. |
@@ -87,15 +87,26 @@ to make anything happen on disk.
 
    **Edit detection (`plan/build_edit.go`).** Each manifest entry written by this release
    carries an owned-content record (`domain.OwnedContent`: a hash, plus per-region hashes for
-   agents). For an agent the owned content is the body outside the project and custom regions;
+   agents). For an agent the owned content is the body outside the project and custom regions,
+   computed from the canonical (decoded) form on both the write side (`agentOwnedContentFor`)
+   and the probe side (`attachOwnedContent`), so the agent's on-disk format does not matter;
    for a skill file or hook file it is the whole file. The frontmatter and the project and
-   custom regions belong to the user and are not part of the record. `markOwnedContentEdit`
-   compares the recorded record with the one recomputed from the disk (`deployed.Owned`); a
-   difference adds the reason "Deploy-owned content was edited locally" (naming the differing
-   regions where known), sets `PlanItem.BackupBeforeWrite` and makes the item an update. The
-   executor backs the file up under `.mosaic/backups/` before overwriting. An entry with no
-   record (written before this release) or a disk record that cannot be computed gets no check
-   until its next write.
+   custom regions belong to the user, for every harness, and are not part of the record.
+   `markOwnedContentEdit` compares the recorded record with the one recomputed from the disk
+   (`deployed.Owned`); a difference adds the reason "Deploy-owned content was edited locally"
+   (naming the differing regions where known), sets `PlanItem.BackupBeforeWrite` and makes the
+   item an update. The executor backs the file up under `.mosaic/backups/` before overwriting.
+   An entry with no record (written before this release) or a disk record that cannot be
+   computed gets no check until its next write. `ContentHash` is separate and stays over the
+   exact written bytes.
+
+   The record comparison needs a record. Where none vouches for the file (no manifest, an
+   unusable manifest, no entry for the path), the file on disk is a conflict (see Conflict
+   above) and the frontmatter keys that differ from the incoming file are reported
+   in `RunSummary.OwnedKeyDifferences` as information only; a file that cannot be parsed or
+   decoded is a conflict with a parse reason. Both mechanisms exist because each covers what
+   the other cannot. The eight hand-edit scenarios and their tests are in
+   [Agent Format](../AgentFormat/Index.md), "Owned content and hand edits".
 4. Gaps are also surfaced during planning, before any transform runs: an agent with no
    resolved model produces `GapNoModel`; a generic tool the harness cannot map produces
    `GapUnmappedTool`; a hook registration step whose target file already exists in the
@@ -350,9 +361,10 @@ snapshot to its own harness (`forHarness`), so a run sees and rewrites only its 
 - A file found on disk that cannot be confirmed as tool-written (no manifest, manifest
   unusable, no record for its target path, or unparseable) is always classified as a conflict,
   never auto-created or auto-overwritten.
-- A local edit of Deploy-owned content (agent body outside project and custom regions; whole
-  skill and hook files) is never lost silently: it becomes an update with a backup. Project and
-  custom regions and the frontmatter are the user's and never count as edits.
+- A local edit of Deploy-owned content (agent body outside project and custom regions, judged
+  on the decoded form; whole skill and hook files) is never lost silently: when a record vouches
+  for the file it becomes an update with a backup, otherwise the file is a conflict. Project and
+  custom regions and the frontmatter are the user's, on every harness, and never count as edits.
 - The manifest is reconciled with the disk before every action, and the entries dropped by
   reconciliation or by the schema-1 migration reach the plan and the preview.
 - Content hashes are never normalised — byte-for-byte comparison only.

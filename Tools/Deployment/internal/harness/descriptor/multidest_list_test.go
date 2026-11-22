@@ -633,7 +633,7 @@ func TestMultiDestList_CustomDest_FieldDestAppearsInFieldsOutput(t *testing.T) {
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)
@@ -659,7 +659,7 @@ func TestMultiDestList_CustomDest_FieldContainsCustomName(t *testing.T) {
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)
@@ -688,7 +688,7 @@ func TestMultiDestList_CustomDest_FieldOnlyDest_CustomNameAbsentFromMainToolsFie
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)
@@ -718,7 +718,7 @@ func TestMultiDestList_CustomDest_MainAndFieldDest_CustomNameAppearsInBothFields
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)
@@ -760,7 +760,7 @@ func TestMultiDestList_CustomDest_FieldFormat_ListBlockApplied(t *testing.T) {
 	req := domain.ToolRequest{
 		AgentKey:    "test-agent",
 		Generic:     []string{"terminal"},
-		CustomNames: map[string]string{"terminal": "my-server"},
+		CustomNames: domain.CustomToolAnswers{"terminal": {{Server: "my-server"}}},
 	}
 
 	result, err := descriptor.MapTools(d, req)

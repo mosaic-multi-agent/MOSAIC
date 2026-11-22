@@ -15,7 +15,7 @@ import (
 // sessionLegendKeys are the columns of the Session call table the legend must describe.
 var sessionLegendKeys = []string{
 	"time", "model", "kind", "context", "input", "cache read", "cache write", "output", "cost", "mark",
-	"requested tools", "context growth",
+	"requested tools", "result growth",
 }
 
 func TestSessionLegend_DescribesEveryColumnOfTheCallTableWithASentence(t *testing.T) {
@@ -55,7 +55,7 @@ func TestSessionLegend_OverlayOfAnActorWithoutCallsStillDescribesTheColumns(t *t
 
 	overlay := stripStyling(openOverlay(s, headerW, legendOverlayH))
 
-	assertContains(t, overlay, "requested tools", "context growth")
+	assertContains(t, overlay, "requested tools", "result growth")
 }
 
 func TestSessionLayout_ColumnTitlesWrapAtSpacesAndTheTableHasOneLineRows(t *testing.T) {

@@ -14,7 +14,9 @@ The run model (`RunActivity.Compactions`, `Timeline.Compactions`) holds one `dom
 
 ## Detected compactions and the "near" rule
 
-`analysis/compaction_detect.go` detects a compaction between two consecutive context-present calls of an actor when neither call is partial, the earlier context is above 0, and the drop is at least `AnalysisSettings.CompactionDropPercent` (default 30, integer arithmetic). Detected marks are always labelled detected and sit beside the logged marks in `ActorContext.Compactions`.
+`analysis/compaction_detect.go` detects a compaction between two consecutive context-present calls of one session of an actor (the previous call is tracked per session, so the first call of a session is never a detection and a smaller context in a new session is no compaction) when neither call is partial, the earlier context is above 0, and the drop is at least `AnalysisSettings.CompactionDropPercent` (default 30, integer arithmetic). Detected marks are always labelled detected and sit beside the logged marks in `ActorContext.Compactions`.
+
+The first-write heuristic (`analysis/context_firstwrite.go`) is computed per session: `ActorContext.FirstWrites` holds one entry per session, `FirstWrite` is the first session's figure and `FirstWriteAt` the actor-wide earliest write. The orchestrator has none. Tool context growth (`analysis/tool_growth.go`) is measured only when the next main call is in the same session, and covers the tool result only (the tool input is part of the calling call's output tokens).
 
 `analysis/compaction_match.go` compares logged and detected compactions per actor and raises `FindingCompactionMismatch` findings (returned by `analysis.Price`):
 

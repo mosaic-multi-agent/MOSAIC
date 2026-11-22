@@ -657,6 +657,8 @@ def _subagent_session_payloads(session_id, run_id_str, instance_id, call_id, cwd
     base = {"session_id": session_id, "cwd": cwd,
             "transcript_path": "/nonexistent/transcript.jsonl"}
     tool_use_id = f"{call_id}__vscode-1793098349279"
+    # A start is matched to a dispatch by type: the started type is the id prefix.
+    agent_type = instance_id.split("#")[0]
     prompt = f"agent_instance_id: {instance_id}\nrun_id: {run_id_str}\ntask: analyse"
     response = json.dumps({"agent_instance_id": instance_id, "run_id": run_id_str,
                            "status_code": "SUCCESS", "status_message": "Done."})
@@ -664,12 +666,12 @@ def _subagent_session_payloads(session_id, run_id_str, instance_id, call_id, cwd
         {**base, "hook_event_name": "SessionStart", "source": "startup"},
         {**base, "hook_event_name": "UserPromptSubmit", "prompt": f"run_id: {run_id_str} go"},
         {**base, "hook_event_name": "PreToolUse", "tool_name": "runSubagent",
-         "tool_use_id": tool_use_id, "tool_input": {"agentName": "worker", "prompt": prompt}},
-        {**base, "hook_event_name": "SubagentStart", "agent_id": call_id, "agent_type": "worker"},
+         "tool_use_id": tool_use_id, "tool_input": {"agentName": agent_type, "prompt": prompt}},
+        {**base, "hook_event_name": "SubagentStart", "agent_id": call_id, "agent_type": agent_type},
         {**base, "hook_event_name": "SubagentStop", "agent_id": call_id,
-         "agent_type": "worker", "stop_hook_active": False},
+         "agent_type": agent_type, "stop_hook_active": False},
         {**base, "hook_event_name": "PostToolUse", "tool_name": "runSubagent",
-         "tool_use_id": tool_use_id, "tool_input": {"agentName": "worker", "prompt": prompt},
+         "tool_use_id": tool_use_id, "tool_input": {"agentName": agent_type, "prompt": prompt},
          "tool_response": response},
     ]
 

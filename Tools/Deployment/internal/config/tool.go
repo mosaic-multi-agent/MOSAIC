@@ -58,11 +58,11 @@ type ToolConfigStore interface {
 // ---------------------------------------------------------------------------
 
 type toolConfigYAML struct {
-	SchemaVersion         string                         `yaml:"schema_version"`
-	UtilityAgentAllowList []string                       `yaml:"utility_agent_allow_list"`
-	AllowExternalModules  bool                           `yaml:"allow_external_modules"`
-	LogRetentionRuns      int                            `yaml:"log_retention_runs"`
-	ToolDestinations      map[string][]wireToolMapping   `yaml:"tool_destinations"`
+	SchemaVersion         string                       `yaml:"schema_version"`
+	UtilityAgentAllowList []string                     `yaml:"utility_agent_allow_list"`
+	AllowExternalModules  bool                         `yaml:"allow_external_modules"`
+	LogRetentionRuns      int                          `yaml:"log_retention_runs"`
+	ToolDestinations      map[string][]wireToolMapping `yaml:"tool_destinations"`
 }
 
 // ---------------------------------------------------------------------------
@@ -149,9 +149,9 @@ func (s *toolConfigStore) Load() (ToolConfig, error) {
 // tool-config.yaml.
 func DefaultToolConfig() ToolConfig {
 	return ToolConfig{
-		SchemaVersion: toolConfigSchemaVersion,
+		SchemaVersion:         toolConfigSchemaVersion,
 		UtilityAgentAllowList: []string{"injections-helper"},
-		AllowExternalModules: false,
-		LogRetentionRuns:     0,
+		AllowExternalModules:  false,
+		LogRetentionRuns:      0,
 	}
 }

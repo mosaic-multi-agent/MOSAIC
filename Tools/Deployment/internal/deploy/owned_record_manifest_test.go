@@ -53,7 +53,7 @@ func runWriteIn(t *testing.T, workspace string, item domain.PlanItem, content st
 	return res
 }
 
-func TestExecute_WrittenAgentEntry_RecordsOwnedContentOfWrittenBytes(t *testing.T) {
+func TestExecute_WrittenAgentEntry_WithoutCallback_RecordsOwnedContentOfWholeWrittenBytes(t *testing.T) {
 	item := newAgentItem("runner", "agents/runner.md", domain.ActionCreate)
 
 	_, res := runWrite(t, item, ownedAgentBody)

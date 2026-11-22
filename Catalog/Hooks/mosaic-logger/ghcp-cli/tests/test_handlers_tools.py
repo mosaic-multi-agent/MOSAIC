@@ -27,10 +27,14 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import mosaic_logger_core as core
 import mosaic_logger_runstate as runstate
 import mosaic_logger_handlers_tools as tools
+from runner_mode_support import LazyModule
+
+pending = LazyModule("mosaic_logger_pending_dispatch")
 
 
 # ---------------------------------------------------------------------------
@@ -242,9 +246,9 @@ class TestHandlePreToolUse(unittest.TestCase):
                         toolArgs={"prompt": prompt_with_id}, toolUseId="tu-006")
         tools.handle_pre_tool_use(ctx)
         paths = ctx.paths
-        dispatch = runstate.pop_pending_dispatch(paths, dispatched_run, _SESSION_ID)
+        dispatch = pending.take_pending_dispatch(paths, dispatched_run, _SESSION_ID, "Planner")
         self.assertIsNotNone(dispatch)
-        self.assertEqual("Planner#3", dispatch["agent_instance_id"])
+        self.assertEqual("Planner#3", dispatch.agent_instance_id)
 
     def test_agent_dispatch_binds_the_session_to_the_dispatched_run(self):
         dispatched_run = "20260101T000000Z-bb22"
@@ -264,17 +268,16 @@ class TestHandlePreToolUse(unittest.TestCase):
         ctx = _make_ctx("preToolUse", self.tmp_path, toolName="task",
                         toolArgs={"prompt": prompt_with_id}, toolUseId="tu-007")
         tools.handle_pre_tool_use(ctx)
-        dispatch = runstate.pop_pending_dispatch(ctx.paths, _RUN_ID, _SESSION_ID)
+        dispatch = pending.take_pending_dispatch(ctx.paths, _RUN_ID, _SESSION_ID, "Executor")
         self.assertIsNotNone(dispatch)
-        self.assertEqual("Executor#1", dispatch["agent_instance_id"])
+        self.assertEqual("Executor#1", dispatch.agent_instance_id)
 
     def test_does_not_capture_dispatch_for_non_agent_tool(self):
         """bash, view, create etc. must not create a pending dispatch."""
         ctx = _make_ctx("preToolUse", self.tmp_path, toolName="bash",
                         toolArgs={"command": "ls"}, toolUseId="tu-008")
         tools.handle_pre_tool_use(ctx)
-        dispatch = runstate.pop_pending_dispatch(ctx.paths, _RUN_ID, _SESSION_ID)
-        self.assertIsNone(dispatch)
+        self.assertFalse(ctx.paths.pending_dispatch_entry(_RUN_ID, _SESSION_ID).exists())
 
     def test_routes_to_orchestrator_when_no_agent_id(self):
         ctx = _make_ctx("preToolUse", self.tmp_path, toolName="bash", toolUseId="tu-009")

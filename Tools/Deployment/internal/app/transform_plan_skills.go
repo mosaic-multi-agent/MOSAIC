@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"mosaic-common/docformat"
-	"mosaic-deploy/internal/agentfields"
+	"mosaic-common/agentfields"
 	"mosaic-deploy/internal/domain"
+	"mosaic-deploy/internal/manifest"
 )
 
 // planSkills fills plan.Skills.
@@ -34,6 +34,11 @@ func (s *service) planSkills(in transformPlanInput, plan *TransformPlan) error {
 	if err != nil {
 		return err
 	}
+	var recordedSkills manifest.Snapshot
+	openCodePair := inputIsOpenCodePair(in)
+	if openCodePair {
+		recordedSkills = loadReconciledManifest(s.deps.Manifest, in.Workspace).Snapshot.ForHarness(in.Source.Ref().ID)
+	}
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
@@ -41,6 +46,9 @@ func (s *service) planSkills(in transformPlanInput, plan *TransformPlan) error {
 		sk, err := s.planSkill(in, root, relDir, e.Name(), sourceFiles)
 		if err != nil {
 			return err
+		}
+		if openCodePair {
+			sk = s.planOpenCodeSkill(sk, recordedSkills)
 		}
 		plan.Skills = append(plan.Skills, sk)
 	}
@@ -125,7 +133,7 @@ func skillVersion(skillFile string) string {
 	if err != nil {
 		return ""
 	}
-	doc, err := docformat.Parse(data)
+	doc, err := ParseGenericSource(data)
 	if err != nil {
 		return ""
 	}

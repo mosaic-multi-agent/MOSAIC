@@ -24,12 +24,14 @@ func (s *ConfigScreen) View() string {
 	case configStepHarness:
 		body.WriteString(s.styles.Body.Width(s.width).Render("Harness adapter:") + "\n")
 		for i, sel := range harness.CLISelections() {
-			body.WriteString(s.renderOption(i, sel.Label))
+			body.WriteString(s.renderOption(i, sel.DisplayLabel()))
 		}
 	case configStepHarnessTimeout:
 		body.WriteString(s.timeoutInput.View())
 	case configStepHITLTimeout:
 		body.WriteString(s.hitlTimeoutInput.View())
+	case configStepNoOutputTimeout:
+		body.WriteString(s.noOutputInput.View())
 	case configStepVersionDrift:
 		// Defense in depth: the step machine never lands here unless the prompt is
 		// meaningful, but never render it if it somehow does.

@@ -214,7 +214,7 @@ func newTestCLIHarnessWorkDir(t *testing.T, harnessID string) {
 	if err := os.MkdirAll(agentsDirFull, 0o755); err != nil {
 		t.Fatalf("newTestCLIHarnessWorkDir: mkdir %q: %v", agentsDirFull, err)
 	}
-	orchPath := filepath.Join(agentsDirFull, "orchestrator-script.md")
+	orchPath := filepath.Join(agentsDirFull, "orchestrator-script"+entry.AgentExtension)
 	if err := os.WriteFile(orchPath, []byte("# orchestrator\n"), 0o644); err != nil {
 		t.Fatalf("newTestCLIHarnessWorkDir: write %q: %v", orchPath, err)
 	}

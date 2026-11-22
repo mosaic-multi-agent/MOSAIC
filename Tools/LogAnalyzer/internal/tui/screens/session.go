@@ -58,7 +58,7 @@ func (s *SessionScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s, nil
 	}
 	k := key.String()
-	if s.help.handle(k) {
+	if s.handleOverlays(k) {
 		return s, nil
 	}
 	switch k {
@@ -126,7 +126,7 @@ func (s *SessionScreen) View(width, height int) string {
 
 // helpKeys are the short help keys of the screen.
 func (s *SessionScreen) helpKeys() []tuicommon.HelpEntry {
-	return []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: KeySort, Desc: "sort"}, exportKeyEntry, {Key: "esc", Desc: "back"}}
+	return []tuicommon.HelpEntry{{Key: "↑/↓", Desc: "select"}, {Key: KeySort, Desc: "sort"}, findingsKeyEntry, exportKeyEntry, {Key: "esc", Desc: "back"}}
 }
 
 // screenKeys are the overlay entries of the keys this screen has of its own.

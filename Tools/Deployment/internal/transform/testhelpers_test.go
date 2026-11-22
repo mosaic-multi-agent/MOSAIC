@@ -3,12 +3,12 @@ package transform_test
 // testhelpers_test.go contains shared test infrastructure for the transform package tests:
 //   - fixtureModule: a domain.HarnessModule backed by testdata/transform/fixture.yaml
 //   - Standard model selection for tests
-//   - Path helpers for locating generic agents and testdata
+//   - Path helpers for locating the agent-source corpus and testdata
 
 import (
-	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -52,58 +52,35 @@ func fixtureModel() domain.ModelSelection {
 	}
 }
 
-// genericAgentsDir returns the absolute path to Catalog/Subagents/ in the repository
-// root — the directory that contains worker agent .md files organised by category
-// (Audit, Creation, Execution, …). Skill files, hook README files, the orchestrator, and
-// utility agents live in sibling directories and are intentionally excluded.
-//
-// The test is skipped rather than failed if the directory cannot be located, so that the
-// transform tests remain runnable in an isolated checkout that only includes Tools/.
-func genericAgentsDir(t *testing.T) string {
-	t.Helper()
-	// From Tools/Deployment/internal/transform/ navigate four levels up to the repo root,
-	// then descend into the worker agents directory.
-	rel := filepath.Join("..", "..", "..", "..", "Catalog", "Subagents")
-	abs, err := filepath.Abs(rel)
-	if err != nil {
-		t.Fatalf("resolve generic agents directory: %v", err)
-	}
-	if _, err := os.Stat(abs); err != nil {
-		t.Skipf("generic agents directory not found at %s (skipping body-preservation tests): %v", abs, err)
-	}
-	return abs
-}
+// agentCorpusDir is the committed agent-source corpus used by the body-preservation test.
+// It lives under testdata/transform/ and covers several body shapes: plain prose, project
+// regions, mixed managed and project regions, and the orchestrator role.
+const agentCorpusDir = testdataDir + "/agent-corpus"
 
-// collectGenericAgentPaths returns all worker agent .md file paths under dir, recursively,
-// excluding README files. README files have no frontmatter; processing them as ArtifactAgent
-// would produce incorrect semantics because SplitFrontmatter would treat the entire file as
-// the body, masking bugs in frontmatter handling and polluting the body-preservation corpus.
-func collectGenericAgentPaths(t *testing.T, dir string) []string {
+// agentCorpusPaths returns the absolute paths of every .md agent source in the committed
+// corpus, sorted, excluding README files (they carry no frontmatter and must not be
+// dispatched as ArtifactAgent). A missing or too-small corpus fails the test; it never skips.
+func agentCorpusPaths(t *testing.T) []string {
 	t.Helper()
-	var paths []string
-	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(p, ".md") {
-			return nil
-		}
-		// Skip README files — they are category documentation, not agent definitions.
-		// They have no frontmatter and must not be dispatched as ArtifactAgent.
-		if strings.EqualFold(filepath.Base(p), "readme.md") {
-			return nil
-		}
-		paths = append(paths, p)
-		return nil
-	})
+	dir, err := filepath.Abs(agentCorpusDir)
 	if err != nil {
-		t.Fatalf("walk %s: %v", dir, err)
+		t.Fatalf("resolve agent corpus directory: %v", err)
 	}
-	if len(paths) == 0 {
-		t.Skipf("no agent .md files found under %s", dir)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read agent corpus directory %s: %v", dir, err)
+	}
+	var paths []string
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".md") || strings.EqualFold(name, "readme.md") {
+			continue
+		}
+		paths = append(paths, filepath.Join(dir, name))
+	}
+	sort.Strings(paths)
+	if len(paths) < 2 {
+		t.Fatalf("agent corpus %s has %d agent sources, want at least 2", dir, len(paths))
 	}
 	return paths
 }

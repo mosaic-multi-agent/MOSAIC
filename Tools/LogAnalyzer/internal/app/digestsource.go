@@ -25,10 +25,34 @@ func (s *Service) digestResolver() sourceResolver {
 			}
 			return domain.Source{Kind: domain.SourceDigestDir, Path: path}, files
 		},
-		digestsAt: func(src domain.Source) []string {
-			return s.deps.Digests.Discover(src.Path)
-		},
+		defaultSource: s.defaultWithDigests,
 	}
+}
+
+// defaultWithDigests completes the default start. Digests beside the logs
+// folder come first, then those in the working directory (so on equal written-at
+// times a logs-folder digest wins); a file listed twice is passed once. Without
+// a usable logs folder, working-directory digests alone make a digest directory
+// source.
+func (s *Service) defaultWithDigests(probe domain.Source, workDir string) (domain.Source, []string) {
+	workFiles := s.deps.Digests.Discover(workDir)
+	if !probe.IsUsable() {
+		if len(workFiles) == 0 {
+			return probe, nil
+		}
+		return domain.Source{Kind: domain.SourceDigestDir, Path: workDir}, workFiles
+	}
+	files := s.deps.Digests.Discover(probe.Path)
+	seen := make(map[string]bool, len(files))
+	for _, f := range files {
+		seen[f] = true
+	}
+	for _, f := range workFiles {
+		if !seen[f] {
+			files = append(files, f)
+		}
+	}
+	return probe, files
 }
 
 // loadedDigest is one successfully decoded digest and the file it came from.

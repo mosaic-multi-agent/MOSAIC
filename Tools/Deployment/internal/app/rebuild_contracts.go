@@ -1,6 +1,7 @@
 package app
 
 import (
+	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -21,10 +22,19 @@ type RebuildInput struct {
 	TargetModule        domain.HarnessModule
 	Catalog             CatalogAgentLookup // nil = no cross-check
 	Model               domain.ModelSelection
-	CustomTools         map[string]string // custom-tool answers: generic -> server
-	SkippedTools        map[string]bool   // generics the user chose to skip
+	CustomTools         domain.CustomToolAnswers // custom-tool answers: generic -> entries
+	SkippedTools        map[string]bool          // generics the user chose to skip
 	ToolMappingsVersion string
 	Timestamp           string // RFC3339 UTC, passed to transform.Request
+
+	// Op is create versus update of the DESTINATION file, passed verbatim to
+	// transform.Request.Op. The zero value is accepted by Markdown targets and rejected by
+	// Codex; production sets it from the planned write action.
+	Op agentformat.Operation
+	// DestinationRaw is the existing destination file exactly as on disk, passed verbatim to
+	// transform.Request.DeployedRaw. Nil on create and when no readable destination exists;
+	// Markdown-format targets ignore it.
+	DestinationRaw []byte
 	// DeclaredServers are server names from the source harness's MCP configuration.
 	DeclaredServers []string
 	MCPSplits       map[string]string // source name -> chosen server
@@ -45,4 +55,12 @@ type RebuildResult struct {
 	UnmappedTools []string // unmapped generics with no CustomTools answer; each has a gap
 	DroppedFields []string // source frontmatter keys not present in the output
 	Gaps          []domain.Gap
+
+	// StrippedFields reports source fields removed from the output: harness-specific fields
+	// of a non-Markdown-format source (StripReasonUnknownField) and keys held in the source
+	// carriage container (StripReasonCarriedKey). Nil when nothing was stripped.
+	StrippedFields []StrippedField
+	// MinimalToolGrant is true when the target's tools come from the minimal read-only grant
+	// applied for a tool-info-unrecoverable source.
+	MinimalToolGrant bool
 }

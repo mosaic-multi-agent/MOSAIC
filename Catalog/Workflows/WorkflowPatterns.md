@@ -103,7 +103,6 @@ The planner sets each stage's approach; the orchestrator reads the Execution Gro
 **Where it appears:**
 - `brownfield-tdd`, `greenfield-tdd`, `brownfield-tdd-build-verified` — full TDD staged execution
 - `brownfield-pr-fix` — staged execution with an additional Response group per stage
-- `implementation-only` — staged execution without Execution Groups (fixed sequence)
 - `brownfield-pr-audit` — staged execution with 4 audit types per stage
 
 **When to use:** When the scope is well-understood enough that a planner can enumerate all stages before work begins. Feature development against a researched codebase is the canonical case.
@@ -127,7 +126,6 @@ Stage 2..N (parallel within tier) → may add deeper stages
 **Where it appears:**
 - `kb-generation` — Tier 1 KB generator analyzes the codebase and creates `KBProgress.md` with all generation stages; deeper tiers may add more
 - `hw-schema-kb-generation` — similar: first research stage creates `HWResearchProgress.md`; first KB generation stage creates `KBProgress.md`
-- `kb-correction` — generator reads existing KB and creates correction stages dynamically
 
 **When to use:** When the scope cannot be enumerated upfront because the structure of the work emerges from analyzing the subject matter. Documentation generation is the canonical case — you don't know how many subsystems need documenting until you've looked at the codebase.
 
@@ -319,7 +317,7 @@ The key constraint: the vocabulary is closed. The deciding agent can only pick f
 
 **How this differs from static routing:** `On Success` / `On Findings` routing is fixed in the workflow table — every run follows the same paths. This pattern adds a second routing mechanism that's dynamic *within* the static structure: the workflow table still defines all possible paths, but a subagent's output determines which subset activates for a given unit of work.
 
-**Relationship to Pattern 3 (Decompose-Then-Execute):** Orthogonal. Decompose-Then-Execute answers "how do we break work into units?" Agent-Directed Routing answers "within each unit, which agents run and in what order?" You can have staged execution without agent-directed routing (fixed sequence, like `implementation-only`), and agent-directed routing could theoretically apply without stages — though no workflow currently does this.
+**Relationship to Pattern 3 (Decompose-Then-Execute):** Orthogonal. Decompose-Then-Execute answers "how do we break work into units?" Agent-Directed Routing answers "within each unit, which agents run and in what order?" You can have staged execution without agent-directed routing (the same fixed row sequence in every stage), and agent-directed routing could theoretically apply without stages — though no workflow currently does this.
 
 **Trade-offs:**
 - The vocabulary must be defined upfront in the workflow. Adding a new selection requires updating the workflow definition, not just the deciding agent.
@@ -334,7 +332,7 @@ Patterns observed in the catalog that are kept as explicit negative examples —
 
 ### A1. Skipping Quality Gates for Speed
 
-**Exemplar:** `quick-fix` — skips RESEARCH (no `codebase-research`), skips test writing (no `test-writer-tdd`), has no `Requirements.md` in its artifact list.
+**Shape:** a "quick fix" workflow that skips RESEARCH (no `codebase-research`), skips test writing (no `test-writer-tdd`), and takes no `Requirements.md`. No catalog workflow has this shape; for small fixes, size `brownfield-tdd` down instead.
 
 **Why it fails:** Bug fixes ship with no regression test proving the fix holds. "Well-understood" modifications are never actually verified against the codebase. The two things a lightweight workflow is most tempted to cut — requirements clarity and regression coverage — are exactly the two things that catch the failure modes small fixes are most prone to.
 
@@ -364,11 +362,9 @@ Worth watching: currently appears only in PR-integrated workflows. If more exter
 
 ### Complementary Workflow Pairs
 
-A full workflow split at a natural boundary into a "head" and a "tail" that each serve as standalone workflows. `brownfield-design` (RESEARCH/PLANNING/DESIGN) + `implementation-only` (EXECUTION/REVIEW) together reconstitute `brownfield-tdd`.
+A full workflow split at a natural boundary into a "head" and a "tail" that each serve as standalone workflows. Resist splitting a long workflow into resume-from-phase-X variants: native run continuation covers resuming a run.
 
-The head half (`brownfield-design`) has a genuine standalone purpose: "produce a design without implementing it" is a real, distinct request. The tail half (`implementation-only`) is weaker — its original purpose was manual run continuation, now largely superseded by native run persistence. Neither half has been used as a deliberate complementary pair in practice.
-
-Noting this mainly as a historical observation. The temptation to split a long workflow into resume-from-phase-X variants should be resisted — native run continuation is almost always the better answer now.
+A part of a workflow earns its own file only when it answers a distinct request. `brownfield-design` is the head of `brownfield-tdd` (RESEARCH/PLANNING/DESIGN) and stands on its own, because "produce a design without implementing it" is a real request.
 
 ---
 
@@ -385,14 +381,9 @@ Most workflows combine multiple patterns. This section maps which patterns each 
 | `brownfield-pr-audit` | 1, 3A, 4 (Multi-Pass Research), 5 (Fan-Out), 6 (Script-Mediated Scaling) |
 | `brownfield-system-audit` | 1, 4, 5 |
 | `brownfield-design` | 1, A2 |
-| `implementation-only` | 1, 3A |
-| `quick-fix` | 1, 3A, A1 (Skipping Gates) |
-| `brownfield-research-only` | *(none — minimal single-agent workflow)* |
 | `product-comparison` | 1, 5, 8 (Three-Tier Evidence-Evaluation-Synthesis) |
 | `kb-generation` | 3B (Emergent Decomposition), 5 |
-| `kb-correction` | 3B |
 | `hw-schema-kb-generation` | 3B, 5, 9 (Retrieval-Driven Research) |
-| `kb-verification-human` | 5 |
 | `requirements-to-test-cases` | 1, 2 (Presenter Pattern), 9 |
 
 ---

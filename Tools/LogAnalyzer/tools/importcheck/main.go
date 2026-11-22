@@ -162,6 +162,30 @@ var rules = []rule{
 		},
 	},
 	{
+		dir:  "internal/transcript",
+		desc: "transcript is an I/O adapter: must not import frontend or use-case packages, nor sibling adapters",
+		forbidPrefix: []string{
+			modulePrefix + "internal/app",
+			modulePrefix + "internal/cli",
+			modulePrefix + "internal/tui",
+			modulePrefix + "internal/logscan",
+			modulePrefix + "internal/logread",
+			modulePrefix + "internal/pricing",
+		},
+	},
+	{
+		dir:  "internal/findingsfile",
+		desc: "findingsfile is an I/O adapter: must not import frontend or use-case packages, nor sibling adapters",
+		forbidPrefix: []string{
+			modulePrefix + "internal/app",
+			modulePrefix + "internal/cli",
+			modulePrefix + "internal/tui",
+			modulePrefix + "internal/logscan",
+			modulePrefix + "internal/logread",
+			modulePrefix + "internal/pricing",
+		},
+	},
+	{
 		dir:  "internal/pricing",
 		desc: "pricing is an I/O adapter: must not import frontend or use-case packages",
 		forbidPrefix: []string{

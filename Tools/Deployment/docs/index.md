@@ -11,7 +11,7 @@ then use the references below for deeper topics.
 | Document | What it covers |
 |----------|----------------|
 | [README](../README.md) | Installation, the two flows (deploy and update), config file reference, runtime layout, troubleshooting |
-| [Deployment Guide](../../../docs/DeploymentGuide.md) | Task-oriented guide for project authors, including catalog stacks: layering catalogs, precedence, the conflict report, provenance, persistence and migration from `--catalog-folder` |
+| [Deployment Guide](../../../docs/DeploymentGuide.md) | Task-oriented guide for project authors, including catalog stacks: creating your own catalog, layering catalogs, precedence, the conflict report, provenance, persistence and migration from `--catalog-folder` |
 | [Configuration Reference](configuration.md) | Every key in `tool-config.yaml` and `user-config.yaml`; the `tool_destinations` tool-mapping layer; precedence, validation rules, worked examples; where the catalog stack is persisted and the catalog identity file |
 | [CLI Reference](cli.md) | Every subcommand, flag, exit code, and the selections file format; the catalog stack flags, the stack-in-effect and conflict-report output, `promote --target-catalog`, per-catalog `check-index`; machine-readable JSON output |
 
@@ -105,6 +105,8 @@ The following harnesses are compiled into the `mosaic-deploy` binary:
 | `opencode` | OpenCode | Permission-shape tool mapping; reference external module available |
 | `ghcp-cli` | GHCP CLI / VS Code GHCP Copilot | List-shape tool mapping |
 | `vscode-ghcp` | VS Code GHCP Local | List-shape tool mapping |
+| `codex` | Codex (experimental) | Agent files are TOML (not Markdown); skills resolved from shared `.agents/skills` root; tool grants rendered through the harness module (sandbox_mode, web_search, network access) rather than the shared mapper; the agent-format layer is shared from `Tools/Common` |
+| `opencode-v2` | OpenCode V2 (experimental) | Rules-shape tool mapping (ordered permission rules, deny by default); one OpenCode target per workspace, either `opencode` or `opencode-v2`; Transform moves between them; Deploy writes no `opencode.json` |
 
 Third-party harnesses use the descriptor-only or external module tier. See the
 [Harness Contributor Guide](harness-contributor-guide.md).

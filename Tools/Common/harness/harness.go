@@ -98,6 +98,14 @@ type SpawnRequest struct {
 	// OnStdoutLine is passed unchanged into RunOptions.OnStdoutLine by the
 	// Claude Code, OpenCode and GHCP CLI spawners. Nil: today's behaviour.
 	OnStdoutLine func(line []byte)
+
+	// Sink, when non-nil, receives this call's Run events instead of the
+	// spawner's configured sink (WithSink). Nil: the configured sink.
+	Sink Sink
+
+	// NoOutputTimeout is passed to RunOptions.NoOutputTimeout by the OpenCode V2
+	// spawner only; every other builder and spawner ignores it.
+	NoOutputTimeout time.Duration
 }
 
 // GHCPCLIPermissionMode selects one of the two supported GHCP CLI permission
@@ -174,6 +182,9 @@ var (
 	// timeout. The subprocess is killed before this error is returned.
 	ErrTimeout = errors.New("harness: invocation timed out")
 
+	// ErrNoOutput: the no-output watchdog ended the invocation.
+	ErrNoOutput = errors.New("harness: no output within the no-output timeout")
+
 	// ErrCancelled is returned when the parent context is cancelled. The
 	// subprocess is killed before this error is returned. Distinguishable
 	// from ErrTimeout so a caller can tell which condition ended the run.
@@ -206,11 +217,20 @@ type RunOptions struct {
 	Env        []string
 	Stdin      []byte
 	Timeout    time.Duration
-	Sink       Sink
+
+	// Sink, when non-nil, receives the invocation's diagnostic events: live
+	// spawn.stdout.lines, the end-path events and a closing spawn.end (see Run
+	// for the full set and order). It may be slow: Run never lets it stall the
+	// process or the no-output watch, and calls it from one goroutine at a time.
+	Sink Sink
 
 	// OnStdoutLine, when non-nil, receives each stdout line while the process
 	// runs. Nil: today's behaviour exactly.
 	OnStdoutLine func(line []byte)
+
+	// NoOutputTimeout, when > 0, ends the process tree if no stdout data arrives
+	// for this long. Zero or negative: no watchdog (today's behaviour exactly).
+	NoOutputTimeout time.Duration
 }
 
 // Option configures a Spawner constructed by NewClaudeCode.
@@ -221,4 +241,13 @@ type spawnerConfig struct {
 	executablePath string
 	timeout        time.Duration
 	sink           Sink
+}
+
+// sinkFor returns the sink for one call: the request's own sink when set,
+// otherwise the configured one.
+func (c spawnerConfig) sinkFor(req SpawnRequest) Sink {
+	if req.Sink != nil {
+		return req.Sink
+	}
+	return c.sink
 }

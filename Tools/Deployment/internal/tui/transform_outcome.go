@@ -21,5 +21,5 @@ func isRunCancellation(err error) bool {
 // transformCancelledView is the done screen of a cancelled transform.
 func (m *rootModel) transformCancelledView() string {
 	return m.theme.Style(RoleWarning).Width(m.width).Render("Transform cancelled: nothing was written.") +
-		"\n" + m.theme.Style(RoleHelp).Width(m.width).Render("press q or enter to exit")
+		"\n" + m.theme.Style(RoleHelp).Width(m.width).Render(finalScreenHelp)
 }

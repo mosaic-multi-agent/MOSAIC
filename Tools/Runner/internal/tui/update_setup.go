@@ -175,7 +175,7 @@ func (m *rootModel) updateSetupHarness(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var regions []domain.WorkflowRegion
 		if orchPath != "" {
 			var err error
-			regions, err = orchfile.EnumerateWorkflows(orchPath)
+			regions, err = orchfile.EnumerateWorkflows(orchPath, harnessAgentFormat(harnessID))
 			if err != nil {
 				style := stylesFromTheme(m.theme)
 				m.doneScreen = runflow.NewDoneScreen(
@@ -188,14 +188,14 @@ func (m *rootModel) updateSetupHarness(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Enumerate infrastructure agents so the config screen can prompt when
 			// multiple agents of the same gated class are declared.
-			infraAgents, err := orchfile.EnumerateInfrastructureAgents(orchPath)
+			infraAgents, err := orchfile.EnumerateInfrastructureAgents(orchPath, harnessAgentFormat(harnessID))
 			if err != nil {
 				infraAgents = nil
 			}
 			m.configScreen.SetDeclaredAgents(infraAgents)
 		}
 		m.workflows = regions
-		if err := m.deploymentRefusal(orchPath, regions); err != nil {
+		if err := m.deploymentRefusal(orchPath, harnessAgentFormat(harnessID), regions); err != nil {
 			m.showEarlyRefusal(err)
 			return m, nil
 		}
@@ -258,7 +258,7 @@ func (m *rootModel) updateSetupFile(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.fileScreen.Reset()
 
 		// Enumerate workflow regions from the file.
-		regions, err := orchfile.EnumerateWorkflows(path)
+		regions, err := orchfile.EnumerateWorkflows(path, m.selectedAgentFormat())
 		if err != nil {
 			// Show error on the file screen by re-entering with an error overlay.
 			// For simplicity, just clear and let the user retry with a new path.
@@ -277,7 +277,7 @@ func (m *rootModel) updateSetupFile(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// user to select one when multiple agents of the same gated class are
 		// declared. A parse error is treated as zero declared agents; the
 		// session layer will enforce a refusal at run start if needed.
-		infraAgents, err := orchfile.EnumerateInfrastructureAgents(path)
+		infraAgents, err := orchfile.EnumerateInfrastructureAgents(path, m.selectedAgentFormat())
 		if err != nil {
 			infraAgents = nil
 		}
@@ -306,6 +306,7 @@ func (m *rootModel) updateSetupWorkflow(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// known, and the selected workflow's version is only known here. A new
 		// run has no recorded version, so it is never asked.
 		m.prepareConfigScreen()
+		m.seedInputScreen.SetRequiredInputs(m.selectedWorkflowSeedInputs())
 
 		m.workflowScreen.Reset()
 		m.screen = screenSetupTask

@@ -4,7 +4,6 @@ package app
 // agents of a transform run for the model questions.
 
 import (
-	"mosaic-common/docformat"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -14,20 +13,30 @@ import (
 const UnsetSourceModel = ""
 
 // ReadSourceModel extracts the source harness's model identifier from an agent
-// document's frontmatter. Resolution order:
+// file's frontmatter. The content is decoded through the decode funnel with srcDesc first,
+// so a source in a non-Markdown format is read from its canonical form. Resolution order:
 //
 //  1. srcDesc.Frontmatter.ModelKey, when that key is declared and present as a
 //     non-empty scalar.
 //  2. The generic "model" key, when present as a non-empty scalar.
 //  3. Otherwise UnsetSourceModel.
 //
-// Unparseable content yields UnsetSourceModel and no error: a file that cannot be
-// parsed is classified by the planning step, not here.
+// Undecodable or unparseable content yields UnsetSourceModel and no error: a file that
+// cannot be read is classified by the planning step, not here.
 func ReadSourceModel(content []byte, srcDesc domain.HarnessDescriptor) string {
 	if len(content) == 0 {
 		return UnsetSourceModel
 	}
-	doc, err := docformat.Parse(content)
+	read := decodeDeployedBytes(content, domain.ArtifactAgent, &srcDesc)
+	if read.DecodeErr != nil {
+		return UnsetSourceModel
+	}
+	return readCanonicalSourceModel(read.Canonical, &srcDesc)
+}
+
+// readCanonicalSourceModel reads the source model from canonical (already decoded) bytes.
+func readCanonicalSourceModel(canonical []byte, srcDesc *domain.HarnessDescriptor) string {
+	doc, err := ParseGenericSource(canonical)
 	if err != nil {
 		return UnsetSourceModel
 	}

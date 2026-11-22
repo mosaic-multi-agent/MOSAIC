@@ -19,10 +19,12 @@ Subagent dispatches only (orchestrator excluded): `Success` = closed with `SUCCE
 
 ## Cache figures
 
-Per dispatch, agent type and run (`CacheFigures`). Hit ratio, write tokens and write cost come from the scope's totals. Net benefit and unread writes come from per-call records (those with a record id):
+Per dispatch, agent type and run (`CacheFigures`). Write tokens and write cost come from the scope's totals. The hit ratio comes from the scope's actor contexts (`analysis/cache_hit.go`). Net benefit and unread writes come from per-call records (those with a record id):
+
+- hit ratio = sum of cache reads (each capped at the previous call's context) over the sum of previous-call contexts, over qualifying main calls of every actor in scope. A call is skipped when it is the first main call of its session, has no cache-read figure, its previous call is partial or has no positive context, its model differs from the previous call's, or a compaction (logged, detected or a compaction call) lies between the two. A cache expiry after a pause is not excluded and counts as a miss. Perfect caching gives 100 %. The Overview gauge, the dispatch table and the type table use the same figure;
 
 - net benefit per call = (cache read at the input rate - cache read cost) - (cache write cost - cache write tokens at the input rate), each call priced at its own model and tier (`cost.RatesFor`); unpriced calls are left out and mark the figure incomplete; no contributing call gives NoData, only unpriced calls give Unpriced; negative values are valid;
-- unread writes = cache-write tokens and cost of each invocation's last call; the run scope adds only the orchestrator's last call.
+- unread writes = cache-write tokens and cost of the last call of every session of each actor (`lastPerSession`); the run scope includes the orchestrator's sessions too.
 
 ## Run comparison
 

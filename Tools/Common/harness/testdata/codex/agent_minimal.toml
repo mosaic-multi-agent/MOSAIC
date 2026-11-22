@@ -1,0 +1,5 @@
+name = "minimal"
+description = "Declares only the owned keys"
+developer_instructions = """
+You do the minimum.
+"""
