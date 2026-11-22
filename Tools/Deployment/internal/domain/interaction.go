@@ -81,7 +81,9 @@ const (
 	// QPromoteCustomTool is asked once per distinct harness-side tool entry that has no
 	// reverse mapping to a generic tool. It is the inverse of QCustomTool: that question
 	// asks for a harness-side name given a generic tool, this one asks for a generic name
-	// given a harness-side tool. Subject is the harness-side tool name. It is a text
+	// given a harness-side tool. Subject is the harness-side tool name. The answer is one
+	// generic tool name (a list is refused by the question's Validate hook; several harness
+	// tools may share a name; a blank answer keeps the harness name). It is a text
 	// question and therefore reaches the existing TextPromptScreen overlay with no TUI
 	// routing change.
 	QPromoteCustomTool QuestionID = "promote-custom-tool"

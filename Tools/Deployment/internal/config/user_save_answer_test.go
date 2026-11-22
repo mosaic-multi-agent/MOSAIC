@@ -143,10 +143,10 @@ func TestSaveToolDestination_SavedAnswer_DoesNotChangeOtherMappingsOfTheHarness(
 	}
 }
 
-func TestSaveToolDestination_Save_ChangesTheToolMappingHash(t *testing.T) {
+func TestSaveToolDestination_Save_ChangesTheToolSettingsStamp(t *testing.T) {
 	h := claudeLikeHarness()
 	store := config.NewUserConfigStore(makeRoot(t))
-	before := config.HashToolDestinations(nil, mustLoad(t, store).ToolDestinations)
+	before := stampFor(t, h.id, h.d.Tools, nil, mustLoad(t, store).ToolDestinations)
 	entry, err := config.CustomToolMapping(resolveCustom(t, h, answerCases["mixed answer"]).Resolutions[0])
 	if err != nil {
 		t.Fatalf("CustomToolMapping: %v", err)
@@ -156,9 +156,9 @@ func TestSaveToolDestination_Save_ChangesTheToolMappingHash(t *testing.T) {
 		t.Fatalf("SaveToolDestination: %v", err)
 	}
 
-	after := config.HashToolDestinations(nil, mustLoad(t, store).ToolDestinations)
+	after := stampFor(t, h.id, h.d.Tools, nil, mustLoad(t, store).ToolDestinations)
 	if before == after {
-		t.Error("tool-mapping hash did not change after saving an entry")
+		t.Error("tool settings stamp did not change after saving an entry")
 	}
 }
 

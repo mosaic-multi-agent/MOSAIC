@@ -23,7 +23,6 @@ import (
 	"context"
 
 	"mosaic-deploy/internal/catalog"
-	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/plan"
@@ -290,12 +289,10 @@ func deployAgents(ctx context.Context, s *service, req DeployAgentsRequest) (dom
 		false,
 		probeSet.Agents, plannedPaths, deployedState)
 
-	toolCfg, _ := s.deps.ToolConfig.Load()
-	userCfg, err := s.deps.UserConfig.Load()
+	toolMappingsVersion, err := s.toolSettingsStamp(module)
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
-	toolMappingsVersion := config.HashToolDestinations(toolCfg.ToolDestinations, userCfg.ToolDestinations)
 
 	// Build plan.Input. WorkflowIDs and HookIDs are nil — deploy-agents never touches
 	// orchestrator workflow regions or hook registrations. Only orchestrator files that need

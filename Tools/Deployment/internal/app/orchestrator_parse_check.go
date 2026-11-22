@@ -12,8 +12,7 @@ import (
 
 // unreadableAgentProblem returns why the file at targetPath is no agent document (it cannot be
 // read or decoded in the harness's agent format, does not parse, or has no frontmatter), or ""
-// when state shows no file at targetPath itself (absent, or read from a legacy file) or the
-// file reads as an agent document. The file is read through the decode funnel, so a
+// when state shows no file (absent) or the file reads as an agent document. The file is read through the decode funnel, so a
 // non-Markdown agent format (such as Codex TOML) is judged in its canonical form.
 func unreadableAgentProblem(workspace, targetPath string, state domain.DeployedArtifactState, src *domain.HarnessDescriptor) string {
 	if !state.Present || state.ParseFailed {

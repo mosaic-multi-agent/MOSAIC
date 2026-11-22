@@ -10,13 +10,28 @@ import (
 
 	"mosaic-deploy/internal/catalog"
 	"mosaic-deploy/internal/domain"
+	"mosaic-deploy/internal/manifest"
 	"mosaic-deploy/internal/transform"
 )
 
 // deployedOrchestratorFile names an orchestrator-role file the update flow found on disk.
 type deployedOrchestratorFile struct {
 	TargetPath string
+	ReadPath   string // file actually read when it differs from TargetPath (recorded legacy X.md)
 	Present    bool
+}
+
+// legacyAwareFile describes the orchestrator-role file at target for readKeptWorkflows. When the
+// planned file is absent and the manifest records its legacy X.md, that file is the read source
+// while the result stays keyed by the planned path.
+func legacyAwareFile(
+	workspace string, module domain.HarnessModule, snap manifest.Snapshot, key, target string, present bool,
+) deployedOrchestratorFile {
+	return deployedOrchestratorFile{
+		TargetPath: target,
+		ReadPath:   probedReadPath(workspace, module, snap, key, target),
+		Present:    present,
+	}
 }
 
 // keptWorkflows is what the update flow keeps in the deployed orchestrator-role files.
@@ -43,7 +58,11 @@ func readKeptWorkflows(workspace string, src *domain.HarnessDescriptor, cat cata
 		if !f.Present || f.TargetPath == "" {
 			continue
 		}
-		read := readDeployedArtifact(filepath.Join(workspace, f.TargetPath), domain.ArtifactAgent, src)
+		readFrom := f.TargetPath
+		if f.ReadPath != "" {
+			readFrom = f.ReadPath
+		}
+		read := readDeployedArtifact(filepath.Join(workspace, filepath.FromSlash(readFrom)), domain.ArtifactAgent, src)
 		if read.ReadErr != nil {
 			return keptWorkflows{}, fmt.Errorf("%s: %w", f.TargetPath, read.ReadErr)
 		}

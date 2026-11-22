@@ -8,7 +8,6 @@ package app
 import (
 	"context"
 
-	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/logging"
@@ -104,7 +103,7 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	}); pathErr == nil {
 		orchTargetPath = orchPath
 		orchState = probeAgentWithRecordedLegacy(workspace, module, snap, orchestrator.Key, orchTargetPath)
-		if problem := unreadableAgentProblem(workspace, orchTargetPath, orchState, module.Descriptor()); problem != "" {
+		if problem := unreadableAgentProblem(workspace, probedReadPath(workspace, module, snap, orchestrator.Key, orchTargetPath), orchState, module.Descriptor()); problem != "" {
 			// An orchestrator file that cannot be read as an agent stays a conflict, as for the
 			// other agents, instead of being rewritten as an ordinary update.
 			orchState.ParseFailed, orchState.ParseProblem = true, problem
@@ -115,8 +114,8 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 	script := s.probeWorkflowScript(module, workspace, scope, snap)
 	deployedCustom, err := readKeptWorkflows(workspace, module.Descriptor(), s.deps.Catalog, []deployedOrchestratorFile{
 		// An unreadable orchestrator is a conflict (ParseFailed), so its workflows are not read.
-		{TargetPath: orchTargetPath, Present: orchState.Present && !orchState.ParseFailed},
-		{TargetPath: script.targetPath, Present: script.state.Present},
+		legacyAwareFile(workspace, module, snap, orchestrator.Key, orchTargetPath, orchState.Present && !orchState.ParseFailed),
+		legacyAwareFile(workspace, module, snap, script.agent.Key, script.targetPath, script.state.Present),
 	})
 	if err != nil {
 		return domain.RunSummary{}, err
@@ -258,12 +257,10 @@ func (s *service) UpdateWorkflows(ctx context.Context, req WorkflowUpdateRequest
 		models = nil
 	}
 
-	toolCfg, _ := s.deps.ToolConfig.Load()
-	userCfg, err := s.deps.UserConfig.Load()
+	toolMappingsVersion, err := s.toolSettingsStamp(module)
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
-	toolMappingsVersion := config.HashToolDestinations(toolCfg.ToolDestinations, userCfg.ToolDestinations)
 
 	planInput := plan.Input{
 		Catalog: s.deps.Catalog, Module: module, Mode: domain.ModeUpdateWorkflows,

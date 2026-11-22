@@ -353,7 +353,7 @@ func TestToolConfigStore_OldSchemaVersion_PreservesUtilityAgentAllowList(t *test
 		}
 	}
 	if !found {
-		t.Errorf("UtilityAgentAllowList after migration does not contain \"anthropic-subagent-creator\"; "+
+		t.Errorf("UtilityAgentAllowList after migration does not contain \"anthropic-subagent-creator\"; " +
 			"the allow-list from the old-schema config must be preserved, not reset to defaults")
 	}
 }

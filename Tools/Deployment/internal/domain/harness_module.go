@@ -72,7 +72,7 @@ type VersionStamps struct {
 	HarnessVersion                string // transform engine version (agents only); written as mosaic_harness_version
 	InjectionsVersion             string // role-selected injection version; for orchestrators, populated with desc.OrchestratorInjectionsVersion
 	OrchestratorInjectionsVersion string // reserved; no longer populated after Stage 3 — role-conditional comparison uses InjectionsVersion
-	ToolMappingsVersion           string // hash of the effective tool-destination mapping set; empty when no config mappings
+	ToolMappingsVersion           string // tool settings stamp: hash of the descriptor tool spec plus config tool_destinations
 }
 
 // FrontmatterPlan is a declarative edit list that transform applies via docformat. The module

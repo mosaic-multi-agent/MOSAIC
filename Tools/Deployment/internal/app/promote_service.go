@@ -174,16 +174,7 @@ func (s *service) resolvePromoteTools(
 			continue
 		}
 
-		q := domain.TextQuestion{
-			Question: domain.Question{
-				ID:           domain.QPromoteCustomTool,
-				Subject:      harnessName,
-				Title:        "Generic tool name for harness tool " + harnessName,
-				AllowSkip:    true,
-				AllowSkipAll: true,
-			},
-		}
-		ans, err := s.deps.Interaction.AskText(ctx, q)
+		ans, err := s.deps.Interaction.AskText(ctx, promoteToolQuestion(harnessName))
 		if err != nil {
 			// Transport error — carry verbatim (AD-8).
 			addTool(harnessName)
@@ -193,8 +184,8 @@ func (s *service) resolvePromoteTools(
 
 		switch ans.Status {
 		case domain.Answered:
-			if ans.Text != "" {
-				addTool(ans.Text)
+			if name := strings.TrimSpace(ans.Text); name != "" {
+				addTool(name)
 			} else {
 				// Empty answer treated as non-answered — carry verbatim.
 				addTool(harnessName)

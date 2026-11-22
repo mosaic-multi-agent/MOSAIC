@@ -227,18 +227,18 @@ func applyFrontmatter(
 	// legacy mosaic_injections_version fields from pre-migration deployed files.
 	ivField, _ := agentfields.ByDeployedName("injections_version")
 	touchedKeys[ivField.Deployed] = true
-	// tool_mappings_version is a content hash of the effective tool_destinations
-	// mappings for this harness (combined project + user config). It lets `update`
-	// detect stale tool mappings without re-diffing tool lists. See "The
+	// tool_mappings_version is a content hash of the harness's tool settings (descriptor
+	// tool spec plus project + user config tool_destinations). It lets `update`
+	// detect stale tool settings without re-diffing tool lists. See "The
 	// tool_mappings_version stamp" in Tools/Deployment/docs/configuration.md.
 	tmvField, _ := agentfields.ByDeployedName("tool_mappings_version")
 	if c := applyVersionStamp(fm, tmvField.Deployed, req.ToolMappingsVersion); c != nil {
 		touchedKeys[tmvField.Deployed] = true
 		changes = append(changes, *c)
 	} else if req.Deployed != nil {
-		// ToolMappingsVersion is empty (no new stamp to write). Check whether the deployed
-		// file carries a zombie stamp left over from a previous run when mappings were
-		// active. Actively remove it and mark it touched so the Step 5c preservation pass
+		// ToolMappingsVersion is empty (callers that supply no stamp, such as direct
+		// transform requests). Check whether the deployed
+		// file carries a zombie stamp left over from a previous run. Actively remove it and mark it touched so the Step 5c preservation pass
 		// does not re-inject it, allowing the staleness loop to converge.
 		if deployedDoc, deployedParseErr := docformat.Parse(req.Deployed); deployedParseErr == nil {
 			deployedFM := deployedDoc.Frontmatter()

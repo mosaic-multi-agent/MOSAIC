@@ -7,7 +7,6 @@ package app
 import (
 	"context"
 
-	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/logging"
@@ -107,12 +106,10 @@ func deployHooks(ctx context.Context, s *service, req DeployHooksRequest) (domai
 		return domain.RunSummary{}, err
 	}
 
-	toolCfg, _ := s.deps.ToolConfig.Load()
-	userCfg, err := s.deps.UserConfig.Load()
+	toolMappingsVersion, err := s.toolSettingsStamp(module)
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
-	toolMappingsVersion := config.HashToolDestinations(toolCfg.ToolDestinations, userCfg.ToolDestinations)
 
 	// Load the protocol and bundle versions for stamp consistency even though no agent
 	// content is generated; the planner and executor still record them.

@@ -69,6 +69,18 @@ func probeAgentWithRecordedLegacy(
 	return state
 }
 
+// probedReadPath returns the file probeAgentWithRecordedLegacy reads for the agent planned at
+// target: the manifest-recorded legacy X.md when nothing is at target, else target itself.
+func probedReadPath(workspace string, module domain.HarnessModule, snap manifest.Snapshot, key, target string) string {
+	if target == "" || pathExists(filepath.Join(workspace, filepath.FromSlash(target))) {
+		return target
+	}
+	if legacy := recordedLegacyPath(module, snap, key, target); legacy != "" {
+		return legacy
+	}
+	return target
+}
+
 // recordedLegacyPath returns the X.md path the manifest records for the agent whose planned
 // X.agent.md path is target, or "" when there is none or the harness is not a GHCP target.
 func recordedLegacyPath(module domain.HarnessModule, snap manifest.Snapshot, key, target string) string {
@@ -113,8 +125,13 @@ func applyRecordedLegacyAgents(
 		if !legacyState.Present {
 			continue
 		}
-		if cur := state[pp.TargetPath]; cur.Present && cur.ContentHash != legacyState.ContentHash {
+		cur := state[pp.TargetPath]
+		if cur.Present && cur.ContentHash != legacyState.ContentHash {
 			continue // resolved to another file of the same agent (renamed by the user)
+		}
+		if cur.ParseFailed {
+			// The seeded state already judged this same file unreadable: it stays a conflict.
+			legacyState.ParseFailed, legacyState.ParseProblem = true, cur.ParseProblem
 		}
 		state[pp.TargetPath] = legacyState
 		if migrating == nil {

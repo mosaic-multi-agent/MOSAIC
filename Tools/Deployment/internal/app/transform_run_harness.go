@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/pathinput"
 )
@@ -94,12 +93,11 @@ func (r *transformRun) resolveWorkspace(ctx context.Context) error {
 // makePlan computes the tool-mappings version stamped into the rebuilt agents and the whole
 // plan. It asks nothing and writes nothing.
 func (r *transformRun) makePlan() error {
-	toolCfg, _ := r.s.deps.ToolConfig.Load()
-	userCfg, err := r.s.deps.UserConfig.Load()
+	stamp, err := r.s.toolSettingsStamp(r.tgt)
 	if err != nil {
 		return err
 	}
-	r.toolMappingsVersion = config.HashToolDestinations(toolCfg.ToolDestinations, userCfg.ToolDestinations)
+	r.toolMappingsVersion = stamp
 
 	plan, err := r.s.planTransform(transformPlanInput{
 		Workspace: r.workspace, Source: r.src, Target: r.tgt, Overwrite: r.req.Overwrite,

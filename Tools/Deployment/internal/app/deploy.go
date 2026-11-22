@@ -7,7 +7,6 @@ package app
 import (
 	"context"
 
-	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/plan"
@@ -245,14 +244,12 @@ func (s *service) DeployNew(ctx context.Context, req DeployRequest) (domain.RunS
 		true,
 		probeSet.Agents, plannedPaths, deployedState)
 
-	// Compute the tool-mappings version hash from the loaded config stores so the planner
-	// can detect staleness when the user modifies their tool-destination configuration.
-	toolCfg, _ := s.deps.ToolConfig.Load()
-	userCfg, err := s.deps.UserConfig.Load()
+	// Compute the tool settings stamp (descriptor tool spec plus config) so the planner
+	// can detect staleness when either source changes.
+	toolMappingsVersion, err := s.toolSettingsStamp(module)
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
-	toolMappingsVersion := config.HashToolDestinations(toolCfg.ToolDestinations, userCfg.ToolDestinations)
 
 	planInput := plan.Input{
 		Catalog: s.deps.Catalog, Module: module, Mode: domain.ModeDeployWorkspace,

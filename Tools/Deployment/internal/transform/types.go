@@ -133,11 +133,12 @@ type Request struct {
 
 	// PreserveDeployedWorkflows lifts the deployed AvailableWorkflows region when Workflows is empty.
 	PreserveDeployedWorkflows bool
-	// ToolMappingsVersion is the hash of the effective tool-destination mapping set for this
-	// run, computed by config.HashToolDestinations. It is written to the deployed file as the
+	// ToolMappingsVersion is the tool settings stamp for this run, computed by
+	// config.ToolSettingsStamp over the harness's descriptor tool spec and config
+	// tool_destinations. It is written to the deployed file as the
 	// `tool_mappings_version` frontmatter stamp so the planner can detect staleness on
-	// subsequent runs when the config-declared mapping set changes. An empty string means no
-	// config mappings are active and no stamp is written to the deployed file.
+	// subsequent runs when those tool settings change. An empty string means the caller
+	// supplies no stamp and none is written to the deployed file.
 	ToolMappingsVersion string
 
 	// Role is the deploying agent's role. It selects the protocol variant for

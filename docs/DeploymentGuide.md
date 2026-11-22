@@ -385,7 +385,7 @@ Asked **once per batch**:
 
 - the target layer (stacks with two or more layers)
 - whether to keep or empty project region content (Keep is pre-selected; asked only when a selected agent has project content, and the summary states the answer)
-- a server name for each unmapped tool name
+- a generic tool name for each harness tool that does not map back to one: a single name per question; several harness tools can be given the same name (tools you saved to `tool_destinations` map back on their own and are not asked)
 - the recommended tier, once per distinct source model (an agent without a model is asked individually)
 
 Asked **per agent**:

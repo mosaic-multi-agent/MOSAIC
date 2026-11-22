@@ -217,10 +217,10 @@ func TestUserConfigStore_ToolDestinations_FieldDest_SaveAndLoad_AllFieldsPreserv
 					Generic: "user_interaction",
 					Destinations: []domain.ToolDestination{
 						{
-							Kind:      domain.DestField,
-							Field:     "mcpServers",
-							Format:    domain.FormatListBlock,
-							Names:     []string{"user-feedback"},
+							Kind:   domain.DestField,
+							Field:  "mcpServers",
+							Format: domain.FormatListBlock,
+							Names:  []string{"user-feedback"},
 						},
 					},
 				},

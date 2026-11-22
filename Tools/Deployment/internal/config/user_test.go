@@ -361,8 +361,8 @@ func TestUserConfig_TierModels_LeafTypeIsString(t *testing.T) {
 		if innerType.Kind() == reflect.Map {
 			leafType := innerType.Elem()
 			if leafType == modelSelectionType {
-				t.Errorf("UserConfig.TierModels leaf type is domain.ModelSelection; "+
-					"it must be a plain string (model ID) — ModelSelection carries origin metadata "+
+				t.Errorf("UserConfig.TierModels leaf type is domain.ModelSelection; " +
+					"it must be a plain string (model ID) — ModelSelection carries origin metadata " +
 					"that must never be persisted (AC14.6)")
 			}
 		}

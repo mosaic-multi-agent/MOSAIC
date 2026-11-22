@@ -83,22 +83,14 @@ func (r *promoteBatchRun) askUnmappedTool(name string) bool {
 		r.tools[name] = batchToolAnswer{}
 		return true
 	}
-	ans, ok := r.askText(domain.TextQuestion{
-		Question: domain.Question{
-			ID:           domain.QPromoteCustomTool,
-			Subject:      name,
-			Title:        "Generic tool name for harness tool " + name,
-			AllowSkip:    true,
-			AllowSkipAll: true,
-		},
-	})
+	ans, ok := r.askText(promoteToolQuestion(name))
 	if !ok {
 		return false
 	}
 	answer := batchToolAnswer{}
 	switch ans.Status {
 	case domain.Answered:
-		answer.generic = ans.Text
+		answer.generic = strings.TrimSpace(ans.Text)
 	case domain.SkippedAll:
 		r.toolsSkipped = true
 	}

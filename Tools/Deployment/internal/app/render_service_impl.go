@@ -19,7 +19,6 @@ import (
 
 	"mosaic-common/agentformat"
 	"mosaic-deploy/internal/agentkey"
-	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/transform"
 )
@@ -247,12 +246,10 @@ func renderAgent(_ context.Context, s *service, req RenderAgentRequest) (RenderA
 	// -----------------------------------------------------------------------
 	// 13. Tool-mappings version hash
 	// -----------------------------------------------------------------------
-	toolCfg, _ := s.deps.ToolConfig.Load()
-	userCfg, userCfgErr := s.deps.UserConfig.Load()
+	toolMappingsVersion, userCfgErr := s.toolSettingsStamp(module)
 	if userCfgErr != nil {
 		return RenderAgentResult{}, userCfgErr
 	}
-	toolMappingsVersion := config.HashToolDestinations(toolCfg.ToolDestinations, userCfg.ToolDestinations)
 
 	// -----------------------------------------------------------------------
 	// 14. Render via transform.Apply (the sole transformation entry point)

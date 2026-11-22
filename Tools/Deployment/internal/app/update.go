@@ -26,7 +26,6 @@ package app
 import (
 	"context"
 
-	"mosaic-deploy/internal/config"
 	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/domain"
 	"mosaic-deploy/internal/logging"
@@ -202,8 +201,8 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 
 	existing := discoverExistingWorkflows(orchState)
 	kept, err := readKeptWorkflows(workspace, module.Descriptor(), s.deps.Catalog, []deployedOrchestratorFile{
-		{TargetPath: orchTargetPath, Present: orchState.Present},
-		{TargetPath: orchScriptTargetPath, Present: orchScriptState.Present},
+		legacyAwareFile(workspace, module, snap, orchestrator.Key, orchTargetPath, orchState.Present),
+		legacyAwareFile(workspace, module, snap, orchScriptAgent.Key, orchScriptTargetPath, orchScriptState.Present),
 	})
 	if err != nil {
 		return domain.RunSummary{}, err
@@ -314,14 +313,12 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (domain.RunSumm
 		}
 	}
 
-	// Compute the tool-mappings version hash from the loaded config stores so the planner
-	// can detect staleness when the user modifies their tool-destination configuration.
-	toolCfg, _ := s.deps.ToolConfig.Load()
-	userCfg, err := s.deps.UserConfig.Load()
+	// Compute the tool settings stamp (descriptor tool spec plus config) so the planner
+	// can detect staleness when either source changes.
+	toolMappingsVersion, err := s.toolSettingsStamp(module)
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
-	toolMappingsVersion := config.HashToolDestinations(toolCfg.ToolDestinations, userCfg.ToolDestinations)
 
 	// Already-declared catalog-backed infrastructure agents are refreshed; none is ever added.
 	orchRefresh := s.orchestratorRefresh([]probedOrchestrator{

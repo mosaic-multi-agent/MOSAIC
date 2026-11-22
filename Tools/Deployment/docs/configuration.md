@@ -451,18 +451,24 @@ Every deployed agent's frontmatter carries a `tool_mappings_version: <hex>`
 field. This is bookkeeping written by the deployment tool, not something you
 author or edit:
 
-- **What it is** — a content hash of the effective `tool_destinations`
-  mappings for that agent's harness.
-- **Where it comes from** — both config files combined: the project-level
-  `tool-config.yaml` and the user-level `user-config.yaml`, per harness.
-- **What it is for** — letting `update` detect that a harness's tool mappings
-  changed without re-diffing the full tool list. Editing `tool_destinations`
-  changes the hash, so already-deployed agents are correctly detected as
-  stale on the next `update` and regenerated with the new mappings. You do
-  not need to redeploy from scratch.
-- **Empty is normal** — when neither config file declares any mappings for a
-  harness, the hash is empty, so agents deployed before this feature existed
-  do not report spurious staleness.
+- **What it is** — a content hash of the tool settings that shape an agent's
+  tools field for its harness: the harness descriptor's tool data (shape,
+  tool universe and unused-tool dispositions, name mappings, MCP name forms,
+  custom-tool destinations, placeholder expansion, rules) plus the harness's
+  `tool_destinations` from the config files.
+- **Where it comes from** — the harness descriptor shipped with the release,
+  and both config files combined: the project-level `tool-config.yaml` and
+  the user-level `user-config.yaml`, per harness.
+- **What it is for** — letting `update` detect that a harness's tool settings
+  changed without re-diffing the full tool list. Editing `tool_destinations`,
+  or upgrading to a release whose descriptor changed its tool data, changes
+  the hash, so already-deployed agents are correctly detected as stale on the
+  next `update` and regenerated with the new settings. You do not need to
+  redeploy from scratch.
+- **Never empty** — every deployed agent carries a stamp, also when no config
+  file declares any mappings. The first `update` after a release that changed
+  how the stamp is computed rewrites each agent once; after that, consecutive
+  runs are clean.
 - **Safe to ignore, do not hand-edit** — the value has no meaning to read by
   eye; hand-editing it only causes incorrect staleness detection on the next
   `update`. Leave it alone.

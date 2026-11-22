@@ -843,10 +843,10 @@ type harnessOnlyContentPlan struct {
 // rendered through transform.Apply; skill items are copied verbatim from source. Hook items
 // bypass this callback entirely and are handled by deployHooks.
 //
-// toolMappingsVersion is the hash of the effective tool-destination mapping set for this run
-// (from config.HashToolDestinations). It is forwarded to transform.Apply so the transform
-// can stamp it into the deployed file frontmatter as `tool_mappings_version`, closing the
-// probe → planner → executor → frontmatter staleness loop for config-mapping changes.
+// toolMappingsVersion is the tool settings stamp for this run (from service.toolSettingsStamp:
+// descriptor tool spec plus config tool_destinations). It is forwarded to transform.Apply so the
+// transform can stamp it into the deployed file frontmatter as `tool_mappings_version`, closing
+// the probe → planner → executor → frontmatter staleness loop for tool-setting changes.
 //
 // ownedKeyDiffSink, when non-nil, receives any OwnedKeyDifference entries emitted during
 // this run. The content callback appends to it for each agent item that carries conflict
@@ -1094,8 +1094,8 @@ func (s *service) buildContent(
 
 // buildVersionStamps derives the version stamps for every plan item from the resolved
 // artifact set and harness descriptor, keyed by target path (as deploy.ExecRequest requires).
-// toolMappingsVersion is the hash of the effective tool-destination mapping set for this run
-// (from HashToolDestinations); it is stamped into agent entries so the executor can record it
+// toolMappingsVersion is the tool settings stamp for this run (from service.toolSettingsStamp);
+// it is stamped into agent entries so the executor can record it
 // in the manifest and surface it in VersionDelta comparisons.
 func buildVersionStamps(
 	agents []domain.Agent, skills []domain.Skill, hooks []domain.HookBundle,

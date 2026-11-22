@@ -482,8 +482,9 @@ The generated generic file:
     `injections_version` (a legacy stamp, distinct from the removed descriptor field of the same name), `bundle_version`, `protocol_version`,
     `tool_mappings_version`, `model`. These are per-deployment artifacts that
     have no place in a generic source. See "The `tool_mappings_version` stamp"
-    in `docs/configuration.md` for what that particular field is and where it
-    comes from.
+    in `docs/configuration.md` for what that particular field is (a hash of the
+    harness descriptor's tool data plus the config `tool_destinations`) and
+    where it comes from.
 
 The source (harness-only) file is **never modified or deleted**.
 
@@ -562,8 +563,9 @@ list shows the promotable agents, including those whose key already exists in
 the stack (hand-written agents that are not promotable are not listed). Asked
 once per batch: the target layer (stacks of two or more layers), whether to keep
 or empty project region content (Keep pre-selected; asked only when a selected
-agent has project content, and the summary states the answer), a server name
-for each unmapped tool name, and the recommended tier per distinct source model
+agent has project content, and the summary states the answer), a single
+generic tool name for each harness tool that does not map back (several harness
+tools can be given the same name; a list is refused in place), and the recommended tier per distinct source model
 (agents without a model are asked individually). Asked per agent: the category
 (mandatory), the tier rationale and required skills (Ctrl+K skips for this
 agent, Ctrl+X for the rest of the batch), and for an existing key replace or

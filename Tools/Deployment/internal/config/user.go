@@ -337,4 +337,3 @@ func (s *userConfigStore) saveFresh(raw userConfigYAML) error {
 	}
 	return nil
 }
-
