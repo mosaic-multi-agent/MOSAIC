@@ -281,6 +281,15 @@ mosaic-log-analyzer settings path
 
 Output is one `global:` line and one `project:` line, each marked `(exists)` or `(absent)`. The TUI help overlay shows the same four files under "Configuration files".
 
+### Failure files
+
+When LogAnalyzer ends with an unexpected failure (exit code 1, a failure while starting, a TUI that cannot run) or a panic, it writes a failure file named `mosaic-log-analyzer-failure-<UTC time>-<pid>.txt` into the global folder shown above. It holds the time, the tool and its version, the command line, the message and, for a panic, the stack trace. Documented outcomes (exit codes 2 to 5) and successful runs write no file.
+
+- **CLI:** stderr is unchanged except for one last line, `failure report written to <path>`, when the file was written.
+- **TUI:** the failure message and the file path are shown. On Windows the program then waits for Enter, so a console that opened just for the run does not vanish. A TUI you quit normally never waits, and neither does one interrupted from outside (for example Ctrl+Break); an analysis error screen you saw and quit still ends with exit code 1 and writes no file.
+
+If the global folder cannot be determined or written, the message is still shown and no file is written.
+
 ### How the levels merge
 
 - **Pricing:** entries of both files are combined. When both files price the same provider and model, the **project entry wins**.

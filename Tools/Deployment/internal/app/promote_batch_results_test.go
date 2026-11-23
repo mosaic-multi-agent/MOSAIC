@@ -314,7 +314,7 @@ func TestPromoteBatch_EverySelectedAgentIsAccountedFor(t *testing.T) {
 }
 
 // TestPromoteBatch_NewAgents_GetDistinctIDsAboveTheStackAndDistinctKeys verifies new agents get
-// consecutive ids above the stack's largest, no id of the stack is reused, and two selected files
+// consecutive ids from the 1000 floor of a user layer, no id of the stack is reused, and two selected files
 // with the same key write only the first of them (in selection order) and ask nothing for the
 // second.
 func TestPromoteBatch_NewAgents_GetDistinctIDsAboveTheStackAndDistinctKeys(t *testing.T) {
@@ -336,9 +336,9 @@ func TestPromoteBatch_NewAgents_GetDistinctIDsAboveTheStackAndDistinctKeys(t *te
 	for _, f := range []string{"a-agent.md", "b-agent.md", "x.agent.md"} {
 		ids[f] = requirePromoted(t, res, f).Result.NumericID
 	}
-	want := map[string]string{"a-agent.md": "901", "b-agent.md": "902", "x.agent.md": "903"}
+	want := map[string]string{"a-agent.md": "1000", "b-agent.md": "1001", "x.agent.md": "1002"}
 	if !reflect.DeepEqual(ids, want) {
-		t.Errorf("ids = %v, want consecutive ids above the stack's largest %v", ids, want)
+		t.Errorf("ids = %v, want consecutive ids from the floor %v", ids, want)
 	}
 	dup := agentResult(t, res, "x.md")
 	if dup.Status != app.PromoteBatchSkipped || !strings.Contains(dup.Reason, "same key x") {

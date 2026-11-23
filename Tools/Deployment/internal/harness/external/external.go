@@ -37,6 +37,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"mosaic-common/fatal"
 	"mosaic-deploy/internal/domain"
 )
 
@@ -471,6 +472,7 @@ func (c *liveConn) readResponseWithTimeout(timeout time.Duration) (wireResponse,
 	}
 	ch := make(chan result, 1)
 	go func() {
+		defer fatal.Recover()
 		var resp wireResponse
 		err := c.dec.Decode(&resp)
 		ch <- result{resp, err}
@@ -613,7 +615,10 @@ func startLiveConn(execPath string, desc *domain.HarnessDescriptor, timeout time
 	stdinR.Close()
 	stdoutW.Close()
 
-	go func() { c.waitCh <- cmd.Wait() }()
+	go func() {
+		defer fatal.Recover()
+		c.waitCh <- cmd.Wait()
+	}()
 
 	ref, err := performHandshake(c, execPath, desc, timeout)
 	if err != nil {

@@ -6,27 +6,14 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/mattn/go-isatty"
-
-	"mosaic-log-analyzer/internal/app"
-	"mosaic-log-analyzer/internal/cli"
-	"mosaic-log-analyzer/internal/digest"
-	"mosaic-log-analyzer/internal/findingsfile"
-	"mosaic-log-analyzer/internal/logread"
-	"mosaic-log-analyzer/internal/logscan"
-	"mosaic-log-analyzer/internal/otelusage"
-	"mosaic-log-analyzer/internal/pricing"
-	"mosaic-log-analyzer/internal/settings"
-	"mosaic-log-analyzer/internal/transcript"
-	"mosaic-log-analyzer/internal/tui"
+	"mosaic-common/fatal"
 )
 
-const ToolVersion = "1.6.0"
+const ToolVersion = "1.7.0"
 
 // valueFlagNames are the flags that consume a following token in space-separated
 // form (--flag value). Boolean flags like --tui are NOT in this set.
@@ -127,91 +114,5 @@ type realClock struct{}
 func (c *realClock) Now() time.Time { return time.Now().UTC() }
 
 func main() {
-	args := os.Args[1:]
-
-	if versionRequested(args) {
-		os.Exit(runVersion(os.Stdout))
-	}
-
-	workDir, err := os.Getwd()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: getting working directory: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Pre-scan --path before dispatching; passed to tui.Options.InitialPath.
-	explicitPath := scanFlag(args, "--path", "")
-
-	// Construct all infrastructure adapters here — the only site in the module
-	// where concrete implementations are instantiated.
-	scanner := logscan.NewScanner()
-	reader := logread.NewReader()
-	globalDir := globalConfigDir()
-	pricingStore := pricing.NewStore(globalDir, workDir)
-	settingsStore := settings.NewStore(globalDir, workDir)
-	ensureGlobalFiles(pricingStore, settingsStore)
-	clock := &realClock{}
-	digestStore := digest.NewStore()
-	usageIngest := otelusage.New()
-
-	if wantsTUI(args, isatty.IsTerminal) {
-		// TUI mode: create the TUI interaction first so it can be shared between
-		// the service (which calls it for source prompts and pricing gaps) and the
-		// TUI model (which renders the overlay and supplies answers).
-		tuiInteract, tuiQuestions := tui.NewInteraction()
-
-		svc := app.New(app.Deps{
-			Source:        scanner,
-			Reader:        reader,
-			Pricing:       pricingStore,
-			Settings:      settingsStore,
-			Digests:       digestStore,
-			ToolVersion:   ToolVersion,
-			Clock:         clock,
-			Interaction:   tuiInteract,
-			WorkDir:       workDir,
-			IngestProbe:   usageIngest,
-			Alarms:        scanner,
-			Transcripts:   transcript.NewReader(),
-			FindingsFiles: findingsfile.NewWriter(),
-		})
-
-		os.Exit(tui.Run(tui.Options{
-			Service:     svc,
-			InitialPath: explicitPath,
-			Version:     ToolVersion,
-			Interaction: tuiInteract,
-			Questions:   tuiQuestions,
-		}))
-	}
-
-	// CLI mode: build the non-blocking Interaction from any flag-derived answers,
-	// then hand the fully-wired service to the cobra command tree.
-	answers := cli.Answers{}
-	interact := cli.NewInteraction(os.Stdout, answers)
-
-	svc := app.New(app.Deps{
-		Source:        scanner,
-		Reader:        reader,
-		Pricing:       pricingStore,
-		Settings:      settingsStore,
-		Digests:       digestStore,
-		ToolVersion:   ToolVersion,
-		Clock:         clock,
-		Interaction:   interact,
-		WorkDir:       workDir,
-		Ingester:      usageIngest,
-		IngestProbe:   usageIngest,
-		Alarms:        scanner,
-		Transcripts:   transcript.NewReader(),
-		FindingsFiles: findingsfile.NewWriter(),
-	})
-
-	os.Exit(cli.Execute(cli.Options{
-		Service: svc,
-		Stdout:  os.Stdout,
-		Stderr:  os.Stderr,
-		Version: ToolVersion,
-		Getenv:  os.Getenv,
-	}, args))
+	run(fatal.Config{}, os.Args[1:], exitSeams{})
 }

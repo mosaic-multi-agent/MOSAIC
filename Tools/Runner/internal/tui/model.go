@@ -234,7 +234,7 @@ func Run(ctx context.Context, sess session.Session, opts Options) error {
 		programOpts = append(programOpts, tea.WithMouseCellMotion())
 	}
 
-	p := tea.NewProgram(m, programOpts...)
+	p := opts.newProgram(m, programOpts...)
 
 	if opts.Interaction != nil {
 		opts.Interaction.set(p)

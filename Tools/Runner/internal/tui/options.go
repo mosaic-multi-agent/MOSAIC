@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	tuicommon "mosaic-common/tui"
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/runscan"
@@ -186,4 +188,9 @@ type Options struct {
 	// the result as a testAllDoneMsg. When nil and DevMode is true, the "Run
 	// Tests" option is visible but starting a run will show an error.
 	TestRunnerFactory func(ctx context.Context, cfg testrun.TestConfig, reporter testrun.ProgressReporter) (*testrun.TestSummary, error)
+
+	// NewProgram builds the Bubble Tea program; nil means tea.NewProgram. The composition
+	// root supplies the shared fatal reporter's factory so panics inside the model are
+	// reported and the terminal is restored.
+	NewProgram func(m tea.Model, opts ...tea.ProgramOption) *tea.Program
 }

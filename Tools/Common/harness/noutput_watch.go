@@ -4,6 +4,8 @@ import (
 	"io"
 	"sync"
 	"time"
+
+	"mosaic-common/fatal"
 )
 
 // outputWatch is Run's opt-in no-output watchdog. It records when stdout data
@@ -31,7 +33,10 @@ func startOutputWatch(after time.Duration) *outputWatch {
 		quit:  make(chan struct{}),
 		last:  time.Now(),
 	}
-	go w.run()
+	go func() {
+		defer fatal.Recover()
+		w.run()
+	}()
 	return w
 }
 

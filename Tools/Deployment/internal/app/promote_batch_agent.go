@@ -204,6 +204,7 @@ func (r *promoteBatchRun) writeBatchAgent(
 	dest := promoteDestination{
 		targetRoot:      r.layer.root,
 		targetCatalogID: r.layer.catalogID,
+		targetIsDefault: r.layer.isDefault,
 		category:        category,
 		path:            promoteDestinationPath(r.layer.root, category, src.key),
 	}

@@ -12,9 +12,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
+	"mosaic-common/fatal"
 	commonharness "mosaic-common/harness"
 
 	"mosaic-run/internal/artifact"
@@ -27,7 +29,7 @@ import (
 	"github.com/mattn/go-isatty"
 )
 
-const ToolVersion = "1.16.0"
+const ToolVersion = "1.17.0"
 
 // stdioIsTerminal reports whether stdin and stdout are both real terminals.
 func stdioIsTerminal() bool {
@@ -58,52 +60,22 @@ func wantsTUIWith(args []string, isTerminal func() bool) bool {
 	return isTerminal()
 }
 
+// main hands the whole run to runTool, which ends the process through the fatal reporter.
 func main() {
-	args := os.Args[1:]
-
-	// --version is decided before any other routing or wiring: no TUI, logger,
-	// run identity or workspace access.
-	switch selectFrontend(args, stdioIsTerminal) {
-	case frontendVersion:
-		os.Exit(runVersion(os.Stdout))
-	case frontendVersionUsage:
-		os.Exit(runVersionUsage(os.Stderr))
-	}
-
-	// Pre-scan --dev before any other processing. The --dev flag gates the test
-	// subcommand and the TUI test flow. It is an entry-point-only flag (like
-	// --tui): it is consumed here and must be stripped before cobra sees it,
-	// since neither the run nor the test cobra subcommand registers it.
-	devMode := scanBoolFlag(args, "--dev")
-	cobraArgs := stripBoolFlag(args, "--dev")
-
-	if wantsTUI(cobraArgs) {
-		runTUIMode(cobraArgs, devMode)
-		return
-	}
-
-	// When --dev is present and the first positional argument is "test", route to
-	// the test subcommand entry point before any run-specific wiring (run identity
-	// resolution, session construction, etc.). The test subcommand manages its own
-	// dependency construction from its flags.
-	if devMode && firstPositionalArg(cobraArgs) == "test" {
-		os.Exit(runDevTestMode(cobraArgs))
-	}
-
-	os.Exit(runCLIMode(args, cobraArgs))
+	runTool(fatal.Config{}, os.Args[1:], defaultExitSeams())
 }
 
 // runDevTestMode routes to the --dev test subcommand entry point. The test
 // subcommand manages its own dependency construction from its flags, so no
 // run-specific wiring (run identity resolution, session construction) happens
 // before this call.
-func runDevTestMode(cobraArgs []string) int {
-	testWorkDir, wdErr := os.Getwd()
+func runDevTestMode(cobraArgs []string, getwd func() (string, error), stdout, stderr io.Writer) int {
+	testWorkDir, wdErr := getwd()
 	if wdErr != nil {
-		fmt.Fprintf(os.Stderr, "error: getting working directory: %v\n", wdErr)
+		fmt.Fprintf(stderr, "error: getting working directory: %v\n", wdErr)
 		return 1
 	}
-	return cli.RunTestCommand(context.Background(), cobraArgs, testWorkDir, os.Stdout, os.Stderr)
+	return cli.RunTestCommand(context.Background(), cobraArgs, testWorkDir, stdout, stderr)
 }
 
 // runCLIMode performs the non-interactive CLI frontend's dependency wiring and
@@ -111,12 +83,18 @@ func runDevTestMode(cobraArgs []string) int {
 // (used for pre-scans that must see --dev-adjacent flags exactly as main()
 // received them); cobraArgs is the --dev-stripped list handed to cli.Run.
 func runCLIMode(args, cobraArgs []string) int {
+	return runCLI(args, cobraArgs, os.Getwd, os.Stdout, os.Stderr)
+}
+
+// runCLI is runCLIMode with its process facts injected: the working directory lookup and the
+// writers for the command result and for all error output.
+func runCLI(args, cobraArgs []string, getwd func() (string, error), stdout, stderr io.Writer) int {
 	// Resolve the working directory as early as possible so the debug logger can
 	// be constructed before any other operation, capturing failures that occur
 	// before run identity is known.
-	workDir, err := os.Getwd()
+	workDir, err := getwd()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: getting working directory: %v\n", err)
+		fmt.Fprintf(stderr, "error: getting working directory: %v\n", err)
 		return 1
 	}
 
@@ -151,7 +129,7 @@ func runCLIMode(args, cobraArgs []string) int {
 	runIdentity, _, identErr := resolveRunIdentityForCLI(args, workDir)
 	if identErr != nil {
 		logger.Log(domain.EventRunnerError, identErr.Error())
-		fmt.Fprintf(os.Stderr, "error: %v\n", identErr)
+		fmt.Fprintf(stderr, "error: %v\n", identErr)
 		return 2
 	}
 
@@ -164,8 +142,8 @@ func runCLIMode(args, cobraArgs []string) int {
 	store := newLoggedArtifactStore(filepath.Join(runIdentity.RunFolder, "Orchestration.md"), logger)
 
 	// Build the CLI Interaction port. The same instance is used as the session's
-	// Interaction (for per-step progress and notices) and writes to os.Stdout.
-	interact := cli.NewInteraction(os.Stdout)
+	// Interaction (for per-step progress and notices) and writes to stdout.
+	interact := cli.NewInteraction(stdout)
 
 	// Pre-scan the GHCP CLI permission mode flag. Only relevant when
 	// --harness=ghcp-cli; ignored for other harnesses. The flag is optional;
@@ -175,11 +153,11 @@ func runCLIMode(args, cobraArgs []string) int {
 	// FR-8: Reject a GHCP CLI run without a resolved mode before spawning.
 	// In CLI mode the flag must be supplied when the harness is ghcp-cli.
 	if harnessStr == commonharness.HarnessIDGHCPCLI && ghcpPermissionMode == "" {
-		fmt.Fprintf(os.Stderr, "error: --ghcp-permission-mode is required when --harness=ghcp-cli (accepted values: blanket, allowlist)\n")
+		fmt.Fprintf(stderr, "error: --ghcp-permission-mode is required when --harness=ghcp-cli (accepted values: blanket, allowlist)\n")
 		return 2
 	}
 	if ghcpPermissionMode != "" && ghcpPermissionMode != "blanket" && ghcpPermissionMode != "allowlist" {
-		fmt.Fprintf(os.Stderr, "error: --ghcp-permission-mode must be \"blanket\" or \"allowlist\", got %q\n", ghcpPermissionMode)
+		fmt.Fprintf(stderr, "error: --ghcp-permission-mode must be \"blanket\" or \"allowlist\", got %q\n", ghcpPermissionMode)
 		return 2
 	}
 
@@ -232,5 +210,5 @@ func runCLIMode(args, cobraArgs []string) int {
 	sess = newRunLifecycleSession(sess, newRunLogConfig(runIdentity.RunFolder, harnessStr, logger, &realClock{}))
 	runCtx, releaseRunCtx := newCLIRunContext(context.Background(), osInterrupt)
 	defer releaseRunCtx()
-	return cli.Run(runCtx, cobraArgs, store, runIdentity, sess, os.Stdout, os.Stderr)
+	return cli.Run(runCtx, cobraArgs, store, runIdentity, sess, stdout, stderr)
 }

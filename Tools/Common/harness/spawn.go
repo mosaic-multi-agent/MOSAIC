@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"mosaic-common/fatal"
 )
 
 // defaultTimeout is applied when neither the request nor the spawner
@@ -264,7 +266,10 @@ func Run(ctx context.Context, cmd Command, args []string, o RunOptions) (Respons
 	group.attach(execCmd.Process)
 
 	waitCh := make(chan error, 1)
-	go func() { waitCh <- execCmd.Wait() }()
+	go func() {
+		defer fatal.Recover()
+		waitCh <- execCmd.Wait()
+	}()
 
 	timeout := o.Timeout
 	if timeout <= 0 {

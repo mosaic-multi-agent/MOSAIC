@@ -1,3 +1,26 @@
+# Unreleased
+
+## Tools
+
+### Runner v1.17.0
+#### Bugfixes
+- **Fatal failures and panics are no longer silent.** A fatal failure on a Windows TUI start shows its message and waits for Enter, and a panic is reported with message and stack while the terminal is restored. An unexpected failure or panic writes a `mosaic-run-failure-<UTC time>-<pid>.txt` file next to the `mosaic-run` executable with the time, version, command line, message and stack. In CLI mode one extra stderr line names the file; stdout and exit codes are unchanged. See the Runner guide
+
+### Deploy v1.14.0
+#### Changes
+- **Promoted agents in a non-default catalog layer get an id of at least 1000** (the larger of 1000 and the highest id + 1), in CLI and TUI promote. The default catalog keeps highest id + 1, and replaced agents keep their ids
+#### Bugfixes
+- **Fatal failures and panics are no longer silent.** A fatal failure on a Windows TUI start shows its message and waits for Enter, and a panic is reported with message and stack while the terminal is restored. An unexpected failure or panic writes a `mosaic-deploy-failure-<UTC time>-<pid>.txt` file next to the `mosaic-deploy` executable with the time, version, command line, message and stack. In CLI mode one extra stderr line names the file; stdout and exit codes are unchanged. See the Deployment guide
+
+### LogAnalyzer v1.7.0
+#### Bugfixes
+- **Fatal failures and panics are no longer silent.** A fatal failure on a Windows TUI start shows its message and waits for Enter, and a panic is reported with message and stack while the terminal is restored. An unexpected failure or panic writes a `mosaic-log-analyzer-failure-<UTC time>-<pid>.txt` file into the global folder with the time, version, command line, message and stack. In CLI mode one extra stderr line names the file; stdout and exit codes are unchanged. See the LogAnalyzer guide
+- A TUI that cannot run is reported instead of exiting silently
+
+### AgentTest v1.3.2
+#### Changes
+- Rebuilt with the updated shared harness package; no change in behaviour
+
 # 0.8.0 (2026-11-22)
 
 > **To upgrade:**

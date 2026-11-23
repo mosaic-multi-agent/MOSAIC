@@ -652,7 +652,7 @@ The stack in effect never changes an exit code.
 - A **new** agent in a stack of two or more layers needs a target layer: pass `--target-catalog <catalog id>` on the CLI (without it the command fails and writes nothing), or choose a layer when the TUI asks. The default layer is a valid target.
 - With one layer there is nothing to choose.
 
-The category list comes from the target layer's `Subagents/` folder. The new agent's numeric id is one greater than the largest id across *all* agents of the stack, so it never collides with another layer.
+The category list comes from the target layer's `Subagents/` folder. The new agent's numeric id is one greater than the largest id across *all* agents of the stack, so it never collides with another layer. In any layer other than the default catalog, the id is at least 1000, so later default agents (which take the next low ids) cannot clash with it. Agents you add to the default catalog itself do not get this floor: give them an id of 1000 or more yourself.
 
 ```sh
 mosaic-deploy promote --file /path/to/agent.md --harness claude-code \
@@ -739,6 +739,10 @@ Work through this checklist before using the workspace. Filling project regions 
 | `MosaicDeploy/logs/latest.log` | Full log of the most recent run |
 | `MosaicDeploy/logs/history.log` | Summary of all runs, newest first |
 
+### Failure file
+
+When `mosaic-deploy` ends with an unexpected failure (exit code 1, a failure while starting up, a TUI that cannot run) or a panic, it writes a failure file named `mosaic-deploy-failure-<UTC time>-<pid>.txt` into the folder that holds the `mosaic-deploy` executable. The file holds the time, the tool version, the command line, the failure message and, for a panic, the stack trace. The failure message is also shown on screen, followed by the line `failure report written to <path>` naming the file; the file is skipped silently when that folder cannot be written. On Windows, a TUI start (for example a double-click) then waits for Enter so the message stays readable. Success, exit code 2 (completed with skips), exit code 3 (invalid arguments) and a TUI interrupted by a signal write no failure file.
+
 ---
 
 ## Exit Codes
@@ -766,7 +770,7 @@ Work through this checklist before using the workspace. Filling project regions 
 | "catalog stack has no layers" | You gave `--include-default-catalog=false` without `--catalog-folder`. Add a layer or drop the flag. |
 | "catalog layer ... has no valid identity" | The folder given to `--catalog-folder` has no valid `catalog-identity.yaml` at its root. See the identity section of `Catalog/CatalogFilesFormat.md`. |
 | "two catalog layers share a catalog id" | Two layers declare the same `id`. Give each catalog a unique id. |
-| "numeric agent id used by two different agents" | Two agents that both win in the stack share a numeric `id`. Renumber one, or leave the clashing catalog (for example the AgentTest catalog) out of the stack. |
+| "numeric agent id used by two different agents" | Two agents that both win in the stack share a numeric `id`. Renumber one, or leave the clashing catalog (for example the AgentTest catalog) out of the stack. After a MOSAIC update, renumber your own agent to 1000 or more. |
 | "catalog layer supplies only one orchestrator file" | A layer has `orchestrator.md` or `orchestrator-script.md` but not both. Supply both or neither. |
 | "no catalog layer supplies ..." | No layer has `CommunicationProtocol.md`, `DeployedSections.md` or the harness's `HarnessInjections/<Harness>/`. A catalog used without the default layer must carry its own copies. |
 | "persisted catalog layer no longer resolves" | A layer stored with the workspace moved or changed id. Pass new stack flags (they replace the persisted stack), or `--include-default-catalog` alone to return to the default catalog. |

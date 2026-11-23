@@ -5,6 +5,8 @@ import (
 	"io"
 	"strconv"
 	"sync"
+
+	"mosaic-common/fatal"
 )
 
 // stdoutLogger reports stdout lines to a Sink as they arrive. Write never
@@ -42,7 +44,10 @@ func startStdoutLogger(sink Sink) *stdoutLogger {
 		wake: make(chan struct{}, 1),
 		done: make(chan struct{}),
 	}
-	go l.deliver()
+	go func() {
+		defer fatal.Recover()
+		l.deliver()
+	}()
 	return l
 }
 
