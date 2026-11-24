@@ -1,25 +1,29 @@
-# Unreleased
+# 0.8.1 (2026-11-24)
 
 ## Tools
 
 ### Runner v1.17.0
 #### Bugfixes
-- **Fatal failures and panics are no longer silent.** A fatal failure on a Windows TUI start shows its message and waits for Enter, and a panic is reported with message and stack while the terminal is restored. An unexpected failure or panic writes a `mosaic-run-failure-<UTC time>-<pid>.txt` file next to the `mosaic-run` executable with the time, version, command line, message and stack. In CLI mode one extra stderr line names the file; stdout and exit codes are unchanged. See the Runner guide
+- **Fatal failures and panics are no longer silent.** The message stays on screen, a TUI waits for Enter, and a failure file is written next to the executable.
 
 ### Deploy v1.14.0
 #### Changes
-- **Promoted agents in a non-default catalog layer get an id of at least 1000** (the larger of 1000 and the highest id + 1), in CLI and TUI promote. The default catalog keeps highest id + 1, and replaced agents keep their ids
+- **Promoted agents in a non-default catalog layer get an id of at least 1000** (the larger of 1000 and the highest id + 1), in CLI and TUI promote. The default catalog keeps highest id + 1, and replaced agents keep their ids. Agents promoted earlier keep their ids too: give any below 1000 an id of 1000 or more yourself, because a later default catalog agent can take the same id and Deploy then refuses to load the stack
 #### Bugfixes
-- **Fatal failures and panics are no longer silent.** A fatal failure on a Windows TUI start shows its message and waits for Enter, and a panic is reported with message and stack while the terminal is restored. An unexpected failure or panic writes a `mosaic-deploy-failure-<UTC time>-<pid>.txt` file next to the `mosaic-deploy` executable with the time, version, command line, message and stack. In CLI mode one extra stderr line names the file; stdout and exit codes are unchanged. See the Deployment guide
+- **Fatal failures and panics are no longer silent.** The message stays on screen, a TUI waits for Enter, and a failure file is written next to the executable.
 
 ### LogAnalyzer v1.7.0
 #### Bugfixes
-- **Fatal failures and panics are no longer silent.** A fatal failure on a Windows TUI start shows its message and waits for Enter, and a panic is reported with message and stack while the terminal is restored. An unexpected failure or panic writes a `mosaic-log-analyzer-failure-<UTC time>-<pid>.txt` file into the global folder with the time, version, command line, message and stack. In CLI mode one extra stderr line names the file; stdout and exit codes are unchanged. See the LogAnalyzer guide
+- **Fatal failures and panics are no longer silent.** The message stays on screen, a TUI waits for Enter, and a failure file is written into the global folder.
 - A TUI that cannot run is reported instead of exiting silently
 
 ### AgentTest v1.3.2
 #### Changes
 - Rebuilt with the updated shared harness package; no change in behaviour
+
+## Catalog
+- **Restored** the workflows `implementation-only` and `brownfield-research-only`, removed in 0.8.0 but reported as in use by users. Workspaces that kept their deployed copies can select them again and get catalog updates
+- **implementation-only** (v4.1): test-runner reads `Plan.md`, so it no longer asks for its scope on every run.
 
 # 0.8.0 (2026-11-22)
 

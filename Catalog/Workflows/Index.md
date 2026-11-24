@@ -1,6 +1,6 @@
 # Workflow Index
 
-Workflow definitions organized by category. This file is a lookup table pointing at the 12 workflow files in this catalog — it is not the source of truth for any workflow's metadata. The **Version** column mirrors each file's frontmatter `version` and is updated whenever the workflow's version is bumped (`WorkflowFormat.md` §11.2); where the two disagree, the file wins. Description and hint come only from the file's frontmatter.
+Workflow definitions organized by category. This file is a lookup table pointing at the 14 workflow files in this catalog — it is not the source of truth for any workflow's metadata. The **Version** column mirrors each file's frontmatter `version` and is updated whenever the workflow's version is bumped (`WorkflowFormat.md` §11.2); where the two disagree, the file wins. Description and hint come only from the file's frontmatter.
 
 ## How to Use Workflows
 
@@ -15,7 +15,7 @@ Workflows are organized into six categories reflecting their primary purpose:
 
 - **Build** — Feature development and implementation (new projects, existing codebases, fixes)
 - **Audit** — Quality assessment of existing code (PR reviews, system-level audits)
-- **Research** — Research and analysis (e.g. product comparison) without implementation
+- **Research** — Codebase exploration and research and analysis (e.g. product comparison) without implementation
 - **Design** — Architecture review and design proposals without implementation
 - **Verification** — Deriving verification artifacts (test scenarios, test cases) from specifications; no implementation
 - **DataPreprocessing** — Knowledge base generation and refresh
@@ -55,6 +55,7 @@ Harness conformance fixtures for `mosaic-run` live under `Tools/Runner/TestCatal
 |----|----------|---------|------|--------|------|
 | greenfield-tdd | Build | 4.0 | Greenfield TDD Workflow | MOSAIC | `Build/greenfield-tdd.md` |
 | brownfield-tdd | Build | 4.1 | Brownfield TDD Workflow | MOSAIC | `Build/brownfield-tdd.md` |
+| implementation-only | Build | 4.1 | Implementation Only Workflow | MOSAIC | `Build/implementation-only.md` |
 | brownfield-tdd-build-verified | Build | 3.1 | Brownfield TDD Build-Verified Workflow | MOSAIC | `Build/brownfield-tdd-build-verified.md` |
 | brownfield-pr-fix | Build | 1.3 | Brownfield PR Fix Workflow | MOSAIC | `Build/brownfield-pr-fix.md` |
 
@@ -69,6 +70,7 @@ Harness conformance fixtures for `mosaic-run` live under `Tools/Runner/TestCatal
 
 | ID | Category | Version | Name | Author | File |
 |----|----------|---------|------|--------|------|
+| brownfield-research-only | Research | 1.0 | Brownfield Research Only Workflow | MOSAIC | `Research/brownfield-research-only.md` |
 | product-comparison | Research | 2.0 | Product Comparison Workflow | MOSAIC | `Research/product-comparison.md` |
 
 ### Design
