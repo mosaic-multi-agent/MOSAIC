@@ -26,8 +26,12 @@ handles.
 | `internal/tui/update_setup.go` `launchSession` | Builds the session, batches `startSession` | Not needed | Runs no work itself; covered by `startSession`. |
 | `internal/cli/run.go` `runCmd.RunE` | CLI run | Existing boundary kept as last resort | Stack to error output, `ExitFailure`. `cli.Run` stays logger-free. |
 | `cmd/mosaic-run/main.go` CLI composition (`newPanicLoggingSession`) | CLI session | Boundary added | Converts a panic in `Start` into an error with a `RunFailed` outcome and logs value and stack; sits inside `newRunLifecycleSession` so `run_end` is still written. |
-| `cmd/mosaic-run/mosaiclog_wiring.go` `newCLIRunContext` goroutine | Signal watcher | Not needed | A `select` that only calls `cancel()` and the signal-stop seam; no work, no I/O. |
-| `Tools/Common/harness/spawn.go` `Run` wait goroutine | `waitCh <- execCmd.Wait()` | Not needed | Standard-library `Wait` only; Common is shared with AgentTest and Deployment, so a change there is out of proportion. |
+| `cmd/mosaic-run/mosaiclog_wiring.go` `newCLIRunContext` goroutine | Signal watcher | Shared fatal routing (`fatal.Recover`) | Every goroutine the tool starts runs under the shared fatal reporter, including those running only standard-library code. |
+| `internal/tui/activity_observer.go` `post` drain goroutine | Hands queued activity messages to the program | Shared fatal routing (`fatal.Recover`) | Same rule. |
+| `cmd/mosaic-run/exit_wiring.go` `runTool` | Whole process | Top-level `fatal.Recover` | Any panic outside the session boundaries is reported with message and stack, a failure file is written, exit code 1. |
+| `internal/tui/model.go` `Run` | Bubble Tea program | Program built through the fatal reporter | Panics in `Init`, `Update`, `View` and commands are reported and the terminal is restored. |
+| `Tools/Common/harness` worker goroutines | Logging sinks, stdout observers | Shared fatal routing | A panicking logging sink is reported; a panic in a stdout-line observer callback stays swallowed. |
+| `Tools/Common/harness/spawn.go` `Run` wait goroutine | `waitCh <- execCmd.Wait()` | Not needed | Standard-library `Wait` only. |
 | Harness stdout/stderr readers, background loggers | n/a | None exist | `Run` assigns `bytes.Buffer`s; `os/exec` copies internally. |
 
 The inventory search found no additional site. No open follow-ups.

@@ -1,5 +1,5 @@
 ---
-version: 3.1.2
+version: 3.2.0
 base-version: 1.0.0
 name: subagent-creator
 description: Creates high-quality orchestration subagent instructions through iterative collaboration, ensuring compliance with the multi-agent orchestration system architecture and protocols
@@ -243,7 +243,7 @@ Supporting documents, read when relevant to the agent at hand:
 
 ### Where Subagents Live
 
-The `Catalog/Subagents/{Category}/README.md` files form the agent registry — every existing subagent with its function folder, id, version, tier, and one-line description. Read the relevant category README during Phase 2: it is how you check for scope overlap, how you pick an unused `id`, and how you decide which folder the new file belongs in.
+The `Catalog/Subagents/{Category}/README.md` files form the agent registry — every existing subagent with its function folder, id, version, tier, and one-line description. Read the relevant category README during Phase 2: it is how you check for scope overlap, how you find the ids already taken, and how you decide which folder the new file belongs in.
 
 An agent's function is its folder. There is no frontmatter field for it, and adding one would be a second statement of the same fact.
 
@@ -456,7 +456,11 @@ Subagent instructions name no other agent, no artifact file, no workflow, and no
 
 The field list and its rules are in the schema document. What it cannot decide for you:
 
-- **`id`** — the next unused integer. Check the `Catalog/Subagents/` category README files; it must be unique across the registry and never changes afterwards.
+- **`id`** — depends on which catalog the agent is for. Establish that first; when the request does not make it clear, ask the user.
+  - **MOSAIC default catalog** (`Catalog/` in the MOSAIC repo, maintained by MOSAIC): the next unused id below 1000.
+  - **A user's own agent** — in a separate catalog layer, or added by the user into the default catalog folder: the next unused id of 1000 or more, checked across the default catalog and the user's catalog. Low ids belong to MOSAIC; a user agent there clashes with the next MOSAIC release.
+
+  The id must be unique across the catalog stack and never changes afterwards.
 - **`name`** — kebab-case, matching the file's base name.
 - **`tools`** — the generic vocabulary this agent actually needs. Read the `tools` line of two or three existing agents in the same function folder rather than guessing; terminal access in particular is granted only where the agent runs something.
 - **`recommended_tier` and `tier_rationale`** — the capability the work demands, and one line saying why. The rationale is shown to a person choosing a model, so make it a reason rather than a restatement of the tier.

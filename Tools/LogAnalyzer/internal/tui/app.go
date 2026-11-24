@@ -22,6 +22,9 @@ type Options struct {
 	// the TUI model share the same Interaction channel.
 	Interaction *Interaction
 	Questions   <-chan Pending
+	// NewProgram builds the bubbletea program; nil means tea.NewProgram. The
+	// composition root sets the fatal-exit reporter's guarded builder here.
+	NewProgram func(m tea.Model, opts ...tea.ProgramOption) *tea.Program
 }
 
 // screenName identifies the currently active screen.
@@ -137,19 +140,17 @@ func New(opts Options) Model {
 	}
 }
 
-// Run starts the bubbletea program and returns the process exit code, mapped
-// to the same stable codes the CLI uses.
-func Run(opts Options) int {
+// Run starts the bubbletea program and returns the in-TUI outcome code, mapped
+// to the same stable codes the CLI uses, and a non-nil error only when the TUI
+// could not run or ended abnormally.
+func Run(opts Options) (int, error) {
 	m := New(opts)
-	p := tea.NewProgram(m, tea.WithAltScreen())
-	finalModel, err := p.Run()
-	if err != nil {
-		return 1
+	newProgram := opts.NewProgram
+	if newProgram == nil {
+		newProgram = tea.NewProgram
 	}
-	if fm, ok := finalModel.(Model); ok {
-		return fm.exitCode
-	}
-	return 0
+	p := newProgram(m, tea.WithAltScreen())
+	return runResult(p.Run())
 }
 
 // Init is called once when the bubbletea program starts.

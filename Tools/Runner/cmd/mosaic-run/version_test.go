@@ -10,8 +10,8 @@ import (
 )
 
 func TestToolVersion_IsBumpedForVersionFlag(t *testing.T) {
-	if ToolVersion != "1.16.0" {
-		t.Fatalf("ToolVersion = %q, want 1.16.0", ToolVersion)
+	if ToolVersion != "1.17.0" {
+		t.Fatalf("ToolVersion = %q, want 1.17.0", ToolVersion)
 	}
 }
 

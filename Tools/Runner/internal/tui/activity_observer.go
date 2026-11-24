@@ -6,6 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"mosaic-common/fatal"
+
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/tui/screens/runflow"
 )
@@ -75,7 +77,10 @@ func (a *activitySender) post(p *tea.Program, msg tea.Msg) {
 	a.queue = append(a.queue, msg)
 	if !a.running {
 		a.running = true
-		go a.drain(p)
+		go func() {
+			defer fatal.Recover()
+			a.drain(p)
+		}()
 	}
 }
 

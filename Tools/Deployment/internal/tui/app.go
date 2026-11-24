@@ -53,6 +53,10 @@ type Options struct {
 	// Supplied by the composition root; nil omits the stack screen in every mode.
 	ReloadCatalog CatalogReloadFunc
 
+	// NewProgram builds the bubbletea program; nil means tea.NewProgram. The composition
+	// root supplies the fatal reporter's guarded constructor.
+	NewProgram func(m tea.Model, opts ...tea.ProgramOption) *tea.Program
+
 	// ToolVersion is the semver string of the mosaic-deploy binary (e.g. "1.0.0").
 	// When set, it is included in the ModeScreen title so users see the tool identity
 	// immediately on launch. An empty string omits the version from the title.
@@ -75,7 +79,7 @@ func Run(ctx context.Context, svc app.Service, opts Options) error {
 		programOpts = append(programOpts, tea.WithMouseCellMotion())
 	}
 
-	p := tea.NewProgram(m, programOpts...)
+	p := opts.newProgram(m, programOpts...)
 
 	// Wire the interaction so questions from the service goroutine reach this program.
 	// The ProgramRef was created by the caller before app.New(), so the service already

@@ -248,7 +248,7 @@ func TestPromoteBatch_ExistingKey_InDefaultCatalog_NamesItAndReplacesIntoChosenL
 }
 
 // TestPromoteBatch_ExistingKey_ReplacementDoesNotShiftNewIDs verifies a replacement keeps its
-// own id while a new agent of the same batch still gets one greater than the stack's largest.
+// own id while a new agent of the same batch still gets the floored first id of a user layer.
 func TestPromoteBatch_ExistingKey_ReplacementDoesNotShiftNewIDs(t *testing.T) {
 	// Arrange
 	b := newExistingBatch(t, "Audit")
@@ -263,7 +263,7 @@ func TestPromoteBatch_ExistingKey_ReplacementDoesNotShiftNewIDs(t *testing.T) {
 	if got := requirePromoted(t, res, "a-agent.md").Result.NumericID; got != "301" {
 		t.Errorf("a-agent id = %q, want the replaced 301", got)
 	}
-	if got := requirePromoted(t, res, "b-agent.md").Result.NumericID; got != "901" {
-		t.Errorf("b-agent id = %q, want 901 (one greater than the stack's largest, %s)", got, batchSeedID)
+	if got := requirePromoted(t, res, "b-agent.md").Result.NumericID; got != "1000" {
+		t.Errorf("b-agent id = %q, want 1000 (the floor; the stack's largest is %s)", got, batchSeedID)
 	}
 }

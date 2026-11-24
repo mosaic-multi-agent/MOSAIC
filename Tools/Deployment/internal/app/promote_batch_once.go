@@ -16,7 +16,7 @@ import (
 func (r *promoteBatchRun) chooseLayer() bool {
 	layers := r.s.promoteCatalogLayers()
 	if len(layers) == 0 {
-		r.layer = batchLayer{root: r.s.deps.Catalog.CatalogRoot()}
+		r.layer = batchLayer{root: r.s.deps.Catalog.CatalogRoot(), isDefault: true}
 		return true
 	}
 	idx := 0
@@ -45,7 +45,7 @@ func (r *promoteBatchRun) chooseLayer() bool {
 		}
 	}
 	l := layers[idx]
-	r.layer = batchLayer{root: l.Root, catalogID: l.Identity.ID, label: promoteLayerLabel(l)}
+	r.layer = batchLayer{root: l.Root, catalogID: l.Identity.ID, label: promoteLayerLabel(l), isDefault: l.Default}
 	r.result.TargetCatalogID, r.result.TargetLayer = r.layer.catalogID, r.layer.label
 	return true
 }

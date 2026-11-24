@@ -85,7 +85,7 @@ what it finds and does not report what is absent. See
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | integer string | Numeric agent identifier for round-tripping. Present only on `role: subagent` files — absent from the orchestrators, utility agents, and standalone agents. |
+| `id` | integer string | Numeric agent identifier for round-tripping. Present only on `role: subagent` files — absent from the orchestrators, utility agents, and standalone agents. Unique across the catalog stack. The default catalog uses low ids. Agents a user adds use 1000 and above, so that new default agents cannot clash with them. |
 | `version` | semver string | Agent version. Bumped on any change to identity or hand-authored body content. Tiers in `AgentTemplateArchitecture.md` §3.4. Content arriving in a `managed` region never bumps it. |
 | `name` | string | Agent slug (matches file base name). |
 | `description` | string | One-line description shown to users. |

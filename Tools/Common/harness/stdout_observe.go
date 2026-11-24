@@ -5,6 +5,8 @@ import (
 	"io"
 	"sync"
 	"time"
+
+	"mosaic-common/fatal"
 )
 
 // observerDrainGrace bounds how long Run waits, after the process exited, for
@@ -36,7 +38,10 @@ func startLineObserver(fn func(line []byte)) *lineObserver {
 		wake: make(chan struct{}, 1),
 		done: make(chan struct{}),
 	}
-	go o.deliver()
+	go func() {
+		defer fatal.Recover()
+		o.deliver()
+	}()
 	return o
 }
 

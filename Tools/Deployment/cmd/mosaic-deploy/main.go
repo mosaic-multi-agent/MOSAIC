@@ -12,27 +12,15 @@
 package main
 
 import (
-	"context"
-	"fmt"
 	"os"
-	"runtime"
 	"strings"
 
-	"github.com/mattn/go-isatty"
-
-	defaultconfig "mosaic-deploy/config"
-	"mosaic-deploy/internal/app"
-	"mosaic-deploy/internal/app/stackconfig"
-	"mosaic-deploy/internal/catalog"
+	"mosaic-common/fatal"
+	"mosaic-deploy/internal/catalog/stack/injections"
 	"mosaic-deploy/internal/cli"
 	"mosaic-deploy/internal/config"
-	"mosaic-deploy/internal/deploy"
 	"mosaic-deploy/internal/harness/registry"
-	"mosaic-deploy/internal/logging"
 	"mosaic-deploy/internal/pathinput"
-	"mosaic-deploy/internal/plan"
-	"mosaic-deploy/internal/todo"
-	"mosaic-deploy/internal/tui"
 
 	// Import built-in harnesses so their init() functions run and register
 	// themselves with the package-level registry before Discover is called.
@@ -51,199 +39,25 @@ import (
 	_ "mosaic-common/agentformat/all"
 )
 
-const ToolVersion = "1.13.0"
+const ToolVersion = "1.14.0"
 
-// wantsTUI reports whether mosaic-deploy should launch the interactive TUI: no subcommand
-// was given, and both stdin and stdout are attached to a real terminal (not a pipe/redirect).
-func wantsTUI(args []string) bool {
-	if len(args) != 0 {
-		return false
-	}
-	return isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd())
-}
-
-// isFreshConsole reports whether mosaic-deploy is running in a freshly-spawned
-// console with no parent terminal — the typical double-click scenario on Windows.
-// When this is true, the console window closes as soon as the process exits, so
-// any error message printed to stderr would disappear before the user has a chance
-// to read it.
-//
-// The heuristic reuses wantsTUI's conditions (no subcommand given and stdin/stdout
-// are real terminals), restricted to Windows where the auto-closing console problem
-// applies. On non-Windows platforms this always returns false because POSIX terminals
-// and terminal emulators do not close automatically on process exit.
-func isFreshConsole(args []string) bool {
-	if runtime.GOOS != "windows" {
-		return false
-	}
-	return wantsTUI(args)
-}
-
+// main hands the whole run to runTool, which ends the process through the fatal reporter.
 func main() {
-	args := os.Args[1:]
+	runTool(fatal.Config{}, os.Args[1:], defaultExitSeams())
+}
 
-	if versionRequested(args) {
-		os.Exit(runVersion(os.Stdout))
-	}
-
-	if len(args) == 0 && !wantsTUI(args) {
-		fmt.Fprintln(os.Stderr, "usage: mosaic-deploy <deploy|update> [flags]")
-		os.Exit(cli.ExitUsage)
-	}
-
-	// Step 1: Pre-scan global flags needed for dependency wiring. cobra will
-	// re-parse these when cli.Run calls root.Execute; the two parses agree.
-	mosaicRoot, catalogFolderFlag, logDir, allowExternal := scanGlobalFlags(args)
-
-	// Step 2: Resolve the MOSAIC root from the working directory when the flag
-	// is not provided explicitly.
-	if mosaicRoot == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: cannot determine working directory: %v\n", err)
-			os.Exit(cli.ExitFailure)
-		}
-		resolved, err := catalog.ResolveRoot(wd)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: mosaic-deploy must be run from the MOSAIC repository root: %v\n", err)
-			if isFreshConsole(args) {
-				fmt.Fprint(os.Stderr, "Press Enter to exit...")
-				fmt.Scanln() //nolint:errcheck
-			}
-			os.Exit(cli.ExitFailure)
-		}
-		mosaicRoot = resolved
-	}
-
-	// Step 2b: Resolve and validate the catalogue folder. When --catalog-folder is
-	// absent, the default {mosaic-root}/Catalog is used without validation. When
-	// it is explicitly supplied, the path is made absolute and validated fail-fast
-	// before any further dependency construction.
-	_, err := resolveCatalogFolder(mosaicRoot, catalogFolderFlag)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(cli.ExitFailure)
-	}
-
-	// Step 2c: Create any missing config file from the commented templates. A failure
-	// only warns: the stores fall back to defaults and the command proceeds unchanged.
-	if err := config.SeedConfigFiles(mosaicRoot, defaultconfig.Templates); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not create default config files: %v\n", err)
-	}
-
-	// Step 3: Load project-level tool configuration. Absent file yields documented
-	// defaults (no error); other I/O errors are fatal.
-	toolConfigStore := config.NewToolConfigStore(mosaicRoot)
-	toolCfg, err := toolConfigStore.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: load tool config: %v\n", err)
-		os.Exit(cli.ExitFailure)
-	}
-
-	// Step 3b: Load user-local tool configuration. Absent file yields an empty
-	// config (no error); other I/O errors are fatal. Loaded here so that the
-	// ToolMappings hook below can capture both config stores at registry discovery
-	// time, before the app.Service is constructed.
-	userConfigStore := config.NewUserConfigStore(mosaicRoot)
-	userCfg, err := userConfigStore.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: load user config: %v\n", err)
-		os.Exit(cli.ExitFailure)
-	}
-
-	// Step 4: Construct the logger before catalog/registry (StartRun is called
-	// inside the app layer per run, not here).
-	logger := logging.New(mosaicRoot, toolCfg, logging.WithLogDir(logDir))
-
-	// Step 5: Load the MOSAIC source catalog. The resolved catalogFolder is the
-	// exclusive source for agents and workflows; bundle and protocol always come
-	// from mosaicRoot.
-	cat, stackDesc, stackOrigin, err := loadRunStack(mosaicRoot, args)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: load catalog: %v\n", err)
-		os.Exit(cli.ExitFailure)
-	}
-
-	// Step 6: Discover available harnesses. External modules are allowed when
-	// either the command-line flag or the tool config enables them. The ToolMappings
-	// hook wires config-declared tool-destination mappings into each harness module's
-	// descriptor at construction time, so that destination fields are emitted on every
-	// deploy and update without any further module-level knowledge of config stores.
-	// The ModelCatalog hook overlays the shared catalog's descriptor-derived model
-	// data onto every harness the catalog knows. It is a no-op for an unmodified
-	// builtin id, whose own descriptor already declares the same data, and matters
-	// for a Deploy-side override of a builtin id; a harness the shared catalog does
-	// not know keeps its own descriptor-sourced catalog unchanged.
-	// The ToolMappings hook re-reads both config files at every registry build, so a registry
-	// rebuilt after a saved custom tool answer applies it in the same process.
-	reg, err := registry.DiscoverForStack(registryOptions(
-		mosaicRoot, allowExternal || toolCfg.AllowExternalModules,
-		toolConfigStore, userConfigStore, toolCfg, userCfg,
-	), cat.HarnessInjections())
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: discover harnesses: %v\n", err)
-		os.Exit(cli.ExitFailure)
-	}
-
-	// Step 7: Construct the remaining single-instance dependencies. The todo
-	// collector is shared between the Interaction port and the executor so
-	// both sinks write to the same checklist.
-	todoCollector := todo.NewCollector()
-	manifestStore := newManifestStore(reg)
-
-	// The Interaction port differs by frontend: the TUI needs a ProgramRef so the
-	// service's blocking calls can round-trip through the Bubble Tea program; the
-	// CLI needs the non-interactive, pre-answers-only implementation. It is set
-	// below, per branch, before app.New(deps) is called.
-	deps := app.Deps{
-		Catalog:        cat,
-		Registry:       reg,
-		Planner:        plan.New(),
-		Executor:       deploy.NewExecutor(manifestStore, logger, todoCollector),
-		Manifest:       manifestStore,
-		ToolConfig:     toolConfigStore,
-		UserConfig:     userConfigStore,
-		Logger:         logger,
-		Todo:           todoCollector,
-		MosaicRoot:     mosaicRoot,
-		GOOS:           runtime.GOOS,
-		ProtocolLoader: catalog.FileProtocolLoader{},
-		BundleLoader:   catalog.FileBundleLoader{},
-		ToolVersion:    ToolVersion,
-
-		StackDescription: stackDesc,
-		StackFromInput:   stackOrigin == stackconfig.OriginStackInput,
-		StackOrigin:      stackOrigin,
-	}
-
-	if wantsTUI(args) {
-		ref := tui.NewInteraction()
-		deps.Interaction = ref
-		reloadFunc := buildReloadFunc(mosaicRoot, deps)
-		launchStack, launchGiven := tuiLaunchStack(args)
-		if err := tui.Run(context.Background(), app.New(deps), tui.Options{
-			Interaction:      ref,
-			LaunchStack:      launchStack,
-			LaunchStackGiven: launchGiven,
-			ReloadCatalog:    reloadFunc,
-			ToolVersion:      ToolVersion,
-		}); err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(cli.ExitFailure)
-		}
-		os.Exit(cli.ExitSuccess)
-	}
-
-	preAnswers := buildPreAnswers(args)
-	// Notices and progress lines are diagnostics: they go to stderr in every output mode so
-	// stdout carries only the subcommand's result.
-	deps.Interaction = cli.NewInteraction(preAnswers, todoCollector, os.Stderr)
-
-	// Step 8: Dispatch to the CLI adapter with a fully-wired service. cli.Run
-	// handles all subcommand routing and output formatting; main.go is purely
-	// responsible for dependency construction and process exit.
-	code := cli.Run(context.Background(), args, app.New(deps), os.Stdout, os.Stderr)
-	os.Exit(code)
+// discoverHarnesses discovers the available harnesses. The registry options come from
+// registryOptions so the ToolMappings hook re-reads both config files at every registry
+// build, and a registry rebuilt after a saved custom tool answer applies it in the same process.
+func discoverHarnesses(
+	mosaicRoot string, allowExternal bool,
+	toolStore config.ToolConfigStore, userStore config.UserConfigStore,
+	toolCfg config.ToolConfig, userCfg config.UserConfig,
+	res injections.Result,
+) (registry.Registry, error) {
+	return registry.DiscoverForStack(registryOptions(
+		mosaicRoot, allowExternal, toolStore, userStore, toolCfg, userCfg,
+	), res)
 }
 
 // scanGlobalFlags does a minimal pre-scan of args for the global flags that

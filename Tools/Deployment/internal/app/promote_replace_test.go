@@ -139,7 +139,8 @@ func TestPromote_Overwrite_DryRun_ReportsReplacedIDAndChangesNothing(t *testing.
 }
 
 // TestPromote_Overwrite_NoExistingAgent_AssignsNextID verifies Overwrite on a key that does not
-// exist behaves like a new promote: the id is one greater than the largest in the stack.
+// exist behaves like a new promote: into a user layer the id is the larger of 1000 and one
+// greater than the largest in the stack.
 func TestPromote_Overwrite_NoExistingAgent_AssignsNextID(t *testing.T) {
 	// Arrange
 	ls := newPlLayerSet(t, "only")
@@ -154,8 +155,8 @@ func TestPromote_Overwrite_NoExistingAgent_AssignsNextID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
-	if result.NumericID != "13" {
-		t.Errorf("NumericID = %q, want 13", result.NumericID)
+	if result.NumericID != "1000" {
+		t.Errorf("NumericID = %q, want 1000 (floor for a non-default layer)", result.NumericID)
 	}
 	want := filepath.Join(ls.roots["only"], "Subagents", "Audit", plAgentKey+".md")
 	if got := keyFiles(t, ls.roots["only"], plAgentKey); !reflect.DeepEqual(got, []string{want}) {

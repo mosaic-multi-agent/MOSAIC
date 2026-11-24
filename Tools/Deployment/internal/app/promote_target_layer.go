@@ -26,24 +26,25 @@ import (
 var errPromoteTargetRequired = errors.New("promote needs a target catalog for a new item: pass --target-catalog with one of the active catalog ids")
 
 // promoteTarget returns the root (and catalog id, empty for a plain catalog) of the layer
-// that receives the promoted file for agent key. A non-empty req.TargetCatalogID must name an
+// that receives the promoted file for agent key, and whether that layer is the default catalog.
+// A catalog without layers counts as the default catalog. A non-empty req.TargetCatalogID must name an
 // active layer even when the item has a resolved source; the resolved source then wins.
-func (s *service) promoteTarget(ctx context.Context, req PromoteRequest, key string) (root, catalogID string, err error) {
+func (s *service) promoteTarget(ctx context.Context, req PromoteRequest, key string) (root, catalogID string, isDefault bool, err error) {
 	lister, isStack := s.deps.Catalog.(catalog.LayerLister)
 	if !isStack {
 		if req.TargetCatalogID != "" {
-			return "", "", fmt.Errorf("target catalog %q: the active catalog has no layers", req.TargetCatalogID)
+			return "", "", false, fmt.Errorf("target catalog %q: the active catalog has no layers", req.TargetCatalogID)
 		}
-		return s.deps.Catalog.CatalogRoot(), "", nil
+		return s.deps.Catalog.CatalogRoot(), "", true, nil
 	}
 	layers := lister.Layers()
 	if req.TargetCatalogID != "" && findPromoteLayer(layers, req.TargetCatalogID) < 0 {
-		return "", "", fmt.Errorf("target catalog %q is not an active catalog layer", req.TargetCatalogID)
+		return "", "", false, fmt.Errorf("target catalog %q is not an active catalog layer", req.TargetCatalogID)
 	}
 
 	if reporter, ok := s.deps.Catalog.(catalog.ProvenanceReporter); ok {
 		if layer, known := reporter.Provenance(domain.CatalogItem{Kind: domain.CatalogItemAgent, Key: key}); known {
-			return layer.Root, layer.Identity.ID, nil
+			return layer.Root, layer.Identity.ID, layer.Default, nil
 		}
 	}
 
@@ -54,11 +55,11 @@ func (s *service) promoteTarget(ctx context.Context, req PromoteRequest, key str
 	case len(layers) > 1:
 		chosen, askErr := s.askPromoteTargetLayer(ctx, layers, req.FilePath)
 		if askErr != nil {
-			return "", "", askErr
+			return "", "", false, askErr
 		}
 		idx = chosen
 	}
-	return layers[idx].Root, layers[idx].Identity.ID, nil
+	return layers[idx].Root, layers[idx].Identity.ID, layers[idx].Default, nil
 }
 
 // targetRequiredError wraps errPromoteTargetRequired with the catalog ids of the stack in

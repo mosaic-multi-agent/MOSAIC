@@ -35,6 +35,9 @@ type promoteDestination struct {
 	targetRoot string
 	// targetCatalogID is the target layer's catalog id; empty for a plain catalog.
 	targetCatalogID string
+	// targetIsDefault reports that the target layer is the default catalog (or a catalog without
+	// layers); a new agent there takes no id floor.
+	targetIsDefault bool
 	// category is the chosen category, or PromoteCategoryUtility.
 	category string
 	// path is the file the new agent is written to.
@@ -51,7 +54,7 @@ func (s *service) resolvePromoteDestination(
 ) (promoteDestination, error) {
 	// The layer is chosen before the category because the category options come from its
 	// Subagents/ directory.
-	targetRoot, targetCatalogID, err := s.promoteTarget(ctx, req, key)
+	targetRoot, targetCatalogID, targetIsDefault, err := s.promoteTarget(ctx, req, key)
 	if err != nil {
 		return promoteDestination{}, err
 	}
@@ -72,6 +75,7 @@ func (s *service) resolvePromoteDestination(
 	dest := promoteDestination{
 		targetRoot:      targetRoot,
 		targetCatalogID: targetCatalogID,
+		targetIsDefault: targetIsDefault,
 		category:        category,
 		path:            promoteDestinationPath(targetRoot, category, key),
 	}
@@ -120,12 +124,31 @@ func pathInside(root, path string) bool {
 }
 
 // promoteNumericIDFor returns the id for the file written to dest: the replaced agent's id
-// when there is one, otherwise one greater than the largest id in the catalog.
+// when there is one, otherwise the next new id for the target layer.
 func promoteNumericIDFor(dest promoteDestination, c catalog.Catalog) string {
 	if dest.existing != nil && dest.existing.numericID != "" {
 		return dest.existing.numericID
 	}
-	return nextNumericID(c)
+	return firstNewNumericID(c, dest.targetIsDefault)
+}
+
+// minNonDefaultNumericID is the lowest id a new agent gets outside the default catalog, so it
+// cannot clash with ids later added to the default catalog.
+const minNonDefaultNumericID = 1000
+
+// firstNewNumericID returns the id of the first new agent promoted into a layer: one greater
+// than the largest id in the catalog, and at least minNonDefaultNumericID outside the default
+// catalog.
+func firstNewNumericID(c catalog.Catalog, targetIsDefault bool) string {
+	next := nextNumericID(c)
+	if targetIsDefault {
+		return next
+	}
+	n, err := strconv.Atoi(next)
+	if err != nil || n < minNonDefaultNumericID {
+		n = minNonDefaultNumericID
+	}
+	return strconv.Itoa(n)
 }
 
 // nextNumericID returns the numeric agent id to assign to a newly promoted agent: one

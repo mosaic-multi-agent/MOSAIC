@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"mosaic-common/fatal"
 
 	"mosaic-run/internal/debuglog"
 	"mosaic-run/internal/dispatchlog"
@@ -21,11 +24,11 @@ import (
 // devMode enables the test-mode flow in the TUI (DevMode field on tui.Options).
 // When true, a "Run Tests" entry point is visible in the TUI; when false, the
 // test flow is hidden.
-func runTUIMode(args []string, devMode bool) {
-	workDir, err := os.Getwd()
+func runTUIMode(r *fatal.Reporter, args []string, devMode bool, seams exitSeams) {
+	workDir, err := seams.Getwd()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: getting working directory: %v\n", err)
-		os.Exit(1)
+		r.Fail(fmt.Sprintf("error: getting working directory: %v", err))
+		return
 	}
 
 	// Construct the process-level debug logger once here, before any other
@@ -82,11 +85,12 @@ func runTUIMode(args []string, devMode bool) {
 	if identErr != nil {
 		logger.Log(domain.EventRunnerError, identErr.Error())
 		if errors.Is(identErr, errTUIUsage) {
-			fmt.Fprintf(os.Stderr, "error: %v\n", identErr)
-			os.Exit(2)
+			fmt.Fprintf(r.Stderr(), "error: %v\n", identErr)
+			r.Exit(2)
+			return
 		}
-		fmt.Fprintf(os.Stderr, "error: %v\n", identErr)
-		os.Exit(1)
+		r.Fail(fmt.Sprintf("error: %v", identErr))
+		return
 	}
 
 	// Associate the run_id with both log files if identity is already resolved
@@ -130,8 +134,17 @@ func runTUIMode(args []string, devMode bool) {
 	initSess := wiring.Options.SessionFactory(identity.RunFolder, identity.IsNewRun, "", runconfig.ConfigSelection{})
 
 	ctx := context.Background()
-	if err := tui.Run(ctx, initSess, wiring.Options); err != nil {
-		fmt.Fprintf(os.Stderr, "tui: %v\n", err)
-		os.Exit(1)
+	opts := wiring.Options
+	opts.NewProgram = r.NewProgram
+	switch err := seams.RunTUI(ctx, initSess, opts); {
+	case err == nil:
+		r.Exit(0)
+	case errors.Is(err, tea.ErrInterrupted):
+		// An externally delivered signal is not an unexpected failure: today's line and
+		// exit code stay, with no failure file and no pause.
+		fmt.Fprintf(r.Stderr(), "tui: %v\n", err)
+		r.Exit(1)
+	default:
+		r.Fail(fmt.Sprintf("tui: %v", err))
 	}
 }

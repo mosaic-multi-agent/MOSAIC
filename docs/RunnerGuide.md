@@ -294,6 +294,10 @@ Experimental harnesses today: **Codex** and **OpenCode V2**. For OpenCode V2 the
 | 6 | Stopped by orchestrator consultant, a failed consultation, or an ended manual routing dialogue (resumable) |
 | 7 | Commit setup or pre-consultation failed after the run folder was created (kept; resuming retries it) |
 
+### Failure file
+
+When `mosaic-run` ends with an unexpected failure (exit code 1, a failure while starting up, a TUI that cannot run) or a panic, it writes a failure file named `mosaic-run-failure-<UTC time>-<pid>.txt` into the folder that holds the `mosaic-run` executable. The file holds the time, the tool version, the command line, the failure message and, for a panic, the stack trace. The failure message is also shown on screen, followed by the line `failure report written to <path>` naming the file; the file is skipped silently when that folder cannot be written. On Windows, a TUI start (for example a double-click) then waits for Enter so the message stays readable. CLI runs never wait. Success, the documented outcome codes 2 to 7, the TUI's exit code 2 for a run-identity usage error and a TUI interrupted by a signal write no failure file.
+
 ---
 
 ## Quick Reference

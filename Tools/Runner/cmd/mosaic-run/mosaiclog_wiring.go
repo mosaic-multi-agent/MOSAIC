@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"sync"
 
+	"mosaic-common/fatal"
+
 	"mosaic-run/internal/domain"
 	"mosaic-run/internal/mosaiclog"
 	"mosaic-run/internal/session"
@@ -161,6 +163,7 @@ func newCLIRunContext(parent context.Context, in cliInterrupt) (ctx context.Cont
 	stop := func() { once.Do(func() { in.Stop(sigs) }) }
 
 	go func() {
+		defer fatal.Recover()
 		select {
 		case <-sigs:
 			cancel()

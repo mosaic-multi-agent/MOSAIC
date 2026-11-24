@@ -29,6 +29,8 @@ type batchLayer struct {
 	root      string
 	catalogID string
 	label     string
+	// isDefault reports that the layer is the default catalog (or a catalog without layers).
+	isDefault bool
 }
 
 // batchToolAnswer is the answer to the question about one unmapped harness tool name.
@@ -162,9 +164,9 @@ func (r *promoteBatchRun) closeSources() {
 	}
 }
 
-// firstNewID is the numeric id one greater than the largest the catalog holds.
+// firstNewID is the id of the first new agent of the batch: see firstNewNumericID.
 func (r *promoteBatchRun) firstNewID() int {
-	n, err := strconv.Atoi(nextNumericID(r.s.deps.Catalog))
+	n, err := strconv.Atoi(firstNewNumericID(r.s.deps.Catalog, r.layer.isDefault))
 	if err != nil {
 		return 1
 	}
